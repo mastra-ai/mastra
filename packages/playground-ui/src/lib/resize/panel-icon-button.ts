@@ -9,5 +9,5 @@ export const panelIconButtonClass = cn(
   'border border-transparent bg-transparent hover:bg-fill active:bg-fill-hover',
   quietTextHover,
   controlStateColorTransition,
-  'focus-visible:border-accent1 focus-visible:outline-hidden',
+  'focus-visible:border-border-focus focus-visible:outline-hidden',
 );

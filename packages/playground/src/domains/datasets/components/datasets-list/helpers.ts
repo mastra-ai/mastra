@@ -1,5 +1,7 @@
 import type { DatasetRecord } from '@mastra/client-js';
 
+export const DATASETS_LIST_COLUMNS = 'auto 1fr auto 5rem 10rem 7rem';
+
 export const DATASET_EXPERIMENT_OPTIONS = [
   { value: 'all', label: 'All datasets' },
   { value: 'with', label: 'With experiments' },

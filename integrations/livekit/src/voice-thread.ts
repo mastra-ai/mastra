@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MastraMemory } from '@mastra/core/memory';
 
@@ -43,7 +42,7 @@ export async function persistSpokenGreeting({
   // A whitespace/empty greeting would persist a low-value assistant message; skip it.
   if (!greeting.trim()) return;
   const message: MastraDBMessage = {
-    id: randomUUID(),
+    id: globalThis.crypto.randomUUID(),
     role: 'assistant',
     type: 'text',
     createdAt: new Date(),

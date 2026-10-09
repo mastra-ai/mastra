@@ -32,6 +32,32 @@ export function sanitizeBody(body: Record<string, unknown>, disallowedKeys: stri
   }
 }
 
+const CREDENTIAL_HEADER_NAMES = new Set([
+  'authorization',
+  'proxy-authorization',
+  'x-api-key',
+  'api-key',
+  'x-goog-api-key',
+  'cookie',
+]);
+
+/**
+ * Removes credential-bearing headers from client-supplied `modelSettings.headers`
+ * so a caller's own auth (e.g. the app's bearer token) can never override the
+ * provider credential configured on the server. Non-credential headers are kept.
+ */
+export function stripClientCredentialHeaders(body: Record<string, unknown>) {
+  const modelSettings = body.modelSettings;
+  if (!modelSettings || typeof modelSettings !== 'object') return;
+  const headers = (modelSettings as { headers?: unknown }).headers;
+  if (!headers || typeof headers !== 'object') return;
+
+  const kept = Object.fromEntries(
+    Object.entries(headers).filter(([name]) => !CREDENTIAL_HEADER_NAMES.has(name.toLowerCase())),
+  );
+  body.modelSettings = { ...modelSettings, headers: kept };
+}
+
 export function parsePerPage(
   value: string | undefined,
   defaultValue: number = 100,

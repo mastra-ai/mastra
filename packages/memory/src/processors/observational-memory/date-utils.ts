@@ -44,6 +44,11 @@ function calendarDayIn(instant: Date, timeZone: string | undefined): number {
   return Date.UTC(part('year'), part('month') - 1, part('day')) / DAY_MS;
 }
 
+/** Format an instant relative to today, using the record's calendar time zone. */
+export function formatRelativeTime(date: Date, currentDate: Date, timeZone?: string): string {
+  return formatRelativeDays(calendarDayIn(currentDate, timeZone) - calendarDayIn(date, timeZone));
+}
+
 function formatRelativeDays(diffDays: number): string {
   if (diffDays < 0) {
     const futureDays = Math.abs(diffDays);

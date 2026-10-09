@@ -1,12 +1,11 @@
 import type { AutoFormFieldProps } from '@autoform/react';
 import React from 'react';
 import { Checkbox } from '@/ds/components/Checkbox';
-import { FieldBlock } from '@/ds/components/FormFieldBlocks';
+import { FieldLabel } from '@/ds/components/Field';
 
-export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, id, inputProps }) => (
+export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, inputProps }) => (
   <div className="flex items-center space-x-2">
     <Checkbox
-      id={id}
       onCheckedChange={checked => {
         // react-hook-form expects an event object
         const event = {
@@ -20,8 +19,6 @@ export const BooleanField: React.FC<AutoFormFieldProps> = ({ field, label, id, i
       defaultChecked={field.default}
       disabled={inputProps.disabled || inputProps.readOnly}
     />
-    <FieldBlock.Label name={id} htmlFor={id} required={field.required}>
-      {label}
-    </FieldBlock.Label>
+    <FieldLabel required={field.required}>{label}</FieldLabel>
   </div>
 );

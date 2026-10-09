@@ -156,6 +156,52 @@ describe('tool approval: standalone Agent (no Mastra) vs Agent with Mastra', () 
     expect(mockFindUser).toHaveBeenCalledTimes(1);
   }, 30000);
 
+  it('sendToolApproval merges the separate decision into custom resume data', async () => {
+    const seenResumeData: unknown[] = [];
+    const findUserTool = createTool({
+      id: 'Find user tool',
+      description: 'Returns the name and email of a user',
+      inputSchema: z.object({ name: z.string() }),
+      requireApproval: true,
+      execute: async (_input, context) => {
+        seenResumeData.push(context?.agent?.resumeData);
+        return { name: 'Dero Israel', email: 'dero@mail.com' };
+      },
+    });
+    const userAgent = new Agent({
+      id: 'send-tool-approval-agent',
+      name: 'Send Tool Approval Agent',
+      instructions: 'Use findUserTool.',
+      model: createMockModel(),
+      tools: { findUserTool },
+    });
+    const mastra = new Mastra({
+      agents: { userAgent },
+      logger: false,
+      storage: new InMemoryStore(),
+    });
+    const agent = mastra.getAgent('userAgent');
+    const memory = { thread: 'send-tool-approval-thread', resource: 'send-tool-approval-resource' };
+    const stream = await agent.stream('Find the user with name - Dero Israel', { memory });
+
+    let toolCallId = '';
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        toolCallId = chunk.payload.toolCallId;
+      }
+    }
+
+    await agent.sendToolApproval({
+      threadId: memory.thread,
+      resourceId: memory.resource,
+      toolCallId,
+      approved: true,
+      resumeData: { note: 'hello' },
+    });
+
+    await vi.waitFor(() => expect(seenResumeData).toEqual([{ approved: true, note: 'hello' }]));
+  }, 30000);
+
   it('WITHOUT Mastra initially: manually registering Mastra with storage fixes resume', async () => {
     mockFindUser.mockClear();
 

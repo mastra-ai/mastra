@@ -1,0 +1,41 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Ask one ask_user question and hold the reply.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_ask_rollout",
+            "name": "ask_user",
+            "arguments": {
+              "question": "Pick a rollout target?",
+              "options": [
+                { "label": "Staging", "description": "Use the staging environment" },
+                { "label": "Production", "description": "Use the production environment" }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_ask_rollout",
+        "hasToolResult": true
+      },
+      "streamingProfile": {
+        "ttft": 1500
+      },
+      "response": {
+        "content": "Ask user rollout answer received."
+      }
+    }
+  ]
+}

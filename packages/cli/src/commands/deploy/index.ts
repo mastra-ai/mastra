@@ -22,6 +22,7 @@ import pc from 'picocolors';
 import { bucketApiHost, getAnalytics } from '../../analytics/index.js';
 import type { CLI_ORIGIN } from '../../analytics/index.js';
 import { createBarLogWriter } from '../../utils/clack-bar.js';
+import { checkBundleSize, uploadArtifact } from '../../utils/deploy-bundle-size.js';
 import { deployDashboardUrl, printDeployFailure } from '../../utils/deploy-failure-output.js';
 import { createLogCollector } from '../../utils/deploy-log-format.js';
 import type { DeployLogWriter, LogCollector } from '../../utils/deploy-log-format.js';
@@ -269,6 +270,7 @@ const CONNECTOR_SPINE_X = Math.floor(CONNECTOR_GAP_WIDTH / 2);
 const DATABASE_PRESENTATION: Record<ProjectDatabase['kind'], { label: string; tone: ArchitectureTone }> = {
   turso: { label: 'Turso', tone: 'cyan' },
   neon: { label: 'Neon', tone: 'green' },
+  postgres: { label: 'Postgres', tone: 'blue' },
   mongodb: { label: 'MongoDB', tone: 'green' },
   redis: { label: 'Redis', tone: 'red' },
 };
@@ -1120,6 +1122,7 @@ export async function uploadToEnvironment(
   if (opts.disablePlatformObservability !== undefined) {
     createBody.disablePlatformObservability = opts.disablePlatformObservability;
   }
+  createBody.artifactBytes = zipBuffer.byteLength;
 
   const createResp = await fetch(`${apiUrl}/v1/projects/${projectId}/environments/${environmentId}/deploy`, {
     method: 'POST',
@@ -1129,23 +1132,15 @@ export async function uploadToEnvironment(
 
   if (!createResp.ok) {
     const err = await createResp.json().catch(() => ({}));
-    throw new Error(`Failed to create deploy: ${(err as { detail?: string }).detail || createResp.statusText}`);
+    const detail = (err as { detail?: string }).detail;
+    // 413 = bundle over the platform limit; its detail already names the size and the fix.
+    if (createResp.status === 413 && detail) throw new Error(detail);
+    throw new Error(`Failed to create deploy: ${detail || createResp.statusText}`);
   }
 
   const { deploy } = (await createResp.json()) as { deploy: { id: string; uploadUrl: string } };
 
-  // Upload artifact
-  const uploadResp = await fetch(deploy.uploadUrl, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/zip',
-    },
-    body: zipBuffer,
-  });
-
-  if (!uploadResp.ok) {
-    throw new Error(`Failed to upload artifact: ${uploadResp.statusText}`);
-  }
+  await uploadArtifact(deploy.uploadUrl, zipBuffer);
 
   // Signal upload complete — uses net-new env-scoped endpoint so the
   // unified-runtime CLI never touches /v1/studio/*.
@@ -1907,9 +1902,15 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
   s.stop(`Created ${sizeLabel} archive (${elapsed(performance.now() - t)})`);
 
+  const zipBuffer = await readFile(zipPath);
+  await checkBundleSize({
+    artifactBytes: zipBuffer.byteLength,
+    outputDir: join(targetDir, '.mastra', 'output'),
+    warn: message => p.log.warn(message),
+  });
+
   t = performance.now();
   s.start('Uploading...');
-  const zipBuffer = await readFile(zipPath);
   const deployResult = await uploadToEnvironment(token, orgId, projectId, environment.id, zipBuffer, {
     gitBranch: gitBranch ?? undefined,
     projectName,

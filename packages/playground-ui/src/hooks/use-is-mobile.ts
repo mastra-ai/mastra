@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useState } from 'react';
 
-// Default breakpoint 1024 matches MainSidebar's mobile breakpoint.
+// Default breakpoint 1024 matches Sidebar's mobile breakpoint.
 export const useIsMobile = (breakpoint: number = 1024) => {
   const query = useMemo(() => `(max-width: ${breakpoint - 1}px)`, [breakpoint]);
   const [isMobile, setIsMobile] = useState(false);

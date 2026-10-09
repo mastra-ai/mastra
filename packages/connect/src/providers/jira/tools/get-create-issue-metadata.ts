@@ -19,12 +19,37 @@ export const getCreateIssueMetadataInputSchema = z.object({
     ),
 });
 
+const CreateIssueFieldSchema = z.object({
+  required: z.boolean().optional(),
+  schema: z.record(z.string(), z.unknown()).optional(),
+  name: z.string().optional(),
+  key: z.string().optional(),
+  hasDefaultValue: z.boolean().optional(),
+  operations: z.array(z.string()).optional(),
+  allowedValues: z.array(z.unknown()).optional(),
+  defaultValue: z.unknown().optional(),
+  autoCompleteUrl: z.string().optional(),
+});
+
+const IssueTypeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  self: z.string().optional(),
+  description: z.string().optional(),
+  iconUrl: z.string().optional(),
+  avatarId: z.number().optional(),
+  subtask: z.boolean().optional(),
+  hierarchyLevel: z.number().optional(),
+  fields: z.record(z.string(), CreateIssueFieldSchema).optional(),
+});
+
 const ProjectSchema = z.object({
   id: z.string(),
   key: z.string(),
   name: z.string(),
   self: z.string().optional(),
   avatarUrls: z.record(z.string(), z.string()).optional(),
+  issuetypes: z.array(IssueTypeSchema).optional(),
 });
 
 const ProviderResponseSchema = z.object({

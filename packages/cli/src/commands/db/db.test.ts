@@ -78,6 +78,9 @@ describe('defaultDatabaseName', () => {
     // frontend so CLI- and UI-created databases look the same.
     expect(defaultDatabaseName('turso', { name: 'My App', slug: 'my-app' })).toBe('my-app-turso');
     expect(defaultDatabaseName('neon', { name: 'My App', slug: 'my-app' })).toBe('my-app-pg');
+    // Railway Postgres keeps `postgres` while Neon keeps `pg` so their default
+    // names never collide within the same project.
+    expect(defaultDatabaseName('postgres', { name: 'My App', slug: 'my-app' })).toBe('my-app-postgres');
     expect(defaultDatabaseName('redis', { name: 'My App', slug: 'my-app' })).toBe('my-app-redis');
     expect(defaultDatabaseName('mongodb', { name: 'My App', slug: 'my-app' })).toBe('my-app-mongo');
   });

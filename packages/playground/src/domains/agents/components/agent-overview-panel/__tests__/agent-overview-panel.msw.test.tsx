@@ -1,5 +1,6 @@
 import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
+import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -10,7 +11,6 @@ import { emptyPlatforms, slackPlatform } from '../../__tests__/fixtures/channels
 import { memoryDisabled, v2Agent } from '../../__tests__/fixtures/composer-model-settings';
 import { semanticRecallConfig } from '../../memory-sidebar/__tests__/fixtures/memory';
 import { AgentOverviewPanel } from '../agent-overview-panel';
-import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
 import { RouteSidePanel, RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';

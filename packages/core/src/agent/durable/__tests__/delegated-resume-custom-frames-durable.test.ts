@@ -258,4 +258,53 @@ describe('durable resume custom frames (#22277)', () => {
     // must surface on the parent durable stream.
     expect(types, label).toContain('data-progress');
   }, 30000);
+
+  it('delegated approval resume ack keeps the inner tool name and its redaction (#24280)', async () => {
+    const mockMemory = new MockMemory();
+    const memory = { thread: 'durable-resumed-delegated-redact', resource: 'durable-resumed-delegated-res' };
+
+    const subAgent = new Agent({
+      id: 'subAgent',
+      name: 'subAgent',
+      description: 'Processes orders',
+      instructions: 'Process orders with your tool.',
+      model: makeToolThenAnswerModel('Order processed.') as LanguageModelV2,
+      tools: { processOrder: buildProcessOrderTool() },
+    });
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'Supervisor',
+      instructions: 'Delegate to subAgent.',
+      model: makeSupervisorModel() as LanguageModelV2,
+      agents: { subAgent },
+      memory: mockMemory,
+    });
+    const durableAgent = createDurableAgent({ agent: supervisor, pubsub });
+    new Mastra({ agents: { durableAgent }, storage: new InMemoryStore(), logger: false });
+
+    // Redact only the inner tool; everything else passes through unchanged.
+    const result = await durableAgent.stream(`Process order ${ORDER}`, {
+      memory,
+      maxSteps: 5,
+      transform: {
+        targets: ['display'],
+        transformToolPayload: (ctx: any) =>
+          ctx.toolName === 'processOrder' ? '[secret]' : (ctx.input ?? ctx.output ?? ctx.suspendPayload ?? null),
+      },
+    } as any);
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') break;
+    }
+    const entry = await getApprovalEntry(mockMemory, memory);
+
+    const resumed = await durableAgent.approveToolCall({ runId: entry.runId, toolCallId: entry.toolCallId, memory });
+    const chunks: any[] = [];
+    for await (const chunk of resumed.fullStream) chunks.push(chunk);
+    const ack = chunks.find(c => c.type === 'tool-call-resumed');
+    expect(ack, chunks.map(c => c.type).join(', ')).toBeDefined();
+    expect(ack.payload).toMatchObject({ kind: 'approval', toolName: 'processOrder' });
+    const display = JSON.stringify(ack.metadata?.mastra?.toolPayloadTransform?.display);
+    expect(display).toContain('[secret]');
+    expect(display).not.toContain(ORDER);
+  }, 30000);
 });

@@ -17,14 +17,14 @@ import { FilterBar } from './filter-bar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from './types';
 import { Avatar } from '@/ds/components/Avatar/Avatar';
 import { Txt } from '@/ds/components/Txt';
-import { themedHueColor } from '@/lib/colors';
+import { hueAccentColor } from '@/lib/colors';
 
 const FIELDS: FilterBarField[] = [
   {
     id: 'status',
     label: 'Status',
     icon: CircleIcon,
-    color: themedHueColor(0),
+    color: hueAccentColor('orange'),
     operators: ['is', 'is-not', 'in', 'is-empty', 'is-not-empty'],
     suggestions: [
       { value: 'running', label: 'Running' },
@@ -36,7 +36,7 @@ const FIELDS: FilterBarField[] = [
     id: 'environment',
     label: 'Environment',
     icon: GlobeIcon,
-    color: themedHueColor(120),
+    color: hueAccentColor('green'),
     operators: ['is', 'is-not', 'in'],
     suggestions: [{ value: 'prod' }, { value: 'staging' }, { value: 'dev' }],
   },
@@ -44,7 +44,7 @@ const FIELDS: FilterBarField[] = [
     id: 'tags',
     label: 'Tags',
     icon: TagIcon,
-    color: themedHueColor(280),
+    color: hueAccentColor('purple'),
     operators: ['in'],
     strict: true,
     suggestions: [{ value: 'production' }, { value: 'experiment' }, { value: 'regression' }, { value: 'canary' }],
@@ -53,15 +53,15 @@ const FIELDS: FilterBarField[] = [
     id: 'traceId',
     label: 'Trace ID',
     icon: HashIcon,
-    color: themedHueColor(220),
+    color: hueAccentColor('blue'),
     operators: ['is', 'contains', 'starts-with'],
   },
-  { id: 'runId', label: 'Run ID', icon: PlayIcon, color: themedHueColor(180), operators: ['is', 'contains'] },
+  { id: 'runId', label: 'Run ID', icon: PlayIcon, color: hueAccentColor('cyan'), operators: ['is', 'contains'] },
   {
     id: 'duration',
     label: 'Duration (ms)',
     icon: TimerIcon,
-    color: themedHueColor(40),
+    color: hueAccentColor('orange'),
     type: 'number',
     operators: ['gt', 'gte', 'lt', 'lte'],
   },
@@ -69,7 +69,7 @@ const FIELDS: FilterBarField[] = [
     id: 'hasError',
     label: 'Has error',
     icon: TriangleAlertIcon,
-    color: themedHueColor(330),
+    color: hueAccentColor('pink'),
     type: 'boolean',
     operators: ['is'],
   },
@@ -152,7 +152,7 @@ export const FreeText: Story = {
         id: 'teammate',
         label: 'Teammate',
         icon: UserIcon,
-        color: themedHueColor(200),
+        color: hueAccentColor('blue'),
         operators: ['is'],
         strict: true,
         suggestions: TEAMMATES.map(teammate => ({

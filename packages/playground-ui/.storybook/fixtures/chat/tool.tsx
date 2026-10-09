@@ -1,36 +1,38 @@
 import type { ReactNode } from 'react';
-import {
-  ToolCall,
-  ToolCallContent,
-  ToolCallArguments,
-  ToolCallOutput,
-  ToolCallPresentedHeader,
-  ToolCallTrigger,
-  presentTool,
-} from '@/ds/components/ai/tool-call';
-import type { ToolCallStatus } from '@/ds/components/ai/tool-call';
+import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '@/ds/components/ai/activity';
+import type { ActivityStatus } from '@/ds/components/ai/activity';
+import { ToolCallArguments, ToolCallOutput, presentTool } from '@/ds/components/ai/tool-call';
 
 interface ReviewToolProps {
   toolName: string;
   args: unknown;
-  status?: ToolCallStatus;
+  status?: ActivityStatus;
   output?: string;
   children?: ReactNode;
+  badges?: ReactNode;
   defaultOpen?: boolean;
 }
 
-export function ReviewTool({ toolName, args, status = 'idle', output, children, defaultOpen }: ReviewToolProps) {
-  const presentation = presentTool(toolName, args);
+export function ReviewTool({
+  toolName,
+  args,
+  status = 'idle',
+  output,
+  children,
+  badges,
+  defaultOpen,
+}: ReviewToolProps) {
+  const { icon: ToolIcon, label, detail } = presentTool(toolName, args);
   return (
-    <ToolCall status={status} defaultOpen={defaultOpen} aria-label={`Tool: ${toolName}`}>
-      <ToolCallTrigger>
-        <ToolCallPresentedHeader {...presentation} />
-      </ToolCallTrigger>
-      <ToolCallContent>
+    <Activity status={status} defaultOpen={defaultOpen} aria-label={`Tool: ${toolName}`}>
+      <ActivityTrigger>
+        <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} badges={badges} />
+      </ActivityTrigger>
+      <ActivityContent>
         <ToolCallArguments toolName={toolName} args={args} />
         {output && <ToolCallOutput text={output} />}
         {children}
-      </ToolCallContent>
-    </ToolCall>
+      </ActivityContent>
+    </Activity>
   );
 }

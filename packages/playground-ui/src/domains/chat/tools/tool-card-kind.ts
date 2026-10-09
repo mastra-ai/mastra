@@ -4,8 +4,8 @@ import { isRecord } from '../messages/signal-data';
 import { getCodeModeCall } from './code-mode';
 import { SUBMIT_PLAN_TOOL_ID } from './submit-plan-tool-id';
 import { WORKSPACE_TOOLS } from './workspace-tool-constants';
+import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { isTaskTool } from '@/ds/components/ai/tool-call';
-import type { ToolCallStatus } from '@/ds/components/ai/tool-call';
 
 /** Which card draws a call. Decided once, shared by the dispatcher and the fold. */
 export type ToolCardKind =
@@ -53,7 +53,7 @@ export const isSettledState = (state: string | undefined): boolean =>
   state === 'output-available' || state === 'result';
 
 /** A call neither settled nor carried by a live run reads as idle, so stale history never shimmers. */
-export function badgeStatus(state: string | undefined, chatRunning: boolean): ToolCallStatus {
+export function badgeStatus(state: string | undefined, chatRunning: boolean): ActivityStatus {
   if (state === 'output-error') return 'error';
   if (isSettledState(state) || !chatRunning) return 'idle';
   return 'running';
@@ -83,12 +83,17 @@ export function toolInteraction(
   };
 }
 
+/** Tools the transcript never draws: working memory updates and task tools (shown in the docked task list). */
+export function isHiddenTool(toolName: string): boolean {
+  return toolName === 'updateWorkingMemory' || isTaskTool(toolName);
+}
+
 export function toolCardKind(
   { toolName, toolCallId, input, output }: ToolPartFields,
   { metadata, mcpAppTools }: ToolCardContext,
 ): ToolCardKind {
   if (toolName === 'mastra-memory-om-observation') return 'observation';
-  if (toolName === 'updateWorkingMemory' || isTaskTool(toolName)) return 'hidden';
+  if (isHiddenTool(toolName)) return 'hidden';
   // A question read back in history draws as a plain badge, but it is still a question: never folded away.
   if (toolName === 'ask_user') return 'ask_user';
   const { suspended } = toolInteraction(metadata, toolName, toolCallId);

@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { assert, describe, it, expect } from 'vitest';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 

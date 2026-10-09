@@ -9,7 +9,6 @@
  * @see https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-execute-command.html
  */
 
-import { randomUUID } from 'node:crypto';
 import {
   BedrockAgentCoreClient,
   InvokeAgentRuntimeCommandCommand,
@@ -140,7 +139,7 @@ function toAgentCoreTimeoutSeconds(timeoutMs: number): number {
 }
 
 function generateSessionId(): string {
-  return randomUUID();
+  return globalThis.crypto.randomUUID();
 }
 
 function getStreamException(event: AgentCoreStreamEvent): { key: string; value: unknown } | undefined {

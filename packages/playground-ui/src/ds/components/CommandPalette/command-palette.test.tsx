@@ -33,7 +33,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// Spacing between the parts of a composed accessible name is not stable across environments
 const ITEM_NAME = /Settings\s*Path\s*Application navigation\s*\/settings/;
 const SCOPE_NAME = /Navigation\s*2/;
 
@@ -151,7 +150,6 @@ describe('CommandPaletteScope', () => {
 });
 
 describe('CommandPaletteItem', () => {
-  // cmdk items need the Command root the dialog provides.
   const renderItem = (props: Partial<Parameters<typeof CommandPaletteItem>[0]> = {}) =>
     render(
       <CommandPaletteDialog
@@ -169,8 +167,6 @@ describe('CommandPaletteItem', () => {
       </CommandPaletteDialog>,
     );
 
-  // The item is an icon, a column of text and an optional shortcut. The column
-  // is a title row and, when there is anything for it, a second line.
   const itemElement = () => screen.getByRole('option');
   const textColumn = () => itemElement().children[1];
   const titleRow = () => textColumn()?.children[0];
@@ -182,7 +178,6 @@ describe('CommandPaletteItem', () => {
     const item = itemElement();
     expect(within(item).getByTestId('item-icon')).toBeTruthy();
     expect(item.textContent).toBe('Settings');
-    // Icon and text column, no shortcut.
     expect(item.childElementCount).toBe(2);
     expect(titleRow()?.childElementCount).toBe(1);
     expect(secondLine()).toBeUndefined();
@@ -225,7 +220,6 @@ describe('CommandPaletteItem', () => {
   it('leaves out the second line entirely with neither a subtitle nor a path', () => {
     renderItem({ badge: 'Path' });
 
-    // Title row and nothing under it.
     expect(textColumn()?.childElementCount).toBe(1);
   });
 
@@ -255,13 +249,13 @@ describe('CommandPaletteDialog', () => {
   it('dims the page behind it', () => {
     renderDialog();
 
-    expect(document.querySelector('.dialog-overlay-anim')).toBeTruthy();
+    expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeTruthy();
   });
 
   it('leaves the page alone when the caller asks', () => {
     renderDialog({ showOverlay: false });
 
-    expect(document.querySelector('.dialog-overlay-anim')).toBeNull();
+    expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
   });
 });
 

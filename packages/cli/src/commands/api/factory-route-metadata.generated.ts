@@ -256,6 +256,22 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /web/factory/projects/:id/apply-default-model": {
+    "contractKey": "projectApplyDefaultModel",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/apply-default-model",
+    "description": "Apply the Factory default model to running work and review threads",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/archive": {
     "contractKey": "attentionArchive",
     "method": "POST",
@@ -1344,6 +1360,67 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       ]
     }
   },
+  "POST /web/factory/projects/:id/apply-default-model": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "modelId": {
+          "type": "string"
+        },
+        "applied": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "threadId": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "not-running",
+                  "work-item-missing",
+                  "stage-inactive",
+                  "thread-missing",
+                  "mode-unknown",
+                  "apply-failed"
+                ]
+              }
+            },
+            "required": [
+              "threadId",
+              "reason"
+            ]
+          }
+        }
+      },
+      "required": [
+        "modelId",
+        "applied",
+        "skipped"
+      ]
+    }
+  },
   "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/archive": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -2272,6 +2349,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "projectUpdate": "PATCH /web/factory/projects/:id",
   "workItemUpdate": "PATCH /web/factory/work-items/:id",
   "projectCreate": "POST /web/factory/projects",
+  "projectApplyDefaultModel": "POST /web/factory/projects/:id/apply-default-model",
   "attentionArchive": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/archive",
   "attentionRead": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/read",
   "attentionRestore": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/restore",

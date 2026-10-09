@@ -455,15 +455,20 @@ const GH_CREDENTIAL_HELPER = '!gh auth git-credential';
 async function fetchStartPoint(
   sandbox: ExecutableSandbox,
   workdir: string,
-  { baseBranch, pullRequestNumber, mergeRequestNumber }: Pick<SessionBranchOptions, 'baseBranch' | 'pullRequestNumber' | 'mergeRequestNumber'>,
+  {
+    baseBranch,
+    pullRequestNumber,
+    mergeRequestNumber,
+  }: Pick<SessionBranchOptions, 'baseBranch' | 'pullRequestNumber' | 'mergeRequestNumber'>,
   shallowClone: boolean,
   env: Record<string, string>,
 ): Promise<SandboxCommandResult> {
-  const changeRequestRef = pullRequestNumber !== undefined
-    ? `refs/pull/${pullRequestNumber}/head`
-    : mergeRequestNumber !== undefined
-      ? `refs/merge-requests/${mergeRequestNumber}/head`
-      : undefined;
+  const changeRequestRef =
+    pullRequestNumber !== undefined
+      ? `refs/pull/${pullRequestNumber}/head`
+      : mergeRequestNumber !== undefined
+        ? `refs/merge-requests/${mergeRequestNumber}/head`
+        : undefined;
   const baseArgs = [
     '-C',
     workdir,
@@ -481,7 +486,14 @@ async function fetchStartPoint(
   if (base.exitCode !== 0 || !changeRequestRef) return base;
   return gitTransfer(
     sandbox,
-    ['-C', workdir, 'fetch', ...(pullRequestNumber !== undefined ? ['--filter=blob:none'] : []), 'origin', changeRequestRef],
+    [
+      '-C',
+      workdir,
+      'fetch',
+      ...(pullRequestNumber !== undefined ? ['--filter=blob:none'] : []),
+      'origin',
+      changeRequestRef,
+    ],
     {
       env,
       timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
@@ -506,13 +518,22 @@ export async function refreshMergeRequestCheckout(
   input: { branch: string; mergeRequestNumber: number; expectedHeadSha: string; access: RepositoryAccess },
 ): Promise<{ headSha: string; changed: boolean }> {
   const { branch, mergeRequestNumber, expectedHeadSha, access } = input;
-  if (!isValidGitRef(branch) || !Number.isSafeInteger(mergeRequestNumber) || mergeRequestNumber <= 0 ||
-      !/^[0-9a-f]{40}$/i.test(expectedHeadSha)) {
+  if (
+    !isValidGitRef(branch) ||
+    !Number.isSafeInteger(mergeRequestNumber) ||
+    mergeRequestNumber <= 0 ||
+    !/^[0-9a-f]{40}$/i.test(expectedHeadSha)
+  ) {
     throw new Error('Refusing to refresh a GitLab review with invalid session or head metadata.');
   }
   const token = access.authorization?.token;
   if (!token) throw new Error('GitLab repository access did not include a bearer token.');
-  const env = gitAuthenticationEnvironment(access.cloneUrl, token, access.authorization?.username ?? 'oauth2', 'pull-failed');
+  const env = gitAuthenticationEnvironment(
+    access.cloneUrl,
+    token,
+    access.authorization?.username ?? 'oauth2',
+    'pull-failed',
+  );
   const current = await execute(sandbox, 'git', ['-C', workdir, 'branch', '--show-current']);
   if (current.exitCode !== 0 || current.stdout.trim() !== branch) {
     throw new Error('The active checkout is not on its bound review branch.');
@@ -523,11 +544,15 @@ export async function refreshMergeRequestCheckout(
   }
   const before = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', 'HEAD']);
   if (before.exitCode !== 0) throw new Error('Could not read the current review checkout head.');
-  const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', `refs/merge-requests/${mergeRequestNumber}/head`], {
-    env,
-    timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
-    phase: 'GitLab review head refresh',
-  });
+  const fetch = await gitTransfer(
+    sandbox,
+    ['-C', workdir, 'fetch', 'origin', `refs/merge-requests/${mergeRequestNumber}/head`],
+    {
+      env,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'GitLab review head refresh',
+    },
+  );
   if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
   const fetched = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', 'FETCH_HEAD']);
   if (fetched.exitCode !== 0 || fetched.stdout.trim().toLowerCase() !== expectedHeadSha.toLowerCase()) {
@@ -546,10 +571,14 @@ async function checkoutSessionBranchImpl(
   workdir: string,
   options: SessionBranchOptions,
 ): Promise<void> {
-  const { branch, baseBranch, token, repoFullName, pullRequestNumber, mergeRequestNumber, cloneUrl, authUsername } = options;
-  if (!isValidGitRef(branch) || !isValidGitRef(baseBranch) ||
-      (pullRequestNumber !== undefined && mergeRequestNumber !== undefined) ||
-      (mergeRequestNumber !== undefined && (!Number.isSafeInteger(mergeRequestNumber) || mergeRequestNumber <= 0))) {
+  const { branch, baseBranch, token, repoFullName, pullRequestNumber, mergeRequestNumber, cloneUrl, authUsername } =
+    options;
+  if (
+    !isValidGitRef(branch) ||
+    !isValidGitRef(baseBranch) ||
+    (pullRequestNumber !== undefined && mergeRequestNumber !== undefined) ||
+    (mergeRequestNumber !== undefined && (!Number.isSafeInteger(mergeRequestNumber) || mergeRequestNumber <= 0))
+  ) {
     throw new MaterializeError('Refusing to create a session from an invalid branch name.', 'clone-failed');
   }
 

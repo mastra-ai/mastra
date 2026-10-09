@@ -1,20 +1,19 @@
-import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { FieldError } from '@mastra/playground-ui/components/Field';
 
 export interface DatasetFieldErrorsProps {
-  name: string;
   field: string;
   errors: Array<{ path: string; message: string }>;
 }
 
-export function DatasetFieldErrors({ name, field, errors }: DatasetFieldErrorsProps) {
+export function DatasetFieldErrors({ field, errors }: DatasetFieldErrorsProps) {
   if (errors.length === 0) return null;
 
   return (
-    <FieldBlock.ErrorMsg name={name}>
+    <FieldError>
       <span className="space-y-1">
         {errors.map(error => (
           <span key={`${error.path}:${error.message}`} className="block">
-            <code className="rounded bg-destructive/10 px-1">
+            <code className="rounded bg-destructive-subtle px-1">
               {field}
               {error.path !== '/' ? error.path : ''}
             </code>
@@ -22,6 +21,6 @@ export function DatasetFieldErrors({ name, field, errors }: DatasetFieldErrorsPr
           </span>
         ))}
       </span>
-    </FieldBlock.ErrorMsg>
+    </FieldError>
   );
 }

@@ -5,6 +5,8 @@ import { entityIndexMetadata, entityStatusLabel } from './entity-index-model';
 import { Badge } from '@/ds/components/Badge';
 import { CardContent, CardDescription, CardLink, CardTitle } from '@/ds/components/Card';
 import { ScrollArea } from '@/ds/components/ScrollArea';
+import { Txt } from '@/ds/components/Txt';
+import { textStyle } from '@/ds/primitives/text';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 export interface EntityIndexCompactGridProps {
@@ -26,7 +28,7 @@ function EntityIndexCompactCard({
   const detailsId = useId();
   const metadata = entityIndexMetadata(entity);
   const statusLabel = entityStatusLabel(metadata.status);
-  const statusVariant = metadata.status === 'ready' ? 'green' : metadata.status === 'processing' ? 'blue' : 'neutral';
+  const statusVariant = metadata.status === 'ready' ? 'success' : metadata.status === 'processing' ? 'info' : 'neutral';
   return (
     <div className="group/entity relative h-full min-w-0" data-entity-card>
       <CardLink
@@ -50,16 +52,16 @@ function EntityIndexCompactCard({
         </div>
         <dl id={detailsId} className="grid grid-cols-3 gap-3">
           <div>
-            <dt className="text-meta text-muted-foreground">Traces</dt>
-            <dd className="text-caption text-foreground">{metadata.traceCount}</dd>
+            <dt className={textStyle({ tone: 'muted', variant: 'meta' })}>Traces</dt>
+            <dd className={textStyle({ tone: 'ink', variant: 'caption' })}>{metadata.traceCount}</dd>
           </div>
           <div>
-            <dt className="text-meta text-muted-foreground">Signals set</dt>
-            <dd className="text-caption text-foreground">{metadata.signalsSet}</dd>
+            <dt className={textStyle({ tone: 'muted', variant: 'meta' })}>Signals set</dt>
+            <dd className={textStyle({ tone: 'ink', variant: 'caption' })}>{metadata.signalsSet}</dd>
           </div>
           <div>
-            <dt className="text-meta text-muted-foreground">Updated</dt>
-            <dd className="text-caption text-foreground" title={entity.updatedAt}>
+            <dt className={textStyle({ tone: 'muted', variant: 'meta' })}>Updated</dt>
+            <dd title={entity.updatedAt} className={textStyle({ tone: 'ink', variant: 'caption' })}>
               {metadata.updatedAt}
             </dd>
           </div>
@@ -76,7 +78,11 @@ export function EntityIndexCompactGrid({
   LinkComponent,
 }: EntityIndexCompactGridProps) {
   if (entities.length === 0 && hasSearch) {
-    return <p className="py-8 text-center text-caption text-muted-foreground">No entities match your search</p>;
+    return (
+      <Txt variant="caption" tone="muted" className="py-8 text-center">
+        No entities match your search
+      </Txt>
+    );
   }
   return (
     <ScrollArea className="h-full">

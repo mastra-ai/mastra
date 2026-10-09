@@ -19,6 +19,16 @@ function createTui() {
 }
 
 describe('MastraTUI user input handoff', () => {
+  it('queues text submitted before the first read', async () => {
+    const { tui, editor } = createTui();
+    tui.installUserInputHandler();
+
+    editor.onSubmit!('/knowledge');
+
+    await expect(tui.getUserInput()).resolves.toBe('/knowledge');
+    expect(editor.setText).toHaveBeenCalledWith('');
+  });
+
   it('resolves the pending read with the submitted text', async () => {
     const { tui, editor } = createTui();
 

@@ -1,11 +1,11 @@
-import { ChatNotification } from '@mastra/playground-ui/components/ai/chat-event';
+import { NotificationActivity } from '@mastra/playground-ui/components/ai/activity';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Bell, CircleDot } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { MessageEntry, NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
-import { parseSkillActivation } from './SkillMessage';
+import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import { isRecord } from './transcript-shared';
 import { signalPartsText } from './TranscriptSignals';
 
@@ -47,16 +47,16 @@ function notificationPresentation(entry: NotificationEntry): { state: string; ic
     return { state: 'closed', icon: <PullRequestStatusIcon status="closed" size={13} decorative /> };
   }
   if (action === 'opened' || action === 'reopened') {
-    return { state: 'open', icon: <CircleDot size={13} />, className: 'text-accent1' };
+    return { state: 'open', icon: <CircleDot size={13} />, className: 'text-success-indicator' };
   }
-  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning1' };
+  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning-foreground' };
 }
 
 export function NotificationCard({ entry }: { entry: NotificationEntry }) {
   const presentation = notificationPresentation(entry);
   const url = notificationUrl(entry);
   return (
-    <ChatNotification
+    <NotificationActivity
       state={presentation.state}
       label={entry.source ?? 'notification'}
       message={entry.message}
@@ -67,7 +67,7 @@ export function NotificationCard({ entry }: { entry: NotificationEntry }) {
 }
 
 export function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
-  return <ChatNotification state="summary" label="Notification summary" message={entry.message} />;
+  return <NotificationActivity state="summary" label="Notification summary" message={entry.message} />;
 }
 
 export function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | NotificationSummaryEntry> {

@@ -110,12 +110,14 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     // Use optimistic locking with retry for atomic updates
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
@@ -156,6 +158,9 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
         // Merge the new step result and request context
         snapshot.context[stepId] = result;
+        if (state !== undefined) {
+          (snapshot.context as Record<string, unknown>).__state = state;
+        }
         snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
 
         const data: WorkflowSnapshotEntityData = {

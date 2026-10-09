@@ -256,12 +256,12 @@ const tools = browser.getTools()
 
 ### Screencast
 
-#### `startScreencast(options?, threadId?)`
+#### `startScreencast(options?)`
 
 Starts streaming browser frames. Returns a `ScreencastStream` that emits frame events.
 
 ```typescript
-const stream = await browser.startScreencast({ format: 'jpeg', quality: 80 }, 'thread-123')
+const stream = await browser.startScreencast({ format: 'jpeg', quality: 80 })
 
 stream.on('frame', frame => {
   console.log('Frame received:', frame.data.length, 'bytes')
@@ -304,29 +304,31 @@ await browser.injectKeyboardEvent({
 
 ### State
 
-#### `getState(threadId?)`
+#### `getBrowserState(threadId?)`
 
-Gets the current browser state including URL and tabs.
+Gets the current browser state, including open tabs and the active tab index. Returns `null` when no state is available.
 
 ```typescript
-const state = await browser.getState('thread-123')
-console.log('Current URL:', state.currentUrl)
-console.log('Tabs:', state.tabs)
+const state = await browser.getBrowserState('thread-123')
+if (state) {
+  console.log('Active tab:', state.tabs[state.activeTabIndex]?.url)
+  console.log('Tabs:', state.tabs)
+}
 ```
 
-**Returns:** `Promise<BrowserState>`
+**Returns:** `Promise<BrowserState | null>`
 
 ```typescript
 interface BrowserState {
-  currentUrl: string | null
   tabs: BrowserTabState[]
   activeTabIndex: number
+  closeReason?: 'agent' | 'user' | 'process_restart' | 'error'
+  activeUrlChangeSource?: 'agent' | 'user'
 }
 
 interface BrowserTabState {
-  id: string
   url: string
-  title: string
+  title?: string
 }
 ```
 

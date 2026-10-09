@@ -2469,6 +2469,37 @@ describe('PgVector', () => {
           expect(indexes).toContain(testIndexName);
         });
 
+        it('returns bit arrays from a metadata-only query with includeVector', async () => {
+          if (!bitSupported) return;
+
+          await bitVectorDB.createIndex({
+            indexName: testIndexName,
+            dimension: 4,
+            metric: 'cosine',
+            vectorType: 'bit',
+          });
+          await bitVectorDB.upsert({
+            indexName: testIndexName,
+            vectors: [
+              [1, 0, 1, 0],
+              [0, 1, 0, 1],
+            ],
+            metadata: [
+              { label: 'lead-one', kind: 'bits' },
+              { label: 'lead-zero', kind: 'bits' },
+            ],
+          });
+
+          const results = await bitVectorDB.query({
+            indexName: testIndexName,
+            filter: { kind: 'bits' },
+            includeVector: true,
+          });
+          const byLabel = Object.fromEntries(results.map(r => [r.metadata?.label, r.vector]));
+
+          expect(byLabel).toEqual({ 'lead-one': [1, 0, 1, 0], 'lead-zero': [0, 1, 0, 1] });
+        });
+
         it('should upsert and query bit vectors', async () => {
           if (!bitSupported) {
             console.log('Skipping test: bit requires pgvector >= 0.7.0');
@@ -2673,6 +2704,25 @@ describe('PgVector', () => {
 
           const indexes = await sparseVectorDB.listIndexes();
           expect(indexes).toContain(testIndexName);
+        });
+
+        it('returns dense vectors from a metadata-only query with includeVector', async () => {
+          if (!sparsevecSupported) return;
+
+          await sparseVectorDB.createIndex({ indexName: testIndexName, dimension: 4, vectorType: 'sparsevec' });
+          await sparseVectorDB.upsert({
+            indexName: testIndexName,
+            vectors: [[0.5, 0, 0.25, 0]],
+            metadata: [{ label: 'a' }],
+          });
+
+          const results = await sparseVectorDB.query({
+            indexName: testIndexName,
+            filter: { label: 'a' },
+            includeVector: true,
+          });
+
+          expect(results[0]?.vector).toEqual([0.5, 0, 0.25, 0]);
         });
 
         it('should upsert and query sparsevec vectors', async () => {

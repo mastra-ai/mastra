@@ -158,10 +158,13 @@ describe('buildGitLabVersionControl', () => {
       cloneUrl: 'https://gitlab.example.com/acme/app.git',
       authorization: { scheme: 'bearer', token: 'glpat-secret', username: 'oauth2' },
     });
-    expect(result.contextForConnection).toHaveBeenLastCalledWith({
-      type: 'oauth',
-      accessToken: 'gitlab-connection:connection-1',
-    }, 'gitlab.example.com');
+    expect(result.contextForConnection).toHaveBeenLastCalledWith(
+      {
+        type: 'oauth',
+        accessToken: 'gitlab-connection:connection-1',
+      },
+      'gitlab.example.com',
+    );
   });
 
   it('preserves a self-managed relative URL root for clone and merge-request note links', async () => {

@@ -1,30 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { NotificationSignalNotice } from './notification-signal-notice';
-import { getNotificationNoticeVariant } from './notification-signal-notice-variant';
 import type { SignalData } from './signal-data';
-import type { NoticeVariant } from '@/ds/components/Notice';
 
 afterEach(() => cleanup());
-
-const priorityCases = [
-  { priority: 'urgent', variant: 'destructive' },
-  { priority: 'high', variant: 'warning' },
-  { priority: 'medium', variant: 'info' },
-  { priority: 'low', variant: 'note' },
-  { priority: 'unexpected', variant: 'note' },
-  { priority: undefined, variant: 'note' },
-] satisfies Array<{ priority: string | undefined; variant: NoticeVariant }>;
-
-describe('getNotificationNoticeVariant', () => {
-  describe.each(priorityCases)('when the priority is $priority', ({ priority, variant }) => {
-    it(`returns the ${variant} variant`, () => {
-      expect(getNotificationNoticeVariant(priority)).toBe(variant);
-    });
-  });
-});
 
 describe('NotificationSignalNotice', () => {
   describe('when the signal contains complete notification metadata', () => {
@@ -52,8 +33,9 @@ describe('NotificationSignalNotice', () => {
       expect(screen.getByText('github / issue-opened')).not.toBeNull();
     });
 
-    it('renders every text content part', () => {
+    it('renders every text content part once opened', () => {
       render(<NotificationSignalNotice signal={signal} />);
+      fireEvent.click(screen.getByRole('button', { name: /github \/ issue-opened/ }));
 
       expect(
         screen.getByText('Studio crashes when I open a workflow Opening any workflow shows a blank page.'),

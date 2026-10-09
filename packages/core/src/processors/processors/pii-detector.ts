@@ -263,6 +263,12 @@ export class PIIDetector implements Processor<'pii-detector'> {
    */
   private static readonly REGEX_CARRYOVER_SIZE = 128;
 
+  /**
+   * Longest unfinished word kept held past the carryover, so a long email address (up to 254
+   * characters) or URL is not released before the rest of it arrives.
+   */
+  private static readonly MAX_WORD_HOLD = 256;
+
   constructor(options: PIIDetectorOptions) {
     this.detectionTypes = options.detectionTypes || PIIDetector.DEFAULT_DETECTION_TYPES;
     this.threshold = options.threshold ?? 0.6;
@@ -332,10 +338,9 @@ export class PIIDetector implements Processor<'pii-detector'> {
           if (this.strategy === 'filter') {
             continue; // Skip this message
           } else if (this.strategy === 'redact') {
+            // No usable redaction (e.g. the whole message was removed): drop it rather than send the original
             if (processedMessage) {
               processedMessages.push(processedMessage);
-            } else {
-              processedMessages.push(message); // Fallback to original if redaction failed
             }
             continue;
           }
@@ -540,7 +545,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
         return null; // Return null to indicate message should be filtered
 
       case 'redact':
-        if (result.redacted_content) {
+        if (result.redacted_content?.trim()) {
           console.info(`[PIIDetector] Redacted PII: ${alertMessage}`);
           return this.createRedactedMessage(message, result.redacted_content);
         } else {
@@ -910,7 +915,28 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     }
   }
 
-  private async processRedactOutputStream(
+  /**
+   * Apply block or filter to regex PII found in held text, before any of it is released.
+   * Block aborts. Filter drops the held text up to the end of the last detection; the rest
+   * stays held and is checked again with later text.
+   */
+  private applyHeldStrategy(
+    state: Record<string, any>,
+    held: string,
+    detections: PIIDetection[],
+    detectionResult: PIIDetectionResult,
+    part: ChunkType & { type: 'text-delta' },
+    abort: (reason?: string) => never,
+  ): string {
+    if (this.strategy === 'redact' || detections.length === 0) return held;
+    this.applyStreamStrategy(part, detectionResult, abort);
+    const kept = held.slice(Math.max(...detections.map(detection => detection.end)));
+    state._piiRegexTail = kept || undefined;
+    state._piiRegexTailPart = kept ? part : undefined;
+    return kept;
+  }
+
+  private async processHeldOutputStream(
     part: ChunkType,
     state: Record<string, any>,
     abort: (reason?: string) => never,
@@ -936,14 +962,20 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     }
 
     if (part.type !== 'text-delta') {
-      const carryover: string = state._piiRegexTail || '';
+      let carryover: string = state._piiRegexTail || '';
       const carryoverPart = state._piiRegexTailPart as (ChunkType & { type: 'text-delta' }) | undefined;
+
+      let regexResult: PIIDetectionResult | undefined;
+      if (carryover && carryoverPart) {
+        regexResult = await this.detectPIILocal(carryover);
+        const detections = regexResult.detections ?? [];
+        carryover = this.applyHeldStrategy(state, carryover, detections, regexResult, carryoverPart, abort);
+      }
       state._piiRegexTail = undefined;
       state._piiRegexTailPart = undefined;
 
-      if (carryover && carryoverPart) {
-        const regexResult = await this.detectPIILocal(carryover);
-        const redacted = regexResult.redacted_content ?? carryover;
+      if (carryover && carryoverPart && regexResult) {
+        const redacted = this.strategy === 'redact' ? (regexResult.redacted_content ?? carryover) : carryover;
         if (this.hasLLMOnlyTypes) {
           if (!state._piiFirstPayloadId) {
             state._piiFirstPayloadId = carryoverPart.payload.id;
@@ -973,15 +1005,24 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     if (!textPart.payload.text) return part;
 
     const previousLength = (state._piiRegexTail as string | undefined)?.length ?? 0;
-    const combined = this.appendRegexCarryover(state, textPart);
+    let combined = this.appendRegexCarryover(state, textPart);
     const regexResult = await this.detectPIILocal(combined);
-    const detections = regexResult.detections ?? [];
+    let detections = regexResult.detections ?? [];
     const hasNewPII = detections.some(detection => detection.end > previousLength);
     if (hasNewPII) await this.emitDetection(combined, regexResult, true);
+    if (this.strategy !== 'redact' && detections.length > 0) {
+      // A match that reaches the end of the held text may still grow with the next chunk.
+      if (this.strategy === 'filter' && detections.some(detection => detection.end === combined.length)) return null;
+      combined = this.applyHeldStrategy(state, combined, detections, regexResult, textPart, abort);
+      detections = [];
+    }
 
     if (combined.length <= PIIDetector.REGEX_CARRYOVER_SIZE) return null;
 
-    let emitEnd = combined.length - PIIDetector.REGEX_CARRYOVER_SIZE;
+    let emitEnd = Math.min(
+      combined.length - PIIDetector.REGEX_CARRYOVER_SIZE,
+      Math.max(combined.search(/\S*$/), combined.length - PIIDetector.MAX_WORD_HOLD),
+    );
     const regions = this.buildRedactionRegions(detections);
     for (const region of regions) {
       if (region.start < emitEnd && region.end > emitEnd) emitEnd = region.start;
@@ -1017,8 +1058,8 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
    * Two modes based on configured detection types:
    *
    * 1. **Regex-only** (no LLM-only types like name/address/DOB configured):
-   *    Each chunk is checked with zero-cost regex patterns. The redact strategy
-   *    withholds a bounded suffix so regex matches can safely span chunks.
+   *    Each chunk is checked with zero-cost regex patterns. The redact, block and
+   *    filter strategies withhold a bounded suffix so regex matches can safely span chunks.
    *
    * 2. **Regex + LLM buffering** (LLM-only types configured):
    *    Each chunk is first checked with regex. Stable text is buffered and
@@ -1040,8 +1081,8 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
     const { part, abort, state, writer, requestContext, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
     try {
-      if (this.strategy === 'redact' && this.hasRegexTypes) {
-        return this.processRedactOutputStream(part, state, abort, writer, observabilityContext, requestContext);
+      if (this.strategy !== 'warn' && this.hasRegexTypes) {
+        return this.processHeldOutputStream(part, state, abort, writer, observabilityContext, requestContext);
       }
 
       // Handle non-text chunks: flush any pending LLM buffer first
@@ -1200,10 +1241,9 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
           if (this.strategy === 'filter') {
             continue; // Skip this message
           } else if (this.strategy === 'redact') {
+            // No usable redaction (e.g. the whole message was removed): drop it rather than send the original
             if (processedMessage) {
               processedMessages.push(processedMessage);
-            } else {
-              processedMessages.push(message); // Fallback to original if redaction failed
             }
             continue;
           }

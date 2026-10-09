@@ -13,9 +13,11 @@ function requestUrl(fetchImpl: ReturnType<typeof vi.fn<typeof fetch>>, call = 0)
 describe('IncidentioApiClient additional API surfaces', () => {
   it('lists actions with incident filters and normalized pagination', async () => {
     const action = { id: 'action-1', description: 'Roll back the release' };
-    const fetchImpl = vi.fn<typeof fetch>().mockResolvedValue(
-      json({ actions: [action], pagination_meta: { after: 'action-next', total_record_count: 12 } }),
-    );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        json({ actions: [action], pagination_meta: { after: 'action-next', total_record_count: 12 } }),
+      );
     const client = new IncidentioApiClient({
       baseUrl: 'https://api.incident.test/',
       accessToken: 'incident-key',

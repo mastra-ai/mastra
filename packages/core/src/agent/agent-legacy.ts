@@ -655,15 +655,16 @@ export class AgentLegacyHandler {
                 promises.push(
                   this.capabilities
                     .genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions)
-                    .then(title => {
-                      if (title) {
-                        return memory.createThread({
-                          threadId: thread.id,
-                          resourceId,
-                          memoryConfig,
-                          title,
-                          metadata: thread.metadata,
-                        });
+                    .then(async title => {
+                      if (!title) return;
+                      // Update-only: the thread may have been deleted while the title was generating (#25203).
+                      if (!(await memory.getThreadById({ threadId: thread.id }))) return;
+                      try {
+                        await memory.updateThread({ id: thread.id, title, memoryConfig });
+                      } catch (error) {
+                        // A delete can still land between the check and the update; only swallow that case.
+                        if (!(await memory.getThreadById({ threadId: thread.id }))) return;
+                        throw error;
                       }
                     }),
                 );

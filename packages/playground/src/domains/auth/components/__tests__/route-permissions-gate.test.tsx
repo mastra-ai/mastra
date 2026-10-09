@@ -1,5 +1,6 @@
 import type { PermissionPatternsResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -28,7 +29,6 @@ vi.mock('@mastra/playground-ui/components/Spinner', () => ({
 }));
 
 import { RoutePermissionsGate } from '../route-permissions-gate';
-import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const authHandler = (capabilities: AuthCapabilities) =>

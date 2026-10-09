@@ -14,14 +14,14 @@ export function SectionHeader({ title, subtitle, icon, className }: SectionHeade
     <header className={cn('flex w-fit flex-col', className)}>
       <Txt as="h2" variant="heading" className="flex items-center gap-2">
         {icon && (
-          <Icon size="lg" className="text-accent1">
+          <Icon size="lg" className="text-success-indicator">
             {icon}
           </Icon>
         )}
         {title}
       </Txt>
       {subtitle && (
-        <Txt tone="muted" className="text-body">
+        <Txt variant="body" tone="muted">
           {subtitle}
         </Txt>
       )}

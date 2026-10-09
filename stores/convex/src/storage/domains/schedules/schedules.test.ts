@@ -277,6 +277,28 @@ describe('SchedulesConvex', () => {
     });
   });
 
+  it('forwards a terminal status through the CAS claim request', async () => {
+    const { client, callStorage } = createClient({
+      callStorage: vi.fn(async () => true),
+    });
+    const storage = new SchedulesConvex({ client });
+
+    await expect(storage.updateScheduleNextFire('schedule-1', 1_000, 2_000, 1_500, 'run-1', 'completed')).resolves.toBe(
+      true,
+    );
+
+    expect(callStorage).toHaveBeenCalledWith({
+      op: 'updateScheduleNextFire',
+      tableName: TABLE_SCHEDULES,
+      id: 'schedule-1',
+      expectedNextFireAt: 1_000,
+      newNextFireAt: 2_000,
+      lastFireAt: 1_500,
+      lastRunId: 'run-1',
+      newStatus: 'completed',
+    });
+  });
+
   it('treats a missing schedules schema as no due schedules for idle polling', async () => {
     const { client } = createClient({
       callStorage: vi.fn(async () => {

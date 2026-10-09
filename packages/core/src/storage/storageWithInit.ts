@@ -2,6 +2,12 @@ import type { IMastraLogger } from '../logger';
 import type { MastraCompositeStore } from './base';
 
 const isAugmentedSymbol = Symbol('isAugmented');
+const storageSources = new WeakMap<MastraCompositeStore, MastraCompositeStore>();
+
+export function getStorageSource(storage: MastraCompositeStore): MastraCompositeStore {
+  return storageSources.get(storage) ?? storage;
+}
+
 const initIndependentMethods = new Set<PropertyKey>([
   '__registerMastra',
   '__setLogger',
@@ -77,6 +83,19 @@ export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeS
           };
         }
 
+        // Knowledge activation owns parent and domain initialization as one
+        // coalesced operation. Running ensureInit() first would initialize the
+        // parent once here and a second time inside initKnowledge().
+        if (prop === 'getStore') {
+          return async (...args: unknown[]) => {
+            if (args[0] === 'knowledge') {
+              return Reflect.apply(value, target, args);
+            }
+            await ensureInit();
+            return Reflect.apply(value, target, args);
+          };
+        }
+
         // Internal housekeeping methods are synchronous and do not access the database.
         if (initIndependentMethods.has(prop)) {
           return (...args: unknown[]) => Reflect.apply(value, target, args);
@@ -94,5 +113,6 @@ export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeS
     },
   });
 
+  storageSources.set(proxy, getStorageSource(storage));
   return proxy;
 }

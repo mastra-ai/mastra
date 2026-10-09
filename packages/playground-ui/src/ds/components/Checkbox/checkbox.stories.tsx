@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Label } from '../Label';
+import { Field, FieldLabel } from '../Field';
 import { Checkbox } from './checkbox';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
@@ -144,28 +144,28 @@ export const OnSurfaces: Story = {
 
 export const WithLabel: Story = {
   render: args => (
-    <div className="flex items-center gap-2">
-      <Checkbox id="terms" {...args} />
-      <Label htmlFor="terms">Accept terms and conditions</Label>
-    </div>
+    <Field orientation="horizontal">
+      <Checkbox {...args} />
+      <FieldLabel>Accept terms and conditions</FieldLabel>
+    </Field>
   ),
 };
 
 export const CheckboxGroup: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <Checkbox id="option1" />
-        <Label htmlFor="option1">Option 1</Label>
-      </div>
-      <div className="flex items-center gap-2">
-        <Checkbox id="option2" defaultChecked />
-        <Label htmlFor="option2">Option 2</Label>
-      </div>
-      <div className="flex items-center gap-2">
-        <Checkbox id="option3" />
-        <Label htmlFor="option3">Option 3</Label>
-      </div>
+      <Field orientation="horizontal">
+        <Checkbox />
+        <FieldLabel>Option 1</FieldLabel>
+      </Field>
+      <Field orientation="horizontal">
+        <Checkbox defaultChecked />
+        <FieldLabel>Option 2</FieldLabel>
+      </Field>
+      <Field orientation="horizontal">
+        <Checkbox />
+        <FieldLabel>Option 3</FieldLabel>
+      </Field>
     </div>
   ),
 };

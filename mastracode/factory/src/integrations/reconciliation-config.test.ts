@@ -17,8 +17,6 @@ describe('optionalBoolean', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     expect(optionalBoolean('ENABLED', 'sometimes', 'Test reconciliation')).toBeUndefined();
-    expect(warn).toHaveBeenCalledWith(
-      '[Test reconciliation] ENABLED must be true or false; received "sometimes".',
-    );
+    expect(warn).toHaveBeenCalledWith('[Test reconciliation] ENABLED must be true or false; received "sometimes".');
   });
 });

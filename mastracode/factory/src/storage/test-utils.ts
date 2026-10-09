@@ -16,7 +16,7 @@ import { CustomProvidersStorage } from './domains/custom-providers/base.js';
 import { IntakeStorage } from './domains/intake/base.js';
 import { IntegrationStorage } from './domains/integrations/base.js';
 import { MemorySettingsStorage } from './domains/memory-settings/base.js';
-import { ModelPacksStorage } from './domains/model-packs/base.js';
+import { ModelDefaultsStorage } from './domains/model-defaults/base.js';
 import { FactoryProjectsStorage } from './domains/projects/base.js';
 import { QueueHealthStorage } from './domains/queue-health/base.js';
 import { SourceControlStorage } from './domains/source-control/base.js';
@@ -31,7 +31,7 @@ export interface FactoryStorageTestSeed {
   integrations: IntegrationStorage;
   projects: FactoryProjectsStorage;
   sourceControl: SourceControlStorage;
-  modelPacks: ModelPacksStorage;
+  modelDefaults: ModelDefaultsStorage;
   memorySettings: MemorySettingsStorage;
   customProviders: CustomProvidersStorage;
   queueHealth: QueueHealthStorage;
@@ -55,7 +55,7 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const integrations = storage.registerDomain(new IntegrationStorage());
   const projects = storage.registerDomain(new FactoryProjectsStorage());
   const sourceControl = storage.registerDomain(new SourceControlStorage());
-  const modelPacks = storage.registerDomain(new ModelPacksStorage());
+  const modelDefaults = storage.registerDomain(new ModelDefaultsStorage());
   const memorySettings = storage.registerDomain(new MemorySettingsStorage());
   const customProviders = storage.registerDomain(new CustomProvidersStorage());
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
@@ -72,7 +72,7 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
     integrations,
     projects,
     sourceControl,
-    modelPacks,
+    modelDefaults,
     memorySettings,
     customProviders,
     queueHealth,

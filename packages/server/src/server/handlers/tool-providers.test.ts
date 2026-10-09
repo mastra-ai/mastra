@@ -320,6 +320,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE', () => {
       toolkit: 'gmail',
       connectionId: 'conn-1',
       toolName: 'gmail.fetch',
+      scope: 'per-author',
     });
     expect(result).toEqual({ url: 'https://oauth/redirect', authId: 'auth-123' });
   });
@@ -341,6 +342,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE', () => {
       toolkit: 'gmail',
       connectionId: 'user-abc',
       toolName: undefined,
+      scope: 'per-author',
     });
   });
 
@@ -410,6 +412,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE', () => {
       connectionId: 'conn-1',
       toolName: undefined,
       config: { subdomain: 'acme' },
+      scope: 'per-author',
     });
   });
 
@@ -430,6 +433,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE', () => {
       toolkit: 'gmail',
       connectionId: 'user-xyz',
       toolName: undefined,
+      scope: 'per-author',
     });
   });
 });
@@ -900,6 +904,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE (scope)', () => {
       connectionId: 'shared',
       toolName: undefined,
       config: undefined,
+      scope: 'shared',
     });
     expect(store.upsertConnection).toHaveBeenCalledWith({
       authorId: 'shared',
@@ -932,6 +937,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE (scope)', () => {
       connectionId: 'user_42',
       toolName: undefined,
       config: undefined,
+      scope: 'per-author',
     });
     expect(store.upsertConnection).toHaveBeenCalledWith({
       authorId: 'user_42',
@@ -965,6 +971,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE (scope)', () => {
       connectionId: 'end_user_77',
       toolName: undefined,
       config: undefined,
+      scope: 'caller-supplied',
     });
     expect(store.upsertConnection).toHaveBeenCalledWith({
       authorId: 'end_user_77',
@@ -1020,6 +1027,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE (scope)', () => {
       connectionId: 'end_user_77',
       toolName: undefined,
       config: undefined,
+      scope: 'caller-supplied',
     });
     expect(store.upsertConnection).toHaveBeenCalledWith({
       authorId: 'end_user_77',
@@ -1056,6 +1064,7 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE (scope)', () => {
       connectionId: 'shared',
       toolName: undefined,
       config: undefined,
+      scope: 'shared',
     });
     expect(store.upsertConnection).toHaveBeenCalledWith(
       expect.objectContaining({ authorId: 'shared', connectionId: 'ca_new', scope: 'shared' }),

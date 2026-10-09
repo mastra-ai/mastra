@@ -7,9 +7,9 @@ import { MastraWorker } from '../worker';
 import type { WorkerDeps } from '../worker';
 
 /**
- * Drives cron-based workflow schedules. On each tick it polls storage
- * for due schedules, computes next fire times, and publishes
- * workflow.start events. Does not consume events — only produces them.
+ * Drives cron-based workflow and agent schedules. On each tick it polls
+ * storage for due schedules, computes next fire times, and publishes fire
+ * events. Does not consume events — only produces them.
  *
  * This is the **single** scheduler code path. `Mastra.startWorkers()` adds it
  * when scheduling work exists or the scheduler is explicitly enabled.

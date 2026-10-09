@@ -132,7 +132,8 @@ type PhantomSerializedKeys = Exclude<
   | keyof AgentExecutionOptionsBase<any>
   // These are durable-internal representations that don't map 1:1 to a
   // base option key but are derived from one:
-  | 'hasErrorProcessors' // derived from errorProcessors.length
+  | 'hasErrorProcessors' // derived from configured errorProcessors.length (no framework defaults)
+  | 'emptyErrorProcessorOverride' // derived from a call-time errorProcessors: [] (replaces the defaults)
   | 'skipBgTaskWait' // derived from _skipBgTaskWait
   | 'agentMaxRetries' // derived from the agent's maxRetries config
   | 'agentMaxRetriesConfigured' // preserves omitted vs explicitly configured maxRetries
@@ -141,6 +142,7 @@ type PhantomSerializedKeys = Exclude<
   | 'transform' // shadow of transform policy (targets only)
   | 'isTaskComplete' // shadow of isTaskComplete (scorer names only)
   | 'structuredOutput' // serialized form of structuredOutput
+  | 'toolsetToolNames' // names of call-time toolsets tools (cross-process detection)
 >;
 
 describe('DurableAgent ↔ Agent parity gate', () => {

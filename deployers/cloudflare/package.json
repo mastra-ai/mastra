@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "1.2.31-alpha.0",
+  "version": "1.2.35-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -61,7 +61,7 @@
     "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "wrangler": "^4.110.0",
+    "wrangler": "^4.147.0",
     "zod": "^3.25.76"
   },
   "homepage": "https://mastra.ai",

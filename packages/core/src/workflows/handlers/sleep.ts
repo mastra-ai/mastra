@@ -3,7 +3,7 @@ import type { PubSub } from '../../events/pubsub';
 import { SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { ExecuteFunction, InnerOutput } from '../step';
 import { getStepResult } from '../step';
@@ -100,7 +100,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
         suspend: async (_suspendPayload: any): Promise<any> => {},
         bail: (() => {}) as () => InnerOutput,
         abort: () => {
-          abortController?.abort();
+          abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
         },
         [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
@@ -234,7 +234,7 @@ export async function executeSleepUntil(
         suspend: async (_suspendPayload: any): Promise<any> => {},
         bail: (() => {}) as () => InnerOutput,
         abort: () => {
-          abortController?.abort();
+          abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
         },
         [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,

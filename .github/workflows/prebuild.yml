@@ -197,6 +197,12 @@ jobs:
           const unitTestFiles = affectedTests.filter(file => !isPackageE2eTest(file) && !isExternalE2eTest(file));
           const e2eTestFiles = affectedTests.filter(isPackageE2eTest);
 
+          fs.mkdirSync('/tmp/affected-outputs', { recursive: true });
+          fs.writeFileSync(
+            '/tmp/affected-outputs/unit_test_files.txt',
+            `${unitTestFiles.join('\n')}${unitTestFiles.length > 0 ? '\n' : ''}`,
+          );
+
           const affectedStoreTests = affected(file => file.startsWith('stores/'));
           const affectedWorkspaceTests = affected(file => file.startsWith('workspaces/'));
           const affectedMemoryTests = affected(file => file.startsWith('packages/memory/integration-tests/'));

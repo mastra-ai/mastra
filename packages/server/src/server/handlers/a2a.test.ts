@@ -4271,6 +4271,38 @@ describe('A2A Handler', () => {
       });
     });
 
+    it('omits all history when historyLength is 0', async () => {
+      const message = (messageId: string) => ({
+        kind: 'message' as const,
+        messageId,
+        role: 'user' as const,
+        parts: [{ kind: 'text' as const, text: messageId }],
+      });
+      await mockTaskStore.save({
+        agentId: 'test-agent',
+        data: {
+          id: 'task-1',
+          contextId: 'context-1',
+          kind: 'task' as const,
+          status: { state: 'completed' as const, timestamp: '2026-08-06T12:00:00.000Z' },
+          history: [message('m1'), message('m2')],
+        },
+      });
+
+      const list = (historyLength: number) =>
+        (
+          handleTaskList({
+            requestId: 1,
+            taskStore: mockTaskStore,
+            agentId: 'test-agent',
+            params: { historyLength },
+          }) as any
+        ).result.tasks[0].history;
+
+      expect(list(0)).toEqual([]);
+      expect(list(1)).toHaveLength(1);
+    });
+
     it('returns a protocol error for unsupported A2A versions', async () => {
       const response = await AGENT_EXECUTION_ROUTE.handler({
         mastra: mockMastra,

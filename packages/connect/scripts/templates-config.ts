@@ -43,6 +43,16 @@ const PIN_677: TemplatePin = {
 };
 
 export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
+  // NangoHQ/integration-templates#670 fixed clerk_list_users and
+  // clerk_list_sessions, which previously parsed Clerk's bare-array
+  // responses with an envelope schema and 500'd on every call. Pinned to
+  // upstream main at the merge commit so we pick up the fix without
+  // regenerating every other provider. Fold back into TEMPLATE_SHA on the
+  // next workspace-wide refresh.
+  clerk: {
+    repo: 'NangoHQ/integration-templates',
+    sha: '23df553a789b6e30ba1640d4605cf5bfa7ca7cae',
+  },
   // NangoHQ/integration-templates#667
   resend: {
     repo: 'rhysbalevicius/integration-templates',

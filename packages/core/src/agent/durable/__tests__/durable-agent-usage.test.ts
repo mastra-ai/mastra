@@ -8,9 +8,9 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import 'zod';
+import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
-import '../../../tools';
+import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
@@ -44,32 +44,56 @@ function createModelWithUsage(usage: { inputTokens: number; outputTokens: number
   });
 }
 
-function _createMultiStepModelWithUsage(
-  steps: Array<{ usage: { inputTokens: number; outputTokens: number; totalTokens: number }; text: string }>,
-) {
-  let stepIndex = 0;
+type PartialUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  reasoningTokens?: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+};
+
+function createToolThenReplyingModelWithUsage(firstUsage: PartialUsage, secondUsage: PartialUsage) {
   return new MockLanguageModelV2({
-    doStream: async () => {
-      const step = steps[stepIndex % steps.length];
-      stepIndex++;
+    doStream: async ({ prompt }) => {
+      const sawToolResult = JSON.stringify(prompt).includes('usage-tool-result');
       return {
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: `id-${stepIndex}`, modelId: 'mock-model-id', timestamp: new Date(0) },
-          { type: 'text-start', id: 'text-1' },
-          { type: 'text-delta', id: 'text-1', delta: step.text },
-          { type: 'text-end', id: 'text-1' },
-          {
-            type: 'finish',
-            finishReason: 'stop',
-            usage: step.usage,
-          },
-        ]),
+        stream: convertArrayToReadableStream<any>(
+          sawToolResult
+            ? [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-2', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-2' },
+                { type: 'text-delta', id: 'text-2', delta: 'Final response' },
+                { type: 'text-end', id: 'text-2' },
+                { type: 'finish', finishReason: 'stop', usage: secondUsage },
+              ]
+            : [
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallType: 'function',
+                  toolCallId: 'call-1',
+                  toolName: 'usageTool',
+                  input: '{}',
+                  providerExecuted: false,
+                },
+                { type: 'finish', finishReason: 'tool-calls', usage: firstUsage },
+              ],
+        ),
         rawCall: { rawPrompt: null, rawSettings: {} },
       };
     },
   });
 }
+
+const usageTool = createTool({
+  id: 'usageTool',
+  description: 'Returns a value so the model runs a second step.',
+  inputSchema: z.object({}),
+  execute: async () => ({ result: 'usage-tool-result' }),
+});
 
 // ============================================================================
 // Usage Tracking Tests
@@ -217,6 +241,121 @@ describe('DurableAgent usage accumulation', () => {
 
   afterEach(async () => {
     await pubsub.close();
+  });
+
+  it('keeps an omitted counter unknown across a real multi-step durable run', async () => {
+    const model = createToolThenReplyingModelWithUsage(
+      { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+      { outputTokens: 5 },
+    );
+    const baseAgent = new Agent({
+      id: 'partial-usage-agent',
+      name: 'Partial Usage Agent',
+      instructions: 'Use the tool, then answer.',
+      model: model as LanguageModelV2,
+      tools: { usageTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    let callbackUsage: PartialUsage | undefined;
+    const result = await durableAgent.stream('Run the tool', {
+      maxSteps: 3,
+      onFinish: ({ usage }) => {
+        callbackUsage = usage;
+      },
+    });
+
+    try {
+      for await (const _chunk of result.fullStream) {
+        // Drain the durable workflow before reading its final output.
+      }
+      const output = await result.output.getFullOutput();
+      expect(output.usage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: 25,
+        totalTokens: undefined,
+      });
+      expect(callbackUsage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: 25,
+        totalTokens: undefined,
+      });
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  it('keeps all counters unknown when every durable step omits usage', async () => {
+    const model = createToolThenReplyingModelWithUsage({}, {});
+    const baseAgent = new Agent({
+      id: 'missing-usage-agent',
+      name: 'Missing Usage Agent',
+      instructions: 'Use the tool, then answer.',
+      model: model as LanguageModelV2,
+      tools: { usageTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const result = await durableAgent.stream('Run the tool', { maxSteps: 3 });
+
+    try {
+      for await (const _chunk of result.fullStream) {
+        // Drain the durable workflow before reading its final output.
+      }
+      const output = await result.output.getFullOutput();
+      expect(output.usage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+    } finally {
+      result.cleanup();
+    }
+  });
+
+  it('keeps usage unknown when the model errors before reporting usage', async () => {
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-error', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-error' },
+          { type: 'text-delta', id: 'text-error', delta: 'Partial work before failure.' },
+          { type: 'error', error: new Error('Provider failed before reporting usage') },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+      }),
+    });
+    const baseAgent = new Agent({
+      id: 'error-usage-agent',
+      name: 'Error Usage Agent',
+      instructions: 'Test',
+      model: model as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const result = await durableAgent.stream('Fail before reporting usage', { maxSteps: 3 });
+
+    try {
+      const chunks: any[] = [];
+      for await (const chunk of result.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const stepFinish = chunks.findLast(chunk => chunk.type === 'step-finish');
+      expect(stepFinish?.payload?.output?.usage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+
+      const finish = chunks.findLast(chunk => chunk.type === 'finish');
+      expect(finish?.payload?.output?.usage).toMatchObject({
+        inputTokens: undefined,
+        outputTokens: undefined,
+        totalTokens: undefined,
+      });
+    } finally {
+      result.cleanup();
+    }
   });
 
   it('should prepare workflow with correct structure for accumulation', async () => {

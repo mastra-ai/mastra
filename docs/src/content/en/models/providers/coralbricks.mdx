@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "coralbricks/deepseek-v4.1-flash-fast-fp4"
+  model: "coralbricks/deepseek-v4.1-flash-fast"
 });
 
 // Generate a response
@@ -46,8 +46,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "coralbricks/deepseek-v4.1-flash-fast-fp4",
-    "imageInput": false,
+    "model": "coralbricks/deepseek-v4.1-flash-fast",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -58,16 +58,28 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "coralbricks/glm-5.3-flash-fp4",
+    "model": "coralbricks/deepseek-v4.1-flash-fast-fp4",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": true,
+    "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.15,
-    "outputCost": 0.5
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "coralbricks/glm-5.3-fast",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.12,
+    "outputCost": 4.4
   },
   {
     "model": "coralbricks/glm-5.3-fp4",
@@ -80,18 +92,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 1.12,
     "outputCost": 4.4
-  },
-  {
-    "model": "coralbricks/gpt-oss-120b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.12,
-    "outputCost": 0.6
   }
 ]}
 />
@@ -108,7 +108,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://inference.coralbricks.ai/v1",
-    id: "coralbricks/deepseek-v4.1-flash-fast-fp4",
+    id: "coralbricks/deepseek-v4.1-flash-fast",
     apiKey: process.env.CORAL_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -126,8 +126,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "coralbricks/gpt-oss-120b"
-      : "coralbricks/deepseek-v4.1-flash-fast-fp4";
+      ? "coralbricks/glm-5.3-fp4"
+      : "coralbricks/deepseek-v4.1-flash-fast";
   }
 });
 ```

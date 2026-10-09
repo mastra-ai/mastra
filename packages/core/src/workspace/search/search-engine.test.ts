@@ -95,6 +95,16 @@ Line 3`;
       expect(results[0]?.lineRange).toEqual({ start: 2, end: 2 });
     });
 
+    it('should report lineRange matching a case-preserving custom tokenizer', async () => {
+      const caseEngine = new SearchEngine({
+        bm25: { tokenize: { tokenizer: text => text.split(/\s+/).filter(Boolean) } },
+      });
+      await caseEngine.index({ id: 'doc1', content: 'Introduction\nPython examples\npython alternatives' });
+
+      const results = await caseEngine.search('Python');
+      expect(results[0]?.lineRange).toEqual({ start: 2, end: 2 });
+    });
+
     it('should store and return metadata', async () => {
       await engine.index({
         id: 'doc1',
@@ -1164,6 +1174,46 @@ Third line has learning too`;
 });
 
 describe('splitIntoChunks', () => {
+  const lastLine = (c: { content: string; startLine: number }) => c.startLine + c.content.split('\n').length - 1;
+  const expectNoRedundantChunks = (chunks: { content: string; startLine: number }[]) => {
+    for (let i = 1; i < chunks.length; i++) {
+      if (chunks[i]!.startLine === chunks[i - 1]!.startLine) continue; // character fragments of one line
+      expect(lastLine(chunks[i]!)).toBeGreaterThan(lastLine(chunks[i - 1]!));
+    }
+  };
+
+  it('should not emit a trailing chunk made only of overlap lines', () => {
+    const lines = Array.from({ length: 10 }, (_, i) => `${i + 1}`.padEnd(790, 'x'));
+    const withNewline = splitIntoChunks(lines.join('\n') + '\n');
+    expect(withNewline.map(c => c.startLine)).toEqual([1, 3, 5, 7]);
+    expect(lastLine(withNewline.at(-1)!)).toBe(11);
+    expectNoRedundantChunks(withNewline);
+
+    const withoutNewline = splitIntoChunks(lines.join('\n'));
+    expect(lastLine(withoutNewline.at(-1)!)).toBe(10);
+    expectNoRedundantChunks(withoutNewline);
+  });
+
+  it('should cover all lines without redundant chunks for zero and large overlap', () => {
+    const text = Array.from({ length: 20 }, (_, i) => `line-${i + 1}`).join('\n');
+    for (const overlapLines of [0, 10]) {
+      const chunks = splitIntoChunks(text, { maxChunkChars: 40, overlapLines });
+      expect(lastLine(chunks.at(-1)!)).toBe(20);
+      expectNoRedundantChunks(chunks);
+    }
+  });
+
+  it('should keep all fragments of an oversized final line', () => {
+    const text = ['short', 'y'.repeat(250)].join('\n');
+    const chunks = splitIntoChunks(text, { maxChunkChars: 100, overlapLines: 1 });
+    expect(
+      chunks
+        .filter(c => c.startLine === 2)
+        .map(c => c.content)
+        .join(''),
+    ).toBe('y'.repeat(250));
+  });
+
   it('should return a single chunk for short text', () => {
     const chunks = splitIntoChunks('hello world');
     expect(chunks).toHaveLength(1);

@@ -140,7 +140,7 @@ describe('Tools', () => {
       </FormHarness>,
     );
 
-    const searchInput = getByTestId('tools-card-picker-search').querySelector('input');
+    const searchInput = getByTestId('tools-card-picker-search');
     expect(searchInput).toBeTruthy();
     fireEvent.change(searchInput!, { target: { value: 'unchecked' } });
 
@@ -169,10 +169,10 @@ describe('Tools', () => {
       </FormHarness>,
     );
 
-    const searchWrapper = getByTestId('tools-card-picker-search');
+    const searchField = getByTestId('tools-card-picker-search').closest('[data-slot="field"]');
     const filterLabel = getByTestId('tools-only-selected-filter');
 
-    expect(searchWrapper.parentElement).toBe(filterLabel.parentElement);
+    expect(searchField?.parentElement).toBe(filterLabel.parentElement);
     expect(filterLabel.parentElement?.className).toContain('flex');
     expect(filterLabel.parentElement?.className).toContain('justify-between');
   });
@@ -349,7 +349,7 @@ describe('Tools — toolkit filter pane', () => {
     );
 
     await findByTestId('tools-toolkit-filter-item-gmail');
-    const filterSearch = getByTestId('tools-toolkit-filter-search').querySelector('input');
+    const filterSearch = getByTestId('tools-toolkit-filter-search');
     expect(filterSearch).toBeTruthy();
     fireEvent.change(filterSearch!, { target: { value: 'slack' } });
 

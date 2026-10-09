@@ -32,6 +32,8 @@ export interface SpanDataPanelViewProps {
   isLoading?: boolean;
   onPrevious?: () => void;
   onNext?: () => void;
+  /** When provided, an × button in the header closes the span column. */
+  onClose?: () => void;
   activeTab?: string;
   onTabChange?: (tab: string) => void;
   /**
@@ -58,6 +60,7 @@ export function SpanDataPanelView({
   isLoading,
   onPrevious,
   onNext,
+  onClose,
   activeTab,
   onTabChange,
   feedbackTabSlot,
@@ -84,6 +87,7 @@ export function SpanDataPanelView({
             previousLabel="Go to previous span"
             nextLabel="Go to next span"
           />
+          {onClose && <DataPanel.CloseButton icon="x" onClick={onClose} label="Close span" tooltip="Close span" />}
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 

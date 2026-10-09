@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI overused verb: '%s'. Name the dependency or the mechanism directly. Disable this rule for transit or equestrian prose."
+message: "AI overused verb: '%s'. State the dependency or the mechanism directly. Disable this rule for transit or equestrian prose."
 level: error
 nonword: true
 ignorecase: true

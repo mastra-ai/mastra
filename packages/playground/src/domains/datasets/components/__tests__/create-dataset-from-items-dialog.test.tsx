@@ -12,7 +12,6 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
-// Thin stub for the heavy Dialog atom so this test focuses on the real client + mutation behavior.
 vi.mock('@mastra/playground-ui/components/Dialog', () => {
   const Dialog = ({ open, children }: PropsWithChildren<{ open: boolean }>) => (open ? <div>{children}</div> : null);
 
@@ -22,6 +21,22 @@ vi.mock('@mastra/playground-ui/components/Dialog', () => {
     DialogHeader: ({ children }: PropsWithChildren) => <div>{children}</div>,
     DialogTitle: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
     DialogBody: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    DialogFooter: ({ children }: PropsWithChildren) => <div>{children}</div>,
+    DialogCancel: ({ children, onClick }: PropsWithChildren<{ onClick?: () => void }>) => (
+      <button type="button" onClick={onClick}>
+        {children}
+      </button>
+    ),
+    DialogAction: ({
+      children,
+      type = 'button',
+      disabled,
+      onConfirm,
+    }: PropsWithChildren<{ type?: 'button' | 'submit'; disabled?: boolean; onConfirm?: () => void }>) => (
+      <button type={type} disabled={disabled} onClick={onConfirm}>
+        {children}
+      </button>
+    ),
   };
 });
 
@@ -62,7 +77,7 @@ describe('CreateDatasetFromItemsDialog', () => {
 
     renderDialog();
 
-    fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Copied Dataset' } });
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Copied Dataset' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Dataset' }));
 
     await waitFor(() => expect(addItemBodies).toHaveLength(1));
@@ -90,7 +105,7 @@ describe('CreateDatasetFromItemsDialog', () => {
 
     renderDialog();
 
-    fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'Copied Dataset' } });
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'Copied Dataset' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create Dataset' }));
 
     await waitFor(() => expect(itemDatasetIds).toEqual(['ds-new']));

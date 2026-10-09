@@ -17,6 +17,14 @@ export const IGNORE_LIST = [
 export const ALLOW_LIST = ['mastra', 'create-mastra', '@mastra', 'create-factory'];
 
 export const REQUIRED_SECTIONS = ['Installation', 'Usage', 'Documentation', 'Changelog', 'Support'];
+
+// Files every eligible package must ship. README.md is also content-validated;
+// CHANGELOG.md only has to exist.
+export const REQUIRED_PACKAGE_DOCS = [
+  { file: 'README.md', label: 'README' },
+  { file: 'CHANGELOG.md', label: 'CHANGELOG' },
+];
+
 export const SUPPORT_TEXT =
   'We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.';
 
@@ -72,6 +80,25 @@ export function discoverPackages(rootDir) {
 
 function toPosixPath(filePath) {
   return filePath.split(path.sep).join('/');
+}
+
+// Required doc files missing from a single discovered package.
+function findMissingPackageDocs(packageInfo) {
+  return REQUIRED_PACKAGE_DOCS.filter(doc => !existsSync(path.join(packageInfo.directory, doc.file)));
+}
+
+// Eligible packages that are missing required doc files. CI routing uses this to
+// decide whether the validator must run: a package added without docs, or one
+// promoted into the eligible set, breaks the invariant without any README.md
+// path appearing in the diff.
+export function findPackagesMissingDocs(rootDir) {
+  return discoverPackages(rootDir)
+    .map(packageInfo => ({
+      name: packageInfo.name,
+      relativeDirectory: packageInfo.relativeDirectory,
+      missing: findMissingPackageDocs(packageInfo).map(doc => doc.label),
+    }))
+    .filter(packageInfo => packageInfo.missing.length > 0);
 }
 
 function normalizeRoute(route) {
@@ -378,11 +405,11 @@ export function runCli({ rootDir = process.cwd(), arguments_ = process.argv.slic
 
   for (const packageInfo of packages) {
     const readmePath = path.join(packageInfo.directory, 'README.md');
-    const changelogPath = path.join(packageInfo.directory, 'CHANGELOG.md');
     const relativeReadmePath = `${packageInfo.relativeDirectory}/README.md`;
     const errors = [];
+    const missingDocs = new Set(findMissingPackageDocs(packageInfo).map(doc => doc.label));
 
-    if (!existsSync(readmePath)) {
+    if (missingDocs.has('README')) {
       errors.push(`${packageInfo.relativeDirectory}: missing README`);
     } else {
       errors.push(
@@ -395,7 +422,7 @@ export function runCli({ rootDir = process.cwd(), arguments_ = process.argv.slic
       );
     }
 
-    if (!existsSync(changelogPath)) {
+    if (missingDocs.has('CHANGELOG')) {
       errors.push(`${packageInfo.relativeDirectory}: missing CHANGELOG`);
     }
 

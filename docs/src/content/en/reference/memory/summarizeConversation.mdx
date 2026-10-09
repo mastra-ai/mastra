@@ -31,8 +31,9 @@ const result = await summarizeConversation({
   content={[
   {
     name: 'model',
-    type: 'string | LanguageModel | DynamicModel',
-    description: "Model that runs the summarization, such as a router string like '__GATEWAY_OPENAI_MODEL_MINI__'.",
+    type: 'string | LanguageModel | DynamicModel | ModelWithRetries[]',
+    description:
+      "Model that runs the summarization, such as a router string like '__GATEWAY_OPENAI_MODEL_MINI__'. Pass an array of `{ model, maxRetries }` entries to fall back to the next model when one fails.",
     isOptional: false,
   },
   {

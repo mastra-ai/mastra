@@ -1,16 +1,17 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
+  DialogAction,
   DialogBody,
+  DialogCancel,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { X, Plug, Unplug } from 'lucide-react';
+import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react/hooks/agents';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
-import { useConnectChannelAction } from '@/domains/agents/hooks/use-channels';
-import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@/domains/agents/hooks/use-channels';
+import { useConnectChannelAction } from '@/domains/agents/hooks/use-connect-channel-action';
 
 interface PlatformCopy {
   description: (platformName: string) => string;
@@ -94,28 +95,19 @@ export function PublishChannelContent({
 
       <DialogFooter>
         {platform.isConfigured && activeInstallation ? (
-          <Button
-            icon={<Unplug />}
-            variant="default"
-            onClick={onDisconnectRequest}
-            data-testid={`publish-channel-dialog-${platform.id}-disconnect`}
-          >
+          <Button onClick={onDisconnectRequest} data-testid={`publish-channel-dialog-${platform.id}-disconnect`}>
             Disconnect
           </Button>
         ) : platform.isConfigured ? (
-          <Button
-            icon={<Plug />}
-            variant="default"
-            onClick={handleConnect}
+          <DialogAction
+            onConfirm={handleConnect}
             disabled={isConnecting}
             data-testid={`publish-channel-dialog-${platform.id}-connect`}
           >
             {isConnecting ? 'Connecting…' : copy.connectLabel}
-          </Button>
+          </DialogAction>
         ) : (
-          <Button icon={<X />} variant="default" onClick={onClose}>
-            Close
-          </Button>
+          <DialogCancel>Close</DialogCancel>
         )}
       </DialogFooter>
     </>

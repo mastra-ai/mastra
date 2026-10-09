@@ -1,6 +1,27 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defaultGithubRules, resolveGithubRules } from './default-rules.js';
 
+describe('GitHub issue re-triage', () => {
+  const comment = (stages: string[]) =>
+    ({
+      event: 'issueCommentCreated',
+      ingress: { id: 'ingress-1' },
+      actor: { type: 'github', login: 'someone', trusted: true, factoryAuthored: false },
+      item: { source: 'github-issue', url: 'https://github.com/mastra-ai/mastra/issues/1', stages },
+    }) as unknown as Parameters<NonNullable<typeof defaultGithubRules.issueCommentCreated>>[0];
+
+  it.each([['execute'], ['review']])('does not take over a card in %s', stage => {
+    expect(defaultGithubRules.issueCommentCreated?.(comment([stage]))).toBeUndefined();
+  });
+
+  it.each([['intake'], ['triage'], ['planning']])('re-triages a card in %s', stage => {
+    expect(defaultGithubRules.issueCommentCreated?.(comment([stage]))).toMatchObject({
+      type: 'invokeSkill',
+      skillName: 'factory-triage',
+    });
+  });
+});
+
 describe('GitHub rule resolution', () => {
   it.each(Object.keys(defaultGithubRules))('preserves the default for %s', event => {
     expect(resolveGithubRules()).toHaveProperty(event, Reflect.get(defaultGithubRules, event));

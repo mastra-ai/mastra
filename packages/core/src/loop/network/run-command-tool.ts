@@ -12,7 +12,7 @@
  */
 
 import { exec } from 'node:child_process';
-import { resolve, normalize } from 'node:path';
+import nodePath from 'node:path';
 import { promisify } from 'node:util';
 
 import { z } from 'zod/v4';
@@ -26,9 +26,9 @@ const execAsync = promisify(exec);
  * These are rejected when found in command input.
  */
 const DANGEROUS_PATTERNS = [
-  /[;&|`$(){}[\]<>]/g, // Shell metacharacters
-  /\n|\r/g, // Newlines (command chaining)
-  /\\(?![ ])/g, // Backslashes (except escaped spaces)
+  /[;&|`$(){}[\]<>]/, // Shell metacharacters
+  /\n|\r/, // Newlines (command chaining)
+  /\\(?![ ])/, // Backslashes (except escaped spaces)
 ];
 
 /**
@@ -120,26 +120,56 @@ export interface RunCommandToolOptions {
 /**
  * Validates that a path is under one of the allowed base paths.
  */
-function isPathAllowed(targetPath: string, allowedBasePaths: string[]): boolean {
+export function isPathAllowed(
+  targetPath: string,
+  allowedBasePaths: string[],
+  pathImpl: typeof nodePath.posix = nodePath,
+): boolean {
   if (allowedBasePaths.length === 0) return true;
 
-  const normalizedTarget = normalize(resolve(targetPath));
+  const target = pathImpl.resolve(targetPath);
   return allowedBasePaths.some(basePath => {
-    const normalizedBase = normalize(resolve(basePath));
-    return normalizedTarget === normalizedBase || normalizedTarget.startsWith(normalizedBase + '/');
+    const rel = pathImpl.relative(pathImpl.resolve(basePath), target);
+    return rel === '' || (rel !== '..' && !rel.startsWith('..' + pathImpl.sep) && !pathImpl.isAbsolute(rel));
   });
 }
 
 /**
- * Extracts the base command from a command string.
+ * Extracts the base command from a command string, handling both `/` and `\\`
+ * separators and common Windows executable extensions.
  */
-function extractBaseCommand(command: string): string {
+export function extractBaseCommand(
+  command: string,
+  platform: NodeJS.Platform = process.platform,
+  stripExtension = true,
+): string {
   const trimmed = command.trim();
-  const firstSpace = trimmed.indexOf(' ');
-  const baseCmd = firstSpace === -1 ? trimmed : trimmed.substring(0, firstSpace);
-  // Handle paths like /usr/bin/git -> git
-  const lastSlash = baseCmd.lastIndexOf('/');
-  return lastSlash === -1 ? baseCmd : baseCmd.substring(lastSlash + 1);
+  // Read the first shell word: whitespace ends it only outside quotes, and quote
+  // characters are dropped, since the shell joins `r"m"` / `"r"m` into `rm`.
+  let baseCmd = '';
+  let quote = '';
+  for (const ch of trimmed) {
+    if (quote) {
+      if (ch === quote) quote = '';
+      else baseCmd += ch;
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (/\s/.test(ch)) {
+      break;
+    } else {
+      baseCmd += ch;
+    }
+  }
+  const lastSep = Math.max(baseCmd.lastIndexOf('/'), baseCmd.lastIndexOf('\\'));
+  const name = lastSep === -1 ? baseCmd : baseCmd.substring(lastSep + 1);
+  const lower = name.toLowerCase();
+  if (platform !== 'win32') return lower;
+  // Windows ignores trailing dots/spaces and resolves executable extensions (`rm.exe.` runs `rm.exe`).
+  // On POSIX these are distinct files, so normalizing there would let `./echo.` match an `echo` allowlist entry.
+  let end = lower.length;
+  while (end > 0 && (lower[end - 1] === '.' || lower[end - 1] === ' ')) end--;
+  const trimmedName = lower.slice(0, end);
+  return stripExtension ? trimmedName.replace(/\.(exe|cmd|bat|com)$/, '') : trimmedName;
 }
 
 /**
@@ -176,7 +206,14 @@ export function createRunCommandTool(options: RunCommandToolOptions = {}) {
     allowUnsafeCharacters = false,
   } = options;
 
-  const blockedCommands = new Set([...BLOCKED_COMMANDS, ...additionalBlockedCommands.map(c => c.toLowerCase())]);
+  // Normalize configured names the same way as commands so `tool.exe` still matches on Windows.
+  const blockedCommands = new Set([...BLOCKED_COMMANDS, ...additionalBlockedCommands.map(c => extractBaseCommand(c))]);
+  // An allowlist entry with an explicit extension (`safe.cmd`) only permits that exact file,
+  // so it can't authorize `safe.exe` or a bare `safe` that Windows might resolve to another file.
+  const allowedEntries = allowedCommands.map(c => ({
+    name: extractBaseCommand(c),
+    full: extractBaseCommand(c, process.platform, false),
+  }));
 
   return createTool({
     id: 'run-command',
@@ -204,7 +241,7 @@ export function createRunCommandTool(options: RunCommandToolOptions = {}) {
       }
 
       // Validate: extract and check base command
-      const baseCommand = extractBaseCommand(command).toLowerCase();
+      const baseCommand = extractBaseCommand(command);
 
       // Check blocked commands
       if (blockedCommands.has(baseCommand)) {
@@ -219,7 +256,10 @@ export function createRunCommandTool(options: RunCommandToolOptions = {}) {
 
       // Check allowlist if configured
       if (allowedCommands.length > 0) {
-        const isAllowed = allowedCommands.some(allowed => baseCommand === allowed.toLowerCase());
+        const fullCommand = extractBaseCommand(command, process.platform, false);
+        const isAllowed = allowedEntries.some(entry =>
+          entry.full === entry.name ? entry.name === baseCommand : entry.full === fullCommand,
+        );
         if (!isAllowed) {
           return {
             success: false,

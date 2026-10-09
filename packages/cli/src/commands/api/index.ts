@@ -475,6 +475,10 @@ export function registerApiCommand(program: CommanderCommand): void {
     input: 'required',
     routePlacement: 'origin',
   });
+  addAction(factoryProject, 'apply-default-model', FACTORY_API_ROUTE_CATALOG.projectApplyDefaultModel, {
+    description: 'Apply the project default model to running sessions',
+    routePlacement: 'origin',
+  });
   addAction(factoryProject, 'delete', FACTORY_API_ROUTE_CATALOG.projectDelete, {
     description: 'Delete a Factory project',
     routePlacement: 'origin',

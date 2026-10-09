@@ -788,6 +788,14 @@ export class Workspace<
   }
 
   /**
+   * Compact span representation. Without it, the trace serializer would walk the
+   * workspace's config and its filesystem/sandbox providers, which can hold credentials.
+   */
+  serializeForSpan(): { id: string; name: string; status: WorkspaceStatus } {
+    return { id: this.id, name: this.name, status: this._status };
+  }
+
+  /**
    * The filesystem provider (if configured).
    *
    * Returns the concrete type you passed to the constructor.

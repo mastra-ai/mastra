@@ -15,6 +15,16 @@ export function transformNullToUndefined(value: unknown, jsonSchema: Record<stri
     return value;
   }
 
+  const branches = (jsonSchema.anyOf ?? jsonSchema.oneOf) as Record<string, unknown>[] | undefined;
+  if (Array.isArray(branches)) {
+    const { anyOf: _anyOf, oneOf: _oneOf, ...parent } = jsonSchema;
+    const branch = findMatchingBranch(value, branches);
+    if (!branch) {
+      return 'properties' in parent || 'items' in parent ? transformNullToUndefined(value, parent) : value;
+    }
+    return transformNullToUndefined(value, mergeSchemas(parent, branch));
+  }
+
   if (typeof value !== 'object' || Array.isArray(value)) {
     if (Array.isArray(value) && jsonSchema.items && typeof jsonSchema.items === 'object') {
       return value.map(item => transformNullToUndefined(item, jsonSchema.items as Record<string, unknown>));
@@ -43,6 +53,59 @@ export function transformNullToUndefined(value: unknown, jsonSchema: Record<stri
   }
 
   return result;
+}
+
+/**
+ * Picks the non-null union branch (from `anyOf`/`oneOf`) whose shape matches the value,
+ * e.g. the object branch of a `.nullable()` object. For objects, branches whose required
+ * keys are missing or whose `const`/`enum` properties (discriminators) disagree are skipped.
+ */
+function findMatchingBranch(value: unknown, branches: Record<string, unknown>[]): Record<string, unknown> | undefined {
+  const isArray = Array.isArray(value);
+  if (typeof value !== 'object' && !isArray) {
+    return undefined;
+  }
+  return branches.find(branch => {
+    if (!branch || typeof branch !== 'object') return false;
+    const types = Array.isArray(branch.type) ? branch.type : [branch.type];
+    if (isArray) {
+      if (!('items' in branch || types.includes('array'))) return false;
+      const items = branch.items as Record<string, unknown> | undefined;
+      return !items || typeof items !== 'object' || (value as unknown[]).every(item => itemMatches(item, items));
+    }
+    if (!('properties' in branch || 'anyOf' in branch || 'oneOf' in branch || types.includes('object'))) return false;
+    return objectMatchesBranch(value as Record<string, unknown>, branch);
+  });
+}
+
+function itemMatches(item: unknown, schema: Record<string, unknown>): boolean {
+  if (item === null || typeof item !== 'object' || Array.isArray(item)) return true;
+  const branches = (schema.anyOf ?? schema.oneOf) as Record<string, unknown>[] | undefined;
+  if (Array.isArray(branches)) return findMatchingBranch(item, branches) !== undefined;
+  return objectMatchesBranch(item as Record<string, unknown>, schema);
+}
+
+function objectMatchesBranch(value: Record<string, unknown>, branch: Record<string, unknown>): boolean {
+  const required = (branch.required as string[] | undefined) ?? [];
+  if (required.some(key => !(key in value))) return false;
+  const properties = (branch.properties as Record<string, Record<string, unknown>> | undefined) ?? {};
+  return Object.entries(properties).every(([key, prop]) => {
+    if (!prop || typeof prop !== 'object' || !(key in value)) return true;
+    if ('const' in prop) return prop.const === value[key];
+    if (Array.isArray(prop.enum)) return prop.enum.includes(value[key]);
+    return true;
+  });
+}
+
+function mergeSchemas(parent: Record<string, unknown>, branch: Record<string, unknown>): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...parent, ...branch };
+  if (parent.items && !branch.items) merged.items = parent.items;
+  if (!parent.properties) return merged;
+  return {
+    ...merged,
+    properties: { ...(parent.properties as object), ...(branch.properties as object | undefined) },
+    required: [...new Set([...((parent.required as string[]) ?? []), ...((branch.required as string[]) ?? [])])],
+  };
 }
 
 /**

@@ -22,6 +22,11 @@ describe('v0_3Compat', () => {
         contextId: 'context-1',
       },
     });
+    expect(v0_3Compat.createSendMessageParams({ prompt: 'hello' })).toMatchObject({
+      message: {
+        messageId: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/),
+      },
+    });
     expect(v0_3Compat.createGetTaskParams('task-1')).toEqual({ id: 'task-1' });
     expect(v0_3Compat.createResubscribeParams('task-1')).toEqual({ id: 'task-1' });
   });

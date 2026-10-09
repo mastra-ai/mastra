@@ -13,6 +13,11 @@ import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/co
 import type { Context, Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
+import {
+  CUSTOM_DOMAIN_UNSUPPORTED_ERROR,
+  PLATFORM_AUTH_PROVIDER,
+  isPlatformAuthSupportedHost,
+} from './platform-auth-host.js';
 import type { RouteAuth } from './routes/route.js';
 import { actorFromAuthUser } from './storage/domains/comments/actor.js';
 import { isFactoryTelemetryEnabled } from './telemetry.js';
@@ -150,6 +155,18 @@ export function getFactoryAuthUserId(user: FactoryAuthUser | undefined): string 
 /** Resolve the organization id from a user shape, if present. */
 export function getFactoryAuthOrgId(user: FactoryAuthUser | undefined): string | undefined {
   return user?.organizationId;
+}
+
+/**
+ * The org rung a user's rows are keyed by: the organization they belong to, or a
+ * per-user rung for personal (no-org) accounts so their rows never land in the
+ * shared `local` scope. Every writer and reader of a `(org, user)` row must
+ * agree on this, so it lives here rather than being re-derived per call site.
+ */
+export function factoryUserOrgId(user: FactoryAuthUser | undefined): string | undefined {
+  const userId = getFactoryAuthUserId(user);
+  if (!userId) return undefined;
+  return getFactoryAuthOrgId(user) ?? `user:${userId}`;
 }
 
 /**
@@ -388,6 +405,19 @@ export function getWorkOSProvider(provider: IMastraAuthProvider | undefined): Ma
  *
  * Returns `undefined` when there is no valid session (or auth is disabled).
  */
+function forwardPendingResponseHeaders(provider: IMastraAuthProvider, c: Context): void {
+  // Forward a renewed session cookie (e.g. rotated by the shared API during
+  // verification) so the browser's cookie stays current. Best-effort.
+  try {
+    const pending = provider.consumePendingResponseHeaders?.(c.req.raw);
+    for (const [name, value] of Object.entries(pending ?? {})) {
+      c.header(name, value, { append: true });
+    }
+  } catch {
+    // never fail a request over header forwarding
+  }
+}
+
 export async function ensureFactoryAuthUser(
   provider: IMastraAuthProvider | undefined,
   c: Context,
@@ -398,6 +428,9 @@ export async function ensureFactoryAuthUser(
 
   const token = getBearerToken(c.req.header('Authorization'));
   const user = await authenticateRequest(provider, token, c.req.raw);
+  // Routes declared `requiresAuth: false` skip the gate, so this is their only
+  // authentication — forward a renewed session cookie from here too.
+  forwardPendingResponseHeaders(provider, c);
   if (!user) return undefined;
 
   const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
@@ -439,20 +472,32 @@ function isNavigationRequest(path: string, accept: string | undefined): boolean 
   return (accept ?? '').includes('text/html');
 }
 
+function isPlatformAuthCustomDomain(provider: IMastraAuthProvider, publicUrl?: string): boolean {
+  return (
+    provider.name === PLATFORM_AUTH_PROVIDER &&
+    Boolean(publicUrl && !isPlatformAuthSupportedHost(new URL(publicUrl).hostname))
+  );
+}
+
 /**
  * Handle the provider-neutral `/auth/me` route: validate the session with the
  * active provider and report the signed-in user (no tokens) to the SPA.
  * `/auth/me` is public (the gate skips `/auth/*`), so it validates the session
  * itself rather than reading a value the gate would have stashed.
  */
-async function handleAuthMe(provider: IMastraAuthProvider, c: Context): Promise<Response> {
+async function handleAuthMe(provider: IMastraAuthProvider, c: Context, publicUrl?: string): Promise<Response> {
   const token = getBearerToken(c.req.header('Authorization'));
   const user = await authenticateRequest(provider, token, c.req.raw);
   // Provider identity for the SPA: `/signin` renders the hosted-login button
   // for WorkOS and an email/password form for better-auth (with sign-up hidden
   // when the provider disables it).
   const signUpDisabled = isCredentialsProvider(provider) && provider.isSignUpEnabled?.() === false;
-  const meta = { provider: provider.name, ...(signUpDisabled ? { signUpDisabled: true } : {}) };
+  const customDomainUnsupported = isPlatformAuthCustomDomain(provider, publicUrl);
+  const meta = {
+    provider: provider.name,
+    ...(signUpDisabled ? { signUpDisabled: true } : {}),
+    ...(customDomainUnsupported ? { customDomainUnsupported: true } : {}),
+  };
   if (!user) {
     return c.json({ authenticated: false, user: null, ...meta });
   }
@@ -572,6 +617,11 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
         method: 'GET',
         handler: async c => {
           const returnTo = sanitizeReturnTo(c.req.query('returnTo'));
+          if (isPlatformAuthCustomDomain(provider, publicUrl)) {
+            const query = new URLSearchParams({ error: CUSTOM_DOMAIN_UNSUPPORTED_ERROR });
+            if (returnTo !== '/') query.set('returnTo', returnTo);
+            return c.redirect(`/signin?${query.toString()}`);
+          }
           const state = encodeState(returnTo);
           // Build the callback URL from the browser-facing public origin so
           // the OAuth round-trip lands back on the SPA's origin (in dev the
@@ -725,7 +775,7 @@ export function registerAuthRoutes(
     const methods = route.method === 'ALL' ? ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] : [route.method];
     app.on(methods, route.path, c => route.handler(c));
   }
-  app.get('/auth/me', c => handleAuthMe(provider, c));
+  app.get('/auth/me', c => handleAuthMe(provider, c, options.publicUrl));
 }
 
 /**
@@ -755,7 +805,7 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
     registerApiRoute('/auth/me', {
       method: 'GET',
       requiresAuth: false,
-      handler: c => handleAuthMe(provider, c as unknown as Context),
+      handler: c => handleAuthMe(provider, c as unknown as Context, options.publicUrl),
     }),
   ];
 }
@@ -840,6 +890,7 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     const user = await timedAboveThreshold('auth.gate.authenticate', 1_000, () =>
       authenticateRequest(provider, token, c.req.raw),
     );
+    forwardPendingResponseHeaders(provider, c);
 
     if (user) {
       const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;

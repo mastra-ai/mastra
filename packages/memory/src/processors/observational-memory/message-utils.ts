@@ -298,7 +298,9 @@ export function filterObservedMessages(opts: {
   }
 }
 
-export function getBufferedChunks(record: ObservationalMemoryRecord | null | undefined): BufferedObservationChunk[] {
+export function getBufferedChunks(
+  record: Pick<ObservationalMemoryRecord, 'bufferedObservationChunks'> | null | undefined,
+): BufferedObservationChunk[] {
   if (!record?.bufferedObservationChunks) return [];
   if (Array.isArray(record.bufferedObservationChunks)) return record.bufferedObservationChunks;
   if (typeof record.bufferedObservationChunks === 'string') {

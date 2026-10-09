@@ -57,11 +57,10 @@ tokens:
   - On a related note
   - Case in point
   - A case in point
-  # Anchored sentence-initial: bare openers are the tell, but mid-sentence "a
-  # point of note" and the "It's worth noting" span (owned by HedgingPhrases)
-  # are not.
+  # Anchored sentence-initial: the bare opener is the tell, but mid-sentence
+  # "a point of note" is not. "Worth noting" in any position belongs to
+  # FigurativeWorth.
   - '^Of note'
-  - '^Worth noting'
   - Along the same lines
   - In the same vein
   - By extension

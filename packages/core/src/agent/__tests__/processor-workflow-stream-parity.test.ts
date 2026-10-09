@@ -212,7 +212,7 @@ describe.each([false, true])('stream adapter parity (explicit workflow: %s)', ne
     expect(last).not.toHaveBeenCalled();
   });
 
-  it('retains the original part and stops remaining adapters on generic failure', async () => {
+  it('fails and stops remaining adapters on generic failure', async () => {
     const last = vi.fn<NonNullable<Processor['processOutputStream']>>(({ part }) => part);
     const failing = vi.fn<NonNullable<Processor['processOutputStream']>>(() => {
       throw new Error('test failure');
@@ -229,10 +229,9 @@ describe.each([false, true])('stream adapter parity (explicit workflow: %s)', ne
       ],
       nested,
     );
-    expect(await runner.processPart(textPart('original'), states, undefined, undefined, messages)).toEqual({
-      part: textPart('original'),
-      blocked: false,
-    });
+    await expect(runner.processPart(textPart('original'), states, undefined, undefined, messages)).rejects.toThrow(
+      'test failure',
+    );
     expect(failing).toHaveBeenCalledTimes(1);
     expect(last).not.toHaveBeenCalled();
   });

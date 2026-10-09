@@ -15,7 +15,7 @@ import type { LanguageModelMiddleware } from 'ai';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
-import { supportsMaxReasoningEffort } from '../thinking.js';
+import { runCatalogThinkingLevel } from '../thinking-catalog.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 export { supportsMaxReasoningEffort } from '../thinking.js';
 
@@ -55,22 +55,13 @@ const GPT5_MODEL_RE = /^gpt-5(?:\.|-|$)/;
 
 export function getEffectiveThinkingLevel(modelId: string, level: ThinkingLevel): ThinkingLevel {
   // GPT-5.* models on Codex require at least low reasoning.
-  if (GPT5_MODEL_RE.test(modelId) && level === 'off') {
-    return 'low';
-  }
-
-  // Clamp `max` to `xhigh` only for models whose effort scale tops out there.
-  if (level === 'max' && !supportsMaxReasoningEffort(modelId)) {
-    return 'xhigh';
-  }
-
-  return level;
+  const requestedLevel = GPT5_MODEL_RE.test(modelId) && level === 'off' ? 'low' : level;
+  return runCatalogThinkingLevel(`openai/${modelId}`, requestedLevel);
 }
 
 // Map thinkingLevel state values to OpenAI reasoningEffort values.
-// undefined means omit the parameter (no reasoning). Model-dependent clamping
-// (e.g. `max` → `xhigh` for pre-GPT-5.6 models) happens in
-// getEffectiveThinkingLevel before this lookup.
+// undefined means omit the parameter (no reasoning). Model-dependent fitting
+// happens in getEffectiveThinkingLevel before this lookup.
 export const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | undefined> = {
   off: undefined,
   low: 'low',

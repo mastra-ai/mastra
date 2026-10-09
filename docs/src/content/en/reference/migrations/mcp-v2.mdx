@@ -1,6 +1,6 @@
 ---
 title: "Migration: @mastra/mcp v1 to v2 | Migration Guide"
-description: "@mastra/mcp 2.0 serves the MCP 2026-07-28 revision only: self-contained requests, suspend/resume carried as input_required, subscriptions/listen, per-request logging and pre-registered or URL-based OAuth clients. The client speaks 2026-07-28 and still connects to older servers."
+description: "Migrate @mastra/mcp to v2, which serves only the MCP 2026-07-28 revision and replaces elicitation with suspend/resume. Clients still connect to older servers."
 packages:
   - "@mastra/mcp"
 ---
@@ -247,7 +247,7 @@ Requests are stateless, so there is nothing to resume or identify. `startHTTP` h
 
 ### `roots` and `sampling`
 
-Clients no longer advertise `roots`. `setRoots()` and `sendRootsListChanged()` are gone. Servers neither request sampling nor advertise it. A server that embeds a `roots/list` or `sampling/createMessage` request in `input_required` isn't answered: the client has no handler for those methods, so the call fails instead of fabricating a response.
+Clients no longer advertise `roots`. `setRoots()` and `sendRootsListChanged()` are gone. Servers neither request sampling nor advertise it. A server that embeds a `roots/list` or `sampling/createMessage` request in `input_required` isn't answered: the client has no handler for those methods. The call fails instead of fabricating a response.
 
 ### `logging/setLevel` and `sendLoggingMessage`
 

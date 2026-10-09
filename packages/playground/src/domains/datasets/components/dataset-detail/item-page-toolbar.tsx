@@ -41,9 +41,9 @@ export function ItemPageToolbar({ onBack, onEdit, onDelete, isEditing = false }:
               <PopoverContent align="end" className="w-48 bg-muted p-1">
                 <div className="flex flex-col gap-2">
                   <Button
-                    variant="ghost"
+                    variant="destructive-ghost"
                     size="sm"
-                    className="w-full justify-start text-red-500 hover:text-red-400"
+                    className="w-full justify-start"
                     onClick={onDelete}
                     icon={<Trash2 />}
                   >

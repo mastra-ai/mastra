@@ -10,6 +10,32 @@ export function jsonV(val: unknown): string {
 }
 
 /**
+ * `span_events` JSON columns that can hold large payloads. Missing values are
+ * stored as the JSON literal `null` instead of SQL NULL.
+ *
+ * DuckDB only reads the selected rows of a large-string column when the
+ * column's validity mask is constant (no NULLs in the row group). Any SQL NULL
+ * makes it fall back to reading the whole 2,048-row vector, which loads every
+ * large string in it even when the query needs one row. Keeping these columns
+ * NULL-free lets point lookups and page reads load only what they return.
+ */
+export const SPAN_PAYLOAD_COLUMNS = ['attributes', 'input', 'output', 'requestContext'] as const;
+
+/** Stored in {@link SPAN_PAYLOAD_COLUMNS} in place of SQL NULL; read back as missing. */
+export const JSON_NULL_PLACEHOLDER = 'null';
+
+/** Like {@link jsonV}, but writes the JSON `null` placeholder instead of SQL NULL. */
+export function payloadJsonV(val: unknown): string {
+  if (val === null || val === undefined) return `'${JSON_NULL_PLACEHOLDER}'`;
+  return jsonV(val);
+}
+
+/** SQL for a payload column that maps the JSON `null` placeholder back to SQL NULL. */
+export function payloadColumnSql(column: string): string {
+  return `NULLIF(${column}, '${JSON_NULL_PLACEHOLDER}')`;
+}
+
+/**
  * Trim, drop blank, and dedupe tags before they are written, matching the
  * PostgreSQL and ClickHouse stores so tag predicates and discovery agree.
  */

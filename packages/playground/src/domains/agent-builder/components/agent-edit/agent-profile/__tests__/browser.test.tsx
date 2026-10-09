@@ -1,5 +1,5 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { stringToColor } from '@mastra/playground-ui/utils/colors';
+import { hueColors, hueForName } from '@mastra/playground-ui/utils/colors';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -94,18 +94,10 @@ describe('Browser', () => {
       </Wrapper>,
     );
 
-    // jsdom normalizes inline colors to rgb(...); compare via a probe element fed the same hsl().
-    const probe = document.createElement('div');
-    probe.style.backgroundColor = stringToColor(agentId, 50);
-    const expected = probe.style.backgroundColor;
-    expect(expected).not.toBe('');
-
     const toggle = getByTestId('agent-browser-toggle') as HTMLButtonElement;
-    expect(toggle.style.backgroundColor).toBe(expected);
-    // It must NOT match the foreground (lightness 20) value that the switch previously used.
-    const fgProbe = document.createElement('div');
-    fgProbe.style.backgroundColor = stringToColor(agentId, 20);
-    expect(toggle.style.backgroundColor).not.toBe(fgProbe.style.backgroundColor);
+    const colors = hueColors(hueForName(agentId));
+    expect(toggle.getAttribute('style')).toContain(colors.tint);
+    expect(toggle.getAttribute('style')).not.toContain(colors.foreground);
   });
 
   it('does not apply an inline background color to the switch when browserEnabled is false', () => {

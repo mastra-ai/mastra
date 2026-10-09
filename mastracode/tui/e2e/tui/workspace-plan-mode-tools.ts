@@ -77,7 +77,7 @@ export const workspacePlanModeToolsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Build-mode workspace tools observed\./i, terminal, 10_000);
 
     terminal.submit('/mode plan');
-    await runtime.waitForScreenText(/▐plan▌/i, terminal, 8_000);
+    await runtime.waitForScreenText(/\bplan · /i, terminal, 8_000);
 
     terminal.submit(PLAN_PROMPT);
     await runtime.waitForScreenText(/Plan-mode workspace tools observed\./i, terminal, 10_000);

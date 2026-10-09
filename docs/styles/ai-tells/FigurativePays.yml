@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI money metaphor: '%s'. Name the plain benefit or cost. Disable this rule for finance or commerce prose."
+message: "AI money metaphor: '%s'. State the plain benefit or cost. Disable this rule for finance or commerce prose."
 level: error
 nonword: true
 ignorecase: true

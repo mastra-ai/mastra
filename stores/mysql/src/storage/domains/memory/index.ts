@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -173,6 +172,7 @@ function addMySQLMessageMetadataFilter(
 export class MemoryMySQL extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
+  readonly supportsObservationalMemoryHistorySearch = true;
 
   private pool: Pool;
   private operations: StoreOperationsMySQL;
@@ -979,7 +979,7 @@ export class MemoryMySQL extends MemoryStorage {
           });
         }
         const createdAt = message.createdAt ? new Date(message.createdAt) : new Date();
-        const id = message.id ?? randomUUID();
+        const id = message.id ?? globalThis.crypto.randomUUID();
         const record = {
           id,
           thread_id: message.threadId,
@@ -1197,7 +1197,7 @@ export class MemoryMySQL extends MemoryStorage {
     }
 
     // Use provided ID or generate a new one
-    const newThreadId = providedThreadId || randomUUID();
+    const newThreadId = providedThreadId || globalThis.crypto.randomUUID();
 
     // Check if the new thread ID already exists
     const existingThread = await this.getThreadById({ threadId: newThreadId });
@@ -1295,7 +1295,7 @@ export class MemoryMySQL extends MemoryStorage {
 
       for (const sourceRow of sourceMessageRows) {
         const row = sourceRow as MessageRow;
-        const newMessageId = randomUUID();
+        const newMessageId = globalThis.crypto.randomUUID();
         messageIdMap[row.id] = newMessageId;
 
         let content = row.content;
@@ -1889,6 +1889,10 @@ export class MemoryMySQL extends MemoryStorage {
       const conditions: string[] = [`${omCol('lookupKey')} = ?`];
       const params: any[] = [lookupKey];
 
+      if (options?.recordId !== undefined) {
+        conditions.push(`${omCol('id')} = ?`);
+        params.push(options.recordId);
+      }
       if (options?.from) {
         conditions.push(`${omCol('createdAt')} >= ?`);
         params.push(transformToSqlValue(options.from));
@@ -1898,8 +1902,26 @@ export class MemoryMySQL extends MemoryStorage {
         params.push(transformToSqlValue(options.to));
       }
 
+      if (options?.groupId !== undefined) {
+        conditions.push(`(LOCATE(CAST(? AS BINARY), CAST(${omCol('activeObservations')} AS BINARY)) > 0 OR EXISTS (
+          SELECT 1 FROM JSON_TABLE(${omCol('bufferedObservationChunks')}, '$[*]'
+            COLUMNS (observations LONGTEXT PATH '$.observations')) AS chunk
+          WHERE LOCATE(CAST(? AS BINARY), CAST(chunk.observations AS BINARY)) > 0
+        ))`);
+        const prefix = `<observation-group id="${options.groupId}"`;
+        params.push(prefix, prefix);
+      }
+      if (options?.beforeGeneration !== undefined) {
+        conditions.push(`${omCol('generationCount')} < ?`);
+        params.push(options.beforeGeneration);
+      }
+      if (options?.afterGeneration !== undefined) {
+        conditions.push(`${omCol('generationCount')} > ?`);
+        params.push(options.afterGeneration);
+      }
+      const direction = options?.sortDirection === 'ASC' ? 'ASC' : 'DESC';
       const whereClause = conditions.join(' AND ');
-      let sql = `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${whereClause} ORDER BY ${omCol('generationCount')} DESC LIMIT ${safeLimit}`;
+      let sql = `SELECT * FROM ${OM_TABLE_QUOTED} WHERE ${whereClause} ORDER BY ${omCol('generationCount')} ${direction}, ${omCol('createdAt')} ASC, id ASC LIMIT ${safeLimit}`;
 
       if (options?.offset != null && options.offset > 0) {
         sql += ` OFFSET ${options.offset}`;
@@ -1915,7 +1937,7 @@ export class MemoryMySQL extends MemoryStorage {
 
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
       const lookupKey = this.getOMKey(input.threadId, input.resourceId);
 
@@ -2046,7 +2068,7 @@ export class MemoryMySQL extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
       const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
 
@@ -2227,7 +2249,7 @@ export class MemoryMySQL extends MemoryStorage {
         }
 
         const newChunk: BufferedObservationChunk = {
-          id: `ombuf-${randomUUID()}`,
+          id: `ombuf-${globalThis.crypto.randomUUID()}`,
           cycleId: input.chunk.cycleId,
           observations: input.chunk.observations,
           tokenCount: input.chunk.tokenCount,

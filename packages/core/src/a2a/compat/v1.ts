@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { AgentCard, Message, Task } from '@a2a-js/sdk-v0_3';
 import {
   AgentCard as AgentCardCodec,
@@ -170,7 +169,7 @@ function createSendMessageParams({ prompt, data, contextId, taskId }: SendMessag
   const request = SendMessageRequestCodec.fromJSON({
     message: {
       role: 'ROLE_USER',
-      messageId: randomUUID(),
+      messageId: globalThis.crypto.randomUUID(),
       parts: [{ text: prompt }, ...(data ? [{ data }] : [])],
       ...(contextId ? { contextId } : {}),
       ...(taskId ? { taskId } : {}),

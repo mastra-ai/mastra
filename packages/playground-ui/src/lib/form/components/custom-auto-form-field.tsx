@@ -6,7 +6,6 @@ import React, { useMemo } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { CustomArrayField } from './custom-array-field';
 import { CustomObjectField } from './custom-object-field';
-import { fieldErrorId } from '@/ds/components/FormFieldBlocks';
 
 export const CustomAutoFormField: React.FC<{
   field: ParsedField;
@@ -62,10 +61,7 @@ export const CustomAutoFormField: React.FC<{
         key={fullPath}
         path={path}
         inputProps={{
-          required: field.required,
-          error: error,
-          'aria-invalid': error ? true : undefined,
-          'aria-describedby': error ? fieldErrorId(fullPath) : undefined,
+          'aria-required': field.required || undefined,
           key: `${fullPath}-input`,
           ...field.fieldConfig?.inputProps,
           ...register(fullPath),

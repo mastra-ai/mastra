@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -36,9 +37,9 @@ export function BrowserViewHeader({
       )}
     >
       <div className="mr-3 min-w-0 flex-1">
-        <span className={cn('block truncate text-body text-muted-foreground', !url && 'text-muted-foreground italic')}>
+        <Txt as="span" tone="muted" className={cn('block truncate', !url && 'italic')}>
           {url || 'No URL'}
-        </span>
+        </Txt>
       </div>
 
       <div className="flex items-center gap-2">

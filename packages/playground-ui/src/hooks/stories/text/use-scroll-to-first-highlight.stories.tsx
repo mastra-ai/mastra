@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
 import { Button } from '@/ds/components/Button';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
 import { Txt } from '@/ds/components/Txt';
 import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
@@ -14,10 +15,10 @@ function ScrollToFirstHighlightDemo() {
   const { ref: highlightRef } = useTextHighlight<HTMLDivElement>(search);
   return (
     <HookDemo>
-      <Txt as="label" htmlFor="scroll-query">
-        Search for “target” or a line number
-      </Txt>
-      <Input id="scroll-query" value={search} onChange={event => setSearch(event.target.value)} />
+      <Field>
+        <FieldLabel>Search for “target” or a line number</FieldLabel>
+        <Input value={search} onChange={event => setSearch(event.target.value)} />
+      </Field>
       <Button disabled={search.trim().length < 2} onClick={() => setResetKey(value => value + 1)}>
         Return to first match
       </Button>

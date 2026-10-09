@@ -154,6 +154,13 @@ describe('recordTerminalErrorMessage', () => {
     expect(recorded).toBe(all[1]);
   });
 
+  it('generates a synchronous UUID when neither response id is available', () => {
+    const messageList = makeList();
+    const recorded = recordTerminalErrorMessage({ messageList, error: new Error('model exploded') });
+
+    expect(recorded?.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  });
+
   it('appends the error part after existing partial parts on the same record', () => {
     const messageList = makeListWithPartialAttempt('attempt-1', [
       { type: 'text', text: 'partial answer' },

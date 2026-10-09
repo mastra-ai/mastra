@@ -30,7 +30,7 @@ export const fileAutocompleteScenario = {
     runtime.startLiveOutput(terminal);
 
     await runtime.waitForScreenText(/Branch: feature\/super-long-branch-name/i, terminal);
-    await runtime.waitForScreenText(/│ ›/i, terminal, 10_000);
+    await runtime.waitForScreenText(/→/, terminal, 10_000);
 
     await typeTextSlowly(terminal, 'Attach @auto', 25);
     await terminal.flushInput?.();

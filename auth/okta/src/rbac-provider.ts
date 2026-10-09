@@ -7,8 +7,6 @@
 
 import type { IRBACProvider, RoleMapping } from '@internal/auth/ee';
 import { resolvePermissionsFromMapping, matchesPermission } from '@internal/auth/ee';
-import pkg from '@okta/okta-sdk-nodejs';
-const { Client } = pkg;
 import { LRUCache } from 'lru-cache';
 
 import type { OktaUser, MastraRBACOktaOptions } from './types.js';
@@ -18,6 +16,26 @@ const DEFAULT_CACHE_TTL_MS = 60 * 1000;
 
 /** Default max cache size (number of users) */
 const DEFAULT_CACHE_MAX_SIZE = 1000;
+
+/** Page size for the Okta list-user-groups call (Okta max is 200) */
+const GROUPS_PAGE_LIMIT = 200;
+
+interface OktaGroup {
+  profile?: { name?: string };
+}
+
+/**
+ * Return the rel="next" URL from an Okta Link header, if any.
+ * Okta paginates with Link headers: `<https://...>; rel="next"`.
+ */
+function getNextLink(linkHeader: string | null): string | undefined {
+  if (!linkHeader) return undefined;
+  for (const part of linkHeader.split(',')) {
+    const match = part.match(/<([^>]+)>\s*;\s*rel="?next"?/);
+    if (match) return match[1];
+  }
+  return undefined;
+}
 
 /**
  * Okta RBAC provider that maps Okta groups to Mastra permissions.
@@ -64,7 +82,8 @@ const DEFAULT_CACHE_MAX_SIZE = 1000;
  * ```
  */
 export class MastraRBACOkta implements IRBACProvider<OktaUser> {
-  private oktaClient: InstanceType<typeof Client>;
+  private orgUrl: string;
+  private apiToken: string;
   private options: MastraRBACOktaOptions;
   /**
    * Single cache for roles (the expensive Okta API call).
@@ -104,10 +123,8 @@ export class MastraRBACOkta implements IRBACProvider<OktaUser> {
       );
     }
 
-    this.oktaClient = new Client({
-      orgUrl: `https://${domain}`,
-      token: apiToken,
-    });
+    this.orgUrl = `https://${domain}`;
+    this.apiToken = apiToken;
 
     this.options = options;
 
@@ -174,13 +191,33 @@ export class MastraRBACOkta implements IRBACProvider<OktaUser> {
    * Errors propagate to the caller so the cache eviction in getRoles() works.
    */
   private async fetchGroupsFromOkta(userId: string): Promise<string[]> {
-    const groups = await this.oktaClient.userApi.listUserGroups({ userId });
     const groupNames: string[] = [];
+    const origin = new URL(this.orgUrl).origin;
+    let url: string | undefined =
+      `${this.orgUrl}/api/v1/users/${encodeURIComponent(userId)}/groups?limit=${GROUPS_PAGE_LIMIT}`;
 
-    for await (const group of groups) {
-      if (group && group.profile?.name) {
-        groupNames.push(group.profile.name);
+    while (url) {
+      const response = await fetch(url, {
+        headers: {
+          Accept: 'application/json',
+          Authorization: `SSWS ${this.apiToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Okta list user groups request failed with status ${response.status}`);
       }
+
+      const groups = (await response.json()) as OktaGroup[];
+      for (const group of groups) {
+        if (group?.profile?.name) {
+          groupNames.push(group.profile.name);
+        }
+      }
+
+      // Only follow pagination links on the same Okta org so the API token never leaves it.
+      const next = getNextLink(response.headers.get('link'));
+      url = next && new URL(next).origin === origin ? next : undefined;
     }
 
     return groupNames;

@@ -66,13 +66,13 @@ const responseSchema = z.object({
 // Per-intent focus prepended to the front-desk agent for this turn only. System messages are not
 // persisted to the thread, so this steers the reply without polluting the saved transcript.
 const INTENT_GUIDANCE: Record<Intent, string> = {
-  lead: 'The caller is a new prospect who wants work done. Find out which trade they need, the property, and a rough scope. If they are ready, look them up and book a site visit; otherwise capture the lead and call finalizeIntake with scenario "lead".',
+  lead: 'The caller is a new prospect who wants work done. Find out which trade they need, the property, and a rough scope. If they are ready to book, reuse an existing lookup or look them up once. Only book with a matched customer record; otherwise capture a lead for office follow-up with finalizeIntake, scenario "lead", at call end. Follow the agent\'s lookup rules.',
   inspection:
-    'The caller wants a roof inspection. Collect the property address and zip code, then call checkServiceArea before promising a visit. In area: take their name and number and book it, then finalizeIntake with scenario "inspection". Out of area: apologize that you do not cover it and offer a callback instead.',
+    'The caller wants a roof inspection. Collect the property address and zip code, then call checkServiceArea before promising a visit. In area: take their name and number and capture an inspection request with finalizeIntake, scenario "inspection", at call end. Only confirm a booking if a customer record is found and bookAppointment succeeds; otherwise the office must arrange the visit. Out of area: apologize that you do not cover it and offer a callback instead.',
   callback:
     'The caller wants a callback or has a request outside trades work. Collect their name, number, and the reason, then call finalizeIntake with scenario "callback".',
   existing_job:
-    'The caller has an existing account or booked visit. Use lookupCustomer by phone or name first, then help them check availability, book, reschedule, or cancel a site visit.',
+    "The caller has an existing account or booked visit. Reuse the customer lookup from this call, or look them up once by phone or name. Follow the agent's lookup rules; a no-match result should lead to intake for office follow-up. With a matched record, help them check availability, book, reschedule, or cancel a site visit.",
   general:
     'Answer the question briefly and find out what they need. If it is outside trades work, scheduling, or accounts, offer to take a callback.',
 };

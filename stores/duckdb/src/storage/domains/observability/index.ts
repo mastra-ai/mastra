@@ -1,6 +1,8 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createStorageErrorId, ObservabilityStorage } from '@mastra/core/storage';
 import type {
+  SpanQueryResponse,
+  TrustedSpanQueryPlan,
   CreateSpanArgs,
   GetSpanArgs,
   GetSpanResponse,
@@ -84,23 +86,33 @@ import type {
   QueryThreadsResult,
   RetentionTablesDescriptor,
   TableRetentionPolicy,
+  TraceAggregateResponse,
   TraceQueryObservedFieldsResult,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
+  TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryValuesPlan,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
+import { spanQueryFeatures } from '../../features';
 import { resolveTargets, runPrune } from '../../retention';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import * as discoveryOps from './discovery';
 import * as feedbackOps from './feedback';
 import * as logOps from './logs';
 import * as metricOps from './metrics';
-import { checkSignalTablesMigrationStatus, dropLegacyCursorIdDefaults, migrateSignalTables } from './migration';
+import {
+  checkSignalTablesMigrationStatus,
+  dropLegacyCursorIdDefaults,
+  hasPrimaryKey,
+  migrateSignalTables,
+} from './migration';
 import { deltaPollingFeatureEnabled } from './polling';
 import * as scoreOps from './scores';
+import * as spanQueryOps from './span-query';
+import * as traceAggregateOps from './trace-aggregate';
 import * as traceQueryOps from './trace-query';
 import * as tracingOps from './tracing';
 
@@ -152,6 +164,9 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
     feedback: { table: 'feedback_events', column: 'timestamp', indexed: false },
   };
 
+  /** Set by `init()`; until then aggregate queries dedupe metric rows on `metricId`. */
+  private metricIdsUnique = false;
+
   private db: DuckDBConnection;
 
   constructor(config: ObservabilityDuckDBConfig) {
@@ -185,6 +200,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
 
     await this.db.executeBatch([...ALL_DDL, ...ALL_MIGRATIONS]);
     await dropLegacyCursorIdDefaults(this.db);
+    this.metricIdsUnique = await hasPrimaryKey(this.db, 'metric_events');
   }
 
   /**
@@ -248,11 +264,14 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'tag-discovery',
         'metric-discovery',
         'trace-query',
+        'trace-aggregate',
+        ...spanQueryFeatures,
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'trace-query-context-ids',
       ] as const;
     }
 
@@ -267,11 +286,14 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'metric-discovery',
       'delta-polling',
       'trace-query',
+      'trace-aggregate',
+      ...spanQueryFeatures,
       'trace-query-root-duration',
       'trace-query-discovery',
       'thread-query',
       'trace-query-tenant-scope',
       'feedback',
+      'trace-query-context-ids',
     ] as const;
   }
 
@@ -303,8 +325,16 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   async listTraces(args: ListTracesArgs): Promise<ListTracesResponse> {
     return tracingOps.listTraces(this.db, args);
   }
+
+  override async querySpans(plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    return spanQueryOps.querySpans(this.db, plan);
+  }
+
   override async queryTraces(plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
     return traceQueryOps.queryTraces(this.db, plan);
+  }
+  override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    return traceAggregateOps.aggregateTraces(this.db, plan, { metricIdsUnique: this.metricIdsUnique });
   }
   override async getTraceQueryObservedFields(
     plan: TrustedTraceQueryObservedFieldsPlan,

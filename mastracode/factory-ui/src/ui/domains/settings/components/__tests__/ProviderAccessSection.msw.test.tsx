@@ -154,6 +154,37 @@ describe('ProviderAccessSection', () => {
     });
   });
 
+  describe('when auth is disabled', () => {
+    it('labels org-pinned credentials as personal and saves them without a scope', async () => {
+      const providers: ProviderInfo[] = [{ provider: 'openai', source: 'stored' }];
+      let putBody: unknown;
+      server.use(
+        http.get(PROVIDERS_URL, () => providersResponse(providers)),
+        http.put(keyUrl('openai'), async ({ request }) => {
+          putBody = await request.json();
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ProviderAccessSection fixedScope="org" />);
+
+      await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
+      await screen.findByText('OpenAI');
+      expect(within(rowFor('openai')).getByText('Key saved')).toBeInTheDocument();
+      expect(screen.getByText('Personal')).toBeInTheDocument();
+      expect(screen.queryByText('Org-wide')).not.toBeInTheDocument();
+
+      const updateKey = within(rowFor('openai')).getByRole('button', { name: 'Update key for OpenAI' });
+      await waitFor(() => expect(updateKey).toBeEnabled());
+      await user.click(updateKey);
+      await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-local');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(putBody).toEqual({ key: 'sk-local' }));
+    });
+  });
+
   describe('when an OAuth provider uses a paste-code flow', () => {
     it('starts the flow, completes it, and refetches the signed-in status', async () => {
       const providers: ProviderInfo[] = [
@@ -306,6 +337,32 @@ describe('ProviderAccessSection', () => {
       );
     const orgWide = () => screen.getByRole('button', { name: 'Org-wide' });
     const personal = () => screen.getByRole('button', { name: 'Personal' });
+
+    it('shows a deployment-provided provider as configured by the deployment, with no key to add', async () => {
+      window.__MASTRACODE_CONFIG__ = { authEnabled: true };
+      server.use(
+        authenticated(),
+        http.get(PROVIDERS_URL, () =>
+          providersResponse([
+            { provider: 'amazon-bedrock', source: 'deployment' },
+            { provider: 'openai', source: 'none' },
+          ]),
+        ),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ProviderAccessSection />);
+
+      await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
+      await screen.findByText('Amazon Bedrock');
+      for (const scope of [personal, orgWide]) {
+        await user.click(scope());
+        const row = rowFor('amazon-bedrock');
+        expect(within(row).getByText('From deployment')).toBeInTheDocument();
+        expect(within(row).queryByRole('button', { name: /API key|Update key|Remove key/ })).not.toBeInTheDocument();
+      }
+      expect(within(rowFor('openai')).getByRole('button', { name: 'Add API key for OpenAI' })).toBeInTheDocument();
+    });
 
     it('saves an org-wide API key from the org view and shows the personal view as covered', async () => {
       window.__MASTRACODE_CONFIG__ = { authEnabled: true };

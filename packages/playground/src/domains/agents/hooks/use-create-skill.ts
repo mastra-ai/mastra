@@ -1,11 +1,11 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
+import { useWriteWorkspaceFile } from '@mastra/react/hooks/workspace';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { extractSkillInstructions, extractSkillLicense } from '../components/agent-cms-pages/skill-file-tree-utils';
 import type { InMemoryFileNode } from '../components/agent-edit-page/utils/form-validation';
 import { usePermissions } from '@/domains/auth/hooks';
-import { useWriteWorkspaceFile } from '@/domains/workspace/hooks';
 
 interface CreateSkillParams {
   /** Optional client-generated id. When omitted, the server derives one from the name. */

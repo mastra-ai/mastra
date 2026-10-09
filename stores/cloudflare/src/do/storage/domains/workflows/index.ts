@@ -219,8 +219,8 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
         countBuilder.whereAnd('workflow_name = ?', workflowName);
       }
       if (status) {
-        builder.whereAnd("json_extract(snapshot, '$.status') = ?", status);
-        countBuilder.whereAnd("json_extract(snapshot, '$.status') = ?", status);
+        builder.whereAnd("CASE WHEN json_valid(snapshot) THEN json_extract(snapshot, '$.status') END = ?", status);
+        countBuilder.whereAnd("CASE WHEN json_valid(snapshot) THEN json_extract(snapshot, '$.status') END = ?", status);
       }
       if (resourceId) {
         const hasResourceId = await this.#db.hasColumn(fullTableName, 'resourceId');

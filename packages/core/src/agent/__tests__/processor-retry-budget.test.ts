@@ -1,8 +1,9 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { IMastraLogger } from '../../logger';
 import type { Processor } from '../../processors';
-import { DEFAULT_MAX_PROCESSOR_RETRIES } from '../../processors/retry-budget';
+import { __resetProcessorRetryWarnings, DEFAULT_MAX_PROCESSOR_RETRIES } from '../../processors/retry-budget';
 import { Agent } from '../agent';
 
 /**
@@ -50,12 +51,12 @@ function createSucceedOnRetryModel(responseText: string, failuresBeforeSuccess: 
       callCount++;
       if (callCount <= failuresBeforeSuccess) {
         throw new APICallError({
-          message: 'bad request',
+          message: 'overloaded',
           url: 'https://api.example.com/v1/messages',
           requestBodyValues: {},
-          statusCode: 400,
-          responseBody: JSON.stringify({ error: { message: 'bad request' } }),
-          isRetryable: false,
+          statusCode: 500,
+          responseBody: JSON.stringify({ error: { message: 'overloaded' } }),
+          isRetryable: true,
         });
       }
       return {
@@ -70,12 +71,12 @@ function createSucceedOnRetryModel(responseText: string, failuresBeforeSuccess: 
       callCount++;
       if (callCount <= failuresBeforeSuccess) {
         throw new APICallError({
-          message: 'bad request',
+          message: 'overloaded',
           url: 'https://api.example.com/v1/messages',
           requestBodyValues: {},
-          statusCode: 400,
-          responseBody: JSON.stringify({ error: { message: 'bad request' } }),
-          isRetryable: false,
+          statusCode: 500,
+          responseBody: JSON.stringify({ error: { message: 'overloaded' } }),
+          isRetryable: true,
         });
       }
       return {
@@ -117,6 +118,10 @@ async function runExpectingFailure(run: () => Promise<unknown>) {
 }
 
 describe('implicit maxProcessorRetries budget', () => {
+  beforeEach(() => {
+    __resetProcessorRetryWarnings();
+  });
+
   it('caps a runaway error processor well below the old implicit budget of 10', async () => {
     const { model, getCallCount } = createAlwaysFailingModel();
 
@@ -167,7 +172,7 @@ describe('implicit maxProcessorRetries budget', () => {
     expect(getCallCount()).toBe(7);
   });
 
-  it('counts each processor retry against the agent step budget', async () => {
+  it('does not count processor retries against the agent step budget', async () => {
     const { model, getCallCount } = createAlwaysFailingModel();
 
     const agent = new Agent({
@@ -178,12 +183,11 @@ describe('implicit maxProcessorRetries budget', () => {
       errorProcessors: [createAlwaysRetryProcessor()],
     });
 
-    // `stopWhen` defaults to stepCountIs(5), and processor retries are loop
-    // iterations, so the step budget bounds the retries before the retry budget
-    // does. This is why a high maxProcessorRetries needs a raised maxSteps too.
+    // Processor retries re-run the same step, so they do not count against the
+    // default 5-step budget: maxProcessorRetries alone bounds them (1 + 20 calls).
     await runExpectingFailure(() => agent.generate('hello', { maxProcessorRetries: 20 }));
 
-    expect(getCallCount()).toBe(5);
+    expect(getCallCount()).toBe(21);
   });
 
   it('still lets a well-behaved processor recover on its first retry', async () => {
@@ -201,5 +205,85 @@ describe('implicit maxProcessorRetries budget', () => {
 
     expect(result.text).toBe('recovered');
     expect(getCallCount()).toBe(2);
+  });
+});
+
+describe('implicit maxProcessorRetries warning', () => {
+  function capturingLogger() {
+    return {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+      getTransports: vi.fn().mockReturnValue(new Map()),
+      listLogs: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+      listLogsByRunId: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
+    } satisfies IMastraLogger;
+  }
+
+  const budgetWarning = (call: unknown[]) => typeof call[0] === 'string' && call[0].includes('maxProcessorRetries');
+
+  beforeEach(() => {
+    __resetProcessorRetryWarnings();
+  });
+
+  it('warns once when the caller configured error processors without maxProcessorRetries', async () => {
+    const { model } = createAlwaysFailingModel();
+    const logger = capturingLogger();
+
+    const agent = new Agent({
+      id: 'retry-budget-warns',
+      name: 'Retry Budget Agent',
+      instructions: 'You are a test agent',
+      model: [{ model, maxRetries: 0 }],
+      errorProcessors: [createAlwaysRetryProcessor()],
+    });
+    agent.__registerPrimitives({ logger });
+
+    await runExpectingFailure(() => agent.generate('hello'));
+
+    const warnings = logger.warn.mock.calls.filter(budgetWarning);
+    expect(warnings.length).toBe(1);
+  });
+
+  it('does not warn for a bare agent whose only error processors are the framework defaults', async () => {
+    const { model, getCallCount } = createSucceedOnRetryModel('recovered', 1);
+    const logger = capturingLogger();
+
+    const agent = new Agent({
+      id: 'retry-budget-quiet',
+      name: 'Retry Budget Agent',
+      instructions: 'You are a test agent',
+      model: [{ model, maxRetries: 0 }],
+    });
+    agent.__registerPrimitives({ logger });
+
+    const result = await agent.generate('hello');
+
+    // The framework default retry processor recovered the transient 500…
+    expect(result.text).toBe('recovered');
+    expect(getCallCount()).toBe(2);
+    // …and the safety cap still applied, but silently.
+    expect(logger.warn.mock.calls.filter(budgetWarning).length).toBe(0);
+  });
+
+  it('does not warn when maxProcessorRetries is set explicitly', async () => {
+    const { model } = createAlwaysFailingModel();
+    const logger = capturingLogger();
+
+    const agent = new Agent({
+      id: 'retry-budget-explicit-quiet',
+      name: 'Retry Budget Agent',
+      instructions: 'You are a test agent',
+      model: [{ model, maxRetries: 0 }],
+      errorProcessors: [createAlwaysRetryProcessor()],
+      maxProcessorRetries: 1,
+    });
+    agent.__registerPrimitives({ logger });
+
+    await runExpectingFailure(() => agent.generate('hello'));
+
+    expect(logger.warn.mock.calls.filter(budgetWarning).length).toBe(0);
   });
 });

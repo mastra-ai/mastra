@@ -411,7 +411,6 @@ describe('S1: full write-back journey through the real route handlers', () => {
     );
     const app = buildApp({ workosId: 'u1', organizationId: 'org1' });
 
-
     // 2. Session creation persists identity only. The isolated checkout is
     // materialized later, by the session sandbox's start lifecycle.
     const sessionRes = await postJson(app, `/web/github/projects/${projectId}/sessions`, { branch: 'feat/x' });
@@ -428,13 +427,16 @@ describe('S1: full write-back journey through the real route handlers', () => {
     expect(tables.worktrees).toHaveLength(0);
     const persistedSessionWorkdir = '/workspace/session-feat-x';
     // Local-provider seed: the memo derives `<workingDirectory>/<repo name>`.
-    getSessionSandbox(session.id, 'seed/session-feat-x', () =>
-      ({
-        id: 'sb-session',
-        provider: 'local',
-        workingDirectory: '/workspace',
-        executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-      }) as never,
+    getSessionSandbox(
+      session.id,
+      'seed/session-feat-x',
+      () =>
+        ({
+          id: 'sb-session',
+          provider: 'local',
+          workingDirectory: '/workspace',
+          executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+        }) as never,
     );
     await sourceControlStorage.sessions.setSandbox({
       id: session.id,
@@ -545,13 +547,16 @@ describe('S2: concurrent pushes', () => {
       }),
     );
     const now = new Date();
-    getSessionSandbox(`stored-session-${id}`, 'seed/hello', () =>
-      ({
-        id: `sb-${id}`,
-        provider: 'local',
-        workingDirectory: '/workspace',
-        executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-      }) as never,
+    getSessionSandbox(
+      `stored-session-${id}`,
+      'seed/hello',
+      () =>
+        ({
+          id: `sb-${id}`,
+          provider: 'local',
+          workingDirectory: '/workspace',
+          executeCommand: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
+        }) as never,
     );
     tables.sessions.push({
       id: `stored-session-${id}`,

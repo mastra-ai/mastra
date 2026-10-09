@@ -10,6 +10,8 @@ import { ProviderConnectControl } from '../../settings/components/PlatformProvid
 import { IncidentIoIcon, JiraIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 
+const BUTTON_LAYOUT = 'whitespace-nowrap max-sm:min-h-11 max-sm:w-full max-sm:justify-start';
+
 export interface ProjectManagementFactoryStepProps {
   onConnect: () => void;
   onContinue: () => void;
@@ -29,7 +31,7 @@ function LinearPane({ onConnect }: { onConnect: () => void }) {
   if (linearStatus.data?.connected) {
     return (
       <EmptyState
-        className="py-8"
+        className="items-stretch text-left"
         iconSlot={<LinearIcon />}
         titleSlot="Linear connected"
         descriptionSlot={`Connected to ${linearStatus.data.workspace?.name ?? 'Linear'}.`}
@@ -38,15 +40,14 @@ function LinearPane({ onConnect }: { onConnect: () => void }) {
   }
   return (
     <EmptyState
-      className="py-8"
+      className="items-stretch text-left"
       iconSlot={<LinearIcon />}
       titleSlot="Connect Linear"
       descriptionSlot="Give your Factory the issue context and priorities behind your code."
       actionSlot={
         linearStatus.data?.reason !== 'missing_config' &&
         linearStatus.data?.reason !== 'organization_required' && (
-          <Button variant="primary" onClick={onConnect}>
-            <LinearIcon className="size-4" />
+          <Button variant="primary" icon={<LinearIcon />} className={BUTTON_LAYOUT} onClick={onConnect}>
             {linearStatus.data?.reason === 'not_connected' ? 'Connect Linear' : 'Reconnect Linear'}
           </Button>
         )
@@ -62,12 +63,12 @@ function JiraPane({ connections, onRetry }: { connections: PlatformProviderConne
   if (onRetry && !hasActiveConnection) {
     return (
       <EmptyState
-        className="py-8"
+        className="items-stretch text-left"
         iconSlot={<JiraIcon />}
         titleSlot="Connect Jira"
         descriptionSlot="Couldn't load Jira connections."
         actionSlot={
-          <Button variant="ghost" onClick={onRetry}>
+          <Button variant="ghost" className={BUTTON_LAYOUT} onClick={onRetry}>
             Retry
           </Button>
         }
@@ -77,7 +78,7 @@ function JiraPane({ connections, onRetry }: { connections: PlatformProviderConne
   if (hasActiveConnection) {
     return (
       <EmptyState
-        className="py-8"
+        className="items-stretch text-left"
         iconSlot={<JiraIcon />}
         titleSlot="Jira connected"
         descriptionSlot={accountSummary(connections, 'Jira')}
@@ -86,7 +87,7 @@ function JiraPane({ connections, onRetry }: { connections: PlatformProviderConne
   }
   return (
     <EmptyState
-      className="py-8"
+      className="items-stretch text-left"
       iconSlot={<JiraIcon />}
       titleSlot="Connect Jira"
       descriptionSlot="Give your Factory the issue context and priorities behind your code."
@@ -96,6 +97,7 @@ function JiraPane({ connections, onRetry }: { connections: PlatformProviderConne
           label="Connect Jira"
           variant="primary"
           size="md"
+          className={BUTTON_LAYOUT}
           icon={<JiraIcon size={16} />}
         />
       }
@@ -110,12 +112,12 @@ function IncidentIoPane({ connections, onRetry }: { connections: PlatformProvide
   if (onRetry && !hasActiveConnection) {
     return (
       <EmptyState
-        className="py-8"
+        className="items-stretch text-left"
         iconSlot={<IncidentIoIcon />}
         titleSlot="Connect incident.io"
         descriptionSlot="Couldn't load incident.io connections."
         actionSlot={
-          <Button variant="ghost" onClick={onRetry}>
+          <Button variant="ghost" className={BUTTON_LAYOUT} onClick={onRetry}>
             Retry
           </Button>
         }
@@ -125,7 +127,7 @@ function IncidentIoPane({ connections, onRetry }: { connections: PlatformProvide
   if (hasActiveConnection) {
     return (
       <EmptyState
-        className="py-8"
+        className="items-stretch text-left"
         iconSlot={<IncidentIoIcon />}
         titleSlot="incident.io connected"
         descriptionSlot={accountSummary(connections, 'incident.io')}
@@ -134,7 +136,7 @@ function IncidentIoPane({ connections, onRetry }: { connections: PlatformProvide
   }
   return (
     <EmptyState
-      className="py-8"
+      className="items-stretch text-left"
       iconSlot={<IncidentIoIcon />}
       titleSlot="Connect incident.io"
       descriptionSlot="Route incident follow-ups into your Factory. Incidents themselves stay out of intake."
@@ -144,6 +146,7 @@ function IncidentIoPane({ connections, onRetry }: { connections: PlatformProvide
           label="Connect incident.io"
           variant="primary"
           size="md"
+          className={BUTTON_LAYOUT}
           icon={<IncidentIoIcon size={16} />}
         />
       }
@@ -178,15 +181,19 @@ export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectM
   return (
     <section
       aria-label="Project management connections"
-      className={`border-border bg-background/80 rounded-2xl border p-5 ${paneCount === 3 ? 'max-w-5xl' : paneCount === 2 ? 'max-w-3xl' : 'max-w-xl'}`}
+      className={`border-border bg-background/80 @container rounded-2xl border p-5 ${paneCount === 3 ? 'max-w-5xl' : paneCount === 2 ? 'max-w-3xl' : 'max-w-xl'}`}
     >
       {paneCount > 1 ? (
-        <div className={`divide-border grid divide-x ${paneCount === 3 ? 'grid-cols-3' : 'grid-cols-2'}`}>
-          <div className="pr-6">
+        // Size columns against the panel: the desktop artwork also narrows it.
+        // Three panes need 39rem to fit their padding and the incident.io label.
+        <div
+          className={`divide-border grid grid-cols-1 divide-y ${paneCount === 3 ? '@min-[39rem]:grid-cols-3 @min-[39rem]:divide-x @min-[39rem]:divide-y-0' : '@lg:grid-cols-2 @lg:divide-x @lg:divide-y-0'}`}
+        >
+          <div className="min-w-0">
             <LinearPane onConnect={onConnect} />
           </div>
           {jiraOffered && (
-            <div className={incidentOffered ? 'px-6' : 'pl-6'}>
+            <div className="min-w-0">
               <JiraPane
                 connections={jiraConnections.data ?? []}
                 {...(jiraConnections.isError ? { onRetry: () => void jiraConnections.refetch() } : {})}
@@ -194,7 +201,7 @@ export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectM
             </div>
           )}
           {incidentOffered && (
-            <div className="pl-6">
+            <div className="min-w-0">
               <IncidentIoPane
                 connections={incidentConnections.data ?? []}
                 {...(incidentConnections.isError ? { onRetry: () => void incidentConnections.refetch() } : {})}
@@ -205,13 +212,13 @@ export function ProjectManagementFactoryStep({ onConnect, onContinue }: ProjectM
       ) : (
         <LinearPane onConnect={onConnect} />
       )}
-      <div className="mt-4 flex items-center justify-center gap-2">
+      <div className="mt-4 flex items-center gap-2 px-4">
         {anyConnected ? (
-          <Button variant="primary" onClick={onContinue}>
+          <Button variant="primary" className={BUTTON_LAYOUT} onClick={onContinue}>
             Continue
           </Button>
         ) : (
-          <Button variant="ghost" onClick={onContinue}>
+          <Button variant="ghost" className={BUTTON_LAYOUT} onClick={onContinue}>
             Skip for now
           </Button>
         )}

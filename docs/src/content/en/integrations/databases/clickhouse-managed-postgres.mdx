@@ -1,0 +1,66 @@
+---
+title: "ClickHouse Managed Postgres | Database"
+description: "Store Mastra application data in ClickHouse Managed Postgres with PostgresStore and verified TLS."
+packages:
+  - "@mastra/core"
+  - "@mastra/pg"
+---
+
+# ClickHouse Managed Postgres
+
+[ClickHouse Managed Postgres](https://clickhouse.com/cloud/postgres) connects to Mastra through [`PostgresStore`](/integrations/databases/postgresql), which uses the Node.js `pg` driver.
+
+## Set up the connection
+
+In the ClickHouse Cloud console, open your Postgres instance and select **Connect**. Turn off **via PgBouncer** and copy the direct connection URL. Download the instance's CA certificate bundle from **Settings**.
+
+Set these environment variables in your application:
+
+```bash title=".env"
+DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@YOUR_HOST:5432/postgres
+PG_CA_CERT_PATH=/absolute/path/to/ca-certificate.pem
+```
+
+Keep the password out of version control. Use the hostname from **Connect** and leave SSL query parameters out of `DATABASE_URL`. The `ssl` object below configures certificate verification.
+
+See the [connection documentation](https://clickhouse.com/docs/products/managed-postgres/connection) for connection details and certificates.
+
+## Configure storage
+
+Install the PostgreSQL storage package:
+
+```bash npm2yarn
+npm install @mastra/pg@latest
+```
+
+Register the store with Mastra:
+
+```typescript title="src/mastra/index.ts"
+import { readFileSync } from 'node:fs'
+import { Mastra } from '@mastra/core/mastra'
+import { PostgresStore } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'clickhouse-managed-postgres-storage',
+    connectionString: process.env.DATABASE_URL!,
+    ssl: {
+      ca: readFileSync(process.env.PG_CA_CERT_PATH!, 'utf8'),
+      rejectUnauthorized: true,
+    },
+  }),
+})
+```
+
+The CA certificate is unique to your instance. Make it available to the deployed application at `PG_CA_CERT_PATH`.
+
+Mastra initializes its storage tables when the application starts. The database role must have permission to create those tables and indexes. Run your application, then use the instance's SQL Console to inspect the tables:
+
+```sql
+SELECT table_schema, table_name
+FROM information_schema.tables
+WHERE table_name LIKE 'mastra_%'
+ORDER BY table_schema, table_name;
+```
+
+For separate schema initialization and runtime roles, see the [PostgreSQL storage guide](/integrations/databases/postgresql).

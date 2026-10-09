@@ -1,0 +1,297 @@
+/**
+ * Port of harness case T78 (completion feedback with a real model, no structured output — the F5 shape).
+ *
+ * An `isTaskComplete` scorer fails once and then passes. Its feedback lands as a trailing assistant
+ * message, so the follow-up request ends on an assistant turn. Anthropic rejects that with a prefill
+ * 400; the default `PrefillErrorHandler` must repair it and the run must complete (COR-1312). The case
+ * runs on the plain, durable and evented engines. Anthropic is the discriminator; OpenAI is the
+ * control that must keep working.
+ *
+ * This copy lives here (rather than in `packages/core`) because harness parity needs the real
+ * `@mastra/memory` `Memory` plus `@mastra/libsql` storage, the way the harness sets it up. Core does
+ * not depend on `@mastra/memory`.
+ *
+ * Replay is the default: provider traffic is served from `packages/memory/__recordings__/`, so the
+ * memory CI job runs this without API keys. Recordings include the rejected 400 and the repaired
+ * retry.
+ *
+ * To re-record (needs both OPENAI_API_KEY and ANTHROPIC_API_KEY), from
+ * `packages/memory/integration-tests`:
+ *
+ *   LLM_TEST_MODE=record pnpm vitest run src/durable-agent-completion-feedback.test.ts
+ *
+ * Only commit recordings from a run where every cell passed. The recorder strips credentials and
+ * account metadata headers (`authorization`, `x-api-key`, `anthropic-organization-id`,
+ * `openai-organization`, …), so the diff should contain none of them.
+ *
+ * Replay uses exact request matching. If replay fails with "No exact match for hash", a request body
+ * changed (for example the completion-feedback template); re-record.
+ */
+import { randomUUID } from 'node:crypto';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { getLLMTestMode } from '@internal/llm-recorder';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { Agent } from '@mastra/core/agent';
+import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
+import { createScorer } from '@mastra/core/evals';
+import { Mastra } from '@mastra/core/mastra';
+import { LibSQLStore } from '@mastra/libsql';
+import { Memory } from '@mastra/memory';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { transformRequest } from './transform-request';
+
+const MODE = getLLMTestMode();
+setupDummyApiKeys(MODE, ['openai', 'anthropic']);
+
+const RECORDING_NAME = 'memory-integration-tests-src-durable-agent-completion-feedback';
+
+const PROVIDERS = {
+  anthropic: 'anthropic/claude-sonnet-4-6',
+  openai: 'openai/gpt-5-mini',
+} as const;
+const ENGINES = ['plain', 'durable', 'evented'] as const;
+
+const OMEGA_FEEDBACK = 'The reply is missing the required word OMEGA.';
+const PREFILL_REPAIR_MARKER = 'anthropic-prefill-processor-retry';
+
+type ModelRequest = { endpoint: string; body: any; status: number; responseText?: string };
+
+// Role of the final conversational item a request ends on. OpenAI Responses `item_reference` ids
+// prefixed `msg_` point at a prior assistant message.
+function lastTurn(body: any): string | null {
+  const items = body?.messages ?? body?.input ?? [];
+  const last = items.at(-1);
+  if (!last) return null;
+  if (last.type === 'item_reference') return String(last.id).startsWith('msg_') ? 'assistant' : 'reference';
+  return last.role ?? last.type ?? null;
+}
+
+// An Anthropic request ending on an assistant turn may be attempted, as long as the very next request
+// carries the prefill repair and no longer ends on the assistant. A repair with no such request in
+// front of it is spurious.
+function prefillRepairs(requests: ModelRequest[]) {
+  const reqs = requests.map((r, i) => ({
+    i,
+    provider: r.endpoint.includes('anthropic') ? 'anthropic' : 'openai',
+    last: lastTurn(r.body),
+    status: r.status,
+    repair: JSON.stringify(r.body ?? '').includes(PREFILL_REPAIR_MARKER),
+  }));
+  const ended = reqs.filter(r => r.provider === 'anthropic' && r.last === 'assistant');
+  const isRepairOf = (r: (typeof reqs)[number]) => {
+    const next = reqs[r.i + 1];
+    return !!next && next.repair && next.last !== 'assistant';
+  };
+  const repairIdx = new Set(ended.filter(isRepairOf).map(r => r.i + 1));
+  return {
+    ended,
+    repaired: ended.filter(isRepairOf),
+    unrepaired: ended.filter(r => !isRepairOf(r)),
+    spurious: reqs.filter(r => r.repair && !repairIdx.has(r.i)),
+  };
+}
+
+// Requests that end on an assistant turn, split by provider. Anthropic rejects these (the prefill 400
+// the repair has to fix); OpenAI accepts a wake-up ending on an assistant `item_reference`, so those
+// are reported separately. This is the harness's `assistantEndedAccepted` observation.
+function assistantEndedRequests(requests: ModelRequest[]) {
+  const ended = requests
+    .map((r, i) => ({
+      i,
+      provider: r.endpoint.includes('anthropic') ? 'anthropic' : 'openai',
+      last: lastTurn(r.body),
+    }))
+    .filter(r => r.last === 'assistant');
+  return {
+    rejected: ended.filter(r => r.provider === 'anthropic'),
+    accepted: ended.filter(r => r.provider !== 'anthropic'),
+  };
+}
+
+function createOmegaScorer(scores: number[]) {
+  return createScorer({ id: 't78-scorer', description: 'requires OMEGA after one failure' })
+    .generateScore(async () => {
+      const score = scores.length >= 1 ? 1 : 0;
+      scores.push(score);
+      return score;
+    })
+    .generateReason(async ({ score }) => (score ? 'complete' : OMEGA_FEEDBACK));
+}
+
+describe.each(Object.entries(PROVIDERS))('T78 completion feedback — %s', (provider, model) => {
+  describe.each(ENGINES)('%s engine', engine => {
+    let mock: ReturnType<typeof createGatewayMock>;
+    let originalFetch: typeof fetch;
+    let requests: ModelRequest[];
+
+    beforeEach(() => {
+      mock = createGatewayMock({
+        name: `${RECORDING_NAME}-${provider}-${engine}`,
+        exactMatch: true,
+        // The shared normalizer redacts `\d+ms`, which covers the completion feedback's
+        // "Duration: 1ms" — otherwise the check's wall-clock duration would change the request hash
+        // between runs. It also redacts ids, timestamps and tool-call ids.
+        transformRequest,
+      });
+      mock.start();
+
+      // Observe every provider request and its status on top of the recorder, in both record and
+      // replay mode. In record mode the recorder re-issues each request through MSW's `bypass()`, which
+      // tags it with `accept: msw/passthrough`; skip those so each request is counted once.
+      requests = [];
+      originalFetch = globalThis.fetch;
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const response = await originalFetch(input, init);
+        const isBypass = input instanceof Request && !!input.headers.get('accept')?.includes('msw/passthrough');
+        const url = new URL(input instanceof Request ? input.url : input);
+        if (!isBypass && ['api.openai.com', 'api.anthropic.com'].includes(url.hostname)) {
+          const entry: ModelRequest = {
+            endpoint: url.origin + url.pathname,
+            body: typeof init?.body === 'string' ? JSON.parse(init.body) : null,
+            status: response.status,
+          };
+          if (!response.ok) entry.responseText = await response.clone().text();
+          requests.push(entry);
+        }
+        return response;
+      }) as typeof fetch;
+    });
+
+    afterEach(async () => {
+      globalThis.fetch = originalFetch;
+      await mock.saveAndStop();
+    });
+
+    it('repairs the prefill rejection and completes after one failed completion check', async () => {
+      const scores: number[] = [];
+      const onComplete: boolean[] = [];
+      const dbPath = await mkdtemp(join(tmpdir(), `t78-${provider}-${engine}-`));
+      const storage = new LibSQLStore({
+        id: randomUUID(),
+        url: `file:${join(dbPath, 'memory.db')}`,
+      });
+      const memory = new Memory({
+        storage,
+        options: { lastMessages: 40, semanticRecall: false, generateTitle: false, workingMemory: { enabled: false } },
+      });
+      const agent = new Agent({
+        id: `t78-${provider}-${engine}`,
+        name: 't78',
+        model,
+        memory,
+        instructions: 'Answer briefly. If you receive completion feedback, follow it exactly.',
+        defaultOptions: {
+          isTaskComplete: {
+            scorers: [createOmegaScorer(scores)],
+            onComplete: r => {
+              onComplete.push(r.complete);
+            },
+          },
+        },
+      });
+      const runner =
+        engine === 'plain'
+          ? agent
+          : engine === 'durable'
+            ? createDurableAgent({ agent })
+            : createEventedAgent({ agent });
+      const mastra = new Mastra({ agents: { t78: runner as any }, storage, logger: false });
+      if (engine !== 'plain') {
+        expect((runner as any).getWorkflow().engineType).toBe(engine === 'evented' ? 'evented' : 'default');
+      }
+
+      const thread = `t78-thread-${provider}-${engine}`;
+      const resource = `t78-resource-${provider}-${engine}`;
+      const chunks: any[] = [];
+      let threw: string | null = null;
+      try {
+        const result: any = await runner.stream(
+          'Give a one-sentence reply containing the word ALPHA, and the number 7.',
+          { memory: { thread, resource }, maxSteps: 4 } as any,
+        );
+        const output = engine === 'plain' || !result.output ? result : result.output;
+        for await (const chunk of output.fullStream) chunks.push(chunk);
+        result.cleanup?.();
+      } catch (err: any) {
+        threw = String(err?.message ?? err);
+      }
+      await mastra.stopWorkers?.();
+
+      const errors = chunks
+        .filter(c => c.type === 'error')
+        .map(c => String(c.payload?.error?.message ?? c.payload?.error ?? ''));
+      const finalText = chunks
+        .filter(c => c.type === 'text-delta')
+        .map(c => c.payload?.text ?? '')
+        .join('');
+      const bodies = requests.map(r => JSON.stringify(r.body ?? ''));
+      const repairs = prefillRepairs(requests);
+      // Read everything stored, including signals that recall() hides by default.
+      const recalled = await memory.recall({ threadId: thread, resourceId: resource, perPage: 50, hideSignals: false });
+      await rm(dbPath, { recursive: true, force: true });
+
+      // 1. Every Anthropic request ending on an assistant turn was repaired (F5, COR-1312).
+      expect(repairs.unrepaired).toEqual([]);
+      // 2. No prefill repair without a rejected request in front of it (control).
+      expect(repairs.spurious).toEqual([]);
+      // 3. No assistant-prefill rejection surfaced.
+      expect([...errors, threw ?? ''].filter(m => /prefill|assistant message/i.test(m))).toEqual([]);
+      // 4. No error chunk (and the stream did not reject).
+      expect(errors).toEqual([]);
+      expect(threw).toBeNull();
+      // 5. The run produced an answer.
+      expect(finalText.length).toBeGreaterThan(0);
+      // 6. Exercised-ness: the completion feedback was delivered to the model.
+      expect(bodies.some(b => b.includes('missing the required word OMEGA'))).toBe(true);
+      // 7. The scorer failed once, then passed.
+      expect(scores).toEqual([0, 1]);
+      // 8. The final completion check graded complete.
+      expect(onComplete.at(-1)).toBe(true);
+      // 9. The synthetic continuation turn is not persisted in memory. Guard against an empty history:
+      // the prompt and the model's replies must be there.
+      const stored = JSON.stringify(recalled.messages);
+      expect(stored).toContain('Give a one-sentence reply containing the word ALPHA');
+      const storedReplies = recalled.messages
+        .filter(m => m.role === 'assistant')
+        .map(m => String((m.content as { content?: string } | undefined)?.content ?? ''))
+        .filter(text => text.length > 0);
+      // The post-feedback reply must be persisted too, not just the first reply: the streamed text is
+      // the pre-repair reply followed by the post-repair one, so the last stored assistant message
+      // must be the tail of it. Otherwise the absence check below could pass on a history that stops
+      // before the repair ever ran.
+      expect(storedReplies.length).toBeGreaterThanOrEqual(2);
+      const lastStoredReply = storedReplies.at(-1) ?? '';
+      expect(lastStoredReply.length).toBeGreaterThan(0);
+      expect(finalText.trimEnd().endsWith(lastStoredReply.trimEnd())).toBe(true);
+      expect(stored).not.toContain('Continue.');
+      // The repair's own signal is stored (role 'signal', text 'continue'), but T78 makes no claim
+      // about it, so it is deliberately not asserted here.
+
+      // Anthropic must actually take the rejection -> repair path. OpenAI never rejects: an OpenAI
+      // request ending on an assistant turn is accepted as-is (the control), so it must stay
+      // unrepaired rather than being "fixed" before it is ever sent.
+      const endedByProvider = assistantEndedRequests(requests);
+      if (provider === 'anthropic') {
+        expect(endedByProvider.accepted).toEqual([]);
+        expect(repairs.ended.length).toBeGreaterThan(0);
+        for (const { i } of repairs.ended) {
+          expect(requests[i]!.status).toBe(400);
+          expect(requests[i]!.responseText).toMatch(/does not support assistant message prefill/);
+        }
+        expect(repairs.repaired.length).toBe(repairs.ended.length);
+      } else {
+        expect(repairs.ended).toEqual([]);
+        expect(repairs.spurious).toEqual([]);
+        // The control has to see the contrast: an assistant-ended OpenAI request that the provider
+        // accepted (200) and that was not pre-repaired.
+        expect(endedByProvider.accepted.length).toBeGreaterThan(0);
+        for (const { i } of endedByProvider.accepted) {
+          expect(requests[i]!.status).toBe(200);
+          expect(bodies[i]!).not.toContain(PREFILL_REPAIR_MARKER);
+        }
+      }
+    }, 120_000);
+  });
+});

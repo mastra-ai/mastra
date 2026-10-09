@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ 792329abc442 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { createConnectionTool } from './tools/create-connection.js';
 import { createInvitationTool } from './tools/create-invitation.js';
 import { createOrganizationDomainTool } from './tools/create-organization-domain.js';
@@ -87,5 +87,5 @@ export function createWorkosTools(options?: ProviderToolsOptions) {
     workos_update_user: updateUserTool(platformProxy),
     workos_verify_organization_domain: verifyOrganizationDomainTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

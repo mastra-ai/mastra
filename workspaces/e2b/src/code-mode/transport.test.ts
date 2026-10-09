@@ -237,4 +237,49 @@ describe('E2BCodeModeTransport', () => {
     expect(startSpy).toHaveBeenCalledOnce();
     expect(result.success).toBe(true);
   });
+
+  it('resumes an auto-paused sandbox whose status is still running and runs the program', async () => {
+    const pausedE2B = makeFakeE2B();
+    pausedE2B.files.makeDir.mockRejectedValue(new Error('Paused sandbox abc123 not found'));
+    const resumedE2B = makeFakeE2B();
+    const handle = {
+      sendStdin: vi.fn().mockResolvedValue(undefined),
+      wait: vi.fn(() => new Promise(() => {})),
+      kill: vi.fn().mockResolvedValue(true),
+    } as unknown as ProcessHandle;
+
+    const sandbox = makeSandbox(pausedE2B, opts => {
+      setTimeout(() => opts.onStdout?.(frame({ type: 'done', ok: true, result: 7 })), 0);
+      return { handle };
+    });
+    const startSpy = vi.spyOn(sandbox, 'start');
+    const ensureSpy = vi.spyOn(sandbox, 'ensureRunning').mockImplementation(async () => {
+      (sandbox as unknown as { _sandbox: unknown })._sandbox = resumedE2B;
+      sandbox.status = 'running';
+    });
+
+    const transport = new E2BCodeModeTransport();
+    const result = await transport.run({ sandbox, ...baseOpts() });
+
+    expect(result).toEqual({ success: true, result: 7, logs: [] });
+    expect(startSpy).not.toHaveBeenCalled();
+    expect(ensureSpy).toHaveBeenCalledOnce();
+    expect(resumedE2B.files.makeDir).toHaveBeenCalledOnce();
+    expect(resumedE2B.writes).toHaveLength(2);
+    expect(resumedE2B.files.remove).toHaveBeenCalledOnce();
+  });
+
+  it('does not retry setup on errors unrelated to a dead sandbox', async () => {
+    const fakeE2B = makeFakeE2B();
+    fakeE2B.files.makeDir.mockRejectedValue(new Error('permission denied'));
+    const sandbox = makeSandbox(fakeE2B, () => {
+      throw new Error('spawn should not be reached');
+    });
+    const ensureSpy = vi.spyOn(sandbox, 'ensureRunning');
+
+    const transport = new E2BCodeModeTransport();
+    await expect(transport.run({ sandbox, ...baseOpts() })).rejects.toThrow(/permission denied/);
+    expect(ensureSpy).not.toHaveBeenCalled();
+    expect(fakeE2B.files.makeDir).toHaveBeenCalledOnce();
+  });
 });

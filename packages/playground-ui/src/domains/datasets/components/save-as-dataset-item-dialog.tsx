@@ -1,18 +1,19 @@
 'use client';
 
 import type { DatasetItemToolMock, AddDatasetItemParams } from '@mastra/client-js';
+import { useDatasetMutations, useDatasets } from '@mastra/react/hooks/datasets';
 import { DatabaseIcon, Check, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
-import { useDatasets } from '../hooks/use-datasets';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Label } from '@/ds/components/Label';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { Form } from '@/ds/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { SideDialog } from '@/ds/components/SideDialog';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon } from '@/ds/components/Text';
+import { Txt } from '@/ds/components/Txt';
 import { toast } from '@/utils/toast';
 
 export type SaveAsDatasetItemDialogProps = {
@@ -226,20 +227,22 @@ export function SaveAsDatasetItemDialog({
           </SideDialog.Heading>
         </SideDialog.Header>
 
-        <form onSubmit={handleSubmit} className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="target-dataset">Dataset *</Label>
+        <Form onSubmit={handleSubmit}>
+          <Field>
+            <FieldLabel required>Dataset</FieldLabel>
             <Select
               value={selectedDatasetId}
               onValueChange={setSelectedDatasetId}
               disabled={addItem.isPending || isDatasetsLoading}
             >
-              <SelectTrigger id="target-dataset">
+              <SelectTrigger>
                 <SelectValue placeholder={isDatasetsLoading ? 'Loading datasets...' : 'Select a dataset'} />
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="px-2 py-4 text-center text-body text-muted-foreground">No datasets available</div>
+                  <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
+                    No datasets available
+                  </Txt>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>
@@ -249,42 +252,42 @@ export function SaveAsDatasetItemDialog({
                 )}
               </SelectContent>
             </Select>
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label htmlFor="item-input">Input (JSON) *</Label>
+          <Field>
+            <FieldLabel required>Input (JSON)</FieldLabel>
             <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-30" />
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label htmlFor="item-ground-truth">Ground Truth (JSON, optional)</Label>
+          <Field>
+            <FieldLabel>Ground Truth (JSON, optional)</FieldLabel>
             <CodeEditor
               value={groundTruth}
               onChange={handleGroundTruthChange}
               showCopyButton={false}
               className="min-h-20"
             />
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label htmlFor="item-trajectory">Expected Trajectory (JSON, optional)</Label>
+          <Field>
+            <FieldLabel>Expected Trajectory (JSON, optional)</FieldLabel>
             <CodeEditor
               value={expectedTrajectory}
               onChange={handleExpectedTrajectoryChange}
               showCopyButton={false}
               className="min-h-20"
             />
-          </div>
+          </Field>
 
-          <div className="grid gap-2">
-            <Label htmlFor="item-tool-mocks">Tool Mocks (JSON, optional)</Label>
+          <Field>
+            <FieldLabel>Tool Mocks (JSON, optional)</FieldLabel>
             <CodeEditor
               value={toolMocks}
               onChange={handleToolMocksChange}
               showCopyButton={false}
               className="min-h-20"
             />
-          </div>
+          </Field>
 
           <div className="flex justify-end gap-2 pt-4">
             <Button icon={<X />} type="button" onClick={handleCancel}>
@@ -299,7 +302,7 @@ export function SaveAsDatasetItemDialog({
               {addItem.isPending ? 'Saving...' : trajectoryLoading ? 'Loading...' : 'Save Item'}
             </Button>
           </div>
-        </form>
+        </Form>
       </SideDialog.Content>
     </SideDialog>
   );

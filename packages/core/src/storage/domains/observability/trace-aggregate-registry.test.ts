@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TokenMetrics } from '../../../observability/types/metrics';
 import {
   getTraceAggregateDimensionDescriptors,
   getTraceAggregateDimensionRule,
@@ -9,6 +10,7 @@ import {
   isTraceAggregateDimension,
   isTraceQueryMetadataPath,
   parseTraceAggregateMeasure,
+  TRACE_AGGREGATE_COST_METRIC_NAMES,
   TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX,
   TRACE_AGGREGATE_DIMENSION_REGISTRY,
   TRACE_AGGREGATE_FIXED_MEASURES,
@@ -16,11 +18,12 @@ import {
   TRACE_AGGREGATE_MAX_DIMENSIONS,
   TRACE_AGGREGATE_MEASURE_REGISTRY,
   TRACE_AGGREGATE_METADATA_DIMENSION_RULE,
+  TRACE_AGGREGATE_USAGE_METRIC_NAMES,
   TRACE_QUERY_FIELD_REGISTRY,
   TRACE_QUERY_MAX_PATH_BYTES,
 } from '../../index';
 
-const DECISION_4_TRACE_DIMENSIONS = [
+const TRACE_DIMENSIONS = [
   'entityType',
   'entityName',
   'environment',
@@ -35,7 +38,7 @@ const DECISION_4_TRACE_DIMENSIONS = [
   'experimentId',
 ];
 
-const DECISION_3_MEASURES = [
+const ROOT_MEASURES = [
   'count',
   'duration.avg',
   'duration.min',
@@ -48,11 +51,28 @@ const DECISION_3_MEASURES = [
   'errorRate',
 ];
 
+const TOKEN_COST_MEASURES = [
+  'tokens.input.sum',
+  'tokens.input.avg',
+  'tokens.output.sum',
+  'tokens.output.avg',
+  'tokens.total.sum',
+  'tokens.total.avg',
+  'tokens.reasoning.sum',
+  'tokens.reasoning.avg',
+  'tokens.cached.sum',
+  'tokens.cached.avg',
+  'cost.sum',
+  'cost.avg',
+];
+
+const ALL_MEASURES = [...ROOT_MEASURES, ...TOKEN_COST_MEASURES];
+
 const PROTOTYPE_KEYS = ['constructor', '__proto__', 'toString', 'hasOwnProperty'];
 
 describe('trace aggregate dimension registry', () => {
-  it('declares exactly the Decision 4 trace-scope allowlist, in spec order', () => {
-    expect(Object.keys(TRACE_AGGREGATE_DIMENSION_REGISTRY)).toEqual(DECISION_4_TRACE_DIMENSIONS);
+  it('declares exactly the trace-scope dimension allowlist, in order', () => {
+    expect(Object.keys(TRACE_AGGREGATE_DIMENSION_REGISTRY)).toEqual(TRACE_DIMENSIONS);
     expect(TRACE_AGGREGATE_MAX_DIMENSIONS).toBe(2);
     for (const rule of Object.values(TRACE_AGGREGATE_DIMENSION_REGISTRY)) {
       expect(rule).toEqual({ valueKind: 'string' });
@@ -61,7 +81,7 @@ describe('trace aggregate dimension registry', () => {
   });
 
   it('accepts every canonical dimension for groupBy and countDistinct', () => {
-    for (const path of DECISION_4_TRACE_DIMENSIONS) {
+    for (const path of TRACE_DIMENSIONS) {
       expect(isTraceAggregateCanonicalDimension(path), path).toBe(true);
       expect(isTraceAggregateDimension(path), path).toBe(true);
       expect(isTraceAggregateCountDistinctField(path), path).toBe(true);
@@ -134,7 +154,7 @@ describe('trace aggregate dimension registry', () => {
 
   it('lists dimension descriptors in registry order', () => {
     const descriptors = getTraceAggregateDimensionDescriptors();
-    expect(descriptors.map(descriptor => descriptor.path)).toEqual(DECISION_4_TRACE_DIMENSIONS);
+    expect(descriptors.map(descriptor => descriptor.path)).toEqual(TRACE_DIMENSIONS);
     for (const descriptor of descriptors) {
       expect(descriptor).toEqual({ path: descriptor.path, valueKind: 'string' });
     }
@@ -142,8 +162,8 @@ describe('trace aggregate dimension registry', () => {
 });
 
 describe('trace aggregate measure registry', () => {
-  it('declares exactly the Decision 3 v1 measures, in spec order', () => {
-    expect(Object.keys(TRACE_AGGREGATE_MEASURE_REGISTRY)).toEqual(DECISION_3_MEASURES);
+  it('declares exactly the root, token, and cost measures, in order', () => {
+    expect(Object.keys(TRACE_AGGREGATE_MEASURE_REGISTRY)).toEqual(ALL_MEASURES);
     expect(TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX).toBe('countDistinct.');
   });
 
@@ -170,8 +190,52 @@ describe('trace aggregate measure registry', () => {
     }
   });
 
+  it('maps token and cost measures to their token metric names', () => {
+    expect(TokenMetrics.TOTAL_INPUT).toBe('mastra_model_total_input_tokens');
+    expect(TokenMetrics.TOTAL_OUTPUT).toBe('mastra_model_total_output_tokens');
+    expect(TokenMetrics.OUTPUT_REASONING).toBe('mastra_model_output_reasoning_tokens');
+    expect(TokenMetrics.INPUT_CACHE_READ).toBe('mastra_model_input_cache_read_tokens');
+
+    const expected = {
+      input: [TokenMetrics.TOTAL_INPUT],
+      output: [TokenMetrics.TOTAL_OUTPUT],
+      total: [TokenMetrics.TOTAL_INPUT, TokenMetrics.TOTAL_OUTPUT],
+      reasoning: [TokenMetrics.OUTPUT_REASONING],
+      cached: [TokenMetrics.INPUT_CACHE_READ],
+    } as const;
+    for (const [field, metricNames] of Object.entries(expected)) {
+      for (const statistic of ['sum', 'avg'] as const) {
+        const name = `tokens.${field}.${statistic}` as keyof typeof TRACE_AGGREGATE_MEASURE_REGISTRY;
+        expect(TRACE_AGGREGATE_MEASURE_REGISTRY[name], name).toEqual({
+          kind: 'tokens',
+          statistic,
+          unit: 'tokens',
+          approximate: false,
+          metricNames,
+        });
+      }
+    }
+
+    // Cost is read from the total rows only: they already hold the sum of their detail rows' costs.
+    expect(TRACE_AGGREGATE_COST_METRIC_NAMES).toEqual([TokenMetrics.TOTAL_INPUT, TokenMetrics.TOTAL_OUTPUT]);
+    for (const statistic of ['sum', 'avg'] as const) {
+      expect(TRACE_AGGREGATE_MEASURE_REGISTRY[`cost.${statistic}`]).toEqual({
+        kind: 'cost',
+        statistic,
+        unit: 'currency',
+        approximate: false,
+        metricNames: TRACE_AGGREGATE_COST_METRIC_NAMES,
+      });
+    }
+
+    const referenced = new Set(
+      Object.values(TRACE_AGGREGATE_MEASURE_REGISTRY).flatMap(rule => ('metricNames' in rule ? rule.metricNames : [])),
+    );
+    expect(new Set(TRACE_AGGREGATE_USAGE_METRIC_NAMES)).toEqual(referenced);
+  });
+
   it('parses canonical measures', () => {
-    for (const name of DECISION_3_MEASURES) {
+    for (const name of ALL_MEASURES) {
       expect(isTraceAggregateCanonicalMeasure(name), name).toBe(true);
       expect(parseTraceAggregateMeasure(name)).toEqual({
         type: 'canonical',
@@ -203,8 +267,13 @@ describe('trace aggregate measure registry', () => {
       'countdistinct.traceId',
       'duration.p75',
       'duration',
-      'tokens.input.sum',
-      'cost.sum',
+      'tokens.input',
+      'tokens.input.max',
+      'tokens.cost.sum',
+      'cost',
+      'cost.coverage',
+      'cost.unit',
+      'costUnit',
       'errorrate',
       'Count',
       '',
@@ -218,7 +287,7 @@ describe('trace aggregate measure registry', () => {
 
   it('lists measure descriptors in registry order with rule fields', () => {
     const descriptors = getTraceAggregateMeasureDescriptors();
-    expect(descriptors.map(descriptor => descriptor.name)).toEqual(DECISION_3_MEASURES);
+    expect(descriptors.map(descriptor => descriptor.name)).toEqual(ALL_MEASURES);
     expect(descriptors[0]).toEqual({ name: 'count', kind: 'count', unit: 'count', approximate: false });
     expect(descriptors.find(descriptor => descriptor.name === 'duration.p95')).toEqual({
       name: 'duration.p95',
@@ -231,6 +300,13 @@ describe('trace aggregate measure registry', () => {
       name: 'errorRate',
       kind: 'error',
       unit: 'ratio',
+      approximate: false,
+    });
+    expect(descriptors.find(descriptor => descriptor.name === 'cost.avg')).toEqual({
+      name: 'cost.avg',
+      kind: 'cost',
+      statistic: 'avg',
+      unit: 'currency',
       approximate: false,
     });
   });

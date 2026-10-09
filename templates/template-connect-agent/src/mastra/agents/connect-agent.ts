@@ -1,4 +1,4 @@
-import { connect } from '@mastra/connect';
+import { tools } from '@mastra/connect';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 
@@ -10,7 +10,7 @@ import { Memory } from '@mastra/memory';
  *
  * Shared with the activity-digest workflow, which calls it directly.
  */
-export const connectTools = connect();
+export const connectTools = tools();
 
 export const connectAgent = new Agent({
   id: 'connect-agent',
@@ -21,7 +21,7 @@ export const connectAgent = new Agent({
 
 Every tool is named \`<integration>_<action>\` — for example \`linear_list_issues\`, \`linear_create_issue\`, \`notion_search\`, \`notion_create_page\`. Which integrations are available depends on what the user has connected to their Mastra platform project, so inspect your tool list before promising anything.
 
-- If you have no tools at all, tell the user to attach integrations to their Mastra platform project (https://cloud.mastra.ai) and set MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_PROJECT_ID. Don't guess or invent results.
+- If you have no tools at all, tell the user to attach integrations to their Mastra platform project and set MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_PROJECT_ID. Don't guess or invent results.
 - If the user asks for something an unconnected integration would handle, say which integration to connect.
 
 ## How to work

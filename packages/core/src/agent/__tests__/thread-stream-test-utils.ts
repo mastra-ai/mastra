@@ -55,10 +55,15 @@ export class LeasePubSub extends PubSub implements LeaseProvider {
     if (this.streamPartDelayMs && event.data?.type === 'stream-part') {
       await new Promise(resolve => setTimeout(resolve, this.streamPartDelayMs));
     }
-    const stamped = { ...event, id: 'evt', createdAt: event.createdAt ?? new Date() };
+    const stamped = { ...event, id: event.id ?? crypto.randomUUID(), createdAt: event.createdAt ?? new Date() };
     if (this.retain) this.#retained.set(topic, [...(this.#retained.get(topic) ?? []), stamped]);
     for (const subscriber of [...(this.#subscribers.get(topic) ?? [])]) {
       await this.#deliver(topic, stamped, subscriber);
+    }
+  }
+  async redeliver(topic: string, event: any): Promise<void> {
+    for (const subscriber of [...(this.#subscribers.get(topic) ?? [])]) {
+      await this.#deliver(topic, event, subscriber);
     }
   }
   override async trimTopic(

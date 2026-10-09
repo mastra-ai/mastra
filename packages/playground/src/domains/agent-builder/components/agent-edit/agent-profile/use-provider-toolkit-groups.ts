@@ -1,5 +1,5 @@
+import { useToolProviders } from '@mastra/react/hooks/tool-providers';
 import { useMemo } from 'react';
-import { useToolProviders } from '../../../../tool-providers/hooks/use-tool-providers';
 import type { AgentTool } from '../../../types/agent-tool';
 
 // Sentinel id for the synthetic "Built-in" toolkit group that covers all

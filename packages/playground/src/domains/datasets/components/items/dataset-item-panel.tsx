@@ -5,9 +5,9 @@ import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { useDatasetMutations } from '@mastra/playground-ui/domains/datasets';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { EllipsisVerticalIcon, History, Pencil, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
@@ -311,10 +311,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
                     <Pencil />
                     Edit
                   </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    onSelect={() => setShowDeleteConfirm(true)}
-                    className="text-red-500 focus:text-red-400"
-                  >
+                  <DropdownMenu.Item onSelect={() => setShowDeleteConfirm(true)} variant="destructive">
                     <Trash2 />
                     Delete Item
                   </DropdownMenu.Item>

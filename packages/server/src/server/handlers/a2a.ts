@@ -238,7 +238,9 @@ function toV1Task(
           extensions: artifact.extensions,
         }))
       : undefined,
-    history: task.history?.slice(historyLength === undefined ? 0 : -historyLength).map(toV1Message),
+    history: (historyLength === 0 ? [] : task.history?.slice(historyLength === undefined ? 0 : -historyLength))?.map(
+      toV1Message,
+    ),
     metadata: task.metadata,
   };
 }

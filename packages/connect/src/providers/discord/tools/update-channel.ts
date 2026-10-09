@@ -3,6 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const updateChannelInputSchema = z.object({
   channel_id: z.string().describe('The ID of the channel to update. Example: "1504364254634180618"'),
@@ -67,10 +68,6 @@ const ProviderChannelSchema = z.object({
   flags: z.number().int().optional(),
 });
 
-const MetadataSchema = z.object({
-  botToken: z.string(),
-});
-
 export const updateChannelOutputSchema = z.object({
   id: z.string(),
   type: z.number().int(),
@@ -106,15 +103,7 @@ export function updateChannelTool(proxy: PlatformProxy) {
     outputSchema: updateChannelOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof updateChannelOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const rawMetadata = await platformProxy.getMetadata();
-      const metadata = MetadataSchema.safeParse(rawMetadata);
-
-      if (!metadata.success || !metadata.data.botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in metadata. Please set the Discord bot token in the connection metadata.',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       const updateData: Record<string, unknown> = {};
 
@@ -159,7 +148,7 @@ export function updateChannelTool(proxy: PlatformProxy) {
       const response = await platformProxy.patch({
         endpoint: `/api/v10/channels/${input.channel_id}`,
         headers: {
-          Authorization: `Bot ${metadata.data.botToken}`,
+          Authorization: `Bot ${botToken}`,
         },
         data: updateData,
         retries: 10,

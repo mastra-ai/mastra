@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -25,9 +25,9 @@ function renderFactorySwitcher(initialEntry: string) {
       {
         path: '/factories/:factoryId/*',
         element: (
-          <MainSidebarProvider storageKey="factory-switcher-navigation" mobileBreakpoint={768}>
+          <SidebarProvider storageKey="factory-switcher-navigation" mobileBreakpoint={768}>
             <FactorySwitcher />
-          </MainSidebarProvider>
+          </SidebarProvider>
         ),
       },
     ],

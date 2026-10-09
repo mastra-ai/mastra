@@ -49,7 +49,7 @@ await agent.getModel()
   content={[
   {
     name: 'model',
-    type: 'MastraLanguageModel | Promise<MastraLanguageModel>',
+    type: 'MastraLanguageModel | MastraLegacyLanguageModel | Promise<MastraLanguageModel | MastraLegacyLanguageModel>',
     description:
       'The language model configured for the agent, either as a direct instance or a promise that resolves to the model.',
   },

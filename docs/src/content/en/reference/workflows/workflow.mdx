@@ -136,7 +136,7 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
     name: 'schedule',
     type: 'WorkflowScheduleConfig | WorkflowScheduleConfig[]',
     description:
-      'Optional cron schedule for the workflow. Accepts a single config or an array of configs to fire on multiple cadences. Setting this auto-promotes the workflow to the evented execution engine. See the scheduled workflows guide for usage.',
+      'Optional cron schedule for the workflow. Accepts a single config or an array of configs to fire on multiple cadences. Declaring a schedule keeps the execution engine unchanged unless the MASTRA_WORKERS environment variable is set, in which case the workflow runs on the evented engine. See the scheduled workflows guide for usage.',
     isOptional: true,
     properties: [
       {

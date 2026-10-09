@@ -5,7 +5,7 @@ import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
 import { memo } from 'react';
 import type { ReactNode } from 'react';
 
-import { SkillMessage } from './SkillMessage';
+import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
 import { SubmitPlanCard } from './SubmitPlanCard';
 
 type ToolStatus = 'running' | 'done' | 'error';

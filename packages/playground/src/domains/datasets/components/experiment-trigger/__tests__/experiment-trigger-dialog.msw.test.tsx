@@ -112,7 +112,7 @@ const selectScorers = (values: string[]) => setMultiSelectValues('Select scorers
 
 const runButton = () => screen.getByRole('button', { name: 'Run' });
 
-const nameInput = () => screen.getByLabelText('Name *') as HTMLInputElement;
+const nameInput = () => screen.getByLabelText(/^Name/) as HTMLInputElement;
 const descriptionInput = () => screen.getByLabelText('Description') as HTMLInputElement;
 const typeName = (value: string) => fireEvent.change(nameInput(), { target: { value } });
 

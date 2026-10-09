@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { AlertDialog } from './alert-dialog';
 import { Button } from '@/ds/components/Button';
+import { Dialog, DialogContent, DialogTitle } from '@/ds/components/Dialog';
 
 afterEach(() => {
   cleanup();
@@ -34,28 +35,30 @@ describe('AlertDialog', () => {
     expect(screen.getByText('Body content')).toBeDefined();
   });
 
-  it('renders an asChild Trigger as the child element without nesting buttons', () => {
+  it('keeps Cancel usable while an enclosing Dialog is pending', () => {
     render(
-      <AlertDialog>
-        <AlertDialog.Trigger asChild>
-          <Button>Open alert</Button>
-        </AlertDialog.Trigger>
-        <AlertDialog.Content>
-          <AlertDialog.Title>Title</AlertDialog.Title>
-        </AlertDialog.Content>
-      </AlertDialog>,
+      <Dialog open pending>
+        <DialogContent>
+          <DialogTitle>Outer</DialogTitle>
+          <AlertDialog open>
+            <AlertDialog.Content>
+              <AlertDialog.Title>Inner</AlertDialog.Title>
+              <AlertDialog.Footer>
+                <AlertDialog.Cancel>Keep</AlertDialog.Cancel>
+              </AlertDialog.Footer>
+            </AlertDialog.Content>
+          </AlertDialog>
+        </DialogContent>
+      </Dialog>,
     );
 
-    const trigger = screen.getByRole('button', { name: 'Open alert' });
-    expect(trigger.querySelector('button')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Keep' }).hasAttribute('disabled')).toBe(false);
   });
 
   it('opens the alert dialog when the trigger is clicked', () => {
     render(
       <AlertDialog>
-        <AlertDialog.Trigger asChild>
-          <Button>Open alert</Button>
-        </AlertDialog.Trigger>
+        <AlertDialog.Trigger render={<Button>Open alert</Button>} />
         <AlertDialog.Content>
           <AlertDialog.Title>Revealed title</AlertDialog.Title>
         </AlertDialog.Content>

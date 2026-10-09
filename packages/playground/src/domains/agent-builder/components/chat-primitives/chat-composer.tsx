@@ -43,7 +43,7 @@ export const ChatComposer = ({
     () => ({
       viewTransitionName: 'chat-composer',
       ['--agent-color-fg' as string]: agentColor.foreground,
-      ['--agent-color-bg' as string]: agentColor.background,
+      ['--agent-color-bg' as string]: agentColor.tint,
     }),
     [agentColor],
   );

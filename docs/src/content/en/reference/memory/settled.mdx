@@ -63,7 +63,7 @@ await memory.settled()
 await store.close()
 ```
 
-<Callout>
+<Callout type="note">
   `settled()` joins the work that had started by the time you called it, plus any
   work that work enqueues. It doesn't prevent new work from starting afterwards,
   so call it once the agent runs you care about have returned.

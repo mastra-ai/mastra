@@ -28,6 +28,13 @@ All chunks include these base properties:
     description: 'Unique identifier for this execution run',
   },
   {
+    name: 'traceId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Trace ID of the run that produced this chunk, when tracing is enabled. Not set on custom data-* chunks.',
+  },
+  {
     name: 'from',
     type: 'ChunkFrom',
     description: 'Source of the chunk',

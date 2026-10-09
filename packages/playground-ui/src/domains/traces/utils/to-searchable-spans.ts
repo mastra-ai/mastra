@@ -1,10 +1,10 @@
-import type { LightSpanRecord, SearchableSpan } from '../types';
+import type { LightSpanRecord } from '../types';
 import { flattenToSearchText } from './flatten-to-search-text';
 
 /**
  * Attach a precomputed search haystack to each span.
  *
- * Run this once, where the span list is resolved — not per keystroke. Flattening
+ * Run this once per span list — not per keystroke. Flattening
  * walks every nested payload, so doing it inside a filter would repeat the whole
  * walk for every character typed.
  *
@@ -22,29 +22,4 @@ export function toSearchableSpans<Span extends LightSpanRecord>(spans: Span[]): 
     // rather than carried through by the spread.
     searchText: flattenToSearchText(span).toLowerCase(),
   }));
-}
-
-/**
- * React Query `select` for the `{ traceId, spans }` payload returned by
- * `getTraceLight` and `getBranch`.
- *
- * Enriching here rather than in a component means the flattening runs once per
- * fetch and is cached with the query, so it survives the panel unmounting and
- * remounting. Keep this a module-level reference: React Query re-runs `select`
- * whenever its identity changes, and an inline arrow would re-flatten the whole
- * trace on every render.
- *
- * Deliberately not generic: TypeScript cannot infer a query's `TData` from a
- * generic function passed as `select`, and silently falls back to the unselected
- * type — which would leave `searchText` missing at the call sites.
- *
- * `null` is passed through because a query may resolve to it. `undefined` is not
- * in the signature: React Query only runs `select` once data exists.
- */
-export function selectSearchableSpans(
-  data: { traceId: string; spans: LightSpanRecord[] } | null,
-): { traceId: string; spans: SearchableSpan[] } | null {
-  if (!data) return null;
-
-  return { ...data, spans: toSearchableSpans(data.spans) };
 }

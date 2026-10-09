@@ -111,7 +111,7 @@ export function __resetRunRegistryActivityForTests(): void {
 
 export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise<unknown>[] {
   return Array.from(globalRunRegistry.values()).flatMap(entry =>
-    entry.mastra === mastra && entry.workflowExecution ? [entry.workflowExecution] : [],
+    entry?.mastra === mastra && entry.workflowExecution ? [entry.workflowExecution] : [],
   );
 }
 
@@ -123,7 +123,7 @@ export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise
  */
 export function endRunSpansWithError(runId: string, error: Error): void {
   try {
-    const entry = globalRunRegistry.get(runId);
+    const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
     (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({ error, endSpan: true });
     (entry?.resumeAgentSpan ?? entry?.agentSpan)?.error({ error, endSpan: true });
   } catch {

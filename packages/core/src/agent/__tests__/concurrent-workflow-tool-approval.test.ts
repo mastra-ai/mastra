@@ -76,13 +76,13 @@ function createSuspendingWorkflow(id: string) {
     inputSchema: schema,
     outputSchema: z.object({ ticket: z.string(), completed: z.boolean() }),
     suspendSchema: z.object({ ticket: z.string() }),
-    resumeSchema: z.object({ approved: z.boolean() }),
+    resumeSchema: z.object({ note: z.literal('hello') }).strict(),
     execute: async ({ inputData, resumeData, suspend }) => {
       if (!resumeData) {
         return suspend({ ticket: inputData.ticket });
       }
 
-      return { ticket: inputData.ticket, completed: resumeData.approved };
+      return { ticket: inputData.ticket, completed: resumeData.note === 'hello' };
     },
   });
 
@@ -154,7 +154,7 @@ describe('concurrent workflow tool approvals', () => {
             resourceId,
             toolCallId,
             approved: true,
-            resumeData: { approved: true },
+            resumeData: { note: 'hello' },
           });
 
         if (order === 'concurrent') {

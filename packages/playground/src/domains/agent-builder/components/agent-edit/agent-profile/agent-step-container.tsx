@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeftIcon, Settings2 } from 'lucide-react';
@@ -81,7 +82,9 @@ export const AgentStepContainer = ({
         {panelOverlay}
         {title && (
           <div className="border-b border-border px-4 pt-4 pb-4" data-testid="agent-step-title-section">
-            <h2 className="pb-1 text-display text-foreground">{title}</h2>
+            <Txt as="h2" variant="display" tone="ink" className="pb-1">
+              {title}
+            </Txt>
             {description && <div className="w-1/2 text-muted-foreground">{description}</div>}
           </div>
         )}

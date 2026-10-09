@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
@@ -12,14 +12,6 @@ import type { FilterBarExpression, FilterBarField, FilterBarItem, FilterBarOpera
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const pressActive = (init: { key: string }) => fireEvent.keyDown(document.activeElement ?? document.body, init);
 const argAt = (mock: { mock: { calls: any[][] } }, call: number, arg: number) => mock.mock.calls.at(call)?.at(arg);
-
-beforeAll(() => {
-  // jsdom ships no PointerEvent, and Base UI constructs one on press.
-  if (typeof window.PointerEvent === 'undefined') {
-    class PointerEventStub extends MouseEvent {}
-    window.PointerEvent = PointerEventStub as unknown as typeof PointerEvent;
-  }
-});
 
 afterEach(() => {
   cleanup();
@@ -54,12 +46,14 @@ const FIELDS: FilterBarField[] = [
 function Harness({
   initial = [],
   fields = FIELDS,
+  operators = OPERATORS,
   onChange,
   readOnlyIds = [],
   nonRemovableIds = [],
 }: {
   initial?: FilterBarItem[];
   fields?: FilterBarField[];
+  operators?: FilterBarOperator[];
   onChange?: (items: FilterBarItem[]) => void;
   readOnlyIds?: string[];
   nonRemovableIds?: string[];
@@ -68,7 +62,7 @@ function Harness({
   return (
     <FilterBar
       fields={fields}
-      operators={OPERATORS}
+      operators={operators}
       value={items}
       onValueChange={next => {
         setItems(next);
@@ -217,6 +211,24 @@ describe('FilterBar', () => {
 
       key('ArrowUp');
       await waitFor(() => expect(input.getAttribute('aria-activedescendant')).toBe(first.id));
+    });
+
+    it('keeps the hovered option lit when the pointer crosses onto the next option', async () => {
+      render(<Harness />);
+      getInput().focus();
+      const first = await screen.findByRole('option', { name: 'Status' });
+      const hovered = screen.getByRole('option', { name: 'Trace ID' });
+      const next = screen.getByRole('option', { name: 'Tags' });
+
+      fireEvent.pointerMove(screen.getByRole('listbox'), { pointerType: 'mouse', movementX: 1 });
+      fireEvent.mouseMove(hovered, { movementX: 1 });
+      await waitFor(() => expect(hovered.hasAttribute('data-highlighted')).toBe(true));
+
+      fireEvent.pointerLeave(hovered, { pointerType: 'mouse', relatedTarget: within(next).getByText('Tags') });
+      await act(async () => {});
+
+      expect(first.hasAttribute('data-highlighted')).toBe(false);
+      expect(hovered.hasAttribute('data-highlighted')).toBe(true);
     });
 
     it('restarts the highlight on the first option of the next step', async () => {
@@ -381,10 +393,7 @@ describe('FilterBar', () => {
         expect(committed.hasAttribute('data-shine')).toBe(true);
         expect(preexisting.hasAttribute('data-shine')).toBe(false);
 
-        // jsdom has no AnimationEvent: build one with the name the browser would report.
-        const end = new Event('animationend', { bubbles: true });
-        Object.defineProperty(end, 'animationName', { value: 'filter-bar-chip-shine' });
-        fireEvent(committed, end);
+        fireEvent.animationEnd(committed, { animationName: 'filter-bar-chip-shine' });
         expect(committed.hasAttribute('data-shine')).toBe(false);
       });
 
@@ -523,6 +532,197 @@ describe('FilterBar', () => {
         operatorId: 'in',
         value: ['prod', 'staging'],
       });
+    });
+
+    describe('when "is any of" takes free text', () => {
+      const fields: FilterBarField[] = [{ id: 'threadId', label: 'Thread ID', operators: ['in'] }];
+
+      it('adds each value on Enter and keeps the draft open until Done', async () => {
+        const onChange = vi.fn();
+        render(<Harness fields={fields} onChange={onChange} />);
+        const input = getInput();
+        input.focus();
+        type('thread');
+        key('Enter');
+        await screen.findByText('Type a value');
+
+        type('thread-a');
+        key('Enter');
+        expect(onChange).not.toHaveBeenCalled();
+        expect(input.dataset.step).toBe('value');
+        expect(input.getAttribute('aria-expanded')).toBe('true');
+        expect(input.value).toBe('');
+        expect(screen.getByRole('option', { name: 'thread-a' })).toBeTruthy();
+
+        type('thread-b');
+        fireEvent.click(screen.getByRole('button', { name: /^Apply/ }));
+        expect(onChange).not.toHaveBeenCalled();
+        expect(screen.getByRole('option', { name: 'thread-b' })).toBeTruthy();
+
+        // A value still in the input is kept by Done rather than dropped.
+        type('thread-c');
+        fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({
+          fieldId: 'threadId',
+          operatorId: 'in',
+          value: ['thread-a', 'thread-b', 'thread-c'],
+        });
+      });
+
+      it('removes an added value when it is clicked', async () => {
+        const onChange = vi.fn();
+        render(<Harness fields={fields} onChange={onChange} />);
+        getInput().focus();
+        type('thread');
+        key('Enter');
+        await screen.findByText('Type a value');
+        type('thread-a');
+        key('Enter');
+        type('thread-b');
+        key('Enter');
+
+        fireEvent.click(screen.getByRole('option', { name: 'thread-a' }));
+        expect(screen.queryByRole('option', { name: 'thread-a' })).toBeNull();
+        key('Enter', { ctrlKey: true });
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: ['thread-b'] });
+      });
+
+      it('adds typed text next to the suggestions when the field is not strict', async () => {
+        const onChange = vi.fn();
+        render(<Harness onChange={onChange} />);
+        getInput().focus();
+        type('status');
+        key('Enter');
+        fireEvent.click(await screen.findByRole('option', { name: 'in' }));
+        await screen.findByRole('option', { name: 'Running' });
+
+        type('custom');
+        await screen.findByText('No suggestions — press Enter to use your text.');
+        key('Enter');
+        expect(onChange).not.toHaveBeenCalled();
+        const custom = await screen.findByRole('option', { name: 'custom' });
+        expect(custom.dataset.selected).toBeDefined();
+        expect(screen.getByRole('option', { name: 'Running' })).toBeTruthy();
+
+        key('Enter', { ctrlKey: true });
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({ fieldId: 'status', operatorId: 'in', value: ['custom'] });
+      });
+
+      it('keeps typed text that matches no suggestion when Done commits a selection', async () => {
+        const onChange = vi.fn();
+        render(<Harness onChange={onChange} />);
+        getInput().focus();
+        type('status');
+        key('Enter');
+        fireEvent.click(await screen.findByRole('option', { name: 'in' }));
+        fireEvent.click(await screen.findByRole('option', { name: 'Running' }));
+
+        type('custom');
+        await screen.findByText('No suggestions — press Enter to use your text.');
+        fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: ['running', 'custom'] });
+      });
+
+      it('treats typed text that matches a suggestion as a search when Done commits', async () => {
+        const onChange = vi.fn();
+        render(<Harness onChange={onChange} />);
+        getInput().focus();
+        type('status');
+        key('Enter');
+        fireEvent.click(await screen.findByRole('option', { name: 'in' }));
+        fireEvent.click(await screen.findByRole('option', { name: 'Running' }));
+
+        type('err');
+        await screen.findByRole('option', { name: 'Error' });
+        fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: ['running'] });
+      });
+
+      it('adds a value on Enter in the chip editor without closing it', async () => {
+        const onChange = vi.fn();
+        render(
+          <Harness
+            fields={fields}
+            initial={[{ id: 't', fieldId: 'threadId', operatorId: 'in', value: ['thread-a'] }]}
+            onChange={onChange}
+          />,
+        );
+        fireEvent.click(screen.getByRole('combobox', { name: 'Value: thread-a' }));
+        const search = await screen.findByPlaceholderText<HTMLInputElement>('Type a value…');
+        expect(screen.getByRole('option', { name: 'thread-a' })).toBeTruthy();
+
+        fireEvent.change(search, { target: { value: 'thread-b' } });
+        fireEvent.keyDown(search, { key: 'Enter' });
+        expect(onChange).not.toHaveBeenCalled();
+        expect(search.value).toBe('');
+        expect(screen.getByRole('option', { name: 'thread-b' })).toBeTruthy();
+
+        fireEvent.keyDown(search, { key: 'Enter', metaKey: true });
+        expect(argAt(onChange, 0, 0)[0]).toMatchObject({ id: 't', value: ['thread-a', 'thread-b'] });
+      });
+    });
+
+    it('shows the first of several values with a count and keeps every value on hover', () => {
+      render(<Harness initial={[{ id: 'f', fieldId: 'status', operatorId: 'in', value: ['running', 'error'] }]} />);
+      const valueSegment = screen.getByLabelText('Value: Running, Error');
+      expect(valueSegment.textContent).toBe('Running +1');
+      expect(valueSegment.getAttribute('title')).toBe('Running, Error');
+    });
+
+    it('serializes chip field and operator options as strings', () => {
+      const { container } = render(
+        <Harness initial={[{ id: 'f', fieldId: 'status', operatorId: 'in', value: ['running', 'error'] }]} />,
+      );
+
+      const values = Array.from(
+        container.querySelectorAll<HTMLInputElement>('input[aria-hidden="true"]'),
+        input => input.value,
+      );
+      expect(values).toContain('Status');
+      expect(values).toContain('in');
+      expect(values).not.toContain('[object Object]');
+    });
+
+    it('takes typed text instead of the pick list when the operator is free text', async () => {
+      const onChange = vi.fn();
+      const fields: FilterBarField[] = [
+        {
+          id: 'name',
+          label: 'Name',
+          operators: ['is', 'matches'],
+          strict: true,
+          suggestions: [{ value: 'agent run' }],
+        },
+      ];
+      const operators: FilterBarOperator[] = [...OPERATORS, { id: 'matches', label: 'matches', freeText: true }];
+      render(<Harness fields={fields} operators={operators} onChange={onChange} />);
+      getInput().focus();
+      type('name');
+      key('Enter');
+      type('matches');
+      key('Enter');
+      await screen.findByText('Type a value');
+      expect(screen.queryByRole('option', { name: 'agent run' })).toBeNull();
+      type('gpt');
+      key('Enter');
+      expect(argAt(onChange, 0, 0)[0]).toMatchObject({ fieldId: 'name', operatorId: 'matches', value: 'gpt' });
+    });
+
+    it('does not commit free text without a letter or digit when the operator is free text', async () => {
+      const onChange = vi.fn();
+      const fields: FilterBarField[] = [{ id: 'name', label: 'Name', operators: ['matches'] }];
+      const operators: FilterBarOperator[] = [...OPERATORS, { id: 'matches', label: 'matches', freeText: true }];
+      render(<Harness fields={fields} operators={operators} onChange={onChange} />);
+      getInput().focus();
+      type('name');
+      key('Enter');
+      await screen.findByText('Type a value');
+      type('!!! ---');
+      key('Enter');
+      expect(onChange).not.toHaveBeenCalled();
+      type('gpt-5');
+      key('Enter');
+      expect(argAt(onChange, 0, 0)[0]).toMatchObject({ fieldId: 'name', operatorId: 'matches', value: 'gpt-5' });
     });
 
     it('does not commit free text for strict fields', async () => {

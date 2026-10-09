@@ -55,9 +55,24 @@ async function runGoalStep(
     requestContext?: RequestContext;
     judge?: any;
     tools?: any;
+    outputWriter?: (data: any, options: any) => Promise<void>;
+    /** Mutates the stored objective right after the step's first read, i.e. while the judge runs. */
+    mutateDuringJudge?: (states: Map<string, GoalObjectiveRecord>) => void;
   },
 ) {
   const store = createStore(record);
+  if (opts?.mutateDuringJudge) {
+    const getState = store.getState;
+    let mutated = false;
+    store.getState = async args => {
+      const value = await getState(args);
+      if (!mutated && args.type === GOAL_STATE_TYPE) {
+        mutated = true;
+        opts.mutateDuringJudge!(store.states);
+      }
+      return value;
+    };
+  }
   const chunks: any[] = [];
   const messages: any[] = [];
   const dataParts: any[] = [];
@@ -160,7 +175,7 @@ async function runGoalStep(
     mastra,
     controller: { enqueue: (c: any) => chunks.push(c) },
     runId: 'run-1',
-    outputWriter: async (data: any, options: any) => dataParts.push({ data, options }),
+    outputWriter: opts?.outputWriter ?? (async (data: any, options: any) => dataParts.push({ data, options })),
     _internal: {
       generateId: () => 'response-2',
       threadId: THREAD_ID,
@@ -183,6 +198,7 @@ async function runGoalStep(
     pendingChunk: goalChunks.find(c => c.payload.pending),
     goalChunks,
     record: store.states.get(`${THREAD_ID}:${GOAL_STATE_TYPE}`)!,
+    store,
     stepResult,
     messages,
     dataParts,
@@ -387,6 +403,19 @@ describe('goal step waiting semantics', () => {
     expect(chunk.payload.passed).toBe(true);
   });
 
+  it('completes the judged step when the feedback signal transport write rejects', async () => {
+    const { record, stepResult, chunk, messages } = await runGoalStep('done', makeRecord(), {
+      outputWriter: async () => {
+        throw new Error('transport closed');
+      },
+    });
+
+    expect(record.status).toBe('done');
+    expect(stepResult.isContinued).toBe(false);
+    expect(chunk.payload.passed).toBe(true);
+    expect(messages.some(m => JSON.stringify(m).includes('goal-judge'))).toBe(true);
+  });
+
   it('keeps the objective active and continues the loop on a continue decision', async () => {
     const { record, stepResult, chunk } = await runGoalStep('continue', makeRecord());
 
@@ -475,14 +504,95 @@ describe('goal step waiting semantics', () => {
   });
 });
 
+describe('goal step concurrent objective changes', () => {
+  const key = `${THREAD_ID}:${GOAL_STATE_TYPE}`;
+
+  it('does not resume an objective paused while the judge runs', async () => {
+    const { record, stepResult, goalChunks, messages } = await runGoalStep('continue', makeRecord({ id: 'g1' }), {
+      mutateDuringJudge: states => states.set(key, { ...states.get(key)!, status: 'paused', pausedReason: 'user' }),
+    });
+
+    expect(record.status).toBe('paused');
+    expect(record.pausedReason).toBe('user');
+    expect(record.runsUsed).toBe(0);
+    expect(stepResult.isContinued).toBe(false);
+    expect(goalChunks.every(c => c.payload.pending)).toBe(true);
+    expect(messages.some(m => JSON.stringify(m).includes('goal-judge'))).toBe(false);
+  });
+
+  it('does not recreate an objective cleared while the judge runs', async () => {
+    const { record, stepResult } = await runGoalStep('continue', makeRecord({ id: 'g1' }), {
+      mutateDuringJudge: states => states.delete(key),
+    });
+
+    expect(record).toBeUndefined();
+    expect(stepResult.isContinued).toBe(false);
+  });
+
+  it('does not overwrite an objective replaced while the judge runs', async () => {
+    const replacement = makeRecord({ id: 'g2', objective: 'something else' });
+    const { record, stepResult } = await runGoalStep('done', makeRecord({ id: 'g1' }), {
+      mutateDuringJudge: states => states.set(key, replacement),
+    });
+
+    expect(record).toEqual(replacement);
+    expect(stepResult.isContinued).toBe(false);
+  });
+
+  it('does not overwrite a replacement that reuses the same id and objective', async () => {
+    const original = makeRecord({ id: 'g1', startedAt: 1 });
+    const replacement = { ...original, startedAt: 2 };
+    const { record } = await runGoalStep('done', original, {
+      mutateDuringJudge: states => states.set(key, replacement),
+    });
+
+    expect(record).toEqual(replacement);
+  });
+
+  it('continues when maxRuns is raised past the budget while the judge runs', async () => {
+    const { record, stepResult, chunk } = await runGoalStep('continue', makeRecord({ id: 'g1', runsUsed: 9 }), {
+      mutateDuringJudge: states => states.set(key, { ...states.get(key)!, maxRuns: 20 }),
+    });
+
+    expect(record.status).toBe('active');
+    expect(record.runsUsed).toBe(10);
+    expect(stepResult.isContinued).toBe(true);
+    expect(chunk.payload.maxRuns).toBe(20);
+  });
+
+  it('pauses when maxRuns is lowered to the budget while the judge runs', async () => {
+    const { record, stepResult } = await runGoalStep('continue', makeRecord({ id: 'g1', runsUsed: 2 }), {
+      mutateDuringJudge: states => states.set(key, { ...states.get(key)!, maxRuns: 3 }),
+    });
+
+    expect(record.status).toBe('paused');
+    expect(stepResult.isContinued).toBe(false);
+  });
+
+  it('keeps option changes made while the judge runs', async () => {
+    const { record, stepResult } = await runGoalStep('continue', makeRecord({ id: 'g1' }), {
+      mutateDuringJudge: states => states.set(key, { ...states.get(key)!, maxRuns: 20 }),
+    });
+
+    expect(record.maxRuns).toBe(20);
+    expect(record.runsUsed).toBe(1);
+    expect(stepResult.isContinued).toBe(true);
+  });
+});
+
 describe('goal step judge-failure semantics', () => {
   it('pauses the objective and stops the loop when the judge/scorer throws', async () => {
     // The decision the model "would" have returned is irrelevant: the scorer
     // throws before it matters. The step must not treat the error as continue.
-    const { record, stepResult, chunk } = await runGoalStep('done', makeRecord(), { throwingScorer: true });
+    const { record, store, stepResult, chunk } = await runGoalStep('done', makeRecord(), { throwingScorer: true });
 
     expect(record.status).toBe('paused');
-    expect(record.runsUsed).toBe(1);
+    // A failed evaluation produced no verdict, so it must not consume the run budget.
+    expect(record.runsUsed).toBe(0);
+    // Read back through the store API: the persisted record is paused with the budget untouched.
+    const stored = await store.getState({ threadId: THREAD_ID, type: GOAL_STATE_TYPE });
+    expect(stored).toMatchObject({ status: 'paused', runsUsed: 0 });
+    expect(stored?.pausedReason).toContain('judge model exploded');
     // A failed judge must stop the loop, not silently iterate against it.
     expect(stepResult.isContinued).toBe(false);
     expect(chunk.payload.status).toBe('paused');
@@ -527,8 +637,8 @@ describe('goal step judge-failure semantics', () => {
     // Loop stops immediately (isContinued false) — no march toward 500.
     expect(stepResult.isContinued).toBe(false);
     expect(record.status).toBe('paused');
-    // Only the single failed run was consumed (3 → 4), not the whole budget.
-    expect(record.runsUsed).toBe(4);
+    // The failed evaluation consumes no budget (stays 3), let alone the whole budget.
+    expect(record.runsUsed).toBe(3);
     expect(chunk.payload.judgeFailed).toBe(true);
     // The status drives the TUI label away from "continue" → it renders "paused".
     expect(chunk.payload.status).toBe('paused');
@@ -556,10 +666,14 @@ describe('goal step judge-failure semantics', () => {
 
     // The step must NOT throw — the failure is handled internally.
     expect(thrown).toBeUndefined();
-    const { record, stepResult, chunk } = res!;
+    const { record, store, stepResult, chunk } = res!;
     expect(stepResult.isContinued).toBe(false);
     expect(record.status).toBe('paused');
-    expect(record.runsUsed).toBe(4);
+    expect(record.runsUsed).toBe(3);
+    expect(await store.getState({ threadId: THREAD_ID, type: GOAL_STATE_TYPE })).toMatchObject({
+      status: 'paused',
+      runsUsed: 3,
+    });
     expect(chunk.payload.judgeFailed).toBe(true);
     expect(chunk.payload.status).toBe('paused');
     expect(chunk.payload.reason).toContain('Bad Request');

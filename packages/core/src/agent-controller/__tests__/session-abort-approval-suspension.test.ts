@@ -67,6 +67,13 @@ function textStream() {
   });
 }
 
+const SNAPSHOT_WORKFLOW_NAMES = [
+  'agentic-loop',
+  'executionWorkflow',
+  'durable-agentic-loop',
+  'durable-agentic-execution',
+];
+
 async function createHarness(id: string, durable: boolean) {
   const findUser = createTool({
     id: 'find-user',
@@ -154,7 +161,7 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
     await ended;
 
     const ds = session.displayState.get();
-    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingApprovals.size).toBe(0);
     expect(ds.isRunning).toBe(false);
 
     // The gated call must be settled rather than left rendering as in-flight.
@@ -191,7 +198,7 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
     const ended = waitForAgentEnd(session, events);
     session.subscribe((event: AgentControllerEvent) => {
       if (event.type === 'tool_approval_required') {
-        void session.respondToToolApproval({ decision: 'approve' });
+        void session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId });
       }
       if (!durable && event.type === 'agent_end' && event.reason === 'suspended') session.abort();
     });
@@ -230,6 +237,36 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
     expect(persistedToolParts[0]?.toolInvocation).toMatchObject({
       state: 'output-denied',
       approval: { approved: false, reason: 'Aborted by the user' },
+    });
+  });
+
+  it('Given a run parked in suspend(), When abort() is called, Then its registration and snapshot rows are released (#25903)', async () => {
+    const { controller, session, agent, events } = await createHarness('abort-suspension-release', durable);
+    const mastra = controller.getMastra()!;
+
+    const ended = waitForAgentEnd(session, events);
+    let suspendedRunId: string | undefined;
+    session.subscribe((event: AgentControllerEvent) => {
+      if (event.type === 'tool_approval_required') {
+        void session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId });
+      }
+      if (event.type === 'agent_end' && event.reason === 'suspended') {
+        suspendedRunId = session.suspensions.get({ toolCallId: 'call-1' })?.runId;
+        session.abort();
+      }
+    });
+
+    await session.sendMessage({ content: 'find dero' });
+    await ended;
+    expect(suspendedRunId).toBeDefined();
+
+    const workflowsStore = await mastra.getStorage()!.getStore('workflows');
+    await vi.waitFor(async () => {
+      for (const workflowName of SNAPSHOT_WORKFLOW_NAMES) {
+        expect(await workflowsStore!.getWorkflowRunById({ runId: suspendedRunId!, workflowName })).toBeNull();
+      }
+      expect(mastra.__getRunScope(suspendedRunId!)).toBeUndefined();
+      expect((await agent.listSuspendedRuns({})).runs).toHaveLength(0);
     });
   });
 
@@ -313,7 +350,7 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
     });
 
     const ds = session.displayState.get();
-    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingApprovals.size).toBe(0);
     expect(ds.pendingSuspensions.size).toBe(0);
     expect(ds.isRunning).toBe(false);
     expect(controller.listActiveThreadRuns()).toHaveLength(0);
@@ -404,7 +441,7 @@ describe.each([false, true])('session.abort() during approval / suspension (#205
     });
 
     const ds = session.displayState.get();
-    expect(ds.pendingApproval).toBeNull();
+    expect(ds.pendingApprovals.size).toBe(0);
     expect(ds.pendingSuspensions.size).toBe(0);
     expect(ds.isRunning).toBe(false);
     expect(session.suspensions.hasPending()).toBe(false);

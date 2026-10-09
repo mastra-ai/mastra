@@ -4,7 +4,7 @@ This guide provides instructions for developers who want to contribute to or wor
 
 ## Prerequisites
 
-- **Node.js** (v22.13.0 or later)
+- **Node.js** (v22.19.0 or later on Node 22, or v24.11.0 or later)
 - **pnpm** (v11.21.0 or later): Mastra uses pnpm for package management
 - **Docker** (for local development services): Only needed for a subset of tests, not required for general development
 

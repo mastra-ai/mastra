@@ -319,33 +319,27 @@ describe('MessageRow dynamic-tool rendering', () => {
       }),
     ]);
 
-    // Unknown dynamic tools render as a GenericTool ToolCard showing "Executing <toolName>".
-    expect(container.textContent).toContain('Executing');
-    expect(container.textContent).toContain('some-other-tool');
+    expect(container.textContent).toContain('Some other tool');
     expect(container.textContent).not.toContain('Web Search');
 
-    fireEvent.click(getByRole('button'));
+    fireEvent.click(getByRole('button', { name: /some other tool/i }));
 
-    expect(container.textContent).toContain('Input');
     expect(container.textContent).toContain('"web-search"');
-    expect(container.textContent).toContain('Output');
     expect(container.textContent).toContain('"success": true');
   });
 
-  it('omits the generic fallback output panel when there is no output', () => {
-    const { container, getByRole } = renderRow([
+  it('offers nothing to open when the generic fallback has neither arguments nor output', () => {
+    const { container, queryByRole } = renderRow([
       builderToolPart({
         toolCallId: 'call-5',
         toolName: 'some-other-tool',
-        input: { a: 1 },
+        input: {},
         output: undefined,
       }),
     ]);
 
-    fireEvent.click(getByRole('button'));
-
-    expect(container.textContent).toContain('Input');
-    expect(container.textContent).not.toContain('Output');
+    expect(container.textContent).toContain('Some other tool');
+    expect(queryByRole('button', { name: /some other tool/i })).toBeNull();
   });
 
   it('renders signal data parts in agent-builder chat messages', () => {

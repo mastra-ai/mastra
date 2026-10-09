@@ -95,7 +95,7 @@ export const LIST_SCHEDULES_ROUTE = createRoute({
   responseSchema: listSchedulesResponseSchema,
   summary: 'List schedules',
   description:
-    'Returns all schedules — agent schedules and workflow schedules — optionally filtered by agentId, workflowId, or status. Agent schedules can additionally be filtered by threadId, resourceId, or name.',
+    'Returns all schedules — agent schedules and workflow schedules — optionally filtered by agentId, workflowId, or status. Completed schedules are excluded unless requested with a status filter. Agent schedules can additionally be filtered by threadId, resourceId, or name.',
   tags: ['Schedules'],
   requiresAuth: true,
   handler: async ({ mastra, agentId, workflowId, status, threadId, resourceId, name }) => {
@@ -194,7 +194,7 @@ export const UPDATE_SCHEDULE_ROUTE = createRoute({
   responseSchema: scheduleSchema,
   summary: 'Update a schedule',
   description:
-    "Partial update of a schedule. Fields apply to the matching target type; agent-only fields on a workflow schedule are rejected. An agent schedule's `threadId` and `resourceId` are part of its identity and cannot be changed — to re-target, delete and recreate. A workflow schedule's `resourceId` is run-attribution metadata and may be updated. Editing `cron` (or `timezone`) recomputes `nextFireAt`.",
+    "Partial update of a schedule. Fields apply to the matching target type; agent-only fields on a workflow schedule are rejected. An agent schedule's `threadId` and `resourceId` are part of its identity and cannot be changed — to re-target, delete and recreate. A workflow schedule's `resourceId` is run-attribution metadata and may be updated. Editing `cron` (or `timezone`) recomputes `nextFireAt`. A recomputed cadence that can still fire reactivates a `completed` schedule, while a cadence with no future occurrence leaves the schedule `completed`.",
   tags: ['Schedules'],
   requiresAuth: true,
   handler: async ({ mastra, scheduleId, ...body }) => {

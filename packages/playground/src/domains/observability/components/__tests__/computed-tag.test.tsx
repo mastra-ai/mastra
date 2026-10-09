@@ -1,4 +1,3 @@
-import { stringToColor } from '@mastra/playground-ui/utils/colors';
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ComputedTag } from '../computed-tag';
@@ -7,12 +6,7 @@ afterEach(() => {
   cleanup();
 });
 
-// jsdom normalizes inline colors to rgb(...); feed a probe element the same hsl() to get the expected value.
-function normalizeColor(color: string) {
-  const probe = document.createElement('div');
-  probe.style.color = color;
-  return probe.style.color;
-}
+const BADGE_FILL = /(^|\s)bg-badge-[a-z]+-strong(\s|$)/;
 
 describe('ComputedTag', () => {
   describe('when given a value', () => {
@@ -22,16 +16,10 @@ describe('ComputedTag', () => {
       expect(screen.getByTestId('computed-tag').textContent).toBe('alpha');
     });
 
-    it('derives the background color from the value (lightness 90)', () => {
+    it('fills the tag with a categorical badge hue', () => {
       render(<ComputedTag value="alpha" />);
 
-      expect(screen.getByTestId('computed-tag').style.backgroundColor).toBe(normalizeColor(stringToColor('alpha')));
-    });
-
-    it('derives the foreground color from the value (lightness 25)', () => {
-      render(<ComputedTag value="alpha" />);
-
-      expect(screen.getByTestId('computed-tag').style.color).toBe(normalizeColor(stringToColor('alpha', 25)));
+      expect(screen.getByTestId('computed-tag').className).toMatch(BADGE_FILL);
     });
   });
 
@@ -44,13 +32,11 @@ describe('ComputedTag', () => {
         </>,
       );
 
-      expect(screen.getByTestId('first').getAttribute('style')).toBe(
-        screen.getByTestId('second').getAttribute('style'),
-      );
+      expect(screen.getByTestId('first').className).toBe(screen.getByTestId('second').className);
     });
   });
 
-  describe('when two different values are rendered', () => {
+  describe('when two values hash to different hues', () => {
     it('produces different colors', () => {
       render(
         <>
@@ -59,22 +45,23 @@ describe('ComputedTag', () => {
         </>,
       );
 
-      expect(screen.getByTestId('first').getAttribute('style')).not.toBe(
-        screen.getByTestId('second').getAttribute('style'),
-      );
+      expect(screen.getByTestId('first').className).not.toBe(screen.getByTestId('second').className);
     });
   });
 
   describe('when children are provided', () => {
     it('renders the children instead of the raw value while keeping value-derived colors', () => {
       render(
-        <ComputedTag value="alpha">
-          alpha <button type="button">x</button>
-        </ComputedTag>,
+        <>
+          <ComputedTag value="alpha" data-testid="with-children">
+            alpha <button type="button">x</button>
+          </ComputedTag>
+          <ComputedTag value="alpha" data-testid="without-children" />
+        </>,
       );
 
       expect(screen.getByRole('button', { name: 'x' })).toBeTruthy();
-      expect(screen.getByTestId('computed-tag').style.backgroundColor).toBe(normalizeColor(stringToColor('alpha')));
+      expect(screen.getByTestId('with-children').className).toBe(screen.getByTestId('without-children').className);
     });
   });
 });

@@ -1,5 +1,5 @@
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
-import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   ArrowLeft,
@@ -12,7 +12,6 @@ import {
   GitBranch,
   Inbox,
   Palette,
-  Search,
   SlidersHorizontal,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -38,7 +37,8 @@ type SettingsNavGroup = {
 
 const SETTINGS_GROUPS: SettingsNavGroup[] = [
   {
-    id: 'preferences',
+    id: 'personal',
+    label: 'Your settings',
     items: [
       {
         id: 'account',
@@ -52,24 +52,44 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: Palette,
         searchText: 'preferences general theme appearance color scheme completion sound',
       },
+      {
+        id: 'personal-models',
+        label: SETTINGS_SECTION_LABELS['personal-models'],
+        icon: Bot,
+        searchText: 'your personal models default model api keys providers credentials sign in oauth',
+      },
+      {
+        id: 'memory',
+        label: SETTINGS_SECTION_LABELS.memory,
+        icon: Brain,
+        searchText:
+          'your personal memory observational recall observer reflector thresholds attachments summarize context',
+      },
+      {
+        id: 'connections',
+        label: SETTINGS_SECTION_LABELS.connections,
+        icon: Cable,
+        searchText: 'your personal connections connected accounts slack communication integrations',
+      },
     ],
   },
   {
-    id: 'agent',
-    label: 'Agent',
+    id: 'factory',
+    label: 'Factory settings',
     items: [
       {
         id: 'models',
         label: SETTINGS_SECTION_LABELS.models,
         icon: Bot,
         searchText:
-          'models thinking level factory default model packs api keys providers credentials sign in oauth custom endpoints',
+          'factory shared models thinking level default api keys providers credentials sign in oauth custom endpoints',
       },
       {
-        id: 'memory',
-        label: SETTINGS_SECTION_LABELS.memory,
+        id: 'factory-memory',
+        label: SETTINGS_SECTION_LABELS['factory-memory'],
         icon: Brain,
-        searchText: 'memory observational recall observer reflector thresholds attachments summarize context',
+        searchText:
+          'factory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
         id: 'skills',
@@ -83,12 +103,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: SlidersHorizontal,
         searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
       },
-    ],
-  },
-  {
-    id: 'sources',
-    label: 'Sources',
-    items: [
       {
         id: 'repositories',
         label: SETTINGS_SECTION_LABELS.repositories,
@@ -101,18 +115,6 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         icon: Inbox,
         searchText: 'work intake sources tasks issues pull requests github linear feed sync',
       },
-      {
-        id: 'connections',
-        label: SETTINGS_SECTION_LABELS.connections,
-        icon: Cable,
-        searchText: 'connections connected accounts slack communication integrations',
-      },
-    ],
-  },
-  {
-    id: 'factory',
-    ariaLabel: SETTINGS_SECTION_LABELS.factory,
-    items: [
       {
         id: 'factory',
         label: SETTINGS_SECTION_LABELS.factory,
@@ -128,7 +130,7 @@ export function SettingsNavigation() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const location = useLocation();
   const closeSettings = useCloseSettings();
-  const { state } = useMainSidebar();
+  const { state } = useSidebar();
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLowerCase();
   const filteredGroups = SETTINGS_GROUPS.map(group => ({
@@ -140,45 +142,34 @@ export function SettingsNavigation() {
 
   return (
     <>
-      <MainSidebar.NavList>
-        <MainSidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
+      <Sidebar.NavList>
+        <Sidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
           <button type="button" aria-label="Back to app" onClick={closeSettings}>
             <ArrowLeft aria-hidden="true" />
-            <MainSidebar.NavLabel>Back to app</MainSidebar.NavLabel>
+            <Sidebar.NavLabel>Back to app</Sidebar.NavLabel>
           </button>
-        </MainSidebar.NavLink>
-      </MainSidebar.NavList>
+        </Sidebar.NavLink>
+      </Sidebar.NavList>
       {state === 'default' && (
         <div className="py-2">
-          <InputGroup>
-            <InputGroupAddon>
-              <Search aria-hidden="true" />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              aria-label="Search settings"
-              placeholder="Search settings…"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-            />
-          </InputGroup>
+          <SearchInput label="Search settings" placeholder="Search settings…" value={query} onValueChange={setQuery} />
         </div>
       )}
       {filteredGroups.length > 0 ? (
         filteredGroups.map(group => {
           const headerId = group.label ? `settings-${group.id}` : undefined;
           return (
-            <MainSidebar.NavSection
+            <Sidebar.NavSection
               key={group.id}
               aria-labelledby={headerId}
               aria-label={headerId ? undefined : (group.ariaLabel ?? group.id)}
             >
-              {group.label && <MainSidebar.NavHeader id={headerId}>{group.label}</MainSidebar.NavHeader>}
-              <MainSidebar.NavList>
+              {group.label && <Sidebar.NavHeader id={headerId}>{group.label}</Sidebar.NavHeader>}
+              <Sidebar.NavList>
                 {group.items.map(({ id, label, icon: Icon }) => {
                   const isActive = section === id;
                   return (
-                    <MainSidebar.NavLink
+                    <Sidebar.NavLink
                       key={id}
                       asChild
                       isActive={isActive}
@@ -191,13 +182,13 @@ export function SettingsNavigation() {
                         aria-current={isActive ? 'page' : undefined}
                       >
                         <Icon aria-hidden="true" />
-                        <MainSidebar.NavLabel>{label}</MainSidebar.NavLabel>
+                        <Sidebar.NavLabel>{label}</Sidebar.NavLabel>
                       </Link>
-                    </MainSidebar.NavLink>
+                    </Sidebar.NavLink>
                   );
                 })}
-              </MainSidebar.NavList>
-            </MainSidebar.NavSection>
+              </Sidebar.NavList>
+            </Sidebar.NavSection>
           );
         })
       ) : (

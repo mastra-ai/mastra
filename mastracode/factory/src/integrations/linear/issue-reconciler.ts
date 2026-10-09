@@ -21,6 +21,8 @@ function issueToIngress(issue: import('../../capabilities/intake.js').IntakeIssu
     creator: issue.author ?? null,
     team: issue.source ?? null,
     labels: [...(issue.labels ?? [])],
+    sourceId: issue.sourceId,
+    projectId: issue.projectId,
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
   };
@@ -28,7 +30,9 @@ function issueToIngress(issue: import('../../capabilities/intake.js').IntakeIssu
 
 export function attachLinearIssueReconciler(
   linear: Pick<LinearIntegration, 'intake' | 'rules'>,
-  context: IntegrationContext,
+  context: Pick<IntegrationContext, 'runtime'> & {
+    storage: Pick<IntegrationContext['storage'], 'projects'>;
+  },
 ): LinearIssueReconciler | undefined {
   if (!context.runtime || !linear.intake.resolveIntakeDispatch) return undefined;
   const boards = context.runtime.boards;
@@ -53,6 +57,8 @@ export function attachLinearIssueReconciler(
     },
     metadata: (_item, issue) => ({
       linearIssueId: issue.id,
+      // Persist explicit removal too; omitting the key would retain stale membership.
+      linearProjectId: issue.projectId,
       identifier: issue.identifier,
       linearState: issue.state,
       linearStateType: issue.stateType,

@@ -61,10 +61,9 @@ export const fromCoreUserMessageToMastraDBMessage = (coreUserMessage: CoreUserMe
  * Merge multiple `CoreUserMessage`s into a single canonical `MastraDBMessage`.
  *
  * A user turn that carries attachments arrives as several `CoreUserMessage`s
- * (one for the text, one per attachment). Memory/reload persists and resolves
- * that whole turn as a single multi-part user message, so the optimistic
- * streaming display must do the same — flatten every message's parts into one
- * `parts` array — to render identically (one bubble, not one per message).
+ * (one for the text, one per attachment). Flatten their parts for the optimistic
+ * display. The send path must also submit a single multipart message: this
+ * display conversion alone cannot combine separately persisted messages.
  */
 export const fromCoreUserMessagesToMastraDBMessage = (coreUserMessages: CoreUserMessage[]): MastraDBMessage =>
   newUserMessage(coreUserMessages.flatMap(coreUserMessageToParts));

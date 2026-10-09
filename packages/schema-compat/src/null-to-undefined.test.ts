@@ -147,3 +147,111 @@ describe('wrapSchemaWithNullTransform', () => {
     expect(jsonSchema).toHaveProperty('type', 'object');
   });
 });
+
+describe('null transform with nullable parents (#25112)', () => {
+  const validate = async (schema: z.ZodTypeAny, input: unknown) =>
+    wrapSchemaWithNullTransform(toStandardSchema(schema))['~standard'].validate(input);
+
+  const address = z.object({ street: z.string(), unit: z.string().optional() });
+
+  it('drops optional nulls inside a nullable object', async () => {
+    const result = await validate(z.object({ address: address.nullable() }), {
+      address: { street: 'Main', unit: null },
+    });
+    expect(result.issues).toBeUndefined();
+    expect((result as { value: unknown }).value).toEqual({ address: { street: 'Main' } });
+  });
+
+  it('drops optional nulls inside a nullish object', async () => {
+    const result = await validate(z.object({ address: address.nullish() }), {
+      address: { street: 'Main', unit: null },
+    });
+    expect(result.issues).toBeUndefined();
+    expect((result as { value: unknown }).value).toEqual({ address: { street: 'Main' } });
+  });
+
+  it('drops optional nulls inside a nullable array of objects', async () => {
+    const result = await validate(z.object({ list: z.array(address).nullable() }), {
+      list: [{ street: 'A', unit: null }],
+    });
+    expect(result.issues).toBeUndefined();
+    expect((result as { value: unknown }).value).toEqual({ list: [{ street: 'A' }] });
+  });
+
+  it('preserves a null nullable parent and required nullable children', async () => {
+    const schema = z.object({ address: z.object({ street: z.string(), note: z.string().nullable() }).nullable() });
+    expect(((await validate(schema, { address: null })) as { value: unknown }).value).toEqual({ address: null });
+    const result = await validate(schema, { address: { street: 'Main', note: null } });
+    expect((result as { value: unknown }).value).toEqual({ address: { street: 'Main', note: null } });
+  });
+
+  it('resolves raw anyOf, oneOf and type arrays', () => {
+    const obj = { type: 'object', properties: { a: { type: 'string' } }, required: [] };
+    for (const key of ['anyOf', 'oneOf']) {
+      expect(transformNullToUndefined({ a: null }, { [key]: [{ type: 'null' }, obj] })).toEqual({ a: undefined });
+    }
+    expect(transformNullToUndefined({ a: null }, { ...obj, type: ['object', 'null'] })).toEqual({ a: undefined });
+  });
+
+  it('applies parent properties alongside anyOf', () => {
+    const schema = {
+      type: 'object',
+      properties: { a: { type: 'string' } },
+      anyOf: [{ type: 'object' }, { type: 'null' }],
+    };
+    expect(transformNullToUndefined({ a: null }, schema)).toEqual({ a: undefined });
+  });
+
+  it('selects the discriminated branch matching the value', () => {
+    const schema = {
+      oneOf: [
+        { type: 'object', properties: { kind: { const: 'a' }, note: { type: 'string' } }, required: ['kind'] },
+        {
+          type: 'object',
+          properties: { kind: { const: 'b' }, note: { type: ['string', 'null'] } },
+          required: ['kind', 'note'],
+        },
+      ],
+    };
+    expect(transformNullToUndefined({ kind: 'b', note: null }, schema)).toEqual({ kind: 'b', note: null });
+    expect(transformNullToUndefined({ kind: 'a', note: null }, schema)).toEqual({ kind: 'a', note: undefined });
+  });
+
+  it('keeps nulls in discriminated unions of zod objects', async () => {
+    const schema = z.object({
+      item: z
+        .discriminatedUnion('kind', [
+          z.object({ kind: z.literal('a'), note: z.string().optional() }),
+          z.object({ kind: z.literal('b'), note: z.string().nullable() }),
+        ])
+        .nullable(),
+    });
+    const result = await validate(schema, { item: { kind: 'b', note: null } });
+    expect(result.issues).toBeUndefined();
+    expect((result as { value: unknown }).value).toEqual({ item: { kind: 'b', note: null } });
+  });
+
+  it('applies parent items alongside anyOf', () => {
+    const schema = {
+      items: { type: 'object', properties: { note: { type: 'string' } }, required: [] },
+      anyOf: [{ type: 'array' }, { type: 'null' }],
+    };
+    expect(transformNullToUndefined([{ note: null }], schema)).toEqual([{ note: undefined }]);
+  });
+
+  it('selects the array branch whose items match the elements', () => {
+    const item = (kind: string, required: string[]) => ({
+      type: 'object',
+      properties: { kind: { const: kind }, note: { type: ['string', 'null'] } },
+      required,
+    });
+    const schema = {
+      oneOf: [
+        { type: 'array', items: item('a', ['kind']) },
+        { type: 'array', items: item('b', ['kind', 'note']) },
+      ],
+    };
+    expect(transformNullToUndefined([{ kind: 'b', note: null }], schema)).toEqual([{ kind: 'b', note: null }]);
+    expect(transformNullToUndefined([{ kind: 'a', note: null }], schema)).toEqual([{ kind: 'a', note: undefined }]);
+  });
+});

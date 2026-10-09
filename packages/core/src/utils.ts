@@ -29,7 +29,20 @@ export type { FetchWithRetryOptions } from './utils/fetchWithRetry';
 export { boundedStringify, ensureSerializable, isBoundedSerializable, safeStringify } from './utils/safe-stringify';
 export { deepEqual } from './utils/deep-equal';
 
-export const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+/** Resolves after `ms`, or as soon as `signal` aborts. */
+export const delay = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>(resolve => {
+    if (signal?.aborted) return resolve();
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 
 /**
  * Read a positive-integer environment variable (e.g. a TTL in ms). Unset, empty,

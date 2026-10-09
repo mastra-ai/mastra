@@ -381,6 +381,35 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(level ? { level } : {}),
       };
     }
+    case 'dismissStaleReviews': {
+      assertExactKeys(
+        value,
+        [
+          'type',
+          'idempotencyKey',
+          'installationId',
+          'repository',
+          'pullRequestNumber',
+          'approvingReviewId',
+          'approvingAuthor',
+        ],
+        'Factory dismiss stale reviews decision',
+      );
+      for (const key of ['installationId', 'pullRequestNumber'] as const) {
+        if (!Number.isSafeInteger(value[key]) || (value[key] as number) <= 0) {
+          throw new FactoryRuleValidationError(`Factory dismiss stale reviews ${key} must be a positive integer.`);
+        }
+      }
+      return {
+        type,
+        ...commonCommitFields(value),
+        installationId: value.installationId as number,
+        repository: boundedString(value.repository, 'Factory dismiss stale reviews repository', MAX_TITLE_LENGTH),
+        pullRequestNumber: value.pullRequestNumber as number,
+        approvingReviewId: boundedString(value.approvingReviewId, 'Factory approving review id', MAX_TITLE_LENGTH),
+        approvingAuthor: boundedString(value.approvingAuthor, 'Factory approving review author', MAX_TITLE_LENGTH),
+      };
+    }
     default:
       throw new FactoryRuleValidationError('Factory rule decision type is unsupported.');
   }

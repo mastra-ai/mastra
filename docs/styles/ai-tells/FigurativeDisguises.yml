@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI disguise metaphor: '%s'. Name what the thing is, then say how it differs from what it resembles. Disable this rule for security, forensics, or costume prose."
+message: "AI disguise metaphor: '%s'. State what the thing is, then say how it differs from what it resembles. Disable this rule for security, forensics, or costume prose."
 level: error
 nonword: true
 ignorecase: true

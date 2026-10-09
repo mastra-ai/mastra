@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI overused verb: '%s'. Name the literal movement: is sent or is copied. Disable this rule for transit or physics prose."
+message: "AI overused verb: '%s'. Use the literal movement: is sent or is copied. Disable this rule for transit or physics prose."
 level: error
 nonword: true
 ignorecase: true

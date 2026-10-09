@@ -20,6 +20,7 @@ import { MockMemory } from '../../../memory/mock';
 import { Agent } from '../../agent';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 
 /** @param onCall - invoked as soon as the model starts streaming, to synchronize on a live run. */
 function createAbortableModel(onCall?: () => void) {
@@ -66,6 +67,27 @@ function createAbortableModel(onCall?: () => void) {
   });
 }
 
+function createErrorModel() {
+  return new MockLanguageModelV2({
+    doStream: async () => ({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          controller.enqueue({
+            type: 'response-metadata',
+            id: 'id-0',
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          });
+          controller.enqueue({ type: 'error', error: new Error('Terminal provider failure') });
+          controller.close();
+        },
+      }),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+    }),
+  });
+}
+
 describe('DurableAgent abort signal', () => {
   let pubsub: EventEmitterPubSub;
 
@@ -108,6 +130,65 @@ describe('DurableAgent abort signal', () => {
     expect(abortPayload).toBeDefined();
 
     cleanup();
+  });
+
+  it.each([
+    ['durable', createDurableAgent],
+    ['evented', createEventedAgent],
+  ] as const)('%s abort emits an abort chunk and does not invoke onFinish', async (_kind, createAgent) => {
+    const baseAgent = new Agent({
+      id: `abort-parity-${_kind}`,
+      name: `Abort Parity ${_kind}`,
+      instructions: 'Test',
+      model: createAbortableModel() as LanguageModelV2,
+    });
+    const agent = createAgent({ agent: baseAgent, pubsub });
+    const onAbort = vi.fn();
+    const onFinish = vi.fn();
+    const result = await agent.stream('Go', { onAbort, onFinish });
+    const chunks: any[] = [];
+    const consumption = (async () => {
+      try {
+        for await (const chunk of result.output.fullStream) chunks.push(chunk);
+      } catch {
+        // The provider stream terminates with AbortError after the public abort chunk.
+      }
+    })();
+
+    await new Promise(r => setTimeout(r, 10));
+    result.abort();
+    await consumption;
+
+    expect(chunks.some(chunk => chunk.type === 'abort')).toBe(true);
+    expect(onAbort).toHaveBeenCalledTimes(1);
+    expect(onFinish).not.toHaveBeenCalled();
+    result.cleanup();
+  });
+
+  it.each([
+    ['durable', createDurableAgent],
+    ['evented', createEventedAgent],
+  ] as const)('%s failure invokes onError and does not invoke onFinish', async (_kind, createAgent) => {
+    const baseAgent = new Agent({
+      id: `error-parity-${_kind}`,
+      name: `Error Parity ${_kind}`,
+      instructions: 'Test',
+      model: createErrorModel() as LanguageModelV2,
+    });
+    const agent = createAgent({ agent: baseAgent, pubsub });
+    const onError = vi.fn();
+    const onFinish = vi.fn();
+    const result = await agent.stream('Go', {
+      modelSettings: { maxRetries: 0 },
+      onError,
+      onFinish,
+    });
+
+    await result.output.consumeStream().catch(() => undefined);
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onFinish).not.toHaveBeenCalled();
+    result.cleanup();
   });
 
   it('onAbort receives the text streamed before the abort', async () => {
@@ -160,6 +241,7 @@ describe('DurableAgent abort signal', () => {
     }
 
     expect(abortPayload?.text).toBe('Hello');
+    expect(await output.text).toBe('Hello');
 
     cleanup();
   });
@@ -322,11 +404,13 @@ describe('DurableAgent abort signal', () => {
     const source = await durableAgent.stream('Go');
     await new Promise(r => setTimeout(r, 10));
 
-    let finishReason: string | undefined;
+    let abortPayload: unknown;
+    const onFinish = vi.fn();
     const observed = await durableAgent.observe(source.runId, {
-      onFinish: result => {
-        finishReason = result.finishReason;
+      onAbort: data => {
+        abortPayload = data;
       },
+      onFinish,
     });
 
     const sourceConsumption = source.output.consumeStream().catch(() => undefined);
@@ -337,7 +421,8 @@ describe('DurableAgent abort signal', () => {
 
     await Promise.all([sourceConsumption, observedConsumption]);
 
-    expect(finishReason).toBe('abort');
+    expect(abortPayload).toBeDefined();
+    expect(onFinish).not.toHaveBeenCalled();
 
     source.cleanup();
   });

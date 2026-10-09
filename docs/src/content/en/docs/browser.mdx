@@ -139,7 +139,6 @@ Screencast is enabled by default and can be configured:
 ```typescript
 const browser = new AgentBrowser({
   screencast: {
-    enabled: true,
     format: 'jpeg',
     quality: 80,
     maxWidth: 1280,
@@ -149,12 +148,6 @@ const browser = new AgentBrowser({
 ```
 
 ## Record browser sessions
-
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
 
 AgentBrowser and StagehandBrowser can opt into recording for reviewing, sharing, or debugging browser runs. Configure `outputDir` to add the recording tools:
 
@@ -169,7 +162,7 @@ export const browser = new AgentBrowser({
 })
 ```
 
-StagehandBrowser accepts the same `recording` option. The agent uses `browser_record` to start, check, and stop a recording, and `browser_record_caption` to label major actions. Stopping saves the video and lets the agent return its path. A custom `outputPath` must be absolute and stay inside `recording.outputDir`.
+StagehandBrowser accepts the same `recording` option. The agent uses `browser_record` to start, check, and stop a recording, and `browser_record_caption` to label major actions. Stopping saves the video and lets the agent return its path. A custom `outputPath` can be absolute or relative to the current working directory, and must resolve to a path inside `recording.outputDir`.
 
 Recordings use Motion-JPEG AVI and don't require `ffmpeg`. The default maximum duration is 30 seconds, with a 120-second hard cap. The default maximum frame size is 1024 × 720, captions are limited to 80 characters, and only one recording can be active per process.
 

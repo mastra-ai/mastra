@@ -2,6 +2,7 @@ import { Text, truncateToWidth, visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, mastra, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
+import { card } from './surface.js';
 import type { QuietToolDisplayMode } from './tool-execution-interface.js';
 import { WidthAwareContainer } from './width-aware-container.js';
 
@@ -34,10 +35,6 @@ function priorityColor(priority?: string): string {
 
 const MAX_NOTIFICATION_CONTENT_WIDTH = 100;
 const MIN_NOTIFICATION_CONTENT_WIDTH = 24;
-
-function padLine(value: string, width: number): string {
-  return value + ' '.repeat(Math.max(0, width - visibleWidth(value)));
-}
 
 function splitLongWord(word: string, maxWidth: number): string[] {
   const segments: string[] = [];
@@ -141,12 +138,12 @@ export class NotificationComponent extends WidthAwareContainer {
       return;
     }
     const titleText = options.source ? `notification from ${options.source}` : 'notification';
-    // Quiet mode keeps the box but only the essentials: who it's from and what it says.
+    // Quiet mode keeps the card but only the essentials: who it's from and what it says.
     const details = quiet ? '' : [options.priority, options.kind, options.status].filter(Boolean).join(' · ');
     const message = options.message.trim();
     const maxContentWidth = Math.max(
       MIN_NOTIFICATION_CONTENT_WIDTH,
-      Math.min(MAX_NOTIFICATION_CONTENT_WIDTH, width - BOX_INDENT - 4),
+      Math.min(MAX_NOTIFICATION_CONTENT_WIDTH, width - BOX_INDENT - 2),
     );
     const titleLines = wrapText(titleText, maxContentWidth);
     const detailLines = details ? wrapText(details, maxContentWidth) : [];
@@ -166,55 +163,22 @@ export class NotificationComponent extends WidthAwareContainer {
           .filter((line): line is string => Boolean(line))
           .flatMap(line => wrapText(line, maxContentWidth))
       : [];
-    const allLines = [...titleLines, ...detailLines, ...messageLines, ...backgroundDetailLines];
-    const contentWidth = Math.max(...allLines.map(line => visibleWidth(line)), 1);
-    const borderColor = chalk.hex(mastra.blue);
-    const top = `╭${'─'.repeat(contentWidth + 2)}╮`;
-    const bottom = `╰${'─'.repeat(contentWidth + 2)}╯`;
-
-    this.addChild(new Text(borderColor(top), BOX_INDENT, 0));
-    for (const line of titleLines) {
-      this.addChild(
-        new Text(
-          `${borderColor('│')} ${chalk.hex(priorityColor(options.priority)).bold(padLine(line, contentWidth))} ${borderColor('│')}`,
-          BOX_INDENT,
-          0,
-        ),
-      );
-    }
-
-    for (const line of detailLines) {
-      this.addChild(
-        new Text(
-          `${borderColor('│')} ${theme.fg('dim', padLine(line, contentWidth))} ${borderColor('│')}`,
-          BOX_INDENT,
-          0,
-        ),
-      );
-    }
-
-    for (const line of messageLines) {
-      this.addChild(new Text(`${borderColor('│')} ${padLine(line, contentWidth)} ${borderColor('│')}`, BOX_INDENT, 0));
-    }
-
-    for (const line of backgroundDetailLines) {
-      this.addChild(
-        new Text(
-          `${borderColor('│')} ${theme.fg('dim', padLine(line, contentWidth))} ${borderColor('│')}`,
-          BOX_INDENT,
-          0,
-        ),
-      );
-    }
-
-    this.addChild(new Text(borderColor(bottom), BOX_INDENT, 0));
+    // Left-bar card in blue: who it's from (in the priority color), details, then the message.
+    const lines = [
+      ...titleLines.map(line => chalk.hex(priorityColor(options.priority)).bold(line)),
+      ...detailLines.map(line => theme.fg('dim', line)),
+      // Message body in a soft grey so notifications read differently from assistant text.
+      ...messageLines.map(line => theme.fg('thinkingText', line)),
+      ...backgroundDetailLines.map(line => theme.fg('dim', line)),
+    ];
+    this.addChild(new Text(card(mastra.blue, lines).join('\n'), BOX_INDENT, 0));
   }
 
   private limitMessageLines(lines: string[], quiet: boolean, maxWidth: number): string[] {
     if (!quiet || lines.length <= this.quietPreviewLineLimit) return lines;
     const shown = lines.slice(0, this.quietPreviewLineLimit);
     if (shown.length === 0) return shown;
-    // The ellipsis must fit inside the content width or the box border overflows by a column.
+    // The ellipsis must fit inside the content width.
     const last = shown[shown.length - 1]!;
     shown[shown.length - 1] =
       visibleWidth(last) < maxWidth ? `${last}…` : `${truncateToWidth(last, maxWidth - 1, '')}…`;

@@ -1,11 +1,8 @@
-import type { MastraClient } from '@mastra/client-js';
 import type { EntityType } from '@mastra/core/observability';
+import type { LightSpanRecord } from '@mastra/react/hooks/traces';
 import type { ReactNode } from 'react';
 
-type GetTraceLightResponse = Awaited<ReturnType<MastraClient['getTraceLight']>>;
-type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
-export type LightSpanRecord = GetTraceLightResponse['spans'][number];
-export type SpanRecord = GetSpanResponse['span'];
+export type { LightSpanRecord, SpanRecord } from '@mastra/react/hooks/traces';
 
 /**
  * A light span carrying a precomputed haystack of everything it holds.

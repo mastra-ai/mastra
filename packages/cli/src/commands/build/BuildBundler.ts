@@ -2,12 +2,13 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Config } from '@mastra/core/mastra';
 import { FileService } from '@mastra/deployer/build';
-import { Bundler } from '@mastra/deployer/bundler';
+import { Bundler, IS_DEFAULT } from '@mastra/deployer/bundler';
 import { copy } from 'fs-extra';
 import { shouldSkipDotenvLoading } from '../utils.js';
 import { getWorkerEntry } from '../worker/WorkerBundler.js';
 
 export class BuildBundler extends Bundler {
+  protected defaultExternalsPreset = true;
   private studio: boolean;
 
   constructor({ studio }: { studio?: boolean } = {}) {
@@ -22,19 +23,11 @@ export class BuildBundler extends Bundler {
     outputDirectory: string,
   ): Promise<NonNullable<Config['bundler']>> {
     const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
-    const configuredExternals = Array.isArray(bundlerOptions.externals) ? bundlerOptions.externals : [];
-
-    if (bundlerOptions.externals === true || bundlerOptions.externals === false) {
+    if (bundlerOptions.externals !== undefined && !(IS_DEFAULT in bundlerOptions)) {
       return bundlerOptions;
     }
 
-    const dynamicPackages = [...new Set([...(bundlerOptions.dynamicPackages ?? []), ...configuredExternals])];
-
-    return {
-      ...bundlerOptions,
-      externals: true,
-      ...(dynamicPackages.length > 0 ? { dynamicPackages } : {}),
-    };
+    return { ...bundlerOptions, externals: true };
   }
 
   getEnvFiles(): Promise<string[]> {

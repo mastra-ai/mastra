@@ -4,19 +4,17 @@ import type { LightSpanRecord } from '@mastra/core/storage';
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
-import type { SearchableSpan } from '../../types';
-import { toSearchableSpans } from '../../utils';
 import { useTraceSearch } from '../use-trace-search';
 
 const timestamp = new Date('2026-06-10T00:00:00.000Z');
 
-/** Spans reach the hook already enriched, exactly as the query hooks deliver them. */
+/** Spans reach the hook as plain records, exactly as the query hooks deliver them. */
 function makeSpan(
   spanId: string,
   parentSpanId: string | null,
   overrides: Partial<LightSpanRecord> = {},
-): SearchableSpan {
-  const span: LightSpanRecord = {
+): LightSpanRecord {
+  return {
     traceId: 'trace-1',
     spanId,
     parentSpanId,
@@ -29,14 +27,9 @@ function makeSpan(
     updatedAt: timestamp,
     ...overrides,
   };
-
-  const [searchable] = toSearchableSpans([span]);
-  if (!searchable) throw new Error('toSearchableSpans dropped the span');
-
-  return searchable;
 }
 
-const ids = (spans: SearchableSpan[]) => spans.map(span => span.spanId);
+const ids = (spans: LightSpanRecord[]) => spans.map(span => span.spanId);
 
 describe('useTraceSearch', () => {
   it('returns the input array by reference when the query is empty', () => {
@@ -150,6 +143,18 @@ describe('useTraceSearch', () => {
   });
 
   describe('the open-ended payloads no fixed field list can reach', () => {
+    it.each([
+      ['input', { input: { messages: [{ role: 'user', content: 'Weather in Lyon?' }] } }],
+      ['output', { output: { text: 'It is raining in Lyon.' } }],
+    ] as const)('matches on text only present in %s', (_field, overrides) => {
+      const spans = [makeSpan('a', null, overrides), makeSpan('b', null)];
+      const { result } = renderHook(() => useTraceSearch(spans));
+
+      act(() => result.current.setQuery('lyon'));
+
+      expect(ids(result.current.results)).toEqual(['a']);
+    });
+
     it('matches on a metadata value', () => {
       const spans = [makeSpan('a', null, { metadata: { city: 'Lyon' } }), makeSpan('b', null)];
       const { result } = renderHook(() => useTraceSearch(spans));

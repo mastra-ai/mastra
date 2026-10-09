@@ -283,6 +283,26 @@ function sanitizeIdList(value: unknown): string[] | null | undefined {
   return ids.length === value.length && new Set(ids).size === ids.length ? ids : undefined;
 }
 
+function sanitizeLinearRepositoryMap(value: unknown): Record<string, string> | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value);
+  if (entries.length > 200) return undefined;
+  const mapping: Record<string, string> = Object.create(null);
+  for (const [projectId, slug] of entries) {
+    if (
+      !projectId ||
+      projectId.length > MAX_INTAKE_SOURCE_ID_LENGTH ||
+      typeof slug !== 'string' ||
+      !slug.trim() ||
+      slug.length > 512
+    ) {
+      return undefined;
+    }
+    mapping[projectId] = slug;
+  }
+  return mapping;
+}
+
 /** Validate a request body into an intake config, rejecting unknown shapes. */
 export function parseIntakeConfig(body: unknown): IntakeConfig | null {
   if (typeof body !== 'object' || body === null || Array.isArray(body)) return null;
@@ -302,11 +322,23 @@ export function parseIntakeConfig(body: unknown): IntakeConfig | null {
     ) {
       return null;
     }
-    const selection = value as { enabled?: unknown; sourceIds?: unknown };
+    const selection = value as { enabled?: unknown; sourceIds?: unknown; repositoryByLinearProject?: unknown };
     if (typeof selection.enabled !== 'boolean') return null;
     const sourceIds = sanitizeIdList(selection.sourceIds ?? null);
     if (sourceIds === undefined) return null;
-    config[integrationId] = { enabled: selection.enabled, sourceIds };
+    const repositoryByLinearProject =
+      integrationId === 'linear' ? sanitizeLinearRepositoryMap(selection.repositoryByLinearProject) : undefined;
+    if (
+      integrationId === 'linear' &&
+      selection.repositoryByLinearProject !== undefined &&
+      repositoryByLinearProject === undefined
+    )
+      return null;
+    config[integrationId] = {
+      enabled: selection.enabled,
+      sourceIds,
+      ...(repositoryByLinearProject ? { repositoryByLinearProject } : {}),
+    };
   }
   return config;
 }

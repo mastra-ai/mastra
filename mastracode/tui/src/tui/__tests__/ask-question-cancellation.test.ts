@@ -71,7 +71,8 @@ function createMockContext(state: TUIState): EventHandlerContext {
     renderCompletedTasksInline: vi.fn(),
     renderTaskDeltaInline: vi.fn(),
     refreshModelAuthStatus: vi.fn(),
-    startGoal: vi.fn(),
+    setGoal: vi.fn(),
+    sendGoalReminder: vi.fn(),
   } as unknown as EventHandlerContext;
 }
 

@@ -91,6 +91,18 @@ describe('UpstashTransport', () => {
     });
   });
 
+  it('should send LPUSH and LTRIM as separate pipeline commands', async () => {
+    transport.logBuffer.push({ msg: 'hello', time: 1 } as any);
+
+    await transport._flush();
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).toEqual([
+      ['LPUSH', 'test-logs', JSON.stringify({ msg: 'hello', time: 1 })],
+      ['LTRIM', 'test-logs', 0, 999],
+    ]);
+  });
+
   it('should properly clean up resources on destroy', () => {
     const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
     const flushSpy = vi.spyOn(transport, '_flush').mockImplementation(() => Promise.resolve());
@@ -101,6 +113,25 @@ describe('UpstashTransport', () => {
         expect(flushSpy).toHaveBeenCalled();
       }
     });
+  });
+
+  it('should flush every remaining batch before destroy completes', async () => {
+    const batchTransport = new UpstashTransport({
+      ...defaultOptions,
+      batchSize: 2,
+    });
+    batchTransport.logBuffer = Array.from({ length: 5 }, (_, index) => ({ msg: `message${index + 1}` }));
+
+    await new Promise<void>((resolve, reject) => {
+      batchTransport._destroy(null as any, (error?: Error | null) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls.map(([, request]: any[]) => JSON.parse(request.body)[0].length - 2)).toEqual([2, 2, 1]);
+    expect(batchTransport.logBuffer).toEqual([]);
   });
 
   it('should handle errors in _transform', () => {
@@ -171,6 +202,93 @@ describe('UpstashTransport', () => {
   });
 
   describe('listLogs and listLogsByRunId', () => {
+    it('should fetch only the requested page for unfiltered queries', async () => {
+      const logs = Array.from({ length: 2 }, (_, index) =>
+        JSON.stringify({ msg: `message${index + 3}`, time: index + 3 }),
+      );
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: 5 }, { result: logs }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ page: 2, perPage: 2 });
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([
+        ['LLEN', 'test-logs'],
+        ['LRANGE', 'test-logs', 2, 3],
+      ]);
+      expect(result).toMatchObject({ total: 5, page: 2, perPage: 2, hasMore: true });
+      expect(result.logs.map(log => log.msg)).toEqual(['message3', 'message4']);
+    });
+
+    it('should read run ID queries from a single snapshot', async () => {
+      const logs = [
+        JSON.stringify({ msg: 'other', runId: 'other-run-id', time: 1 }),
+        JSON.stringify({ msg: 'wanted1', runId: 'test-run-id', time: 2 }),
+        JSON.stringify({ msg: 'wanted2', runId: 'test-run-id', time: 3 }),
+      ];
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: logs }]),
+        }),
+      );
+
+      const result = await transport.listLogsByRunId({ runId: 'test-run-id', page: 2, perPage: 1 });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([['LRANGE', 'test-logs', 0, -1]]);
+      expect(result).toMatchObject({ total: 2, page: 2, perPage: 1, hasMore: false });
+      expect(result.logs[0]?.msg).toBe('wanted2');
+    });
+
+    it('should read filtered queries from a single snapshot', async () => {
+      const logs = [
+        JSON.stringify({ msg: 'info', level: LogLevel.INFO, time: 1 }),
+        JSON.stringify({ msg: 'error', level: LogLevel.ERROR, time: 2 }),
+      ];
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: logs }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ logLevel: LogLevel.ERROR, page: 1, perPage: 1 });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([['LRANGE', 'test-logs', 0, -1]]);
+      expect(result).toMatchObject({ total: 1, page: 1, perPage: 1, hasMore: false });
+      expect(result.logs.map(log => log.msg)).toEqual(['error']);
+    });
+
+    it('should return every log when pagination results are disabled', async () => {
+      const logs = [JSON.stringify({ msg: 'message1', time: 1 }), JSON.stringify({ msg: 'message2', time: 2 })];
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: logs }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ returnPaginationResults: false, page: 2, perPage: 1 });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([['LRANGE', 'test-logs', 0, -1]]);
+      expect(result).toEqual({
+        logs: [
+          { msg: 'message1', time: 1 },
+          { msg: 'message2', time: 2 },
+        ],
+        total: 2,
+        page: 2,
+        perPage: 2,
+        hasMore: false,
+      });
+    });
+
     it('should return empty array for listLogs', async () => {
       const logs = await transport.listLogs();
       expect(logs).toEqual({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false });

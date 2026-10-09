@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { MastraVoice } from '@internal/voice';
 import type { ToolsInput, VoiceEventType, VoiceConfig } from '@internal/voice';
 import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
@@ -505,7 +504,7 @@ export class GeminiLiveVoice extends MastraVoice<
       // Send initial configuration (session_resumption handle is embedded in setup frame)
       this.sendInitialConfig();
       this.sessionStartTime = Date.now();
-      this.sessionId = randomUUID();
+      this.sessionId = globalThis.crypto.randomUUID();
 
       // Wait for session to be created after sending config
       await this.waitForSessionCreated();
@@ -1521,7 +1520,7 @@ export class GeminiLiveVoice extends MastraVoice<
             toolCall: {
               name: part.functionCall.name,
               args: part.functionCall.args || {},
-              id: part.functionCall.id || randomUUID(),
+              id: part.functionCall.id || globalThis.crypto.randomUUID(),
             },
           };
 
@@ -1539,7 +1538,7 @@ export class GeminiLiveVoice extends MastraVoice<
             const int16Array = this.audioStreamManager.base64ToInt16Array(audioData);
 
             // Use the tracked response ID or generate one if not available
-            const responseId = this.getCurrentResponseId() || randomUUID();
+            const responseId = this.getCurrentResponseId() || globalThis.crypto.randomUUID();
 
             // Get or create the speaker stream for this response
             let speakerStream = this.audioStreamManager.getSpeakerStream(responseId);
@@ -1657,7 +1656,7 @@ export class GeminiLiveVoice extends MastraVoice<
     for (const toolCall of toolCalls) {
       const toolName = toolCall.name || '';
       const toolArgs = toolCall.args || {};
-      const toolId = toolCall.id || randomUUID();
+      const toolId = toolCall.id || globalThis.crypto.randomUUID();
 
       await this.processSingleToolCall(toolName, toolArgs, toolId);
     }

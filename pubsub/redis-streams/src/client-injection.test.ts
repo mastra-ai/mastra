@@ -88,7 +88,9 @@ describe('RedisStreamsPubSub client injection', () => {
       void ack?.();
     };
     await ps.subscribe(topic, cb);
+    // Fan-out subscribers to one topic share a reader; another topic gets its own.
     await ps.subscribe(topic, async (_e, ack) => void ack?.());
+    await ps.subscribe(`${topic}-other`, async (_e, ack) => void ack?.());
     await ps.publish(topic, makeEvent());
     await waitFor(() => received === 1);
 

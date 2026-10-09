@@ -118,7 +118,11 @@ export async function transform(
   const args = buildArgs(codemodPath, targetPath, transformOptions);
   // execFile with an args array (no shell) so paths can't be used for
   // command injection (CodeQL js/shell-command-injection-from-environment).
-  const { stdout } = await execFile(process.execPath, [getJscodeshiftBin(), ...args], { encoding: 'utf8' });
+  const { stdout } = await execFile(process.execPath, [getJscodeshiftBin(), ...args], {
+    encoding: 'utf8',
+    // --print and --verbose can legitimately emit more than Node's default 1 MiB buffer.
+    maxBuffer: Infinity,
+  });
   const errors = parseErrors(codemod, stdout);
   const notImplementedErrors = parseNotImplementedErrors(codemod, stdout);
   // Keep routine v1 bundle runs quiet while its spinner is active, but always

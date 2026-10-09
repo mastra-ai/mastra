@@ -120,7 +120,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
   }
 
   async processOutputStream(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
-    const { part, state, streamParts, requestContext, messageList, ...rest } = args;
+    const { part, state, streamParts, requestContext, messageList, abortSignal, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
     const controller = state.controller as TransformStreamDefaultController<ChunkType<OUTPUT>> | undefined;
 
@@ -137,6 +137,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           observabilityContext,
           requestContext,
           messageList,
+          abortSignal,
         );
         return part;
 
@@ -163,9 +164,23 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     observabilityContext?: ObservabilityContext,
     requestContext?: RequestContext,
     messageList?: ProcessOutputStreamArgs['messageList'],
+    abortSignal?: AbortSignal,
   ): Promise<void> {
+    if (abortSignal?.aborted) return;
     const requestState = this.getRequestState(state);
     if (requestState.isStructuringAgentStreamStarted) return;
+    // enqueue() throws once the downstream stream is closed, cancelled, or errored. desiredSize can't
+    // detect this (a closed stream reports 0, same as backpressure), so treat a throw as "stream gone".
+    const safeEnqueue = (chunk: ChunkType<OUTPUT>): boolean => {
+      if (!controller) return true;
+      try {
+        controller.enqueue(chunk);
+        return true;
+      } catch (error) {
+        this.logger?.debug('[StructuredOutputProcessor] Output stream closed; stopping structuring', error);
+        return false;
+      }
+    };
     requestState.isStructuringAgentStreamStarted = true;
     try {
       const attemptParts = streamParts.slice(requestState.streamPartsStartIndex);
@@ -182,6 +197,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
         requestContext,
         messageList,
         observabilityContext,
+        abortSignal,
       );
 
       const excludedChunkTypes = [
@@ -196,6 +212,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
 
       // Stream object chunks directly into the main stream
       for await (const chunk of structuringAgentStream.fullStream) {
+        if (abortSignal?.aborted) break;
         if (excludedChunkTypes.includes(chunk.type) || chunk.type.startsWith('data-')) {
           continue;
         }
@@ -217,7 +234,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
                 fallback: true,
               },
             };
-            controller?.enqueue(fallbackChunk);
+            safeEnqueue(fallbackChunk);
             break;
           }
         }
@@ -229,9 +246,11 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
             from: 'structured-output',
           },
         } as unknown as ChunkType<OUTPUT>;
-        controller?.enqueue(newChunk);
+        if (!safeEnqueue(newChunk)) break;
       }
     } catch (error) {
+      // The run was cancelled; errors from the torn-down stream are not structuring failures.
+      if (abortSignal?.aborted) return;
       this.handleError('Structured output processing failed', error, requestState);
     }
     if (requestState.structuredOutputError) {
@@ -249,6 +268,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
     requestContext?: RequestContext,
     messageList?: ProcessOutputStreamArgs['messageList'],
     observabilityContext?: ObservabilityContext,
+    abortSignal?: AbortSignal,
   ) {
     const structuredOutput: StructuredOutputOptions<OUTPUT> = {
       schema: this.schema,
@@ -310,6 +330,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
           options: { readOnly: true, retainFullInput: true },
         },
         providerOptions: this.providerOptions,
+        abortSignal,
         ...observabilityContext,
       });
     }
@@ -320,6 +341,7 @@ export class StructuredOutputProcessor<OUTPUT extends {}> implements Processor<'
       {
         structuredOutput,
         providerOptions: this.providerOptions,
+        abortSignal,
         ...observabilityContext,
       },
     );

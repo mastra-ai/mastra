@@ -17,6 +17,7 @@ import {
   preserveResponseItemIdsOnMerge,
 } from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
+import { unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
 import { AIV5Adapter } from './AIV5Adapter';
 
 type AIV6AdapterContext = {
@@ -50,10 +51,6 @@ function getToolNameFromType(type: string): string {
 
 function normalizeToolArgs(input: unknown): Record<string, unknown> {
   return typeof input === 'object' && input !== null && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
-}
-
-function normalizeToolResult(output: unknown): unknown {
-  return typeof output === 'object' && output && 'value' in output ? (output as { value: unknown }).value : output;
 }
 
 function isV6OnlyToolState(
@@ -148,7 +145,7 @@ function createToolInvocationPartFromUIPart(part: AIV6Type.ToolUIPart | AIV6Type
       return createToolInvocationPart({
         ...base,
         state: 'result',
-        result: normalizeToolResult(part.output),
+        result: unwrapLegacyToolOutput(part.output),
       });
 
     case 'output-error':

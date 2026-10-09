@@ -99,7 +99,7 @@ export function DatasetHeader({
               <DropdownMenu.Item onSelect={onDuplicateClick}>
                 <Copy /> Duplicate Dataset
               </DropdownMenu.Item>
-              <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
+              <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
                 <Trash2 /> Delete Dataset
               </DropdownMenu.Item>
             </DropdownMenu.Content>

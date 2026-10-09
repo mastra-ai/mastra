@@ -1407,7 +1407,8 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
    * When the E2B sandbox times out or crashes mid-operation, this method
    * resets sandbox state, restarts it, and retries the operation once.
    *
-   * @internal Used by E2BProcessManager to handle dead sandboxes during spawn.
+   * @internal Used by E2BProcessManager (spawn) and E2BCodeModeTransport (file setup)
+   * to handle dead sandboxes.
    */
   async retryOnDead<T>(fn: () => Promise<T>): Promise<T> {
     try {

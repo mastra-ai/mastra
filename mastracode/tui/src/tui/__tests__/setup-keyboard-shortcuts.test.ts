@@ -38,6 +38,7 @@ vi.mock('@earendil-works/pi-tui', () => ({
   Container: class {},
   Spacer: class {},
   Text: class {},
+  visibleWidth: (s: string) => s.length,
 }));
 
 vi.mock('../components/banner.js', () => ({
@@ -55,6 +56,10 @@ vi.mock('../display.js', () => ({
 
 vi.mock('../status-line.js', () => ({
   updateStatusLine: vi.fn(),
+}));
+
+vi.mock('../model-packs/apply.js', () => ({
+  switchModeWithPack: vi.fn(),
 }));
 
 import { showError, showInfo } from '../display.js';
@@ -119,6 +124,7 @@ function createState(isRunning: boolean) {
       ui: { requestRender: vi.fn(), start: vi.fn(), stop: vi.fn() },
       goalManager: {
         isActive: vi.fn(() => false),
+        getGoal: vi.fn(() => ({ status: 'active' })),
         pause: vi.fn(),
         saveToThread: vi.fn(),
       },
@@ -266,6 +272,24 @@ describe('setupKeyboardShortcuts', () => {
     const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
     expect(commandNames[0]).toBe('new');
     expect(commandNames).toContain('thread');
+    expect(commandNames).not.toContain('fork');
+    expect(commandNames).toContain('resume');
+    expect(commandNames).toContain('rename');
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'name')?.description).toBe(
+      'Rename current thread',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'rename')?.description).toBe(
+      'Alias for /name',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'clone')?.description).toBe(
+      'Clone the current thread',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'threads')?.description).toBe(
+      'Switch between threads',
+    );
+    expect(autocompleteProviders[0]?.commands.find(command => command.name === 'resume')?.description).toBe(
+      'Alias for /threads',
+    );
     expect(commandNames).not.toContain('judge');
     expect(commandNames).not.toContain('notify');
     const goalCommand = autocompleteProviders[0]?.commands.find(command => command.name === 'goal') as
@@ -610,6 +634,64 @@ describe('setupKeyboardShortcuts', () => {
     expect(state.goalManager.saveToThread).toHaveBeenCalledWith(state);
     expect(state.activeGoalJudge).toBeUndefined();
     expect(state.userInitiatedAbort).toBe(true);
+  });
+
+  it('pauses the stored goal when nothing is loaded in memory during goal judge evaluation', async () => {
+    const { state, actions } = createState(true);
+    const updateObjectiveOptions = vi.fn(async () => undefined);
+    const getObjective = vi.fn(async () => ({ status: 'active' }));
+    state.controller.getCurrentAgent.mockReturnValue({ getObjective, updateObjectiveOptions });
+    state.session.thread.getId = vi.fn(() => 'thread-1');
+    state.goalManager.getGoal.mockReturnValue(null);
+    state.activeGoalJudge = {
+      modelId: 'openai/gpt-5.5',
+      abortController: { abort: vi.fn() },
+      component: { setInterrupted: vi.fn() },
+    };
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+    await vi.waitFor(() => expect(updateObjectiveOptions).toHaveBeenCalled());
+
+    expect(state.goalManager.pause).not.toHaveBeenCalled();
+    expect(state.goalManager.saveToThread).not.toHaveBeenCalled();
+    expect(updateObjectiveOptions).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      status: 'paused',
+      pausedReason: 'Judge evaluation was interrupted.',
+    });
+    expect(state.activeGoalJudge).toBeUndefined();
+  });
+
+  it('does not overwrite a stored goal that is no longer active when Esc interrupts the judge', async () => {
+    const { state, actions } = createState(true);
+    const updateObjectiveOptions = vi.fn(async () => undefined);
+    const getObjective = vi.fn(async () => ({ status: 'done' }));
+    state.controller.getCurrentAgent.mockReturnValue({ getObjective, updateObjectiveOptions });
+    state.session.thread.getId = vi.fn(() => 'thread-1');
+    state.goalManager.getGoal.mockReturnValue(null);
+    state.activeGoalJudge = {
+      modelId: 'openai/gpt-5.5',
+      abortController: { abort: vi.fn() },
+      component: { setInterrupted: vi.fn() },
+    };
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+    await vi.waitFor(() => expect(getObjective).toHaveBeenCalledWith({ threadId: 'thread-1' }));
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(updateObjectiveOptions).not.toHaveBeenCalled();
   });
 
   it('aborts and clears an active plan approval parked in a tool suspension', () => {

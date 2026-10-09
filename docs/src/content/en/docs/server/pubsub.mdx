@@ -75,7 +75,7 @@ export const mastra = new Mastra({
 
 ### Distributed deployments
 
-Use a distributed backend when you run more than one instance or host, so every instance receives the same events. This matters whenever a request handled by one instance must reach work running on another.
+Use a distributed backend when you run more than one instance or host, and every instance receives the same events. This matters whenever a request handled by one instance must reach work running on another.
 
 For example, sending a signal to an agent run requires the signal event to cross the process boundary to the instance that owns the run. With the in-process default, that instance never receives the event.
 

@@ -1,5 +1,17 @@
 # @mastra/voice-aws-nova-sonic
 
+## 0.2.3
+
+### Patch Changes
+
+- Generate workspace, integration, channel, and voice identifiers with Web Crypto without changing synchronous APIs. ([#25462](https://github.com/mastra-ai/mastra/pull/25462))
+
+## 0.2.3-alpha.0
+
+### Patch Changes
+
+- Generate workspace, integration, channel, and voice identifiers with Web Crypto without changing synchronous APIs. ([#25462](https://github.com/mastra-ai/mastra/pull/25462))
+
 ## 0.2.2
 
 ### Patch Changes

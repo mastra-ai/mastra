@@ -54,22 +54,54 @@ export type TelegramCommand = string | { command: string; description?: string }
 export const BOTFATHER_DEEP_LINK = 'https://t.me/botfather';
 
 /**
- * Configuration for {@link TelegramProvider}.
- *
- * Telegram has no OAuth and no org-level parent credential: a BotFather bot
- * token *is* the credential (one token per bot). Multi-tenancy is therefore a
- * store of bot tokens — see {@link TelegramInstallation}.
+ * Self-managed credentials: bot tokens are supplied directly (provider default
+ * and/or per-`connect()`) and persisted in the install store. Mutually
+ * exclusive with {@link TelegramDelegatedCredentialsConfig}.
  */
-export interface TelegramProviderConfig {
+export interface TelegramSelfManagedCredentialsConfig {
   /**
    * BotFather bot token to use as the default for {@link TelegramProvider.connect}
    * when the caller does not supply one per-agent. Setting this here matches the
    * shape of {@link SlackProvider} / {@link DiscordProvider} and lets the token
-   * live on a Mastra Connect credential (or another vault) instead of on every
-   * `connect()` call site. When both are set, an explicit
-   * {@link TelegramConnectOptions.botToken} wins.
+   * live in one place instead of on every `connect()` call site. When both are
+   * set, an explicit {@link TelegramConnectOptions.botToken} wins.
    */
   botToken?: string;
+
+  tokenResolver?: never;
+}
+
+/**
+ * Delegated credentials: an external credential manager (e.g. the Mastra
+ * platform) owns the bot token. The provider never persists the token — it
+ * asks the resolver for the current token before each Bot API call, so a
+ * token re-pasted or rotated upstream takes effect without a restart.
+ *
+ * The resolver is the single source of truth: a direct `botToken` (config,
+ * `configure()`, or per-`connect()`) cannot be combined with it.
+ */
+export interface TelegramDelegatedCredentialsConfig {
+  /** Resolve the current BotFather bot token on demand. */
+  tokenResolver: () => Promise<string>;
+  botToken?: never;
+}
+
+/**
+ * How the provider obtains bot tokens: either directly (`botToken`,
+ * self-managed) or via a `tokenResolver` (externally managed) — never both.
+ */
+export type TelegramCredentialsConfig = TelegramSelfManagedCredentialsConfig | TelegramDelegatedCredentialsConfig;
+
+/**
+ * Configuration for {@link TelegramProvider}.
+ *
+ * Telegram has no OAuth and no org-level parent credential: a BotFather bot
+ * token *is* the credential (one token per bot). Multi-tenancy is therefore a
+ * store of bot tokens — see {@link TelegramInstallation}. Credentials are
+ * either self-managed (`botToken`) or delegated (`tokenResolver`), never both
+ * — see {@link TelegramCredentialsConfig}.
+ */
+export interface TelegramProviderConfigBase {
   /**
    * Public HTTPS base URL used to register per-bot webhooks (`setWebhook`).
    * May be omitted and auto-detected from the Mastra server config, or set later.
@@ -201,6 +233,9 @@ export interface TelegramProviderConfig {
   onInstall?: (installation: TelegramInstallation) => void | Promise<void>;
 }
 
+/** See {@link TelegramProviderConfigBase} and {@link TelegramCredentialsConfig}. */
+export type TelegramProviderConfig = TelegramProviderConfigBase & TelegramCredentialsConfig;
+
 /** Options accepted by {@link TelegramProvider.connect}. */
 export interface TelegramConnectOptions {
   /**
@@ -235,8 +270,19 @@ export interface TelegramInstallation {
   webhookId: string;
   /** Whether a bot token has been ingested and validated. */
   status: 'active' | 'pending';
-  /** BotFather bot token — the full credential. Present once ingested. */
+  /**
+   * BotFather bot token — the full credential. Present once ingested in
+   * self-managed mode. Absent in delegated mode (`tokenResolver`), where the
+   * external credential manager is the single source of truth and the token
+   * is never persisted locally.
+   */
   botToken?: string;
+  /**
+   * Telegram user id of the bot (from `getMe`). Used to detect two agents
+   * connecting the same bot when the token itself is not stored (delegated
+   * mode).
+   */
+  botUserId?: number;
   /**
    * Per-bot webhook shared secret, echoed by Telegram as the
    * `X-Telegram-Bot-Api-Secret-Token` header on every inbound POST.

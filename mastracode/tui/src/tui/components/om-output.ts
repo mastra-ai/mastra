@@ -1,14 +1,15 @@
 /**
- * TUI component for rendering OM observation/reflection output in a bordered box.
+ * TUI component for rendering OM observation/reflection output as a tool-style block.
  * Uses observer (amber) color for observations and reflector (red) color for reflections.
  * Collapsed to COLLAPSED_LINES by default, expandable with ctrl+e.
- * Includes marker info (emoji, compression stats) in the footer.
+ * The title row carries the compression stats; the observations sit on a panel below.
  */
 
 import { Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
+import { TOOL_DOT, toolBlock } from './surface.js';
 import { WidthAwareContainer } from './width-aware-container.js';
 
 // Read from proxy at render time so they pick up contrast adaptation
@@ -20,39 +21,6 @@ function formatTokens(tokens: number): string {
   if (tokens === 0) return '0';
   const k = tokens / 1000;
   return k % 1 === 0 ? `${k}k` : `${k.toFixed(1)}k`;
-}
-
-/** Truncate a string with ANSI codes to a visible width */
-function truncateAnsi(str: string, maxWidth: number): string {
-  const ansiRegex = /\x1b\[[0-9;]{0,32}m/g;
-  let visibleLength = 0;
-  let result = '';
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = ansiRegex.exec(str)) !== null) {
-    const textBefore = str.slice(lastIndex, match.index);
-    for (const char of textBefore) {
-      if (visibleLength >= maxWidth) break;
-      result += char;
-      visibleLength++;
-    }
-    if (visibleLength >= maxWidth) break;
-    result += match[0];
-    lastIndex = match.index + match[0].length;
-  }
-
-  const remaining = str.slice(lastIndex);
-  for (const char of remaining) {
-    if (visibleLength >= maxWidth) break;
-    result += char;
-    visibleLength++;
-  }
-
-  if (visibleLength >= maxWidth) {
-    result += '\x1b[0m';
-  }
-  return result;
 }
 
 /**
@@ -126,22 +94,18 @@ export class OMOutputComponent extends WidthAwareContainer {
 
     const isReflection = this.data.type === 'reflection';
     const color = isReflection ? getReflectorColor() : getObserverColor();
-    const border = (char: string) => chalk.bold.hex(color)(char);
-
-    const maxLineWidth = termWidth - 6 - BOX_INDENT * 2; // "│ " prefix + buffer + indent
+    const width = Math.max(1, termWidth - BOX_INDENT * 2);
+    const maxLineWidth = width - 4; // panel indent + buffer
     // Soft-wrap all original lines to terminal width
     const originalLines = this.data.observations.split('\n');
     const { groups, flat: wrappedLines } = softWrapLines(originalLines, maxLineWidth);
     const originalLineCount = originalLines.length;
     const wrappedLineCount = wrappedLines.length;
 
-    // Build footer text with marker info (emoji + compression stats)
+    // Title with compression stats
     const footerText = this.buildFooterText(color);
 
-    // Top border
-    this.addChild(new Text(border('╭──'), BOX_INDENT, 0));
-
-    // Content lines with left border
+    // Content lines, shown on the panel under the title
     let truncated = false;
     const borderedLines: string[] = [];
     if (!this.expanded && wrappedLineCount > COLLAPSED_LINES + 1) {
@@ -170,60 +134,47 @@ export class OMOutputComponent extends WidthAwareContainer {
 
       if (truncated) {
         for (const line of headLines) {
-          borderedLines.push(border('│') + ' ' + chalk.hex(mastra.specialGray)(line));
+          borderedLines.push(chalk.hex(mastra.specialGray)(line));
         }
-        borderedLines.push(
-          border('│') + ' ' + chalk.hex(mastra.mainGray)(`... ${originalLineCount} lines total (ctrl+e to expand)`),
-        );
+        borderedLines.push(chalk.hex(mastra.mainGray)(`... ${originalLineCount} lines total (ctrl+e to expand)`));
         for (const line of tailLines) {
-          borderedLines.push(border('│') + ' ' + chalk.hex(mastra.specialGray)(line));
+          borderedLines.push(chalk.hex(mastra.specialGray)(line));
         }
       } else {
         // Edge case: all groups fit when snapped to boundaries
         for (const line of wrappedLines) {
-          borderedLines.push(border('│') + ' ' + chalk.hex(mastra.specialGray)(line));
+          borderedLines.push(chalk.hex(mastra.specialGray)(line));
         }
       }
     } else {
       for (const line of wrappedLines) {
-        borderedLines.push(border('│') + ' ' + chalk.hex(mastra.specialGray)(line));
+        borderedLines.push(chalk.hex(mastra.specialGray)(line));
       }
-    }
-
-    const displayOutput = borderedLines.join('\n');
-    if (displayOutput.trim()) {
-      this.addChild(new Text(displayOutput, BOX_INDENT, 0));
     }
 
     // Current task / suggested response sections
     if (this.data.currentTask && (this.expanded || !truncated)) {
-      const taskLine =
-        border('│') +
-        ' ' +
-        chalk.hex(color).bold('Current task: ') +
-        chalk.hex(mastra.specialGray)(this.data.currentTask);
-      this.addChild(new Text(truncateAnsi(taskLine, termWidth - 2 - BOX_INDENT * 2), BOX_INDENT, 0));
+      borderedLines.push(
+        chalk.hex(color).bold('Current task: ') + chalk.hex(mastra.specialGray)(this.data.currentTask),
+      );
     }
 
     if (this.data.suggestedResponse && (this.expanded || !truncated)) {
-      const sugLine =
-        border('│') +
-        ' ' +
-        chalk.hex(color).bold('Suggested response: ') +
-        chalk.hex(mastra.specialGray)(this.data.suggestedResponse);
-      this.addChild(new Text(truncateAnsi(sugLine, termWidth - 2 - BOX_INDENT * 2), BOX_INDENT, 0));
+      borderedLines.push(
+        chalk.hex(color).bold('Suggested response: ') + chalk.hex(mastra.specialGray)(this.data.suggestedResponse),
+      );
     }
 
-    // Bottom border with footer
-    this.addChild(new Text(`${border('╰──')} ${footerText}`, BOX_INDENT, 0));
+    // "● Observed: …" title in the observer / reflector color, the observations on a panel below
+    const output = borderedLines.some(line => line.trim()) ? borderedLines : [];
+    this.addChild(new Text(toolBlock(chalk.hex(color)(TOOL_DOT), footerText, output, width).join('\n'), BOX_INDENT, 0));
   }
 
   private buildFooterText(color: string): string {
     const isReflection = this.data.type === 'reflection';
-    const emoji = '🧠';
 
     if (isReflection) {
-      // Reflection: "🧠 Reflected: Xk → Yk tokens (Zx compression) in Ns ✓"
+      // Reflection: "Reflected: Xk → Yk tokens (Zx compression) in Ns"
       const observed = formatTokens(this.data.tokensObserved ?? 0);
       const compressed = formatTokens(this.data.compressedTokens ?? this.data.observationTokens ?? 0);
       const ratio =
@@ -232,9 +183,9 @@ export class OMOutputComponent extends WidthAwareContainer {
           : '';
       const durationStr = this.data.durationMs ? ` in ${(this.data.durationMs / 1000).toFixed(1)}s` : '';
       const ratioStr = ratio ? ` (${ratio} compression)` : '';
-      return `${emoji} ${chalk.hex(color)(`Reflected: ${observed} → ${compressed} tokens${ratioStr}${durationStr}`)} ${chalk.hex(mastra.green)('✓')}`;
+      return `${chalk.hex(color)(`Reflected: ${observed} → ${compressed} tokens${ratioStr}${durationStr}`)}`;
     } else {
-      // Observation: "🧠 Observed: Xk → Yk tokens (Zx compression) in Ns ✓"
+      // Observation: "Observed: Xk → Yk tokens (Zx compression) in Ns"
       const observed = formatTokens(this.data.tokensObserved ?? 0);
       const compressed = formatTokens(this.data.observationTokens ?? 0);
       const ratio =
@@ -243,7 +194,7 @@ export class OMOutputComponent extends WidthAwareContainer {
           : '';
       const durationStr = this.data.durationMs ? ` in ${(this.data.durationMs / 1000).toFixed(1)}s` : '';
       const ratioStr = ratio ? ` (${ratio} compression)` : '';
-      return `${emoji} ${chalk.hex(color)(`Observed: ${observed} → ${compressed} tokens${ratioStr}${durationStr}`)} ${chalk.hex(mastra.green)('✓')}`;
+      return `${chalk.hex(color)(`Observed: ${observed} → ${compressed} tokens${ratioStr}${durationStr}`)}`;
     }
   }
 

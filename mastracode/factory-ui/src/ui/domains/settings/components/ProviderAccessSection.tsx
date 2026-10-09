@@ -1,11 +1,10 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Input } from '@mastra/playground-ui/components/Input';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Search } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../api/types';
@@ -72,7 +71,7 @@ function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope:
   const own = credentialAt(provider, rowScope.scope);
   if (own) {
     return (
-      <Badge size="sm" variant="green">
+      <Badge size="sm" variant="success">
         {CREDENTIAL_LABEL[own]}
       </Badge>
     );
@@ -81,6 +80,13 @@ function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope:
     return (
       <Badge size="sm" variant="blue">
         Covered by org
+      </Badge>
+    );
+  }
+  if (provider.source === 'deployment') {
+    return (
+      <Badge size="sm" variant="blue">
+        From deployment
       </Badge>
     );
   }
@@ -101,9 +107,11 @@ function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope:
 export function ProviderAccessSection({
   description,
   fixedScope,
+  showOrgCoverage = fixedScope === undefined,
 }: {
   description?: string;
   fixedScope?: CredentialScope;
+  showOrgCoverage?: boolean;
 }) {
   const providersQuery = useProvidersQuery();
   const authQuery = useFactoryAuth();
@@ -120,16 +128,20 @@ export function ProviderAccessSection({
   const providers = providersQuery.data ?? [];
   const authEnabled = authQuery.data?.authEnabled === true;
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
+  const pinnedScope: CredentialScope | undefined = fixedScope === 'org' && !authEnabled ? 'user' : fixedScope;
   const fixedSettingsScope: SettingsScope | undefined =
-    fixedScope === 'org' ? 'org' : fixedScope ? 'personal' : undefined;
+    pinnedScope === 'org' ? 'org' : pinnedScope ? 'personal' : undefined;
   const scopeOptions: SettingsScope[] = fixedSettingsScope
     ? [fixedSettingsScope]
     : authEnabled
       ? ['personal', 'org']
       : ['personal'];
   const scopeControl = useScopeControl(scopeOptions, canWriteOrgKey ? undefined : { org: ORG_SCOPE_MEMBER_REASON });
-  const scope: CredentialScope = fixedScope ?? (scopeControl.shown === 'org' ? 'org' : 'user');
-  const rowScope: RowScope = { scope, authEnabled, showOrgCoverage: fixedScope === undefined };
+  const scope: CredentialScope = pinnedScope ?? (scopeControl.shown === 'org' ? 'org' : 'user');
+  const orgScopeUnresolved = fixedScope === 'org' && authQuery.isPending;
+  const readOnly = authEnabled && scope === 'org' && !canWriteOrgKey;
+  const actionsDisabled = orgScopeUnresolved || readOnly;
+  const rowScope: RowScope = { scope, authEnabled, showOrgCoverage };
   const scopeArg = authEnabled ? { scope } : {};
 
   const oauthProviders = providers
@@ -208,8 +220,13 @@ export function ProviderAccessSection({
         }
       >
         <div className="flex flex-col gap-3">
+          {readOnly && (
+            <Txt as="p" variant="caption">
+              {ORG_SCOPE_MEMBER_REASON}
+            </Txt>
+          )}
           {error && (
-            <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+            <Txt as="p" variant="caption" className="text-destructive-foreground">
               {error}
             </Txt>
           )}
@@ -222,7 +239,7 @@ export function ProviderAccessSection({
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : oauthProviders.length === 0 ? (
-                  <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
+                  <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
                     No providers support sign in.
                   </Txt>
                 ) : (
@@ -243,7 +260,7 @@ export function ProviderAccessSection({
                                   ? `Sign out of ${displayName} for the org`
                                   : `Sign out of ${displayName}`
                               }
-                              disabled={isSigningOut(provider)}
+                              disabled={actionsDisabled || isSigningOut(provider)}
                               onClick={() => signOut(provider)}
                             >
                               {isSigningOut(provider) ? 'Signing out…' : 'Sign out'}
@@ -253,7 +270,7 @@ export function ProviderAccessSection({
                               variant={covered ? 'default' : 'primary'}
                               size="sm"
                               aria-label={`Sign in to ${displayName}`}
-                              disabled={startOAuthMutation.isPending}
+                              disabled={actionsDisabled || startOAuthMutation.isPending}
                               onClick={() => void startOAuth(provider)}
                             >
                               {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}
@@ -269,20 +286,12 @@ export function ProviderAccessSection({
           </TabContent>
 
           <TabContent value="api-key" className="flex flex-col gap-3">
-            <div className="relative">
-              <Search
-                size={14}
-                className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 -translate-y-1/2"
-              />
-              <Input
-                type="text"
-                placeholder="Search providers to add an API key…"
-                value={search}
-                onChange={event => setSearch(event.target.value)}
-                aria-label="Search providers"
-                className="pl-8"
-              />
-            </div>
+            <SearchInput
+              label="Search providers"
+              placeholder="Search providers to add an API key…"
+              value={search}
+              onValueChange={setSearch}
+            />
 
             <ScopeSwap control={scopeControl}>
               <SettingsContainer className="max-h-[280px] overflow-y-auto">
@@ -291,7 +300,7 @@ export function ProviderAccessSection({
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : results.length === 0 ? (
-                  <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
+                  <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
                     {query ? `No providers match “${search.trim()}”.` : 'No API key providers are available.'}
                   </Txt>
                 ) : (
@@ -302,19 +311,21 @@ export function ProviderAccessSection({
                       <SettingsRow key={provider.provider} label={displayName}>
                         <span className="flex items-center gap-2">
                           <StatusBadge provider={provider} rowScope={rowScope} />
-                          <Button
-                            size="sm"
-                            aria-label={`${storedKey ? 'Update key' : 'Add API key'} for ${displayName}`}
-                            disabled={isRemoving(provider)}
-                            onClick={() => setKeyDialogProvider(provider)}
-                          >
-                            {storedKey ? 'Update key' : 'Add API key'}
-                          </Button>
+                          {provider.source !== 'deployment' && (
+                            <Button
+                              size="sm"
+                              aria-label={`${storedKey ? 'Update key' : 'Add API key'} for ${displayName}`}
+                              disabled={actionsDisabled || isRemoving(provider)}
+                              onClick={() => setKeyDialogProvider(provider)}
+                            >
+                              {storedKey ? 'Update key' : 'Add API key'}
+                            </Button>
+                          )}
                           {storedKey && (
                             <Button
                               size="sm"
                               aria-label={`Remove key for ${displayName}`}
-                              disabled={isRemoving(provider)}
+                              disabled={actionsDisabled || isRemoving(provider)}
                               onClick={() => removeKey(provider)}
                             >
                               {isRemoving(provider) ? 'Removing…' : 'Remove'}

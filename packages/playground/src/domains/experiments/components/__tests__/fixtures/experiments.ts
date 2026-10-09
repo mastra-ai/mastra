@@ -18,6 +18,7 @@ const base: DatasetExperiment = {
   totalItems: 10,
   succeededCount: 10,
   failedCount: 0,
+  skippedCount: 0,
   startedAt: '2026-07-01T10:00:00.000Z',
   completedAt: '2026-07-01T10:05:00.000Z',
   createdAt: '2026-07-01T10:00:00.000Z',

@@ -78,14 +78,14 @@ function TokenRow({
       <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
         <div className="flex min-w-0 flex-col">
           <div className="flex items-center gap-2">
-            <Txt variant="body" className="text-foreground">
+            <Txt tone="ink" variant="body">
               {title}
             </Txt>
-            <Badge size="sm" variant={configured ? 'green' : 'neutral'}>
+            <Badge size="sm" variant={configured ? 'success' : 'neutral'}>
               {configured ? 'Configured' : 'Not set'}
             </Badge>
           </div>
-          <Txt variant="caption" className="text-muted-foreground">
+          <Txt tone="muted" variant="caption">
             {description}
           </Txt>
         </div>
@@ -145,7 +145,7 @@ function TokenRow({
       )}
 
       {error && (
-        <Txt as="p" variant="caption" className="text-notice-destructive-fg">
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}
         </Txt>
       )}

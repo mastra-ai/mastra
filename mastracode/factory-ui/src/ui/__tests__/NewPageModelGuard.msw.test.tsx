@@ -119,7 +119,7 @@ describe('NewPage credential guard', () => {
     expect(screen.getByText(/ask an org admin to share an org-wide key/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/models',
+      '/factories/fp-1/settings/personal-models',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
   });

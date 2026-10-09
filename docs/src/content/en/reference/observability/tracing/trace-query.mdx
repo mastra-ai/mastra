@@ -1,6 +1,6 @@
 ---
 title: 'Advanced trace queries'
-description: 'Query completed traces and thread identities with recursive predicates, numbered pages, keyset cursors, and delta polling.'
+description: 'Query completed traces, thread identities, and spans with recursive predicates, numbered pages, keyset cursors, and delta polling.'
 packages:
   - '@mastra/client-js'
   - '@mastra/server'
@@ -10,13 +10,124 @@ packages:
 
 Use `queryTraces()` or `POST /api/observability/traces/query` to find completed logical traces that match trace fields and related span, score, or feedback records. Use `queryTraceThreads()` or `POST /api/observability/threads/query` to find thread identities that qualify across multiple eligible traces.
 
-Both endpoints use the same authentication as other observability routes and require the `observability:read` permission. The configured observability store must support the requested trace-query or thread-query operation.
+Use `querySpans()` or `POST /api/observability/spans/query` to list the individual completed spans that match a span predicate.
+
+All three endpoints use the same authentication as other observability routes and require the `observability:read` permission. The configured observability store must support the requested trace-query, thread-query, or span-query operation.
 
 :::warning[Thread grouping is deprecated]
 
 The `group` option remains supported until the next major release. Use [`queryTraceThreads()`](/reference/client-js/observability) to retrieve matching thread identities in new code.
 
 :::
+
+## Query individual spans
+
+`querySpans()` returns one row per matching completed span across traces, including matching child spans. Use it to list the spans themselves, for example every failed tool call in the last day.
+
+`queryTraces()` with a `spans.some` predicate answers a different question. It returns the traces that contain at least one matching span, and it doesn't identify which spans matched. Both use the same span fields and operators.
+
+```typescript
+const timeRange = {
+  from: '2026-10-01T00:00:00.000Z',
+  to: '2026-10-02T00:00:00.000Z',
+}
+const where = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+    { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+  ],
+} as const
+
+const firstPage = await mastraClient.querySpans({
+  timeRange,
+  where,
+  orderBy: [{ field: 'startedAt', direction: 'desc' }],
+  page: { limit: 50 },
+})
+
+if (firstPage.page.next) {
+  const secondPage = await mastraClient.querySpans({
+    timeRange,
+    where,
+    orderBy: [{ field: 'startedAt', direction: 'desc' }],
+    page: { limit: 50, after: firstPage.page.next },
+  })
+}
+```
+
+The HTTP route accepts the same body:
+
+```bash
+curl --request POST \
+  --url http://localhost:4111/api/observability/spans/query \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "timeRange": {
+      "from": "2026-10-01T00:00:00.000Z",
+      "to": "2026-10-02T00:00:00.000Z"
+    },
+    "where": { "op": "eq", "left": { "path": "spanType" }, "right": { "literal": "tool_call" } },
+    "page": { "limit": 50 }
+  }'
+```
+
+Span queries are optional for observability stores. Call `mastraClient.getObservabilityCapabilities()` and check `capabilities.spanQuery` before showing a span list. Treat a missing `spanQuery` value as unsupported, because older servers don't report it. A server whose store or `@mastra/core` version doesn't support span queries returns `501` with code `SPAN_QUERY_UNSUPPORTED`.
+
+The other statuses match trace queries: `400` for malformed JSON or a malformed cursor, `409` for a cursor that doesn't match the query, `413` for a body over 256 KiB, `422` with code `TRACE_QUERY_INVALID` and structured `issues` for an invalid query, `503` with code `TRACE_QUERY_RESOURCE_LIMIT` when a page exceeds a resource limit, and `504` with code `TRACE_QUERY_EXECUTION_TIMEOUT` when the database deadline is exceeded.
+
+The server applies [trusted tenant scope](#trusted-tenant-scope) to span queries the same way it does for trace queries. A cursor created under one scope and reused under another returns `409`.
+
+### Query individual spans through storage
+
+The observability domain in DuckDB and the PostgreSQL and ClickHouse v-next stores supports `querySpans(plan)`. Check `storage.getFeatures()?.includes('span-query')` before using this optional storage method.
+
+Build the plan in trusted backend code:
+
+```typescript
+import { planSpanQuery } from '@mastra/core/storage'
+
+const storage = await mastra.getStorage()?.getStore('observability')
+if (!storage?.getFeatures()?.includes('span-query')) {
+  throw new Error('This store does not support span queries')
+}
+
+const plan = planSpanQuery({
+  timeRange: {
+    from: '2026-10-01T00:00:00.000Z',
+    to: '2026-10-02T00:00:00.000Z',
+  },
+  where: {
+    op: 'eq',
+    left: { path: 'spanType' },
+    right: { literal: 'tool_call' },
+  },
+  page: { limit: 50 },
+})
+
+const { spans, page } = await storage.querySpans(plan)
+```
+
+This example uses local, unscoped storage. For a shared database, pass `{ scope: { organizationId, resourceId } }` as the second argument to `planSpanQuery()`, using identifiers resolved by your backend's authorization. The request body can't supply trusted scope. Apply the same authorization when loading full span details with `getSpan({ traceId, spanId })`.
+
+Span queries use the scalar fields and operators available inside `queryTraces()`'s `spans.some` predicate. They don't accept related-record clauses. Nested attributes require support in the shared predicate contract and each store.
+
+The `timeRange` applies to each span's `startedAt`, includes `from`, excludes `to`, and can cover at most 31 days. Sort by `startedAt` or `endedAt`, in either direction. The default is `startedAt` descending. A page contains up to 1,000 rows, with a default of 100. Pass `page.next` back as `page.after` with the same filters, time range, scope, and ordering. Cursors use scope and span identifiers to break timestamp ties. They aren't a snapshot across requests. New completions can appear when the view is refreshed.
+
+Each row contains span and trace identifiers, display fields, duration, status, and input/output previews of at most 256 Unicode characters. Truncation flags indicate when a preview is incomplete. Stores select the page before loading previews and cost. Full payloads remain available through the existing span detail method.
+
+The `cost` field describes only that span's model-token cost:
+
+- `available` includes `amount` and `currency`. Zero is a valid amount.
+- `missing` means no matching model metrics were found.
+- `unavailable` means metrics exist but a complete, unambiguous cost can't be established.
+
+Directional token totals supply the cost. Overlapping detail metrics aren't added again. A provider-supplied `query_total` cost is counted once. Partial pricing, conflicting currencies, and ambiguous totals produce `unavailable`.
+
+Current-record selection runs before mutable filters. PostgreSQL and ClickHouse select the greatest completed `endedAt`. PostgreSQL breaks ties with its ingestion cursor. DuckDB reconstructs the earliest start event and selects the latest ingested completed event, matching its existing span-predicate behavior. Time bounds are checked again after reconstruction. ClickHouse uses its existing completion-only, insert-only model, where equal-version retries must contain identical records. Querying spans doesn't add a table or materialized view.
+
+Queries have a 15-second default execution deadline. PostgreSQL and ClickHouse use their existing `traceQuery.timeoutMs` setting. ClickHouse also caps each query at 512 MiB. A page with more than 50,000 matching model metrics fails with a resource-limit error instead of returning partial cost. A small page size limits returned rows, but doesn't limit the number of records the database must examine.
 
 ## Query traces with the client SDK
 
@@ -293,11 +404,12 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 
 | Predicate context | Fields | Operators |
 | - | - | - |
-| Trace | `traceId`, `threadId`, `resourceId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace | `traceId`, `threadId`, `resourceId`, `runId`, `sessionId`, `userId`, `organizationId`, `entityName`, `entityType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Trace | `tags` | `includes`, `notIncludes`, `exists`, `notExists` |
-| Span | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Span | `name` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists`, `matches`, `notMatches` |
+| Span | `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId`, `runId`, `sessionId`, `userId`, `organizationId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Span | `startedAt`, `endedAt`, `durationMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `error` | `exists`, `notExists` |
 | Score | `scorerId`, `scorerVersion`, `scoreSource`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
@@ -305,11 +417,11 @@ Hono and Fastify enforce the request-body limit before JSON parsing. Express and
 | Score | `spanId` | `exists`, `notExists` |
 | Feedback | `feedbackType`, `feedbackSource`, `feedbackUserId`, `sourceId`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Feedback | `value`, `timestamp` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
-| Feedback | `comment` | `exists`, `notExists` |
+| Feedback | `comment` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists`, `matches`, `notMatches` |
 
-Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`. Tag predicates name the stored tag collection in `path`. `includes` and `notIncludes` also take one tag in `value`, while `exists` and `notExists` take only `op` and `path`. See [Filter by tags](#filter-by-tags).
+Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`. Tag predicates name the stored tag collection in `path`. `includes` and `notIncludes` also take one tag in `value`, while `exists` and `notExists` take only `op` and `path`. See [Filter by tags](#filter-by-tags). Text predicates use the comparison shape with a string literal. See [Filter by text](#filter-by-text).
 
-String comparisons are case-sensitive, and literals are never coerced. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Numeric predicates, including `score` and `durationMs`, require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
+String comparisons are case-sensitive, and literals are never coerced. `matches` and `notMatches` are the exception: they compare words case-insensitively. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Numeric predicates, including `score` and `durationMs`, require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
 
 ### Filter by root duration
 
@@ -326,6 +438,27 @@ const slowRootTraces = {
 This top-level predicate doesn't inspect child spans. In contrast, `spans.some` with a `durationMs` predicate examines the current root span and current child spans, so a long child can satisfy that clause even when its root is shorter.
 
 Trace queries exclude incomplete roots before evaluating predicates. As a result, `{ op: 'notExists', path: 'durationMs' }` doesn't find running traces or malformed roots without a usable `endedAt`.
+
+### Filter by context identifiers
+
+`runId`, `sessionId`, `userId`, and `organizationId` are available at trace scope and inside `spans.some` / `spans.none`. Trace-scope predicates read the current root span. Span-scope predicates bind to one related current span, so a run recorded only on a child span is found through `spans.some`:
+
+```typescript
+const sessionTracesWithRun = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-123' } },
+    { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
+    {
+      spans: {
+        some: { op: 'eq', left: { path: 'runId' }, right: { literal: 'run-42' } },
+      },
+    },
+  ],
+}
+```
+
+These identifiers support `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`. Field discovery lists them, but value discovery doesn't return their recorded values. Stores advertise support through the `trace-query-context-ids` feature. A predicate on one of these fields against an older store returns `501` before storage runs, and field discovery omits them for that store.
 
 ### Filter by span properties
 
@@ -507,6 +640,31 @@ Tags compare exactly and case-sensitively as whole strings. `value` must be one 
 
 `tags` is available in trace predicates only, including those inside `traces.some` or `traces.none`. `in`, `notIn`, and the comparison operators are rejected for `tags`. Value discovery for `tags` returns each observed tag with the number of qualifying traces that carry it.
 
+### Filter by text
+
+Human-written text fields support word matching in addition to exact comparison. `matches` succeeds when the literal's words appear in the field, in order, as whole words. `notMatches` succeeds when the field exists but doesn't contain those words. This query finds traces whose current feedback mentions an incorrect dosage:
+
+```typescript
+const incorrectDosage = {
+  feedback: {
+    some: {
+      op: 'matches',
+      left: { path: 'comment' },
+      right: { literal: 'incorrect dosage' },
+    },
+  },
+}
+```
+
+Both the literal and the stored value are lowercased and split into words. A word is a run of letters, digits, and combining marks, so any other character, such as punctuation, spaces, or `_`, separates words. `incorrect` matches `This answer is incorrect.` but not `This was incorrectly formatted.`, and `gpt 5` matches `llm: 'gpt-5'`. A literal with several words must appear as a contiguous phrase in that order. Letters keep their accents: `café` doesn't match `cafe`. Text is composed to Unicode NFC first, so `café` matches whether the accent is stored as part of the letter or as a separate mark, and marks stay inside their word, so `नमस` doesn't match `नमस्ते`. The Turkish `İ` folds to `i`, and a Greek final `ς` equals `σ`. PostgreSQL lowercases letters according to the database locale, so a database created with the `C` locale doesn't fold the case of letters outside ASCII. Use a UTF-8 locale such as `en_US.UTF-8` for consistent results.
+
+| Operator | Matches when |
+| - | - |
+| `matches` | The field contains the literal's words as a contiguous whole-word phrase |
+| `notMatches` | The field is present and doesn't contain that phrase |
+
+The literal must contain at least one letter or digit; otherwise the request fails with `422 TRACE_QUERY_INVALID`. A missing field satisfies neither operator. Use `{ op: 'not', arg: { op: 'matches', ... } }` when records without the field should also match. Text operators are available on span `name` and feedback `comment`. Other string fields, numbers, timestamps, tags, and metadata reject them. Substring, wildcard, regular-expression, and fuzzy matching aren't supported, and there is no search across several fields.
+
 ### Filter by feedback
 
 Every condition inside one `feedback.some` or `feedback.none` clause applies to the same current feedback record. `feedbackType` and `feedbackSource` are exact application-defined strings rather than built-in enums. This query finds traces with a numeric patient rating below zero:
@@ -544,7 +702,7 @@ const missingClinicianReview = {
 }
 ```
 
-Feedback `timestamp` predicates are independent of the root `timeRange`. Use `comment` only with `exists` or `notExists`. Comment contents aren't searchable. The deprecated feedback fields `source` and `userId` aren't available. Use `feedbackSource` and `feedbackUserId`.
+Feedback `timestamp` predicates are independent of the root `timeRange`. `comment` supports exact string operators and word matching with `matches` and `notMatches`. See [Filter by text](#filter-by-text). The deprecated feedback fields `source` and `userId` aren't available. Use `feedbackSource` and `feedbackUserId`.
 
 ## Responses
 
@@ -687,7 +845,7 @@ const plan = planTraceQuery(parseTraceQueryRequest(request), {
 })
 ```
 
-`resourceId` is optional and narrows within the organization. Keyset and delta cursors are bound to the scope, so a cursor minted under one scope and reused under another returns `409` before storage runs. A scoped request against an observability store or `@mastra/core` that predates tenant scope returns `501` instead of running unscoped. Stores advertise support through the `trace-query-tenant-scope` feature. Callers can't name `organizationId` or `projectId` in predicates. Without a scope the routes behave as before, so self-hosted installations keep their own tenant model.
+`resourceId` is optional and narrows within the organization. Keyset and delta cursors are bound to the scope. A cursor created under one scope and reused under another returns `409` before storage runs. A scoped request against an observability store or `@mastra/core` that predates tenant scope returns `501` instead of running unscoped. Stores advertise support through the `trace-query-tenant-scope` feature. Callers can't name `projectId` in predicates. An `organizationId` predicate compares recorded data and is ANDed with the scope, so it can only narrow the tenant's own traces and never widens it. Without a scope the routes behave as before, so self-hosted installations keep their own tenant model.
 
 Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
 
@@ -705,7 +863,7 @@ PostgreSQL and ClickHouse stop advanced trace and thread queries after 15 second
 
 ## Limitations
 
-Both operations consider completed traces only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, measures, or custom grouping. Numbered trace pages include a total count.
+Trace and thread queries consider completed traces only, and span queries consider completed spans only. They don't support running traces, custom projections, embedded evidence, summaries, aggregations, measures, or custom grouping. Numbered trace pages include a total count.
 
 ## Related
 

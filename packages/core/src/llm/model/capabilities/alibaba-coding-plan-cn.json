@@ -1,5 +1,5 @@
 {
-  "attachment": ["kimi-k2.5", "qwen3.6-flash", "qwen3.7-plus"],
+  "attachment": ["kimi-k2.5", "qwen3.7-plus"],
   "temperature": [
     "MiniMax-M2.5",
     "glm-4.7",
@@ -9,10 +9,40 @@
     "qwen3-coder-plus",
     "qwen3-max-2026-01-23",
     "qwen3.5-plus",
-    "qwen3.6-flash",
     "qwen3.6-plus",
-    "qwen3.7-max",
     "qwen3.7-plus"
   ],
-  "structuredOutput": ["qwen3-coder-next", "qwen3.6-flash"]
+  "structuredOutput": ["qwen3-coder-next"],
+  "reasoning": {
+    "qwen3.5-plus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.6-plus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.7-plus": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
 }

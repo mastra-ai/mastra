@@ -478,6 +478,13 @@ Sixth line ends the document`;
     expect(rangeNoLower).toEqual({ start: 2, end: 2 });
   });
 
+  it('should not lowercase query terms when a custom tokenizer is provided', () => {
+    const content = 'Introduction\nPython examples\npython alternatives';
+    const tokenizer = (text: string) => text.split(/\s+/).filter(Boolean);
+    expect(findLineRange(content, ['Python'], { tokenizer })).toEqual({ start: 2, end: 2 });
+    expect(findLineRange(content, ['python'], { tokenizer })).toEqual({ start: 3, end: 3 });
+  });
+
   it('should handle empty content', () => {
     const range = findLineRange('', ['test']);
     expect(range).toBeUndefined();

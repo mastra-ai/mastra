@@ -11,6 +11,7 @@ import type {
   ProcessorPipelineAttributes,
   UsageStats,
 } from '@mastra/core/observability';
+import { generateSignalId } from '../ids';
 import { resolveModelId } from '../model-id';
 import { estimateCosts } from './estimator';
 import { TokenMetrics } from './types';
@@ -60,9 +61,10 @@ export function emitTokenMetricsForUsage(
   usage: UsageStats,
   provider: string | undefined,
   model: string | undefined,
+  usageIncomplete: boolean | undefined,
   metrics: MetricsContext,
 ): void {
-  emitUsageMetrics({ provider, model } as ModelGenerationAttributes, usage, metrics);
+  emitUsageMetrics({ provider, model, usageIncomplete } as ModelGenerationAttributes, usage, metrics);
 }
 
 /** Emit all auto-extracted metrics for a live span end. */
@@ -110,14 +112,14 @@ function emitUsageMetrics(
     }
   }
 
+  const labels = attrs.usageIncomplete ? { usageIncomplete: 'true' } : undefined;
+  // One id per usage observation, shared by all of its token/cost rows, so storage can
+  // collapse them to one row per model call. Rolled-up hidden calls each get their own id
+  // even though they share the ancestor's spanId.
+  const usageId = generateSignalId();
   const emit = (name: TokenMetrics, value: number) => {
     const costContext = metricCosts.get(name);
-    if (!costContext) {
-      metrics.emit(name, value);
-      return;
-    }
-
-    metrics.emit(name, value, undefined, { costContext });
+    metrics.emit(name, value, labels, costContext ? { costContext, usageId } : { usageId });
   };
 
   for (const sample of getTokenMetricSamples(usage)) {

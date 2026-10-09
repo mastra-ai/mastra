@@ -77,8 +77,8 @@ const Slider = ({
               'relative block h-5 w-2.5 shrink-0 rounded-full border-2 border-foreground bg-placeholder outline-hidden select-none',
               'after:absolute after:-inset-2 after:content-[""]',
               'transition-shadow duration-normal',
-              'hover:ring-2 hover:ring-border-hover',
-              'has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-border-focus',
+              'hover:ring-1 hover:ring-border-hover',
+              'has-[:focus-visible]:outline-1 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-border-focus has-[:focus-visible]:outline-solid',
               'data-[orientation=vertical]:h-2.5 data-[orientation=vertical]:w-5',
               'data-[disabled]:pointer-events-none',
             )}

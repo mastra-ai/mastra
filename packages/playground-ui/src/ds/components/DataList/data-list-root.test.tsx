@@ -1,15 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DataList } from './data-list';
-
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
-  }
-});
 
 afterEach(() => {
   cleanup();
@@ -86,9 +80,9 @@ describe('DataListRoot', () => {
         </DataList>,
       );
 
-      expect(scrollRef.current?.className).not.toContain('mask-l-from');
-      expect(scrollRef.current?.className).toContain('mask-r-from');
-      expect(scrollRef.current?.className).not.toContain('mask-t-from');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-left')).toBe('0px');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-right')).toBe('2rem');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('0px');
     });
 
     it('leaves the top unfaded by default, since the header sits there', () => {
@@ -99,8 +93,8 @@ describe('DataListRoot', () => {
         </DataList>,
       );
 
-      expect(scrollRef.current?.className).not.toContain('mask-t-from');
-      expect(scrollRef.current?.className).toContain('mask-b-from');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('0px');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('2rem');
     });
 
     it('fades the top when the caller asks for it by name', () => {
@@ -111,7 +105,7 @@ describe('DataListRoot', () => {
         </DataList>,
       );
 
-      expect(scrollRef.current?.className).toContain('mask-t-from');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('2rem');
     });
 
     it('fades every end when the caller turns masking on outright', () => {
@@ -122,8 +116,8 @@ describe('DataListRoot', () => {
         </DataList>,
       );
 
-      expect(scrollRef.current?.className).toContain('mask-t-from');
-      expect(scrollRef.current?.className).toContain('mask-b-from');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-top')).toBe('2rem');
+      expect(scrollRef.current?.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('2rem');
     });
 
     it('fades nothing when the caller turns masking off', () => {
@@ -288,7 +282,7 @@ describe('DataListRoot', () => {
           </DataList>,
         );
         const row = container.querySelector<HTMLButtonElement>('.data-list-row');
-        expect(row?.className).toContain('data-[variant=error]:active:bg-notice-destructive/20');
+        expect(row?.className).toContain('data-[variant=error]:active:bg-destructive-subtle-active');
       });
     });
 

@@ -66,7 +66,7 @@
 }
 
 [data-slot='tabbed-container-query']:focus-within {
-  border-color: color-mix(in oklab, var(--foreground) 50%, transparent);
+  border-color: var(--border-focus);
 }
 
 [data-slot='tabs'].tabbed-container

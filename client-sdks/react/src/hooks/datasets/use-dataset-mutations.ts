@@ -1,0 +1,232 @@
+import type {
+  CreateDatasetParams,
+  UpdateDatasetParams,
+  AddDatasetItemParams,
+  UpdateDatasetItemParams,
+  TriggerDatasetExperimentParams,
+  UpdateDatasetExperimentParams,
+  UpdateExperimentResultParams,
+  BatchInsertDatasetItemsParams,
+  BatchDeleteDatasetItemsParams,
+  MastraClient,
+} from '@mastra/client-js';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMastraClient } from '../../mastra-client-context';
+import type { MastraMutationOptions } from '../shared/query-options';
+
+type DatasetItemMutationVariables = {
+  datasetId: string;
+  itemId: string;
+};
+
+type ClientResult<K extends keyof MastraClient> = MastraClient[K] extends (...args: any[]) => Promise<infer R>
+  ? R
+  : never;
+
+export interface DatasetMutationsQueryOptions {
+  createDataset?: MastraMutationOptions<ClientResult<'createDataset'>, CreateDatasetParams>;
+  updateDataset?: MastraMutationOptions<ClientResult<'updateDataset'>, UpdateDatasetParams>;
+  deleteDataset?: MastraMutationOptions<ClientResult<'deleteDataset'>, string>;
+  addItem?: MastraMutationOptions<ClientResult<'addDatasetItem'>, AddDatasetItemParams>;
+  updateItem?: MastraMutationOptions<ClientResult<'updateDatasetItem'>, UpdateDatasetItemParams>;
+  deleteItem?: MastraMutationOptions<ClientResult<'deleteDatasetItem'>, DatasetItemMutationVariables>;
+  purgeItem?: MastraMutationOptions<ClientResult<'purgeDatasetItem'>, DatasetItemMutationVariables>;
+  deleteItems?: MastraMutationOptions<
+    ClientResult<'batchDeleteDatasetItems'>,
+    { datasetId: string; itemIds: string[] }
+  >;
+  batchInsertItems?: MastraMutationOptions<ClientResult<'batchInsertDatasetItems'>, BatchInsertDatasetItemsParams>;
+  batchDeleteItems?: MastraMutationOptions<ClientResult<'batchDeleteDatasetItems'>, BatchDeleteDatasetItemsParams>;
+  triggerExperiment?: MastraMutationOptions<ClientResult<'triggerDatasetExperiment'>, TriggerDatasetExperimentParams>;
+  deleteExperiment?: MastraMutationOptions<ClientResult<'deleteExperiment'>, string>;
+  updateExperiment?: MastraMutationOptions<ClientResult<'updateDatasetExperiment'>, UpdateDatasetExperimentParams>;
+  updateExperimentResult?: MastraMutationOptions<
+    ClientResult<'updateDatasetExperimentResult'>,
+    UpdateExperimentResultParams
+  >;
+}
+
+/**
+ * Hook providing mutation functions for datasets, items, and runs
+ * All mutations invalidate relevant query caches on success.
+ * `queryOptions` is keyed by returned mutation name and spread last; a user `onSuccess` replaces the internal invalidation.
+ */
+export const useDatasetMutations = ({ queryOptions }: { queryOptions?: DatasetMutationsQueryOptions } = {}) => {
+  const client = useMastraClient();
+  const queryClient = useQueryClient();
+
+  const createDataset = useMutation({
+    mutationFn: (params: CreateDatasetParams) => client.createDataset(params),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['datasets'] });
+    },
+    ...queryOptions?.createDataset,
+  });
+
+  const updateDataset = useMutation({
+    mutationFn: (params: UpdateDatasetParams) => client.updateDataset(params),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['datasets'] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+    },
+    ...queryOptions?.updateDataset,
+  });
+
+  const deleteDataset = useMutation({
+    mutationFn: (datasetId: string) => client.deleteDataset(datasetId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['datasets'] });
+    },
+    ...queryOptions?.deleteDataset,
+  });
+
+  const addItem = useMutation({
+    mutationFn: (params: AddDatasetItemParams) => client.addDatasetItem(params),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
+    },
+    ...queryOptions?.addItem,
+  });
+
+  const updateItem = useMutation({
+    mutationFn: (params: UpdateDatasetItemParams) => client.updateDatasetItem(params),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-item', variables.datasetId, variables.itemId] });
+      void queryClient.invalidateQueries({
+        queryKey: ['dataset-item-versions', variables.datasetId, variables.itemId],
+      });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
+    },
+    ...queryOptions?.updateItem,
+  });
+
+  const deleteItem = useMutation({
+    mutationFn: ({ datasetId, itemId }: DatasetItemMutationVariables) => client.deleteDatasetItem(datasetId, itemId),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
+    },
+    ...queryOptions?.deleteItem,
+  });
+
+  const purgeItem = useMutation({
+    mutationFn: ({ datasetId, itemId }: DatasetItemMutationVariables) => client.purgeDatasetItem(datasetId, itemId),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-item', variables.datasetId, variables.itemId] });
+      void queryClient.invalidateQueries({
+        queryKey: ['dataset-item-versions', variables.datasetId, variables.itemId],
+      });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-experiment-results'] });
+      void queryClient.invalidateQueries({ queryKey: ['experiment-results'] });
+      void queryClient.invalidateQueries({ queryKey: ['review-items'] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-review-items'] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-completed-items'] });
+      void queryClient.invalidateQueries({ queryKey: ['experiment-review-summary'] });
+    },
+    ...queryOptions?.purgeItem,
+  });
+
+  // Batch insert items using the batch endpoint
+  const batchInsertItems = useMutation({
+    mutationFn: (params: BatchInsertDatasetItemsParams) => client.batchInsertDatasetItems(params),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
+    },
+    ...queryOptions?.batchInsertItems,
+  });
+
+  // Batch delete items using the batch endpoint
+  const batchDeleteItems = useMutation({
+    mutationFn: (params: BatchDeleteDatasetItemsParams) => client.batchDeleteDatasetItems(params),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
+    },
+    ...queryOptions?.batchDeleteItems,
+  });
+
+  // @deprecated - use batchDeleteItems mutation instead
+  const deleteItems = useMutation({
+    mutationFn: async ({ datasetId, itemIds }: { datasetId: string; itemIds: string[] }) => {
+      return client.batchDeleteDatasetItems({ datasetId, itemIds });
+    },
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['dataset-items', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset', variables.datasetId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-versions', variables.datasetId] });
+    },
+    ...queryOptions?.deleteItems,
+  });
+
+  const triggerExperiment = useMutation({
+    mutationFn: (params: TriggerDatasetExperimentParams) => client.triggerDatasetExperiment(params),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['dataset-experiments', variables.datasetId] });
+    },
+    ...queryOptions?.triggerExperiment,
+  });
+
+  const deleteExperiment = useMutation({
+    mutationFn: (experimentId: string) => client.deleteExperiment(experimentId),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['experiments'] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-experiments'] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-experiment'] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-experiment-results'] });
+      void queryClient.invalidateQueries({ queryKey: ['review-items'] });
+      void queryClient.invalidateQueries({ queryKey: ['completed-items'] });
+      void queryClient.invalidateQueries({ queryKey: ['experiment-review-summary'] });
+    },
+    ...queryOptions?.deleteExperiment,
+  });
+
+  const updateExperiment = useMutation({
+    mutationFn: (params: UpdateDatasetExperimentParams) => client.updateDatasetExperiment(params),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['experiments'] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-experiments', variables.datasetId] });
+      void queryClient.invalidateQueries({
+        queryKey: ['dataset-experiment', variables.datasetId, variables.experimentId],
+      });
+    },
+    ...queryOptions?.updateExperiment,
+  });
+
+  const updateExperimentResult = useMutation({
+    mutationFn: (params: UpdateExperimentResultParams) => client.updateDatasetExperimentResult(params),
+    onSuccess: (_, variables) => {
+      void queryClient.invalidateQueries({ queryKey: ['experiment-results', variables.experimentId] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-experiment-results'] });
+      void queryClient.invalidateQueries({ queryKey: ['review-items'] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-review-items'] });
+      void queryClient.invalidateQueries({ queryKey: ['dataset-completed-items'] });
+      void queryClient.invalidateQueries({ queryKey: ['experiment-review-summary'] });
+    },
+    ...queryOptions?.updateExperimentResult,
+  });
+
+  return {
+    createDataset,
+    updateDataset,
+    deleteDataset,
+    addItem,
+    updateItem,
+    deleteItem,
+    purgeItem,
+    deleteItems,
+    batchInsertItems,
+    batchDeleteItems,
+    triggerExperiment,
+    deleteExperiment,
+    updateExperiment,
+    updateExperimentResult,
+  };
+};

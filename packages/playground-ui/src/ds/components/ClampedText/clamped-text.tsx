@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Button } from '@/ds/components/Button';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import type { TxtProps } from '@/ds/components/Txt';
 import { Txt } from '@/ds/components/Txt';
-import { ChevronIcon } from '@/ds/icons/ChevronIcon';
 import { useIsClamped } from '@/hooks/use-is-clamped';
 import { cn } from '@/lib/utils';
 
@@ -50,7 +50,7 @@ export function ClampedText({
           className="mt-1 -ml-[.8em] self-start justify-self-start"
           aria-expanded={isExpanded}
           onClick={() => setIsExpanded(v => !v)}
-          icon={<ChevronIcon className={cn('transition-transform', isExpanded && 'rotate-180')} />}
+          icon={<DisclosureChevron />}
         >
           {isExpanded ? showLessLabel : readMoreLabel}
         </Button>

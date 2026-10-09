@@ -18,6 +18,13 @@ export const PricingMeter = {
 
 export type PricingMeter = (typeof PricingMeter)[keyof typeof PricingMeter];
 
+/**
+ * Local copy of `TokenMetrics` from `@mastra/core/observability`. Core added that export after
+ * this package's minimum core version, so re-exporting it would raise the peer floor here and in
+ * every exporter that depends on this package. `types.test.ts` keeps the two copies identical.
+ *
+ * TODO(mastra-v2): replace this with `export { TokenMetrics } from '@mastra/core/observability'`.
+ */
 export const TokenMetrics = {
   TOTAL_INPUT: 'mastra_model_total_input_tokens',
   TOTAL_OUTPUT: 'mastra_model_total_output_tokens',

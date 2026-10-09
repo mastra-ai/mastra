@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
 import { AgentControllerChannels } from '@mastra/core/channels';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
@@ -263,7 +264,7 @@ describe('MastraFactory constructor', () => {
     expect(() => new MastraFactory({ secretEncryption } as never)).toThrow(/'storage' is required/);
   });
 
-  it('rejects duplicate installed board ids at construction time', () => {
+  it('rejects a board id already used by an installed built-in', () => {
     expect(
       () =>
         new MastraFactory({
@@ -271,11 +272,126 @@ describe('MastraFactory constructor', () => {
           storage: fakeStorage(),
           boards: [createTestBoard({ id: 'work' })],
         }),
-    ).toThrow("board id 'work' is reserved for a built-in board");
+    ).toThrow("duplicate board id 'work'");
+  });
+
+  it('allows replacing a built-in board when default boards are disabled', () => {
+    expect(
+      () =>
+        new MastraFactory({
+          secretEncryption,
+          storage: fakeStorage(),
+          includeDefaultBoards: false,
+          boards: [createTestBoard({ id: 'work' })],
+        }),
+    ).not.toThrow();
   });
 });
 
 describe('MastraFactory.prepare', () => {
+  it('loads authoritative memory settings before dynamic memory resolves for each invocation', async () => {
+    const storage = fakeStorage();
+    const config = await prepareFactory({ storage, auth: null });
+    const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
+    await memorySettings.patch({
+      orgId: 'local',
+      userId: 'local',
+      patch: { observerModelId: 'openai/observer-1' },
+    });
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+    const requestContext = new RequestContext();
+
+    const first = await inputProcessors({ requestContext });
+    expect(first).toHaveLength(1);
+    expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
+      observerModelId: 'openai/observer-1',
+    });
+
+    await memorySettings.patch({
+      orgId: 'local',
+      userId: 'local',
+      patch: { observerModelId: 'openai/observer-2' },
+    });
+    await inputProcessors({ requestContext });
+    expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
+      observerModelId: 'openai/observer-2',
+    });
+  });
+
+  it('still loads the saved memory settings when work items are unavailable', async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
+    const config = await prepareFactory({ storage, auth: null });
+    await storage.getDomain<MemorySettingsStorage>('memory-settings').patch({
+      orgId: 'local',
+      userId: 'local',
+      patch: { observerModelId: 'openai/observer-1' },
+    });
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+    const requestContext = new RequestContext();
+
+    await expect(inputProcessors({ requestContext })).resolves.toEqual([]);
+    expect(requestContext.get('mastra__factoryMemorySettings')).toMatchObject({
+      observerModelId: 'openai/observer-1',
+    });
+  });
+
+  it('falls back to auto and tells the thread when settings cannot load without work items', async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const config = await prepareFactory({ storage, auth: null });
+    vi.spyOn(storage.getDomain<MemorySettingsStorage>('memory-settings'), 'get').mockRejectedValue(
+      new Error('storage unavailable'),
+    );
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+    const requestContext = new RequestContext();
+    const emitEvent = vi.fn();
+    requestContext.set('controller', { getState: () => ({}), emitEvent });
+
+    await expect(inputProcessors({ requestContext })).resolves.toEqual([]);
+    expect(requestContext.get('mastra__factoryMemorySettings')).toEqual({
+      status: 'unavailable',
+      reason: 'storage unavailable',
+    });
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'error', errorType: 'factory_memory_settings_unavailable' }),
+    );
+    warn.mockRestore();
+  });
+
+  it("layers a channel sender's saved memory settings over the project's", async () => {
+    const storage = fakeStorage();
+    vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
+    const config = await prepareFactory({ storage, auth: null });
+    const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
+    await memorySettings.patch({
+      orgId: 'org-1',
+      userId: 'factory-project:fp-1',
+      patch: { observerModelId: 'anthropic/project-observer', reflectorModelId: 'anthropic/project-reflector' },
+    });
+    await memorySettings.patch({ orgId: 'org-1', userId: 'user-1', patch: { reflectorModelId: 'openai/mine' } });
+    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+    const run = async (channel: boolean) => {
+      const requestContext = new RequestContext();
+      requestContext.set('controller', {
+        getState: () => ({ factoryProjectId: 'fp-1', factoryOrgId: 'org-1' }),
+        emitEvent: vi.fn(),
+      });
+      requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
+      if (channel) requestContext.set('channel', { platform: 'slack' });
+      await inputProcessors({ requestContext });
+      return requestContext.get('mastra__factoryMemorySettings');
+    };
+
+    await expect(run(true)).resolves.toMatchObject({
+      observerModelId: 'anthropic/project-observer',
+      reflectorModelId: 'openai/mine',
+    });
+    // Web runs of a project session share the project's row as-is.
+    await expect(run(false)).resolves.toMatchObject({ reflectorModelId: 'anthropic/project-reflector' });
+  });
+
   it('uses the platform bot co-author identity', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 
@@ -298,6 +414,15 @@ describe('MastraFactory.prepare', () => {
     await expect(factory.prepare()).resolves.toBeDefined();
   });
 
+  it('passes the host-owned keyed Knowledge instance through the SDK mount', async () => {
+    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge' });
+    const knowledge = { key: 'mastra', instance };
+
+    const config = await prepareFactory({ storage: fakeStorage(), knowledge });
+
+    expect(config.knowledge).toEqual(knowledge);
+  });
+
   it('throws when called twice', async () => {
     const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
     await factory.prepare();
@@ -316,7 +441,7 @@ describe('MastraFactory.prepare', () => {
     expect(prepareMock).toHaveBeenCalledOnce();
   });
 
-  it('registers a blocking session-created listener that seeds stored OM settings', async () => {
+  it('registers a blocking session-created listener that seeds the session organization without copying OM settings', async () => {
     const storage = fakeStorage();
     const factory = new MastraFactory({ secretEncryption, storage });
     await factory.prepare();
@@ -382,8 +507,9 @@ describe('MastraFactory.prepare', () => {
 
     await (blockingCall![0] as (session: unknown) => Promise<void>)(session);
 
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
+    expect(session.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
   });
 
   it('passes the sandbox callback through to integrations', async () => {
@@ -464,7 +590,7 @@ describe('MastraFactory.prepare', () => {
       'audit',
       'work-items',
       'model-credentials',
-      'model-packs',
+      'model-defaults',
       'memory-settings',
       'custom-providers',
       'queue-health',
@@ -505,7 +631,9 @@ describe('MastraFactory.prepare', () => {
     // fix its config from the message alone.
     expect(error.message).toMatch(/'sandbox' is now a callback/);
     expect(error.message).toMatch(/FactorySandboxContext/);
-    expect(error.message).toMatch(/sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId \}\)/);
+    expect(error.message).toMatch(
+      /sandbox: ctx => new E2BSandbox\(\{ id: ctx\.sessionId, sandboxId: ctx\.sandboxId \}\)/,
+    );
     // The old options had three different fates, and a host reading this
     // message needs all three: none of them is "pass it to the provider"
     // unchanged.
@@ -1520,8 +1648,8 @@ describe('MastraFactory.prepare integrations', () => {
       const ctx = channels.mock.calls[0]![0];
       expect(ctx.storage.channelIdentity).toBeDefined();
       // A channel integration starts a new session on the linked sender's own
-      // model pack, so it reads the same model-packs handle the web routes use.
-      expect(ctx.storage.modelPacks).toBeDefined();
+      // default model, so it reads the same model-defaults handle the web routes use.
+      expect(ctx.storage.modelDefaults).toBeDefined();
       expect(ctx.auth).toBeDefined();
     });
 

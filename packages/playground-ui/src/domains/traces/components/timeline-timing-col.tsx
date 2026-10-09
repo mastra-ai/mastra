@@ -40,10 +40,10 @@ export function TimelineTimingCol({
           },
         )}
       >
-        <div className={cn('w-full rounded-md bg-muted p-1.5')}>
+        <div className="w-full rounded-md bg-muted p-1.5">
           <div className="relative h-1.5 w-full overflow-hidden rounded-sm">
             <div
-              className={cn('absolute top-0 h-1.5 rounded-sm bg-placeholder')}
+              className="absolute top-0 h-1.5 rounded-sm bg-placeholder"
               style={{
                 width: widthPercent ? `${widthPercent}%` : '2px',
                 left: `${leftPercent}%`,
@@ -53,11 +53,9 @@ export function TimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-meta text-muted-foreground')}>
-          <Txt as="span" variant="meta" font="mono">
-            {formatDurationPrecise(span.latency)}
-          </Txt>
-        </div>
+        <Txt as="span" variant="meta" tone="muted" font="mono" className="block text-right">
+          {formatDurationPrecise(span.latency)}
+        </Txt>
       </HoverCardTrigger>
       <SpanTimingHoverCard span={span} startShiftMs={startShiftMs} />
     </HoverCard>

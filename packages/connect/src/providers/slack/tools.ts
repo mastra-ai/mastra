@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { addReactionTool } from './tools/add-reaction.js';
 import { archiveChannelTool } from './tools/archive-channel.js';
 import { createChannelTool } from './tools/create-channel.js';
@@ -42,6 +42,7 @@ import { removeFromChannelTool } from './tools/remove-from-channel.js';
 import { removeReactionTool } from './tools/remove-reaction.js';
 import { renameChannelTool } from './tools/rename-channel.js';
 import { scheduleMessageTool } from './tools/schedule-message.js';
+import { searchChannelsTool } from './tools/search-channels.js';
 import { searchFilesTool } from './tools/search-files.js';
 import { searchMessagesTool } from './tools/search-messages.js';
 import { sendEphemeralMessageTool } from './tools/send-ephemeral-message.js';
@@ -97,6 +98,7 @@ export function createSlackTools(options?: ProviderToolsOptions) {
     slack_remove_reaction: removeReactionTool(platformProxy),
     slack_rename_channel: renameChannelTool(platformProxy),
     slack_schedule_message: scheduleMessageTool(platformProxy),
+    slack_search_channels: searchChannelsTool(platformProxy),
     slack_search_files: searchFilesTool(platformProxy),
     slack_search_messages: searchMessagesTool(platformProxy),
     slack_send_ephemeral_message: sendEphemeralMessageTool(platformProxy),
@@ -109,5 +111,5 @@ export function createSlackTools(options?: ProviderToolsOptions) {
     slack_unpin_message: unpinMessageTool(platformProxy),
     slack_update_message: updateMessageTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

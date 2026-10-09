@@ -23,6 +23,8 @@ export const firstLegacyTracePage: ListTracesLightResponse = {
       entityType: EntityType.AGENT,
       entityId: 'assistant',
       entityName: 'assistant',
+      threadId: 'thread-legacy-a',
+      resourceId: 'user-legacy-a',
       metadata: { region: 'eu-west' },
       inputPreview: 'Hello',
       createdAt: startedAt,

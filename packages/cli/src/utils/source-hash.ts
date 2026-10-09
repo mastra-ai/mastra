@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { open, readFile, stat } from 'node:fs/promises';
 import { dirname, join, relative, posix } from 'node:path';
 import { glob } from 'tinyglobby';
@@ -79,7 +78,7 @@ async function getWorkspaceRootLockfiles(projectDir: string): Promise<string[]> 
  */
 async function hashFile(filePath: string): Promise<string> {
   const content = await readFile(filePath);
-  return createHash('sha256').update(content).digest('hex');
+  return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', content)).toString('hex');
 }
 
 /**
@@ -136,14 +135,14 @@ export async function computeSourceHash(rootDir: string, mastraDir: string, proj
   const workspaceRootLockfiles = await getWorkspaceRootLockfiles(rootDir);
 
   // Create a hash of all file hashes combined with their paths
-  const masterHash = createHash('sha256');
+  const hashParts: string[] = [];
 
   // Hash project files
   for (const filePath of files) {
     const relPath = relative(rootDir, filePath);
     const fileHash = await hashFile(filePath);
     // Include path in hash so file renames are detected
-    masterHash.update(`${relPath}:${fileHash}\n`);
+    hashParts.push(`${relPath}:${fileHash}\n`);
   }
 
   // Hash workspace root lockfiles (if any)
@@ -151,10 +150,11 @@ export async function computeSourceHash(rootDir: string, mastraDir: string, proj
     const fileHash = await hashFile(lockfilePath);
     // Use just the lockfile name to ensure determinism across machines
     const lockfileName = lockfilePath.split(/[/\\]/).pop()!;
-    masterHash.update(`[workspace-root]${lockfileName}:${fileHash}\n`);
+    hashParts.push(`[workspace-root]${lockfileName}:${fileHash}\n`);
   }
 
-  return `sha256:${masterHash.digest('hex')}`;
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(hashParts.join('')));
+  return `sha256:${Buffer.from(digest).toString('hex')}`;
 }
 
 /**

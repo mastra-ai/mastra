@@ -25,7 +25,6 @@ overrides:
   brace-expansion@>=2.0.0 <2.1.7: 2.1.7
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
   brace-expansion@>=4.0.0 <5.0.12: 5.0.12
-  nanoid@>=3.0.0 <3.3.19: 3.3.19
   jose@>=4.14.0 <6.2.12: 6.2.12
   hono@<4.13.8: 4.13.8
   better-auth: ^1.6.26
@@ -34,6 +33,9 @@ overrides:
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
   zod@>=4.0.0 <4.6.5: 4.6.5
+  # Vanta 2026-09-28: nested-lock security floors
+  # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
+  'undici@<8.11.2': 8.11.2
 allowBuilds:
   esbuild: true
 minimumReleaseAgeExclude:

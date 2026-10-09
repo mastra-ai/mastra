@@ -165,6 +165,12 @@ export class ModerationProcessor implements Processor<'moderation'> {
       name: 'Content Moderator',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
+      // A single-shot classification over a synthetic prompt. The agent-level
+      // stability defaults have nothing to repair here — there is no
+      // conversation history to rescue — so a retry only adds its delay, and
+      // the request-lane span would surface inside the caller's trace even
+      // though this agent is internal.
+      errorProcessorDefaults: false,
       options: {
         tracingPolicy: { internal: InternalSpans.ALL },
       },

@@ -24,6 +24,8 @@ async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
   }
 }
 
+const MAX_STALE_RULE_ATTEMPTS = 3;
+
 export interface LinearIssueIngress {
   id: string;
   identifier: string;
@@ -41,6 +43,7 @@ export interface LinearIssueIngress {
   updatedAt: string;
   /** Linear source the issue was read from (project or team); resolves the bound board via `intakeBoards`. */
   sourceId?: string | null;
+  projectId?: string | null;
 }
 
 export interface LinearRulesOptions {
@@ -114,6 +117,7 @@ export class LinearRules {
     input: LinearRulesIngress,
     issue: LinearIssueIngress,
     relatedItem: WorkItemRow | undefined,
+    attempt = 1,
   ): Promise<IngressStatus> {
     const ingressId = `linear:${issue.id}:${issue.updatedAt}`;
     const actor = { type: 'human' as const, id: input.userId };
@@ -200,6 +204,15 @@ export class LinearRules {
       causalChain: [],
       now: new Date(),
     });
+    if (committed.status === 'stale') {
+      // Nothing was persisted: re-read the item and evaluate again at its fresh revision.
+      if (attempt >= MAX_STALE_RULE_ATTEMPTS) {
+        throw new Error(`Factory Linear rule evaluation for ${ingressId} kept losing revision races.`);
+      }
+      const fresh = relatedItem ? await this.options.storage.get({ orgId: input.orgId, id: relatedItem.id }) : null;
+      if (relatedItem && !fresh) return 'missing';
+      return this.#ingestIssue(input, issue, fresh ?? undefined, attempt + 1);
+    }
     return committed.status;
   }
 }

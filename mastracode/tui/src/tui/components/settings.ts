@@ -8,7 +8,7 @@
 
 import { Box, Container, SelectList, SettingsList, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, SettingItem } from '@earendil-works/pi-tui';
-import type { StorageBackend, WebSearchProviderSetting } from '@mastra/code-sdk/onboarding/settings';
+import type { ExperimentalAgent, StorageBackend, WebSearchProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 import type { NotificationMode } from '../notify.js';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
 import { MaskedInput } from './masked-input.js';
@@ -30,6 +30,8 @@ export interface SettingsConfig {
   libsqlUrl: string;
   experimentalGithubSignals: boolean;
   experimentalCrossAgentSignals: boolean;
+  experimentalScheduleTools: boolean;
+  experimentalAgent: ExperimentalAgent | null;
   backgroundToolsEnabled: boolean;
   webSearchProvider: WebSearchProviderSetting;
   tavilyKeyAvailable: boolean;
@@ -46,6 +48,8 @@ export interface SettingsCallbacks {
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onExperimentalGithubSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
   onExperimentalCrossAgentSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
+  onExperimentalScheduleToolsChange: (enabled: boolean) => void;
+  onExperimentalAgentChange: (agent: ExperimentalAgent | null) => void;
   onBackgroundToolsChange: (enabled: boolean) => void;
   onWebSearchProviderChange: (provider: WebSearchProviderSetting) => void;
   onApiKeys?: () => void;
@@ -503,6 +507,71 @@ export class SettingsComponent extends Box implements Focusable {
               const accepted = await callbacks.onExperimentalCrossAgentSignalsChange(nextValue);
               config.experimentalCrossAgentSignals = accepted === false ? !nextValue : nextValue;
               done(config.experimentalCrossAgentSignals ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'experimentalScheduleTools',
+        label: 'Experimental schedule tools',
+        description: 'Let the agent create and manage /schedules on its thread (restart required).',
+        currentValue: config.experimentalScheduleTools ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Give the agent schedule_create, schedule_list, schedule_update, and schedule_run',
+              },
+              {
+                value: 'off',
+                label: '  Off',
+                description: 'Only you can manage schedules, with /schedules',
+              },
+            ],
+            config.experimentalScheduleTools ? 'on' : 'off',
+            value => {
+              const enabled = value === 'on';
+              callbacks.onExperimentalScheduleToolsChange(enabled);
+              config.experimentalScheduleTools = enabled;
+              done(enabled ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'experimentalAgent',
+        label: 'Experimental agent',
+        description: 'Run the coding agent on the durable or evented runtime (restart required).',
+        currentValue:
+          config.experimentalAgent === 'durable'
+            ? 'Durable'
+            : config.experimentalAgent === 'evented'
+              ? 'Evented'
+              : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              { value: 'off', label: '  Off', description: 'Use the standard coding agent' },
+              { value: 'durable', label: '  Durable', description: 'Use resumable durable agent streams' },
+              {
+                value: 'evented',
+                label: '  Evented',
+                description: 'Run the agent loop on the evented workflow engine',
+              },
+            ],
+            config.experimentalAgent ?? 'off',
+            value => {
+              config.experimentalAgent = value === 'off' ? null : (value as ExperimentalAgent);
+              callbacks.onExperimentalAgentChange(config.experimentalAgent);
+              done(
+                config.experimentalAgent === 'durable'
+                  ? 'Durable'
+                  : config.experimentalAgent === 'evented'
+                    ? 'Evented'
+                    : 'Off',
+              );
             },
             () => done(),
           ),

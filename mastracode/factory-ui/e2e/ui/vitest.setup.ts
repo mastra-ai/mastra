@@ -25,6 +25,9 @@ afterEach(async () => {
   cleanup();
   await new Promise(resolve => setTimeout(resolve, 0));
   server.resetHandlers();
+  // Remembered UI state (e.g. board filters) must not carry into the next case.
+  localStorage.clear();
+  sessionStorage.clear();
 });
 
 afterAll(() => server.close());

@@ -13,7 +13,6 @@ vi.mock('../modal-question.js', () => ({
 
 vi.mock('@mastra/code-sdk/onboarding/index', () => ({
   getAvailableModePacks: vi.fn(() => []),
-  getAvailableOmPacks: vi.fn(() => []),
   ONBOARDING_VERSION: 1,
   loadSettings: mocks.loadSettings,
   saveSettings: mocks.saveSettings,

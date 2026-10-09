@@ -1,57 +1,64 @@
 import { Children, isValidElement } from 'react';
-import type { ComponentPropsWithoutRef } from 'react';
+import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 
 import { PageHeaderAction } from './page-header-action';
-import { PageHeaderDescription } from './page-header-description';
+import { PageHeaderEyebrow } from './page-header-eyebrow';
 import { PageHeaderIcon } from './page-header-icon';
+import { PageHeaderMeta } from './page-header-meta';
+import type { PageHeaderMetaProps } from './page-header-meta';
 import { PageHeaderTitle } from './page-header-title';
 import { cn } from '@/lib/utils';
 
-export interface PageHeaderRootProps extends Omit<ComponentPropsWithoutRef<'header'>, 'title'> {
-  title?: React.ReactNode;
-  description?: React.ReactNode;
-  icon?: React.ReactNode;
-  isLoading?: boolean;
+export type PageHeaderRootProps = ComponentPropsWithoutRef<'header'> & {
+  spacing?: 'default' | 'breathing';
+};
+
+function isSlot(child: ReactNode, type: ElementType) {
+  return isValidElement(child) && child.type === type;
 }
 
-export function PageHeaderRoot({
-  children,
-  className,
-  title,
-  description,
-  icon,
-  isLoading,
-  ...props
-}: PageHeaderRootProps) {
-  const useLegacyApi = children === undefined && title !== undefined;
+function isBesideMeta(child: ReactNode) {
+  return isValidElement<PageHeaderMetaProps>(child) && child.type === PageHeaderMeta && Boolean(child.props.beside);
+}
 
-  // Actions sit outside the title grid so their height never affects title/meta/description alignment.
+function groupSlots(items: ReactNode[]) {
+  const eyebrows = items.filter(child => isSlot(child, PageHeaderEyebrow));
+  const icons = items.filter(child => isSlot(child, PageHeaderIcon));
+  const headline = [...items.filter(child => isSlot(child, PageHeaderTitle)), ...items.filter(isBesideMeta)];
+  // Actions sit outside the title column so their height never affects title/meta/description alignment.
+  const actions = items.filter(child => isSlot(child, PageHeaderAction));
+  const placed = [...eyebrows, ...icons, ...headline, ...actions];
+  const below = items.filter(child => !placed.includes(child));
+  return { eyebrows, icons, headline, below, actions };
+}
+
+export function PageHeaderRoot({ children, className, spacing = 'default', ...props }: PageHeaderRootProps) {
   const items = Children.toArray(children);
-  const actions = items.filter(child => isValidElement(child) && child.type === PageHeaderAction);
-  const content = items.filter(child => !actions.includes(child));
+  const { eyebrows, icons, headline, below, actions } = groupSlots(items);
+  const hasControls = icons.length > 0 || actions.length > 0;
 
   return (
-    <header className={cn('relative flex w-full items-start gap-3', className)} {...props}>
-      <div
-        data-slot="page-header-grid"
-        className={cn(
-          'grid min-w-0 flex-1 grid-cols-[[title]_auto_[meta]_minmax(0,1fr)_[end]] gap-x-3 gap-y-1',
-          'has-[>[data-slot=page-header-icon]]:grid-cols-[[icon]_auto_[title]_auto_[meta]_minmax(0,1fr)_[end]]',
-        )}
-      >
-        {useLegacyApi ? (
-          <>
-            {!isLoading && icon !== undefined && <PageHeaderIcon>{icon}</PageHeaderIcon>}
-            <PageHeaderTitle isLoading={isLoading}>{title}</PageHeaderTitle>
-            {description !== undefined && (
-              <PageHeaderDescription isLoading={isLoading}>{description}</PageHeaderDescription>
-            )}
-          </>
-        ) : (
-          content
-        )}
+    <header
+      className={cn(
+        'relative flex w-full flex-col',
+        !hasControls && 'gap-1',
+        className,
+        spacing === 'breathing' && 'pt-10',
+      )}
+      data-page-header-spacing={spacing === 'breathing' ? spacing : undefined}
+      {...props}
+    >
+      {eyebrows}
+      <div className="flex w-full items-start gap-3">
+        {icons}
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          {headline.length > 0 && (
+            <div className={cn('flex min-w-0 items-start gap-3', hasControls && 'py-1')}>{headline}</div>
+          )}
+          {below}
+        </div>
+        {actions}
       </div>
-      {actions}
     </header>
   );
 }

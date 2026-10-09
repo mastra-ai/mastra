@@ -192,7 +192,7 @@ Use results to improve your system:
 Control how penalties are applied for unused and missing context:
 
 ```typescript
-import { createContextRelevanceScorerLLM } from '@mastra/evals'
+import { createContextRelevanceScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 // Stricter penalty configuration
 const strictScorer = createContextRelevanceScorerLLM({
@@ -322,7 +322,7 @@ const scorer = createContextRelevanceScorerLLM({
 This example shows excellent context relevance where all context directly supports the response:
 
 ```typescript
-import { createContextRelevanceScorerLLM } from '@mastra/evals'
+import { createContextRelevanceScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 const scorer = createContextRelevanceScorerLLM({
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -369,7 +369,7 @@ console.log(result)
 This example shows moderate relevance with some context being irrelevant or unused:
 
 ```typescript
-import { createContextRelevanceScorerLLM } from '@mastra/evals'
+import { createContextRelevanceScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 const scorer = createContextRelevanceScorerLLM({
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -458,7 +458,7 @@ console.log(customResult)
 This example shows poor context relevance with mostly irrelevant information:
 
 ```typescript
-import { createContextRelevanceScorerLLM } from '@mastra/evals'
+import { createContextRelevanceScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 const scorer = createContextRelevanceScorerLLM({
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -506,7 +506,7 @@ console.log(result)
 Extract context at runtime based on the run input:
 
 ```typescript
-import { createContextRelevanceScorerLLM } from '@mastra/evals'
+import { createContextRelevanceScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 const scorer = createContextRelevanceScorerLLM({
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -549,7 +549,7 @@ const scorer = createContextRelevanceScorerLLM({
 Integrate with RAG pipelines to evaluate retrieved context:
 
 ```typescript
-import { createContextRelevanceScorerLLM } from '@mastra/evals'
+import { createContextRelevanceScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 const scorer = createContextRelevanceScorerLLM({
   model: '__GATEWAY_OPENAI_MODEL__',

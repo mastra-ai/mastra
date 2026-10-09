@@ -1,3 +1,4 @@
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { describe, expect, it } from 'vitest';
 import { formatOmError, isOmModelExecutionFailure } from '../error';
 import { createBufferingFailedMarker, createObservationFailedMarker } from '../markers';
@@ -74,6 +75,37 @@ describe('isOmModelExecutionFailure', () => {
 describe('formatOmError', () => {
   it('extracts provider diagnostics without serializing request metadata or the entire response', () => {
     expect(formatOmError(providerError())).toBe(diagnostic);
+  });
+
+  it('preserves the MastraError id when the wrapper inherits the driver message', () => {
+    const error = new MastraError(
+      {
+        id: 'MASTRA_STORAGE_LIBSQL_UPDATE_BUFFERED_OBSERVATIONS_FAILED',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { id: 'om-record-1' },
+      },
+      new Error('SQLITE_CORRUPT: database disk image is malformed'),
+    );
+    const expected =
+      'MASTRA_STORAGE_LIBSQL_UPDATE_BUFFERED_OBSERVATIONS_FAILED: SQLITE_CORRUPT: database disk image is malformed';
+    expect(formatOmError(error)).toBe(expected);
+    expect(formatOmError(error)).not.toContain('om-record-1');
+
+    const marker = createBufferingFailedMarker({
+      cycleId: 'cycle',
+      operationType: 'observation',
+      startedAt: new Date().toISOString(),
+      tokensAttempted: 100,
+      error,
+      recordId: 'record',
+      threadId: 'thread',
+    });
+    expect(JSON.parse(JSON.stringify(marker)).data.error).toBe(expected);
+  });
+
+  it('ignores ids on values that are not MastraErrors', () => {
+    expect(formatOmError({ id: 'resp_123', message: 'x' })).toBe('x');
   });
 
   it.each([

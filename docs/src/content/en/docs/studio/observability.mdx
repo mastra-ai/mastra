@@ -80,7 +80,7 @@ Visit the [metrics overview](/docs/observability/metrics/overview) for more deta
 
 :::note
 
-Metrics require a separate OLAP store for observability. Relational databases like PostgreSQL, LibSQL, etc. aren't supported for metrics. In-memory storage resets on restart.
+Metrics require an observability store that supports them, such as DuckDB, ClickHouse, or `PostgresStoreVNext` with its observability domain enabled. LibSQL, MSSQL, and MongoDB don't support metrics. In-memory storage resets on restart. See [storage support](/docs/observability/metrics/overview#storage-support) for the full list.
 
 :::
 

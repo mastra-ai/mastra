@@ -11,8 +11,8 @@ const { execFileMock, jscodeshiftOutput } = vi.hoisted(() => {
       (
         _file: string,
         _args: string[],
-        _options: { encoding: string },
-        callback: (error: null, result: { stdout: string; stderr: string }) => void,
+        _options: { encoding: string; maxBuffer?: number },
+        callback: (error: Error | null, result?: { stdout: string; stderr: string }) => void,
       ) => callback(null, { stdout: jscodeshiftOutput, stderr: '' }),
     ),
   };
@@ -71,6 +71,27 @@ describe('transform', () => {
     await transform('v1/runtime-context', '.', {}, { logStatus: false });
 
     expect(stdoutWriteSpy).not.toHaveBeenCalled();
+  });
+
+  it('supports printed output larger than the execFile default buffer', async () => {
+    const largeOutput = 'x'.repeat(2 * 1024 * 1024);
+    execFileMock.mockImplementationOnce((_file, _args, options, callback) => {
+      if (largeOutput.length > (options.maxBuffer ?? 1024 * 1024)) {
+        const error = Object.assign(new RangeError('stdout maxBuffer length exceeded'), {
+          code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
+        });
+        callback(error);
+        return;
+      }
+
+      callback(null, { stdout: largeOutput, stderr: '' });
+    });
+    vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    await expect(transform('v1/runtime-context', '.', { print: true }, { logStatus: false })).resolves.toEqual({
+      errors: [],
+      notImplementedErrors: [],
+    });
   });
 
   it('anchors the hidden-directory ignore pattern to the target', async () => {

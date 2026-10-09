@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "aki-io/deepseek-v4-flash-0731-284b"
+  model: "aki-io/deepseek-v4.1-flash-552b"
 });
 
 // Generate a response
@@ -46,16 +46,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "aki-io/deepseek-v4-flash-0731-284b",
-    "imageInput": false,
+    "model": "aki-io/deepseek-v4.1-flash-552b",
+    "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 81920,
-    "inputCost": 0.2,
-    "outputCost": 0.5
+    "inputCost": 0.25,
+    "outputCost": 1
   },
   {
     "model": "aki-io/gemma4-26b",
@@ -144,7 +144,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://aki.io/v1",
-    id: "aki-io/deepseek-v4-flash-0731-284b",
+    id: "aki-io/deepseek-v4.1-flash-552b",
     apiKey: process.env.AKI_IO_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -163,7 +163,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "aki-io/qwen3.8-27b"
-      : "aki-io/deepseek-v4-flash-0731-284b";
+      : "aki-io/deepseek-v4.1-flash-552b";
   }
 });
 ```

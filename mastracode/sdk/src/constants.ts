@@ -25,6 +25,10 @@ export function validateConfigDirName(configDirName: string): void {
   }
 }
 
+// Model routes are persisted host input and eagerly resolved per request.
+export const MODEL_ROUTE_MAX_ENTRIES = 32;
+export const MODEL_ROUTE_MAX_FIELD_LENGTH = 512;
+
 // Default OM model - using gemini-3.5-flash for efficiency
 export const DEFAULT_OM_MODEL_ID = process.env.DEFAULT_OM_MODEL_ID ?? 'google/gemini-3.5-flash';
 

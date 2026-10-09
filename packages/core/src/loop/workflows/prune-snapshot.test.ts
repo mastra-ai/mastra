@@ -530,6 +530,59 @@ describe('pruneAgentLoopSnapshot stepResult.request strip', () => {
   });
 });
 
+describe('pruneAgentLoopSnapshot foreach step-level stream state', () => {
+  function suspendedForeach(stepLevelStreamState: unknown, entryStreamState: unknown) {
+    const entryPayload = { __streamState: entryStreamState, approval: { toolCallId: 'tool-1' } };
+    return snapshotWith({
+      toolCallStep: {
+        status: 'suspended',
+        suspendPayload: {
+          ...entryPayload,
+          __streamState: stepLevelStreamState,
+          __workflow_meta: {
+            foreachIndex: 1,
+            foreachOutput: [
+              { status: 'success', output: { ok: true }, suspendPayload: {} },
+              { status: 'suspended', suspendPayload: entryPayload },
+            ],
+          },
+        },
+      },
+    });
+  }
+
+  it("drops the foreach step's mirror of its suspended entry's stream state", () => {
+    const streamState = { messageList: 'live' };
+    const original = suspendedForeach(streamState, streamState);
+
+    const step = (pruneAgentLoopSnapshot({ snapshot: original }).context as Record<string, any>).toolCallStep;
+
+    expect(step.suspendPayload).not.toHaveProperty('__streamState');
+    expect(step.suspendPayload.approval).toEqual({ toolCallId: 'tool-1' });
+    expect(step.suspendPayload.__workflow_meta.foreachOutput[1].suspendPayload.__streamState).toBe(streamState);
+    expect((original.context as Record<string, any>).toolCallStep.suspendPayload.__streamState).toBe(streamState);
+  });
+
+  it("keeps a step-level stream state that is not the suspended entry's own object", () => {
+    const step = (
+      pruneAgentLoopSnapshot({
+        snapshot: suspendedForeach({ messageList: 'live' }, { messageList: 'live' }),
+      }).context as Record<string, any>
+    ).toolCallStep;
+
+    expect(step.suspendPayload.__streamState).toEqual({ messageList: 'live' });
+  });
+
+  it('keeps the parent row copy, whose propagated foreach entries carry no stream state', () => {
+    const streamState = { messageList: 'live' };
+    const step = (
+      pruneAgentLoopSnapshot({ snapshot: suspendedForeach(streamState, undefined) }).context as Record<string, any>
+    ).toolCallStep;
+
+    expect(step.suspendPayload.__streamState).toBe(streamState);
+  });
+});
+
 /**
  * The durable agent loop threads its iteration state through every step as
  * that step's input, so each completed step's `payload` pins another copy of
@@ -665,5 +718,81 @@ describe('pruneAgentLoopSnapshot terminal payload iteration state', () => {
     expect((pruned.context as Record<string, any>)['collect-tool-results'].payload).toEqual({
       toolResults: [{ result: 'ok' }],
     });
+  });
+});
+
+describe('pruneAgentLoopSnapshot agentSpanData instructions strip', () => {
+  const prompt = 'p'.repeat(2000);
+  function agentSpanData() {
+    return {
+      id: 'span-1',
+      traceId: 'trace-1',
+      type: 'agent_run',
+      attributes: { instructions: prompt, availableTools: ['a'] },
+    };
+  }
+  const withoutInstructions = {
+    id: 'span-1',
+    traceId: 'trace-1',
+    type: 'agent_run',
+    attributes: { availableTools: ['a'] },
+  };
+
+  it('strips instructions from step payload, output and prevOutput but keeps span identity', () => {
+    const pruned = pruneAgentLoopSnapshot({
+      snapshot: snapshotWith({
+        step: {
+          status: 'success',
+          payload: { agentSpanData: agentSpanData(), runId: 'r' },
+          output: { agentSpanData: agentSpanData() },
+          prevOutput: { agentSpanData: agentSpanData() },
+        },
+      }),
+    });
+    const step = (pruned.context as Record<string, any>).step;
+    expect(step.payload.agentSpanData).toEqual(withoutInstructions);
+    expect(step.payload.runId).toBe('r');
+    expect(step.output.agentSpanData).toEqual(withoutInstructions);
+    expect(step.prevOutput.agentSpanData).toEqual(withoutInstructions);
+  });
+
+  it('keeps instructions in context.input, which rebuildSpan reads', () => {
+    const snapshot = {
+      context: { input: { agentSpanData: agentSpanData() } },
+    } as unknown as WorkflowRunState;
+    const pruned = pruneAgentLoopSnapshot({ snapshot });
+    expect((pruned.context as Record<string, any>).input.agentSpanData).toEqual(agentSpanData());
+  });
+
+  it('strips instructions from the active step of a running snapshot', () => {
+    const snapshot = {
+      status: 'running',
+      activePaths: [0],
+      activeStepsPath: { current: [0] },
+      context: {
+        input: {},
+        current: { status: 'running', payload: { agentSpanData: agentSpanData(), messageListState: { m: 1 } } },
+      },
+    } as unknown as WorkflowRunState;
+    const current = (pruneAgentLoopSnapshot({ snapshot }).context as Record<string, any>).current;
+    expect(current.payload.agentSpanData).toEqual(withoutInstructions);
+    expect(current.payload.messageListState).toEqual({ m: 1 });
+  });
+
+  it('does not mutate the caller snapshot', () => {
+    const original = snapshotWith({
+      step: { status: 'success', payload: { agentSpanData: agentSpanData() } },
+    });
+    const before = structuredClone(original);
+    pruneAgentLoopSnapshot({ snapshot: original });
+    expect(original).toEqual(before);
+  });
+
+  it('leaves payloads without agentSpanData instructions unchanged', () => {
+    const payload = { agentSpanData: withoutInstructions };
+    const pruned = pruneAgentLoopSnapshot({
+      snapshot: snapshotWith({ step: { status: 'suspended', payload } }),
+    });
+    expect((pruned.context as Record<string, any>).step.payload.agentSpanData).toBe(withoutInstructions);
   });
 });

@@ -5,12 +5,15 @@ import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeft, FileDiff, Folder, FolderOpen, RefreshCw } from 'lucide-react';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 
 import type { WorkspaceChange, WorkspaceChanges, WorkspaceChangeStatus } from '../../../../api/types';
 import { useWorkspaceDiff } from '../../../../hooks/use-fs';
-import { WorkspaceDiffLines } from './WorkspaceDiffLines';
 import { treeRowContainmentClass } from '../layout';
+
+const CodeDiff = lazy(() =>
+  import('@mastra/playground-ui/components/CodeDiff').then(({ CodeDiff }) => ({ default: CodeDiff })),
+);
 
 const STATUS_LABELS: Record<WorkspaceChangeStatus, string> = {
   modified: 'Modified',
@@ -23,39 +26,46 @@ const STATUS_LABELS: Record<WorkspaceChangeStatus, string> = {
 };
 
 const STATUS_CLASSES: Record<WorkspaceChangeStatus, string> = {
-  modified: 'text-notice-info/70!',
-  added: 'text-notice-success/70!',
-  deleted: 'text-notice-destructive/70!',
-  renamed: 'text-notice-info/70!',
-  copied: 'text-notice-success/70!',
-  untracked: 'text-notice-success/70!',
-  conflicted: 'text-notice-destructive/70!',
+  modified: 'text-info-indicator!',
+  added: 'text-success-indicator!',
+  deleted: 'text-destructive-foreground!',
+  renamed: 'text-info-indicator!',
+  copied: 'text-success-indicator!',
+  untracked: 'text-success-indicator!',
+  conflicted: 'text-destructive-foreground!',
 };
 const FOLDER_CLASS = 'text-muted-foreground!';
 
 function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'additions' | 'deletions' | 'binary'>) {
   if (binary) {
-    return <span className="text-meta text-muted-foreground shrink-0">Binary</span>;
+    return (
+      <Txt as="span" variant="meta" tone="muted" className="shrink-0">
+        Binary
+      </Txt>
+    );
   }
   if (additions === undefined || deletions === undefined) return null;
 
   return (
-    <span
-      className="text-meta flex shrink-0 items-center gap-1 font-mono tabular-nums"
+    <Txt
+      as="span"
+      variant="meta"
+      font="mono"
+      className="flex shrink-0 items-center gap-1 tabular-nums"
       aria-label={`${additions} ${additions === 1 ? 'addition' : 'additions'} and ${deletions} ${
         deletions === 1 ? 'deletion' : 'deletions'
       }`}
     >
-      <span className="text-notice-success/70">+{additions}</span>
-      <span className="text-notice-destructive/70">−{deletions}</span>
-    </span>
+      <span className="text-success-indicator">+{additions}</span>
+      <span className="text-destructive-foreground">−{deletions}</span>
+    </Txt>
   );
 }
 
 function ChangesEmptyState({ available }: { available: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
-      <Txt variant="caption" className="text-muted-foreground">
+      <Txt tone="muted" variant="caption">
         {available ? 'No changes' : 'No sandbox running. Changes appear once the session sandbox starts.'}
       </Txt>
     </div>
@@ -168,13 +178,13 @@ function ChangeTreeItem({ node, openFolders, onFolderOpenChange }: ChangeTreeIte
       <Tree.Icon>
         <FileDiff className={colorClass} />
       </Tree.Icon>
-      <Tree.Label className={cn('font-mono', colorClass)}>
+      <Tree.Label className={cn(colorClass, 'text-body-sm font-mono')}>
         {node.change.previousPath ? `${splitPath(node.change.previousPath).name} → ${node.name}` : node.name}
       </Tree.Label>
       <span className="ml-auto flex shrink-0 items-center gap-2">
-        <span className={cn('text-meta shrink-0', STATUS_CLASSES[node.change.status])}>
+        <Txt as="span" variant="meta" className={cn('shrink-0', STATUS_CLASSES[node.change.status])}>
           {STATUS_LABELS[node.change.status]}
-        </span>
+        </Txt>
         <ChangeCounts {...node.change} />
       </span>
     </Tree.File>
@@ -213,18 +223,18 @@ function DiffViewer({
           <ArrowLeft />
         </Button>
         <div className="min-w-0 flex-1">
-          <Txt variant="column" font="mono" className="text-foreground truncate">
+          <Txt tone="ink" variant="column" font="mono" className="truncate">
             {name}
           </Txt>
-          <Txt variant="meta" font="mono" className="text-muted-foreground truncate">
+          <Txt tone="muted" variant="meta" font="mono" className="truncate">
             {directory || 'Repository root'}
           </Txt>
         </div>
         {change ? (
           <span className="flex shrink-0 items-center gap-2">
-            <span className={cn('text-meta shrink-0', STATUS_CLASSES[change.status])}>
+            <Txt as="span" variant="meta" className={cn('shrink-0', STATUS_CLASSES[change.status])}>
               {STATUS_LABELS[change.status]}
-            </span>
+            </Txt>
             <ChangeCounts {...change} />
           </span>
         ) : null}
@@ -245,15 +255,22 @@ function DiffViewer({
       ) : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="caption" className="text-error">
+          <Txt variant="caption" className="text-destructive-foreground">
             {error.message}
           </Txt>
         </div>
       ) : null}
       {!isLoading && !error && patch ? (
-        <ScrollArea className="min-h-0 flex-1 font-mono text-xs leading-5">
-          <WorkspaceDiffLines patch={patch} truncated={truncated} />
-        </ScrollArea>
+        <div className="min-h-0 flex-1 overflow-auto p-2">
+          <Suspense fallback={<Spinner size="sm" />}>
+            <CodeDiff patch={patch} />
+          </Suspense>
+          {truncated ? (
+            <Txt tone="muted" variant="meta" className="block p-3">
+              Diff truncated at 512 KB.
+            </Txt>
+          ) : null}
+        </div>
       ) : null}
       {!isLoading && !error && !patch ? <ChangesEmptyState available /> : null}
     </section>
@@ -321,11 +338,11 @@ export function WorkspaceChangesPanel({
           <ArrowLeft />
         </Button>
         <FileDiff className="text-muted-foreground" size={14} />
-        <Txt as="h2" variant="column" className="text-foreground">
+        <Txt tone="ink" as="h2" variant="column">
           Changes
         </Txt>
         {!isLoading && !error ? (
-          <Txt variant="meta" className="text-muted-foreground ml-auto">
+          <Txt tone="muted" variant="meta" className="ml-auto">
             {changes?.changes.length ?? 0} {changes?.changes.length === 1 ? 'file' : 'files'}
           </Txt>
         ) : null}
@@ -350,7 +367,7 @@ export function WorkspaceChangesPanel({
       ) : null}
       {error ? (
         <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">
-          <Txt variant="caption" className="text-error">
+          <Txt variant="caption" className="text-destructive-foreground">
             {error.message}
           </Txt>
         </div>

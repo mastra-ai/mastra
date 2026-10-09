@@ -44,6 +44,13 @@ export interface PlatformProxyRequest {
   retries?: number;
   /** Provider base URL selected by the tool from connection config or metadata. */
   baseUrlOverride?: string;
+  /**
+   * How to decode the provider response body. Defaults to JSON. Set to
+   * `'arraybuffer'` when the endpoint returns binary content (e.g. file
+   * exports); the body is returned as an ArrayBuffer that a template can
+   * wrap with `Buffer.from(...)`.
+   */
+  responseType?: 'arraybuffer';
 }
 
 /** Templates treat provider response bodies as untyped JSON until they validate them. */
@@ -74,9 +81,13 @@ export interface TemplateConnectionContextWithCredentials extends TemplateConnec
 
 /** Maps the platform credential to the field names templates are written against. */
 function toTemplateCredentials(credential: ConnectionCredential): Record<string, ProviderResponseData> {
-  return credential.type === 'oauth2'
-    ? { type: 'OAUTH2', access_token: credential.accessToken, expires_at: credential.expiresAt }
-    : { type: 'API_KEY', apiKey: credential.apiKey };
+  if (credential.type === 'oauth2') {
+    return { type: 'OAUTH2', access_token: credential.accessToken, expires_at: credential.expiresAt };
+  }
+  if (credential.type === 'two_step') {
+    return { type: 'TWO_STEP', token: credential.token, expires_at: credential.expiresAt };
+  }
+  return { type: 'API_KEY', apiKey: credential.apiKey };
 }
 
 /**
@@ -216,6 +227,7 @@ async function callProxy<T>(
         headers: config.headers,
         baseUrlOverride: config.baseUrlOverride,
         body: config.data,
+        responseType: config.responseType,
       });
       return { ...response, data: response.data as T };
     } catch (error) {

@@ -1,0 +1,31 @@
+{
+  "providerId": "google-sheet",
+  "localId": "google-sheet",
+  "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
+  "templateRepo": "NangoHQ/integration-templates",
+  "generatedAt": "2026-09-30T14:05:51.882Z",
+  "toolCount": 18,
+  "skippedActions": [],
+  "files": {
+    "index.ts": "31b287a938e756199365cb24cd7decde03b6642ea8e46b2462120c5c5f882c6a",
+    "tools.ts": "6981dad3eea49754d46688d25c460f4954c85af62f1bb48983fd11e6a0a25fba",
+    "tools/append-values-to-spreadsheet.ts": "14d9d49e6d5ee99709abd1d55b7679f803cb42b726a16f50f7380768bfb5c1d3",
+    "tools/batch-clear-values-by-data-filter.ts": "07548363731cb64e4b5236f2d5cb62cc68bd44ddf0b318333a83a74457609af5",
+    "tools/batch-clear-values.ts": "c6b50df322aa5772bd2f71fc6ef9b599c5f12be4654b1cb5f6ab57c6b708f5f8",
+    "tools/batch-get-values-by-data-filter.ts": "d8248d3a51935d5862a538bacc107ccee86cf48a86367caa27c2866bb93c908e",
+    "tools/batch-get-values.ts": "f0cbe99d9b68ce9f650acac7e76d54637891163482b921a61643f7180f48d21d",
+    "tools/batch-update-spreadsheet.ts": "0855e68de309f32282149d3c9ac94b111ca8f447650af9680b3cc03aaf6d688a",
+    "tools/clear-values.ts": "2aaa2f46226e4458ac7eefc7bedbbdc928fda3fef92b0c83c64efe251236681c",
+    "tools/copy-sheet.ts": "ccfb5f4f6ee2850665b7717e9789a6dbe8c2b8ebe7b31aca763c6648862fb29e",
+    "tools/create-column.ts": "32ffe985482700dff533c1b4c897bb8246a89182d987243a5f3da749b37229da",
+    "tools/create-spreadsheet-row.ts": "ec5a1adcdec1f2fa2a18f35f54547482fca39efa7b639174c9cd60d5d47b58a8",
+    "tools/create-spreadsheet.ts": "f683a68a7dd80d486ab9be5743fbb4bb5e233d43b8663021d9bd751027c714dd",
+    "tools/delete-worksheet.ts": "b4a58ca2ec2113fb6ab310cbe2d404da97686d11fa8b2facca6f29421102d23c",
+    "tools/get-spreadsheet-by-data-filter.ts": "50af7f51c25b98ce57f25b529c9ded172f43e9f7615321874d10f700f4cdf38f",
+    "tools/get-values.ts": "cb3e532c4139c3c0c05e8c16740903c239537d354d2aae4492ad6eda02a3f7d6",
+    "tools/search-developer-metadata.ts": "c09c5194770340808a5aca8a79c960ee615424f6eae66939c14eac715dba4bf9",
+    "tools/update-conditional-format-rule.ts": "28858531e714dbbcccb10193e9fd3eee3374d11d8a04da9cb82a4c07e4e7f269",
+    "tools/update-values.ts": "59633302835686cb497c9ef856c803f1c2978f93d1471491e062573987ba0e73",
+    "tools/upsert-row.ts": "ce2b2afe202c2cc7126fabb692d20f736ebe337d3efb0bebde5e892fc8f6c9c8"
+  }
+}

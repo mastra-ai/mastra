@@ -249,7 +249,7 @@ const result = await agent.generate('message for agent')
                 parameters: [
                   {
                     name: 'messageFilter',
-                    type: '(context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>',
+                    type: '(context: MessageFilterContext) => ModelMessage[] | Promise<ModelMessage[]>',
                     isOptional: true,
                     description:
                       'Callback function called before delegating to a subagent. Use this to filter the messages that are passed to the subagent.',
@@ -849,6 +849,17 @@ const result = await agent.generate('message for agent')
               {
                 parameters: [
                   {
+                    name: 'nestUnderParent',
+                    type: 'boolean',
+                    isOptional: true,
+                    description:
+                      "Set to `true` together with `parentSpanId` to attach this run as a child of that span inside the existing trace, for example an LLM judge under the run it scores. Exporters then keep the trace's own name, input, output, and tags. Leave unset when `parentSpanId` comes from your own tracing system. Ignored without a valid `traceId` and `parentSpanId`.",
+                  },
+                ],
+              },
+              {
+                parameters: [
+                  {
                     name: 'tags',
                     type: 'string[]',
                     isOptional: true,
@@ -1425,6 +1436,8 @@ const response = await agent.generate([
 
 console.log(response.text)
 ```
+
+The `image` value, or `data` for a `type: 'file'` part, should be an absolute URL, a data URL, or base64 content. The model can't see an attachment given as a relative path such as `/api/images/foo.png`, so resolve it to an absolute URL before sending. The agent replaces it with a placeholder and logs a warning. It does the same for inline content that can't be decoded or isn't the image or PDF its media type says, and for any attachment it can't download, instead of failing. See [attachment download failures](/docs/agents/processors#recover-from-attachment-download-failures).
 
 ### Using `maxSteps`
 

@@ -6,6 +6,8 @@ import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { VoiceTurnContext } from './bridge';
 import { createRemoteAgentReplyGenerator, readMastraSSE } from './remote';
+import { createGenerationMetrics, VOICE_TEXT_FLUSH } from './turn-metrics';
+import type { VoiceReplyChunk } from './turn-metrics';
 
 // ---------------------------------------------------------------------------
 // Fake Mastra server (node:http) — records requests, streams recorded chunks.
@@ -107,13 +109,13 @@ function makeCtx(overrides: Partial<VoiceTurnContext> = {}): VoiceTurnContext {
   } as VoiceTurnContext;
 }
 
-async function readAll(stream: ReadableStream<string>): Promise<string[]> {
+async function readAll(stream: ReadableStream<VoiceReplyChunk>): Promise<string[]> {
   const reader = stream.getReader();
   const out: string[] = [];
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    out.push(value);
+    if (typeof value === 'string') out.push(value);
   }
   return out;
 }
@@ -197,6 +199,47 @@ describe('readMastraSSE', () => {
 // ===========================================================================
 
 describe('createRemoteAgentReplyGenerator — streaming', () => {
+  it('flushes an acknowledgment before the server finishes a tool and retains its timing', async () => {
+    let releaseTool!: () => void;
+    const blocked = new Promise<void>(resolve => {
+      releaseTool = resolve;
+    });
+    const fake = await startFakeServer(async ({ res }) => {
+      openSSE(res);
+      writeChunk(res, { type: 'text-delta', payload: { text: 'Checking.' } });
+      writeChunk(res, { type: 'text-end' });
+      writeChunk(res, { type: 'tool-call', payload: { toolCallId: 'tool-1', toolName: 'lookup' } });
+      await blocked;
+      writeChunk(res, { type: 'tool-result', payload: { toolCallId: 'tool-1', result: 42 } });
+      writeChunk(res, { type: 'step-finish' });
+      endSSE(res);
+    });
+    const onMetrics = vi.fn();
+    const metrics = createGenerationMetrics({ turnId: 'turn', attemptId: 'attempt' }, onMetrics);
+    const generate = createRemoteAgentReplyGenerator({
+      baseUrl: fake.url,
+      agentId: 'support',
+      toolFeedback: () => 'One moment.',
+    });
+    const reader = (await generate(makeCtx({ metrics })))!.getReader();
+    try {
+      expect((await reader.read()).value).toBe('Checking.');
+      expect((await reader.read()).value).toEqual(VOICE_TEXT_FLUSH);
+      expect((await reader.read()).value).toEqual(VOICE_TEXT_FLUSH);
+      expect((await reader.read()).value).toBe('One moment. ');
+      expect((await reader.read()).value).toEqual(VOICE_TEXT_FLUSH);
+    } finally {
+      releaseTool();
+    }
+    expect((await reader.read()).value).toEqual(VOICE_TEXT_FLUSH);
+    expect((await reader.read()).done).toBe(true);
+    metrics.end('completed');
+    await vi.waitFor(() => expect(onMetrics).toHaveBeenCalledOnce());
+    expect(onMetrics.mock.calls[0]![0].tools).toEqual([
+      { toolCallId: 'tool-1', toolName: 'lookup', startedAtMs: expect.any(Number), durationMs: expect.any(Number) },
+    ]);
+  });
+
   it('accumulates text deltas into the spoken stream', async () => {
     const server = await startFakeServer(
       respondWithChunks([

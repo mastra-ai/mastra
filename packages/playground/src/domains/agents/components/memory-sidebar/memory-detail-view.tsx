@@ -1,12 +1,16 @@
 import { MemoryStudioPanel } from '@mastra/playground-ui/domains/memory/components/memory-studio-panel';
-import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
-import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import {
+  useMemoryThreadMessages,
+  useObservationalMemory,
+  useMemoryConfig,
+  useThread,
+} from '@mastra/react/hooks/memory';
 import { useEffect } from 'react';
 
 import { getObservationWindowTokens } from './lib/observation-window';
 import type { OmAgentConfig } from './lib/observation-window';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
-import { useMemoryConfig, useThread } from '@/domains/memory/hooks';
 
 export interface MemoryDetailViewProps {
   agentId: string;
@@ -31,26 +35,35 @@ export function MemoryDetailView({ agentId, threadId }: MemoryDetailViewProps) {
   const isOMActive = isObservingFromStream || isReflectingFromStream;
 
   // Resolve the thread's actual resourceId (may differ from agentId for externally-created threads)
-  const { data: thread } = useThread({ threadId, agentId });
+  const { data: thread } = useThread({
+    threadId: threadId,
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(threadId) && threadId !== 'new' && Boolean(agentId) },
+  });
   const effectiveResourceId = thread?.resourceId ?? agentId;
 
   // Config thresholds, read the same way the OM sidebar section does.
-  const { data: configData } = useMemoryConfig(agentId);
+  const { data: configData } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
 
   const {
     data: omData,
     isLoading: isOMLoading,
     refetch: refetchOM,
-  } = useObservationalMemory(
-    isPanelOpen ? agentId : undefined,
-    isPanelOpen ? threadId : undefined,
-    effectiveResourceId,
-  );
+  } = useObservationalMemory({
+    agentId: isPanelOpen ? agentId : undefined,
+    threadId: isPanelOpen ? threadId : undefined,
+    resourceId: effectiveResourceId,
+  });
   const {
     data: messagesData,
     isLoading: isMessagesLoading,
     refetch: refetchMessages,
-  } = useMemoryThreadMessages(isPanelOpen ? threadId : undefined);
+  } = useMemoryThreadMessages({ threadId: isPanelOpen ? threadId : undefined });
 
   // Refetch as soon as new observations are signalled (e.g. on stream finish),
   // matching the left sidebar's `observationsUpdatedAt`-driven refresh.

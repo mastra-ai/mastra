@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
@@ -65,7 +66,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
               })}
             >
               {template.imageURL && (
-                <div className={cn('overflow-hidden')}>
+                <div className="overflow-hidden">
                   <div
                     className="thumb transition-scale h-full w-full bg-cover duration-150"
                     style={{
@@ -80,51 +81,68 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                   '[&_svg]:h-[1em] [&_svg]:w-[1em] [&_svg]:text-muted-foreground',
                 )}
               >
-                <h2 className="text-body text-foreground">{template.title}</h2>
-                <p className={cn('text-body', quietTextHoverInGroup, controlStateColorTransition)}>
-                  {template.description}
-                </p>
-                <div className="mt-3 hidden flex-wrap items-center gap-4 text-body text-muted-foreground 2xl:flex">
+                <Txt as="h2" tone="ink">
+                  {template.title}
+                </Txt>
+                <Txt className={cn(quietTextHoverInGroup, controlStateColorTransition)}>{template.description}</Txt>
+                <div className="mt-3 hidden flex-wrap items-center gap-4 text-muted-foreground 2xl:flex">
                   {hasMetaInfo && (
                     <ul
                       className={cn(
-                        'm-0 flex list-none gap-4 p-0 text-body text-muted-foreground',
-                        'text-muted-foreground [&>li]:flex [&>li]:items-center [&>li]:gap-0.5',
+                        'text-muted-foreground',
+                        'm-0 flex list-none gap-4 p-0',
+                        '[&>li]:flex [&>li]:items-center [&>li]:gap-0.5',
                       )}
                     >
                       {template?.agents && template.agents.length > 0 && (
                         <li>
-                          <AgentIcon /> {template.agents.length}
+                          <Txt as="span" variant="body" className="block">
+                            <AgentIcon /> {template.agents.length}
+                          </Txt>
                         </li>
                       )}
                       {template?.tools && template.tools.length > 0 && (
                         <li>
-                          <ToolsIcon /> {template.tools.length}
+                          <Txt as="span" variant="body" className="block">
+                            <ToolsIcon /> {template.tools.length}
+                          </Txt>
                         </li>
                       )}
                       {template?.networks && template.networks.length > 0 && (
                         <li>
-                          <NetworkIcon /> {template.networks.length}
+                          <Txt as="span" variant="body" className="block">
+                            <NetworkIcon /> {template.networks.length}
+                          </Txt>
                         </li>
                       )}
                       {template?.workflows && template.workflows.length > 0 && (
                         <li>
-                          <WorkflowIcon /> {template.workflows.length}
+                          <Txt as="span" variant="body" className="block">
+                            <WorkflowIcon /> {template.workflows.length}
+                          </Txt>
                         </li>
                       )}
                       {template?.mcp && template.mcp.length > 0 && (
                         <li>
-                          <McpServerIcon /> {template.mcp.length}
+                          <Txt as="span" variant="body" className="block">
+                            <McpServerIcon /> {template.mcp.length}
+                          </Txt>
                         </li>
                       )}
                     </ul>
                   )}
-                  {hasMetaInfo && template.supportedProviders && <small>|</small>}
-                  <div className="flex items-center gap-4 text-muted-foreground">
+                  {hasMetaInfo && template.supportedProviders && (
+                    <small>
+                      <Txt as="span" variant="body">
+                        |
+                      </Txt>
+                    </small>
+                  )}
+                  <div className="flex items-center gap-4">
                     {template.supportedProviders.map(provider => (
-                      <span key={provider} className="">
+                      <Txt tone="muted" as="span" variant="body" key={provider}>
                         {provider}
-                      </span>
+                      </Txt>
                     ))}
                   </div>
                 </div>
@@ -132,20 +150,22 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
             </LinkComponent>
             <a
               href={template.githubUrl}
-              className={cn('group ml-auto hidden items-center gap-2 pr-4 text-body', 'lg:flex')}
+              className={cn('group ml-auto hidden items-center gap-2 pr-4', 'lg:flex')}
               target="_blank"
               rel="noopener noreferrer"
             >
-              <span
-                className={cn(
-                  'flex items-center gap-2 rounded bg-sidebar px-2 py-1',
-                  surfaceGroupStateLayerStyle,
-                  quietTextHoverInGroup,
-                  controlStateColorTransition,
-                )}
-              >
-                <GithubIcon /> {getRepoName(template.githubUrl)}
-              </span>
+              <Txt as="span" variant="body">
+                <span
+                  className={cn(
+                    'flex items-center gap-2 rounded bg-sidebar px-2 py-1',
+                    surfaceGroupStateLayerStyle,
+                    quietTextHoverInGroup,
+                    controlStateColorTransition,
+                  )}
+                >
+                  <GithubIcon /> {getRepoName(template.githubUrl)}
+                </span>
+              </Txt>
             </a>
           </article>
         );

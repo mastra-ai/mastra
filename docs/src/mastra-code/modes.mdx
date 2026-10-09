@@ -55,7 +55,7 @@ Plan persistence is best-effort — a write failure does not block or affect the
 
 ## Plan mode
 
-Plan mode is read-only. The agent can explore the codebase but cannot modify files or run side-effect commands.
+Plan mode is read-only for project files. The agent can explore the codebase but can't modify project files or run side-effect commands. The only files it can write are the markdown plan files it submits with `submit_plan`.
 
 Use Plan mode when you want to analyze architecture, design an approach, or create a detailed implementation plan before writing code.
 
@@ -64,6 +64,7 @@ Use Plan mode when you want to analyze architecture, design an approach, or crea
 - `view`: Read files and list directories
 - `search_content`: Search file contents
 - `find_files`: Find files by pattern
+- `write_file` and `string_replace_lsp`: Create and edit plan files only
 - `execute_command`: Only for read-only commands (`git status`, `git log`, `git diff`)
 
 ### Plan submission

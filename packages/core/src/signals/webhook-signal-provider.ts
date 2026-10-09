@@ -4,8 +4,6 @@ import type { SignalProviderTarget, SignalProviderWebhookRequest, SignalSubscrip
 
 /**
  * Configuration for the webhook signal provider.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export type WebhookSignalProviderOptions = {
   /**
@@ -70,8 +68,6 @@ export type WebhookSignalProviderOptions = {
  *   headers: {},
  * });
  * ```
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export class WebhookSignalProvider extends SignalProvider<string> {
   readonly id: string;

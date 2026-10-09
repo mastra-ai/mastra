@@ -73,7 +73,11 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     }
 
     // Check if a timeout has triggered a flush
-    if (state.timeoutTriggered && state.batch.length > 0) {
+    // Non-text parts skip this and take the emitOnNonText path below, which emits
+    // them right after the flushed text. Buffering them here would hold them past
+    // the current step (e.g. a step-finish surfacing in the next step).
+    const emitsImmediately = this.options.emitOnNonText && part.type !== 'text-delta';
+    if (state.timeoutTriggered && state.batch.length > 0 && !emitsImmediately) {
       state.timeoutTriggered = false;
       // Add the current part to the batch before flushing
       state.batch.push(part);
@@ -82,7 +86,8 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
     }
 
     // If it's a non-text part and we should emit immediately, flush the batch first
-    if (this.options.emitOnNonText && part.type !== 'text-delta') {
+    if (emitsImmediately) {
+      state.timeoutTriggered = false;
       const batchedChunk = this.flushBatch(state as BatchPartsState);
       if (batchedChunk) {
         // We have two parts to emit (the batched text and this non-text part)

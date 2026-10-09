@@ -367,11 +367,17 @@ export const factory = new MastraFactory({
   secretEncryption,
   integrations,
   configVersion: factoryConfigVersion,
+  // Providers every signed-in account may run on this server's own credentials,
+  // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
+  deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
   sandbox: ctx => {
     const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
     if (!useLocalSandbox && hasPlatformSandboxEnv) {
       return new PlatformSandbox({
         id: ctx.sessionId,
+        // Physical VM id from a prior start (undefined on first start) so
+        // resume reattaches the original VM instead of provisioning a replacement.
+        sandboxId: ctx.sandboxId,
         template: createPlatformRepoTemplate(ctx),
       });
     }
@@ -379,6 +385,7 @@ export const factory = new MastraFactory({
     if (!useLocalSandbox && process.env.E2B_API_KEY?.trim()) {
       return new E2BSandbox({
         id: ctx.sessionId,
+        sandboxId: ctx.sandboxId,
         template: createE2BRepoTemplate(ctx),
       });
     }

@@ -12,13 +12,13 @@ const stateClasses = {
     'group-hover/separator:opacity-100',
     "group-data-[separator='hover']/separator:opacity-100",
     "group-data-[separator='active']/separator:via-foreground/45 group-data-[separator='active']/separator:opacity-100",
-    'group-focus-visible/separator:via-accent1 group-focus-visible/separator:opacity-100',
+    'group-focus-visible/separator:via-border-focus group-focus-visible/separator:opacity-100',
   ),
   pill: cn(
     'group-hover/separator:h-12 group-hover/separator:w-1',
     "group-data-[separator='hover']/separator:h-12 group-data-[separator='hover']/separator:w-1",
-    "group-data-[separator='active']/separator:h-12 group-data-[separator='active']/separator:w-1 group-data-[separator='active']/separator:bg-accent1",
-    'group-focus-visible/separator:bg-accent1',
+    "group-data-[separator='active']/separator:h-12 group-data-[separator='active']/separator:w-1 group-data-[separator='active']/separator:bg-border-focus",
+    'group-focus-visible/separator:bg-border-focus',
   ),
 };
 

@@ -1,0 +1,24 @@
+import type { ComponentProps, ReactNode } from 'react';
+import { Badge } from '@/ds/components/Badge';
+
+type ReviewStatus = 'needs-review' | 'complete' | 'reviewed';
+
+function reviewStatusBadgeVariant(status: string): ComponentProps<typeof Badge>['variant'] {
+  if (status === 'needs-review') return 'warning';
+  if (status === 'complete' || status === 'reviewed') return 'success';
+  return 'neutral';
+}
+
+type ReviewStatusBadgeProps = Omit<ComponentProps<typeof Badge>, 'variant' | 'children' | 'icon' | 'indicator'> & {
+  status: ReviewStatus | (string & {});
+  children?: ReactNode;
+};
+
+/** Shared status badge for review items and trace feedback, so both surfaces use the same colours. */
+export function ReviewStatusBadge({ status, children, ...props }: ReviewStatusBadgeProps) {
+  return (
+    <Badge size="xs" {...props} variant={reviewStatusBadgeVariant(status)}>
+      {children ?? status}
+    </Badge>
+  );
+}

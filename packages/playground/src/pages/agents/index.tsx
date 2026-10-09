@@ -5,6 +5,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useAgents } from '@mastra/react/hooks/agents';
 import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
@@ -15,7 +16,6 @@ import type { AgentsSort } from '@/domains/agents/components/agent-list/agents-s
 import { AgentsViewToggle } from '@/domains/agents/components/agent-list/agents-view-toggle';
 import type { AgentsView } from '@/domains/agents/components/agent-list/agents-view-toggle';
 import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { extractPrompt } from '@/domains/agents/utils/extractPrompt';
 import { navCrumb } from '@/domains/navigation/crumbs';
 

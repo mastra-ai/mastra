@@ -282,7 +282,7 @@ async function retentionTick() {
 }
 ```
 
-You can also cancel a long-running prune with an `AbortSignal`: the loop stops between batches and returns partial results with `done: false`, so the next run resumes cleanly.
+You can also cancel a long-running prune with an `AbortSignal`: the loop stops between batches and returns partial results with `done: false`. The next run resumes cleanly.
 
 ## ClickHouse native TTL
 

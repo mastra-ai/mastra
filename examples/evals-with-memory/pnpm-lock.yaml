@@ -15,7 +15,6 @@ overrides:
   '@mastra/evals': link:../../packages/evals
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/memory': link:../../packages/memory
-  nanoid@>=3.0.0 <3.3.19: 3.3.19
   proxy-addr: 2.0.8
   qs: 6.16.0
   fast-uri: 3.1.8
@@ -48,6 +47,7 @@ overrides:
   zod@>=4.0.0 <4.6.5: 4.6.5
   es-toolkit@<1.52.0: 1.52.0
   fast-copy@<4.1.1: 4.1.1
+  nanoid@<5.1.16: 5.1.16
 
 importers:
 
@@ -305,9 +305,9 @@ packages:
     engines: {node: ^18.0.0 || >=20.0.0}
     hasBin: true
 
-  nanoid@3.3.19:
-    resolution: {integrity: sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug==}
-    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+  nanoid@5.1.16:
+    resolution: {integrity: sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==}
+    engines: {node: ^18 || >=20}
     hasBin: true
 
   react@19.2.8:
@@ -357,7 +357,7 @@ snapshots:
   '@ai-sdk/provider-utils@2.2.8(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      nanoid: 3.3.19
+      nanoid: 5.1.16
       secure-json-parse: 2.7.0
       zod: 3.25.76
 
@@ -520,7 +520,7 @@ snapshots:
     dependencies:
       '@dmsnell/diff-match-patch': 1.1.0
 
-  nanoid@3.3.19: {}
+  nanoid@5.1.16: {}
 
   react@19.2.8: {}
 

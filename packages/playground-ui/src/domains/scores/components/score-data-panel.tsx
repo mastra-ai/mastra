@@ -5,6 +5,7 @@ import { ScoreAsItemDialog } from './score-as-item-dialog';
 import { Button } from '@/ds/components/Button';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
+import { Txt } from '@/ds/components/Txt';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
 import { formatTimestampPrecise } from '@/utils/date-format';
@@ -20,10 +21,10 @@ function isCodeBasedScorer(score?: ClientScoreRowData): boolean {
 function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: ClientScoreRowData) {
   return (
     <>
-      <span className="flex items-center gap-1.5 tracking-widest text-placeholder uppercase [&>svg]:size-3.5">
+      <Txt as="span" variant="eyebrow" tone="faint" className="flex items-center gap-1.5 [&>svg]:size-3.5">
         {icon}
         {sectionTitle}
-      </span>
+      </Txt>
       <span>
         › Score <b className="text-muted-foreground">#{score.id}</b>
       </span>
@@ -52,18 +53,20 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
         {score && (
           <>
             <DataPanel.Header>
-              <DataPanel.CloseButton onClick={onClose} />
               <DataPanel.Heading>
                 Score
                 <DataPanel.CopyId id={score.id} />
               </DataPanel.Heading>
               <DataPanel.HeaderActions>
-                <DataPanel.NextPrevNav
-                  onPrevious={onPrevious}
-                  onNext={onNext}
-                  previousLabel="Go to previous score"
-                  nextLabel="Go to next score"
-                />
+                {(onPrevious || onNext) && (
+                  <DataPanel.NextPrevNav
+                    onPrevious={onPrevious}
+                    onNext={onNext}
+                    previousLabel="Go to previous score"
+                    nextLabel="Go to next score"
+                  />
+                )}
+                <DataPanel.CloseButton icon="x" onClick={onClose} label="Close score" tooltip="Close score" />
               </DataPanel.HeaderActions>
             </DataPanel.Header>
 
@@ -84,17 +87,25 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 {score.traceId && (
                   <>
                     <DataKeysAndValues.Key>Trace Id</DataKeysAndValues.Key>
-                    <DataKeysAndValues.ValueLink href={paths.traceLink(score.traceId)} as={Link}>
-                      {score.traceId}
-                    </DataKeysAndValues.ValueLink>
+                    {paths.traceLink(score.traceId) ? (
+                      <DataKeysAndValues.ValueLink href={paths.traceLink(score.traceId)} as={Link}>
+                        {score.traceId}
+                      </DataKeysAndValues.ValueLink>
+                    ) : (
+                      <DataKeysAndValues.Value>{score.traceId}</DataKeysAndValues.Value>
+                    )}
                   </>
                 )}
                 {score.spanId && score.traceId && (
                   <>
                     <DataKeysAndValues.Key>Span Id</DataKeysAndValues.Key>
-                    <DataKeysAndValues.ValueLink href={paths.traceLink(score.traceId, score.spanId)} as={Link}>
-                      {score.spanId}
-                    </DataKeysAndValues.ValueLink>
+                    {paths.traceLink(score.traceId, score.spanId) ? (
+                      <DataKeysAndValues.ValueLink href={paths.traceLink(score.traceId, score.spanId)} as={Link}>
+                        {score.spanId}
+                      </DataKeysAndValues.ValueLink>
+                    ) : (
+                      <DataKeysAndValues.Value>{score.spanId}</DataKeysAndValues.Value>
+                    )}
                   </>
                 )}
               </DataKeysAndValues>
@@ -108,18 +119,26 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
               <div className="mb-6 text-muted-foreground">
                 <div
                   className={cn(
-                    'flex items-baseline gap-2 text-body text-placeholder',
+                    'text-placeholder',
+                    'flex items-baseline gap-2',
                     '[&>svg]:size-5 [&>svg]:translate-y-1',
                   )}
                 >
                   <GaugeIcon />
-                  <span className="">Score:</span>
-                  <b className="text-muted-foreground tabular-nums">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
+                  <Txt as="span" variant="body">
+                    Score:
+                  </Txt>
+                  <Txt
+                    as="b"
+                    variant="body"
+                    tone="muted"
+                    className="tabular-nums"
+                  >{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</Txt>
                 </div>
-                <div className="mt-2 text-body-sm">
+                <Txt as="p" variant="body-sm" className="mt-2">
                   {score.reason ||
                     (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
-                </div>
+                </Txt>
               </div>
 
               <div className="grid gap-4">

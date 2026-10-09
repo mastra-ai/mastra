@@ -263,6 +263,21 @@ describe('shared workflow builder authoring schema', () => {
       expect(foreach.step.options).toBeUndefined();
       expect(foreach.opts).toBeUndefined();
     });
+    it('normalizes null classifier-only options so the canonical schema accepts them', () => {
+      const normalized = normalizeWorkflowBuilderDefinition({
+        ...authoringDefinition,
+        graph: [
+          {
+            type: 'classifier',
+            id: 'classify-ticket',
+            classifierId: 'ticket-router',
+            options: { maxRetries: null, providerOptions: null, retries: null, metadata: null },
+          },
+        ],
+      });
+      const parsed = workflowBuilderDefinitionSchema.parse(normalized);
+      expect(parsed.graph[0]).toEqual({ type: 'classifier', id: 'classify-ticket', classifierId: 'ticket-router' });
+    });
   });
 
   describe('when a canonical entry carries fields the contract does not support', () => {

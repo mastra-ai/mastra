@@ -447,6 +447,11 @@ export class DockerSandbox extends MastraSandbox {
         this.setWorkingDirectory(reconnectedWorkingDir);
       }
 
+      // Report the image the existing container actually runs, not this instance's default.
+      if (info.Config?.Image) {
+        this._image = info.Config.Image;
+      }
+
       // Provide container reference to process manager
       this.processes.setContainer(this._container);
 

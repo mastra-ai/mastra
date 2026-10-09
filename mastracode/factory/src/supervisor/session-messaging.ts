@@ -1,4 +1,7 @@
+import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
+
+export type WorkerMessageResult = void | { status: 'interrupted' };
 
 type WorkerSession = {
   sendMessage(input: { content: string; requestContext?: RequestContext }): Promise<unknown>;
@@ -21,14 +24,19 @@ export async function messageWorkerSession({
   message: string;
   delivery: 'send' | 'queue';
   requestContext?: RequestContext;
-}): Promise<void> {
+}): Promise<WorkerMessageResult> {
   const session = await controller.getSessionByResource(sessionId);
   if (!session) throw new Error('The worker session is not currently available.');
 
   const input = { content: message, ...(requestContext ? { requestContext } : {}) };
-  if (delivery === 'queue') {
-    await session.queueMessage(input);
-  } else {
-    await session.sendMessage(input);
+  try {
+    if (delivery === 'queue') {
+      await session.queueMessage(input);
+    } else {
+      await session.sendMessage(input);
+    }
+  } catch (error) {
+    if (isSessionStartupCancelledError(error)) return { status: 'interrupted' };
+    throw error;
   }
 }

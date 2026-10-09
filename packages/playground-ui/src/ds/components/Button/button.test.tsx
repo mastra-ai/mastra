@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import * as React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { Form } from '../Form';
 import { TooltipProvider } from '../Tooltip';
 import { Button, buttonVariants } from './Button';
 
@@ -197,9 +198,9 @@ describe('Button', () => {
     it('submits its form when no type is set, as a native button does', () => {
       const onSubmit = vi.fn(e => e.preventDefault());
       render(
-        <form onSubmit={onSubmit}>
+        <Form onSubmit={onSubmit}>
           <Button>Save</Button>
-        </form>,
+        </Form>,
       );
       fireEvent.click(screen.getByRole('button', { name: 'Save' }));
       expect(onSubmit).toHaveBeenCalledTimes(1);
@@ -208,9 +209,9 @@ describe('Button', () => {
     it('does not submit when the caller opts out with type="button"', () => {
       const onSubmit = vi.fn(e => e.preventDefault());
       render(
-        <form onSubmit={onSubmit}>
+        <Form onSubmit={onSubmit}>
           <Button type="button">Cancel</Button>
-        </form>,
+        </Form>,
       );
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
       expect(onSubmit).not.toHaveBeenCalled();

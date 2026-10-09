@@ -134,14 +134,21 @@ export function useMouseInteraction(options: UseMouseInteractionOptions): void {
       pendingMoveEvent = e;
 
       if (rafId !== null) return; // already scheduled
+      scheduleMoveFlush();
+    }
 
+    function scheduleMoveFlush(): void {
       rafId = requestAnimationFrame(now => {
         rafId = null;
 
         if (!pendingMoveEvent) return;
 
         const delta = now - lastMoveTime;
-        if (delta < FRAME_INTERVAL) return;
+        if (delta < FRAME_INTERVAL) {
+          // Keep the buffered position so the final one is sent after the mouse stops
+          scheduleMoveFlush();
+          return;
+        }
 
         lastMoveTime = now;
 

@@ -54,6 +54,17 @@ describe('MongoDB knowledge concurrency and indexes', () => {
     expect(Object.keys(await outbox.indexInformation())).toContain('idempotencyKey_1');
   });
 
+  it('rejects the deprecated curation cursor methods without touching storage', async () => {
+    const store = createStore();
+    await store.init();
+    await expect(store.getCurationCursor({ sourceThreadId: 'thread', agent: 'curate' })).rejects.toThrow(
+      'Knowledge curation cursors were removed',
+    );
+    await expect(
+      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01A' }),
+    ).rejects.toThrow('Knowledge curation cursors were removed');
+  });
+
   it('allows only one concurrent CAS update', async () => {
     const store = createStore();
     await store.init();
@@ -65,18 +76,6 @@ describe('MongoDB knowledge concurrency and indexes', () => {
     ]);
     expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
     expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
-  });
-
-  it('advances concurrent cursors monotonically', async () => {
-    const store = createStore();
-    await store.init();
-    await store.dangerouslyClearAll();
-    await Promise.all([
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01A' }),
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01C' }),
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01B' }),
-    ]);
-    expect((await store.getCurationCursor({ sourceThreadId: 'thread', agent: 'curate' }))?.lastKnowledgeId).toBe('01C');
   });
 });
 

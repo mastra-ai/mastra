@@ -67,6 +67,19 @@ describe('LinearRules', () => {
     ]);
   });
 
+  it('stamps the Linear project rather than the team source on a routed issue', async () => {
+    const { project, service, workItems } = await setup();
+    await service.ingest({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      issues: [{ ...issue, sourceId: 'linear-team:team-1', projectId: 'project-1' }],
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { decision: { metadata: { linearProjectId: 'project-1' } } },
+    ]);
+  });
+
   it('does not mint a second card while another Factory holds a live card for the issue', async () => {
     const { project, service, workItems } = await setup();
     await workItems.upsert({
@@ -340,6 +353,37 @@ describe('LinearRules', () => {
       expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
     },
   );
+
+  it('re-reads the card and commits at its fresh revision when a concurrent write makes the commit stale', async () => {
+    const { project, service, workItems } = await setup();
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: `linear:${issue.identifier}`,
+          url: issue.url,
+        },
+        title: `${issue.identifier}: ${issue.title}`,
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const original = workItems.commitRuleEvaluation.bind(workItems);
+    const commit = vi
+      .spyOn(workItems, 'commitRuleEvaluation')
+      .mockImplementationOnce(input => original({ ...input, expectedRevision: (input.expectedRevision ?? 0) - 1 }));
+
+    await expect(
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
+    ).resolves.toEqual({ status: 'committed', ingested: 1 });
+    expect(commit).toHaveBeenCalledTimes(2);
+    expect(commit.mock.calls[1]?.[0].workItemId).toEqual(expect.any(String));
+  });
 
   it('retains ingestion bookkeeping when an event is disabled', async () => {
     const { project, service, workItems } = await setup({ issueObserved: null });

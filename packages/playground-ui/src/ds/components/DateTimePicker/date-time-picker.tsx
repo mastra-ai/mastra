@@ -4,11 +4,12 @@ import * as React from 'react';
 import type { DayPickerSingleProps } from 'react-day-picker';
 import { useDebouncedCallback } from 'use-debounce';
 
-import { TextFieldBlock } from '../FormFieldBlocks/fields/text-field-block';
 import { DatePicker } from './date-picker';
 import { TimePicker } from './time-picker';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
+import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
+import { Input } from '@/ds/components/Input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { controlTriggerOpenStateFor } from '@/ds/primitives/control-size';
 import { fieldTriggerStyle } from '@/ds/primitives/form-element';
@@ -217,15 +218,11 @@ export const DateTimePickerContent = ({
         }
       }}
     >
-      <TextFieldBlock
-        name="date-range"
-        type="text"
-        value={dateInputValue}
-        onChange={handleInputChange}
-        placeholder={placeholder}
-        className="m-4 mb-0 w-auto!"
-        errorMsg={localErrorMsg}
-      />
+      <Field invalid={Boolean(localErrorMsg)} className="m-4 mb-0 w-auto!">
+        <FieldLabel className="sr-only">Date</FieldLabel>
+        <Input type="text" value={dateInputValue} onChange={handleInputChange} placeholder={placeholder} />
+        <FieldError>{localErrorMsg}</FieldError>
+      </Field>
 
       <DatePicker
         mode="single"

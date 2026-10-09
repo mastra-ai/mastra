@@ -1,4 +1,4 @@
-import { useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { useEffect, useId } from 'react';
@@ -9,7 +9,7 @@ import { ChatHeaderSidebarTrigger } from '../domains/chat/components/ChatHeaderS
 import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
-import { SETTINGS_SECTION_LABELS, isSettingsSection } from '../domains/settings/settingsSections';
+import { SETTINGS_SECTION_LABELS, isSettingsSection, settingsSectionPath } from '../domains/settings/settingsSections';
 
 /**
  * Routed settings page (`/settings/:section`). Sections are URL-addressable;
@@ -17,8 +17,18 @@ import { SETTINGS_SECTION_LABELS, isSettingsSection } from '../domains/settings/
  * section navigation) is rendered by `AppLayout`.
  */
 export function SettingsPage() {
-  const { section } = useParams();
+  const { section, factoryId } = useParams();
   const location = useLocation();
+
+  if (factoryId && section === 'models' && location.hash === '#model-packs') {
+    return (
+      <Navigate
+        to={`${settingsSectionPath(factoryId, 'personal-models')}${location.search}#default-model`}
+        replace
+        state={location.state}
+      />
+    );
+  }
 
   if (!isSettingsSection(section)) {
     return <Navigate to="../preferences" replace state={location.state} />;
@@ -39,7 +49,7 @@ export function SettingsPage() {
 /** Moves focus to the section title on desktop so section switches are announced; mobile focuses its own title. */
 function FocusedTitle({ children }: { children: ReactNode }) {
   const id = useId();
-  const { isMobile } = useMainSidebar();
+  const { isMobile } = useSidebar();
   useEffect(() => {
     if (!isMobile) document.getElementById(id)?.focus();
   }, [id, isMobile]);
@@ -64,7 +74,7 @@ export function SettingsPageLayout({
   header: ReactNode;
   breadcrumbs?: ReactNode;
 }) {
-  const { isMobile, desktopState } = useMainSidebar();
+  const { isMobile, desktopState } = useSidebar();
   const sidebarCollapsed = !isMobile && desktopState === 'collapsed';
 
   return (

@@ -18,8 +18,14 @@
       "outputs": ["dist/**"]
     },
     "build": {
-      "dependsOn": ["build:lib"],
+      "dependsOn": ["build:lib", "generate:provider-docs"],
       "inputs": ["package.json"]
+    },
+    "generate:provider-docs": {
+      // Regenerates the docs provider-toolsets reference from src/providers.
+      // Writes outside the package (docs/), so it cannot be cached.
+      "inputs": ["src/providers/**", "scripts/generate-provider-docs.ts"],
+      "cache": false
     }
   }
 }

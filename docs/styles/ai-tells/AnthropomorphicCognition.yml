@@ -150,6 +150,19 @@ tokens:
   - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|any|some|no) (?:[a-z'-]+ )?[a-z]+ (?:then |also |never |still |only |always |itself |alone )?(?:decides?|decided|deciding) (?:which|whether|what|how|when|where|if|for itself|on|to|the|a|an|that|between|among)\\b"
   - "\\b(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|any|some|no) (?:[a-z'-]+ )?[a-z]+ (?:then |also |never |still |only |always )?answers (?:questions?|a|an|the|its|this|that|every|each|from|with|by)\\b"
   - "\\banswers? questions\\b"
+  # The accountable artifact: "answers to" with a rule, a style, or a gate
+  # as the authority ("the sentence-case rule that every other heading here
+  # answers to," "a squash message answers to the same styles," "a draft
+  # under tmp/ answers to nothing," "what a commit answers to"). The
+  # lookahead refuses the noun sense, an answer to a question or a problem
+  # ("the answers to these two questions," "finding answers to Go
+  # questions"), the singular spelling keeps "an answer to the query" and
+  # "have to answer to make progress" out, and the stranded token reads
+  # the relative-clause tail. The verb matches nowhere across the seven
+  # pre-LLM corpora (2026-09).
+  - "\\b(?:(?:a|an|the|this|that|these|those|each|every|its|their|both|all|one|any|some|no|which|what) (?:[a-z'-]+ ){0,2}[a-z]+|it|which|that|this|nothing|everything) (?:then |also |never |still |only |always )?answers to\\b(?! (?:(?:the |a |an |this |that |these |those |these two |those two |such |all |some |any |both |each |every |many |several |the same |those same |your |my |our |their |its |his |her |one |two |three |\\d+ )?(?:[a-z'-]+ )?(?:questions?|problems?|issues?|queries|requests?|riddles?|puzzles?|prompts?|objections?|concerns?|criticisms?)\\b|\\(|\\d|`))"
+  - "\\banswers? to (?:nothing|nobody|no one|none)\\b"
+  - "\\banswers? to(?= ?[.,;:!?]|$)"
   - "\\b(?!(?:we|i|you|they|he|she|who|which|that|it|this)\\b)[a-z-]+ forbids\\b"
   - "\\barbitrat(?:es?|ed|ing)\\b"
   - "\\bced(?:es?|ed|ing)\\b"

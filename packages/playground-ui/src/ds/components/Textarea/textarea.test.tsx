@@ -3,6 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { createRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { Field } from '../Field';
 import { Textarea } from './textarea';
 
 afterEach(() => {
@@ -32,8 +33,12 @@ describe('Textarea', () => {
     expect(screen.getByPlaceholderText('Description').className).not.toContain('rounded-xl');
   });
 
-  it('marks itself invalid', () => {
-    render(<Textarea error placeholder="Description" />);
+  it('marks itself invalid inside an invalid field', () => {
+    render(
+      <Field invalid>
+        <Textarea placeholder="Description" />
+      </Field>,
+    );
 
     const textarea = screen.getByPlaceholderText('Description');
     expect(textarea.getAttribute('aria-invalid')).toBe('true');

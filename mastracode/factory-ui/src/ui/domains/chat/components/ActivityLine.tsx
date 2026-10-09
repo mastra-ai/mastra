@@ -1,6 +1,6 @@
 import type { MastraMessagePart } from '@mastra/core/agent-controller';
-import { Shimmer } from '@mastra/playground-ui/components/Shimmer';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Sparkles } from 'lucide-react';
+import { ActivityItem } from '@mastra/playground-ui/components/ai/activity';
 import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useEffect, useState } from 'react';
@@ -86,14 +86,14 @@ export function ActivityLine() {
 
   return (
     <Arriving>
-      <Txt
-        as="p"
-        variant="caption"
-        aria-hidden
-        className={cn('text-muted-foreground px-1.5 py-1 transition-opacity duration-300', !thinking && 'opacity-0')}
-      >
-        <Shimmer active={thinking}>Thinking</Shimmer>
-      </Txt>
+      <div aria-hidden className={cn('transition-opacity duration-300', !thinking && 'opacity-0')}>
+        <ActivityItem
+          icon={<Sparkles aria-hidden />}
+          label="Thinking"
+          status={thinking ? 'running' : 'idle'}
+          aria-label="Thinking"
+        />
+      </div>
     </Arriving>
   );
 }

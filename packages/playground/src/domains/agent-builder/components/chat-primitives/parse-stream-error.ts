@@ -50,6 +50,7 @@ const extractFriendlyMessage = (payload: Record<string, unknown>): string | unde
   //   { message, name, responseBody }                       — top-level Error
   //   { message: '{"type":"error","error":{...}}' }         — OpenAI envelope nested as a string
   //   { error: { message, code, type } }                    — direct provider error
+  //   { message: '{"type":"response.failed","response":{"error":{...}}}' } — OpenAI Responses
   const direct = typeof payload.message === 'string' ? payload.message : undefined;
   if (direct) {
     const nested = tryParseNestedProviderError(direct);
@@ -73,6 +74,15 @@ const tryParseNestedProviderError = (value: string): string | undefined => {
     if (nestedError && typeof nestedError === 'object') {
       const message = (nestedError as Record<string, unknown>).message;
       if (typeof message === 'string') return message;
+    }
+    // OpenAI Responses API: { type: 'response.failed', response: { error: { message } } }
+    const response = parsed.response;
+    if (response && typeof response === 'object') {
+      const responseError = (response as Record<string, unknown>).error;
+      if (responseError && typeof responseError === 'object') {
+        const message = (responseError as Record<string, unknown>).message;
+        if (typeof message === 'string') return message;
+      }
     }
     if (typeof parsed.message === 'string') return parsed.message;
   } catch {

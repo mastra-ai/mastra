@@ -197,6 +197,7 @@ function parseStoredOMRecord(doc: StoredOMRecord): ObservationalMemoryRecord {
 export class MemoryConvex extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
+  readonly supportsObservationalMemoryHistorySearch = true;
 
   #db: ConvexDB;
   constructor(config: ConvexDomainConfig) {
@@ -926,6 +927,11 @@ export class MemoryConvex extends MemoryStorage {
       from: options?.from ? options.from.toISOString() : undefined,
       to: options?.to ? options.to.toISOString() : undefined,
       offset: options?.offset ?? undefined,
+      groupId: options?.groupId,
+      recordId: options?.recordId,
+      beforeGeneration: options?.beforeGeneration,
+      afterGeneration: options?.afterGeneration,
+      sortDirection: options?.sortDirection,
     });
     return docs.map(doc => parseStoredOMRecord(doc));
   }

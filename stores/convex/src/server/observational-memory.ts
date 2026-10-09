@@ -216,11 +216,23 @@ export async function handleObservationalMemoryOperation(
     }
 
     case 'omGetHistory': {
-      let docs = await ctx.db
-        .query(convexTable)
-        .withIndex('by_lookup_key', (q: any) => q.eq('lookupKey', request.lookupKey))
-        .order('desc')
-        .take(OM_QUERY_MAX_DOCS);
+      let docs =
+        request.recordId !== undefined
+          ? [await findRecordById(ctx, convexTable, request.recordId)].filter(
+              (doc: any) => doc?.lookupKey === request.lookupKey,
+            )
+          : await ctx.db
+              .query(convexTable)
+              .withIndex('by_lookup_key', (q: any) => {
+                // Bound generations in the index so the row cap applies to the requested range and direction.
+                let range = q.eq('lookupKey', request.lookupKey);
+                if (request.afterGeneration !== undefined) range = range.gt('generationCount', request.afterGeneration);
+                if (request.beforeGeneration !== undefined)
+                  range = range.lt('generationCount', request.beforeGeneration);
+                return range;
+              })
+              .order(request.sortDirection === 'ASC' ? 'asc' : 'desc')
+              .take(OM_QUERY_MAX_DOCS);
 
       // createdAt is a UTC ISO string, so lexicographic comparison is chronological.
       if (request.from) {
@@ -229,6 +241,27 @@ export async function handleObservationalMemoryOperation(
       if (request.to) {
         docs = docs.filter((doc: any) => typeof doc.createdAt === 'string' && doc.createdAt <= request.to!);
       }
+      if (request.groupId !== undefined) {
+        const prefix = `<observation-group id="${request.groupId}"`;
+        docs = docs.filter(
+          (doc: any) =>
+            (typeof doc.activeObservations === 'string' && doc.activeObservations.includes(prefix)) ||
+            parseStoredChunks(doc.bufferedObservationChunks).some(chunk => chunk.observations.includes(prefix)),
+        );
+      }
+      if (request.beforeGeneration !== undefined) {
+        docs = docs.filter((doc: any) => doc.generationCount < request.beforeGeneration!);
+      }
+      if (request.afterGeneration !== undefined) {
+        docs = docs.filter((doc: any) => doc.generationCount > request.afterGeneration!);
+      }
+      const direction = request.sortDirection === 'ASC' ? 1 : -1;
+      docs.sort(
+        (a: any, b: any) =>
+          direction * (a.generationCount - b.generationCount) ||
+          a.createdAt.localeCompare(b.createdAt) ||
+          a.id.localeCompare(b.id),
+      );
       if (request.offset != null) {
         docs = docs.slice(request.offset);
       }

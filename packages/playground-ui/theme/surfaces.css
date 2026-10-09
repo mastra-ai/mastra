@@ -53,17 +53,19 @@
   --fill-inverse-active: color-mix(in srgb, var(--foreground) 60%, var(--background));
   --fill-inverse-disabled: color-mix(in srgb, var(--foreground) 45%, var(--background));
 
-  --fill-destructive: var(--destructive);
-  --fill-destructive-hover: color-mix(in srgb, var(--destructive) 80%, var(--background));
-  --fill-destructive-active: color-mix(in srgb, var(--destructive) 70%, var(--background));
-  --fill-destructive-disabled: color-mix(in srgb, var(--destructive) 45%, var(--background));
+  --fill-destructive: var(--red-600);
+  --fill-destructive-hover: var(--red-700);
+  --fill-destructive-active: var(--red-800);
+  --fill-destructive-disabled: var(--red-soft-900);
+  --fill-destructive-foreground: var(--red-50);
+  --fill-destructive-disabled-foreground: var(--red-soft-300);
 
   /*
    * Boundary ladder — the four states of a control's 1px edge, as alphas of
    * `--fill-tint` so an edge reads the same on any surface and in either theme.
    *
-   * border         rim of a filled control, divider, and the rim of a raised
-   *                surface (the `shadow-raised` utility draws it from this token)
+   * border         rim of a filled control and content divider
+   *                (raised surfaces use `--surface-rim` below)
    * border-strong  the only affordance of a transparent control (outline
    *                button/field at rest, selection control at rest)
    * border-hover   hover on either of those. Deliberately nearer rest than focus: it
@@ -81,7 +83,6 @@
   --border-strong: oklch(var(--fill-tint) 0 0 / 19%);
   --border-hover: oklch(var(--fill-tint) 0 0 / 25%);
   --border-focus: oklch(var(--fill-tint) 0 0 / 40%);
-  --ring: var(--border-focus);
 
   /* Opaque twin of `--fill` over `--background`, for a scrolling panel whose
    * sticky parts cannot let rows show through. Keep the two in sync: a panel and
@@ -108,11 +109,11 @@
    * the whole surface behind it and needs 9% to read; the rim sits on the
    * boundary between two surfaces that already differ in fill and elevation,
    * so the same 9% overshoots and the surface reads as framed. The reference
-   * skin uses its highlight colour for the rim in dark — 3%, the same alpha as
-   * the lip — and a 6% black ring in light, where no lip exists. Both are
-   * below the divider, on purpose.
+   * rim uses white at 5% in dark and black at 8% in light, where no lip exists.
+   * `border-surface-rim` exposes the same color for CSS borders, including a
+   * frame header that meets the inset rim. Do not add opacity at call sites.
    *
-   * Focus moves that one edge (`--surface-rim-focus`) instead of adding a
+   * Focus moves that one edge to `--border-focus` instead of adding a
    * `border` beside it, which would read as two lines — and is why a field and
    * a card can be the same material. Hover does not touch it: the rim is the
    * loudest part of a borderless surface, so a pointer wash goes through
@@ -121,8 +122,8 @@
    * The rim is inset, so it cannot be clipped: the app frame and every
    * ScrollArea viewport are `overflow-hidden`, and an outer ring on a surface
    * sitting flush inside one is shaved off entirely. The cost is the mirror
-   * case — a child flush against the edge paints over it — which is why a panel
-   * holding a sticky header keeps a gutter (`p-1`) instead.
+   * case — a child flush against the edge paints over it. MainCard reserves
+   * the rim with `p-px`; other panels may keep a larger content gutter.
    *
    * In-flow surfaces keep the bleed short for the same reason. The drops fall
    * outside the box and a scroller does clip those, so a tile reaching further
@@ -135,13 +136,13 @@
    * a small surface like a tooltip.
    */
   --elevation-lip: inset 0 1px 0 oklch(100% 0 0deg / 3%);
+  --inset-highlight: oklch(100% 0 0deg / 7%);
+  --inset-rim: oklch(100% 0 0deg / 7%);
   --surface-rim: oklch(100% 0 0deg / 5%);
-  --surface-rim-focus: oklch(100% 0 0deg / 14%);
   --elevation-raised: 0 1px 2px -1px oklch(0% 0 0deg / 22%), 0 2px 3px -2px oklch(0% 0 0deg / 14%);
   --dialog: var(--card);
   --field-on-surface: var(--gray-1);
   --field-rim-on-surface: oklch(100% 0 0deg / 5%);
-  --field-rim-focus-on-surface: oklch(100% 0 0deg / 14%);
   --elevation-overlay:
     0 2px 2px oklch(0% 0 0deg / 10%), 0 4px 4px oklch(0% 0 0deg / 10%), 0 8px 8px oklch(0% 0 0deg / 10%);
 }
@@ -150,6 +151,8 @@ html.light {
   /* Shade instead of light, at the same alphas: the whole fill and boundary
    * ladder re-resolves from here. */
   --fill-tint: 20.5%;
+  --fill-destructive-disabled: var(--red-300);
+  --fill-destructive-disabled-foreground: var(--red-50);
   /* Shade carries less weight than light at equal alpha, so focus needs a
    * higher one here to hold its 3:1 floor against the fill it sits on. */
   --border-focus: oklch(var(--fill-tint) 0 0 / 50%);
@@ -159,19 +162,17 @@ html.light {
   --scrim: oklch(20.8% 0 0deg / 45%);
 
   /* No lip: light does not catch one on a near-white surface, and the utility
-   * needs a value in that slot for the shadow list to stay valid. The rim is a
-   * shade here, and shade at equal alpha carries more weight than light, so it
-   * sits twice as low as the divider rather than level with the lip. Shorter
-   * falloff too — a shadow has room to darken here, so it reads as the same
-   * height over less distance. */
+   * needs a value in that slot for the shadow list to stay valid. The rim uses
+   * black at 8%. Drops have a shorter falloff because a shadow has more room
+   * to darken on a light surface. */
   --elevation-lip: 0 0 #0000;
+  --inset-highlight: oklch(100% 0 0deg / 55%);
+  --inset-rim: oklch(0% 0 0deg / 8%);
   --surface-rim: oklch(0% 0 0deg / 8%);
-  --surface-rim-focus: oklch(0% 0 0deg / 18%);
   --elevation-raised: 0 1px 2px -1px oklch(0% 0 0deg / 5%), 0 1px 3px -2px oklch(0% 0 0deg / 4%);
   --dialog: var(--background);
   --field-on-surface: var(--background-3);
   --field-rim-on-surface: oklch(0% 0 0deg / 14%);
-  --field-rim-focus-on-surface: oklch(0% 0 0deg / 32%);
   --elevation-overlay:
     0 2px 4px -1px oklch(0% 0 0deg / 8%), 0 4px 8px -2px oklch(0% 0 0deg / 6%), 0 8px 16px -4px oklch(0% 0 0deg / 6%);
 }
@@ -180,8 +181,6 @@ html.light {
   --color-scrim: var(--scrim);
   --color-surface-overlay-soft: var(--surface-overlay-soft);
   --color-surface-overlay-strong: var(--surface-overlay-strong);
-
-  --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
 }
 
 /* Inline so a utility resolves var(--token) on the styled element and honors a
@@ -201,9 +200,11 @@ html.light {
   --color-fill-destructive-hover: var(--fill-destructive-hover);
   --color-fill-destructive-active: var(--fill-destructive-active);
   --color-fill-destructive-disabled: var(--fill-destructive-disabled);
+  --color-fill-destructive-foreground: var(--fill-destructive-foreground);
+  --color-fill-destructive-disabled-foreground: var(--fill-destructive-disabled-foreground);
+  --color-surface-rim: var(--surface-rim);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-border-hover: var(--border-hover);
   --color-border-focus: var(--border-focus);
-  --color-ring: var(--ring);
 }

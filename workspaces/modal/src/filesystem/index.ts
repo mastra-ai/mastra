@@ -78,7 +78,7 @@ const SCRIPTS = {
   append: `${PARENT_CHECK} cat >> "$1"`,
   deleteFile: `if [ ! -e "$1" ] && [ ! -L "$1" ]; then [ "$2" = 1 ] && exit 0; exit ${EXIT.NOT_FOUND}; fi; [ -d "$1" ] && exit ${EXIT.IS_DIR}; rm -f -- "$1"`,
   // $1 src, $2 dest, $3 recursive, $4 overwrite, $5 op (cp|mv)
-  transfer: `[ -e "$1" ] || exit ${EXIT.NOT_FOUND}; if [ -d "$1" ] && [ "$5" = cp ] && [ "$3" != 1 ]; then exit ${EXIT.IS_DIR}; fi; if [ -e "$2" ]; then [ "$4" = 0 ] && exit ${EXIT.EXISTS}; rm -rf -- "$2"; fi; mkdir -p -- "$(dirname -- "$2")" || exit 1; if [ "$5" = mv ]; then mv -- "$1" "$2"; else cp -R -- "$1" "$2"; fi`,
+  transfer: `[ -e "$1" ] || exit ${EXIT.NOT_FOUND}; if [ -d "$1" ] && [ "$5" = cp ] && [ "$3" != 1 ]; then exit ${EXIT.IS_DIR}; fi; if [ -e "$2" ]; then [ "$1" -ef "$2" ] && exit ${EXIT.EXISTS}; [ "$4" = 0 ] && exit ${EXIT.EXISTS}; rm -rf -- "$2"; fi; mkdir -p -- "$(dirname -- "$2")" || exit 1; if [ "$5" = mv ]; then mv -- "$1" "$2"; else cp -R -- "$1" "$2"; fi`,
   mkdir: `if [ "$2" = 1 ]; then [ -e "$1" ] && [ ! -d "$1" ] && exit ${EXIT.EXISTS}; mkdir -p -- "$1"; else [ -e "$1" ] && exit ${EXIT.EXISTS}; [ -d "$(dirname -- "$1")" ] || exit ${EXIT.NO_PARENT}; mkdir -- "$1"; fi`,
   rmdir: `if [ ! -e "$1" ]; then [ "$3" = 1 ] && exit 0; exit ${EXIT.NOT_FOUND}; fi; [ -d "$1" ] || exit ${EXIT.NOT_DIR}; if [ "$2" = 1 ]; then rm -rf -- "$1"; else [ -z "$(ls -A -- "$1")" ] || exit ${EXIT.NOT_EMPTY}; rmdir -- "$1"; fi`,
   // Emits NUL-separated records: target type, own type, size, relative path, link target.

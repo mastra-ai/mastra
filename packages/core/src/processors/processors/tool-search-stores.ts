@@ -11,6 +11,11 @@ export interface LoadedToolStoreContext {
    * May be undefined on resume paths that resolve loaded state without a live step.
    */
   args?: ProcessInputStepArgs;
+  /**
+   * Thread messages loaded from memory, for resume paths that have no live step.
+   * Ignored when `args` is present.
+   */
+  messages?: ProcessInputStepArgs['messages'];
 }
 
 /**
@@ -64,7 +69,7 @@ function extractActivatedNames(result: unknown): string[] {
  * Scans conversation messages for completed `search_tools` / `load_tool` invocations
  * and unions the tool names they activated.
  */
-export function deriveLoadedNamesFromMessages(args: ProcessInputStepArgs): Set<string> {
+export function deriveLoadedNamesFromMessages(args: Pick<ProcessInputStepArgs, 'messages'>): Set<string> {
   const loaded = new Set<string>();
 
   if (!Array.isArray(args.messages)) return loaded;
@@ -112,7 +117,8 @@ export class ContextLoadedToolStore implements LoadedToolStore {
   private supplemental = new Map<string, Set<string>>();
 
   getLoadedNames(ctx: LoadedToolStoreContext): Set<string> {
-    const fromMessages = ctx.args ? deriveLoadedNamesFromMessages(ctx.args) : new Set<string>();
+    const messageSource = ctx.args ?? (ctx.messages ? { messages: ctx.messages } : undefined);
+    const fromMessages = messageSource ? deriveLoadedNamesFromMessages(messageSource) : new Set<string>();
 
     if (!ctx.threadId) return fromMessages;
 
@@ -128,7 +134,7 @@ export class ContextLoadedToolStore implements LoadedToolStore {
     // parity): an evicted block disappears from the messages and is no longer
     // shadowed by the supplemental set. Names not yet visible (just activated) stay
     // in the supplemental set until the messages catch up.
-    if (ctx.args) {
+    if (messageSource) {
       for (const name of [...supplemental]) {
         if (fromMessages.has(name)) supplemental.delete(name);
       }

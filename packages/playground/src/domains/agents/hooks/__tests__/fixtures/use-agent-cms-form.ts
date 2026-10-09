@@ -41,3 +41,15 @@ export const oneUnpublishedAgentVersion: ListAgentVersionsResponse = {
   ],
   total: 1,
 };
+
+/** A stored agent whose memory points at a Memory instance registered on the Mastra instance. */
+export const storedAgentWithMemoryRef: StoredAgentResponse = {
+  id: 'support-agent',
+  status: 'published',
+  createdAt: '2026-06-16T00:00:00.000Z',
+  updatedAt: '2026-06-16T00:00:00.000Z',
+  name: 'Support Agent',
+  instructions: 'Help customers.',
+  model: { provider: 'openai', name: '__AI_SDK_OPENAI_MODEL_BASE__' },
+  memory: { type: 'id', memoryId: 'support-memory' },
+};

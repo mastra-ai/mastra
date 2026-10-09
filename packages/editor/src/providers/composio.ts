@@ -47,6 +47,33 @@ export interface ComposioToolProviderConfig extends BaseToolProviderOptions {
    * pin — the resolver cannot override it.
    */
   userIdResolver?: ComposioUserIdResolver;
+  /**
+   * Opt in to Composio SHARED connected accounts. When set, connections
+   * authorized with `scope: 'shared'` are created as Composio `SHARED`
+   * accounts with the given ACL. Without it, shared-scope connections stay
+   * Composio `PRIVATE` accounts under the shared bucket.
+   *
+   * Composio marks SHARED accounts as experimental.
+   */
+  sharedConnections?: ComposioSharedConnectionsConfig;
+}
+
+/** ACL applied to Composio SHARED accounts. Mirrors Composio's `aclConfigForShared`. */
+export interface ComposioSharedAccountAcl {
+  /** Allow every Composio `userId` (except `notAllowedUserIds`). */
+  allowAllUsers?: boolean;
+  /** Composio `userId`s allowed to use the account. */
+  allowedUserIds?: string[];
+  /** Composio `userId`s denied access. Deny always wins. */
+  notAllowedUserIds?: string[];
+}
+
+export interface ComposioSharedConnectionsConfig {
+  /**
+   * Initial ACL for newly created SHARED accounts. Omit to keep Composio's
+   * deny-by-default (only the creating `userId` can use the account).
+   */
+  acl?: ComposioSharedAccountAcl;
 }
 
 /** Inputs handed to {@link ComposioToolProviderConfig.userIdResolver}. */
@@ -106,6 +133,7 @@ export class ComposioToolProvider extends BaseToolProvider {
   readonly userIdResolver?: ComposioUserIdResolver;
 
   private readonly apiKey: string;
+  private readonly sharedConnections?: ComposioSharedConnectionsConfig;
   private rawClient: Composio | null = null;
   private mastraClient: Composio<MastraProvider> | null = null;
 
@@ -117,6 +145,7 @@ export class ComposioToolProvider extends BaseToolProvider {
     });
     this.apiKey = config.apiKey;
     this.userIdResolver = config.userIdResolver;
+    this.sharedConnections = config.sharedConnections;
   }
 
   // ── client cache ──────────────────────────────────────────────────────
@@ -368,17 +397,33 @@ export class ComposioToolProvider extends BaseToolProvider {
             : never)
         : undefined;
 
+    // Only `link` accepts the `experimental` block, so a SHARED account that
+    // also needs custom config fields cannot be created. Fail instead of
+    // silently creating a PRIVATE account.
+    const createShared = opts.scope === 'shared' && this.sharedConnections !== undefined;
+    if (createShared && initiateConfig) {
+      throw new Error(
+        `[composio] Cannot create a shared connection for toolkit "${opts.toolkit}": Composio SHARED accounts do not support custom connection fields.`,
+      );
+    }
+
     // Prefer `link` for the Composio-managed OAuth redirect flow: `initiate`
-    // is deprecated for managed OAuth. `link` allows multiple connected
-    // accounts per (user, auth config) by default, so we no longer pass
-    // `allowMultiple`. Fall back to `initiate` only when custom `config` fields
-    // are supplied, since `link` cannot forward them.
+    // is deprecated for managed OAuth. Both reject a second ACTIVE account per
+    // (user, auth config) unless `allowMultiple` is set, and this provider
+    // supports multiple connections per toolkit. Fall back to `initiate` only
+    // when custom `config` fields are supplied, since `link` cannot forward them.
+    const acl = this.sharedConnections?.acl;
     const request = initiateConfig
       ? await composio.connectedAccounts.initiate(internalUserId, authConfigId, {
           allowMultiple: true,
           config: initiateConfig,
         })
-      : await composio.connectedAccounts.link(internalUserId, authConfigId);
+      : await composio.connectedAccounts.link(internalUserId, authConfigId, {
+          allowMultiple: true,
+          ...(createShared
+            ? { experimental: { accountType: 'SHARED' as const, ...(acl ? { aclConfigForShared: acl } : {}) } }
+            : {}),
+        });
 
     if (!request.redirectUrl) {
       throw new Error(`[composio] authorize did not return a redirectUrl for toolkit "${opts.toolkit}"`);
@@ -436,8 +481,11 @@ export class ComposioToolProvider extends BaseToolProvider {
 
     // One SDK call per `getConnectionStatus`, regardless of N items.
     // Filter by all referenced toolkits, then bucket locally by id.
+    // `accountType: 'ALL'` so pinned SHARED accounts resolve too; Composio
+    // lists PRIVATE accounts only by default.
     const list: ConnectedAccountListResponse = await composio.connectedAccounts.list({
       toolkitSlugs,
+      accountType: 'ALL',
     });
 
     const liveById = new Map<string, { status: string; isDisabled: boolean }>();
@@ -469,25 +517,56 @@ export class ComposioToolProvider extends BaseToolProvider {
     // page-based pagination to keep the Mastra contract consistent with every
     // other list API. For now we only fetch the first page (page=1); paginated
     // requests for page > 1 are a follow-up — the UI does not yet paginate.
-    const list: ConnectedAccountListResponse = await composio.connectedAccounts.list({
+    //
+    // Composio lists PRIVATE accounts only by default, so request `'ALL'` to
+    // include SHARED accounts owned by the requested buckets.
+    const owned: ConnectedAccountListResponse = await composio.connectedAccounts.list({
       toolkitSlugs: [opts.toolkit],
       ...(userIds ? { userIds } : {}),
+      accountType: 'ALL',
       limit: perPage,
     });
+    const lists = [owned];
+
+    // SHARED accounts owned by other users are usable by the requested buckets
+    // when their ACL grants access. List them separately and evaluate the ACL
+    // locally so the result doesn't depend on how Composio combines `userIds`
+    // with `accountType`.
+    if (userIds) {
+      const shared: ConnectedAccountListResponse = await composio.connectedAccounts.list({
+        toolkitSlugs: [opts.toolkit],
+        accountType: 'SHARED',
+        limit: perPage,
+      });
+      lists.push({
+        ...shared,
+        items: (shared.items ?? []).filter(account =>
+          userIds.some(userId => isSharedAccountAccessible(account.experimental?.aclConfigForShared, userId)),
+        ),
+      });
+    }
 
     // Defensive: tolerate undocumented SDK shape drift where `items` is
     // missing or `nextCursor` is `null`/`undefined`/`''`.
-    const items: ExistingConnection[] = (list.items ?? []).map(account => ({
-      connectionId: account.id,
-      status: mapComposioStatus(account.status, account.isDisabled),
-      createdAt: account.createdAt,
-      // `user_id` is preserved by the Composio SDK transform via spread but
-      // isn't on the typed shape. Read it via a narrow cast.
-      authorId: (account as unknown as { user_id?: string }).user_id,
-    }));
+    const items: ExistingConnection[] = [];
+    const seen = new Set<string>();
+    for (const account of lists.flatMap(list => list.items ?? [])) {
+      if (seen.has(account.id)) continue;
+      seen.add(account.id);
+      items.push({
+        connectionId: account.id,
+        status: mapComposioStatus(account.status, account.isDisabled),
+        createdAt: account.createdAt,
+        // `user_id` is preserved by the Composio SDK transform via spread but
+        // isn't on the typed shape. Read it via a narrow cast.
+        authorId: (account as unknown as { user_id?: string }).user_id,
+      });
+    }
 
-    const nextCursor = (list as { nextCursor?: string | null }).nextCursor ?? null;
-    const hasMore = typeof nextCursor === 'string' && nextCursor.length > 0;
+    const hasMore = lists.some(list => {
+      const nextCursor = (list as { nextCursor?: string | null }).nextCursor ?? null;
+      return typeof nextCursor === 'string' && nextCursor.length > 0;
+    });
     return { items, pagination: { page, perPage, hasMore } };
   }
 
@@ -557,6 +636,18 @@ export class ComposioToolProvider extends BaseToolProvider {
 type ComposioAuthScheme = NonNullable<
   Awaited<ReturnType<Composio['authConfigs']['list']>>['items'][number]['authScheme']
 >;
+
+/**
+ * Composio's ACL rule for SHARED accounts: deny list wins, then
+ * `allowAllUsers`, then the allow list, otherwise deny. Owners are not covered
+ * here; they are listed by bucket.
+ */
+function isSharedAccountAccessible(acl: Partial<ComposioSharedAccountAcl> | undefined, userId: string): boolean {
+  if (!acl) return false;
+  if (acl.notAllowedUserIds?.includes(userId)) return false;
+  if (acl.allowAllUsers) return true;
+  return acl.allowedUserIds?.includes(userId) ?? false;
+}
 
 /**
  * Best-effort 404 detection across the various error shapes the Composio

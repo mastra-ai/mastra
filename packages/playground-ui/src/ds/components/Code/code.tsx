@@ -24,7 +24,7 @@ function usableHighlight(highlighted: Highlighted | null, code: string, lang?: s
  * required. Renders plain text while highlighting is pending or when the
  * language is missing/unknown.
  *
- * A streaming fence re-renders on every delta while highlighting stays a frame
+ * A streaming fence re-renders on every delta while highlighting stays a sample
  * behind. Dropping the previous tokens each time would strobe the whole block
  * between colored and plain, so the settled prefix keeps its colors and only
  * the newly arrived tail waits, uncolored, for the next pass.
@@ -55,7 +55,7 @@ export const Code = React.memo(function Code({ code, lang, lineClassName, ...pro
 
   return (
     <pre {...props}>
-      <code>
+      <code className="font-[inherit]">
         {usable.tokens.map((line, lineIndex) => {
           const lineOffset = codeOffset;
           let tokenOffset = lineOffset;

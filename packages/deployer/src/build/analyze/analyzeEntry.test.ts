@@ -221,6 +221,68 @@ describe('analyzeEntry', () => {
     }
   });
 
+  it('should resolve module aliases before applying the externals preset', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-module-alias-'));
+    const entryFilePath = join(root, 'entry.ts');
+    const shimFilePath = join(root, 'shim.ts');
+
+    try {
+      await Promise.all([
+        writeFile(shimFilePath, 'export const value = 42;'),
+        writeFile(entryFilePath, `import { value } from 'aliased-package';\nexport { value };\n`),
+      ]);
+
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: root,
+        externalsPreset: true,
+        alias: { 'aliased-package': shimFilePath },
+      });
+
+      expect(result.dependencies.has('aliased-package')).toBe(false);
+      expect(result.output.code).not.toContain('aliased-package');
+      expect(result.output.code).toContain('42');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('should resolve bare module alias targets from the importer', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-bare-module-alias-'));
+    const entryFilePath = join(root, 'src', 'entry.ts');
+    const replacementDir = join(root, 'node_modules', 'replacement-package');
+
+    try {
+      await mkdir(join(root, 'src'), { recursive: true });
+      await mkdir(replacementDir, { recursive: true });
+      await Promise.all([
+        writeFile(entryFilePath, `import { value } from 'aliased-package';\nexport { value };\n`),
+        writeFile(
+          join(replacementDir, 'package.json'),
+          JSON.stringify({ name: 'replacement-package', version: '1.0.0', type: 'module', exports: './index.js' }),
+        ),
+        writeFile(join(replacementDir, 'index.js'), 'export const value = 42;'),
+      ]);
+
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: root,
+        externalsPreset: true,
+        alias: { 'aliased-package': 'replacement-package' },
+      });
+
+      expect(result.dependencies.has('aliased-package')).toBe(false);
+      expect(result.dependencies.has('replacement-package')).toBe(false);
+      expect(result.output.code).toContain('42');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('should detect workspace packages correctly', async () => {
     const entryAsString = await readFile(join(import.meta.dirname, '__fixtures__', 'default', 'entry.ts'), 'utf-8');
 

@@ -71,7 +71,8 @@ export interface AgentDataSource {
 export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<AgentFormValues> {
   const toolsRecord = normalizeToolsToRecord(dataSource.tools as Parameters<typeof normalizeToolsToRecord>[0]);
 
-  const memoryData = dataSource.memory as
+  const memoryRef = getMemoryIdRef(dataSource.memory);
+  const memoryData = unwrapInlineMemory(dataSource.memory) as
     | {
         vector?: string;
         embedder?: string;
@@ -130,9 +131,26 @@ export function computeAgentInitialValues(dataSource: AgentDataSource): Partial<
           observationalMemory: parseObservationalMemoryFromApi(memoryData.observationalMemory),
         }
       : undefined,
+    memoryRef,
     instructionBlocks,
     skills: normalizeSkillsFromApi(dataSource.skills),
     workspace: normalizeWorkspaceFromApi(dataSource.workspace),
     variables: dataSource.requestContextSchema as AgentFormValues['variables'],
   };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getMemoryIdRef(memory: unknown): AgentFormValues['memoryRef'] {
+  if (!isRecord(memory) || memory.type !== 'id' || typeof memory.memoryId !== 'string') return undefined;
+  return { type: 'id', memoryId: memory.memoryId };
+}
+
+function unwrapInlineMemory(memory: unknown): unknown {
+  if (!isRecord(memory)) return memory;
+  if (memory.type === 'id') return undefined;
+  if (memory.type === 'inline') return memory.config;
+  return memory;
 }

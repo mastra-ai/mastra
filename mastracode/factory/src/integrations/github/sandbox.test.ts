@@ -679,7 +679,10 @@ describe('refreshMergeRequestCheckout', () => {
     branch: 'factory/gitlab-mr-7-abc123',
     mergeRequestNumber: 7,
     expectedHeadSha: newHead,
-    access: { cloneUrl: 'https://gitlab.com/acme/repo.git', authorization: { scheme: 'bearer' as const, token: 'secret-token', username: 'oauth2' } },
+    access: {
+      cloneUrl: 'https://gitlab.com/acme/repo.git',
+      authorization: { scheme: 'bearer' as const, token: 'secret-token', username: 'oauth2' },
+    },
   };
 
   it('fetches the provider MR ref with an ephemeral credential and moves only a clean bound checkout', async () => {
@@ -689,7 +692,10 @@ describe('refreshMergeRequestCheckout', () => {
       if (script.includes('rev-parse FETCH_HEAD')) return { ...OK, stdout: `${newHead}\n` };
       return OK;
     });
-    await expect(refreshMergeRequestCheckout(sandbox, '/workspace/repo', input)).resolves.toEqual({ headSha: newHead, changed: true });
+    await expect(refreshMergeRequestCheckout(sandbox, '/workspace/repo', input)).resolves.toEqual({
+      headSha: newHead,
+      changed: true,
+    });
     expect(sandbox.calls).toContain('git -C /workspace/repo fetch origin refs/merge-requests/7/head');
     expect(sandbox.calls).toContain(`git -C /workspace/repo checkout -B ${input.branch} FETCH_HEAD`);
     expect(sandbox.calls.join('\n')).not.toContain('secret-token');

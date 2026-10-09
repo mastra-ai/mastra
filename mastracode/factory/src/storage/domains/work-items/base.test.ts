@@ -379,6 +379,29 @@ describe('WorkItemsStorage', () => {
     expect(second.pendingStart.bindingId).toBe(second.binding.id);
   });
 
+  it("revokes an earlier role's binding when a later role continues in its session", async () => {
+    const storage = await makeStorage();
+    const start = (role: string, threadId: string) =>
+      storage.prepareRunStart({
+        orgId: 'org1',
+        userId: 'user1',
+        factoryProjectId: 'project1',
+        workItem: { input: { ...input } },
+        role,
+        session: { sessionId: 'session-shared', branch: 'factory/42', threadId },
+        resourceId: 'resource-1',
+        kickoffKey: `kickoff-${role}`,
+        kickoffMessage: null,
+      });
+
+    const plan = await start('plan', 'thread-plan');
+    const work = await start('work', 'thread-work');
+
+    const bindings = await storage.listRunBindings('org1', 'project1', work.item.id);
+    expect(bindings.find(binding => binding.id === plan.binding.id)?.status).toBe('revoked');
+    expect(bindings.find(binding => binding.id === work.binding.id)?.status).toBe('active');
+  });
+
   it('replays the same binding when re-entered while it is still live', async () => {
     const storage = await makeStorage();
     const start = (kickoffKey: string) =>
@@ -457,6 +480,77 @@ describe('WorkItemsStorage', () => {
 
     // Stale ingress no longer short-circuits, so nothing resurrects the deleted card.
     expect((await commit()).status).toBe('committed');
+  });
+
+  it('persists nothing for a stale rule evaluation, so the same delivery can commit at the fresh revision', async () => {
+    const storage = await makeStorage();
+    const created = await storage.upsert({ orgId: 'org1', userId: 'u', factoryProjectId: 'p1', input });
+    const commit = (expectedRevision: number) =>
+      storage.commitRuleEvaluation({
+        orgId: 'org1',
+        factoryProjectId: 'p1',
+        workItemId: created.item.id,
+        ingress: { identity: 'github:delivery-1', triggerType: 'github.issueComment' },
+        configVersion: 'v1',
+        expectedRevision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [{ type: 'transition', stage: 'done', idempotencyKey: 'decision-1' }] as never,
+        causalChain: [],
+        now: new Date(),
+      });
+
+    expect(await commit(created.item.revision - 1)).toEqual({ status: 'stale' });
+    expect(await storage.listDeferredDecisions('org1', 'p1')).toEqual([]);
+
+    const fresh = await commit(created.item.revision);
+    expect(fresh.status).toBe('committed');
+    expect(fresh.status === 'committed' && fresh.result).toMatchObject({ status: 'accepted' });
+    expect((await storage.listDeferredDecisions('org1', 'p1')).map(d => d.idempotencyKey)).toEqual(['decision-1']);
+  });
+
+  it('claims deferred decisions by payload filter, paging past any backlog of filtered-out rows', async () => {
+    const storage = await makeStorage();
+    const scope = { orgId: 'org1', factoryProjectId: 'p1' };
+    const runDecisions = Array.from({ length: 700 }, (_, index) => ({
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'triage',
+      idempotencyKey: `run-${index}`,
+    }));
+    const commitResult = await storage.commitRuleEvaluation({
+      ...scope,
+      workItemId: null,
+      ingress: { identity: 'github:issue:1:1', triggerType: 'issue.observed' },
+      configVersion: 'v1',
+      expectedRevision: null,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [...runDecisions, { type: 'transition', stage: 'done', idempotencyKey: 'bookkeeping-1' }] as never,
+      causalChain: [],
+      now: new Date(),
+    });
+    expect(commitResult.status).toBe('committed');
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    const lease = { ownerId: 'worker-1', now, leaseExpiresAt: new Date(now.getTime() + 30_000) };
+
+    const bookkeeping = await storage.claimDeferredDecisions({
+      ...lease,
+      limit: 5,
+      decisionFilter: decision => decision.type !== 'invokeSkill',
+    });
+    expect(bookkeeping.map(d => d.idempotencyKey)).toEqual(['bookkeeping-1']);
+
+    const runs = await storage.claimDeferredDecisions({
+      ...lease,
+      limit: 3,
+      decisionFilter: decision => decision.type === 'invokeSkill',
+    });
+    expect(runs.map(d => d.decision.type)).toEqual(['invokeSkill', 'invokeSkill', 'invokeSkill']);
+
+    const all = await storage.listDeferredDecisions('org1', 'p1');
+    expect(all.filter(d => d.status === 'leased')).toHaveLength(4);
+    expect(all.filter(d => d.status === 'pending')).toHaveLength(697);
   });
 
   it('lists newest-first within the org/project scope and updates atomically', async () => {

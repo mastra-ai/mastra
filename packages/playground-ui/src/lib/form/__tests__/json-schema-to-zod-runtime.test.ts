@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import type { JSONSchema7 } from 'json-schema';
 import { describe, expect, it } from 'vitest';
@@ -189,6 +188,29 @@ describe('jsonSchemaToZodRuntime', () => {
       }
 
       expect(calls).toEqual([]);
+    });
+  });
+});
+
+describe('jsonSchemaToZodRuntime nullable unions', () => {
+  describe('when a property is `T | null`', () => {
+    const schema = jsonSchemaToZodRuntime({ anyOf: [{ type: 'string' }, { type: 'null' }] });
+
+    it('renders as a single field of the non-null type', () => {
+      expect(inferFieldType(getBaseSchema(schema))).toBe('string');
+    });
+
+    it('still accepts null', () => {
+      expect(schema.safeParse(null).success).toBe(true);
+      expect(schema.safeParse('eu-west').success).toBe(true);
+    });
+  });
+
+  describe('when a property is a real union', () => {
+    it('stays a union', () => {
+      const schema = jsonSchemaToZodRuntime({ anyOf: [{ type: 'string' }, { type: 'number' }] });
+
+      expect(inferFieldType(getBaseSchema(schema))).toBe('union');
     });
   });
 });

@@ -1,0 +1,68 @@
+{
+  "name": "template-genui-data-explorer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reproducible example SaaS Sales analytics for a candidate Mastra generative UI data explorer.",
+  "type": "module",
+  "scripts": {
+    "build": "npm run build:agent && npm run build:ui",
+    "data:init": "node scripts/cli.ts init",
+    "data:inspect": "node scripts/cli.ts inspect",
+    "format": "oxfmt --config .oxfmtrc.json .",
+    "format:check": "oxfmt --check --config .oxfmtrc.json .",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.app.json",
+    "test:unit": "vitest run --config tests/vitest.config.ts tests/unit",
+    "test:integration": "vitest run --config tests/vitest.config.ts tests/integration",
+    "start": "node --env-file-if-exists=.env scripts/launch.ts --production",
+    "dev": "node --env-file-if-exists=.env scripts/launch.ts",
+    "test:workspace": "playwright test --config tests/playwright.config.ts",
+    "test:quality": "vitest run --config tests/quality.config.ts",
+    "benchmark:live": "node --env-file-if-exists=.env scripts/benchmark.ts",
+    "standalone:prepare": "node scripts/standalone.ts",
+    "test:standalone:browser": "playwright test --config tests/standalone.config.ts",
+    "diagnostics": "node --env-file-if-exists=.env scripts/diagnostics.ts",
+    "build:agent": "tsc -p tsconfig.build.json && node --experimental-strip-types scripts/build-mastra.ts",
+    "build:ui": "node scripts/next.ts build",
+    "start:agent": "node --env-file-if-exists=.env .mastra/output/index.mjs --production",
+    "start:ui": "node --env-file-if-exists=.env scripts/next.ts start"
+  },
+  "dependencies": {
+    "@ag-ui/client": "1.0.1",
+    "@ag-ui/core": "1.0.1",
+    "@ag-ui/mastra": "1.1.6",
+    "@copilotkit/react-core": "1.77.0",
+    "@copilotkit/react-ui": "1.77.0",
+    "@copilotkit/runtime": "1.77.0",
+    "@mastra/client-js": "latest",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "echarts": "6.1.0",
+    "next": "16.3.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "rxjs": "7.8.1",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@mastra/evals": "latest",
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.19.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "mastra": "latest",
+    "oxfmt": "0.59.0",
+    "typescript": "5.9.3",
+    "vitest": "4.1.11"
+  },
+  "overrides": {
+    "@graphql-tools/utils@<12.0.1": "12.0.3",
+    "katex@<0.18.2": "0.18.2",
+    "tinypool@<2.1.2": "2.1.2",
+    "undici@<6.29.0": "6.29.0"
+  },
+  "engines": {
+    "node": ">=24.15.0"
+  }
+}

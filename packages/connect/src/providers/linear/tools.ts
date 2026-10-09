@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { addIssueLabelTool } from './tools/add-issue-label.js';
 import { archiveCycleTool } from './tools/archive-cycle.js';
 import { archiveIssueTool } from './tools/archive-issue.js';
@@ -99,5 +99,5 @@ export function createLinearTools(options?: ProviderToolsOptions) {
     linear_update_issue: updateIssueTool(platformProxy),
     linear_update_project: updateProjectTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

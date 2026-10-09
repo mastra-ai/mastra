@@ -1,7 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
-import { useChat } from '@mastra/react';
-import type { ClientToolsInput, SendMessageArgs } from '@mastra/react';
+import { useChat } from '@mastra/react/chat';
+import type { ClientToolsInput, SendMessageArgs } from '@mastra/react/chat';
+import { useCurrentUser } from '@mastra/react/hooks/auth';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useDebounce } from 'use-debounce';
@@ -17,7 +18,6 @@ import type {
   RunningContextValue,
   SendContextValue,
 } from './stream-chat-context';
-import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
 export interface StreamChatProviderProps {
   agentId: string;

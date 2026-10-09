@@ -32,6 +32,7 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
   const { activateSidebar, clearSidebar, resolveSidebar, rootScrollState } = useContextualSidebar()
   const contextualSidebar = resolveSidebar(sidebar)
   const [exitingContextualSidebar, setExitingContextualSidebar] = useState<typeof contextualSidebar>()
+  const [hasMoreBelow, setHasMoreBelow] = useState(false)
   const renderedContextualSidebar = contextualSidebar ?? exitingContextualSidebar
   const isContextualSidebarExiting = !contextualSidebar && Boolean(exitingContextualSidebar)
   const paneKey = contextualSidebar?.state.categoryHref ?? 'root'
@@ -69,6 +70,27 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
 
     return () => resizeObserver.disconnect()
   }, [])
+
+  useLayoutEffect(() => {
+    const navigation = navigationRef.current
+    if (!navigation) return
+
+    const updateScrollHint = () => {
+      // Allow for fractional scroll positions at the bottom.
+      setHasMoreBelow(navigation.scrollHeight - navigation.scrollTop - navigation.clientHeight > 2)
+    }
+
+    updateScrollHint()
+    navigation.addEventListener('scroll', updateScrollHint, { passive: true })
+    const resizeObserver = new ResizeObserver(updateScrollHint)
+    resizeObserver.observe(navigation)
+    for (const child of navigation.children) resizeObserver.observe(child)
+
+    return () => {
+      navigation.removeEventListener('scroll', updateScrollHint)
+      resizeObserver.disconnect()
+    }
+  }, [paneKey, exitingContextualSidebar, sidebar])
 
   const finishContextualExit = () => {
     setExitingContextualSidebar(undefined)
@@ -149,6 +171,21 @@ export default function DocSidebarDesktopContent({ path, sidebar, className }: P
           />
         )}
       </nav>
+      {hasMoreBelow && (
+        <div className={styles['scroll-fade']} aria-hidden="true">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </div>
+      )}
     </div>
   )
 }

@@ -20,4 +20,12 @@ describe('normalizeExternals', () => {
       mergedExternals: [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS],
     });
   });
+
+  it('keeps explicit externals while using the additive CLI preset', () => {
+    expect(normalizeExternals(['@inner/subpath-only'], true)).toEqual({
+      externalsPreset: true,
+      mergedExternals: [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, '@inner/subpath-only'],
+    });
+    expect(normalizeExternals(false, true).externalsPreset).toBe(false);
+  });
 });

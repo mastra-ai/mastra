@@ -1,5 +1,6 @@
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
 
 export const EXAMPLES_PAGE_SIZE = 5;
 
@@ -27,9 +28,9 @@ export function ExamplesPager({
       >
         Previous
       </Button>
-      <span className="font-mono text-caption text-muted-foreground tabular-nums">
+      <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
         Page {page} of {totalPages}
-      </span>
+      </Txt>
       <Button
         icon={<ChevronRight />}
         size="sm"

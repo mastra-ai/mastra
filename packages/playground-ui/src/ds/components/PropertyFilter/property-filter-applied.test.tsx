@@ -1,18 +1,10 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PropertyFilterApplied } from './property-filter-applied';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
-
-beforeAll(() => {
-  // jsdom ships no PointerEvent, and Base UI constructs one when a radio is clicked.
-  if (typeof window.PointerEvent === 'undefined') {
-    class PointerEventStub extends MouseEvent {}
-    window.PointerEvent = PointerEventStub as unknown as typeof PointerEvent;
-  }
-});
 
 afterEach(() => {
   cleanup();

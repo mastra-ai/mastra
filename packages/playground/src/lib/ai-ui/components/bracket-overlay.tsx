@@ -229,24 +229,24 @@ function HighlightBlock({ highlight, visible }: { highlight: HighlightPosition; 
 function getStateColor(state: HighlightPosition['state']): string {
   switch (state) {
     case 'complete':
-      return 'rgba(34, 197, 94, 0.4)';
+      return 'var(--success-edge)';
     case 'loading':
-      return 'rgba(59, 130, 246, 0.4)';
+      return 'var(--info-edge)';
     case 'failed':
-      return 'rgba(239, 68, 68, 0.4)';
+      return 'var(--destructive-edge)';
     case 'disconnected':
-      return 'rgba(234, 179, 8, 0.4)';
+      return 'var(--warning-edge)';
     // Buffering states use a neutral bracket so they don't overpower the message content.
     case 'buffering':
-      return 'rgba(156, 163, 175, 0.45)';
+      return 'var(--border-strong)';
     case 'buffering-complete':
-      return 'rgba(156, 163, 175, 0.45)';
+      return 'var(--border-strong)';
     case 'buffering-failed':
-      return 'rgba(239, 68, 68, 0.4)';
+      return 'var(--destructive-edge)';
     // Activation state uses green — same as sync observation/reflection 'complete'
     case 'activated':
-      return 'rgba(34, 197, 94, 0.4)';
+      return 'var(--success-edge)';
     default:
-      return 'rgba(34, 197, 94, 0.4)';
+      return 'var(--success-edge)';
   }
 }

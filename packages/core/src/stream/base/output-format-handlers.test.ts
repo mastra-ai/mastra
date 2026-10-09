@@ -1606,5 +1606,35 @@ Want to work on challenging problems"}`;
 
       expect(chunks).toEqual(['[', '{"a":1}', ',{"a":2}', ']']);
     });
+
+    it('emits the completed version of an element that a later chunk completes in place', async () => {
+      const transformer = createJsonTextStreamTransformer(arraySchema);
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream([
+        objectChunk([{ a: 1 }]),
+        objectChunk([{ a: 1, b: 2 }]),
+        objectChunk([
+          { a: 1, b: 2 },
+          { a: 2, b: 4 },
+        ]),
+      ]).pipeThrough(transformer);
+      const text = (await convertAsyncIterableToArray(stream)).join('');
+
+      expect(text).toBe('[{"a":1,"b":2},{"a":2,"b":4}]');
+    });
+
+    it('emits the completed version of a later element completed in place', async () => {
+      const transformer = createJsonTextStreamTransformer(arraySchema);
+      // @ts-expect-error - web/stream readable stream type error
+      const stream = convertArrayToReadableStream([
+        objectChunk([]),
+        objectChunk([{ a: 1 }]),
+        objectChunk([{ a: 1 }, { a: 2 }]),
+        objectChunk([{ a: 1 }, { a: 2, b: 3 }]),
+      ]).pipeThrough(transformer);
+      const text = (await convertAsyncIterableToArray(stream)).join('');
+
+      expect(JSON.parse(text)).toEqual([{ a: 1 }, { a: 2, b: 3 }]);
+    });
   });
 });

@@ -25,7 +25,6 @@
       "@mastra/evals": "link:../../packages/evals",
       "@mastra/libsql": "link:../../stores/libsql",
       "@mastra/memory": "link:../../packages/memory",
-      "nanoid@>=3.0.0 <3.3.19": "3.3.19",
       "proxy-addr": "2.0.8",
       "qs": "6.16.0",
       "fast-uri": "3.1.8",
@@ -57,7 +56,8 @@
       "ioredis@>=5.0.0 <6.0.0": "6.0.0",
       "zod@>=4.0.0 <4.6.5": "4.6.5",
       "es-toolkit@<1.52.0": "1.52.0",
-      "fast-copy@<4.1.1": "4.1.1"
+      "fast-copy@<4.1.1": "4.1.1",
+      "nanoid@<5.1.16": "5.1.16"
     }
   },
   "devDependencies": {

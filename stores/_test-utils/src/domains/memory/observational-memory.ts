@@ -136,6 +136,128 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
     });
 
     describe('getObservationalMemoryHistory', () => {
+      it.each(['thread', 'resource'] as const)(
+        'finds buffered groups across retained generations in %s scope without activating',
+        async scope => {
+          const resourceId = randomUUID();
+          const threadId = scope === 'thread' ? randomUUID() : null;
+          const first = await memoryStorage.initializeObservationalMemory(
+            createSampleOMInput({ resourceId, threadId, scope }),
+          );
+          const groupId = 'buffered_%.$group';
+          const tag = `<observation-group id="${groupId}" range="m1:m2">original</observation-group>`;
+          const chunk = {
+            cycleId: randomUUID(),
+            observations: 'Unicode α and "quotes"\\\n'.repeat(600) + tag,
+            tokenCount: 10,
+            messageIds: ['m1', 'm2'],
+            messageTokens: 100,
+            lastObservedAt: new Date(),
+          };
+          await memoryStorage.updateBufferedObservations({ id: first.id, chunk });
+          const second = await memoryStorage.createReflectionGeneration({
+            currentRecord: first,
+            reflection: 'newer generation',
+            tokenCount: 10,
+          });
+          await memoryStorage.updateBufferedObservations({ id: second.id, chunk: { ...chunk, cycleId: randomUUID() } });
+          const before = await memoryStorage.getObservationalMemoryHistory(threadId, resourceId);
+          const find = (
+            options: {
+              sortDirection?: 'ASC' | 'DESC';
+              offset?: number;
+              beforeGeneration?: number;
+              groupId?: string;
+            } = {},
+          ) => memoryStorage.getObservationalMemoryHistory(threadId, resourceId, 1, { groupId, ...options });
+          expect((await find({ sortDirection: 'ASC' })).map(r => r.id)).toEqual([first.id]);
+          expect((await find()).map(r => r.id)).toEqual([second.id]);
+          expect((await find({ sortDirection: 'ASC', offset: 1 })).map(r => r.id)).toEqual([second.id]);
+          expect((await find({ beforeGeneration: 1 })).map(r => r.id)).toEqual([first.id]);
+          expect(await find({ groupId: groupId.toUpperCase() })).toEqual([]);
+          expect(await find({ groupId: groupId.slice(0, -1) })).toEqual([]);
+          expect(await memoryStorage.getObservationalMemoryHistory(threadId, resourceId)).toEqual(before);
+        },
+      );
+      it.each(['thread', 'resource'] as const)('finds existing groups before paging in %s scope', async scope => {
+        const resourceId = randomUUID();
+        const threadId = scope === 'thread' ? randomUUID() : null;
+        const first = await memoryStorage.initializeObservationalMemory(
+          createSampleOMInput({ resourceId, threadId, scope }),
+        );
+        const groupId = 'literal_%.$group';
+        const group = (id: string) => `<observation-group id="${id}" range="m1:m2">body</observation-group>`;
+        const second = await memoryStorage.createReflectionGeneration({
+          currentRecord: first,
+          reflection: group(groupId),
+          tokenCount: 10,
+        });
+        const third = await memoryStorage.createReflectionGeneration({
+          currentRecord: second,
+          reflection: group(groupId),
+          tokenCount: 10,
+        });
+        await memoryStorage.createReflectionGeneration({
+          currentRecord: third,
+          reflection: group(`${groupId}-suffix`) + ` mentions ${groupId}`,
+          tokenCount: 10,
+        });
+
+        expect(memoryStorage.supportsObservationalMemoryHistorySearch).toBe(true);
+        const oldest = await memoryStorage.getObservationalMemoryHistory(threadId, resourceId, 1, {
+          groupId,
+          sortDirection: 'ASC',
+        });
+        expect(oldest.map(r => r.id)).toEqual([second.id]);
+        const newest = await memoryStorage.getObservationalMemoryHistory(threadId, resourceId, 1, { groupId });
+        expect(newest.map(r => r.id)).toEqual([third.id]);
+        const offset = await memoryStorage.getObservationalMemoryHistory(threadId, resourceId, 1, {
+          groupId,
+          sortDirection: 'ASC',
+          offset: 1,
+        });
+        expect(offset.map(r => r.id)).toEqual([third.id]);
+        const bounded = await memoryStorage.getObservationalMemoryHistory(threadId, resourceId, 1, {
+          groupId,
+          afterGeneration: 0,
+          beforeGeneration: 2,
+        });
+        expect(bounded.map(r => r.id)).toEqual([second.id]);
+        const next = await memoryStorage.getObservationalMemoryHistory(threadId, resourceId, 1, {
+          afterGeneration: 1,
+          sortDirection: 'ASC',
+        });
+        expect(next.map(r => r.id)).toEqual([third.id]);
+        expect(
+          await memoryStorage.getObservationalMemoryHistory(threadId, resourceId, 1, {
+            groupId: groupId.toUpperCase(),
+          }),
+        ).toEqual([]);
+        expect(
+          await memoryStorage.getObservationalMemoryHistory(threadId, resourceId, 1, { groupId, afterGeneration: 2 }),
+        ).toEqual([]);
+        expect(
+          await memoryStorage.getObservationalMemoryHistory(threadId, resourceId, 1, { groupId, to: new Date(0) }),
+        ).toEqual([]);
+        expect(
+          await memoryStorage.getObservationalMemoryHistory(scope === 'thread' ? randomUUID() : null, randomUUID(), 1, {
+            groupId,
+          }),
+        ).toEqual([]);
+
+        const byId = (options: { recordId: string; groupId?: string }) =>
+          memoryStorage.getObservationalMemoryHistory(threadId, resourceId, 1, options);
+        expect((await byId({ recordId: second.id })).map(r => r.id)).toEqual([second.id]);
+        expect((await byId({ recordId: second.id, groupId })).map(r => r.id)).toEqual([second.id]);
+        expect(await byId({ recordId: first.id, groupId })).toEqual([]);
+        expect(await byId({ recordId: randomUUID() })).toEqual([]);
+        expect(
+          await memoryStorage.getObservationalMemoryHistory(scope === 'thread' ? randomUUID() : null, randomUUID(), 1, {
+            recordId: second.id,
+          }),
+        ).toEqual([]);
+      });
+
       it('should return empty array for non-existent resource', async () => {
         const history = await memoryStorage.getObservationalMemoryHistory(null, 'non-existent-resource');
 

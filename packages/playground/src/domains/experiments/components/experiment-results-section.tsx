@@ -3,12 +3,12 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
+import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 import { useMemo, useCallback } from 'react';
 
 import { useExperimentItemPanel } from '../context/experiment-item-panel-context';
 import { ExperimentResultsList } from './experiment-results-list';
 import type { ExperimentResultsSortKey } from './experiment-results-list';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
 
 export type ExperimentResultsSectionProps = {
   experimentId: string;
@@ -51,7 +51,11 @@ export function ExperimentResultsSection({
     [results, currentItemId],
   );
 
-  const { data: scoresByExperimentId } = useScoresByExperimentId(experimentId, experimentStatus);
+  const { data: scoresByExperimentId } = useScoresByExperimentId({
+    experimentId: experimentId,
+    experimentStatus: experimentStatus,
+    queryOptions: { enabled: Boolean(experimentId) },
+  });
 
   const scorerIds = useMemo(() => {
     if (!scoresByExperimentId) return [];

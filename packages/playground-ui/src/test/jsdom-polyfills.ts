@@ -1,14 +1,6 @@
-/**
- * jsdom polyfills and auto-cleanup for tests ported from @internal/playground.
- * Import first in a test file: `import '@/test/jsdom-polyfills';`
- */
-import { cleanup } from '@testing-library/react';
-import { afterEach } from 'vitest';
-
-// jsdom-only polyfills. Each one is guarded so the default `node` environment is unaffected.
-
-// Lets manual `act(...)` calls work outside @testing-library/react's helpers.
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+// Every test loads this, `node` environment included, so each stub is guarded. A fake some tests
+// rely on being absent belongs in an opt-in module such as inert-resize-observer.ts.
+export {};
 
 if (typeof globalThis.window !== 'undefined' && !window.matchMedia) {
   Object.defineProperty(window, 'matchMedia', {
@@ -30,11 +22,6 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }
 
-// Used by Radix UI presence and @base-ui's ScrollAreaViewport.
-if (typeof globalThis.Element !== 'undefined' && !Element.prototype.getAnimations) {
-  Element.prototype.getAnimations = () => [];
-}
-
 if (typeof globalThis.window !== 'undefined' && typeof globalThis.IntersectionObserver === 'undefined') {
   class IntersectionObserverStub {
     observe() {}
@@ -48,16 +35,6 @@ if (typeof globalThis.window !== 'undefined' && typeof globalThis.IntersectionOb
     thresholds = [];
   }
   globalThis.IntersectionObserver = IntersectionObserverStub as unknown as typeof IntersectionObserver;
-}
-
-// Used by @xyflow/react when rendering the workflow graph.
-if (typeof globalThis.window !== 'undefined' && typeof globalThis.ResizeObserver === 'undefined') {
-  class ResizeObserverStub {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  }
-  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
 }
 
 // CodeMirror's measure cycle calls these asynchronously after mount.
@@ -84,4 +61,18 @@ if (typeof globalThis.window !== 'undefined' && typeof globalThis.PointerEvent =
   globalThis.PointerEvent = PointerEventStub as unknown as typeof PointerEvent;
 }
 
-afterEach(() => cleanup());
+// jsdom 30 has no AnimationEvent; without it React binds onAnimationEnd to `webkitAnimationEnd`.
+if (typeof globalThis.window !== 'undefined' && typeof globalThis.AnimationEvent === 'undefined') {
+  class AnimationEventStub extends Event {
+    animationName: string;
+    elapsedTime: number;
+    pseudoElement: string;
+    constructor(type: string, init: AnimationEventInit = {}) {
+      super(type, init);
+      this.animationName = init.animationName ?? '';
+      this.elapsedTime = init.elapsedTime ?? 0;
+      this.pseudoElement = init.pseudoElement ?? '';
+    }
+  }
+  globalThis.AnimationEvent = AnimationEventStub;
+}

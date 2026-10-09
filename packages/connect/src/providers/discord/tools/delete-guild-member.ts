@@ -3,10 +3,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
-
-const MetadataSchema = z.object({
-  botToken: z.string().describe('Discord bot token for authentication'),
-});
+import { resolveDiscordBotToken } from './_bot-token.js';
 
 export const deleteGuildMemberInputSchema = z.object({
   guild_id: z.string().describe('Guild ID. Example: "123456789012345678"'),
@@ -26,16 +23,7 @@ export function deleteGuildMemberTool(proxy: PlatformProxy) {
     outputSchema: deleteGuildMemberOutputSchema,
     execute: async (input, { requestContext }): Promise<z.infer<typeof deleteGuildMemberOutputSchema>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
-      const metadata = await platformProxy.getMetadata<{
-        botToken?: string;
-      }>();
-
-      if (!metadata?.botToken) {
-        throw new platformProxy.ActionError({
-          type: 'invalid_metadata',
-          message: 'botToken is required in connection metadata',
-        });
-      }
+      const botToken = await resolveDiscordBotToken(platformProxy);
 
       // https://discord.com/developers/docs/resources/guild#remove-guild-member
       let response: { status: number } | undefined;
@@ -43,7 +31,7 @@ export function deleteGuildMemberTool(proxy: PlatformProxy) {
         response = await platformProxy.delete({
           endpoint: `/api/v10/guilds/${input.guild_id}/members/${input.user_id}`,
           headers: {
-            Authorization: `Bot ${metadata.botToken}`,
+            Authorization: `Bot ${botToken}`,
           },
           retries: 1,
         });

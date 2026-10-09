@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -59,6 +57,7 @@ import { formatDateForMongoDB } from '../utils';
 export class MemoryStorageMongoDB extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
+  readonly supportsObservationalMemoryHistorySearch = true;
 
   #connector: MongoDBConnector;
   #skipDefaultIndexes?: boolean;
@@ -298,9 +297,16 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const target = targetMap.get(id);
       if (!target) continue;
 
-      // Fetch the target message + previous messages (createdAt <= target, ordered DESC, limited)
+      // Fetch the target message + previous messages, ordered DESC and limited.
+      // Messages are ordered by (createdAt, id), so the range has to compare on both. Comparing
+      // on createdAt alone resolves a pinned message to whichever id sorts highest among rows
+      // sharing its timestamp, which a batched save produces routinely.
       const prevMessages = await collection
-        .find({ thread_id: target.threadId, createdAt: { $lte: target.createdAt }, ...resourceFilter })
+        .find({
+          thread_id: target.threadId,
+          ...resourceFilter,
+          $or: [{ createdAt: { $lt: target.createdAt } }, { createdAt: target.createdAt, id: { $lte: id } }],
+        })
         .sort({ createdAt: -1, id: -1 })
         .limit(withPreviousMessages + 1)
         .toArray();
@@ -309,7 +315,11 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       // Fetch messages after the target (only if requested)
       if (withNextMessages > 0) {
         const nextMessages = await collection
-          .find({ thread_id: target.threadId, createdAt: { $gt: target.createdAt }, ...resourceFilter })
+          .find({
+            thread_id: target.threadId,
+            ...resourceFilter,
+            $or: [{ createdAt: { $gt: target.createdAt } }, { createdAt: target.createdAt, id: { $gt: id } }],
+          })
           .sort({ createdAt: 1, id: 1 })
           .limit(withNextMessages)
           .toArray();
@@ -1300,7 +1310,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       });
     }
 
-    const newThreadId = providedThreadId || randomUUID();
+    const newThreadId = providedThreadId || globalThis.crypto.randomUUID();
 
     const existingThread = await this.getThreadById({ threadId: newThreadId });
     if (existingThread) {
@@ -1387,7 +1397,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       if (sourceMessages.length > 0) {
         const messageDocs: any[] = [];
         for (const sourceMsg of sourceMessages) {
-          const newMessageId = randomUUID();
+          const newMessageId = globalThis.crypto.randomUUID();
           messageIdMap[sourceMsg.id] = newMessageId;
 
           let parsedContent = sourceMsg.content;
@@ -1549,6 +1559,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
       const collection = await this.getCollection(OM_TABLE);
 
       const filter: Record<string, unknown> = { lookupKey };
+      if (options?.recordId !== undefined) filter['id'] = options.recordId;
       if (options?.from || options?.to) {
         const createdAtFilter: Record<string, unknown> = {};
         if (options.from) createdAtFilter['$gte'] = options.from;
@@ -1556,7 +1567,36 @@ export class MemoryStorageMongoDB extends MemoryStorage {
         filter['createdAt'] = createdAtFilter;
       }
 
-      let cursor = collection.find(filter).sort({ generationCount: -1 });
+      if (options?.groupId !== undefined) {
+        const prefix = { $literal: `<observation-group id="${options.groupId}"` };
+        filter['$expr'] = {
+          $or: [
+            { $gte: [{ $indexOfCP: [{ $ifNull: ['$activeObservations', ''] }, prefix] }, 0] },
+            {
+              $anyElementTrue: [
+                {
+                  $map: {
+                    input: {
+                      $cond: [{ $isArray: '$bufferedObservationChunks' }, '$bufferedObservationChunks', []],
+                    },
+                    as: 'chunk',
+                    in: { $gte: [{ $indexOfCP: [{ $ifNull: ['$$chunk.observations', ''] }, prefix] }, 0] },
+                  },
+                },
+              ],
+            },
+          ],
+        };
+      }
+      if (options?.beforeGeneration !== undefined || options?.afterGeneration !== undefined) {
+        filter['generationCount'] = {
+          ...(options.beforeGeneration !== undefined ? { $lt: options.beforeGeneration } : {}),
+          ...(options.afterGeneration !== undefined ? { $gt: options.afterGeneration } : {}),
+        };
+      }
+      let cursor = collection
+        .find(filter)
+        .sort({ generationCount: options?.sortDirection === 'ASC' ? 1 : -1, createdAt: 1, id: 1 });
       if (options?.offset != null) {
         cursor = cursor.skip(options.offset);
       }
@@ -1577,7 +1617,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
       const lookupKey = this.getOMKey(input.threadId, input.resourceId);
 
@@ -1749,7 +1789,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
-      const id = randomUUID();
+      const id = globalThis.crypto.randomUUID();
       const now = new Date();
       const lookupKey = this.getOMKey(input.currentRecord.threadId, input.currentRecord.resourceId);
 
@@ -2064,7 +2104,7 @@ export class MemoryStorageMongoDB extends MemoryStorage {
 
       // Create new chunk with ID and timestamp
       const newChunk: BufferedObservationChunk = {
-        id: `ombuf-${randomUUID()}`,
+        id: `ombuf-${globalThis.crypto.randomUUID()}`,
         cycleId: input.chunk.cycleId,
         observations: input.chunk.observations,
         tokenCount: input.chunk.tokenCount,

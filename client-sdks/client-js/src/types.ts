@@ -127,34 +127,16 @@ export interface ClientOptions {
 
 export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/signals'>>;
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export type SendAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/send-message'>>;
 
-/**
- * @experimental Agent message APIs are experimental and may change in a future release.
- */
 export type QueueAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/queue-message'>>;
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export interface SubscribeAgentThreadParams {
   resourceId?: string;
   threadId: string;
@@ -165,10 +147,9 @@ export interface SubscribeAgentThreadParams {
   withInitialHistory?: boolean | { perPage?: number };
 }
 
-/** @experimental Agent thread cancellation is experimental. */
 export type AbortAgentThreadParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/abort'>>;
 
-/** @experimental Cancels pending signals on the server process handling the request. */
+/** Cancels pending signals on the server process handling the request. */
 export type CancelQueuedAgentMessagesParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/signals/cancel'>>;
 
 export type CancelQueuedAgentMessagesResponse = GeneratedResponse<'POST /agents/:agentId/threads/signals/cancel'>;
@@ -188,9 +169,6 @@ export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
 
 export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export interface ProcessAgentThreadStreamOptions {
   /** Receives a `thread-history` chunk first when the subscription requested `withInitialHistory`. */
   onChunk: (chunk: ChunkType | ThreadHistoryChunk) => void | Promise<void>;
@@ -889,6 +867,16 @@ export interface SerializedMemoryConfig {
 }
 
 /**
+ * Stored-agent memory: a reference to a Memory instance registered on Mastra
+ * (by registry key, falling back to the instance id), an explicitly tagged
+ * inline config, or a legacy untagged inline config.
+ */
+export type StoredMemoryRef =
+  | { type: 'id'; memoryId: string }
+  | { type: 'inline'; config: SerializedMemoryConfig }
+  | SerializedMemoryConfig;
+
+/**
  * Default options for agent execution (serializable subset of AgentExecutionOptionsBase)
  */
 export interface DefaultOptions {
@@ -1295,7 +1283,7 @@ export interface AgentVersionResponse {
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
-  memory?: ConditionalField<SerializedMemoryConfig>;
+  memory?: ConditionalField<StoredMemoryRef>;
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   requestContextSchema?: Record<string, unknown>;
   changedFields?: string[];
@@ -1517,6 +1505,23 @@ export type WorkspaceFsMkdirResponse = GeneratedResponse<'POST /workspaces/:work
  * Response for getting file stats
  */
 export type WorkspaceFsStatResponse = GeneratedResponse<'GET /workspaces/:workspaceId/fs/stat'>;
+
+/**
+ * skills.sh registry operations (proxied by the workspace API)
+ */
+export type SkillsShSearchParams = QueryParams<'GET /workspaces/:workspaceId/skills-sh/search'>;
+export type SkillsShSearchResponse = GeneratedResponse<'GET /workspaces/:workspaceId/skills-sh/search'>;
+export type SkillsShPopularParams = QueryParams<'GET /workspaces/:workspaceId/skills-sh/popular'>;
+export type SkillsShPopularResponse = GeneratedResponse<'GET /workspaces/:workspaceId/skills-sh/popular'>;
+export type SkillsShSkill = SkillsShPopularResponse['skills'][number];
+export type SkillsShPreviewParams = QueryParams<'GET /workspaces/:workspaceId/skills-sh/preview'>;
+export type SkillsShPreviewResponse = GeneratedResponse<'GET /workspaces/:workspaceId/skills-sh/preview'>;
+export type SkillsShInstallParams = Body<'POST /workspaces/:workspaceId/skills-sh/install'>;
+export type SkillsShInstallResponse = GeneratedResponse<'POST /workspaces/:workspaceId/skills-sh/install'>;
+export type SkillsShRemoveParams = Body<'POST /workspaces/:workspaceId/skills-sh/remove'>;
+export type SkillsShRemoveResponse = GeneratedResponse<'POST /workspaces/:workspaceId/skills-sh/remove'>;
+export type SkillsShUpdateParams = Body<'POST /workspaces/:workspaceId/skills-sh/update'>;
+export type SkillsShUpdateResponse = GeneratedResponse<'POST /workspaces/:workspaceId/skills-sh/update'>;
 
 /**
  * Workspace search result
@@ -2235,7 +2240,7 @@ export type ListBackgroundTasksResponse = GeneratedResponse<'GET /background-tas
 
 export type StreamBackgroundTasksParams = GeneratedRequest<QueryParams<'GET /background-tasks/stream'>>;
 
-export type ScheduleStatus = 'active' | 'paused';
+export type ScheduleStatus = 'active' | 'paused' | 'completed';
 
 export interface ScheduleRunSummary {
   status: WorkflowRunStatus;
@@ -2469,7 +2474,7 @@ export type BuilderRegistryInstallResponse = GeneratedResponse<'POST /editor/bui
 // Wire shapes derive from the published route contracts, vocabulary from core.
 // Event-stream types can't derive this way (SSE routes carry no response
 // schema) and stay hand-written in `resources/agent-controller`.
-export type { PermissionPolicy, ToolCategory } from '@mastra/core/agent-controller';
+export type { AgentControllerThinkingLevel, PermissionPolicy, ToolCategory } from '@mastra/core/agent-controller';
 export type { TaskItemSnapshot as AgentControllerTaskSnapshot } from '@mastra/core/tools';
 
 export type AgentControllerInfo = GeneratedResponse<'GET /agent-controller'>['agentControllers'][number];

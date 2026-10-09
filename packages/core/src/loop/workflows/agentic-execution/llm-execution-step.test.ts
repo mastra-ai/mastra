@@ -40,6 +40,7 @@ type IterationData = {
   processorRetryCount?: number;
   fallbackModelIndex?: number;
   processorRetryFeedback?: string;
+  backgroundTaskPending?: boolean;
 };
 
 describe('createLLMExecutionStep gateway provider tools', () => {
@@ -1697,6 +1698,101 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(doStream).not.toHaveBeenCalled();
   });
 
+  describe('fallback logging severity', () => {
+    const failingStream = (name: string) =>
+      vi.fn(async () => {
+        throw new APICallError({
+          message: `${name} failed`,
+          url: `https://${name}.example.com/v1/messages`,
+          requestBodyValues: {},
+          statusCode: 503,
+          isRetryable: true,
+        });
+      });
+    const succeedingStream = () =>
+      vi.fn(async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'response-metadata', id: 'resp-1', modelId: 'ok-model', timestamp: new Date(0) },
+          { type: 'text-delta', textDelta: 'ok' },
+          { type: 'finish', finishReason: 'stop', usage: testUsage },
+        ]),
+        request: {},
+        response: { headers: undefined },
+        warnings: [],
+      }));
+    const makeModel = (modelId: string, doStream: any) => ({
+      id: modelId,
+      maxRetries: 0,
+      model: {
+        specificationVersion: 'v2' as const,
+        provider: 'mock-provider',
+        modelId,
+        supportedUrls: {},
+        doGenerate: vi.fn(),
+        doStream,
+      } as any,
+    });
+    const run = async (models: any[]) => {
+      const logger = { error: vi.fn(), warn: vi.fn(), debug: vi.fn(), info: vi.fn() };
+      const step = createLLMExecutionStep({
+        agentId: 'test-agent',
+        messageId: 'msg-0',
+        runId: 'test-run',
+        startTimestamp: Date.now(),
+        methodType: 'stream',
+        controller,
+        outputWriter: vi.fn(),
+        messageList,
+        models,
+        tools: {},
+        streamState: { serialize: vi.fn(), deserialize: vi.fn() },
+        _internal: { generateId: () => 'generated-id', threadId: 'thread-123', resourceId: 'resource-456' },
+        logger: logger as any,
+      } as unknown as OuterLLMRun<{}>);
+      const result = await step.execute(createExecuteParams(createIterationInput())).catch(e => e);
+      return { logger, result };
+    };
+
+    it('logs a single warning and no errors when a fallback model recovers', async () => {
+      const { logger } = await run([
+        makeModel('primary-model', failingStream('primary')),
+        makeModel('secondary-model', succeedingStream()),
+      ]);
+
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Model primary-model failed; falling back to secondary-model',
+        expect.objectContaining({ modelId: 'primary-model', nextModelId: 'secondary-model' }),
+      );
+    });
+
+    it('logs one warning per failover when recovering on the third model', async () => {
+      const { logger } = await run([
+        makeModel('a-model', failingStream('a')),
+        makeModel('b-model', failingStream('b')),
+        makeModel('c-model', succeedingStream()),
+      ]);
+
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('surfaces the final failure as an error without a failover warning for the last model', async () => {
+      const { logger, result } = await run([
+        makeModel('primary-model', failingStream('primary')),
+        makeModel('secondary-model', failingStream('secondary')),
+      ]);
+
+      expect(result.stepResult.reason).toBe('error');
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        'Model primary-model failed; falling back to secondary-model',
+        expect.anything(),
+      );
+    });
+  });
+
   it('preserves fallback model index when processAPIError requests a retry', async () => {
     const firstModelStream = vi.fn(async () => {
       throw new APICallError({
@@ -2013,14 +2109,19 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       } as any,
     } as unknown as OuterLLMRun<{}>);
 
-    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+    const result = await llmExecutionStep.execute(
+      createExecuteParams({ ...createIterationInput(), backgroundTaskPending: true }),
+    );
 
     expect(doStream).toHaveBeenCalledTimes(1);
     expect(onAbort).toHaveBeenCalledOnce();
     // Nothing streamed before the abort, so the partial text is an empty string
     // rather than undefined.
     expect(onAbort).toHaveBeenCalledWith(expect.objectContaining({ text: '' }));
-    expect(result.stepResult).toMatchObject({ reason: 'tripwire', isContinued: false });
+    expect(result).toMatchObject({
+      backgroundTaskPending: true,
+      stepResult: { reason: 'abort', isContinued: false },
+    });
   });
 
   it('hands onAbort the text streamed before the abort', async () => {
@@ -3655,5 +3756,67 @@ describe('per-step modelSettings precedence (call-time < per-model < processor)'
     expect(setInferenceContext).toHaveBeenCalledTimes(1);
     expect((setInferenceContext.mock.calls[0]?.[0] as any)?.parameters?.temperature).toBe(0.1);
     expect(doStream.mock.calls[0]?.[0]?.temperature).toBe(0.1);
+  });
+
+  it.each([
+    { sampled: true, expectedToolNames: ['lookup'] },
+    { sampled: false, expectedToolNames: undefined },
+  ])(
+    'serializes MODEL_INFERENCE tool definitions only for a sampled trace (sampled: $sampled)',
+    async ({ sampled, expectedToolNames }) => {
+      const doStream = finishingStream();
+      const setInferenceContext = vi.fn();
+      const modelSpanTracker = {
+        // An unsampled trace still gets a tracker, backed by a no-op span.
+        getTracingContext: vi.fn(() => ({ currentSpan: { isValid: sampled } })),
+        reportGenerationError: vi.fn(),
+        endGeneration: vi.fn(),
+        updateGeneration: vi.fn(),
+        wrapStream: vi.fn(<T>(stream: T) => stream),
+        startStep: vi.fn(),
+        setInferenceContext,
+        startInference: vi.fn(),
+      };
+
+      const llmExecutionStep = baseRun({
+        modelSpanTracker: modelSpanTracker as any,
+        tools: { lookup: { description: 'Look something up', inputSchema: z.object({ query: z.string() }) } },
+        models: [{ id: 'test-model', maxRetries: 0, model: mockModel(doStream) }],
+      });
+
+      await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+      const context = setInferenceContext.mock.calls[0]?.[0] as any;
+      expect(context?.tools?.map((tool: any) => tool.name)).toEqual(expectedToolNames);
+      // The provider still gets the tool either way.
+      expect(doStream.mock.calls[0]?.[0]?.tools?.map((tool: any) => tool.name)).toEqual(['lookup']);
+    },
+  );
+
+  it('records provider tools on MODEL_INFERENCE with the type a v3 model receives', async () => {
+    const doStream = finishingStream();
+    const setInferenceContext = vi.fn();
+    const modelSpanTracker = {
+      getTracingContext: vi.fn(() => ({ currentSpan: { isValid: true } })),
+      reportGenerationError: vi.fn(),
+      endGeneration: vi.fn(),
+      updateGeneration: vi.fn(),
+      wrapStream: vi.fn(<T>(stream: T) => stream),
+      startStep: vi.fn(),
+      setInferenceContext,
+      startInference: vi.fn(),
+    };
+
+    const llmExecutionStep = baseRun({
+      modelSpanTracker: modelSpanTracker as any,
+      tools: { search: { id: 'openai.web_search', type: 'provider-defined', args: {} } },
+      models: [{ id: 'test-model', maxRetries: 0, model: { ...mockModel(doStream), specificationVersion: 'v3' } }],
+    });
+
+    await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    const sentType = doStream.mock.calls[0]?.[0]?.tools?.[0]?.type;
+    expect(sentType).toBe('provider');
+    expect((setInferenceContext.mock.calls[0]?.[0] as any)?.tools?.[0]?.type).toBe(sentType);
   });
 });

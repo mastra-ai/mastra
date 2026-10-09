@@ -177,6 +177,19 @@ describe('registerTenantCredentialResolver', () => {
     expect(resolveCredentialStore(ctx)).toBe(resolveCredentialStore(ctx));
   });
 
+  it('allows deployment credentials only for providers the operator opted in', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { workosId: USER, organizationId: ORG });
+
+    registerTenantCredentialResolver(seed.credentials);
+    expect(resolveCredentialStore(ctx)?.allowsDeploymentCredentials?.('amazon-bedrock')).toBe(false);
+
+    registerTenantCredentialResolver(seed.credentials, new Set(['amazon-bedrock']));
+    const store = resolveCredentialStore(ctx);
+    expect(store?.allowsDeploymentCredentials?.('amazon-bedrock')).toBe(true);
+    expect(store?.allowsDeploymentCredentials?.('openai')).toBe(false);
+  });
+
   it('scopes personal accounts (no org) under a synthetic per-user org', async () => {
     registerTenantCredentialResolver(seed.credentials);
     const ctx = new RequestContext();

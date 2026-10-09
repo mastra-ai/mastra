@@ -1,10 +1,6 @@
 /* Hatching reads as provisional: the slice of the fill a pending pass will free. */
 .token-budget-hatch {
-  background-image: repeating-linear-gradient(
-    -45deg,
-    currentcolor 0 1.5px,
-    color-mix(in oklab, currentcolor 25%, transparent) 1.5px 4px
-  );
+  background-image: repeating-linear-gradient(-45deg, currentcolor 0 1.5px, transparent 1.5px 4px);
 }
 
 .token-budget-dial {
@@ -20,7 +16,7 @@
 }
 
 .token-budget-track {
-  stroke: color-mix(in oklab, currentcolor 22%, transparent);
+  stroke: var(--border-strong);
 }
 
 /* The wedge starts at noon rather than at three o'clock. */

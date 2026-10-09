@@ -2209,6 +2209,16 @@
       "source": "/docs/connections/connect-mcp-client",
       "destination": "/docs/connections/mcp",
       "permanent": true
+    },
+    {
+      "source": "/reference/core/getTelemetry",
+      "destination": "/docs/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/reference/client-js/telemetry",
+      "destination": "/reference/client-js/observability",
+      "permanent": true
     }
   ]
 }

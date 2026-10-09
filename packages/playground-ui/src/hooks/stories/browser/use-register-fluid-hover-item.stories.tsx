@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
 import { FluidHoverHighlight } from '@/components/fluid-hover-highlight';
 import { Checkbox } from '@/ds/components/Checkbox';
+import { Field, FieldLabel } from '@/ds/components/Field';
 import { Txt } from '@/ds/components/Txt';
 import { useFluidHover, useRegisterFluidHoverItem } from '@/hooks/use-fluid-hover';
 import type { UseFluidHoverReturn } from '@/hooks/use-fluid-hover';
@@ -33,10 +34,10 @@ function RegisterFluidHoverItemDemo() {
   const [middleRegistered, setMiddleRegistered] = useState(true);
   return (
     <HookDemo>
-      <label className="flex items-center gap-2">
+      <Field orientation="horizontal">
         <Checkbox checked={middleRegistered} onCheckedChange={checked => setMiddleRegistered(checked === true)} />
-        <Txt>Register “{steps[1]}”</Txt>
-      </label>
+        <FieldLabel>Register “{steps[1]}”</FieldLabel>
+      </Field>
       <div
         ref={containerRef}
         {...hover.handlers}

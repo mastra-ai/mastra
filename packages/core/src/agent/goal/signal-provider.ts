@@ -29,8 +29,6 @@ import { GoalStateProcessor } from './state-processor';
  *   goal: { judge: judgeModel },
  * });
  * ```
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export class GoalSignalProvider extends SignalProvider<'goal-signals'> {
   readonly id = 'goal-signals';

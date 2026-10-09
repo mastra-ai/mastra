@@ -10,10 +10,11 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
+import type { IntegrationTools } from '../base.js';
 import type { GithubIntegration } from './integration.js';
 import { getGithubPat } from './pat.js';
 import { subscribeToPullRequest, unsubscribeFromPullRequest } from './subscriptions.js';
-import { getRegisteredGithubPatKind, injectGithubToken } from './token-refresh.js';
+import { getGithubRefreshTarget, getRegisteredGithubPatKind, requireGithubTokenInjector } from './token-refresh.js';
 
 type RepositorySessionState = { factoryProjectId?: string; projectRepositoryId?: string };
 
@@ -195,7 +196,11 @@ export async function upsertFactoryTriageComment(
 }
 
 export async function refreshGithubToken(requestContext: RequestContext, github: GithubIntegration): Promise<void> {
-  const target = await resolveSessionTarget(requestContext, github);
+  const inject = requireGithubTokenInjector(requestContext);
+  // The workspace resolver records the target only after authorizing the
+  // caller against the GitHub-backed session that owns this sandbox.
+  const target = getGithubRefreshTarget(requestContext);
+  if (!target) throw new Error('The active session is not backed by a GitHub workspace.');
   // `GH_TOKEN` feeds the `gh` CLI, so a configured org PAT wins over a minted
   // installation token (which 403s on integration-restricted endpoints). The
   // workspace records which PAT kind the sandbox was provisioned with, so a
@@ -206,23 +211,19 @@ export async function refreshGithubToken(requestContext: RequestContext, github:
     getRegisteredGithubPatKind(requestContext),
   );
   if (pat) {
-    injectGithubToken(requestContext, pat);
+    inject(pat);
     return;
   }
-  const access = await github.versionControl.getRepositoryAccess({
-    orgId: target.orgId,
-    repositoryId: target.repository.id,
-  });
+  const access = await github.versionControl.getRepositoryAccess(target);
   const token = access.authorization?.token;
   if (!token) throw new Error('Repository access did not include a bearer token for the Factory session.');
-  injectGithubToken(requestContext, token);
+  inject(token);
 }
 
 export function createGithubSubscriptionTools(requestContext: RequestContext, github: GithubIntegration) {
-  if (!isGithubProjectSession(requestContext)) return {};
-
-  return {
-    github_refresh_token: createTool({
+  const tools: IntegrationTools = {};
+  if (getGithubRefreshTarget(requestContext)) {
+    tools.github_refresh_token = createTool({
       id: 'github_refresh_token',
       description:
         'Refresh GitHub CLI authentication in the active Factory sandbox. Use this after a gh command fails because authentication is expired, invalid, or missing. It installs a fresh GH_TOKEN for subsequent sandbox commands. After this tool succeeds, retry the failed gh command. Takes no arguments and never returns the token.',
@@ -231,7 +232,12 @@ export function createGithubSubscriptionTools(requestContext: RequestContext, gi
         await refreshGithubToken(requestContext, github);
         return { refreshed: true };
       },
-    }),
+    });
+  }
+  if (!isGithubProjectSession(requestContext)) return tools;
+
+  return {
+    ...tools,
     github_upsert_factory_triage_comment: createTool({
       id: 'github_upsert_factory_triage_comment',
       description:

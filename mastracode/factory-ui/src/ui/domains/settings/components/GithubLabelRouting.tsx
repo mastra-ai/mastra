@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsFieldsetRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
@@ -103,7 +103,7 @@ export function GithubLabelRouting({
           </SettingsRow>
         );
       })}
-      <SettingsRow
+      <SettingsFieldsetRow
         label="Add label route"
         description={duplicate ? 'That label is already routed — change its board above.' : undefined}
       >
@@ -137,7 +137,7 @@ export function GithubLabelRouting({
             Add
           </Button>
         </div>
-      </SettingsRow>
+      </SettingsFieldsetRow>
     </div>
   );
 }

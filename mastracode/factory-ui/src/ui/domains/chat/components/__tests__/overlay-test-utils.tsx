@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -6,6 +6,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { thinkingConfig } from '../../../../__tests__/fixtures/thinkingConfig';
 import { OverlaysProvider } from '../../../../lib/overlays';
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
@@ -127,6 +128,8 @@ export function useOverlayControllerHandlers() {
       HttpResponse.json({ root: '/tmp', path: '/tmp', parent: null, entries: [] }),
     ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
+    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(thinkingConfig)),
   );
 }
 
@@ -149,11 +152,11 @@ export function OverlayTestProviders({ children }: { children: ReactNode }) {
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
           element={
-            <MainSidebarProvider storageKey="overlay-test">
+            <SidebarProvider storageKey="overlay-test">
               <ChatSessionProvider threadId="thread-test">
                 <OverlaysProvider>{children}</OverlaysProvider>
               </ChatSessionProvider>
-            </MainSidebarProvider>
+            </SidebarProvider>
           }
         />
         <Route path="*" element={<NavigatedPath />} />

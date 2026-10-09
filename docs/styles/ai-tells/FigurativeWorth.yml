@@ -1,0 +1,57 @@
+---
+extends: existence
+message: "AI value verdict: '%s'. Say what the thing does or what it costs instead of rating it. Disable this rule for finance prose."
+level: error
+nonword: true
+ignorecase: true
+# The value verdict: a subject graded as deserving the reader's attention
+# or the writer's effort, with the grade standing in for the fact ("Naming
+# is worth knowing about," "the migration is worth the effort," "the
+# complexity is worth it," "one thing worth pointing out," "a tool worth
+# its weight"). The reader was owed the thing about naming, or the number
+# the migration bought, and got a rating instead.
+#
+# Four rules had each read an edge of the figure: HedgingPhrases owned the
+# dummy-subject "It's worth noting that" family, MicDrop the sentence-final
+# "It's worth it." and "This is worth noting.", FormalTransitions the
+# sentence-initial "Worth noting," and AnthropomorphicJustification "worth
+# its weight." A real noun as the subject, or any complement outside those
+# short lists, fell through all four. The maintainer's call (2026-09-14)
+# ended the chase: the word is the tell, one bare token flags every
+# spelling, and the four donor rules gave up their worth tokens so a
+# finding reports once.
+#
+# The measurement across the seven pre-LLM corpora splits three ways, and
+# the ban takes all three on the maintainer's call. The reader-directed
+# complements agent prose writes measure zero everywhere: "worth knowing,"
+# "worth understanding," "worth remembering," "worth learning," "worth a
+# look," "worth a closer look," "worth your time." The hedge band is
+# established: "worth noting" forty-four times, "worth pointing out" ten,
+# "worth mentioning" six, "worth calling out" four, most of them under a
+# dummy "it" the hedge rules already flagged, the rest the reduced relative
+# ("subtleties to this algorithm that are worth noting," "One project
+# worth calling out"). The tradeoff band is how the corpora weigh a
+# decision: "worth it" sixty-four times ("is the complexity worth it"),
+# the priced complement about twenty ("worth the effort," "worth the
+# complexity," "worth the cost"), and the action gerund about forty
+# ("whether a fix is worth making," "generics are worth having," "dyn
+# Trait is worth adding"). Every one is the construction, so every one
+# fires. The plain sentence says what the fix changes or what the
+# complexity bought.
+#
+# Two literal senses stay out. The quantity idiom, a possessive or a count
+# and "worth of" ("a buffer's worth of data," "an extra 12 nats worth of
+# scratch space," "two days' worth of logs"), is the
+# corpora's only other use at twenty-four hits, and the lookahead leaves
+# it alone. "Net worth" and "self-worth" measure zero in the corpora and
+# belong to finance and psychology prose, which the lookbehinds spare.
+# "Worthwhile," "worthy," and "noteworthy" are separate words the word
+# boundary never reaches; they stay unmeasured for now. The literal
+# appraisal ("what is the car worth") fires; disable the rule for finance
+# or commerce writing, where things have a price. The comma appositive
+# that closes with the figure (", a detail worth noting") also belongs to
+# SummativeAppositive, which reads the appositive rather than the word.
+tokens:
+  # Up to two words of complement ride along so the finding shows which
+  # spelling fired: "worth knowing about," "worth the effort," "worth it."
+  - "(?<!net )(?<!-)\\bworth\\b(?! of\\b)(?: [a-z']+){0,2}"

@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { overlaySurfaceStyle, raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, Minimize2, ExternalLink, Globe } from 'lucide-react';
@@ -81,14 +82,13 @@ export function BrowserViewPanel() {
         <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
           <Globe className="h-4 w-4 shrink-0 text-muted-foreground" />
           <div className={cn(raisedSurfaceStyle, 'min-w-0 flex-1 rounded-md px-3 py-1.5')}>
-            <span
-              className={cn(
-                'block truncate text-body',
-                currentUrl ? 'text-foreground' : 'text-muted-foreground italic',
-              )}
+            <Txt
+              as="span"
+              tone={currentUrl ? 'ink' : 'muted'}
+              className={cn('block truncate', !currentUrl && 'italic')}
             >
               {currentUrl || 'No URL'}
-            </span>
+            </Txt>
           </div>
           <Badge variant={statusBadge.variant} size="sm" indicator={statusBadge.indicator}>
             {statusBadge.label}

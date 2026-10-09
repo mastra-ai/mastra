@@ -217,7 +217,7 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
         }),
       );
     },
-    onSuccess: (result, variables, context) => {
+    onSuccess: async (result, variables, context) => {
       patchCards(queryClient, listKey, cards =>
         cards.map(item => {
           if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
@@ -238,10 +238,12 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
           };
         }),
       );
-      void queryClient.invalidateQueries({ queryKey: listKey });
-      // The lane's rule queues its run inside this commit; without this the card
-      // stays silent until the decisions poll comes round.
-      void queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) });
+      // The lane's rule queues its run inside this commit. Awaiting both refetches keeps the
+      // move pending until the card shows that run, so its button never reappears in between.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: listKey }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.factoryDecisionsRoot(factoryProjectId) }),
+      ]);
     },
   });
   const pendingTransitions = useMutationState({

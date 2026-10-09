@@ -113,3 +113,39 @@ describe('transient signals (transient: true)', () => {
     expect(() => mastraDBMessageToSignal(corruptPersistedMessage)).toThrow('state signals cannot be transient');
   });
 });
+
+describe('signal attribute rendering', () => {
+  it('renders the same markup after storage reorders the attribute keys', () => {
+    const attributes = {
+      userId: 'u1',
+      name: 'jane',
+      turnId: 't1',
+      messageId: 'm1',
+      attempt: '1',
+      expectsTerminal: 'true',
+    };
+    const fresh = createSignal({ type: 'user', contents: 'hello', attributes });
+
+    // Postgres jsonb returns object keys sorted by length, then bytewise.
+    const dbMessage = fresh.toDBMessage();
+    const signalMeta = dbMessage.content.metadata!.signal as { attributes: Record<string, unknown> };
+    const reorderedAttributes = Object.fromEntries(
+      Object.keys(signalMeta.attributes)
+        .sort((a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0))
+        .map(key => [key, signalMeta.attributes[key]]),
+    );
+    const reloaded = mastraDBMessageToSignal({
+      ...dbMessage,
+      content: {
+        ...dbMessage.content,
+        metadata: { ...dbMessage.content.metadata, signal: { ...signalMeta, attributes: reorderedAttributes } },
+      },
+    });
+
+    expect(Object.keys(reloaded.attributes!)).not.toEqual(Object.keys(attributes));
+    expect(reloaded.toLLMMessage()).toEqual(fresh.toLLMMessage());
+    expect(fresh.toLLMMessage().content).toBe(
+      '<user attempt="1" expectsTerminal="true" messageId="m1" name="jane" turnId="t1" userId="u1">hello</user>',
+    );
+  });
+});

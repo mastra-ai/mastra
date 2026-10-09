@@ -31,6 +31,7 @@ export type SearchFieldBlockProps = {
   inputRef?: RefObject<HTMLInputElement | null>;
 };
 
+/** @deprecated Use `SearchInput`. */
 export function SearchFieldBlock({
   name,
   helpText,

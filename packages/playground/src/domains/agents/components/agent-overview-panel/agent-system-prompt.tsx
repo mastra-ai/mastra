@@ -4,6 +4,7 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { FileText, WrapText } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -12,7 +13,7 @@ import { normalizePromptIndentation } from './normalize-prompt-indentation';
 import { cn } from '@/lib/utils';
 
 const promptTabClassName =
-  'h-control-sm px-1 text-column underline-offset-4 data-[active]:underline pointer-coarse:min-h-11 pointer-coarse:min-w-11';
+  'h-control-sm px-1 underline-offset-4 data-[active]:underline pointer-coarse:min-h-11 pointer-coarse:min-w-11';
 
 export function AgentSystemPrompt({ instructions, children }: { instructions: string; children?: ReactNode }) {
   const [activeTab, setActiveTab] = useState('read');
@@ -76,8 +77,10 @@ export function AgentSystemPrompt({ instructions, children }: { instructions: st
                 aria-label="System prompt source"
                 tabIndex={0}
                 className={cn(
-                  'min-w-0 overflow-x-auto text-caption leading-relaxed text-foreground focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-border-focus',
+                  'min-w-0 overflow-x-auto text-foreground',
+                  focusRing,
                   wrapSource ? '[overflow-wrap:anywhere] whitespace-pre-wrap' : 'whitespace-pre',
+                  'text-caption',
                 )}
               />
             </TabContent>

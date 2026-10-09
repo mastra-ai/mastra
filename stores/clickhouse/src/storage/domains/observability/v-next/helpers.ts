@@ -219,6 +219,8 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
     entityType: nullableEntityType(row.entityType),
     entityId: nullableString(row.entityId),
     entityName: nullableString(row.entityName),
+    threadId: nullableString(row.threadId),
+    resourceId: nullableString(row.resourceId),
     error,
     status: computeTraceStatus({ error, endedAt }),
     metadata: (parseJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,

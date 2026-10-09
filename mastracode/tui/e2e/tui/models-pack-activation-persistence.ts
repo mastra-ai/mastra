@@ -1,11 +1,28 @@
+import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { McE2eScenario } from './types.js';
+import type { McE2eMastraCodeAppResult, McE2eScenario } from './types.js';
+
+let app: McE2eMastraCodeAppResult;
+let pairedSelections: Array<{ modelId: string; thinkingLevel?: string }>;
 
 export const modelsPackActivationPersistenceScenario = {
   name: 'models-pack-activation-persistence',
   description: 'Activates a saved custom model pack through /models and verifies persisted settings.',
-  testName: 'activates a saved custom pack from /models and persists active defaults',
+  testName: 'activates a saved custom pack and persists its model and compatible thinking level together',
+  env: () => ({ OPENAI_API_KEY: 'sk-models-pack-e2e' }),
+  inProcessApp: context =>
+    context.startMastraCodeApp({
+      onCreated: result => {
+        app = result;
+        pairedSelections = [];
+        result.session.subscribe(event => {
+          if (event.type === 'model_changed' && event.thinkingLevel !== undefined) {
+            pairedSelections.push({ modelId: event.modelId, thinkingLevel: event.thinkingLevel });
+          }
+        });
+      },
+    }),
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
@@ -29,12 +46,13 @@ export const modelsPackActivationPersistenceScenario = {
         name: 'Models Pack E2E',
         models: {
           plan: 'models-pack-e2e/plan-e2e',
-          build: 'models-pack-e2e/build-e2e',
+          build: 'openai/gpt-5.5',
           fast: 'models-pack-e2e/fast-e2e',
         },
         createdAt: new Date(0).toISOString(),
       },
     ];
+    settings.preferences = { ...settings.preferences, thinkingLevel: 'max' };
     settings.models = {
       ...settings.models,
       activeModelPackId: null,
@@ -58,13 +76,18 @@ export const modelsPackActivationPersistenceScenario = {
 
     terminal.write('\r');
     await runtime.waitForScreenText(/Switched to Models Pack E2E pack/i, terminal, 8_000);
+    assert.deepEqual(pairedSelections, [{ modelId: 'openai/gpt-5.5', thinkingLevel: 'xhigh' }]);
+    assert.equal(app.session.model.get(), 'openai/gpt-5.5');
+    assert.equal(app.session.state.get().thinkingLevel, 'xhigh');
+    assert.equal(await app.session.thread.getSetting({ key: 'currentModelId' }), 'openai/gpt-5.5');
+    assert.equal(await app.session.thread.getSetting({ key: 'thinkingLevel' }), 'xhigh');
 
     terminal.submit(
       `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("MODELS_ACTIVE="+s.models.activeModelPackId); console.log("MODELS_DEFAULT_PLAN="+s.models.modeDefaults.plan); console.log("MODELS_DEFAULT_BUILD="+s.models.modeDefaults.build); console.log("MODELS_DEFAULT_FAST="+s.models.modeDefaults.fast); console.log("MODELS_SUBAGENTS="+Object.keys(s.models.subagentModels||{}).length); console.log("MODELS_PACK_COUNT="+s.customModelPacks.length)'`,
     );
     await runtime.waitForScreenText(/MODELS_ACTIVE=custom:Models Pack E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/MODELS_DEFAULT_PLAN=models-pack-e2e\/plan-e2e/i, terminal, 8_000);
-    await runtime.waitForScreenText(/MODELS_DEFAULT_BUILD=models-pack-e2e\/build-e2e/i, terminal, 8_000);
+    await runtime.waitForScreenText(/MODELS_DEFAULT_BUILD=openai\/gpt-5.5/i, terminal, 8_000);
     await runtime.waitForScreenText(/MODELS_DEFAULT_FAST=models-pack-e2e\/fast-e2e/i, terminal, 8_000);
     await runtime.waitForScreenText(/MODELS_SUBAGENTS=0/i, terminal, 8_000);
     await runtime.waitForScreenText(/MODELS_PACK_COUNT=1/i, terminal, 8_000);

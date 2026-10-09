@@ -3,13 +3,13 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { AlertCircleIcon, GaugeIcon } from 'lucide-react';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
-import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 
 /**
  * Minimal shape shared by every surface that lists dataset items
@@ -162,12 +162,18 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
             const rowCells = (
               <>
                 {hasItemIdColumn && (
-                  <DataList.Cell className="flex items-center gap-1.5 text-body-sm tracking-wide text-muted-foreground">
+                  <DataList.Cell className="flex items-center gap-1.5 text-muted-foreground">
                     <span>{result.itemId?.slice(0, 8) ?? ''}</span>
                     {hasError && (
                       <Tooltip>
                         <TooltipTrigger
-                          render={<AlertCircleIcon role="img" aria-label="Error" className="size-3.5 text-error" />}
+                          render={
+                            <AlertCircleIcon
+                              role="img"
+                              aria-label="Error"
+                              className="size-3.5 text-destructive-foreground"
+                            />
+                          }
                         />
                         <TooltipContent>{errorMessage(result.error)}</TooltipContent>
                       </Tooltip>
@@ -217,7 +223,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
                   return (
-                    <DataList.Cell key={scorerId} className="text-body-sm text-muted-foreground tabular-nums">
+                    <DataList.Cell key={scorerId} className="text-muted-foreground tabular-nums">
                       {score != null ? score.score.toFixed(3) : '-'}
                     </DataList.Cell>
                   );

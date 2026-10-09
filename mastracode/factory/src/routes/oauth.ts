@@ -14,8 +14,6 @@
  * user codes, poll delays).
  */
 
-import { randomUUID } from 'node:crypto';
-
 import { nextPollDelayMs } from '@mastra/code-sdk/auth/device-code';
 import { completeAnthropicLogin, startAnthropicLogin } from '@mastra/code-sdk/auth/providers/anthropic';
 import {
@@ -36,8 +34,6 @@ import type { Context } from 'hono';
 
 import { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { LoginCredentialScope, LoginSessionKind, LoginSessionRow } from '../storage/domains/credentials/base.js';
-import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
-import { seedPersonalOmDefaults } from './om-seed.js';
 import { getAuthProviderId, resolveCredentialContext } from './provider-credentials.js';
 import type { CredentialContext } from './provider-credentials.js';
 import { Route } from './route.js';
@@ -211,7 +207,6 @@ async function persistOAuthCredential({
   scope,
   credentials,
   authStorage,
-  memorySettings,
   onCredentialsChanged,
 }: {
   ctx: CredentialContext;
@@ -219,7 +214,6 @@ async function persistOAuthCredential({
   scope: LoginCredentialScope | undefined;
   credentials: OAuthCredentials;
   authStorage: AuthStorage | undefined;
-  memorySettings: MemorySettingsStorage | undefined;
   onCredentialsChanged: (tenant: { orgId: string; userId?: string }) => void;
 }): Promise<void> {
   const authProviderId = getAuthProviderId(provider);
@@ -230,7 +224,6 @@ async function persistOAuthCredential({
       ...credentials,
     });
     onCredentialsChanged(tenant);
-    await seedPersonalOmDefaults({ memorySettings, tenant, provider });
     return;
   }
   if (!authStorage) throw new Error('Credential storage is not available');
@@ -251,8 +244,6 @@ export interface OAuthRoutesDeps extends RouteDependencies {
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
-  /** Personal OM settings; seeded from the login provider after a user-scoped sign-in. */
-  memorySettings?: MemorySettingsStorage;
   /** Notifies the host after tenant credentials change so caches can be dropped. */
   onCredentialsChanged?: (tenant: { orgId: string; userId?: string }) => void;
 }
@@ -267,7 +258,7 @@ export interface OAuthRoutesDeps extends RouteDependencies {
  */
 export class OAuthRoutes extends Route<OAuthRoutesDeps> {
   routes(): ApiRoute[] {
-    const { auth, authStorage, modelCredentials, memorySettings } = this.deps;
+    const { auth, authStorage, modelCredentials } = this.deps;
     const onCredentialsChanged = this.deps.onCredentialsChanged ?? (() => {});
 
     return [
@@ -304,7 +295,7 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 502);
           }
 
-          const sessionId = randomUUID();
+          const sessionId = globalThis.crypto.randomUUID();
           const tenant = sessionTenant(ctx);
           await (
             await sessionStore(ctx)
@@ -385,7 +376,6 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
             scope: session.credentialScope,
             credentials,
             authStorage,
-            memorySettings,
             onCredentialsChanged,
           });
           await (await sessionStore(ctx)).deleteLoginSession(sessionId);
@@ -425,7 +415,11 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
           // regardless of how eagerly the client calls this route.
           const now = Date.now();
           const nextPollAt = session.nextPollAt?.getTime();
-          if (nextPollAt != null && now < nextPollAt) {
+          // claimLoginSession parks next_poll_at at expires_at while another
+          // request owns the flow. That is a lock, not a schedule, so fall
+          // through to the claim and take its short retry instead.
+          const parkedByClaim = nextPollAt != null && nextPollAt >= session.expiresAt.getTime();
+          if (nextPollAt != null && now < nextPollAt && !parkedByClaim) {
             return c.json({ status: 'pending', nextPollMs: nextPollAt - now });
           }
 
@@ -454,7 +448,6 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
               scope: session.credentialScope,
               credentials: result.credentials,
               authStorage,
-              memorySettings,
               onCredentialsChanged,
             });
             await (await sessionStore(ctx)).deleteLoginSession(sessionId);

@@ -63,7 +63,7 @@ export const browserSettingsPersistenceScenario = {
     await runtime.waitForScreenText(/BROWSER_PRESERVE=false/i, terminal, 8_000);
 
     await terminal.flushInput?.();
-    await runtime.waitForScreenText(/│ ›/i, terminal, 8_000);
+    await runtime.waitForScreenText(/→/, terminal, 8_000);
     terminal.submit('/browser clear');
     // Match the scrollback, not the viewport: the confirmation can scroll out of
     // the fixed-size screen before this assertion runs when CI is under load.

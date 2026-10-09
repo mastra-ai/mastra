@@ -307,7 +307,7 @@ const testWorkflow = mastra.getWorkflow('testWorkflow')
 1. It provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores)
 1. It provides full TypeScript type inference for workflow input and output schemas
 
-Use `getWorkflow()` with the workflow's **registration key** (the key used when adding it to Mastra). While `getWorkflowById()` is available for retrieving workflows by their `id` property, it doesn't provide the same level of type inference.
+Use `getWorkflow()` with the workflow's **registration key** (the key used when adding it to Mastra). `getWorkflowById()` retrieves workflows by their `id` property, but it doesn't provide the same level of type inference.
 :::
 
 ## Running workflows

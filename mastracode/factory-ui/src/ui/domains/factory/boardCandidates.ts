@@ -1,6 +1,6 @@
 import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
 import { relativeTime } from '../../../lib/date/relativeTime';
-import { hasLabel } from './boardItems';
+import { githubSourceKey, hasLabel } from './boardItems';
 import { itemAppearsInStage } from './boardStages';
 import type { GithubIssue, GithubPullRequest } from './services/factory';
 import type { GitLabIssue, GitLabMergeRequest } from './services/gitlab';
@@ -54,7 +54,7 @@ export interface BoardCandidate {
 export function issueCandidate(issue: GithubIssue): BoardCandidate {
   const labels = issue.labels;
   return {
-    sourceKey: `github-issue:${issue.number}`,
+    sourceKey: githubSourceKey('issue', issue.number, issue.repositoryId),
     source: 'github-issue',
     title: issue.title,
     url: issue.url,
@@ -62,6 +62,7 @@ export function issueCandidate(issue: GithubIssue): BoardCandidate {
     column: hasLabel(labels, AUTO_TRIAGED_LABEL) ? 'triage' : 'intake',
     metadata: {
       number: issue.number,
+      ...(issue.repositoryId !== undefined ? { githubRepositoryId: issue.repositoryId } : {}),
       author: issue.author,
       assignee: issue.assignee,
       assignees: issue.assignees ?? (issue.assignee ? [issue.assignee] : []),
@@ -72,7 +73,7 @@ export function issueCandidate(issue: GithubIssue): BoardCandidate {
 
 export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
   return {
-    sourceKey: `github-pr:${pr.number}`,
+    sourceKey: githubSourceKey('pull-request', pr.number, pr.repositoryId),
     source: 'github-pr',
     title: pr.title,
     url: pr.url,
@@ -80,9 +81,11 @@ export function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
     column: 'intake',
     metadata: {
       number: pr.number,
+      ...(pr.repositoryId !== undefined ? { githubRepositoryId: pr.repositoryId } : {}),
       author: pr.author,
       assignees: pr.assignees ?? [],
       requestedReviewers: pr.requestedReviewers ?? [],
+      labels: pr.labels ?? [],
       headBranch: pr.headBranch,
       baseBranch: pr.baseBranch,
     },
@@ -125,6 +128,7 @@ export function gitlabMergeRequestCandidate(pr: GitLabMergeRequest): BoardCandid
       author: pr.author,
       assignees: pr.assignees,
       requestedReviewers: pr.requestedReviewers,
+      labels: pr.labels ?? [],
       headBranch: pr.headBranch,
       baseBranch: pr.baseBranch,
     },
@@ -141,10 +145,12 @@ export function linearCandidate(issue: LinearIssue): BoardCandidate {
     column: 'intake',
     metadata: {
       linearIssueId: issue.id,
+      ...(issue.projectId ? { linearProjectId: issue.projectId } : {}),
       identifier: issue.identifier,
       state: issue.state,
       assignee: issue.assignee,
       creator: issue.creator ?? null,
+      labels: issue.labels,
     },
   };
 }

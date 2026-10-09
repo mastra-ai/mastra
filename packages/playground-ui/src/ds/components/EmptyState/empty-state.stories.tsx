@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Inbox } from 'lucide-react';
 import { Button } from '../Button';
+import { EmptyStateIllustration } from './empty-state-illustration';
 import { EmptyState } from './EmptyState';
 
 const meta: Meta<typeof EmptyState> = {
@@ -86,4 +87,94 @@ export const ErrorTone: Story = {
     descriptionSlot: 'The observability store did not respond. Check the connection and try again.',
     actionSlot: <Button>Try again</Button>,
   },
+};
+
+export const Illustrated: Story = {
+  args: {
+    iconSlot: <EmptyStateIllustration name="traces" />,
+    titleSlot: 'No traces yet',
+    descriptionSlot: 'Traces appear here when your agents run.',
+    actionSlot: <Button>Open setup</Button>,
+  },
+};
+
+export const IllustratedError: Story = {
+  args: {
+    tone: 'error',
+    iconSlot: <EmptyStateIllustration name="logs" />,
+    titleSlot: 'Couldn’t load logs',
+    descriptionSlot: 'The request timed out. Try again in a moment.',
+    actionSlot: <Button>Retry</Button>,
+  },
+};
+
+const illustrations = [
+  ['traces', 'Traces'],
+  ['logs', 'Logs'],
+  ['api-keys', 'API keys'],
+  ['environments', 'Environments'],
+  ['requests', 'Requests'],
+  ['databases', 'Databases'],
+  ['threads', 'Threads'],
+  ['deploys', 'Deploys'],
+] as const;
+
+export const AllIllustrations: Story = {
+  parameters: { layout: 'padded' },
+  render: () => (
+    <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
+      {illustrations.map(([illustration, title]) => (
+        <EmptyState
+          key={illustration}
+          iconSlot={<EmptyStateIllustration name={illustration} />}
+          titleSlot={title}
+          descriptionSlot="Deploy a project to see its history here."
+          actionSlot={<Button>View projects</Button>}
+        />
+      ))}
+    </div>
+  ),
+};
+
+export const ErrorIllustrations: Story = {
+  parameters: { layout: 'padded' },
+  render: () => (
+    <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-3">
+      <EmptyState
+        tone="error"
+        iconSlot={<EmptyStateIllustration name="disconnected" />}
+        titleSlot="Couldn’t load logs"
+        descriptionSlot="Check your connection and try again."
+        actionSlot={<Button>Retry</Button>}
+      />
+      <EmptyState
+        tone="error"
+        iconSlot={<EmptyStateIllustration name="locked" />}
+        titleSlot="Couldn’t load API keys"
+        descriptionSlot="Your session expired. Sign in again to continue."
+        actionSlot={<Button>Sign in</Button>}
+      />
+      <EmptyState
+        tone="error"
+        iconSlot={<EmptyStateIllustration name="rate-limited" />}
+        titleSlot="Couldn’t load requests"
+        descriptionSlot="Too many requests. Wait a moment and try again."
+        actionSlot={<Button>Retry</Button>}
+      />
+      <EmptyState
+        tone="error"
+        iconSlot={<EmptyStateIllustration name="server-error" />}
+        titleSlot="Couldn’t load deploys"
+        descriptionSlot="The server returned an error. Try again in a moment."
+        actionSlot={<Button>Retry</Button>}
+      />
+      <EmptyState
+        tone="error"
+        iconSlot={<EmptyStateIllustration name="not-a-member" />}
+        titleSlot="Couldn’t load API keys"
+        descriptionSlot="You’re not a member of this organization."
+        actionSlot={<Button>Go to your organization</Button>}
+      />
+    </div>
+  ),
 };

@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { Agent } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import { TITLE_PINNED_THREAD_METADATA_KEY } from '@mastra/core/memory';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { createSkill } from '@mastra/core/skills';
@@ -138,6 +139,7 @@ import {
 import { resolveRetentionFloor } from '../thresholds';
 import { TokenCounter } from '../token-counter';
 import { DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS, formatToolResultForObserver } from '../tool-result-helpers';
+import type { ActivationTTL } from '../types';
 
 // =============================================================================
 // Test Helpers
@@ -1742,6 +1744,31 @@ describe('Observer Agent Helpers', () => {
       expect(formatted).not.toContain(base64);
     });
 
+    it('should fall back to the raw tool result when stored modelOutput is null', () => {
+      const msg = createTestMessage('ignored', 'assistant');
+      msg.content = {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-bg',
+              toolName: 'bg',
+              args: {},
+              result: { ok: true, answer: 'background task finished' },
+            },
+            providerMetadata: { mastra: { modelOutput: null, backgroundTask: { taskId: 't1', status: 'completed' } } },
+          },
+        ],
+      } as any;
+
+      const formatted = formatMessagesForObserver([msg]);
+      expect(formatted).toContain('Tool Result bg');
+      expect(formatted).toContain('background task finished');
+      expect(formatted).not.toContain('Tool Result bg: null');
+    });
+
     it('should hoist file-data tool-result blocks under the file counter', () => {
       const base64 = 'C'.repeat(2000);
       const msg = createTestMessage('ignored', 'assistant');
@@ -2426,6 +2453,81 @@ describe('Observer Agent Helpers', () => {
     }
   });
 
+  it.each([
+    { idleMinutes: 10, expectActivated: false },
+    { idleMinutes: 61, expectActivated: true },
+  ])(
+    'passes a per-provider activateAfterIdle map from Memory options to the OM engine ($idleMinutes min idle)',
+    async ({ idleMinutes, expectActivated }) => {
+      vi.useFakeTimers();
+      try {
+        const now = new Date('2026-04-14T12:00:00.000Z');
+        vi.setSystemTime(now);
+        const threadId = `memory-map-thread-${idleMinutes}`;
+        const resourceId = 'memory-map-resource';
+        const store = new InMemoryStore();
+        const memory = new Memory({
+          storage: store,
+          options: {
+            observationalMemory: {
+              enabled: true,
+              scope: 'thread',
+              model: createStreamCapableMockModel({ defaultObjectGenerationMode: 'json' }) as any,
+              activateAfterIdle: { default: 'auto', anthropic: '1h' },
+              observation: { messageTokens: 50_000, bufferTokens: 5_000 },
+            },
+          },
+        });
+        const om = (await memory.omEngine)!;
+        const memoryStore = (await store.getStore('memory'))!;
+
+        const assistantPartTime = now.getTime() - idleMinutes * 60_000;
+        const messages: MastraDBMessage[] = [
+          {
+            ...createTestMessage('Earlier question', 'user', 'map-user-1', new Date(assistantPartTime - 1000)),
+            threadId,
+            resourceId,
+          },
+          {
+            ...createTestMessage('Earlier answer', 'assistant', 'map-assistant-1', new Date(assistantPartTime)),
+            threadId,
+            resourceId,
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Earlier answer', createdAt: assistantPartTime }],
+            } as MastraMessageContentV2,
+          },
+          { ...createTestMessage('Latest user follow-up', 'user', 'map-user-2', now), threadId, resourceId },
+        ];
+        await memoryStore.saveMessages({ messages });
+        const record = await om.getOrCreateRecord(threadId, resourceId);
+        await memoryStore.updateBufferedObservations({
+          id: record.id,
+          chunk: {
+            observations: '- Buffered observation',
+            tokenCount: 80,
+            messageIds: ['map-user-1', 'map-assistant-1'],
+            cycleId: 'map-cycle-1',
+            messageTokens: 200,
+            lastObservedAt: new Date(assistantPartTime),
+          },
+        });
+
+        const result = await om.activate({
+          threadId,
+          resourceId,
+          checkThreshold: true,
+          messages,
+          currentModel: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+        });
+
+        expect(result.activated).toBe(expectActivated);
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
   describe('buildObserverHistoryMessage', () => {
     it('should preserve image attachments and image-like file attachments in observer input order', () => {
       const msg = createTestMessage('ignored', 'user');
@@ -2462,6 +2564,25 @@ describe('Observer Agent Helpers', () => {
       expect(content[2]).toMatchObject({ type: 'image', image: 'https://example.com/reference-board.png' });
       expect(content[3]).toMatchObject({ type: 'image', image: 'https://example.com/annotated-photo.jpg' });
       expect(content).not.toContainEqual(expect.objectContaining({ image: 'https://example.com/floorplan.pdf' }));
+    });
+
+    it('should not attach attachments the agent recorded as unavailable', () => {
+      const msg = createTestMessage('ignored', 'user');
+      msg.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Look at these.' },
+          { type: 'file', data: 'https://example.com/deleted.png', mimeType: 'image/png', filename: 'deleted.png' },
+          { type: 'file', data: 'https://example.com/kept.png', mimeType: 'image/png', filename: 'kept.png' },
+        ],
+        metadata: { mastra: { unavailableAttachments: ['https://example.com/deleted.png'] } },
+      };
+
+      const content = buildObserverHistoryMessage([msg]).content as any[];
+      expect(content[1].text).toContain('[Image #1: deleted.png]');
+      expect(content[1].text).toContain('[Image #2: kept.png]');
+      const attachments = content.filter(part => part.type !== 'text');
+      expect(attachments).toEqual([expect.objectContaining({ type: 'image', image: 'https://example.com/kept.png' })]);
     });
 
     it('should hoist image-data tool-result blocks into observer input attachments', () => {
@@ -3305,7 +3426,7 @@ describe('Observer Agent Helpers', () => {
           observeAttachments: 'auto',
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: textOnlyModelFn as any }),
+        resolveModel: async () => ({ model: textOnlyModelFn as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,
@@ -3371,7 +3492,7 @@ describe('Observer Agent Helpers', () => {
           observeAttachments: 'auto',
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: 'openrouter/deepseek/deepseek-v4-flash' as any }),
+        resolveModel: async () => ({ model: 'openrouter/deepseek/deepseek-v4-flash' as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,
@@ -3432,7 +3553,7 @@ describe('Observer Agent Helpers', () => {
           observeAttachments: 'auto',
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: multimodalModelFn as any }),
+        resolveModel: async () => ({ model: multimodalModelFn as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,
@@ -3496,7 +3617,7 @@ describe('Observer Agent Helpers', () => {
           ],
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: 'test-model' as any }),
+        resolveModel: async () => ({ model: 'test-model' as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,
@@ -3546,6 +3667,377 @@ describe('Observer Agent Helpers', () => {
       expect(promptText).toContain(
         'Use the prior current-task, suggested-response, and thread-title as continuity hints',
       );
+    });
+  });
+
+  describe('native auto model resolution', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('defaults each role to auto and chooses the active provider low-cost model', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const om = new ObservationalMemory({ storage: createInMemoryStorage() });
+
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          currentModel: { provider: 'openai', modelId: 'gpt-5.5', model: 'openai/gpt-5.5' },
+        }),
+      ).resolves.toMatchObject({ model: 'openai/gpt-6-luna' });
+      await expect(
+        (om as any).resolveReflectionModel(1, {
+          currentModel: { provider: 'anthropic', modelId: 'claude-opus-4-6', model: 'anthropic/claude-opus-4-6' },
+        }),
+      ).resolves.toMatchObject({ model: 'anthropic/claude-haiku-4-5' });
+    });
+
+    it('serializes auto as selection metadata without resolving it as a routed model', async () => {
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      await expect(om.getResolvedConfig()).resolves.toMatchObject({
+        observation: { model: 'auto' },
+        reflection: { model: 'auto' },
+      });
+    });
+
+    it('prefers Gemini when the Google API key is configured', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-key');
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          currentModel: { provider: 'openai', modelId: 'gpt-5.5', model: 'openai/gpt-5.5' },
+        }),
+      ).resolves.toMatchObject({ model: 'google/gemini-2.5-flash' });
+    });
+
+    it('preserves the exact actor model for unknown and custom providers', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new MockLanguageModelV2({ provider: 'custom-gateway', modelId: 'custom-model' });
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      const resolved = await (om as any).resolveObservationModel(1, {
+        currentModel: { provider: 'custom-gateway', modelId: 'custom-model', model: actorModel },
+      });
+
+      expect(resolved.model).toBe(actorModel);
+    });
+
+    it('falls back to the main agent model when no invocation model was captured', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const fallbackModel = new MockLanguageModelV2({ provider: 'custom-gateway', modelId: 'manual-fallback' });
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+      const mainAgent = { getModel: vi.fn(async () => fallbackModel) };
+
+      const resolved = await (om as any).resolveObservationModel(1, { mainAgent });
+
+      expect(mainAgent.getModel).toHaveBeenCalledOnce();
+      expect(resolved.model).toBe(fallbackModel);
+    });
+
+    it('preserves a built-in actor model instance whose sibling route is not known to be usable', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-opus-4-6' });
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      const resolved = await (om as any).resolveObservationModel(1, {
+        currentModel: { provider: 'anthropic', modelId: 'claude-opus-4-6', model: actorModel },
+      });
+
+      expect(resolved.model).toBe(actorModel);
+    });
+
+    it('maps a plain string-backed router captured by the processor path to its provider low-cost model', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new ModelRouterLanguageModel('openai/gpt-5.5');
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+      const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'thread-router-model' },
+        resourceId: 'resource-router-model',
+      });
+      const state: Record<string, unknown> = {};
+
+      await processor.processInputStep({
+        messageList: new MessageList({ threadId: 'thread-router-model', resourceId: 'resource-router-model' }),
+        messages: [],
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: actorModel,
+        retryCount: 0,
+        abort: vi.fn() as any,
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: state.__omActorModelContext }),
+      ).resolves.toMatchObject({ model: 'openai/gpt-6-luna' });
+    });
+
+    it.each([
+      {
+        configuration: 'inline routing credentials',
+        createModel: () =>
+          new ModelRouterLanguageModel({
+            id: 'anthropic/claude-opus-4-6',
+            url: 'https://configured-gateway.example/v1',
+            apiKey: 'inline-test-key',
+          }),
+      },
+      {
+        configuration: 'an explicit API transport',
+        createModel: () => new ModelRouterLanguageModel({ id: 'openai/gpt-5.5', api: 'responses' }),
+      },
+      {
+        configuration: 'a selected custom gateway',
+        createModel: () =>
+          new ModelRouterLanguageModel('anthropic/claude-opus-4-6', [
+            {
+              id: 'test-custom-gateway',
+              name: 'Test custom gateway',
+              handlesModel: (modelId: string) => modelId === 'anthropic/claude-opus-4-6',
+            } as any,
+          ]),
+      },
+      {
+        configuration: 'an older compatible Core router that does not expose its ID',
+        createModel: () => {
+          const model = new ModelRouterLanguageModel('openai/gpt-5.5');
+          Object.defineProperty(model, 'id', { value: undefined });
+          return model;
+        },
+      },
+    ])('preserves a configured router with $configuration', async ({ createModel }) => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = createModel();
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+      const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'thread-configured-router' },
+        resourceId: 'resource-configured-router',
+      });
+      const state: Record<string, unknown> = {};
+
+      await processor.processInputStep({
+        messageList: new MessageList({
+          threadId: 'thread-configured-router',
+          resourceId: 'resource-configured-router',
+        }),
+        messages: [],
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: actorModel,
+        retryCount: 0,
+        abort: vi.fn() as any,
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: state.__omActorModelContext }),
+      ).resolves.toMatchObject({ model: actorModel });
+    });
+
+    it('preserves configured model instances captured by the processor path across actor changes', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-opus-4-6' });
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+      const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', { thread: { id: 'thread-auto-model' }, resourceId: 'resource-auto-model' });
+      const state: Record<string, unknown> = {};
+
+      await processor.processInputStep({
+        messageList: new MessageList({ threadId: 'thread-auto-model', resourceId: 'resource-auto-model' }),
+        messages: [],
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: actorModel as any,
+        retryCount: 0,
+        abort: vi.fn() as any,
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: state.__omActorModelContext }),
+      ).resolves.toMatchObject({ model: actorModel });
+
+      const nextState: Record<string, unknown> = {};
+      const nextActorModel = new MockLanguageModelV2({ provider: 'openai', modelId: 'gpt-5.5' });
+      await processor.processInputStep({
+        messageList: new MessageList({ threadId: 'thread-auto-model', resourceId: 'resource-auto-model' }),
+        messages: [],
+        requestContext,
+        stepNumber: 1,
+        state: nextState,
+        steps: [],
+        systemMessages: [],
+        model: nextActorModel as any,
+        retryCount: 0,
+        abort: vi.fn() as any,
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: nextState.__omActorModelContext }),
+      ).resolves.toMatchObject({ model: nextActorModel });
+    });
+
+    it('resolves auto before an observer agent invokes the provider', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const doGenerate = vi.fn(async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: '<observations>\n- Runtime auto resolved\n</observations>' }],
+        warnings: [],
+      }));
+      const actorModel = createStreamCapableMockModel({
+        provider: 'custom-gateway',
+        modelId: 'runtime-model',
+        doGenerate,
+      });
+      const storage = createInMemoryStorage();
+      const om = new ObservationalMemory({
+        storage,
+        observation: { model: 'auto', messageTokens: 1, bufferTokens: false },
+        reflection: { model: 'auto', observationTokens: 10_000 },
+      });
+      await storage.initializeObservationalMemory({
+        threadId: 'thread-auto-runtime',
+        resourceId: 'resource-auto-runtime',
+        scope: 'resource',
+        config: {},
+      });
+
+      await om.observe({
+        threadId: 'thread-auto-runtime',
+        resourceId: 'resource-auto-runtime',
+        messages: [createTestMessage('Remember this runtime selection', 'user', 'runtime-message')],
+        agent: { getModel: vi.fn(async () => actorModel) } as any,
+      });
+
+      expect(doGenerate).toHaveBeenCalledOnce();
+      expect(actorModel.modelId).toBe('runtime-model');
+    });
+
+    it('keeps the gateway route of a labeled main model', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = Object.assign(
+        new MockLanguageModelV2({ provider: 'openrouter.chat', modelId: 'openai/gpt-5.5' }),
+        {
+          id: 'mastra/openai/gpt-5.5',
+        },
+      );
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: { model: actorModel } }),
+      ).resolves.toMatchObject({ model: 'mastra/openai/gpt-6-luna' });
+    });
+
+    it('applies autoModels overrides, including the Gemini pick', async () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        model: 'auto',
+        autoModels: { google: 'google/gemini-3.5-flash', anthropic: 'anthropic/claude-sonnet-4-6' },
+      });
+
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: { model: 'anthropic/claude-opus-4-6' } }),
+      ).resolves.toMatchObject({ model: 'anthropic/claude-sonnet-4-6' });
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: { model: 'google/gemini-3.1-pro-preview' } }),
+      ).resolves.toMatchObject({ model: 'google/gemini-3.5-flash' });
+
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-key');
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: { model: 'openai/gpt-5.5' } }),
+      ).resolves.toMatchObject({ model: 'google/gemini-3.5-flash' });
+    });
+
+    it('routes the pick through resolveModel with the request context', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const routedModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-haiku-4-5' });
+      const resolveModel = vi.fn(async () => routedModel);
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto', resolveModel });
+      const requestContext = new RequestContext();
+
+      const resolved = await (om as any).resolveReflectionModel(1, {
+        requestContext,
+        currentModel: { model: 'anthropic/claude-opus-4-6' },
+      });
+
+      expect(resolveModel).toHaveBeenCalledWith('anthropic/claude-haiku-4-5', { requestContext });
+      expect(resolved.model).toBe(routedModel);
+    });
+
+    it('does not call resolveModel when the main model is reused', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new MockLanguageModelV2({ provider: 'custom-gateway', modelId: 'custom-model' });
+      const resolveModel = vi.fn();
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto', resolveModel });
+
+      const resolved = await (om as any).resolveObservationModel(1, { currentModel: { model: actorModel } });
+
+      expect(resolved.model).toBe(actorModel);
+      expect(resolveModel).not.toHaveBeenCalled();
+    });
+
+    it('lets a dynamic model function choose auto or a concrete model per request', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        model: ({ requestContext }: { requestContext: RequestContext }) =>
+          (requestContext.get('pinned') as string | undefined) ?? 'auto',
+      });
+      const autoContext = new RequestContext();
+      const pinnedContext = new RequestContext();
+      pinnedContext.set('pinned', 'openai/gpt-5.5');
+
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          requestContext: autoContext,
+          currentModel: { model: 'anthropic/claude-opus-4-6' },
+        }),
+      ).resolves.toMatchObject({ model: 'anthropic/claude-haiku-4-5' });
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          requestContext: pinnedContext,
+          currentModel: { model: 'anthropic/claude-opus-4-6' },
+        }),
+      ).resolves.toMatchObject({ model: 'openai/gpt-5.5' });
+      await expect(om.getResolvedConfig(autoContext)).resolves.toMatchObject({
+        observation: { model: 'auto' },
+        reflection: { model: 'auto' },
+      });
+    });
+
+    it('keeps explicit observer and reflector models independent', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        observation: { model: 'auto' },
+        reflection: { model: 'openai/gpt-5.4-mini' },
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          currentModel: { provider: 'deepseek', modelId: 'deepseek-chat', model: 'deepseek/deepseek-chat' },
+        }),
+      ).resolves.toMatchObject({ model: 'deepseek/deepseek-v4-flash' });
+      await expect(
+        (om as any).resolveReflectionModel(1, {
+          currentModel: { provider: 'deepseek', modelId: 'deepseek-chat', model: 'deepseek/deepseek-chat' },
+        }),
+      ).resolves.toMatchObject({ model: 'openai/gpt-5.4-mini' });
     });
   });
 
@@ -3599,8 +4091,11 @@ describe('Observer Agent Helpers', () => {
       await om.observer.call(undefined, observerMessages);
       await (om as any).reflector.call('01234567890');
 
-      expect(observerResolveSpy).toHaveBeenCalledWith(om.getTokenCounter().countMessages(observerMessages));
-      expect(reflectorResolveSpy).toHaveBeenCalledWith(1);
+      expect(observerResolveSpy).toHaveBeenCalledWith(
+        om.getTokenCounter().countMessages(observerMessages),
+        expect.any(Object),
+      );
+      expect(reflectorResolveSpy).toHaveBeenCalledWith(1, expect.any(Object));
       expect(observerCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o');
       expect(reflectorCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o-mini');
     });
@@ -4033,13 +4528,9 @@ User asked about </current-task> parsing and how it works
       // Simulate Gemini Flash repetition bug - same ~200 char block repeated many times
       const block =
         'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
-      const text = block.repeat(100); // ~11k chars of the same block
+      // A loop of lines; one giant line would be truncated and accepted instead.
+      const text = Array(100).fill(block).join('\n');
       expect(detectDegenerateRepetition(text)).toBe(true);
-    });
-
-    it('should detect extremely long single lines', () => {
-      const line = 'a'.repeat(60_000);
-      expect(detectDegenerateRepetition(line)).toBe(true);
     });
 
     it('should flag degenerate output in parseObserverOutput', () => {
@@ -4125,9 +4616,10 @@ User asked about </current-task> parsing and how it works
 
   describe('describeDegenerateOutput', () => {
     it('reports length, duplicate stats, and the most-repeated window on one line', () => {
+      // Under the 10,000-char line limit, so the line is sampled rather than skipped.
       const block =
         'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, ';
-      const text = block.repeat(100);
+      const text = block.repeat(50);
       const description = describeDegenerateOutput(text);
       expect(description).toContain(`length=${text.length}`);
       expect(description).toMatch(/duplicateRatio=0\.\d+/);
@@ -4138,6 +4630,21 @@ User asked about </current-task> parsing and how it works
       expect(description).toContain('head="');
       expect(description).toContain('tail="');
       expect(description).not.toContain('\n');
+    });
+
+    it('names the strategy that fired, matching the detector', () => {
+      const windowLoop =
+        'getLanguageModel().doGenerate(options: LanguageModelV2CallOptions): PromiseLike<LanguageModelV2GenerateResult>, '.repeat(
+          50,
+        );
+      expect(detectDegenerateRepetition(windowLoop)).toBe(true);
+      expect(describeDegenerateOutput(windowLoop)).toMatch(/strategy=window/);
+
+      const shortToolLog = Array.from({ length: 200 }, (_, i) =>
+        i % 2 ? '  * -> pnpm test → ok' : '  * -> pnpm build → ok',
+      ).join('\n');
+      expect(detectDegenerateRepetition(shortToolLog)).toBe(false);
+      expect(describeDegenerateOutput(shortToolLog)).toContain('strategy=none');
     });
 
     it('bounds snippets to the requested size', () => {
@@ -5044,7 +5551,7 @@ describe('ObservationalMemory Integration', () => {
       // Fallback guidance: irrelevant search results should lead to thread discovery
       expect(instructions).toContain('If search results look irrelevant, do not give up');
       // Threads without observations may still hold the answer in raw history
-      expect(instructions).toContain('raw history may exist for threads that have no observations yet');
+      expect(instructions).toContain('Raw history may exist for threads that have no observations yet');
     });
 
     it('omits search routing for browsing-only resource retrieval', () => {
@@ -5111,6 +5618,11 @@ describe('ObservationalMemory Integration', () => {
       expect(threadText).toContain('limited to the current conversation thread');
     });
 
+    it('only skips recall when visible evidence is not contradicted', () => {
+      const text = getRetrievalInstructions('thread');
+      expect(text).toContain('already visible, unambiguous, and not contradicted by other observations');
+    });
+
     it('injects appended custom instructions into actor context', () => {
       const custom = 'Use a small limit with detail="low" for an initial scan.';
       const text = (makeRetrievalOm({ scope: 'resource', instructions: custom }) as any)
@@ -5135,13 +5647,14 @@ describe('ObservationalMemory Integration', () => {
       expect(text).toContain('Avoid historical tool calls.');
     });
 
-    it('returns undefined without observations for thread-scoped retrieval', async () => {
+    it('returns recall guidance without observations for thread-scoped retrieval', async () => {
       const retrievalOm = makeRetrievalOm({ scope: 'thread' });
       const record = await (retrievalOm as any).getOrCreateRecord(threadId, resourceId);
 
       const messages = await retrievalOm.buildContextSystemMessages({ threadId, resourceId, record });
 
-      expect(messages).toBeUndefined();
+      expect(messages!.join('\n')).toContain('limited to the current conversation thread');
+      expect(messages!.join('\n')).toContain('mode: "messages"');
     });
 
     it('returns undefined without observations when retrieval is disabled', async () => {
@@ -7215,7 +7728,7 @@ describe('Resource Scope Observation Flow', () => {
         extractors: [new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() })],
       } as any,
       observedMessageIds: new Set(),
-      resolveModel: () => ({ model: model as any }),
+      resolveModel: async () => ({ model: model as any }),
       tokenCounter: { countMessages: () => 1 } as any,
     });
     const results = await observer.callMultiThread(
@@ -7610,9 +8123,9 @@ describe('Locking Behavior', () => {
 
   describe('early reflection activation overshoot guard', () => {
     const setupBufferedReflectionEnv = async (opts: {
-      activateAfterIdle?: string | number;
+      activateAfterIdle?: ActivationTTL;
       activateOnProviderChange?: boolean;
-      reflectionActivateAfterIdle?: string | number;
+      reflectionActivateAfterIdle?: ActivationTTL;
       reflectionActivateOnProviderChange?: boolean;
       reflectionObservationTokens?: number;
     }) => {
@@ -8176,6 +8689,80 @@ describe('Locking Behavior', () => {
         vi.useRealTimers();
       }
     });
+
+    it.each([
+      { idleMinutes: 10, expectActivated: false, inheritOnly: false },
+      { idleMinutes: 61, expectActivated: true, inheritOnly: false },
+      { idleMinutes: 61, expectActivated: false, inheritOnly: true },
+    ])(
+      'should resolve a per-provider reflection.activateAfterIdle map for the current model ($idleMinutes min idle, top-level map only: $inheritOnly)',
+      async ({ idleMinutes, expectActivated, inheritOnly }) => {
+        vi.useFakeTimers();
+        try {
+          const now = new Date('2026-04-14T12:00:00.000Z');
+          vi.setSystemTime(now);
+          const idleMs = idleMinutes * 60_000;
+
+          const { storage, om } = await setupBufferedReflectionEnv(
+            inheritOnly
+              ? { activateAfterIdle: { default: '1m', anthropic: '1m' }, reflectionObservationTokens: 500 }
+              : { reflectionActivateAfterIdle: { default: false, anthropic: '1h' }, reflectionObservationTokens: 500 },
+          );
+
+          const threadId = 'thread-overshoot';
+          const resourceId = 'resource-overshoot';
+          const record = (await storage.getObservationalMemory(threadId, resourceId))!;
+
+          const reflectedLines = ['- 🔴 Reflected line 1', '- 🟡 Reflected line 2'];
+          const tailLines = Array.from({ length: 40 }, (_, i) => `- 🟢 Tail observation line ${i + 1}`);
+          const activeObservations = [...reflectedLines, ...tailLines].join('\n');
+          await storage.updateActiveObservations({
+            id: record.id,
+            observations: activeObservations,
+            tokenCount: om.getTokenCounter().countObservations(activeObservations),
+            lastObservedAt: new Date(now.getTime() - idleMs),
+          });
+
+          const reflection = '- 🔴 Condensed reflection';
+          const reflectionTokens = om.getTokenCounter().countObservations(reflection);
+          await storage.updateBufferedReflection({
+            id: record.id,
+            reflection,
+            tokenCount: reflectionTokens,
+            inputTokenCount: reflectionTokens * 3,
+            reflectedObservationLineCount: reflectedLines.length,
+          });
+
+          const { writer, customCalls } = makeCapturingWriter();
+
+          const freshRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+          await om.reflector.maybeReflect({
+            record: freshRecord,
+            observationTokens: freshRecord.observationTokenCount ?? 0,
+            lastActivityAt: now.getTime() - idleMs,
+            threadId,
+            writer,
+            currentModel: { provider: 'anthropic.messages', modelId: 'claude-sonnet-4-5' },
+          });
+
+          const afterRecord = (await storage.getObservationalMemory(threadId, resourceId))!;
+          const activationMarkers = customCalls.filter(part => part?.type === 'data-om-activation');
+          if (expectActivated) {
+            expect(afterRecord.bufferedReflection).toBeFalsy();
+            expect(activationMarkers).toHaveLength(1);
+            expect(activationMarkers[0]?.data).toMatchObject({
+              triggeredBy: 'ttl',
+              config: { activateAfterIdle: 3_600_000 },
+            });
+          } else {
+            expect(afterRecord.bufferedReflection).toBe(reflection);
+            expect(activationMarkers).toHaveLength(0);
+          }
+        } finally {
+          vi.useRealTimers();
+        }
+      },
+    );
 
     it('should prefer a real threshold activation over TTL metadata when observations already crossed the threshold', async () => {
       vi.useFakeTimers();
@@ -17309,6 +17896,138 @@ describe('OM context loading with no prior observations', () => {
     expect(saved.length).toBeGreaterThanOrEqual(2);
     expect(saved.find(m => m.id === 'user-msg-1')).toBeDefined();
     expect(saved.find(m => m.id === 'assistant-msg-1')).toBeDefined();
+  });
+
+  it('uses the supplied terminal list for persistence when it differs from the captured turn list', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+
+    const storage = createInMemoryStorage();
+    const threadId = 'durable-message-list-thread';
+    const resourceId = 'durable-message-list-resource';
+    const mockModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: 'ok' }],
+        warnings: [],
+      }),
+    });
+    const om = new ObservationalMemory({
+      storage,
+      scope: 'thread',
+      model: mockModel as any,
+      observation: { messageTokens: 500000 },
+      reflection: { observationTokens: 200000 },
+    });
+
+    await storage.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Test',
+        createdAt: new Date('2025-01-01T08:00:00Z'),
+        updatedAt: new Date('2025-01-01T08:00:00Z'),
+        metadata: {},
+      },
+    });
+
+    const makeCtx = () => {
+      const ctx = new RequestContext();
+      ctx.set('MastraMemory', { thread: { id: threadId }, resourceId });
+      return ctx;
+    };
+    const abort = (() => {
+      throw new Error('aborted');
+    }) as any;
+    const sharedState: Record<string, unknown> = {};
+    const memoryProvider = createMemoryProvider(om);
+    const stepMessageList = new MessageList({ threadId, resourceId });
+    stepMessageList.add(
+      {
+        id: 'user-msg-durable',
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'Hello from user' }] },
+        createdAt: new Date('2025-01-01T10:00:00Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'input',
+    );
+
+    const inputProcessor = new ObservationalMemoryProcessor(om, memoryProvider);
+    await inputProcessor.processInputStep({
+      messageList: stepMessageList,
+      messages: [],
+      requestContext: makeCtx(),
+      stepNumber: 0,
+      state: sharedState,
+      steps: [],
+      systemMessages: [],
+      model: mockModel as any,
+      retryCount: 0,
+      abort,
+    });
+
+    stepMessageList.add(
+      {
+        id: 'rejected-msg-durable',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Rejected response' }] },
+        createdAt: new Date('2025-01-01T10:00:01Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'response',
+    );
+
+    // Construct a distinct terminal list to assert the ownership invariant, including removed output.
+    // This synthetic setup is not a reproduction of #25023: no supported caller has been shown
+    // to reach finalization with this distinct-list/live-turn combination.
+    const finalMessageList = new MessageList({ threadId, resourceId }).deserialize(stepMessageList.serialize());
+    finalMessageList.removeByIds(['rejected-msg-durable']);
+    finalMessageList.add(
+      {
+        id: 'assistant-msg-durable',
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: 'Final durable response' }] },
+        createdAt: new Date('2025-01-01T10:00:01Z'),
+        threadId,
+        resourceId,
+      } as any,
+      'response',
+    );
+
+    const persistMessages = vi.spyOn(om, 'persistMessages');
+    const outputProcessor = new ObservationalMemoryProcessor(om, memoryProvider);
+    await outputProcessor.processOutputResult({
+      messageList: finalMessageList,
+      messages: finalMessageList.get.response.db(),
+      requestContext: makeCtx(),
+      state: sharedState,
+      abort,
+      result: {
+        text: 'Final durable response',
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        finishReason: 'stop',
+        steps: [],
+      } as any,
+      retryCount: 0,
+    });
+
+    const { messages: saved } = await storage.listMessages({
+      threadId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+      perPage: false,
+    });
+    expect(saved.map(message => message.id)).toEqual(['user-msg-durable', 'assistant-msg-durable']);
+    expect(persistMessages).toHaveBeenCalledTimes(1);
+    expect(persistMessages.mock.calls[0]?.[0].map(message => message.id)).toEqual([
+      'user-msg-durable',
+      'assistant-msg-durable',
+    ]);
+    expect(sharedState.__omTurn).toBeUndefined();
   });
 });
 

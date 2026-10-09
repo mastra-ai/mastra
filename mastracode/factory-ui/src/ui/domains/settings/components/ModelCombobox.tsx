@@ -5,8 +5,8 @@ import { useMemo } from 'react';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 
 /**
- * Searchable model picker shared by the settings model surfaces (Factory
- * default model, pack editors). The catalog is large (every provider's
+ * Searchable model picker shared by the settings model surfaces. The catalog
+ * is large (every provider's
  * models), so a filterable combobox replaces the native `<select>`.
  *
  * A persisted value that is no longer in the catalog (key removed, model

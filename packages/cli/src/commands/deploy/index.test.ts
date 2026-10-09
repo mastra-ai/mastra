@@ -249,6 +249,35 @@ describe('environment deploy upload', () => {
       expect.anything(),
     );
   });
+
+  it('sends artifactBytes and the signed content-length-range header', async () => {
+    const uploadUrl =
+      'https://storage.googleapis.com/b/o?X-Goog-SignedHeaders=content-type%3Bhost%3Bx-goog-content-length-range';
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify({ deploy: { id: 'deploy-1', uploadUrl } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await uploadToEnvironment('token', 'org-1', 'project-1', 'environment-1', Buffer.from('zip-data'), {
+      projectName: 'App',
+    });
+
+    expect(JSON.parse(fetchMock.mock.calls[0]![1].body)).toEqual({ artifactBytes: 8 });
+    expect(fetchMock.mock.calls[1]![1].headers).toEqual({
+      'Content-Type': 'application/zip',
+      'x-goog-content-length-range': '0,8',
+    });
+  });
+
+  it('surfaces a 413 detail verbatim and does not upload', async () => {
+    const detail = 'Deploy bundle is 662 MB, over the 500 MB limit. Check .mastra/output for stray files.';
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ detail }), { status: 413 }));
+
+    await expect(
+      uploadToEnvironment('token', 'org-1', 'project-1', 'environment-1', Buffer.from('zip'), { projectName: 'App' }),
+    ).rejects.toThrow(new Error(detail));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('factory target lookup', () => {

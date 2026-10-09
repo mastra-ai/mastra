@@ -1,7 +1,7 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { SCORER_SOURCE_OPTIONS } from './constants';
@@ -44,15 +44,18 @@ export function ScorersToolbar({
             onSearch={onSearchChange}
           />
         </div>
-        <SelectFieldBlock
-          label="Source"
-          labelIsHidden
-          name="filter-source"
-          options={[...SCORER_SOURCE_OPTIONS]}
-          value={sourceFilter}
-          onValueChange={onSourceFilterChange}
-          className="whitespace-nowrap"
-        />
+        <Select value={sourceFilter} onValueChange={onSourceFilterChange}>
+          <SelectTrigger aria-label="Source" size="md" className="whitespace-nowrap">
+            <SelectValue placeholder="Select an option" />
+          </SelectTrigger>
+          <SelectContent>
+            {SCORER_SOURCE_OPTIONS.map(option => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {onReset && hasActiveFilters && (
           <Button onClick={handleReset} size="sm" variant="default" icon={<XIcon />}>
             Reset

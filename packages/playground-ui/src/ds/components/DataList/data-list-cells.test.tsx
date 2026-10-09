@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   DataListActionsCell,
   DataListCell,
@@ -19,12 +19,6 @@ import { DataListTopSelectCell } from './data-list-top-cell';
 
 // jsdom ships no PointerEvent; Base UI's Checkbox constructs one to decide
 // whether a click came from a pointer or the keyboard.
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    class PointerEventStub extends MouseEvent {}
-    window.PointerEvent = PointerEventStub as unknown as typeof PointerEvent;
-  }
-});
 
 afterEach(cleanup);
 
@@ -390,6 +384,15 @@ describe('DataListCreatedCell', () => {
     const { container } = render(<DataListCreatedCell timestamp={new Date(2020, 4, 19, 9, 5, 3).toISOString()} />);
 
     expect(container.textContent).toBe('May 19, 2020, 9:05:03 AM');
+  });
+
+  it('omits the year from the visible text when given the day preset, keeping it in the title', () => {
+    const { container } = render(
+      <DataListCreatedCell timestamp={new Date(2020, 7, 31, 13, 7, 47, 657)} preset="day-time-seconds" />,
+    );
+
+    expect(container.textContent).toBe('Aug 31, 1:07:47 PM');
+    expect(cellOf(container).title).toBe('Aug 31, 2020, 1:07:47 PM');
   });
 
   it('shows nothing for a date it cannot read', () => {

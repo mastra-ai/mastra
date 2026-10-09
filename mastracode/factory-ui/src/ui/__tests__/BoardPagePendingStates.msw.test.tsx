@@ -1,8 +1,4 @@
-/**
- * Stage moves are multi-second server evaluations. While one is in flight the
- * card must announce where it is going ("Moving to Planning…") instead of
- * silently waiting, and drop the status once the server answers.
- */
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
@@ -15,6 +11,7 @@ import type { GithubIssue } from '../domains/factory/services/factory';
 import type { IncidentioIssue } from '../domains/factory/services/incidentio';
 import type { JiraIssue } from '../domains/factory/services/jira';
 import type { LinearIssue } from '../domains/factory/services/linear';
+import { useStartFactoryRun } from '../../hooks/useStartFactoryRun';
 import { createAppRoutes } from '../router';
 
 const FACTORY_ID = 'fp-1';
@@ -234,7 +231,15 @@ function stubBoardEndpoints() {
 
 function renderWorkBoard() {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [`/factories/${FACTORY_ID}/work`] });
-  return { ...renderWithProviders(<RouterProvider router={router} />), router };
+  return {
+    ...renderWithProviders(
+      <>
+        <RouterProvider router={router} />
+        <Toaster position="bottom-right" />
+      </>,
+    ),
+    router,
+  };
 }
 
 function stubJiraCandidate() {
@@ -602,6 +607,12 @@ describe('Board card pending states', () => {
         if (workItemRequests > 1) await refreshGate.promise;
         return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
       }),
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
+        const body = (await request.json()) as { metadata: Record<string, unknown> };
+        return HttpResponse.json({
+          workItem: { ...workItem, factoryProjectId: FACTORY_ID, externalSource: null, metadata: body.metadata },
+        });
+      }),
       http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
         HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
       ),
@@ -627,6 +638,107 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
   });
 
+  it('starts a Linear session in its configured repository without prompting', async () => {
+    stubBoardEndpoints();
+    const sessionRepositories: string[] = [];
+    const patches: unknown[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
+        HttpResponse.json({ categories: {}, tools: {} }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => HttpResponse.json({ enabled: false, connected: false })),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+        HttpResponse.json({
+          bindings: [
+            { integrationId: 'linear', sourceId: 'linear-project-1', factoryProjectId: FACTORY_ID, board: 'work' },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              installationId: 'inst-1',
+              repositories: [
+                { id: REPO_ID, branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } },
+                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+              ],
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: false, sourceIds: null },
+            linear: {
+              enabled: true,
+              sourceIds: ['linear-project-1'],
+              repositoryByLinearProject: { 'linear-project-1': 'acme/other' },
+            },
+          },
+        }),
+      ),
+
+      http.get(`${TEST_BASE_URL}/web/source-control/projects/repo-2/sessions`, () =>
+        HttpResponse.json({ sessions: [] }),
+      ),
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
+        patches.push(await request.json());
+        return HttpResponse.json({
+          workItem: { ...workItem, metadata: { linearProjectId: 'linear-project-1', repository: 'acme/other' } },
+        });
+      }),
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, ({ params }) => {
+        sessionRepositories.push(String(params.projectRepositoryId));
+        return HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } });
+      }),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, () =>
+        HttpResponse.json({
+          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
+        }),
+      ),
+    );
+    function StartLinearSession() {
+      const { start, enabled } = useStartFactoryRun();
+      return (
+        <button
+          disabled={!enabled}
+          onClick={() =>
+            start.mutate({
+              branch: 'fix-login',
+              threadTitle: 'Fix login bug',
+              workItem: {
+                id: ITEM_ID,
+                role: 'chat',
+                source: 'linear-issue',
+                sourceKey: 'linear:issue-1',
+                title: 'Fix login bug',
+                metadata: { linearProjectId: 'linear-project-1' },
+              },
+            })
+          }
+        >
+          Start Linear session
+        </button>
+      );
+    }
+    const router = createMemoryRouter([{ path: '/factories/:factoryId', element: <StartLinearSession /> }], {
+      initialEntries: [`/factories/${FACTORY_ID}`],
+    });
+    renderWithProviders(<RouterProvider router={router} />);
+    const user = userEvent.setup();
+    const startButton = await screen.findByRole('button', { name: 'Start Linear session' });
+    await waitFor(() => expect(startButton).toBeEnabled());
+    await user.click(startButton);
+
+    await waitFor(() =>
+      expect(patches).toEqual([{ metadata: { linearProjectId: 'linear-project-1', repository: 'acme/other' } }]),
+    );
+    await waitFor(() => expect(sessionRepositories).toEqual(['repo-2']));
+  });
+
   it('starts one session when the details run control is re-triggered before it resolves', async () => {
     stubBoardEndpoints();
     const refreshGate = deferred();
@@ -637,6 +749,12 @@ describe('Board card pending states', () => {
         workItemRequests += 1;
         if (workItemRequests > 1) await refreshGate.promise;
         return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
+      }),
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
+        const body = (await request.json()) as { metadata: Record<string, unknown> };
+        return HttpResponse.json({
+          workItem: { ...workItem, factoryProjectId: FACTORY_ID, externalSource: null, metadata: body.metadata },
+        });
       }),
       http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
         HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'fix-login' } }),
@@ -927,9 +1045,7 @@ describe('Board card pending states', () => {
 
     // The filed Jira card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Investigate hands-off' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build hands-off' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in Jira' })).toHaveAttribute('href', jiraIssue.url);
     expect(screen.getByRole('menuitem', { name: 'Ask supervisor' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
@@ -1082,9 +1198,7 @@ describe('Board card pending states', () => {
 
     // The filed incident.io card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Investigate hands-off' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build hands-off' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in incident.io' })).toHaveAttribute('href', incidentioIssue.url);
     expect(screen.getByRole('menuitem', { name: 'Ask supervisor' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
@@ -1194,6 +1308,120 @@ describe('Board card pending states', () => {
 
     transitionGate.resolve();
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
+  });
+
+  it('refuses a drop that would start a run while automation holds the card, but allows a resting lane', async () => {
+    const { transitionGate, transitionRequests } = stubBoardEndpoints();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+        HttpResponse.json({
+          decisions: [
+            {
+              id: 'decision-1',
+              evaluationId: 'evaluation-1',
+              workItemId: ITEM_ID,
+              type: 'invokeSkill',
+              status: 'pending',
+              attempts: 0,
+              failureOccurrence: 0,
+              source: null,
+              failureCode: null,
+              canRetry: true,
+              lastError: null,
+              createdAt: '2026-07-18T00:00:00.000Z',
+              updatedAt: '2026-07-18T00:01:00.000Z',
+              completedAt: null,
+            },
+          ],
+        }),
+      ),
+    );
+    const { client } = renderWorkBoard();
+    const card = await screen.findByTestId('work-item-card');
+    await within(card).findByText('Starting an automated run…');
+    const dropInto = (stage: string) => {
+      const column = screen.getByTestId(`board-column-${stage}`);
+      const dataTransfer = createDataTransfer();
+      fireEvent.dragStart(card, { dataTransfer });
+      fireEvent.dragOver(column, { dataTransfer });
+      fireEvent.drop(column, { dataTransfer });
+    };
+
+    dropInto('planning');
+    expect(await screen.findByText("Another run can't start while this card is busy.")).toBeVisible();
+    expect(within(card).getByText('Starting an automated run…')).toBeVisible();
+    expect(transitionRequests).toEqual([]);
+
+    dropInto('review');
+    await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
+    transitionGate.resolve();
+    await waitForMutationsIdle(client);
+  });
+
+  it('moves a mapped Linear card into a working lane without asking for a repository while intake config loads', async () => {
+    const { transitionGate, transitionRequests } = stubBoardEndpoints();
+    const configGate = deferred();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              installationId: 'inst-1',
+              repositories: [
+                { id: REPO_ID, branch: 'main', repository: { slug: 'acme/app', defaultBranch: 'main' } },
+                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+              ],
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              ...workItem,
+              factoryProjectId: FACTORY_ID,
+              externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:issue-1' },
+              stages: ['review'],
+              sessions: {},
+              metadata: { linearProjectId: 'linear-project-1' },
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
+      http.get(`${TEST_BASE_URL}/web/source-control/projects/repo-2/sessions`, () =>
+        HttpResponse.json({ sessions: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/config`, async () => {
+        await configGate.promise;
+        return HttpResponse.json({
+          config: {
+            github: { enabled: false, sourceIds: null },
+            linear: {
+              enabled: true,
+              sourceIds: ['linear-project-1'],
+              repositoryByLinearProject: { 'linear-project-1': 'acme/other' },
+            },
+          },
+        });
+      }),
+    );
+    const { client } = renderWorkBoard();
+    const card = await screen.findByTestId('work-item-card');
+    const planning = screen.getByTestId('board-column-planning');
+    const dataTransfer = createDataTransfer();
+
+    fireEvent.dragStart(card, { dataTransfer });
+    fireEvent.dragOver(planning, { dataTransfer });
+    fireEvent.drop(planning, { dataTransfer });
+    configGate.resolve();
+
+    await waitFor(() => expect(transitionRequests).toEqual([ITEM_ID]));
+    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+    transitionGate.resolve();
+    await waitForMutationsIdle(client);
   });
 
   it('creates a manual work item in the selected active column', async () => {

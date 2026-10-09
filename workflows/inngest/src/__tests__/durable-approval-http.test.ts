@@ -1,6 +1,7 @@
 /**
- * Regression test for issue #25154: an Inngest durable run waiting on tool approval must be listed by
- * `GET /api/agents/:agentId/suspended-runs` and accepted by `POST /api/agents/:agentId/approve-tool-call`.
+ * Regression test for durable Inngest tool approvals: a pending approval must be listed by
+ * `GET /api/agents/:agentId/suspended-runs`, then custom resume data must retain the decision through
+ * `POST /api/agents/:agentId/send-tool-approval`.
  *
  * Inngest persists the loop snapshot under `inngest:durable-agentic-loop`. Before the fix the server
  * and `Agent.listSuspendedRuns()` only looked under core's `durable-agentic-loop`, so the run was
@@ -12,7 +13,7 @@
  */
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -95,7 +96,7 @@ describe('Inngest durable agent tool approval over HTTP (real Inngest dev server
     rmSync(DB_PATH, { force: true });
   });
 
-  it('lists the pending approval in suspended-runs and approves it via approve-tool-call', async () => {
+  it('lists the pending approval and preserves custom data through send-tool-approval', async () => {
     const threadId = `thread-${Date.now()}`;
     const resourceId = `user-a-${Date.now()}`;
 
@@ -169,15 +170,34 @@ describe('Inngest durable agent tool approval over HTTP (real Inngest dev server
     expect(otherApprove.status).toBe(403);
     expect(existsSync(path.join(OUT_DIR, 'note.txt'))).toBe(false);
 
-    // Approval by the owner: the guard accepts the run and the approved tool runs on the worker.
-    const approveRes = await app.request(`/api/agents/${AGENT_ID}/approve-tool-call`, asUser('token-a', approveInit));
+    // Approval by the owner: the guard accepts the run and custom data reaches the tool on the worker.
+    const approveRes = await app.request(
+      `/api/agents/${AGENT_ID}/send-tool-approval`,
+      asUser('token-a', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          threadId,
+          resourceId,
+          runId,
+          toolCallId: 'call-1',
+          approved: true,
+          resumeData: { note: 'hello' },
+        }),
+      }),
+    );
     const approveBody = approveRes.text();
     expect(approveRes.status, approveRes.status === 200 ? '' : await approveBody).toBe(200);
     void approveBody.catch(() => {});
 
     await vi.waitFor(
       () => {
-        expect(existsSync(path.join(OUT_DIR, 'note.txt')), 'approved tool wrote its note').toBe(true);
+        const notePath = path.join(OUT_DIR, 'note.txt');
+        expect(existsSync(notePath), 'approved tool wrote its note').toBe(true);
+        expect(JSON.parse(readFileSync(notePath, 'utf8'))).toEqual({
+          text: 'note',
+          resumeData: { note: 'hello', approved: true },
+        });
       },
       { timeout: 30_000, interval: 500 },
     );

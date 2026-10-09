@@ -201,7 +201,7 @@ To debug authentication issues, add logging to your custom providers or check in
 
 ## Limitations
 
-- All providers share the same token from the `Authorization` header
+- All providers share the same token, taken from the `Authorization` header or, when that header is missing, the `apiKey` query parameter
 - User types may differ between providers (use discriminated unions if needed)
 - No built-in way to identify which provider authenticated a request
 

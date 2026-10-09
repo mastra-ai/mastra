@@ -1,6 +1,7 @@
 import { AUDIT_CATEGORIES } from '../../auditPresentation';
 import type { AuditNamespace } from '../../auditPresentation';
 import { FilterChip } from './FilterChip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export function AuditCategoryFilter({
   selectedCategories,
@@ -38,9 +39,9 @@ export function AuditCategoryFilter({
         ))}
       </div>
       {countLabel ? (
-        <span className="text-meta text-placeholder justify-self-center tabular-nums sm:justify-self-end">
+        <Txt as="span" variant="meta" tone="faint" className="justify-self-center tabular-nums sm:justify-self-end">
           {countLabel}
-        </span>
+        </Txt>
       ) : null}
     </div>
   );

@@ -18,12 +18,18 @@ export abstract class WorkflowsStorage extends StorageDomain {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    /**
+     * Workflow state to record as `context.__state` in the same atomic update as
+     * the step result, so a crash can't persist one without the other.
+     */
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
   abstract updateWorkflowState({

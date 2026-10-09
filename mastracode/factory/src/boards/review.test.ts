@@ -146,4 +146,24 @@ describe('reviewBoard', () => {
     expect(decision).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview' });
     expect(decision).not.toHaveProperty('resume');
   });
+
+  it('re-reviews a Reviewing card that already recorded a verdict with the full re-review skill', async () => {
+    const context = reviewContext('feat/review-board', 'review');
+    context.item.metadata = { ...context.item.metadata, reviewVerdict: 'request changes', reviewedHeadSha: 'abc1234' };
+    const decision = await reviewBoard.rules.review?.pullRequest?.onEnter?.(context);
+    expect(decision).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview', cancelInFlight: true });
+    expect(decision).not.toHaveProperty('resume');
+  });
+
+  it('keeps Done for merges: a review agent cannot move its card there', () => {
+    const policy = reviewBoard.transitionPolicy!;
+    const base = { fromStage: 'review', toStage: 'done' };
+    expect(policy({ ...base, actor: { type: 'agent', id: 'binding-1', role: 'review' } } as never)).toMatchObject({
+      type: 'reject',
+    });
+    expect(policy({ ...base, actor: { type: 'github', id: 'merge' } } as never)).toBeUndefined();
+    expect(
+      policy({ ...base, toStage: 'canceled', actor: { type: 'agent', id: 'b', role: 'review' } } as never),
+    ).toBeUndefined();
+  });
 });

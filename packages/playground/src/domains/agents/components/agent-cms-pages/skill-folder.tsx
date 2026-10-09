@@ -1,6 +1,7 @@
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import { FieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState, useCallback, useMemo } from 'react';
 
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
@@ -80,18 +81,16 @@ export function SkillFolder({
     <div className="grid h-full grid-cols-[300px_1fr]">
       <div className="h-full overflow-y-auto border-r border-border p-4">
         {workspaceOptions.length > 0 && (
-          <div className="flex flex-col gap-1.5 pb-4">
-            <FieldBlock.Label name="skill-workspace">Workspace</FieldBlock.Label>
+          <Field className="pb-4">
+            <FieldLabel>Workspace</FieldLabel>
             <Combobox
-              id="input-skill-workspace"
-              name="skill-workspace"
               options={workspaceOptions}
               value={workspaceId}
               onValueChange={setWorkspaceId}
               placeholder="Select a workspace..."
               disabled={readOnly}
             />
-          </div>
+          </Field>
         )}
 
         <SkillFileTree
@@ -127,8 +126,10 @@ export function SkillFolder({
             )}
           </>
         ) : (
-          <div className="flex h-full items-center justify-center text-caption text-muted-foreground">
-            Select a file to edit its content
+          <div className="flex h-full items-center justify-center">
+            <Txt tone="muted" as="span" variant="caption" className="block">
+              Select a file to edit its content
+            </Txt>
           </div>
         )}
       </div>

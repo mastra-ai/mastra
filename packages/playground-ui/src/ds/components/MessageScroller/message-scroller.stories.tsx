@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { expect, within } from 'storybook/test';
 
 import { Button } from '../Button';
 import {
@@ -102,4 +103,35 @@ export const Conversation: Story = {
 
 export const AutoFollow: Story = {
   render: () => <MessageScrollerDemo autoScroll />,
+};
+
+export const InactiveControls: Story = {
+  render: () => (
+    <MessageScrollerProvider>
+      <MessageScroller className="h-80 w-64">
+        <MessageScrollerViewport>
+          <MessageScrollerContent>
+            <p className="p-4 text-body">A short conversation fits without scrolling.</p>
+          </MessageScrollerContent>
+        </MessageScrollerViewport>
+        <MessageScrollerButton direction="start" />
+        <MessageScrollerButton />
+      </MessageScroller>
+    </MessageScrollerProvider>
+  ),
+  play: async ({ canvasElement }) => {
+    const stage = canvasElement.querySelector('[data-slot="message-scroller"]');
+    if (!stage) throw new Error('Conversation must render inside a stage');
+    const bounds = stage.getBoundingClientRect();
+    await expect(getComputedStyle(stage).overflow).toBe('visible');
+    for (const name of ['Scroll to start', 'Scroll to end']) {
+      const button = within(canvasElement).getByRole('button', { name });
+      const buttonBounds = button.getBoundingClientRect();
+      await expect(button).toHaveAttribute('data-active', 'false');
+      await expect(buttonBounds.top).toBeGreaterThanOrEqual(bounds.top);
+      await expect(buttonBounds.bottom).toBeLessThanOrEqual(bounds.bottom);
+      await expect(buttonBounds.left).toBeGreaterThanOrEqual(bounds.left);
+      await expect(buttonBounds.right).toBeLessThanOrEqual(bounds.right);
+    }
+  },
 };

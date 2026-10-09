@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { describe, expect, it } from 'vitest';
 import { getWorkflowIterationScopes } from '../workflow-iteration-scopes';
 

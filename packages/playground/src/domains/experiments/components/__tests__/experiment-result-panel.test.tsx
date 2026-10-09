@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { DatasetExperimentResult, GetSystemPackagesResponse } from '@mastra/client-js';
+import type { DatasetExperimentResult, GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -7,8 +7,8 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { ExperimentResultPanel } from '../experiment-result-panel';
 import {
-  metricsCapableSystemPackages,
-  metricsUnavailableSystemPackages,
+  metricsCapableCapabilities,
+  metricsUnavailableCapabilities,
   traceSpans,
   traceUsageBreakdown,
 } from '@/pages/traces/__tests__/fixtures/traces';
@@ -200,14 +200,14 @@ describe('ExperimentResultPanel trace usage', () => {
   const onBreakdownRequest = vi.fn();
 
   const setUsageHandlers = ({
-    systemPackages,
+    capabilities,
     rootEntityType,
   }: {
-    systemPackages: GetSystemPackagesResponse;
+    capabilities: GetObservabilityCapabilitiesResponse;
     rootEntityType: EntityType;
   }) => {
     server.use(
-      http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackages)),
+      http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
       http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => {
         onTraceRequest();
         const [root] = traceSpans.spans;
@@ -233,7 +233,7 @@ describe('ExperimentResultPanel trace usage', () => {
   });
 
   it('renders no usage rows and fetches nothing when the result has no trace', async () => {
-    setUsageHandlers({ systemPackages: metricsCapableSystemPackages, rootEntityType: EntityType.AGENT });
+    setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
     renderPanel(makeResult({ traceId: null }));
 
     await screen.findByText('Item Id');
@@ -243,7 +243,7 @@ describe('ExperimentResultPanel trace usage', () => {
   });
 
   it('shows tokens and cost for an agent trace when metrics are supported', async () => {
-    setUsageHandlers({ systemPackages: metricsCapableSystemPackages, rootEntityType: EntityType.AGENT });
+    setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
     renderPanel(makeResult({ traceId: 'trace-a' }));
 
     expect(await screen.findByText('Input tokens')).toBeDefined();
@@ -256,7 +256,7 @@ describe('ExperimentResultPanel trace usage', () => {
   });
 
   it('skips usage for a workflow trace', async () => {
-    setUsageHandlers({ systemPackages: metricsCapableSystemPackages, rootEntityType: EntityType.WORKFLOW });
+    setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.WORKFLOW });
     renderPanel(makeResult({ traceId: 'trace-a' }));
 
     await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());
@@ -266,7 +266,7 @@ describe('ExperimentResultPanel trace usage', () => {
   });
 
   it('skips usage when the observability storage does not support metrics', async () => {
-    setUsageHandlers({ systemPackages: metricsUnavailableSystemPackages, rootEntityType: EntityType.AGENT });
+    setUsageHandlers({ capabilities: metricsUnavailableCapabilities, rootEntityType: EntityType.AGENT });
     renderPanel(makeResult({ traceId: 'trace-a' }));
 
     await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());

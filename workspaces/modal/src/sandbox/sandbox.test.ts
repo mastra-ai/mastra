@@ -726,6 +726,14 @@ describe('ModalSandbox.clone', () => {
     expect(child['_constructorOptions']).toMatchObject({ timeoutMs: 900_000 });
   });
 
+  it('applies workingDirectory override', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', workingDirectory: '/template' });
+
+    const child = template.clone({ workingDirectory: '/project' });
+
+    expect(child['_constructorOptions']).toMatchObject({ workingDirectory: '/project' });
+  });
+
   it('inherits template defaults when no overrides are passed', () => {
     const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 120_000, env: { BASE: '1' } });
 

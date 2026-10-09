@@ -223,7 +223,9 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     });
 
     const stream = await createAgent(model, executions, { retry: true, settled }).stream('go', {
-      maxSteps: 1,
+      // Retry steps do not count against maxSteps, so a stop condition that counts
+      // every step is what ends the run before the replacement attempt.
+      stopWhen: ({ steps }) => steps.length >= 1,
       eagerToolExecution: true,
     });
     await drain(stream);
@@ -246,7 +248,9 @@ describe('eager tool dispatch — finished work survives every early exit', () =
     });
 
     const stream = await createAgent(model, executions, { retry: true, settled }).stream('go', {
-      maxSteps: 1,
+      // Retry steps do not count against maxSteps, so a stop condition that counts
+      // every step is what ends the run before the replacement attempt.
+      stopWhen: ({ steps }) => steps.length >= 1,
       eagerToolExecution: true,
       transform: {
         targets: ['transcript'],

@@ -1,5 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
-import { llm } from '@livekit/agents';
+import { FlushSentinel, llm } from '@livekit/agents';
 import type { voice } from '@livekit/agents';
 import type { Agent as MastraAgent } from '@mastra/core/agent';
 import { describe, expect, it, vi } from 'vitest';
@@ -26,13 +26,15 @@ function fakeMastraAgent(chunks: FakeChunk[] | (() => AsyncGenerator<FakeChunk>)
   return { agent: { stream } as unknown as MastraAgent, stream };
 }
 
-async function readAll(stream: ReadableStream<llm.ChatChunk | string>): Promise<(llm.ChatChunk | string)[]> {
+async function readAll(
+  stream: ReadableStream<llm.ChatChunk | string | FlushSentinel>,
+): Promise<(llm.ChatChunk | string)[]> {
   const reader = stream.getReader();
   const out: (llm.ChatChunk | string)[] = [];
   for (;;) {
     const { done, value } = await reader.read();
     if (done) break;
-    out.push(value);
+    if (value !== FlushSentinel) out.push(typeof value === 'string' ? value : (value.delta?.content ?? value));
   }
   return out;
 }
@@ -151,7 +153,7 @@ describe('MastraVoiceAgent.llmNode', () => {
     const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
 
     const reader = result!.getReader();
-    expect((await reader.read()).value).toBe('Hello ');
+    expect((await reader.read()).value).toMatchObject({ delta: { content: 'Hello ' } });
     await reader.cancel();
     expect(observedSignal?.aborted).toBe(true);
   });
@@ -208,7 +210,7 @@ describe('MastraVoiceAgent onTurnComplete hook', () => {
     const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
 
     const reader = result!.getReader();
-    expect((await reader.read()).value).toBe('Hello ');
+    expect((await reader.read()).value).toMatchObject({ delta: { content: 'Hello ' } });
     await reader.cancel();
 
     await vi.waitFor(() => expect(onTurnComplete).toHaveBeenCalledTimes(1));
@@ -323,7 +325,7 @@ describe('MastraVoiceAgent reply generator seam', () => {
           controller.enqueue('from generator');
           controller.close();
         },
-      }) as unknown as ReadableStream<llm.ChatChunk | string>;
+      }) as unknown as ReadableStream<llm.ChatChunk | string | FlushSentinel>;
     });
     const voiceAgent = new MastraVoiceAgent({ generate, memory: { thread: 't1', resource: 'r1' } });
     const result = await voiceAgent.llmNode(userTurnContext('hello'), toolCtx, modelSettings);

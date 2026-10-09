@@ -23,6 +23,7 @@ constructor({
   id?: string;
   servers: Record<string, MastraMCPServerDefinition>;
   timeout?: number;
+  clientInfo?: { name?: string; version?: string };
 }: MCPClientOptions)
 ```
 
@@ -51,6 +52,13 @@ constructor({
     isOptional: true,
     defaultValue: '60000',
     description: 'Global timeout value in milliseconds for all servers unless overridden in individual server configs.',
+  },
+  {
+    name: 'clientInfo',
+    type: '{ name?: string; version?: string }',
+    isOptional: true,
+    description:
+      "Client name and version every server receives on connect and with each request, so servers can attribute traffic to your application. Defaults to the server key as `name` and `'1.0.0'` as `version`. Individual server configs can override either field with their own `clientInfo`. Doesn't change tool name prefixes, which always use the server key.",
   },
 ]}
 />
@@ -138,6 +146,13 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     type: 'number',
     isOptional: true,
     description: 'Server-specific timeout in milliseconds. Falls back to the client-level `timeout` when omitted.',
+  },
+  {
+    name: 'clientInfo',
+    type: '{ name?: string; version?: string }',
+    isOptional: true,
+    description:
+      'Overrides the top-level `clientInfo` for this server. Fields you set replace the top-level values; fields you omit keep them.',
   },
   {
     name: 'capabilities',
@@ -514,6 +529,23 @@ await mcp.listTools()
 
 const instructionsByServer = mcp.getServerInstructions()
 console.log(instructionsByServer.db)
+```
+
+### `getServerInfo()`
+
+Returns the identity each configured MCP server announced when it connected (its `serverInfo`, from the `server/discover` result or, for servers on an older revision, the `initialize` handshake): `name` and `version`, plus `title`, `description`, `websiteUrl`, and `icons` when the server provides them. A server's entry is `undefined` if it hasn't connected yet, or if it connected over the `2026-07-28` revision without announcing an identity, which that revision allows. Don't use it to check whether a server is connected. The values come from the remote server and aren't validated, so treat icon and website URLs as untrusted.
+
+```typescript oxfmt:false
+getServerInfo(): Record<string, MCPServerImplementation | undefined>
+```
+
+Example:
+
+```typescript
+await mcp.listTools()
+
+const info = mcp.getServerInfo()
+console.log(info.myServer?.title, info.myServer?.version)
 ```
 
 ### `authenticate()`

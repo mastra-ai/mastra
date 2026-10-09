@@ -98,12 +98,12 @@ console.log('HOOK_BLOCK_LOG=after:UserPromptSubmit:true');
     terminal.submit('!node .mastracode/rewrite-hooks.cjs');
     await runtime.waitForScreenText(/HOOKS_REWRITTEN=after/i, terminal);
     await terminal.flushInput?.();
-    await runtime.waitForScreenText(/│ ›/i, terminal, 10_000);
+    await runtime.waitForScreenText(/→/, terminal, 10_000);
 
     terminal.submit('/hooks reload');
     await runtime.waitForScreenText(/Hooks config reloaded\./i, terminal, 10_000);
     await terminal.flushInput?.();
-    await runtime.waitForScreenText(/│ ›/i, terminal, 10_000);
+    await runtime.waitForScreenText(/→/, terminal, 10_000);
 
     terminal.submit('/hooks');
     await runtime.waitForScreenText(/hook-after\.cjs/i, terminal);

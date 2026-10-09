@@ -73,6 +73,11 @@ export function formatOmError(error: unknown): string {
     }
     if (visited.has(value)) return;
     visited.add(value);
+    // MastraError ids are framework-generated operation tokens (no user data) and are often the only
+    // attribution when a wrapper omits `text` and inherits the driver message.
+    if (typeof value.id === 'string' && typeof value.domain === 'string' && typeof value.category === 'string') {
+      add(value.id);
+    }
     add(value.message);
     if (typeof value.statusCode === 'number') add(`HTTP ${value.statusCode}`);
 

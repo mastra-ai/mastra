@@ -2,6 +2,7 @@ import type { DatasetItem } from '@mastra/client-js';
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
@@ -176,17 +177,17 @@ export function DatasetItemsList({
                 </DataList.TextCell>
                 <DataList.Cell className="min-w-0">
                   {item.expectedTrajectory ? (
-                    <span className="text-body-sm text-muted-foreground">
+                    <Txt as="span" variant="body-sm" tone="muted">
                       {formatExpectedTrajectory(item.expectedTrajectory)}
-                    </span>
+                    </Txt>
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )}
                 </DataList.Cell>
                 <DataList.Cell className="min-w-0">
-                  <span className="block truncate text-body-sm text-placeholder">
+                  <Txt as="span" variant="body-sm" tone="faint" className="block truncate">
                     {formatDate(createdAtDate, 'date-time')}
-                  </span>
+                  </Txt>
                 </DataList.Cell>
               </>
             );

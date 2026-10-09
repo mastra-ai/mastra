@@ -51,8 +51,10 @@ vi.mock('../../theme.js', () => ({
   theme: {
     bg: (_token: string, text: string) => text,
     fg: (_token: string, text: string) => text,
-    getTheme: () => ({ dim: '#888888', text: '#ffffff' }),
+    bold: (text: string) => text,
+    getTheme: () => ({ dim: '#888888', text: '#ffffff', warning: '#f59e0b', secondary: '#d9d9dc' }),
   },
+  surfaceShade: () => '#252538',
 }));
 
 import { ToolApprovalDialogComponent } from '../tool-approval-dialog.js';
@@ -181,5 +183,121 @@ describe('ToolApprovalDialogComponent.handleInput', () => {
       dialog.handleInput(input);
       expect(onAction).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('ToolApprovalDialogComponent.render', () => {
+  it('renders one inline row with the four key choices', () => {
+    const { dialog } = makeDialog();
+    const lines = dialog.render(120).map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toBe('▎ Allow?   y yes  ·  a always allow Execute  ·  Y YOLO  ·  n no');
+  });
+
+  it('wraps the choices under the question on narrow terminals', () => {
+    const { dialog } = makeDialog();
+    const lines = dialog.render(40).map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    expect(lines).toEqual(['▎ Allow?', '▎ y yes  ·  a always allow Execute', '▎ Y YOLO  ·  n no']);
+  });
+
+  it('names the tool and lists its arguments when showTarget is set', () => {
+    const dialog = new ToolApprovalDialogComponent({
+      toolCallId: 'call-1',
+      toolName: 'write_file',
+      args: { path: 'src/auth.ts', overwrite: true },
+      categoryLabel: 'Edit',
+      showTarget: true,
+      onAction: vi.fn(),
+    });
+    const lines = dialog.render(120).map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    expect(lines).toEqual([
+      '▎ Allow write_file?',
+      '▎   path: src/auth.ts',
+      '▎   overwrite: true',
+      '▎ y yes  ·  a always allow Edit  ·  Y YOLO  ·  n no',
+    ]);
+  });
+
+  it('shows control characters in model arguments as visible escapes instead of sending them to the terminal', () => {
+    const dialog = new ToolApprovalDialogComponent({
+      toolCallId: 'call-1',
+      toolName: 'execute_command',
+      args: { command: 'echo hi\x1b[2J\x1b]8;;https://x.test\x07\r\nrm -rf\tbuild' },
+      showTarget: true,
+      onAction: vi.fn(),
+    });
+    const rendered = dialog.render(120).join('\n');
+    expect(rendered).not.toMatch(/\x1b\[2J|\x1b\]|\x07|\r/);
+    const lines = rendered.split('\n').map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    expect(lines).toContain('▎   command: echo hi\\x1b[2J\\x1b]8;;https://x.test\\x07');
+    expect(lines).toContain('▎   rm -rf  build');
+  });
+
+  it('shows long and multi-line arguments in full, wrapped, when showTarget is set', () => {
+    const command = `node -e "${'x'.repeat(150)}"\necho done`;
+    const dialog = new ToolApprovalDialogComponent({
+      toolCallId: 'call-1',
+      toolName: 'execute_command',
+      args: { command, cwd: null },
+      categoryLabel: 'Execute',
+      showTarget: true,
+      onAction: vi.fn(),
+    });
+    const lines = dialog.render(60).map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
+    const shown = lines
+      .slice(1, -2)
+      .map(line => line.replace(/^▎ {3}/, ''))
+      .join('');
+    expect(shown).toContain('x'.repeat(150));
+    expect(lines.some(line => line.includes('echo done'))).toBe(true);
+    expect(lines.join('\n')).not.toContain('cwd');
+    expect(lines.every(line => line.length <= 60)).toBe(true);
+  });
+
+  it('cuts very long arguments with a count and shows them in full on Ctrl+E', () => {
+    const content = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`).join('\n');
+    const requestRender = vi.fn();
+    const onAction = vi.fn();
+    const dialog = new ToolApprovalDialogComponent({
+      toolCallId: 'call-1',
+      toolName: 'write_file',
+      args: { path: 'notes.md', content },
+      showTarget: true,
+      onAction,
+      requestRender,
+    });
+    const visible = () =>
+      dialog
+        .render(100)
+        .map(line => line.replace(/\x1b\[[0-9;]*m/g, ''))
+        .join('\n');
+
+    expect(visible()).toContain('… 20 more lines · ctrl+e to show all');
+    expect(visible()).not.toContain('line 60');
+
+    dialog.handleInput('\x05');
+    expect(requestRender).toHaveBeenCalled();
+    expect(visible()).toContain('line 60');
+    expect(visible()).not.toContain('more lines');
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it('owns Ctrl+E only when it lists the arguments, leaving it to the tool row otherwise', () => {
+    expect(makeDialog().dialog.handlesExpand()).toBe(false);
+    const listed = new ToolApprovalDialogComponent({
+      toolCallId: 'call-1',
+      toolName: 'write_file',
+      args: { path: 'a.ts' },
+      showTarget: true,
+      onAction: vi.fn(),
+    });
+    expect(listed.handlesExpand()).toBe(true);
+  });
+
+  it('never renders wider than the terminal', () => {
+    const { dialog } = makeDialog();
+    for (const line of dialog.render(20)) {
+      expect(line.replace(/\x1b\[[0-9;]*m/g, '').length).toBeLessThanOrEqual(20);
+    }
   });
 });

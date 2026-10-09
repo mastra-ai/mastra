@@ -133,7 +133,7 @@ Ends the span and triggers export to configured exporters. Sets the `endTime` an
 error(options: ErrorSpanOptions<TType>): void
 ```
 
-Records an error on the span. Sets the `errorInfo` field and can optionally end the span.
+Records an error on the span. Sets the `errorInfo` field and can optionally end the span. When the error is an AI SDK `APICallError` (or wraps one as `cause`), `errorInfo.details` also carries the HTTP `statusCode`, request `url`, `isRetryable` flag and provider `responseBody`.
 
 <PropertiesTable
   props={[

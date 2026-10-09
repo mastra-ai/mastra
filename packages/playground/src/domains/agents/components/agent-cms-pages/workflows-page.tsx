@@ -1,25 +1,24 @@
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { passwordManagerOptOutProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
-import { SearchIcon } from 'lucide-react';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { SectionHeader, DisplayConditionsDialog } from '@/domains/cms';
 import { SubSectionHeader } from '@/domains/cms/components/section/section-header';
-import { usePlaygroundStore } from '@/store/playground-store';
 
 export function WorkflowsPage() {
   const { form, readOnly } = useAgentEditFormContext();
   const { control } = form;
-  const { data: workflows } = useWorkflows({ requestContext: usePlaygroundStore().requestContext });
+  const { data: workflows } = useWorkflows();
   const selectedWorkflows = useWatch({ control, name: 'workflows' });
   const variables = useWatch({ control, name: 'variables' });
   const [search, setSearch] = useState('');
@@ -98,17 +97,12 @@ export function WorkflowsPage() {
             <SubSectionHeader title="Available Workflows" icon={<WorkflowIcon />} />
           </Section.Header>
 
-          <InputGroup>
-            <InputGroupAddon align="inline-start">
-              <SearchIcon />
-            </InputGroupAddon>
-            <InputGroupInput
-              type="search"
-              aria-label="Search workflows"
-              placeholder="Search workflows"
-              onChange={event => setSearch(event.target.value)}
-            />
-          </InputGroup>
+          <SearchInput
+            label="Search workflows"
+            placeholder="Search workflows"
+            value={search}
+            onValueChange={setSearch}
+          />
 
           {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">
@@ -124,6 +118,7 @@ export function WorkflowsPage() {
                       <EntityDescription>
                         <input
                           type="text"
+                          {...passwordManagerOptOutProps}
                           disabled={isDisabled}
                           className={cn(
                             'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',

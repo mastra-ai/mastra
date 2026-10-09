@@ -18,7 +18,14 @@ import { handleError } from './error';
 // Route Definitions
 // ============================================================================
 
-type ProcessorPhase = 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult';
+type ProcessorPhase =
+  | 'input'
+  | 'inputStep'
+  | 'outputStream'
+  | 'outputResult'
+  | 'outputStep'
+  | 'toolResult'
+  | 'llmRequest';
 
 /**
  * Helper to extract text from messages for outputStep testing.
@@ -71,6 +78,9 @@ function detectProcessorPhases(processor: any): ProcessorPhase[] {
   }
   if (typeof processor.processToolResult === 'function') {
     phases.push('toolResult');
+  }
+  if (typeof processor.processLLMRequest === 'function') {
+    phases.push('llmRequest');
   }
   return phases;
 }
@@ -211,6 +221,13 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
 
       if (!phase) {
         throw new HTTPException(400, { message: 'Phase is required' });
+      }
+
+      if (phase === 'llmRequest') {
+        // processLLMRequest operates on the provider prompt, not on messages
+        throw new HTTPException(400, {
+          message: 'llmRequest phase cannot be executed directly. It runs on the provider prompt during an agent call.',
+        });
       }
 
       if (!messages || !Array.isArray(messages)) {

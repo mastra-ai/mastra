@@ -66,46 +66,32 @@ describe('formatIdleStatusTiming', () => {
 });
 
 describe('IdleCounterComponent', () => {
-  it('reserves one stable line and renders only idle timing above input', () => {
-    const component = new IdleCounterComponent();
+  const plain = (lines: string[]) => lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, '').trim());
 
-    expect(component.render(80)).toEqual(['']);
+  it('always renders a gap plus one row so the prompt never shifts', () => {
+    const component = new IdleCounterComponent();
+    expect(component.render(80)).toEqual(['', '']);
 
     component.setTimingState(
       { lastAgentRunDurationMs: 61_000, lastAgentRunEndedAt: 1_000, lastAgentRunEndReason: 'done' },
       60_999,
     );
-    expect(component.render(80)).toEqual(['']);
+    expect(component.render(80)).toEqual(['', '']);
 
     component.update(181_000);
-    const renderedWithIdle = component.render(80).join('\n');
-    expect(renderedWithIdle).not.toContain('done in');
-    expect(renderedWithIdle).not.toContain(' · ');
-    expect(renderedWithIdle).toContain('3m idle');
+    expect(plain(component.render(80))).toEqual(['', '3m idle']);
 
+    component.setActivity(' • working  3s · esc to interrupt');
+    expect(plain(component.render(80))).toEqual(['', '• working  3s · esc to interrupt']);
+
+    component.setActivity('');
     component.setTimingState(undefined);
-    expect(component.render(80)).toEqual(['']);
+    expect(component.render(80)).toEqual(['', '']);
   });
-});
 
-describe('IdleCounterComponent thinking', () => {
-  const text = (component: IdleCounterComponent) =>
-    component
-      .render(80)
-      .join('\n')
-      .replace(/\x1b\[[0-9;]*m/g, '')
-      .trim();
-
-  it('shows Thinking... in place of idle time, keeping the same single line', () => {
+  it('keeps the Working row to a single row on narrow terminals', () => {
     const component = new IdleCounterComponent();
-    component.setTimingState({ lastAgentRunDurationMs: 1_000, lastAgentRunEndedAt: 0 }, 5 * 60_000);
-    expect(text(component)).toBe('5m idle');
-
-    component.setThinking(true);
-    expect(text(component)).toBe('Thinking...');
-    expect(component.render(80)).toHaveLength(1);
-
-    component.setThinking(false);
-    expect(component.render(80)).toHaveLength(1);
+    component.setActivity(` • working  ${'x'.repeat(100)}`);
+    expect(component.render(20)).toHaveLength(2);
   });
 });

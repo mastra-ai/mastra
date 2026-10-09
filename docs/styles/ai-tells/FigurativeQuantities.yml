@@ -15,7 +15,7 @@ ignorecase: true
 # Corpus notes, measured against the Go and Python standard libraries:
 # "a handful" appears 14 times as the ordinary human idiom for a small
 # count, so this is a flag-hard token by the maintainer's call rather than
-# a pure fingerprint; the count it hides is the point. "A host of"
+# a pure fingerprint; the hidden count is the tell. "A host of"
 # measured once, and that one is the literal network host ("A host of ''
 # or port 0" in socket.py), so networking prose about hosts should
 # disable the rule, as should memory-management prose, where objects

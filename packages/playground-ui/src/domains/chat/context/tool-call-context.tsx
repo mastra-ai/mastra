@@ -69,3 +69,8 @@ export function useToolCall() {
 
   return context;
 }
+
+// eslint-disable-next-line react-refresh/only-export-components -- provider and its hook intentionally share this module
+export function useOptionalToolCall() {
+  return useContext(ToolCallContext);
+}

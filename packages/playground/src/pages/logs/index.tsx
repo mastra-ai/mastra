@@ -9,7 +9,6 @@ import { LogsErrorContent } from '@mastra/playground-ui/domains/logs/components/
 import { LogsListView } from '@mastra/playground-ui/domains/logs/components/logs-list-view';
 import { LogsToolbar } from '@mastra/playground-ui/domains/logs/components/logs-toolbar';
 import { NoLogsInfo } from '@mastra/playground-ui/domains/logs/components/no-logs-info';
-import { useLogs } from '@mastra/playground-ui/domains/logs/hooks/use-logs';
 import { useLogsFilterPersistence } from '@mastra/playground-ui/domains/logs/hooks/use-logs-filter-persistence';
 import { useLogsListNavigation } from '@mastra/playground-ui/domains/logs/hooks/use-logs-list-navigation';
 import { useLogsUrlState } from '@mastra/playground-ui/domains/logs/hooks/use-logs-url-state';
@@ -18,17 +17,15 @@ import {
   createLogsPropertyFilterFields,
   neutralizeLogsFilterTokens,
 } from '@mastra/playground-ui/domains/logs/log-filters';
-import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
-import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
-import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
-import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
-import { useTraceSpans } from '@mastra/playground-ui/domains/traces/hooks/use-trace-spans';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
+import { useLogs } from '@mastra/react/hooks/logs';
+import { useEntityNames, useEnvironments, useServiceNames, useTags, useTraceSpans } from '@mastra/react/hooks/traces';
 import { useCallback, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
+import { traceScoreLink } from '@/lib/app-routing';
 
 const crumbs = [navCrumb('/logs')];
 
@@ -37,6 +34,7 @@ const DEFAULT_LOGS_SORT = { key: 'timestamp', direction: 'desc' } as const;
 
 export default function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const url = useLogsUrlState(searchParams, setSearchParams);
   // Servers without the trace-query API list threads through `listTracesLight` and don't expose feedback.
   const traceQuery = useTraceQueryAvailable();
@@ -118,7 +116,10 @@ export default function LogsPage() {
     url.featuredTraceId,
   );
 
-  const { data: traceSpansData, isLoading: isLoadingTraceSpans } = useTraceSpans(url.featuredTraceId ?? null);
+  const { data: traceSpansData, isLoading: isLoadingTraceSpans } = useTraceSpans({
+    traceId: url.featuredTraceId ?? null,
+    queryOptions: { enabled: !!url.featuredTraceId },
+  });
 
   const handleClear = useCallback(
     () => url.applyFilterTokens(neutralizeLogsFilterTokens(filterFields, url.filterTokens)),
@@ -229,6 +230,7 @@ export default function LogsPage() {
         onClose={handleTraceClose}
         withQueryTrace={traceQuery.enabled}
         withFeedback={traceQuery.enabled}
+        onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
       />
     </PageLayout>
   );

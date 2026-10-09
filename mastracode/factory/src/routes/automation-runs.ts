@@ -235,7 +235,9 @@ export class AutomationRunRoutes extends Route<AutomationRunRoutesDeps> {
 
           if (commit.status === 'missing') return c.json({ error: 'Work item not found' }, 404);
 
-          const result = commit.result as {
+          // A stale commit persists nothing, so the caller can retry the same
+          // requestId once it has re-read the work item's revision.
+          const result = (commit.status === 'stale' ? { status: 'rejected', code: 'stale' } : commit.result) as {
             status?: string;
             code?: string;
             itemId?: string | null;

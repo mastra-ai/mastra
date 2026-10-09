@@ -1,5 +1,34 @@
 # @mastra/auth-studio
 
+## 1.3.9-alpha.0
+
+### Patch Changes
+
+- Keep Studio and Factory sessions alive for the identity provider's full session length. ([#26447](https://github.com/mastra-ai/mastra/pull/26447))
+
+  - `MastraAuthStudio` session cookies now last 14 days by default (was a hardcoded 24 hours), configurable via the new `sessionMaxAgeSeconds` option or the `MASTRA_SESSION_MAX_AGE` environment variable.
+  - When the shared API renews the session during verification, `MastraAuthStudio` re-issues the renewed cookie under the deployment's own cookie domain and exposes it through a new optional `consumePendingResponseHeaders` provider hook.
+  - `@mastra/server`'s auth middleware, `CompositeAuth`, the Factory auth gate, and Factory's per-route `ensureFactoryAuthUser` (used by routes declared `requiresAuth: false`, which skip the gate) forward those headers to the browser, as does the public `GET /auth/me` route. Forwarding is best-effort and never fails a request.
+
+  ```ts
+  import { MastraAuthStudio } from '@mastra/auth-studio';
+
+  // Defaults to 14 days. Override per deployment, or set MASTRA_SESSION_MAX_AGE (seconds).
+  const auth = new MastraAuthStudio({ sessionMaxAgeSeconds: 7 * 24 * 60 * 60 });
+  ```
+
+## 1.3.8
+
+### Patch Changes
+
+- Fixed local dev auth: MastraAuthStudio now falls back to organizationId in .mastra-project.json when neither the constructor option nor MASTRA_ORGANIZATION_ID env var is set. Running pnpm mastra dev in a project linked to a platform organization now pins AuthKit to that org and skips the WorkOS org picker for multi-org users, without requiring the env var to be exported locally. ([#25583](https://github.com/mastra-ai/mastra/pull/25583))
+
+## 1.3.8-alpha.0
+
+### Patch Changes
+
+- Fixed local dev auth: MastraAuthStudio now falls back to organizationId in .mastra-project.json when neither the constructor option nor MASTRA_ORGANIZATION_ID env var is set. Running pnpm mastra dev in a project linked to a platform organization now pins AuthKit to that org and skips the WorkOS org picker for multi-org users, without requiring the env var to be exported locally. ([#25583](https://github.com/mastra-ai/mastra/pull/25583))
+
 ## 1.3.7
 
 ### Patch Changes

@@ -37,7 +37,7 @@ A local env file is optional. [`mastra deploy`](/docs/mastra-platform/deploy) re
 
 - **Managed variables**: Injected by platform resources like [hosted databases](/docs/mastra-platform/database). The platform defines these, and you can't edit them.
 - **Stored variables**: Saved on the project or environment through the dashboard. Used as-is on every deploy with no local file needed.
-- **Local env files**: Deployments layer an explicit `--env-file` or the ambient `.env` and `.env.local` files on top. Variables from `.env.local` override those in `.env`.
+- **Local env files**: Deployments layer one local env file on top: the `--env-file` you pass, `.env.<environment>` when you deploy with `--env`, or the only `.env*` file in the project. If several exist, the CLI asks you to choose one. Variables from different local files aren't merged.
 
 To pin the deploy to a specific env file instead of relying on the default selection, pass `--env-file`:
 

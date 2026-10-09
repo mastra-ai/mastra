@@ -14,7 +14,7 @@ Agents that use memory in `thread` scope, including observational memory, requir
 ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList.
 ```
 
-This page covers the three working patterns for running Mastra evals against memory-enabled agents, what each path supports, and which one to pick. A complete runnable repro for all three approaches lives in [`examples/evals-with-memory`](https://github.com/mastra-ai/mastra/tree/main/examples/evals-with-memory).
+Choose an approach based on how you want to share memory across eval items. For runnable examples, see [`examples/evals-with-memory`](https://github.com/mastra-ai/mastra/tree/main/examples/evals-with-memory).
 
 ## When to use which approach
 
@@ -22,7 +22,8 @@ This page covers the three working patterns for running Mastra evals against mem
 | - | - |
 | One shared conversation across every item | [`runEvals` with global `targetOptions.memory`](#shared-thread-with-runevals) |
 | One independent thread per item, focused CI loop | [`runEvals` per item](#per-item-threads-with-runevals) |
-| Per-item threads driven by a stored `Dataset` | [`dataset.startExperiment` with an inline task](#dataset-experiments-with-an-inline-task) |
+| Fresh thread per item in a stored `Dataset` | [`dataset.startExperiment` with a registered agent](/docs/evals/experiments#memory-enabled-agents) |
+| Explicit thread selection per item in a stored `Dataset` | [`dataset.startExperiment` with an inline task](#dataset-experiments-with-an-inline-task) |
 
 Pre-seeding `RequestContext` with `MastraMemory` **isn't** a supported way to drive memory into an agent. Thread resolution reads `args.memory.thread`, `RequestContext.MastraMemory` is populated by `prepare-memory-step` after the agent has already resolved its thread.
 

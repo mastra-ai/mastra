@@ -1,3 +1,5 @@
+import { focusRingInset } from '@/ds/primitives/transitions';
+
 /**
  * Row-level styling for the element that participates in the row sibling
  * chain — applied to `DataList.RowButton` / `DataList.RowLink` when used
@@ -31,7 +33,7 @@ export const dataListRowStateStyles = [
   'active:bg-fill',
   'focus-visible:bg-surface-panel has-focus-visible:bg-surface-panel',
   'data-featured:before:bg-surface-panel has-data-featured:before:bg-surface-panel has-data-selected:before:bg-surface-panel',
-  'data-[variant=error]:bg-notice-destructive/10 has-data-[variant=error]:bg-notice-destructive/10 data-[variant=error]:active:bg-notice-destructive/20 has-data-[variant=error]:active:bg-notice-destructive/20',
+  'data-[variant=error]:bg-destructive-subtle has-data-[variant=error]:bg-destructive-subtle data-[variant=error]:active:bg-destructive-subtle-active has-data-[variant=error]:active:bg-destructive-subtle-active',
 ] as const;
 
 /**
@@ -40,7 +42,7 @@ export const dataListRowStateStyles = [
  */
 export const dataListRowInteractiveStyles = [
   'grid grid-cols-subgrid gap-4 px-3 cursor-pointer',
-  'outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
+  focusRingInset,
 ] as const;
 
 export const dataListRowStyles = [

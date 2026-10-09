@@ -15,6 +15,7 @@ import {
   linearIssueIdForItem,
 } from '../boardItems';
 import type { WorkItem } from '../services/workItems';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 /** The card's source and metadata — a work item or an unfiled candidate. */
 type SourceItem = Pick<WorkItem, 'source' | 'sourceKey' | 'metadata'>;
@@ -106,12 +107,16 @@ export function CardSourceDescription({
     );
   }
   if (query.isError) {
-    return <p className="text-meta text-muted-foreground m-0">The description could not be loaded.</p>;
+    return (
+      <Txt variant="meta" tone="muted" className="m-0">
+        The description could not be loaded.
+      </Txt>
+    );
   }
   const description = query.data?.description ?? null;
   if (description === null || description.trim() === '') return null;
   return (
-    <MarkdownRenderer className="text-caption text-foreground max-w-none [&>*:first-child]:mt-0">
+    <MarkdownRenderer className="text-foreground text-caption max-w-none [&>*:first-child]:mt-0">
       {description}
     </MarkdownRenderer>
   );

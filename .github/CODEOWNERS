@@ -52,7 +52,7 @@
 /packages/core/src/mcp/ @DanielSLew @graysonhicks
 /packages/core/src/memory/ @TylerBarnes @CalebBarnes @abhiaiyer91
 /packages/core/src/notifications/ @TylerBarnes @CalebBarnes
-/packages/core/src/observability/ @epinzur @intojhanurag
+/packages/core/src/observability/ @epinzur @intojhanurag @DanielSLew
 /packages/core/src/processor-provider/ @DanielSLew @TylerBarnes @wardpeet
 /packages/core/src/processors/ @DanielSLew @TylerBarnes @wardpeet
 /packages/core/src/relevance/ @NikAiyer @YujohnNattrass
@@ -81,7 +81,7 @@
 /packages/core/src/storage/domains/workspaces/ @DanielSLew @NikAiyer
 /packages/core/src/storage/providers/ @DanielSLew @NikAiyer
 /packages/core/src/stream/ @taofeeq-deru @wardpeet
-/packages/core/src/telemetry/ @epinzur @intojhanurag
+/packages/core/src/telemetry/ @epinzur @intojhanurag @DanielSLew
 /packages/core/src/tool-loop-agent/ @CalebBarnes @wardpeet
 /packages/core/src/tool-provider/ @DanielSLew @YujohnNattrass
 /packages/core/src/tools/ @wardpeet @abhiaiyer91
@@ -152,7 +152,7 @@
 # ============================================================================
 # Observability — Eric Pinzur primary, Anurag secondary
 # ============================================================================
-/observability/ @epinzur @intojhanurag
+/observability/ @epinzur @intojhanurag @DanielSLew
 
 # ============================================================================
 # Server adapters

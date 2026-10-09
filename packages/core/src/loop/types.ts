@@ -28,6 +28,7 @@ import type { IModelSpanTracker, ObservabilityContext } from '../observability';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
+  LLMRequestProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
   ProcessInputStepArgs,
   ProcessInputStepResult,
@@ -161,6 +162,8 @@ export type StreamInternal = {
   skipBgTaskWait?: boolean;
   /** @deprecated Use `runScope.get(DRAIN_PENDING_SIGNALS_KEY)` from `loop/run-scope-keys`. */
   drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  /** @deprecated Use `runScope.get(SUBSCRIBE_PENDING_SIGNALS_KEY)` from `loop/run-scope-keys`. */
+  subscribePendingSignals?: (runId: string, listener: () => void) => () => void;
   // Signal inputs already stored in the initial message list that still need
   // stream data-part echoes before the first model step.
   /** @deprecated Use `runScope.get(INITIAL_SIGNAL_ECHOES_KEY)` from `loop/run-scope-keys`. */
@@ -227,8 +230,14 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   providerOptions?: SharedProviderOptions;
   outputProcessors?: OutputProcessorOrWorkflow[];
   inputProcessors?: InputProcessorOrWorkflow[];
-  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
+  llmRequestInputProcessors?: LLMRequestProcessorOrWorkflow[];
   errorProcessors?: ErrorProcessorOrWorkflow[];
+  /**
+   * Whether the caller configured error processors themselves (constructor or
+   * call-time), excluding framework-supplied defaults. Gates the implicit
+   * retry-cap warning so bare agents with only default processors stay quiet.
+   */
+  hasConfiguredErrorProcessors?: boolean;
   tools?: TOOLS;
   experimental_generateMessageId?: () => string;
   stopWhen?: StopCondition | Array<StopCondition>;
@@ -266,7 +275,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   /**
    * Maximum number of processor-triggered retries allowed for this generation.
    * Input/output processor retries require this to be explicitly set.
-   * Error processor retries from processAPIError default to 10 when errorProcessors are configured and this is not set.
+   * Error processor retries from processAPIError fall back to a safety cap of
+   * `DEFAULT_MAX_PROCESSOR_RETRIES` (3) when errorProcessors are configured and this is not set.
    */
   maxProcessorRetries?: number;
 

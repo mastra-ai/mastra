@@ -1,7 +1,7 @@
 import { Code } from '@mastra/playground-ui/components/Code';
 import { DataList } from '@mastra/playground-ui/components/DataList';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
 import { relativeTime } from '../../../../../lib/date/relativeTime';
@@ -38,7 +38,7 @@ function AuditEventRow({
       <DataList.TextCell className="tabular-nums" title={event.occurredAt}>
         {relativeTime(event.occurredAt)}
       </DataList.TextCell>
-      <DataList.TextCell className={cn(event.actorType === 'agent' && 'text-accent6')}>
+      <DataList.TextCell className={cn(event.actorType === 'agent' && 'text-badge-amber-indicator')}>
         {auditActorLabel(event, actorName)}
       </DataList.TextCell>
       <DataList.NameCell>
@@ -53,15 +53,7 @@ function AuditEventRow({
       <DataList.TextCell>{target?.name ?? target?.id}</DataList.TextCell>
       <DataList.TextCell>{auditMetadataPreview(event)}</DataList.TextCell>
       <DataList.Cell className="text-placeholder justify-end empty:before:content-none">
-        {hasMetadata ? (
-          <ChevronRight
-            aria-hidden="true"
-            className={cn(
-              'size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none',
-              expanded && 'rotate-90',
-            )}
-          />
-        ) : null}
+        {hasMetadata ? <DisclosureChevron direction="right" className="size-3.5" /> : null}
       </DataList.Cell>
     </>
   );
@@ -80,7 +72,7 @@ function AuditEventRow({
           <Code
             code={JSON.stringify(visibleMetadata, null, 2)}
             lang="json"
-            className="text-meta text-muted-foreground m-0 px-2 py-1 font-sans break-all whitespace-pre-wrap"
+            className="text-meta font-body text-muted-foreground m-0 px-2 py-1 break-all whitespace-pre-wrap"
           />
         </div>
       ) : null}

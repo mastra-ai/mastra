@@ -224,6 +224,13 @@ describe.skipIf(!hasGnuTools)('ModalFilesystem (operations)', () => {
     await expect(fs.moveFile('ghost', 'x')).rejects.toThrow(FileNotFoundError);
   });
 
+  it('refuses to copy or move a path onto itself without deleting it', async () => {
+    await fs.writeFile('dir/a.txt', 'A');
+    await expect(fs.copyFile('dir/a.txt', 'dir/a.txt')).rejects.toThrow(FileExistsError);
+    await expect(fs.moveFile('dir', './dir', { overwrite: true })).rejects.toThrow(FileExistsError);
+    expect(await fs.readFile('dir/a.txt', { encoding: 'utf-8' })).toBe('A');
+  });
+
   it('creates and removes directories', async () => {
     await fs.mkdir('a/b/c');
     expect((await fs.stat('a/b/c')).type).toBe('directory');

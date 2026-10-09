@@ -216,8 +216,9 @@ export function findLineRange(
   const defaultOpts = { lowercase: true, removePunctuation: true, minLength: 2 };
   const opts = { ...defaultOpts, ...options };
 
-  // Normalize query terms for matching
-  const normalizedTerms = new Set(queryTerms.map(t => (opts.lowercase ? t.toLowerCase() : t)));
+  // Normalize query terms the same way line tokens are normalized; a custom tokenizer owns normalization
+  const lowercase = !opts.tokenizer && opts.lowercase;
+  const normalizedTerms = new Set(queryTerms.map(t => (lowercase ? t.toLowerCase() : t)));
 
   let firstMatchLine: number | undefined;
   let lastMatchLine: number | undefined;

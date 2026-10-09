@@ -1,182 +1,48 @@
 import { convertToModelMessages } from '@internal/ai-sdk-v5';
-import { describe, expect, it, vi } from 'vitest';
-import type { IMastraLogger } from '../../../logger';
+import { describe, expect, it } from 'vitest';
 import type { MastraDBMessage } from '../index';
 import { MessageList } from '../index';
 
-function createMockLogger(): IMastraLogger & { warn: ReturnType<typeof vi.fn> } {
-  return {
-    debug: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    trackException: vi.fn(),
-    getTransports: vi.fn().mockReturnValue(new Map()),
-    listLogs: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
-    listLogsByRunId: vi.fn().mockResolvedValue({ logs: [], total: 0, page: 1, perPage: 10, hasMore: false }),
-  };
-}
-
 describe('MessageList - Gemini Compatibility', () => {
-  describe('aiV5.prompt() - Gemini message ordering requirements', () => {
-    it('should ensure first non-system message is user when starting with assistant', () => {
+  // The user-first turn Bedrock and Gemini require is inserted by the agent loops
+  // (ensure-user-first-turn in provider-history-compat), not by MessageList.
+  describe('leading assistant turns are left to the agent loop - Issue #22874', () => {
+    it('aiV5.prompt() keeps a leading assistant turn', () => {
       const list = new MessageList();
-
-      // Simulate memory recall that starts with assistant
-      list.add({ role: 'assistant', content: 'Previous response' }, 'memory');
-      list.add({ role: 'user', content: 'Current input' }, 'input');
-
-      const prompt = list.get.all.aiV5.prompt();
-
-      // First non-system message should be user
-      const firstNonSystem = prompt.find(m => m.role !== 'system');
-      expect(firstNonSystem?.role).toBe('user');
-
-      // The injected user message should come before the assistant
-      expect(prompt[0].role).toBe('user');
-      expect(prompt[0].content).toBe('.');
-      expect(prompt[1].role).toBe('assistant');
-    });
-
-    it('should ensure first non-system message is user when system + assistant pattern', () => {
-      const list = new MessageList();
-
-      // Add system message
-      list.addSystem('You are a helpful assistant');
-
-      // Simulate memory that starts with assistant
+      list.addSystem('You are helpful');
       list.add({ role: 'assistant', content: 'Hello!' }, 'memory');
       list.add({ role: 'user', content: 'Hi there' }, 'input');
 
       const prompt = list.get.all.aiV5.prompt();
 
-      expect(prompt[0].role).toBe('system');
-      // Should inject user message after system, before assistant
-      expect(prompt[1].role).toBe('user');
-      expect(prompt[1].content).toBe('.');
-      expect(prompt[2].role).toBe('assistant');
-      expect(prompt[3].role).toBe('user');
+      expect(prompt.map(m => m.role)).toEqual(['system', 'assistant', 'user']);
     });
 
-    it('should inject user when starting with assistant after system', () => {
+    it('aiV5.llmPrompt() keeps a leading assistant turn', async () => {
       const list = new MessageList();
-
-      list.addSystem('You are helpful');
-      list.add({ role: 'assistant', content: 'Previous response' }, 'memory');
-
-      const prompt = list.get.all.aiV5.prompt();
-
-      expect(prompt).toHaveLength(3);
-      expect(prompt[0].role).toBe('system');
-      expect(prompt[1].role).toBe('user'); // Injected after system
-      expect(prompt[1].content).toBe('.');
-      expect(prompt[2].role).toBe('assistant');
-    });
-
-    it('should handle multiple system messages followed by assistant', () => {
-      const list = new MessageList();
-
-      list.addSystem('System instruction 1');
-      list.addSystem('System instruction 2', 'tag1');
-      list.add({ role: 'assistant', content: 'Ready to help' }, 'memory');
-
-      const prompt = list.get.all.aiV5.prompt();
-
-      expect(prompt).toHaveLength(4);
-      expect(prompt[0].role).toBe('system');
-      expect(prompt[1].role).toBe('system');
-      expect(prompt[2].role).toBe('user'); // Injected after systems
-      expect(prompt[3].role).toBe('assistant');
-    });
-
-    it('should not inject when already properly formatted', () => {
-      const list = new MessageList();
-
-      list.addSystem('System message');
-      list.add({ role: 'user', content: 'Hello' }, 'input');
-      list.add({ role: 'assistant', content: 'Hi' }, 'response');
-      list.add({ role: 'user', content: 'How are you?' }, 'input');
-
-      const prompt = list.get.all.aiV5.prompt();
-
-      // Should not inject any messages
-      expect(prompt).toHaveLength(4);
-      expect(prompt[0].role).toBe('system');
-      expect(prompt[1].role).toBe('user');
-      expect(prompt[2].role).toBe('assistant');
-      expect(prompt[3].role).toBe('user');
-
-      // No injected '.' messages
-      expect(prompt.filter(m => m.content === '.').length).toBe(0);
-    });
-
-    it('should pass through empty message list unchanged', () => {
-      const list = new MessageList();
-
-      const prompt = list.get.all.aiV5.prompt();
-      expect(prompt).toHaveLength(0);
-    });
-
-    it('should pass through system-only message list unchanged with warning', () => {
-      const logger = createMockLogger();
-      const list = new MessageList({ logger });
-      list.addSystem('You are a helpful assistant');
-
-      const prompt = list.get.all.aiV5.prompt();
-      expect(prompt).toHaveLength(1);
-      expect(prompt[0].role).toBe('system');
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No user or assistant messages'));
-    });
-  });
-
-  describe('aiV5.llmPrompt() - Gemini message ordering requirements', () => {
-    it('should ensure first non-system message is user in llmPrompt', async () => {
-      const list = new MessageList();
-
       list.addSystem('System message');
       list.add({ role: 'assistant', content: 'Previous response' }, 'memory');
       list.add({ role: 'user', content: 'Current input' }, 'input');
 
       const llmPrompt = await list.get.all.aiV5.llmPrompt();
 
-      expect(llmPrompt[0].role).toBe('system');
-      // Should inject user message after system
-      expect(llmPrompt[1].role).toBe('user');
-      expect(llmPrompt[1].content).toEqual([{ type: 'text', text: '.' }]);
-      expect(llmPrompt[2].role).toBe('assistant');
-      expect(llmPrompt[3].role).toBe('user');
+      expect(llmPrompt.map(m => m.role)).toEqual(['system', 'assistant', 'user']);
     });
 
-    it('should inject user after system when starting with assistant in llmPrompt', async () => {
+    it('aiV4.prompt() and aiV4.llmPrompt() keep a leading assistant turn', () => {
+      const list = new MessageList();
+      list.add({ role: 'assistant', content: 'Previous response' }, 'memory');
+      list.add({ role: 'user', content: 'Current input' }, 'input');
+
+      expect(list.get.all.aiV4.prompt().map(m => m.role)).toEqual(['assistant', 'user']);
+      expect(list.get.all.aiV4.llmPrompt().map(m => m.role)).toEqual(['assistant', 'user']);
+    });
+
+    it('should pass through empty message list unchanged', async () => {
       const list = new MessageList();
 
-      list.addSystem('You are helpful');
-      list.add({ role: 'assistant', content: 'Ready' }, 'memory');
-
-      const llmPrompt = await list.get.all.aiV5.llmPrompt();
-
-      expect(llmPrompt).toHaveLength(3);
-      expect(llmPrompt[0].role).toBe('system');
-      expect(llmPrompt[1].role).toBe('user'); // Injected after system
-      expect(llmPrompt[2].role).toBe('assistant');
-    });
-
-    it('should pass through empty message list unchanged in llmPrompt', async () => {
-      const list = new MessageList();
-
-      const llmPrompt = await list.get.all.aiV5.llmPrompt();
-      expect(llmPrompt).toHaveLength(0);
-    });
-
-    it('should pass through system-only message list unchanged in llmPrompt', async () => {
-      const logger = createMockLogger();
-      const list = new MessageList({ logger });
-      list.addSystem('You are a helpful assistant');
-
-      const llmPrompt = await list.get.all.aiV5.llmPrompt();
-      expect(llmPrompt).toHaveLength(1);
-      expect(llmPrompt[0].role).toBe('system');
-      expect(logger.warn).toHaveBeenCalled();
+      expect(list.get.all.aiV5.prompt()).toHaveLength(0);
+      expect(await list.get.all.aiV5.llmPrompt()).toHaveLength(0);
     });
   });
 
@@ -616,52 +482,13 @@ describe('MessageList - Gemini Compatibility', () => {
   });
 
   describe('Issue #13045 - Generate response in empty thread', () => {
-    it('should not throw when generating with system-only messages and warn about provider compatibility', () => {
-      const logger = createMockLogger();
-      const list = new MessageList({ logger });
+    it('should not throw when generating with system-only messages', async () => {
+      const list = new MessageList();
       list.addSystem('You are a helpful assistant.');
 
-      expect(() => list.get.all.aiV5.prompt()).not.toThrow();
-
-      const prompt = list.get.all.aiV5.prompt();
-      expect(prompt).toHaveLength(1);
-      expect(prompt[0].role).toBe('system');
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No user or assistant messages'));
-    });
-
-    it('should not throw when generating with system-only messages via llmPrompt', async () => {
-      const logger = createMockLogger();
-      const list = new MessageList({ logger });
-      list.addSystem('You are a helpful assistant.');
-
-      const llmPrompt = await list.get.all.aiV5.llmPrompt();
-      expect(llmPrompt).toHaveLength(1);
-      expect(llmPrompt[0].role).toBe('system');
-      expect(logger.warn).toHaveBeenCalled();
-    });
-
-    it('should not throw when generating with system-only messages via aiV4.prompt', () => {
-      const logger = createMockLogger();
-      const list = new MessageList({ logger });
-      list.addSystem('You are a helpful assistant.');
-
-      expect(() => list.get.all.aiV4.prompt()).not.toThrow();
-
-      const prompt = list.get.all.aiV4.prompt();
-      expect(prompt).toHaveLength(1);
-      expect(prompt[0].role).toBe('system');
-      expect(logger.warn).toHaveBeenCalled();
-    });
-
-    it('should not warn for completely empty message list', () => {
-      const logger = createMockLogger();
-      const list = new MessageList({ logger });
-
-      expect(() => list.get.all.aiV5.prompt()).not.toThrow();
-
-      const prompt = list.get.all.aiV5.prompt();
-      expect(prompt).toHaveLength(0);
-      expect(logger.warn).not.toHaveBeenCalled();
+      expect(list.get.all.aiV5.prompt().map(m => m.role)).toEqual(['system']);
+      expect((await list.get.all.aiV5.llmPrompt()).map(m => m.role)).toEqual(['system']);
+      expect(list.get.all.aiV4.prompt().map(m => m.role)).toEqual(['system']);
     });
   });
 
@@ -708,15 +535,7 @@ describe('MessageList - Gemini Compatibility', () => {
 
       const prompt = list.get.all.aiV5.prompt();
 
-      // Verify Gemini requirements
-      expect(prompt[0].role).toBe('system');
-
-      // First non-system should be user (injected if needed)
-      const firstNonSystemIndex = prompt.findIndex(m => m.role !== 'system');
-      expect(prompt[firstNonSystemIndex].role).toBe('user');
-
-      // Last should be user
-      expect(prompt[prompt.length - 1].role).toBe('user');
+      expect(prompt.map(m => m.role)).toEqual(['system', 'assistant', 'user', 'assistant', 'user']);
     });
   });
 });

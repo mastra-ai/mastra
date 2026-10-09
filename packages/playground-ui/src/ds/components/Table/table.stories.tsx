@@ -34,7 +34,7 @@ export const Default: Story = {
           <Row>
             <TxtCell>Item One</TxtCell>
             <Cell>
-              <Badge variant="green">Active</Badge>
+              <Badge variant="success">Active</Badge>
             </Cell>
             <TxtCell>Jan 14, 2026</TxtCell>
           </Row>
@@ -48,7 +48,7 @@ export const Default: Story = {
           <Row>
             <TxtCell>Item Three</TxtCell>
             <Cell>
-              <Badge variant="red">Error</Badge>
+              <Badge variant="destructive">Error</Badge>
             </Cell>
             <TxtCell>Jan 12, 2026</TxtCell>
           </Row>
@@ -70,13 +70,13 @@ export const SmallSize: Story = {
           <Row>
             <TxtCell>Item One</TxtCell>
             <Cell>
-              <Badge variant="green">Active</Badge>
+              <Badge variant="success">Active</Badge>
             </Cell>
           </Row>
           <Row>
             <TxtCell>Item Two</TxtCell>
             <Cell>
-              <Badge variant="green">Active</Badge>
+              <Badge variant="success">Active</Badge>
             </Cell>
           </Row>
         </Tbody>
@@ -124,7 +124,7 @@ export const WithEntryCell: Story = {
           <Row>
             <EntryCell name="Customer Support Agent" description="Handles customer inquiries" icon={<Bot />} />
             <Cell>
-              <Badge variant="green">Online</Badge>
+              <Badge variant="success">Online</Badge>
             </Cell>
           </Row>
           <Row>
@@ -178,19 +178,19 @@ export const SelectedRow: Story = {
           <Row>
             <TxtCell>Regular Row</TxtCell>
             <Cell>
-              <Badge variant="green">Active</Badge>
+              <Badge variant="success">Active</Badge>
             </Cell>
           </Row>
           <Row selected>
             <TxtCell>Selected Row</TxtCell>
             <Cell>
-              <Badge variant="green">Active</Badge>
+              <Badge variant="success">Active</Badge>
             </Cell>
           </Row>
           <Row>
             <TxtCell>Regular Row</TxtCell>
             <Cell>
-              <Badge variant="green">Active</Badge>
+              <Badge variant="success">Active</Badge>
             </Cell>
           </Row>
         </Tbody>

@@ -1,61 +1,12 @@
-import React from 'react';
+import { configure } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, vi } from 'vitest';
 
 import { server } from './src/test/msw-server';
 
-// @base-ui's ScrollArea (wrapped by playground-ui's ScrollArea) schedules a
-// deferred viewport measurement state update via requestAnimationFrame after
-// mount. In jsdom that update lands after the synchronous test body, producing
-// noisy "An update to ScrollAreaRoot was not wrapped in act(...)" warnings, and
-// jsdom can't meaningfully measure overflow anyway. The component is a purely
-// presentational scroll container with no business logic to assert, so we swap
-// it for a plain div that preserves the public API (className, viewPortClassName,
-// viewportRef, children). Tests still see their content; the overlay-scrollbar
-// internals are simply not exercised.
-vi.mock('@mastra/playground-ui/components/ScrollArea', () => {
-  const ScrollArea = React.forwardRef<
-    HTMLDivElement,
-    {
-      children?: React.ReactNode;
-      className?: string;
-      viewPortClassName?: string;
-      viewportRef?: React.Ref<HTMLDivElement>;
-      maxHeight?: string | number;
-      autoScroll?: boolean;
-      orientation?: 'vertical' | 'horizontal' | 'both';
-      scrollButtons?: unknown;
-      mask?: unknown;
-      showMask?: unknown;
-    }
-  >(
-    (
-      {
-        children,
-        className,
-        viewPortClassName,
-        viewportRef,
-        // ScrollArea-specific props are intentionally dropped so they never leak
-        // onto the underlying DOM node as unknown attributes.
-        maxHeight: _maxHeight,
-        autoScroll: _autoScroll,
-        orientation: _orientation,
-        scrollButtons: _scrollButtons,
-        mask: _mask,
-        showMask: _showMask,
-        ...props
-      },
-      ref,
-    ) => {
-      return React.createElement(
-        'div',
-        { ref, className, 'data-testid': 'scroll-area', ...props },
-        React.createElement('div', { ref: viewportRef, className: viewPortClassName }, children),
-      );
-    },
-  );
-  ScrollArea.displayName = 'ScrollArea';
-  return { ScrollArea };
-});
+// Full-suite runs share CPU across workers; the 1s default makes waitFor flaky under load.
+configure({ asyncUtilTimeout: 3000 });
+
+vi.mock('@mastra/playground-ui/components/ScrollArea', () => import('@/test/mock-scroll-area'));
 
 // React reads this global to decide whether `act(...)` is supported. Vitest's
 // jsdom environment does not set it, so manual `act(...)` calls (outside of

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { describe, expect, it } from 'vitest';
 import { groupWorkflowEdgeData } from '../data/workflow-edge-data-groups';
 import type { WorkflowDataEdgeModel } from '@/ds/components/Workflow';

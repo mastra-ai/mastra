@@ -251,6 +251,18 @@ export interface MCPServerFGAConfig {
   permissionMapping?: MCPServerFGAPermissionMapping;
 }
 
+/** An icon an MCP client can display for a server (the MCP `Icon` type). */
+export interface MCPServerIcon {
+  /** URI of the icon: an `https:` URL or a `data:` URI. */
+  src: string;
+  /** Optional MIME type, such as `image/png` or `image/svg+xml`. */
+  mimeType?: string;
+  /** Optional sizes the icon is available in, such as `['48x48']` or `['any']` for scalable formats. */
+  sizes?: string[];
+  /** Optional theme the icon is designed for. */
+  theme?: 'light' | 'dark';
+}
+
 // +++ Authoritative MCPServerConfig +++
 /** Configuration options for creating an MCPServer instance. */
 export interface MCPServerConfig<TId extends string = string> {
@@ -278,6 +290,12 @@ export interface MCPServerConfig<TId extends string = string> {
   id?: TId;
   /** Optional description of the MCP server. */
   description?: string;
+  /** Optional human-readable display title, announced to MCP clients. Clients fall back to `name` when absent. */
+  title?: string;
+  /** Optional URL of the server's website, announced to MCP clients. */
+  websiteUrl?: string;
+  /** Optional icons clients can display for the server, announced to MCP clients. */
+  icons?: MCPServerIcon[];
   /** Optional instructions describing how to use the server and its features. */
   instructions?: string;
   /**

@@ -2,7 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { MastraConnectError } from '../errors.js';
-import { applyAllowTools, defineProxyTool, resolveConnectionId } from '../toolset.js';
+import {
+  applyAllowTools,
+  applyDisallowTools,
+  applyToolFilter,
+  defineProxyTool,
+  resolveConnectionId,
+} from '../toolset.js';
 
 const TOKEN = 'fake-test-token';
 
@@ -21,7 +27,7 @@ describe('resolveConnectionId', () => {
     expect(resolveConnectionId('MASTRA_LINEAR_CONNECTION_ID')).toBe('c_env');
   });
 
-  it('throws missing_connection_id naming the env var', () => {
+  it('throws missing_connection_id directing the caller to pass connectionId', () => {
     vi.stubEnv('MASTRA_LINEAR_CONNECTION_ID', '');
     try {
       resolveConnectionId('MASTRA_LINEAR_CONNECTION_ID');
@@ -29,7 +35,7 @@ describe('resolveConnectionId', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(MastraConnectError);
       expect((error as MastraConnectError).code).toBe('missing_connection_id');
-      expect((error as Error).message).toContain('MASTRA_LINEAR_CONNECTION_ID');
+      expect((error as Error).message).toContain('pass connectionId');
     }
   });
 });
@@ -47,6 +53,99 @@ describe('applyAllowTools', () => {
 
   it('throws at build time on unknown names', () => {
     expect(() => applyAllowTools(tools, ['a', 'typo'])).toThrow(/typo/);
+  });
+
+  it('expands * globs against the toolset keys', () => {
+    const globTools = {
+      linear_get_issue: { id: 'linear_get_issue' },
+      linear_get_team: { id: 'linear_get_team' },
+      linear_delete_issue: { id: 'linear_delete_issue' },
+    } as never;
+    expect(Object.keys(applyAllowTools(globTools, ['linear_get_*']))).toEqual(['linear_get_issue', 'linear_get_team']);
+  });
+
+  it('treats glob metacharacters other than * literally', () => {
+    const dotTools = { 'a.b': { id: 'a.b' }, axb: { id: 'axb' } } as never;
+    expect(Object.keys(applyAllowTools(dotTools, ['a.*']))).toEqual(['a.b']);
+  });
+
+  it('throws invalid_options on a glob that matches nothing', () => {
+    try {
+      applyAllowTools(tools, ['nope_*']);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(MastraConnectError);
+      expect((error as MastraConnectError).code).toBe('invalid_options');
+      expect((error as Error).message).toMatch(/Pattern 'nope_\*' in allowTools matched no tools/);
+    }
+  });
+});
+
+describe('applyDisallowTools', () => {
+  const tools = { a: { id: 'a' }, b: { id: 'b' }, c: { id: 'c' } } as never;
+
+  it('returns the toolset unchanged without a filter', () => {
+    expect(applyDisallowTools(tools)).toBe(tools);
+  });
+
+  it('returns the toolset unchanged for an empty filter', () => {
+    expect(applyDisallowTools(tools, [])).toBe(tools);
+  });
+
+  it('removes the listed tool keys', () => {
+    expect(Object.keys(applyDisallowTools(tools, ['b'])).sort()).toEqual(['a', 'c']);
+  });
+
+  it('preserves insertion order of the remaining keys', () => {
+    expect(Object.keys(applyDisallowTools(tools, ['a']))).toEqual(['b', 'c']);
+  });
+
+  it('throws at build time on unknown names', () => {
+    expect(() => applyDisallowTools(tools, ['a', 'typo'])).toThrow(/typo/);
+  });
+
+  it('removes keys matched by a * glob', () => {
+    const globTools = {
+      linear_get_issue: { id: 'linear_get_issue' },
+      linear_delete_issue: { id: 'linear_delete_issue' },
+      linear_delete_team: { id: 'linear_delete_team' },
+    } as never;
+    expect(Object.keys(applyDisallowTools(globTools, ['linear_delete_*']))).toEqual(['linear_get_issue']);
+  });
+
+  it('throws on a glob that matches nothing', () => {
+    expect(() => applyDisallowTools(tools, ['nope_*'])).toThrow(/matched no tools/);
+  });
+});
+
+describe('applyToolFilter', () => {
+  const tools = { a: { id: 'a' }, b: { id: 'b' }, c: { id: 'c' } } as never;
+
+  it('returns the toolset unchanged when neither filter is set', () => {
+    expect(applyToolFilter(tools, {})).toBe(tools);
+  });
+
+  it('applies allowTools when only allowTools is set', () => {
+    expect(Object.keys(applyToolFilter(tools, { allowTools: ['a'] }))).toEqual(['a']);
+  });
+
+  it('applies disallowTools when only disallowTools is set', () => {
+    expect(Object.keys(applyToolFilter(tools, { disallowTools: ['a'] })).sort()).toEqual(['b', 'c']);
+  });
+
+  it('treats an empty disallowTools array as no filter', () => {
+    expect(applyToolFilter(tools, { disallowTools: [] })).toBe(tools);
+  });
+
+  it('throws invalid_options when both filters are set', () => {
+    try {
+      applyToolFilter(tools, { allowTools: ['a'], disallowTools: ['b'] });
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(MastraConnectError);
+      expect((error as MastraConnectError).code).toBe('invalid_options');
+      expect((error as Error).message).toMatch(/mutually exclusive/);
+    }
   });
 });
 

@@ -1,13 +1,13 @@
 import { useDeferredValue, useMemo, useState } from 'react';
-import type { SearchableSpan } from '../types';
-import { filterSpansKeepingAncestors } from '../utils';
+import type { LightSpanRecord } from '../types';
+import { filterSpansKeepingAncestors, toSearchableSpans } from '../utils';
 
-export interface UseTraceSearchResult {
+export interface UseTraceSearchResult<Span extends LightSpanRecord = LightSpanRecord> {
   /** The immediate, user-facing input value. Bind this to the search field. */
   query: string;
   setQuery: (query: string) => void;
   /** Rows matching the deferred query. An empty query returns the input array reference. */
-  results: SearchableSpan[];
+  results: Span[];
   /**
    * Spans that matched somewhere other than their name — in `metadata`, `attributes` or
    * `error`. Their row shows no visible occurrence of the term, so the surface needs to say
@@ -22,10 +22,13 @@ export interface UseTraceSearchResult {
 /**
  * Client-side search over a flat span list.
  *
- * Matching is a substring test against `searchText`, the haystack built once per span when
- * the query resolved (see `toSearchableSpans`). That is what makes the open-ended `metadata`
- * and `error` payloads searchable: their shapes are unknown, so no fixed list of fields can
- * read them. Both sides are already lowercased, so the test is a bare `includes`.
+ * Matching is a substring test against a lowercased haystack built once per `spans` array
+ * (see `toSearchableSpans`). That is what makes the open-ended `metadata` and `error`
+ * payloads searchable: their shapes are unknown, so no fixed list of fields can read them.
+ *
+ * The haystack lives here, not in the data hooks, so only a mounted search surface pays for
+ * flattening. Views that merely render spans (e.g. the thread view, which shows every trace
+ * of a thread at once) never build it.
  *
  * Filtering is keyed on a deferred copy of the query, so typing stays responsive while a
  * large list re-filters at lower priority — bind the input to `query`, not to the deferred
@@ -35,9 +38,14 @@ export interface UseTraceSearchResult {
  * `spans` is required. Resolving the loading/empty state is the caller's job — a component
  * holding a query result passes `data?.spans ?? []`.
  */
-export function useTraceSearch(spans: SearchableSpan[]): UseTraceSearchResult {
+export function useTraceSearch<Span extends LightSpanRecord>(spans: Span[]): UseTraceSearchResult<Span> {
   const [query, setQuery] = useState('');
   const deferredQuery = useDeferredValue(query);
+
+  const searchTextById = useMemo(
+    () => new Map(toSearchableSpans(spans).map(span => [span.spanId, span.searchText])),
+    [spans],
+  );
 
   const { results, payloadOnlyMatchIds } = useMemo(() => {
     const term = deferredQuery.trim().toLowerCase();
@@ -45,7 +53,7 @@ export function useTraceSearch(spans: SearchableSpan[]): UseTraceSearchResult {
 
     const payloadOnly = new Set<string>();
     const filtered = filterSpansKeepingAncestors(spans, span => {
-      if (!span.searchText.includes(term)) return false;
+      if (!searchTextById.get(span.spanId)?.includes(term)) return false;
       // The name is the only part of a span the timeline paints, so a match it doesn't
       // contain came from the payload.
       if (!span.name.toLowerCase().includes(term)) payloadOnly.add(span.spanId);
@@ -53,7 +61,7 @@ export function useTraceSearch(spans: SearchableSpan[]): UseTraceSearchResult {
     });
 
     return { results: filtered, payloadOnlyMatchIds: payloadOnly };
-  }, [spans, deferredQuery]);
+  }, [spans, searchTextById, deferredQuery]);
 
   return { query, setQuery, results, payloadOnlyMatchIds, isPending: query !== deferredQuery };
 }

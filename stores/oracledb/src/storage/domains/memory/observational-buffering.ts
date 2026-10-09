@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
 import type {
@@ -49,7 +47,7 @@ export async function updateBufferedObservations(
       // Buffer chunks let long observation cycles append safely without
       // rewriting the active observation CLOB on every small update.
       const newChunk: BufferedObservationChunk = {
-        id: `ombuf-${randomUUID()}`,
+        id: `ombuf-${globalThis.crypto.randomUUID()}`,
         cycleId: input.chunk.cycleId,
         observations: input.chunk.observations,
         tokenCount: Math.round(input.chunk.tokenCount),
@@ -219,7 +217,7 @@ export async function swapBufferedReflectionToActive(
       // writer updated generationCount/config/metadata/etc. concurrently.
       const lockedRecord = parseOMRow(row);
       const newRecord: ObservationalMemoryRecord = {
-        id: randomUUID(),
+        id: globalThis.crypto.randomUUID(),
         scope: lockedRecord.scope,
         threadId: lockedRecord.threadId,
         resourceId: lockedRecord.resourceId,

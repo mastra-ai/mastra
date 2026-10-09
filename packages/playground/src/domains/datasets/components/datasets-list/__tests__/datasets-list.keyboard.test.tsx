@@ -19,7 +19,7 @@ const datasets = [dataset('ds-a', 'Dataset A'), dataset('ds-b', 'Dataset B'), da
 const renderList = () =>
   renderWithProviders(
     <TestLinkProvider>
-      <DatasetsList datasets={datasets} experiments={[]} isLoading={false} />
+      <DatasetsList datasets={datasets} experiments={[]} />
     </TestLinkProvider>,
   );
 

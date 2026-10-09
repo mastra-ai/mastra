@@ -199,6 +199,12 @@ describe('mapInstructionBlocksToApi', () => {
     expect(mapInstructionBlocksToApi(blocks)).toEqual([{ type: 'prompt_block_ref', id: 'saved-block-123' }]);
   });
 
+  it('maps per-usage rules on ref blocks', () => {
+    const rules = { operator: 'AND' as const, conditions: [{ field: 'userPrompt', operator: 'not_exists' as const }] };
+    const blocks = [{ id: 'ui-1', type: 'prompt_block_ref' as const, promptBlockId: 'shared-default', rules }];
+    expect(mapInstructionBlocksToApi(blocks)).toEqual([{ type: 'prompt_block_ref', id: 'shared-default', rules }]);
+  });
+
   it('maps mixed inline and ref blocks', () => {
     const blocks = [
       { id: '1', type: 'prompt_block' as const, content: 'Inline' },
@@ -246,6 +252,14 @@ describe('mapInstructionBlocksFromApi', () => {
     if (instructionBlocks[1].type === 'prompt_block_ref') {
       expect(instructionBlocks[1].promptBlockId).toBe('ref-123');
     }
+  });
+
+  it('preserves per-usage rules on prompt_block_ref instructions', () => {
+    const rules = { operator: 'AND' as const, conditions: [{ field: 'userPrompt', operator: 'not_exists' as const }] };
+    const { instructionBlocks } = mapInstructionBlocksFromApi([
+      { type: 'prompt_block_ref' as const, id: 'shared-default', rules },
+    ]);
+    expect(instructionBlocks[0]).toMatchObject({ type: 'prompt_block_ref', promptBlockId: 'shared-default', rules });
   });
 
   it('filters out text type blocks', () => {

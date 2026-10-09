@@ -44,6 +44,7 @@ const collectionMemberSchema = literalStringSchema.refine(
   'Collection predicates require a non-empty string value',
 );
 const timestampLiteralSchema = z.string().datetime({ offset: true });
+const textLiteralSchema = z.object({ literal: literalStringSchema }).strict();
 const predicatePathSchema = z
   .string()
   .min(1)
@@ -73,6 +74,7 @@ export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicat
     z
       .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
       .strict(),
+    z.object({ op: z.enum(['matches', 'notMatches']), left: pathRefSchema, right: textLiteralSchema }).strict(),
     z
       .object({
         op: z.enum(['and', 'or']),
@@ -103,6 +105,7 @@ export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate> = z.lazy(
     z
       .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
       .strict(),
+    z.object({ op: z.enum(['matches', 'notMatches']), left: pathRefSchema, right: textLiteralSchema }).strict(),
     z
       .object({
         op: z.enum(['and', 'or']),
@@ -158,6 +161,8 @@ export const traceQueryOperatorSchema = z.enum([
   'notExists',
   'includes',
   'notIncludes',
+  'matches',
+  'notMatches',
 ]);
 export const traceQueryValueKindSchema = z.enum([
   'string',
@@ -439,6 +444,7 @@ export type TraceQueryScalarPredicate =
   | { op: 'in' | 'notIn'; value: TraceQueryPathOrLiteral; set: TraceQueryLiteral[] }
   | { op: 'exists' | 'notExists'; path: string }
   | { op: 'includes' | 'notIncludes'; path: string; value: string }
+  | { op: 'matches' | 'notMatches'; left: { path: string }; right: { literal: string } }
   | { op: 'and' | 'or'; args: TraceQueryScalarPredicate[] }
   | { op: 'not'; arg: TraceQueryScalarPredicate };
 
@@ -497,6 +503,8 @@ export const TRACE_QUERY_ORDERED_OPERATORS = [...TRACE_QUERY_STRING_OPERATORS, '
 export const TRACE_QUERY_PRESENCE_OPERATORS = ['exists', 'notExists'] as const;
 /** Stored string collections such as `tags`. `exists` means at least one member; `notExists` means none. */
 export const TRACE_QUERY_ARRAY_OPERATORS = ['includes', 'notIncludes', 'exists', 'notExists'] as const;
+/** Human-written text such as feedback comments: exact string operators plus word matching. */
+export const TRACE_QUERY_TEXT_OPERATORS = [...TRACE_QUERY_STRING_OPERATORS, 'matches', 'notMatches'] as const;
 
 const stringField = (valueSuggestions: boolean): FieldRule => ({
   valueKind: 'string',
@@ -518,12 +526,21 @@ const arrayField = (): FieldRule => ({
   operators: TRACE_QUERY_ARRAY_OPERATORS,
   valueSuggestions: true,
 });
+const textField = (valueSuggestions: boolean): FieldRule => ({
+  valueKind: 'string',
+  operators: TRACE_QUERY_TEXT_OPERATORS,
+  valueSuggestions,
+});
 
 export const TRACE_QUERY_FIELD_REGISTRY = {
   trace: {
     traceId: stringField(false),
     threadId: stringField(false),
     resourceId: stringField(false),
+    runId: stringField(false),
+    sessionId: stringField(false),
+    userId: stringField(false),
+    organizationId: stringField(false),
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
@@ -534,7 +551,7 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     tags: arrayField(),
   },
   spans: {
-    name: stringField(true),
+    name: textField(true),
     spanType: stringField(true),
     model: stringField(true),
     provider: stringField(true),
@@ -549,6 +566,10 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     entityVersionId: stringField(false),
     parentEntityVersionId: stringField(false),
     rootEntityVersionId: stringField(false),
+    runId: stringField(false),
+    sessionId: stringField(false),
+    userId: stringField(false),
+    organizationId: stringField(false),
   },
   scores: {
     scorerId: stringField(true),
@@ -571,7 +592,7 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     rootEntityVersionId: stringField(false),
     value: orderedField('stringOrNumber'),
     timestamp: orderedField('timestamp'),
-    comment: presenceField(),
+    comment: textField(false),
   },
 } as const satisfies Record<TraceQueryPredicateScope, Record<string, FieldRule>>;
 
@@ -598,6 +619,7 @@ export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | '
 export type TraceQueryMembershipOperator = 'in' | 'notIn';
 export type TraceQueryPresenceOperator = 'exists' | 'notExists';
 export type TraceQueryCollectionOperator = 'includes' | 'notIncludes' | 'empty' | 'notEmpty';
+export type TraceQueryTextOperator = 'matches' | 'notMatches';
 
 export type GetTraceQueryFieldsArgs = z.input<typeof getTraceQueryFieldsArgsSchema>;
 export type NormalizedGetTraceQueryFieldsArgs = z.output<typeof getTraceQueryFieldsArgsSchema>;
@@ -624,6 +646,8 @@ export type TrustedTraceQueryScalarPredicate =
   | { type: 'presence'; field: TraceQueryPredicateField; operator: TraceQueryPresenceOperator }
   | { type: 'collection'; field: TraceQueryPredicateField; operator: 'includes' | 'notIncludes'; value: string }
   | { type: 'collection'; field: TraceQueryPredicateField; operator: 'empty' | 'notEmpty' }
+  /** `value` is the normalized word sequence from {@link normalizeTraceQueryText}. */
+  | { type: 'text'; field: TraceQueryPredicateField; operator: TraceQueryTextOperator; value: string }
   | { type: 'boolean'; operator: 'and' | 'or'; args: TrustedTraceQueryScalarPredicate[] }
   | { type: 'not'; arg: TrustedTraceQueryScalarPredicate };
 
@@ -785,9 +809,7 @@ export class TraceQueryValidationError extends Error {
 export class TraceQueryCursorError extends Error {
   constructor(readonly code: 'TRACE_QUERY_CURSOR_MALFORMED' | 'TRACE_QUERY_CURSOR_CONFLICT') {
     super(
-      code === 'TRACE_QUERY_CURSOR_MALFORMED'
-        ? 'The trace query cursor is malformed'
-        : 'The cursor does not match the query',
+      code === 'TRACE_QUERY_CURSOR_MALFORMED' ? 'The query cursor is malformed' : 'The cursor does not match the query',
     );
     this.name = 'TraceQueryCursorError';
   }
@@ -797,7 +819,7 @@ export class TraceQueryExecutionError extends Error {
   readonly code = 'TRACE_QUERY_EXECUTION_TIMEOUT';
 
   constructor() {
-    super('The trace query exceeded its execution timeout');
+    super('The query exceeded its execution timeout');
     this.name = 'TraceQueryExecutionError';
   }
 }
@@ -806,7 +828,7 @@ export class TraceQueryResourceLimitError extends Error {
   readonly code = 'TRACE_QUERY_RESOURCE_LIMIT';
 
   constructor() {
-    super('The trace query exceeded its resource limit');
+    super('The query exceeded its resource limit');
     this.name = 'TraceQueryResourceLimitError';
   }
 }
@@ -1345,7 +1367,7 @@ function planThreadPredicate(
  * problems to `issues`.
  *
  * @internal Shared with the trace-aggregate planner so both apply identical selection
- * validation (Aggregate Query API Decision 2).
+ * validation.
  */
 export function planTraceQuerySelectionPredicate(
   where: TraceQueryPredicate,
@@ -1354,6 +1376,16 @@ export function planTraceQuerySelectionPredicate(
 ): TrustedTraceQueryPredicate | undefined {
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   return planPredicate(where, 'trace', path, 1, state);
+}
+
+/** @internal Plans a span-row predicate using the same rules as `spans.some` / `spans.none`. */
+export function planSpanQuerySelectionPredicate(
+  where: TraceQueryScalarPredicate,
+  issues: TraceQueryIssue[],
+): TrustedTraceQueryScalarPredicate | undefined {
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  // Scalar grammar cannot produce a related-record predicate.
+  return planPredicate(where, 'spans', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
 }
 
 function planPredicate(
@@ -1445,6 +1477,31 @@ function planPredicate(
     };
   }
 
+  if (predicate.op === 'matches' || predicate.op === 'notMatches') {
+    state.literalUnits += 1;
+    if (state.literalUnits > TRACE_QUERY_MAX_LITERAL_UNITS) {
+      addPredicateComplexityIssue(
+        [...path, 'right', 'literal'],
+        `Trace queries are limited to ${TRACE_QUERY_MAX_LITERAL_UNITS} literal units`,
+        state,
+      );
+    }
+    const field = normalizeTraceQueryPath(predicate.left.path);
+    const rule = getRule(field, context, rules, [...path, 'left', 'path'], state);
+    if (!rule) return undefined;
+    if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
+    const value = normalizeTraceQueryText(predicate.right.literal);
+    if (value === '') {
+      state.issues.push({
+        code: 'invalid_literal',
+        path: [...path, 'right', 'literal'],
+        message: 'Text predicates require at least one letter or digit',
+      });
+      return undefined;
+    }
+    return { type: 'text', field: field as TraceQueryPredicateField, operator: predicate.op, value };
+  }
+
   if (predicate.op === 'in' || predicate.op === 'notIn') {
     state.literalUnits += predicate.set.length;
     if (state.literalUnits > TRACE_QUERY_MAX_LITERAL_UNITS) {
@@ -1483,7 +1540,7 @@ function planPredicate(
     };
   }
 
-  const comparison = predicate as Extract<TraceQueryScalarPredicate, { left: TraceQueryPathOrLiteral }>;
+  const comparison = predicate as Extract<TraceQueryScalarPredicate, { op: TraceQueryComparisonOperator }>;
   state.literalUnits += 1;
   if (state.literalUnits > TRACE_QUERY_MAX_LITERAL_UNITS) {
     addPredicateComplexityIssue(
@@ -1571,6 +1628,28 @@ export function normalizeTraceQueryPath(path: string): string {
   return normalized;
 }
 
+/**
+ * Lowercases text and reduces it to its words: maximal runs of Unicode letters, combining
+ * marks, and digits, joined by single spaces. Text is composed to NFC first, so an accent
+ * stored as a separate mark equals its precomposed form, and marks stay inside their word,
+ * so `नमस्ते` is one word. After that, `İ` folds to plain `i`: it is the only letter whose lowercase form
+ * is two code points, and the stores' `lower()` returns one. A Greek final `ς` becomes `σ`, since
+ * `toLowerCase()` picks the final form by position and the stores' `lower()` does not. `matches` succeeds when the
+ * normalized literal appears as a contiguous word sequence inside the normalized field
+ * value. Stores apply the same normalization in SQL, so `incorrect` matches
+ * `This answer is incorrect.` but not `This was incorrectly formatted.`
+ */
+export function normalizeTraceQueryText(text: string): string {
+  return text
+    .normalize('NFC')
+    .replace(/\u0130/g, 'i')
+    .toLowerCase()
+    .replace(/\u03c2/g, '\u03c3')
+    .split(/[^\p{L}\p{M}\p{N}]+/u)
+    .filter(word => word.length > 0)
+    .join(' ');
+}
+
 function normalizeLiteral(
   value: TraceQueryLiteral,
   rule: FieldRule,
@@ -1601,7 +1680,8 @@ function normalizeSet(values: TraceQueryLiteral[], rule: FieldRule): Array<strin
   return normalized as Array<string | number>;
 }
 
-function digestBinding(value: unknown): string {
+/** @internal Shared query binding with property-order-independent serialization. */
+export function digestBinding(value: unknown): string {
   return createHash('sha256').update(stableStringify(value)).digest('hex');
 }
 

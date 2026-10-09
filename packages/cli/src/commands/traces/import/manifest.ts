@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -162,7 +161,7 @@ export async function initializeTraceImport(options: {
   window: TraceImportWindow;
   importId?: string;
 }): Promise<{ directory: string; manifest: TraceImportManifest }> {
-  const importId = options.importId ?? randomUUID();
+  const importId = options.importId ?? globalThis.crypto.randomUUID();
   const directory = resolveTraceImportDirectory({
     stateRoot: options.stateRoot,
     targetProjectId: options.targetProjectId,
@@ -221,7 +220,7 @@ export async function writeTraceImportManifest(
   manifest: TraceImportManifest,
 ): Promise<TraceImportManifest> {
   const next = manifestSchema.parse({ ...manifest, updatedAt: new Date().toISOString() }) as TraceImportManifest;
-  const temporaryFile = join(directory, `.manifest-${randomUUID()}.tmp`);
+  const temporaryFile = join(directory, `.manifest-${globalThis.crypto.randomUUID()}.tmp`);
   try {
     await writeFile(temporaryFile, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
     await rename(temporaryFile, join(directory, TRACE_IMPORT_MANIFEST_FILE));

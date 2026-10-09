@@ -9,7 +9,7 @@ export type FieldBlockMessageProps = {
 
 export function FieldBlockMessage({ name, helpText, errorMsg }: FieldBlockMessageProps) {
   return (
-    <div className="h-[1lh] min-w-0 overflow-hidden text-caption [&>p]:truncate">
+    <div className="h-[1lh] min-w-0 overflow-hidden text-body-sm [&>p]:truncate">
       {errorMsg ? (
         <FieldBlockErrorMsg name={name} className="truncate">
           {errorMsg}

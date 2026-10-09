@@ -37,9 +37,9 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
         }
       }}
     >
-      <header className="flex shrink-0 items-start gap-3 border-b border-border/50 bg-background px-5 py-4">
+      <header className="flex shrink-0 items-start gap-3 border-b border-border bg-background px-5 py-4">
         <div className="min-w-0 flex-1 space-y-2">
-          <Badge variant="neutral" emphasis="muted" icon={<DirectionIcon />}>
+          <Badge variant="neutral" emphasis="subtle" icon={<DirectionIcon />}>
             {DIRECTION_LABELS[direction]}
           </Badge>
           <Txt as="h2" variant="column" tone="ink" className="break-words">
@@ -66,8 +66,8 @@ export function WorkflowDataInspector({ selection }: { selection: WorkflowDataSe
         )}
       </div>
       {result?.status === 'suspended' && (
-        <div className="shrink-0 border-t border-border/50 p-2">
-          <Button variant="ghost" className="w-full justify-start text-warning1" onClick={closeStepDetail}>
+        <div className="shrink-0 border-t border-border p-2">
+          <Button variant="ghost" className="w-full justify-start text-warning-foreground" onClick={closeStepDetail}>
             <CirclePause />
             Return to suspended step
             <ChevronRight className="ml-auto" />

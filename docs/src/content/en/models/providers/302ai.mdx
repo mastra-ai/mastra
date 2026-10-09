@@ -7,7 +7,7 @@ description: "Browse 302.AI model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/302ai.svg" alt="302.AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />302.AI
 
-Access 117 302.AI models through Mastra's model router. Authentication is handled automatically using the `302AI_API_KEY` environment variable.
+Access 122 302.AI models through Mastra's model router. Authentication is handled automatically using the `302AI_API_KEY` environment variable.
 
 Learn more in the [302.AI documentation](https://doc.302.ai).
 
@@ -178,6 +178,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 25
   },
   {
+    "model": "302ai/claude-opus-5-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 4,
+    "outputCost": 20
+  },
+  {
     "model": "302ai/claude-opus-5-thinking",
     "imageInput": true,
     "audioInput": false,
@@ -239,6 +251,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "302ai/claude-sonnet-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
+    "model": "302ai/claude-sonnet-5-5",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
@@ -994,6 +1018,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 50
   },
   {
+    "model": "302ai/gpt-6-luna",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.5
+  },
+  {
+    "model": "302ai/gpt-6-sol",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "302ai/grok-4-1-fast-reasoning",
     "imageInput": true,
     "audioInput": false,
@@ -1079,6 +1127,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "302ai/grok-4.6",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 500000,
+    "maxOutput": 500000,
+    "inputCost": 2,
+    "outputCost": 6
+  },
+  {
+    "model": "302ai/grok-4.7",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,

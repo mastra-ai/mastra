@@ -7,10 +7,10 @@ import type { BadgeSize, BadgeVariant } from './Badge';
 
 const variants = [
   'neutral',
-  'green',
-  'red',
-  'blue',
-  'yellow',
+  'success',
+  'destructive',
+  'info',
+  'warning',
   'purple',
   'orange',
   'cyan',
@@ -26,6 +26,24 @@ afterEach(() => {
 });
 
 describe('Badge', () => {
+  it.each([
+    ['green', 'success'],
+    ['red', 'destructive'],
+    ['amber', 'warning'],
+    ['blue', 'info'],
+  ] as const)('keeps the %s category indicator apart from the %s status indicator', (hue, status) => {
+    render(
+      <>
+        <Badge variant={hue} indicator="dot">
+          {hue}
+        </Badge>
+        <Badge variant={status} indicator="dot">
+          {status}
+        </Badge>
+      </>,
+    );
+    expect(indicatorOf(screen.getByText(hue))).not.toBe(indicatorOf(screen.getByText(status)));
+  });
   describe('when rendered inside text', () => {
     it('uses phrasing content and forwards span attributes', () => {
       render(
@@ -38,9 +56,7 @@ describe('Badge', () => {
       expect(badge.tagName).toBe('SPAN');
       expect(badge.getAttribute('title')).toBe('Publication status');
       expect(badge.parentElement?.textContent).toBe('Status: Published');
-      expect(Array.from(badge.classList)).toEqual(
-        expect.arrayContaining(['rounded-[7px]', 'inset-ring-1', 'inset-shadow-xs']),
-      );
+      expect(Array.from(badge.classList)).toEqual(expect.arrayContaining(['rounded-[7px]', 'shadow-inset']));
     });
   });
 
@@ -58,7 +74,7 @@ describe('Badge', () => {
 
     it('only animates pulse indicators', () => {
       const { container, rerender } = render(
-        <Badge variant="blue" indicator="pulse">
+        <Badge variant="info" indicator="pulse">
           Live
         </Badge>,
       );
@@ -67,7 +83,7 @@ describe('Badge', () => {
       expect(pulse?.classList.contains('motion-safe:animate-pulse')).toBe(true);
 
       rerender(
-        <Badge variant="blue" indicator="dot">
+        <Badge variant="info" indicator="dot">
           Connected
         </Badge>,
       );
@@ -83,7 +99,7 @@ describe('Badge', () => {
       render(
         <>
           <Badge variant={variant}>default</Badge>
-          <Badge variant={variant} emphasis="muted">
+          <Badge variant={variant} emphasis="subtle">
             muted
           </Badge>
         </>,

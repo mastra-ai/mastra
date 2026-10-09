@@ -145,4 +145,24 @@ describe('Experiments page — compare mode', () => {
     expect(screen.getByText('1 / 2')).toBeDefined();
     expect(screen.getByRole('button', { name: /compare experiments/i }).hasAttribute('disabled')).toBe(true);
   });
+
+  it('lets a new pick fill the slot freed by a disappeared first selection', async () => {
+    const { queryClient } = renderPage();
+    await enterCompareMode();
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select experiment exp-a' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select experiment exp-b' }));
+
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/experiments`, () =>
+        HttpResponse.json(buildListExperimentsResponse([sameDatasetB, otherDataset])),
+      ),
+    );
+    await queryClient.invalidateQueries();
+    await waitFor(() => expect(screen.queryByText('run a')).toBeNull());
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select experiment exp-c' }));
+
+    expect(screen.getByText('2 / 2')).toBeDefined();
+  });
 });

@@ -27,7 +27,7 @@ These scorers evaluate how correct, truthful, and complete your agent's answers 
 - [`tool-call-accuracy`](/reference/evals/tool-call-accuracy): Evaluates whether the LLM selects the correct tool from available options (`0-1`, higher is better)
 - [`trajectory-accuracy`](/reference/evals/trajectory-accuracy): Evaluates the expected action sequence for all span types. Covered spans include tool and model activity plus workflow steps (`0-1`, higher is better)
 - [`prompt-alignment`](/reference/evals/prompt-alignment): Measures how well agent responses align with user prompt intent, requirements, completeness, and format (`0-1`, higher is better)
-- [`multi-turn-judge`](/reference/evals/multi-turn-judge): Grades every assistant turn of a [multi-turn conversation](/docs/evals/multi-turn) against a plain-English criterion (`0` or `1`)
+- [`multi-turn-judge`](/reference/evals/multi-turn-judge): Grades every assistant turn of a [multi-turn conversation](/docs/evals/multi-turn) against a plain-English criterion (`0` or `scale`, default `1`)
 
 ### Context quality
 
@@ -63,7 +63,7 @@ Zero-LLM micro-scorers for fast, deterministic assertions. See the [Quick Checks
 
 - [`checks.includes`](/reference/evals/checks#checksincludesexpected-options): Scores 1 if output contains a substring (`0` or `1`)
 - [`checks.excludes`](/reference/evals/checks#checksexcludesunwanted-options): Scores 1 if output doesn't contain a substring (`0` or `1`)
-- [`checks.equals`](/reference/evals/checks#checksequalsexpected-options): Scores 1 if output exactly matches a string (`0` or `1`)
+- [`checks.equals`](/reference/evals/checks#checksequalsexpected-options): Scores 1 if output matches a string, ignoring case by default (`0` or `1`)
 - [`checks.matches`](/reference/evals/checks#checksmatchespattern-options): Scores 1 if output matches a regex (`0` or `1`)
 - [`checks.similarity`](/reference/evals/checks#checkssimilarityexpected-options): String similarity via Dice coefficient (`0-1`, or binary with threshold)
 - [`checks.calledTool`](/reference/evals/checks#checkscalledtooltoolname-options): Scores 1 if a tool was called at least N times (`0` or `1`)

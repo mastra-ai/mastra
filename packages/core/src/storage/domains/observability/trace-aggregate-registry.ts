@@ -1,3 +1,4 @@
+import { TokenMetrics } from '../../../observability/types/metrics';
 import { getTraceAggregateCountDistinctField } from './trace-aggregate';
 import { isTraceQueryMetadataPath } from './trace-query';
 import type { TraceQueryMetadataField } from './trace-query';
@@ -9,7 +10,7 @@ export interface TraceAggregateDimensionRule {
 const stringDimension = (): TraceAggregateDimensionRule => ({ valueKind: 'string' });
 
 /**
- * Trace-scope groupable dimensions for `aggregateTraces()` (Aggregate Query API Decision 4).
+ * Trace-scope groupable dimensions for `aggregateTraces()`.
  * Key order is the spec order and is the order discovery lists them in. Top-level
  * `metadata.<key>` paths are also groupable; see `isTraceAggregateDimension`.
  */
@@ -30,7 +31,7 @@ export const TRACE_AGGREGATE_DIMENSION_REGISTRY = {
 
 export const TRACE_AGGREGATE_METADATA_DIMENSION_RULE: TraceAggregateDimensionRule = stringDimension();
 
-/** Identity fields excluded from grouping (Decision 4): grouping by identity is not grouping. */
+/** Identity fields excluded from grouping: grouping by identity is not grouping. */
 export const TRACE_AGGREGATE_IDENTITY_FIELDS = ['traceId', 'spanId', 'runId', 'requestId'] as const;
 
 export type TraceAggregateCanonicalDimension = keyof typeof TRACE_AGGREGATE_DIMENSION_REGISTRY;
@@ -59,17 +60,37 @@ export function getTraceAggregateDimensionRule(path: string): TraceAggregateDime
   return undefined;
 }
 
-export type TraceAggregateMeasureKind = 'count' | 'duration' | 'error';
-export type TraceAggregateMeasureStatistic = 'avg' | 'min' | 'max' | 'p50' | 'p90' | 'p95' | 'p99';
-export type TraceAggregateMeasureUnit = 'count' | 'milliseconds' | 'ratio';
+export type TraceAggregateMeasureKind = 'count' | 'duration' | 'error' | 'tokens' | 'cost';
+export type TraceAggregateMeasureStatistic = 'avg' | 'min' | 'max' | 'p50' | 'p90' | 'p95' | 'p99' | 'sum';
+export type TraceAggregateMeasureUnit = 'count' | 'milliseconds' | 'ratio' | 'tokens' | 'currency';
 
 export interface TraceAggregateMeasureRule {
   kind: TraceAggregateMeasureKind;
   statistic?: TraceAggregateMeasureStatistic;
   unit: TraceAggregateMeasureUnit;
-  /** Percentiles tolerate backend-native approximation; counts and rates never do (Decision 3). */
+  /** Percentiles tolerate backend-native approximation; counts, sums, and rates never do. */
   approximate: boolean;
+  /**
+   * Token metric rows the measure is computed from. For `tokens.*` the per-trace
+   * value is the sum of these rows' `value`; for `cost.*` it is the sum of their priced
+   * `estimatedCost`. Absent for measures computed from the trace root.
+   */
+  metricNames?: readonly TokenMetrics[];
 }
+
+/**
+ * Token metric rows that carry the per-call cost. Each total row already holds the sum of its
+ * detail rows' costs, so cost is summed over these rows only.
+ */
+export const TRACE_AGGREGATE_COST_METRIC_NAMES = [TokenMetrics.TOTAL_INPUT, TokenMetrics.TOTAL_OUTPUT] as const;
+
+/** Every token metric name a token or cost measure reads; store compilers prune metric rows to these. */
+export const TRACE_AGGREGATE_USAGE_METRIC_NAMES = [
+  TokenMetrics.TOTAL_INPUT,
+  TokenMetrics.TOTAL_OUTPUT,
+  TokenMetrics.OUTPUT_REASONING,
+  TokenMetrics.INPUT_CACHE_READ,
+] as const;
 
 const countMeasure = (): TraceAggregateMeasureRule => ({ kind: 'count', unit: 'count', approximate: false });
 const durationMeasure = (statistic: TraceAggregateMeasureStatistic): TraceAggregateMeasureRule => ({
@@ -83,9 +104,26 @@ const errorMeasure = (unit: 'count' | 'ratio'): TraceAggregateMeasureRule => ({
   unit,
   approximate: false,
 });
+const tokensMeasure = (statistic: 'sum' | 'avg', metricNames: readonly TokenMetrics[]): TraceAggregateMeasureRule => ({
+  kind: 'tokens',
+  statistic,
+  unit: 'tokens',
+  approximate: false,
+  metricNames,
+});
+const costMeasure = (statistic: 'sum' | 'avg'): TraceAggregateMeasureRule => ({
+  kind: 'cost',
+  statistic,
+  unit: 'currency',
+  approximate: false,
+  metricNames: TRACE_AGGREGATE_COST_METRIC_NAMES,
+});
+
+const TOTAL_TOKEN_METRIC_NAMES = [TokenMetrics.TOTAL_INPUT, TokenMetrics.TOTAL_OUTPUT] as const;
 
 /**
- * v1 measures for `aggregateTraces()` (Aggregate Query API Decision 3), in spec order.
+ * Measures for `aggregateTraces()`: the measures computed from the trace root, followed by the
+ * token and cost measures.
  * `countDistinct.<field>` is a family keyed by field and is handled by
  * `parseTraceAggregateMeasure` rather than listed here.
  */
@@ -100,6 +138,18 @@ export const TRACE_AGGREGATE_MEASURE_REGISTRY = {
   'duration.p99': durationMeasure('p99'),
   errorCount: errorMeasure('count'),
   errorRate: errorMeasure('ratio'),
+  'tokens.input.sum': tokensMeasure('sum', [TokenMetrics.TOTAL_INPUT]),
+  'tokens.input.avg': tokensMeasure('avg', [TokenMetrics.TOTAL_INPUT]),
+  'tokens.output.sum': tokensMeasure('sum', [TokenMetrics.TOTAL_OUTPUT]),
+  'tokens.output.avg': tokensMeasure('avg', [TokenMetrics.TOTAL_OUTPUT]),
+  'tokens.total.sum': tokensMeasure('sum', TOTAL_TOKEN_METRIC_NAMES),
+  'tokens.total.avg': tokensMeasure('avg', TOTAL_TOKEN_METRIC_NAMES),
+  'tokens.reasoning.sum': tokensMeasure('sum', [TokenMetrics.OUTPUT_REASONING]),
+  'tokens.reasoning.avg': tokensMeasure('avg', [TokenMetrics.OUTPUT_REASONING]),
+  'tokens.cached.sum': tokensMeasure('sum', [TokenMetrics.INPUT_CACHE_READ]),
+  'tokens.cached.avg': tokensMeasure('avg', [TokenMetrics.INPUT_CACHE_READ]),
+  'cost.sum': costMeasure('sum'),
+  'cost.avg': costMeasure('avg'),
 } as const satisfies Record<string, TraceAggregateMeasureRule>;
 
 export type TraceAggregateCanonicalMeasure = keyof typeof TRACE_AGGREGATE_MEASURE_REGISTRY;

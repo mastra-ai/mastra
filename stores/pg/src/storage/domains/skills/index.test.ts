@@ -35,4 +35,19 @@ describe('skill version JSONB storage', () => {
       nul: 'ab',
     });
   });
+
+  it('bumps updatedAt when an update re-sends unchanged snapshot fields', async () => {
+    const skills = await store.getStore('skills');
+    const id = randomUUID();
+    const snapshot = { name: 'my-skill', description: 'desc', instructions: 'do the thing' };
+    await skills.create({ skill: { id, ...snapshot } });
+    const before = (await skills.getById(id))!;
+
+    await new Promise(resolve => setTimeout(resolve, 20));
+    await skills.update({ id, ...snapshot });
+
+    const after = (await skills.getById(id))!;
+    expect(await skills.countVersions(id)).toBe(1);
+    expect(after.updatedAt.getTime()).toBeGreaterThan(before.updatedAt.getTime());
+  });
 });

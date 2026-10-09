@@ -595,24 +595,24 @@ export const createRestartExecutionParams = ({
     }
   }
 
-  let nestedWorkflowActiveStepsPath: Record<string, number[]> = {};
+  let firstEntryActiveStepsPath: Record<string, number[]> = {};
 
   const firstEntry = graph.steps[0]!;
 
   if (isSingleStepEntry(firstEntry)) {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [getSingleStepEntryId(firstEntry)]: [0],
     };
   } else if (firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [getSingleStepEntryId(firstEntry.step)]: [0],
     };
   } else if (firstEntry.type === 'sleep' || firstEntry.type === 'sleepUntil') {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [firstEntry.id]: [0],
     };
   } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
-    nestedWorkflowActiveStepsPath = firstEntry.steps.reduce(
+    firstEntryActiveStepsPath = firstEntry.steps.reduce(
       (acc, step) => {
         acc[getSingleStepEntryId(step)] = [0];
         return acc;
@@ -620,12 +620,20 @@ export const createRestartExecutionParams = ({
       {} as Record<string, number[]>,
     );
   }
+
+  const hasFirstEntryResult = getStepIds(firstEntry).some(stepId =>
+    Object.prototype.hasOwnProperty.call(snapshot.context, stepId),
+  );
+  const isPreFirstStepRestart = nestedWorkflowPending || (snapshot.activePaths.length === 0 && !hasFirstEntryResult);
   const restartData: RestartExecutionParams = {
-    activePaths: nestedWorkflowPending ? [0] : snapshot.activePaths,
-    activeStepsPath: nestedWorkflowPending ? nestedWorkflowActiveStepsPath : snapshot.activeStepsPath,
+    activePaths: isPreFirstStepRestart ? [0] : snapshot.activePaths,
+    activeStepsPath: isPreFirstStepRestart ? firstEntryActiveStepsPath : snapshot.activeStepsPath,
     stepResults: snapshot.context,
-    state: snapshot.value,
+    // The evented engine records mid-run state as `context.__state` alongside step results;
+    // `value` only holds the state from the run's start or last suspension.
+    state: (snapshot.context as Record<string, any>)?.__state ?? snapshot.value,
     stepExecutionPath: snapshot?.stepExecutionPath,
+    isPreFirstStepRestart,
   };
 
   return restartData;

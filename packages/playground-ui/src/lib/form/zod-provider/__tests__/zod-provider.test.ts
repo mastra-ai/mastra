@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { parseSchema, CustomZodProvider } from '../index';

@@ -315,6 +315,24 @@ describe('proxyRequest', () => {
     expect(JSON.parse(init.body)).toEqual({ query: '{ viewer { id } }' });
   });
 
+  it('drops caller-supplied authorization headers so the platform bearer is never corrupted', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ ok: true }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await proxyRequest(client, 'c_1', {
+      method: 'GET',
+      path: 'api/v10/users/@me/guilds',
+      // Mixed casing: a tool-set `Authorization` would otherwise survive the
+      // spread alongside the client's lowercase `authorization` and the two
+      // would be joined into one invalid header value.
+      headers: { Authorization: 'Bot tool-token', 'Proxy-Authorization': 'Basic x', 'x-custom': 'v1' },
+    });
+    const [, init] = fetchMock.mock.calls[0]!;
+    const sent = new Headers(init.headers);
+    expect(sent.get('authorization')).toBe(`Bearer ${client.accessToken}`);
+    expect(sent.get('proxy-authorization')).toBeNull();
+    expect(sent.get('x-custom')).toBe('v1');
+  });
+
   it('rejects baseUrlOverride values that are not safe HTTPS URLs before sending the request', async () => {
     const fetchMock = vi.fn();
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
@@ -402,6 +420,23 @@ describe('proxyRequest', () => {
     });
   });
 
+  it('surfaces the nested error.message from an OpenAI-style provider error', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json(
+          { error: { message: 'No such batch: batch_abc123', type: 'invalid_request_error', param: null, code: null } },
+          { status: 404 },
+        ),
+      );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(proxyRequest(client, 'c_1', { method: 'GET', path: 'batches/batch_abc123' })).rejects.toMatchObject({
+      code: 'proxy_error',
+      status: 404,
+      message: 'Provider request failed (404): No such batch: batch_abc123',
+    });
+  });
+
   it('keeps a provider 401 as proxy_error', async () => {
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ message: 'expired token' }, { status: 401 }));
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
@@ -453,5 +488,24 @@ describe('proxyRequest', () => {
       data: null,
       status: 204,
     });
+  });
+
+  it('returns the raw ArrayBuffer body without parsing when responseType is arraybuffer', async () => {
+    const binary = new Uint8Array([0x89, 0x50, 0x4e, 0x47]); // PNG magic bytes
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(binary, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+      }),
+    );
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    const response = await proxyRequestWithResponse(client, 'c_1', {
+      method: 'GET',
+      path: 'files/x',
+      responseType: 'arraybuffer',
+    });
+    expect(response.status).toBe(200);
+    expect(response.data).toBeInstanceOf(ArrayBuffer);
+    expect(new Uint8Array(response.data as ArrayBuffer)).toEqual(binary);
   });
 });

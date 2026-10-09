@@ -1,5 +1,6 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { ChevronRight, Plus } from 'lucide-react';
+import { useWorkflow } from '@mastra/react/hooks/workflows';
+import { Plus } from 'lucide-react';
 import type { ContextType, ReactNode } from 'react';
 import { useEffect, useContext, useState } from 'react';
 
@@ -9,12 +10,13 @@ import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowRecentRuns } from '../runs/workflow-run-list';
 import { WorkflowRunStatusBadge } from '../workflow/workflow-run-header';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
+import type { WorkflowRunActionsContext } from '../workflow/workflow-trigger';
 import { panelSurfaceStyle, WorkflowPanelResizeHandle } from './workflow-layout';
 
-import { useWorkflow } from '@/domains/workflows/hooks/use-workflow';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { ScrollArea } from '@/ds/components/ScrollArea';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
@@ -23,7 +25,7 @@ export interface WorkflowInformationProps {
   workflowId: string;
   initialRunId?: string;
   requestContext: Record<string, any>;
-  onRequestContextChange: (values: Record<string, any>) => void;
+  runActionsSlot?: (ctx: WorkflowRunActionsContext) => ReactNode;
   canExecute: boolean;
   canDelete: boolean;
 }
@@ -41,7 +43,7 @@ type WorkflowActionProps = Pick<
 type InitialWorkflowSidebarProps = WorkflowActionProps & {
   workflowId: string;
   requestContext: Record<string, any>;
-  onRequestContextChange: (values: Record<string, any>) => void;
+  runActionsSlot?: (ctx: WorkflowRunActionsContext) => ReactNode;
   canExecute: boolean;
   workflow?: GetWorkflowResponse;
   isLoading: boolean;
@@ -104,7 +106,7 @@ function WorkflowInformationTopSection({
       >
         <div className="flex shrink-0 items-center gap-1 pr-2">
           <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-column text-muted-foreground">
-            <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground motion-reduce:transition-none" />
+            <DisclosureChevron direction="right" className="size-4 text-muted-foreground" />
             <span>Workflow run</span>
             {!isOpen && result?.status && <WorkflowRunStatusBadge status={result.status} />}
           </CollapsibleTrigger>
@@ -121,11 +123,10 @@ function WorkflowInformationTopSection({
         <CollapsibleContent keepMounted fill className="flex min-h-0 flex-col">
           <ScrollArea
             data-testid="workflow-information-top-scroll-area"
-            className="min-h-0 flex-1 border-t border-border/50"
-            viewPortClassName="h-full"
+            className="min-h-0 flex-1 border-t border-border"
             mask={{ top: false, bottom: false }}
           >
-            {children}
+            <ScrollAreaViewport className="h-full">{children}</ScrollAreaViewport>
           </ScrollArea>
         </CollapsibleContent>
       </Collapsible>
@@ -163,11 +164,19 @@ export function WorkflowInformation({
   workflowId,
   initialRunId,
   requestContext,
-  onRequestContextChange,
+  runActionsSlot,
   canExecute,
   canDelete,
 }: WorkflowInformationProps) {
-  const { data: workflow, isLoading, error } = useWorkflow(workflowId, requestContext);
+  const {
+    data: workflow,
+    isLoading,
+    error,
+  } = useWorkflow({
+    workflowId: workflowId,
+    requestContext: requestContext,
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
 
   const {
     createWorkflowRun,
@@ -196,7 +205,7 @@ export function WorkflowInformation({
     isCancellingWorkflowRun,
     cancelWorkflowRun,
     requestContext,
-    onRequestContextChange,
+    runActionsSlot,
     canExecute,
   };
 

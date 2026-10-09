@@ -85,7 +85,19 @@ export function createFactory(storage: MastraFactoryConfig['storage']) {
 }
 ```
 
-Handlers return one typed decision or `undefined`. Supported sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Each Factory instance resolves handlers from its installed definitions. To install only custom boards, set `includeDefaultBoards: false`. The IDs `work` and `review` remain reserved; they cannot be used to replace the built-ins.
+Handlers return one typed decision or `undefined`. Supported sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Each Factory instance resolves handlers from its installed definitions. To replace Work or Review, disable both default boards and install a board with the same ID. You can reinstall the exported `workBoard` and `reviewBoard` definitions unchanged, or use their phases as the starting point for a customized definition:
+
+```typescript
+import { MastraFactory, workBoard } from '@mastra/factory';
+
+const factory = new MastraFactory({
+  storage,
+  includeDefaultBoards: false,
+  boards: [workBoard],
+});
+```
+
+Board IDs must be unique among the installed boards, so a same-ID board still throws while the defaults are enabled. Cards stored before board tracking resolve to `work` or `review`, and some runtime and UI behavior is keyed to those IDs, including Work issue intake and triage, the review-requested filter, and funnel metrics. Keep the built-in phase names and roles in a replacement unless you intend to change that behavior.
 
 **Preferred intake behavior:** By default, every integration arrival lands in its routed board's initial phase—Intake for Work and Review—and does not start or suggest a run. This includes GitHub, GitLab, Linear, Jira, and incident.io; Linear, Jira, and incident.io no longer land directly in Triage. Only custom routes or explicit placement rules choose a different phase. Trusted maintainer requests to review a GitHub pull request with no existing card file it directly in Reviewing.
 
@@ -455,6 +467,12 @@ A decision _without_ the flag that reaches a card which already exists keeps the
 Reconciliation re-applies label-derived placement. The issue sweep replays an open issue through the rules ingress whenever the issue's live labels differ from the card's stored ones — the `labeled`/`unlabeled` webhook may never have arrived (Factory was down, or the label was applied by something else). The deployment rule decides placement, exactly as at arrival, and the context carries the existing card on `item`, so one handler answers for both: a card still resting on the board's initial phase is landed the normal way, and a card that has already left it is re-placed with `skipRules` and no phase rule run. Cards parked by hand are untouched while an issue's labels are unchanged.
 
 A delivery that concerns two cards is evaluated once per card, each under its own ingress identity: every decision is committed against one card, at that card's revision. A merged pull request is the standard case — its Review card closes and the Work item that wrote the code assesses whether it is finished. An opening pull request is evaluated the same way. Its own Review card is filed by the arrival, the evaluation flagged `pullRequestIntake`, which is committed against the Work item that authored the pull request when provenance or a matching session branch names one; that binding is what links the new card to its item. The authoring item is then answered in a second evaluation of its own (`pullRequestIntake` unset), which is where a handler places the item that is now out for review. The built-in `pullRequestOpened` files the card only on the arrival and returns nothing for the authoring item.
+
+### GitHub CLI authentication in Factory sessions
+
+Factory offers `github_refresh_token` to sessions backed by an authorized GitHub repository, including Slack sessions that have no repository ID in controller state. The tool is visible before the sandbox starts, but it only works once the sandbox is running. Chat-only and GitLab-backed sessions do not get the tool.
+
+If a sandbox `gh` command fails authentication, run `github_refresh_token` and retry the failed command. It reloads the organization's stored GitHub credential into that sandbox (or obtains repository access when no personal access token is configured); it does not rotate or renew an expired or revoked personal access token. Replace an invalid token in Factory's GitHub integration settings before retrying. The tool does not refresh GitLab credentials or return the GitHub token.
 
 ### GitLab intake and source control
 

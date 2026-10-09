@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI quantified reveal: '%s'. The totality word replaces a contrast the sentence never states. Name what it rules out, or drop the word."
+message: "AI quantified reveal: '%s'. The totality word replaces a contrast the sentence never states. Say what it rules out, or drop the word."
 level: error
 nonword: true
 ignorecase: true

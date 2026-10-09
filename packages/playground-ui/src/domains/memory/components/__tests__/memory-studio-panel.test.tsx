@@ -19,7 +19,7 @@ describe('MemoryStudioPanel', () => {
     expect(screen.getByText('History')).toBeTruthy();
     // ThreadContextProgress renders both the Messages and Observations bars to
     // match the collapsed sidebar. Scope by the uppercase bar-label class.
-    const barLabels = Array.from(document.querySelectorAll('span.uppercase.tracking-wide')).map(el => el.textContent);
+    const barLabels = Array.from(document.querySelectorAll('span.uppercase')).map(el => el.textContent);
     expect(barLabels).toContain('Messages');
     expect(barLabels).toContain('Observations');
     // FlameGraph renders its zoom controls.
@@ -80,7 +80,7 @@ describe('MemoryStudioPanel', () => {
     expect(screen.getByText('14.2/30k')).toBeTruthy();
     // The observation token count renders as the Observations bar: 4.5/6k.
     expect(screen.getByText('4.5/6k')).toBeTruthy();
-    const barLabels = Array.from(document.querySelectorAll('span.uppercase.tracking-wide')).map(el => el.textContent);
+    const barLabels = Array.from(document.querySelectorAll('span.uppercase')).map(el => el.textContent);
     expect(barLabels).toContain('Messages');
     expect(barLabels).toContain('Observations');
     // The marker-derived readout (messages 540/2000 → 0.5/2k) must not appear.
@@ -163,7 +163,7 @@ describe('MemoryStudioPanel', () => {
     expect(screen.getByText('0.5/2k')).toBeTruthy();
     expect(screen.getByText('0.3/1k')).toBeTruthy();
     expect(screen.queryByText('14.2/30k')).toBeNull();
-    const barLabels = Array.from(document.querySelectorAll('span.uppercase.tracking-wide')).map(el => el.textContent);
+    const barLabels = Array.from(document.querySelectorAll('span.uppercase')).map(el => el.textContent);
     expect(barLabels).toContain('Observations');
   });
 });

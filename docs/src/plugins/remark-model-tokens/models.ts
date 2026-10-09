@@ -30,6 +30,9 @@ export const MODEL_TOKENS: Record<string, string> = {
   __GATEWAY_GOOGLE_MODEL__: 'google/gemini-2.5-pro',
   __GATEWAY_GOOGLE_MODEL_FLASH__: 'google/gemini-2.5-flash',
 
+  // TypeSafe AI
+  __AI_SDK_TYPESAFE_DECISION_MODEL__: 'jev-latest',
+
   // Alibaba
   __GATEWAY_ALIBABA_MODEL__: 'alibaba/qwen-max',
 

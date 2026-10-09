@@ -5,6 +5,8 @@ import type { Pool, RowDataPacket } from 'mysql2/promise';
 import type { StoreOperationsMySQL } from '../operations';
 import { formatTableName, quoteIdentifier, transformToSqlValue } from '../utils';
 
+const INSERT_IGNORE_SQL = `INSERT IGNORE INTO ${formatTableName(TABLE_SKILL_BLOBS)} (${['hash', 'content', 'size', 'mimeType', 'createdAt'].map(column => quoteIdentifier(column, 'column name')).join(', ')}) VALUES (?, ?, ?, ?, ?)`;
+
 export class BlobsMySQL extends BlobStore {
   private pool: Pool;
   private operations: StoreOperationsMySQL;
@@ -20,11 +22,17 @@ export class BlobsMySQL extends BlobStore {
   }
 
   async put(entry: StorageBlobEntry): Promise<void> {
-    const now = entry.createdAt ?? new Date();
-    await this.pool.execute(
-      `INSERT IGNORE INTO ${formatTableName(TABLE_SKILL_BLOBS)} (${quoteIdentifier('hash', 'column name')}, ${quoteIdentifier('content', 'column name')}, ${quoteIdentifier('size', 'column name')}, ${quoteIdentifier('mimeType', 'column name')}, ${quoteIdentifier('createdAt', 'column name')}) VALUES (?, ?, ?, ?, ?)`,
-      [entry.hash, entry.content, entry.size, entry.mimeType ?? null, transformToSqlValue(now)],
-    );
+    await this.pool.execute(INSERT_IGNORE_SQL, this.#insertArgs(entry));
+  }
+
+  #insertArgs(entry: StorageBlobEntry) {
+    return [
+      entry.hash,
+      entry.content,
+      entry.size,
+      entry.mimeType ?? null,
+      transformToSqlValue(entry.createdAt ?? new Date()),
+    ];
   }
 
   async get(hash: string): Promise<StorageBlobEntry | null> {
@@ -54,15 +62,10 @@ export class BlobsMySQL extends BlobStore {
 
   async putMany(entries: StorageBlobEntry[]): Promise<void> {
     if (entries.length === 0) return;
-    await this.operations.batchInsert({
-      tableName: TABLE_SKILL_BLOBS,
-      records: entries.map(entry => ({
-        hash: entry.hash,
-        content: entry.content,
-        size: entry.size,
-        mimeType: entry.mimeType ?? null,
-        createdAt: entry.createdAt ?? new Date(),
-      })),
+    await this.operations.withTransaction(async connection => {
+      for (const entry of entries) {
+        await connection.execute(INSERT_IGNORE_SQL, this.#insertArgs(entry));
+      }
     });
   }
 

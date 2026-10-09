@@ -15,10 +15,10 @@ interface AuditCategoryStyle {
 }
 
 const AUDIT_CATEGORY_STYLES: Record<AuditNamespace, AuditCategoryStyle> = {
-  work_item: { tone: 'purple', label: 'Work items', dotClass: 'bg-accent3', strokeClass: 'stroke-accent3' },
-  run: { tone: 'green', label: 'Runs', dotClass: 'bg-positive1', strokeClass: 'stroke-positive1' },
-  git: { tone: 'orange', label: 'Git', dotClass: 'bg-(--chart-orange)', strokeClass: 'stroke-(--chart-orange)' },
-  agent: { tone: 'blue', label: 'Agent', dotClass: 'bg-accent6', strokeClass: 'stroke-accent6' },
+  work_item: { tone: 'purple', label: 'Work items', dotClass: 'bg-chart-blue', strokeClass: 'stroke-chart-blue' },
+  run: { tone: 'green', label: 'Runs', dotClass: 'bg-chart-green', strokeClass: 'stroke-chart-green' },
+  git: { tone: 'orange', label: 'Git', dotClass: 'bg-chart-orange', strokeClass: 'stroke-chart-orange' },
+  agent: { tone: 'blue', label: 'Agent', dotClass: 'bg-chart-amber', strokeClass: 'stroke-chart-amber' },
   intake: { tone: 'cyan', label: 'Intake', dotClass: 'bg-placeholder', strokeClass: 'stroke-placeholder' },
 };
 

@@ -18,10 +18,6 @@ import {
   composioToolkits,
 } from './fixtures/tool-providers';
 import { server } from '@/test/msw-server';
-vi.mock('@/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
-
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));

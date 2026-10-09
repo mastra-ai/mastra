@@ -2,8 +2,8 @@ import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import type { ComboboxProps } from '@mastra/playground-ui/components/Combobox';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useMCPServers } from '@mastra/react/hooks/mcps';
 import { useEffect } from 'react';
-import { useMCPServers } from '../hooks/use-mcp-servers';
 
 export interface MCPServerComboboxProps {
   value?: string;

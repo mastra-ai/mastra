@@ -370,6 +370,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'databases/clickhouse-managed-postgres',
+          label: 'ClickHouse Managed Postgres',
+          customProps: { icon: 'https://cdn.simpleicons.org/clickhouse?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'databases/cloudflare-d1',
           label: 'Cloudflare D1',
           customProps: { icon: 'https://cdn.simpleicons.org/cloudflare?viewbox=auto&size=28' },

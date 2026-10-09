@@ -2,7 +2,6 @@ import { SpanType } from '@mastra/core/observability';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { LightSpanRecord } from '../types';
-import { toSearchableSpans } from '../utils';
 import { TraceDataPanelView } from './trace-data-panel-view';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 
@@ -42,13 +41,13 @@ const childSpan = (
   endedAt: at(end),
 });
 
-function traceSpans(root: LightSpanRecord) {
-  return toSearchableSpans([
+function traceSpans(root: LightSpanRecord): LightSpanRecord[] {
+  return [
     root,
     childSpan('gen-1', 'root', 'llm: gpt-4o-mini', SpanType.MODEL_GENERATION, 20, 1400),
     childSpan('tool-1', 'gen-1', "tool: 'get-weather'", SpanType.TOOL_CALL, 400, 1100),
     childSpan('gen-2', 'root', 'llm: gpt-4o-mini', SpanType.MODEL_GENERATION, 1420, 2320),
-  ]);
+  ];
 }
 
 const usage = { inputTokens: 12_400, outputTokens: 860, estimatedCost: 0.0042, costUnit: 'usd' };

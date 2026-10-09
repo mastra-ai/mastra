@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { captureEventTool } from './tools/capture-event.js';
 import { createActionTool } from './tools/create-action.js';
 import { createAlertTool } from './tools/create-alert.js';
@@ -141,5 +141,5 @@ export function createPosthogTools(options?: ProviderToolsOptions) {
     posthog_update_property_definition: updatePropertyDefinitionTool(platformProxy),
     posthog_update_survey: updateSurveyTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

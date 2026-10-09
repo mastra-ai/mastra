@@ -90,6 +90,8 @@ export function createObservationFailedMarker(params: {
   tokensAttempted: number;
   error: unknown;
   failurePolicy?: OmFailurePolicy;
+  /** The runner is about to retry this cycle, so the failure is not final. */
+  retrying?: boolean;
   recordId: string;
   threadId: string;
 }): DataOmObservationFailedPart {
@@ -106,6 +108,7 @@ export function createObservationFailedMarker(params: {
       tokensAttempted: params.tokensAttempted,
       error: formatOmError(params.error),
       ...getOmFailureMetadata(params.error, params.failurePolicy ?? 'abort'),
+      ...(params.retrying ? { retrying: true } : {}),
       recordId: params.recordId,
       threadId: params.threadId,
     },

@@ -24,6 +24,15 @@ const messages = (value: unknown): StreamMessage[] =>
     return { id: text(id), message };
   });
 
+const countArgs = (options: { COUNT?: number }): string[] =>
+  options.COUNT === undefined ? [] : ['COUNT', String(options.COUNT)];
+/** Decode an XRANGE/XREVRANGE reply (`[{ key: id, value: [[field, value], …] }]`). */
+const records = (value: unknown): StreamMessage[] =>
+  ((value as Array<{ key: unknown; value: unknown[][] | null }> | null) ?? []).map(entry => ({
+    id: text(entry.key),
+    message: Object.fromEntries((entry.value ?? []).map(([field, fieldValue]) => [text(field), text(fieldValue)])),
+  }));
+
 class ValkeyMulti {
   readonly #batch = new Batch(true);
   constructor(private readonly getClient: () => Promise<GlideClient>) {}
@@ -134,6 +143,17 @@ export class ValkeyStreamsClient {
       id,
       message: Object.fromEntries(fields.map(([field, value]) => [text(field), text(value)])),
     }));
+  }
+  async xRange(key: string, start: string, end: string, options: { COUNT?: number } = {}) {
+    return records(await this.command(['XRANGE', key, start, end, ...countArgs(options)]));
+  }
+  async xRevRange(key: string, end: string, start: string, options: { COUNT?: number } = {}) {
+    return records(await this.command(['XREVRANGE', key, end, start, ...countArgs(options)]));
+  }
+  /** XINFO GROUPS <key>, one object per group keyed by field name. */
+  async xInfoGroups(key: string): Promise<Array<Record<string, unknown>>> {
+    const result = (await this.command(['XINFO', 'GROUPS', key])) as Array<Array<{ key: unknown; value: unknown }>>;
+    return (result ?? []).map(group => Object.fromEntries(group.map(({ key, value }) => [text(key), value])));
   }
   async xAck(key: string, group: string, id: string) {
     return (await this.getClient()).xack(key, group, [id]);

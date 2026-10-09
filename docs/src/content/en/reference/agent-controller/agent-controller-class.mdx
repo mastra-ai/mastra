@@ -1,17 +1,11 @@
 ---
-title: "Reference: AgentController | AgentController"
-description: "Use the AgentController class as a shared host for Session instances, then create sessions and manage conversation state, events, and run control."
+title: 'Reference: AgentController | AgentController'
+description: 'Use the AgentController class as a shared host for Session instances, then create sessions and manage conversation state, events, and run control.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # AgentController
-
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
 
 The `AgentController` class is a shared host for one or more [`Session`](/reference/agent-controller/session) instances. Initialize the controller, create a session, then use `session.*` APIs for conversation state and run control.
 
@@ -77,7 +71,8 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
           {
             name: 'defaultModelId',
             type: 'string',
-            description: 'Model selected when a session enters this mode without a stored selection.',
+            description:
+              'Model used when a session starts in this mode without a stored selection. Mode switches do not apply it.',
             isOptional: true,
           },
           { name: 'description', type: 'string', description: 'Text shown in mode selectors.', isOptional: true },
@@ -190,7 +185,8 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
   {
     name: 'workspace',
     type: 'DynamicArgument<Workspace | undefined>',
-    description: 'Static workspace or per-session workspace factory. A session must resolve a valid workspace.',
+    description:
+      "Static workspace or per-session workspace factory. A workspace is optional. Sessions without one support threads, state, and agent runs. They have no workspace tools unless the mode's agent has its own workspace.",
     isOptional: true,
   },
   {
@@ -257,7 +253,12 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
           },
           { name: 'defaultModelId', type: 'string', description: 'Default subagent model.', isOptional: true },
           { name: 'maxSteps', type: 'number', description: 'Maximum execution steps.', isOptional: true },
-          { name: 'stopWhen', type: 'LoopOptions["stopWhen"]', description: 'Loop stop condition.', isOptional: true },
+          {
+            name: 'stopWhen',
+            type: 'LoopOptions["stopWhen"]',
+            description: 'Loop stop condition.',
+            isOptional: true,
+          },
           {
             name: 'forked',
             type: 'boolean',
@@ -270,6 +271,13 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
     ],
   },
   {
+    name: 'resolveSubagentModel',
+    type: '(modelId: string, options: { requestContext?: RequestContext }) => MastraModelConfig',
+    description:
+      "Resolves a subagent's model ID into a model config. It receives a copy of the calling run's request context without the parent thread and resource IDs, so tenant credentials and request-scoped providers work for subagents. When unset, the model ID goes to the model gateway router.",
+    isOptional: true,
+  },
+  {
     name: 'gateways',
     type: 'MastraModelGatewayInterface[]',
     description: 'Custom model gateways merged with the built-in gateways.',
@@ -278,8 +286,58 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
   {
     name: 'omConfig',
     type: 'AgentControllerOMConfig',
-    description: 'Default observational memory models and thresholds.',
+    description: 'Default observational memory model selections, automatic model resolver, and thresholds.',
     isOptional: true,
+    properties: [
+      {
+        type: 'AgentControllerOMConfig',
+        parameters: [
+          {
+            name: 'defaultObserverModelId',
+            type: 'string',
+            description: 'Concrete observer fallback used when automatic resolution returns no model or throws.',
+            isOptional: true,
+          },
+          {
+            name: 'observerModel',
+            type: "'auto' | string",
+            description: "Default observer model. Use 'auto' to follow the active main model.",
+            isOptional: true,
+          },
+          {
+            name: 'defaultReflectorModelId',
+            type: 'string',
+            description: 'Concrete reflector fallback used when automatic resolution returns no model or throws.',
+            isOptional: true,
+          },
+          {
+            name: 'reflectorModel',
+            type: "'auto' | string",
+            description: "Default reflector model. Use 'auto' to follow the active main model.",
+            isOptional: true,
+          },
+          {
+            name: 'resolveAutoModelId',
+            type: '(args: ResolveAutoOMModelArgs) => string | undefined',
+            description:
+              'Synchronously resolves an automatic role selection to a concrete model ID from the role, current main model, and read-only session state.',
+            isOptional: true,
+          },
+          {
+            name: 'defaultObservationThreshold',
+            type: 'number',
+            description: 'Default observation threshold in tokens.',
+            isOptional: true,
+          },
+          {
+            name: 'defaultReflectionThreshold',
+            type: 'number',
+            description: 'Default reflection threshold in tokens.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'disableBuiltinTools',
@@ -364,6 +422,14 @@ The same `resourceId` and `scope` return the same `Session` instance. A differen
     type: 'string',
     description: 'Exact thread to bind. Missing threads are created with this identifier.',
     isOptional: true,
+  },
+  {
+    name: 'createInitialThread',
+    type: 'boolean',
+    description:
+      'Create a thread when no existing thread matches. Set `false` to start the session without a thread; the first message or `session.thread.ensureId()` creates it, so unused sessions leave no empty thread behind.',
+    isOptional: true,
+    defaultValue: 'true',
   },
   {
     name: 'id',

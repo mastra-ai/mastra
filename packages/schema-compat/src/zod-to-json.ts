@@ -309,7 +309,9 @@ function isDeepEqual(a: unknown, b: unknown): boolean {
  * SchemaCompatLayer ("Cannot flatten intersections with overlapping keys").
  */
 function mergeAllOfSubschemas(target: JSONSchema7 & Record<string, unknown>, subschemas: JSONSchema7[]): void {
-  const mergedProps: Record<string, JSONSchema7> = { ...((target.properties as Record<string, JSONSchema7>) ?? {}) };
+  const mergedProps = new Map<string, JSONSchema7>(
+    Object.entries((target.properties as Record<string, JSONSchema7>) ?? {}),
+  );
   const requiredSet = new Set<string>(Array.isArray(target.required) ? target.required : []);
   const descriptions: string[] =
     typeof target.description === 'string' && target.description ? [target.description] : [];
@@ -322,12 +324,12 @@ function mergeAllOfSubschemas(target: JSONSchema7 & Record<string, unknown>, sub
       switch (key) {
         case 'properties': {
           for (const [propName, propSchema] of Object.entries(value as Record<string, JSONSchema7>)) {
-            if (propName in mergedProps && !isDeepEqual(mergedProps[propName], propSchema)) {
+            if (mergedProps.has(propName) && !isDeepEqual(mergedProps.get(propName), propSchema)) {
               throw new Error(
                 `Cannot flatten allOf for OpenAI strict mode: property "${propName}" is defined differently in multiple branches`,
               );
             }
-            mergedProps[propName] = propSchema;
+            mergedProps.set(propName, propSchema);
           }
           break;
         }
@@ -362,8 +364,8 @@ function mergeAllOfSubschemas(target: JSONSchema7 & Record<string, unknown>, sub
     }
   }
 
-  if (Object.keys(mergedProps).length) {
-    target.properties = mergedProps;
+  if (mergedProps.size) {
+    target.properties = Object.fromEntries(mergedProps);
   }
   if (requiredSet.size) {
     target.required = [...requiredSet];

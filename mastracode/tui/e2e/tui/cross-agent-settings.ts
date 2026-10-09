@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { expect } from './expect.js';
+import { selectMenuRow } from './menu-navigation.js';
 import type { McE2eScenario } from './types.js';
 
 export const crossAgentSettingsScenario: McE2eScenario = {
@@ -23,8 +24,7 @@ export const crossAgentSettingsScenario: McE2eScenario = {
     terminal.submit('/settings');
     await runtime.waitForScreenText(/Experimental cross-agent communication/i, terminal);
 
-    terminal.write('\x1b[B'.repeat(7));
-    terminal.write('\r');
+    await selectMenuRow(terminal, /Experimental cross-agent communication/i);
     await runtime.waitForScreenText(/Enable cross-agent connection tools/i, terminal);
 
     terminal.write('\x1b[A');

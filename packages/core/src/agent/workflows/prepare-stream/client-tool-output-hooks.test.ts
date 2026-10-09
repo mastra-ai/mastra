@@ -61,6 +61,18 @@ function toolResultMessage(toolCallId: string, result: unknown, toolName = 'brow
   };
 }
 
+function toolInvocationResultMessage(toolCallId: string, result: unknown, toolName = 'browserTool') {
+  return {
+    role: 'assistant' as const,
+    content: [
+      {
+        type: 'tool-invocation' as const,
+        toolInvocation: { state: 'result' as const, toolCallId, toolName, args: {}, result },
+      },
+    ],
+  };
+}
+
 describe('fireClientToolOutputHooks', () => {
   it('fires onOutput for a trailing correlated client tool result', async () => {
     const onOutput = vi.fn();
@@ -96,6 +108,30 @@ describe('fireClientToolOutputHooks', () => {
     expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output: { value: 72, unit: 'F' } }));
   });
 
+  it('does not unwrap an unknown `{ type, value }` domain object', async () => {
+    const onOutput = vi.fn();
+    const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
+    const output = { type: 'celsius', value: 20 };
+
+    const messages = [toolCallMessage('call-1'), toolResultMessage('call-1', output)];
+
+    await fireClientToolOutputHooks({ messages, tools });
+
+    expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output }));
+  });
+
+  it('preserves sibling metadata on a recognized wrapper-shaped object', async () => {
+    const onOutput = vi.fn();
+    const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
+    const output = { type: 'json', value: { ok: true }, receipt: 'r-1' };
+
+    const messages = [toolCallMessage('call-1'), toolResultMessage('call-1', output)];
+
+    await fireClientToolOutputHooks({ messages, tools });
+
+    expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output }));
+  });
+
   it('unwraps the AI SDK v5 `{ type, value }` output wrapper', async () => {
     const onOutput = vi.fn();
     const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
@@ -118,6 +154,43 @@ describe('fireClientToolOutputHooks', () => {
     await fireClientToolOutputHooks({ messages, tools });
 
     expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output: { ok: true } }));
+  });
+
+  it('normalizes stored tool-invocation results with the same wrapper rules', async () => {
+    const onOutput = vi.fn();
+    const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
+    const messages = [
+      toolCallMessage('call-1'),
+      toolInvocationResultMessage('call-1', { type: 'json', value: { ok: true } }),
+    ];
+
+    await fireClientToolOutputHooks({ messages, tools });
+
+    expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output: { ok: true } }));
+  });
+
+  it.each([
+    ['error-text', 'client failed'],
+    ['error-json', { code: 'E_FAIL' }],
+  ] as const)('does not fire onOutput for stored %s tool-invocation results', async (type, value) => {
+    const onOutput = vi.fn();
+    const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
+    const messages = [toolCallMessage('call-1'), toolInvocationResultMessage('call-1', { type, value })];
+
+    await fireClientToolOutputHooks({ messages, tools });
+
+    expect(onOutput).not.toHaveBeenCalled();
+  });
+
+  it('preserves unknown stored tool-invocation domain objects', async () => {
+    const onOutput = vi.fn();
+    const tools = await buildAgentTools({ serverTools: { browserTool: browserToolWith(onOutput) } });
+    const output = { type: 'celsius', value: 20 };
+    const messages = [toolCallMessage('call-1'), toolInvocationResultMessage('call-1', output)];
+
+    await fireClientToolOutputHooks({ messages, tools });
+
+    expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output }));
   });
 
   it('preserves the server-defined onOutput when a serialized client tool of the same name is sent', async () => {
@@ -738,7 +811,38 @@ describe('applyClientToolModelOutput', () => {
     expect(toModelOutput).toHaveBeenCalledWith({ ok: true });
   });
 
-  it('skips stored results that still carry an AI SDK v5 error envelope', async () => {
+  it('preserves an unknown `{ type, value }` domain object before mapping', async () => {
+    const output = { type: 'celsius', value: 20 };
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+
+    const messageList = new MessageList();
+    messageList.add([toolCallMessage('call-1'), toolResultMessage('call-1', output)], 'input');
+
+    await applyClientToolModelOutput({ messageList, tools });
+
+    expect(toModelOutput).toHaveBeenCalledWith(output);
+  });
+
+  it('does not map an ingested AI SDK v5 error envelope', async () => {
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
+    const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
+
+    const messageList = new MessageList();
+    messageList.add(
+      [toolCallMessage('call-1'), toolResultMessage('call-1', { type: 'error-text', value: 'client failed' })],
+      'input',
+    );
+
+    await applyClientToolModelOutput({ messageList, tools });
+
+    expect(toModelOutput).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['error-text', 'it failed'],
+    ['error-json', { message: 'it failed' }],
+  ] as const)('skips stored %s results that still carry an AI SDK v5 error envelope', async (type, value) => {
     const toModelOutput = vi.fn(() => ({ type: 'text', value: 'mapped' }));
     const tools = await buildAgentTools({ serverTools: { browserTool: modelOutputTool(toModelOutput) } });
 
@@ -760,7 +864,7 @@ describe('applyClientToolModelOutput', () => {
                 toolCallId: 'call-1',
                 toolName: 'browserTool',
                 args: {},
-                result: { type: 'error-text', value: 'it failed' },
+                result: { type, value },
               },
             },
           ],

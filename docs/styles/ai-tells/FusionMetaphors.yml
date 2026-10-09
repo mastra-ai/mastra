@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI fusion metaphor: '%s'. Say merged, added, or combined, and name what went where. Disable this rule for physics or chemistry prose."
+message: "AI fusion metaphor: '%s'. Say merged, added, or combined, and say what went where. Disable this rule for physics or chemistry prose."
 level: error
 nonword: true
 ignorecase: true

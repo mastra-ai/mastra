@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Activity, ChartNoAxesColumnIncreasing, Settings } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentProps, CSSProperties } from 'react';
+import { Button } from '../Button/Button';
 import { TabContent } from './tabs-content';
 import { TabList } from './tabs-list';
 import { Tabs } from './tabs-root';
@@ -23,7 +24,7 @@ type TabIndicatorStyle = CSSProperties & {
 };
 
 const accentIndicatorStyle: TabIndicatorStyle = {
-  '--tab-indicator-color': 'var(--accent5)',
+  '--tab-indicator-color': 'var(--info-indicator)',
 };
 
 export const Recommended: Story = {
@@ -52,8 +53,8 @@ type ContainedStory = StoryObj<ContainedArgs>;
 
 const extraTabs = ['Deployments', 'Logs', 'Metrics', 'Scorers', 'Datasets', 'Integrations'];
 
-export const Contained: ContainedStory = {
-  args: { frame: 'stroke', moreTabs: false, closableTabs: false, attention: false },
+export const InsetFrame: ContainedStory = {
+  args: { moreTabs: false, closableTabs: false, attention: false },
   argTypes: {
     moreTabs: { name: 'More tabs', control: 'boolean' },
     closableTabs: { name: 'Closable tabs', control: 'boolean' },
@@ -62,11 +63,10 @@ export const Contained: ContainedStory = {
   parameters: {
     layout: 'fullscreen',
   },
-  render: ({ frame, moreTabs, closableTabs, attention }) => (
+  render: ({ moreTabs, closableTabs, attention }) => (
     <ContainedExample
       key={`${moreTabs}-${closableTabs}`}
       attention={attention}
-      frame={frame}
       moreTabs={moreTabs}
       closableTabs={closableTabs}
     />
@@ -74,11 +74,10 @@ export const Contained: ContainedStory = {
 };
 
 function ContainedExample({
-  frame,
   moreTabs,
   closableTabs,
   attention,
-}: Pick<ContainedArgs, 'frame' | 'moreTabs' | 'closableTabs' | 'attention'>) {
+}: Pick<ContainedArgs, 'moreTabs' | 'closableTabs' | 'attention'>) {
   const [closedTabs, setClosedTabs] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState('activity');
   const visibleTabs = ['activity', 'traces', 'settings', ...(moreTabs ? extraTabs : [])].filter(
@@ -99,7 +98,7 @@ function ContainedExample({
   return (
     <main className="min-h-screen bg-sidebar p-4 sm:p-10">
       <div className="mx-auto w-full max-w-5xl">
-        <Tabs defaultTab="activity" value={activeTab} onValueChange={setActiveTab} appearance="contained" frame={frame}>
+        <Tabs defaultTab="activity" value={activeTab} onValueChange={setActiveTab} appearance="contained" frame="inset">
           <TabList>
             {visibleTabs.includes('activity') && (
               <Tab value="activity" onClose={closeHandler('activity')}>
@@ -167,11 +166,6 @@ function ContainedExample({
     </main>
   );
 }
-
-export const InsetFrame: ContainedStory = {
-  ...Contained,
-  args: { frame: 'inset', moreTabs: false, closableTabs: false, attention: false },
-};
 
 export const LegacyLineFallback: Story = {
   render: () => (
@@ -279,6 +273,31 @@ export const PillGhostVariant: Story = {
         <div className="p-4 text-foreground">Account content</div>
       </TabContent>
     </Tabs>
+  ),
+};
+
+/** `size="sm"`: the compact 24px tab with 12px labels, for card toolbars. */
+/**
+ * Tabs take the shared control rung: a `pill` track and a `pill-ghost` tab are as tall as a
+ * Button of the same size, so they line up in one toolbar row. See Foundations/Control sizes.
+ */
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex flex-col gap-4">
+      {(['sm', 'md'] as const).map(size => (
+        <div key={size} className="flex items-center gap-3">
+          {(['pill', 'pill-ghost'] as const).map(variant => (
+            <Tabs key={variant} defaultTab="busiest">
+              <TabList variant={variant} size={size}>
+                <Tab value="busiest">Busiest</Tab>
+                <Tab value="time">Time spent</Tab>
+              </TabList>
+            </Tabs>
+          ))}
+          <Button size={size}>Button {size}</Button>
+        </div>
+      ))}
+    </div>
   ),
 };
 

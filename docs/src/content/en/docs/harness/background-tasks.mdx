@@ -247,7 +247,7 @@ When this `researchAgent` is delegated to from a supervisor that has no backgrou
 
 Mastra supports one nested background-tool level inside a delegated run: a root agent can delegate to a subagent, and that subagent can dispatch an eligible ordinary tool in the background. A second delegated-agent edge runs in the foreground and doesn't receive nested background guidance. This limit is execution-scoped and doesn't mutate the shared subagent configuration.
 
-Which layer to use depends on where consistency matters: subagent-level configuration travels with the agent, so its background behavior stays the same under every supervisor, whereas the supervisor-side opt-in above centralizes that tuning in one place. This boundary stops at a single nested delegation level and has no workflow integration.
+Which layer to use depends on where consistency matters: subagent-level configuration travels with the agent, which keeps its background behavior the same under every supervisor, whereas the supervisor-side opt-in above centralizes that tuning in one place. This boundary stops at a single nested delegation level and has no workflow integration.
 
 ## Suspending and resuming
 
@@ -284,7 +284,7 @@ export const reviewTool = createTool({
 })
 ```
 
-The first invocation of `execute` sees `resumeData === undefined` and calls `suspend`. After the task is resumed, the runtime restarts the tool with `resumeData` populated. The `if` condition is false, so the tool returns its real result.
+The first invocation of `execute` sees `resumeData === undefined` and calls `suspend`. After the task is resumed, the runtime restarts the tool with `resumeData` populated. The `if` condition is false. The tool returns its real result.
 
 To resume the task once an approval arrives:
 

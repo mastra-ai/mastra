@@ -58,7 +58,7 @@ interface ModelSelectionCommonOptions {
    * cannot fail a request.
    */
   onDecision?: (decision: ModelSelectionDecision) => void | Promise<void>;
-  /** Provider options forwarded to `Classifier.evaluate()`. */
+  /** Provider options forwarded to `Classifier.decide()`. */
   providerOptions?: SharedV4ProviderOptions;
   /**
    * Which model calls the routing decision applies to. Defaults to `run`.
@@ -324,7 +324,7 @@ export class ModelSelectionProcessor<const Q extends ClassifierQuestions = Class
       const observabilityContext = resolveObservabilityContext(rest);
       const result = (await executeWithContext({
         span: observabilityContext.tracing.currentSpan,
-        fn: () => classifier.evaluate({ state: { request: text }, providerOptions: this.providerOptions }),
+        fn: () => classifier.decide({ state: { request: text }, providerOptions: this.providerOptions }),
       })) as ClassifierResult<Q>;
 
       const decision = await this.decide(result);

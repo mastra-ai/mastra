@@ -66,7 +66,10 @@ interface Skill {
   description: string
   instructions: string
   path: string
-  source: { type: string; projectPath: string }
+  source:
+    | { type: 'external'; packagePath: string }
+    | { type: 'local'; projectPath: string }
+    | { type: 'managed'; mastraPath: string }
   references: string[]
   scripts: string[]
   assets: string[]
@@ -76,6 +79,8 @@ interface Skill {
   metadata?: Record<string, unknown>
 }
 ```
+
+`source` describes where Mastra discovered the skill. Skills from a path with a `node_modules` segment are `external`, skills under `.mastra/skills` are `managed`, and all other skills, including those created with [`createSkill()`](/reference/agents/createSkill), are `local`.
 
 ## Merging behavior
 

@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { createMetricsPropertyFilterFields } from '@mastra/playground-ui/domains/metrics/metrics-filters';
 import { ExternalLinkIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -27,7 +28,9 @@ export function MetricsStorageGate({ children }: { children: ReactNode }) {
       <MetricsPageLayout filterFields={filterFieldsWithoutDiscovery} isLoading>
         <div className="flex h-full items-center justify-center gap-2">
           <Spinner aria-label="Loading storage capabilities" />
-          <span className="text-caption text-muted-foreground">Loading storage capabilities</span>
+          <Txt as="span" variant="caption" tone="muted">
+            Loading storage capabilities
+          </Txt>
         </div>
       </MetricsPageLayout>
     );

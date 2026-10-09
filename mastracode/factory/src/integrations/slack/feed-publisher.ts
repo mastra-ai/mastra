@@ -21,7 +21,10 @@ export class SlackFeedPublisher implements WorkItemFeedPublisher {
     this.#controller = controller;
   }
 
-  async publish(comment: WorkItemCommentRow, workItem: WorkItemRow): Promise<{ source: ExternalWorkItemSource } | null> {
+  async publish(
+    comment: WorkItemCommentRow,
+    workItem: WorkItemRow,
+  ): Promise<{ source: ExternalWorkItemSource } | null> {
     const source = workItem.externalSource;
     if (source?.integrationId !== this.id || source.type !== 'slack-thread') return null;
 

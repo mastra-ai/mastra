@@ -16,6 +16,7 @@ export {
   refreshRepoTemplate,
   repoTemplateRef,
   type RepoTemplateOptions,
+  type RepoTemplateRepository,
   type RepoTemplateIdentity,
   type RepositoryAccess,
   type RefreshRepoTemplateResult,

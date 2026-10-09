@@ -8,7 +8,7 @@ export function StageBadge({ stage, live, className }: { stage: string; live?: b
     <Badge
       size="xs"
       variant={stageTone(stage)}
-      emphasis="muted"
+      emphasis="subtle"
       className={className}
       {...(live ? { indicator: 'pulse' as const } : {})}
     >

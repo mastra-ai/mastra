@@ -17,6 +17,7 @@ import { mentionLabel } from './mentions';
 import type { CommentQuoteDraft } from './quoteDraft';
 import { useMentionResolver } from './useMentionResolver';
 import { useMentionAutocomplete } from './useMentionAutocomplete';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 export function CommentComposer({
   workItemId,
@@ -119,7 +120,7 @@ export function CommentComposer({
           aria-activedescendant={suggestionItems[mentions.activeIndex]?.id}
           autoFocus={variant === 'thread'}
           maxHeight={variant === 'panel' ? '4.5rem' : '10rem'}
-          className={cn('text-caption', variant === 'panel' && 'min-h-9 pt-2')}
+          className={cn(variant === 'panel' && 'min-h-9 pt-2', 'text-caption')}
           onChange={event => {
             setDraft(event.target.value);
             mentions.onDraftChange(event.target.selectionStart);
@@ -130,9 +131,9 @@ export function CommentComposer({
           onKeyDown={onKeyDown}
         />
         {sendError ? (
-          <p role="alert" className="text-meta text-error m-0 px-3 pb-1">
+          <Txt variant="meta" role="alert" className="text-destructive-foreground m-0 px-3 pb-1">
             {sendError}
-          </p>
+          </Txt>
         ) : null}
         <ComposerActions className="justify-end">
           <Button

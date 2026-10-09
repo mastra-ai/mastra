@@ -1,4 +1,5 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ExperimentUISpan } from '../types';
 import { ExperimentTraceTimelineSpan } from './experiment-trace-timeline-span';
@@ -33,11 +34,16 @@ export function ExperimentTraceTimeline({
       {isLoading ? (
         <div
           className={cn(
-            'flex items-center justify-center gap-4 rounded-md bg-card/50 p-4 text-body text-muted-foreground',
+            'text-muted-foreground',
+            'flex items-center justify-center gap-4 rounded-md bg-card/50 p-4',
             '[&_svg]:h-[1.25em] [&_svg]:w-[1.25em] [&_svg]:opacity-50',
           )}
         >
-          <Spinner /> Loading Trace Timeline ...
+          <Spinner />
+          <Txt as="span" variant="body" className="block">
+            {' '}
+            Loading Trace Timeline ...
+          </Txt>
         </div>
       ) : (
         <div

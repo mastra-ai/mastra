@@ -360,4 +360,6 @@ export interface SerializedMessageListState {
   newUserMessagesPersisted: string[];
   newResponseMessagesPersisted: string[];
   userContextMessagesPersisted: string[];
+  /** Where the latest loop-iteration boundary sits, so a restored list scopes final-step text the same way. */
+  lastStepBoundary?: { messageId: string; partIndex: number };
 }

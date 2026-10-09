@@ -137,6 +137,59 @@ describe('Stream vs Non-Stream Output Processor Consistency (Issue #7087)', () =
   });
 });
 
+describe('Output processor stream errors', () => {
+  it('fails before emitting an unprocessed sensitive chunk', async () => {
+    const sensitiveText = 'card: 4111-1111-1111-1111';
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: sensitiveText },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      }),
+    });
+    const throwingRedactor: Processor = {
+      id: 'throwing-redactor',
+      name: 'Throwing redactor',
+      processOutputStream: async ({ part }) => {
+        if (part.type === 'text-delta' && part.payload.text.includes('4111')) {
+          throw new Error('redactor crashed');
+        }
+        return part;
+      },
+    };
+    const agent = new Agent({
+      id: 'output-processor-error-agent',
+      name: 'Output Processor Error Agent',
+      instructions: 'You are a test agent.',
+      model,
+      outputProcessors: [throwingRedactor],
+    });
+
+    const result = await agent.stream('Reveal the card number');
+    const chunks = [];
+
+    for await (const chunk of result.fullStream) {
+      chunks.push(chunk);
+    }
+
+    expect(JSON.stringify(chunks)).not.toContain(sensitiveText);
+    const errorChunks = chunks.filter(chunk => chunk.type === 'error');
+    expect(errorChunks).toHaveLength(1);
+    expect(errorChunks[0]?.payload.error.message).toContain('redactor crashed');
+    await expect(result.text).resolves.toBe('');
+    await expect(result.finishReason).resolves.toBe('error');
+  });
+});
+
 describe('Processor state persistence across processOutputStream and processOutputResult', () => {
   let mockModel: MockLanguageModelV2;
   let stateInOutputStream: Record<string, unknown> | null = null;

@@ -14,6 +14,7 @@ export interface IntakeSelection {
   enabled: boolean;
   /** Provider-owned source ids; `null` means nothing is selected. */
   sourceIds: string[] | null;
+  repositoryByLinearProject?: Record<string, string>;
 }
 
 export type IntakeConfig = Record<string, IntakeSelection>;

@@ -96,7 +96,7 @@ test.describe('Studio Layout - Cold-Load Stability', () => {
       await responsePromise;
 
       // ASSERT 2 (post-resolution): The sidebar now mounts at a real width.
-      // MainSidebarProvider hydrates width synchronously from localStorage (default
+      // SidebarProvider hydrates width synchronously from localStorage (default
       // 240px); anything smaller would mean the sidebar collapsed or was unmounted.
       await expect(sidebar).toBeVisible({ timeout: 5000 });
       const boxBefore = await sidebar.boundingBox();

@@ -121,9 +121,14 @@ export interface ScorerJudgeConfig {
    */
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /**
+   * Set to `false` to run only the judge's configured `errorProcessors`, with none
+   * of the agent's shared stability defaults added. See `AgentConfig.errorProcessorDefaults`.
+   */
+  errorProcessorDefaults?: boolean;
+  /**
    * Maximum number of times error processors can retry one V2+ judge generation.
    * When errorProcessors are configured and this is omitted, the runtime cap is
-   * 10. Set this explicitly to bound the coordinated retry budget.
+   * 3. Set this explicitly to bound the coordinated retry budget.
    */
   maxProcessorRetries?: number;
   /**
@@ -975,8 +980,9 @@ class MastraScorer<
    * Projects the run's RequestContext down to the keys that should be persisted
    * on the scorer-run span input for repeatability.
    *
-   * `serializeForSpan()` provides the safe base projection — the framework auth
-   * token is redacted and values are shaped for the trace serializer to bound.
+   * `serializeForSpan()` provides the safe base projection — reserved Mastra keys
+   * (auth token, internal plumbing) are omitted and values are shaped for the
+   * trace serializer to bound.
    * `requestContextKeys` then selects from it:
    * - omitted / empty → nothing is persisted (secure default)
    * - `['*']`         → the full (safe) context
@@ -1459,6 +1465,8 @@ class MastraScorer<
     const inputProcessors = originalStep.judge?.inputProcessors ?? this.config.judge?.inputProcessors;
     const outputProcessors = originalStep.judge?.outputProcessors ?? this.config.judge?.outputProcessors;
     const errorProcessors = originalStep.judge?.errorProcessors ?? this.config.judge?.errorProcessors;
+    const errorProcessorDefaults =
+      originalStep.judge?.errorProcessorDefaults ?? this.config.judge?.errorProcessorDefaults;
     const maxProcessorRetries = originalStep.judge?.maxProcessorRetries ?? this.config.judge?.maxProcessorRetries;
     const modelSettings = originalStep.judge?.modelSettings ?? this.config.judge?.modelSettings;
     const memoryOptions = stepMemoryOptions
@@ -1661,6 +1669,7 @@ class MastraScorer<
       ...(inputProcessors ? { inputProcessors } : {}),
       ...(outputProcessors ? { outputProcessors } : {}),
       ...(errorProcessors ? { errorProcessors } : {}),
+      ...(errorProcessorDefaults !== undefined ? { errorProcessorDefaults } : {}),
       ...(maxProcessorRetries !== undefined ? { maxProcessorRetries } : {}),
     });
     if (this.#mastra) {

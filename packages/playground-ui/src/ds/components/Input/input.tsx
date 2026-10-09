@@ -1,9 +1,12 @@
+import { Input as InputPrimitive } from '@base-ui/react/input';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import {
+  deprecatedErrorAria,
   fieldErrorRim,
   inputSurfaceAndFocusStyle,
   resolveFieldVariant,
@@ -11,6 +14,7 @@ import {
   unstyledFormElementStyle,
 } from '@/ds/primitives/form-element';
 import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
+import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -22,10 +26,7 @@ const inputVariants = cva(
     controlStateColorTransition,
     'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
-    // type="number": hide native browser spinner arrows (they clip the pill).
-    // For incrementable numeric inputs, compose <InputGroup> with +/- buttons
-    // instead — see the NumberWithStepper story. WebKit uses the spin-button
-    // pseudo-elements; Firefox needs `appearance: textfield` on the input.
+    // Native number spinners clip the pill; WebKit and Firefox need different selectors.
     '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
     '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',
     '[&[type=number]]:[appearance:textfield]',
@@ -52,32 +53,37 @@ const inputVariants = cva(
   },
 );
 
-export type InputProps = Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size'> &
+export type InputProps = Omit<React.ComponentProps<'input'>, 'size'> &
   Omit<VariantProps<typeof inputVariants>, 'variant'> & {
     /** `filled` is a deprecated alias for `default`; both render the filled surface. */
     variant?: VariantProps<typeof inputVariants>['variant'] | DeprecatedFilledVariant;
     testId?: string;
+    /** @deprecated Wrap the control in `<Field invalid>`, or set `aria-invalid` on a control outside a `Field`. */
     error?: boolean;
+    /**
+     * Leave unset (or `"off"`) for app data: the field renders `autocomplete="off"` plus the
+     * ignore attributes of the common password managers, so a "Name" field doesn't get an
+     * identity popup. Pass a real autofill token (`email`, `username`, `current-password`,
+     * `new-password`, `one-time-code`, ...) on credential and account forms to opt back in.
+     */
+    autoComplete?: React.HTMLInputAutoCompleteAttribute;
   };
 
-const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, size, testId, variant, type, error, ...props }, ref) => {
-    return (
-      <input
-        type={type}
-        className={cn(
-          inputVariants({ variant: resolveFieldVariant(variant), size }),
-          error && fieldErrorRim,
-          className,
-        )}
-        data-testid={testId}
-        ref={ref}
-        aria-invalid={error}
-        {...props}
-      />
-    );
-  },
-);
-Input.displayName = 'Input';
+/**
+ * Single-line text field. Opts out of password manager autofill unless `autoComplete`
+ * names a real autofill token; see `textFieldAutofillProps`.
+ */
+function Input({ className, size, testId, variant, error, autoComplete, ...props }: InputProps) {
+  return (
+    <InputPrimitive
+      className={cn(inputVariants({ variant: resolveFieldVariant(variant), size }), fieldErrorRim, className)}
+      data-testid={testId}
+      {...deprecatedErrorAria(error)}
+      {...props}
+      {...textFieldAutofillProps(autoComplete)}
+      {...keepOwnAccessibleName(props)}
+    />
+  );
+}
 
 export { Input };

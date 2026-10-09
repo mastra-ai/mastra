@@ -114,4 +114,10 @@ export type EventCallback = (
   event: Event,
   ack?: () => Promise<void>,
   nack?: () => Promise<void>,
+  /**
+   * Renews the delivery's lease/visibility so the broker does not redeliver
+   * the event while its handler is still running. Omitted by backends that
+   * cannot extend a delivery.
+   */
+  extend?: () => Promise<void>,
 ) => void | Promise<void>;

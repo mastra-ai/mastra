@@ -69,7 +69,6 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
           "anthropic-ratelimit-input-tokens-limit": "2000000",
           "anthropic-ratelimit-input-tokens-remaining": "1999000",
           "anthropic-ratelimit-input-tokens-reset": "2026-05-18T10:50:48Z",
@@ -223,7 +222,6 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
           "anthropic-ratelimit-input-tokens-limit": "2000000",
           "anthropic-ratelimit-input-tokens-remaining": "1999000",
           "anthropic-ratelimit-input-tokens-reset": "2026-05-18T10:50:51Z",
@@ -662,7 +660,6 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
           "anthropic-ratelimit-input-tokens-limit": "2000000",
           "anthropic-ratelimit-input-tokens-remaining": "1998000",
           "anthropic-ratelimit-input-tokens-reset": "2026-05-18T10:51:06Z",

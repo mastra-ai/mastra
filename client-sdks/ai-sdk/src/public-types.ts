@@ -2,6 +2,13 @@ import type { InferUIMessageChunk as InferUIMessageChunkV5, UIMessage as UIMessa
 import type { InferUIMessageChunk as InferUIMessageChunkV6, UIMessage as UIMessageV6 } from '@internal/ai-v6';
 import type { InferUIMessageChunk as InferUIMessageChunkV7, UIMessage as UIMessageV7 } from '@internal/ai-v7';
 
+/**
+ * Adds the run's `traceId` to the options an AI SDK `messageMetadata` callback receives, so the callback can put it
+ * in message metadata (e.g. `({ part, traceId }) => (part.type === 'start' ? { traceId } : undefined)`).
+ * `traceId` is undefined when tracing is disabled.
+ */
+export type WithTraceId<T> = T extends (options: infer O) => infer R ? (options: O & { traceId?: string }) => R : T;
+
 export type V5UIMessage = UIMessageV5;
 export type V6UIMessage = UIMessageV6;
 export type V7UIMessage = UIMessageV7;

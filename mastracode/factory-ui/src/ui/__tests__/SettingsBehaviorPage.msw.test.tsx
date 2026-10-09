@@ -138,12 +138,16 @@ describe('Behavior settings page (factory scope)', () => {
 
     renderBehaviorSettings();
 
-    const readGroup = await screen.findByRole('group', { name: 'Read permission' });
-    const readAllow = within(readGroup).getByRole('button', { name: 'Allow' });
+    const readGroup = await screen.findByRole('radiogroup', { name: 'Read permission' });
+    const readAllow = within(readGroup).getByRole('radio', { name: 'Allow' });
     await waitFor(() => expect(readAllow).toBeEnabled());
     expect(seen.permissionResourceIds).toContain(FACTORY_RESOURCE_ID);
 
     await user.click(readAllow);
+
+    // Optimistic: selected right away, and the control never locks while the write is in flight.
+    expect(readAllow).toHaveAttribute('aria-checked', 'true');
+    expect(readAllow).toBeEnabled();
 
     await waitFor(() => expect(seen.permissionWrites).toHaveLength(1));
     expect(seen.permissionWrites[0]).toEqual({

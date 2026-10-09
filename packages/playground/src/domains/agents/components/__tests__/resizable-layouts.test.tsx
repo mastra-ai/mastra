@@ -1,9 +1,11 @@
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode, Ref } from 'react';
-import { createRef, useImperativeHandle } from 'react';
+import { useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type * as MemoryTimelineContext from '../../context/memory-timeline-context';
+import { ThreadsPanelProvider } from '../../context/threads-panel-context';
+import { useThreadsPanel } from '../../context/use-threads-panel';
 import { AgentLayout } from '../agent-layout';
 
 const resizeLeftPanel = vi.hoisted(() => vi.fn());
@@ -174,19 +176,29 @@ describe('resizable service layouts', () => {
     expect(screen.queryByTestId('panel-right-slot')).toBeNull();
   });
 
-  it('hands the parent a handle to collapse and expand the left slot', () => {
-    const leftPanel = createRef<CollapsiblePanelHandle>();
+  it('registers the left slot with the threads panel context so it can be hidden and toggled', () => {
+    const PanelControls = () => {
+      const threadsPanel = useThreadsPanel();
+      return (
+        <>
+          <button onClick={() => threadsPanel?.collapse()}>hide</button>
+          <button onClick={() => threadsPanel?.toggle()}>toggle</button>
+        </>
+      );
+    };
 
     render(
-      <AgentLayout agentId="chef-agent" leftPanel={leftPanel} leftSlot={<div>threads</div>}>
-        <div>chat</div>
-      </AgentLayout>,
+      <ThreadsPanelProvider>
+        <AgentLayout agentId="chef-agent" leftSlot={<PanelControls />}>
+          <div>chat</div>
+        </AgentLayout>
+      </ThreadsPanelProvider>,
     );
 
-    leftPanel.current?.collapse();
+    fireEvent.click(screen.getByRole('button', { name: 'hide' }));
     expect(collapseLeftPanel).toHaveBeenCalledTimes(1);
-    leftPanel.current?.expand();
-    expect(expandLeftPanel).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'toggle' }));
+    expect(toggleLeftPanel).toHaveBeenCalledTimes(1);
   });
 
   it('expands the single left slot to 50% when observational memory opens and restores it on close', async () => {
