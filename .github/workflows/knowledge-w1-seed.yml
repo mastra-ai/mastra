@@ -1,0 +1,47 @@
+name: Knowledge W1 seeded data
+on:
+  push:
+    branches: [ci/knowledge-v21-w1-dump]
+permissions:
+  contents: read
+jobs:
+  seed:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        version:
+          - 0.0.0-knowledge-w1-20261009054256
+          - 0.0.0-knowledge-w1-20261007232522
+          - 0.0.0-knowledge-w1-20261006001735
+    steps:
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
+        with:
+          node-version: 22
+      - run: cd stores/pg && docker compose up -d --wait
+      - name: Install snapshot
+        run: |
+          mkdir -p /tmp/proj out && cp .github/knowledge-w1-seed/seed.mjs /tmp/proj/
+          cd /tmp/proj && npm init -y >/dev/null
+          V='${{ matrix.version }}'
+          npm install --legacy-peer-deps --no-audit --no-fund "@mastra/core@$V" "@mastra/libsql@$V" "@mastra/pg@$V"
+      - name: Seed and dump
+        run: |
+          V='${{ matrix.version }}'
+          S=seed_$(echo "$V" | sed 's/[^a-zA-Z0-9]/_/g')
+          docker exec pg-test-db psql -U postgres -d mastra -c "CREATE SCHEMA $S"
+          cd /tmp/proj
+          node seed.mjs libsql "/tmp/$S.db" > "$GITHUB_WORKSPACE/out/$V.libsql.log.json"
+          node seed.mjs pg "$S" > "$GITHUB_WORKSPACE/out/$V.pg.log.json"
+          sqlite3 "/tmp/$S.db" ".dump mastra_knowledge_%" > "$GITHUB_WORKSPACE/out/$V.libsql.sql"
+          docker exec pg-test-db pg_dump -U postgres -d mastra --data-only --column-inserts --no-owner --no-privileges -n "$S" > "$GITHUB_WORKSPACE/out/$V.pg-data.sql"
+          cat "$GITHUB_WORKSPACE"/out/*.log.json
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: seed-${{ matrix.version }}
+          path: out/

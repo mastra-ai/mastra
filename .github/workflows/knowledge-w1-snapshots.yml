@@ -1,7 +1,6 @@
 name: Knowledge W1 snapshot layouts
 on:
-  push:
-    branches: [ci/knowledge-v21-w1-dump]
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:
