@@ -210,7 +210,7 @@ function RepositoryRow({
               {repository.lastBuildError}
             </Txt>
           )}
-          <SettingsRow label="Setup" description="Runs in the repository checkout after it is cloned, during a template build or at session start.">
+          <SettingsRow label="Setup" description="Runs in this checkout after it is cloned, before the agent starts.">
             <div className="w-full lg:max-w-96">
               <CommittedInput
                 label={`Setup command for ${label}`}
