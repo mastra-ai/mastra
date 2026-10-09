@@ -23,6 +23,13 @@ git -C "$workdir" diff --name-only -z --find-renames --diff-filter=ACMRTUXB "$ba
 git -C "$workdir" ls-files --others --exclude-standard -z
 `;
 const ARTIFACTS_LIST_COMMAND = 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true';
+/**
+ * Regular files directly under the workspace root written since the session
+ * was created (epoch seconds in $2): the agent's notes, setup markers. Files
+ * the template shipped with (shell dotfiles) predate the session and stay out;
+ * the checkouts are covered by git.
+ */
+const ROOT_FILES_LIST_COMMAND = 'cd "$1" && find . -mindepth 1 -maxdepth 1 -type f -newermt "@$2" -print0 || true';
 
 export interface FilesystemCaptureSession {
   readonly identity: { getResourceId(): string };
@@ -138,6 +145,24 @@ export async function captureSessionFilesystem(
       const normalizedPath = path.replace(/^\.\//, '');
       if (normalizedPath) {
         files.set(normalizedPath, { path: normalizedPath });
+      }
+    }
+
+    // With several checkouts the root is a plain directory nothing else lists.
+    if (multiRepo) {
+      const since = Math.floor(sourceSession.createdAt.getTime() / 1000);
+      const rootFiles = await executeCommand('sh', ['-c', ROOT_FILES_LIST_COMMAND, 'sh', layout.root, String(since)], {
+        timeout: 30_000,
+      });
+      if (rootFiles.exitCode !== 0) {
+        console.warn('[Factory filesystem capture] Unable to list workspace root files.', rootFiles.stderr);
+        return;
+      }
+      for (const path of rootFiles.stdout.split('\0')) {
+        const normalizedPath = path.replace(/^\.\//, '');
+        if (normalizedPath) {
+          files.set(normalizedPath, { path: normalizedPath });
+        }
       }
     }
 

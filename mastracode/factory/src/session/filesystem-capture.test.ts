@@ -100,13 +100,15 @@ function createDependencies(): FilesystemCaptureDependencies {
           sandboxId: 'sandbox-1',
           sandboxWorkdir: '/sessions/s1/worktree',
           materializedAt: new Date(),
-          createdAt: new Date(),
+          createdAt: SESSION_CREATED_AT,
           updatedAt: new Date(),
         }),
       },
     },
   };
 }
+
+const SESSION_CREATED_AT = new Date('2026-10-09T17:00:00.000Z');
 
 describe('parseFilesystemCaptureFiles', () => {
   it('treats command output as plain paths and normalizes a leading dot segment', () => {
@@ -257,9 +259,11 @@ describe('captureSessionFilesystem across environment repositories', () => {
   function createEnvironmentSession(
     answers: Record<string, ReturnType<typeof commandResult>>,
     artifacts = commandResult(),
+    rootFiles = commandResult(),
   ) {
     const executeCommand = vi.fn(async (_command: string, args: string[]) => {
       if (args[1] === 'cd "$1" && test -d .artifacts && find .artifacts -type f -print0 || true') return artifacts;
+      if (args[1].includes('-newermt')) return rootFiles;
       return answers[args[3]!] ?? commandResult();
     });
     const base = createSession([]);
@@ -284,6 +288,7 @@ describe('captureSessionFilesystem across environment repositories', () => {
         '/sessions/s1/site': commandResult({ stdout: 'index.html\0' }),
       },
       commandResult({ stdout: './.artifacts/report.md\0' }),
+      commandResult({ stdout: './poem.txt\0./.setup-ran-workdir\0' }),
     );
     const dependencies = createDependencies();
 
@@ -295,15 +300,19 @@ describe('captureSessionFilesystem across environment repositories', () => {
       ['/sessions/s1/docs', 'develop'],
       ['/sessions/s1/site', 'develop'],
     ]);
-    const artifactCalls = executeCommand.mock.calls.filter(call => call[1][2] === 'sh');
-    expect(artifactCalls.map(call => call[1][3])).toEqual(['/sessions/s1']);
+    // Artifacts, then the root-level files written since the session was created, both at the root.
+    const rootCalls = executeCommand.mock.calls.filter(call => call[1][2] === 'sh');
+    expect(rootCalls.map(call => call[1][3])).toEqual(['/sessions/s1', '/sessions/s1']);
+    expect(rootCalls[1]![1][4]).toBe(String(Math.floor(SESSION_CREATED_AT.getTime() / 1000)));
     expect(dependencies.filesystem.replaceFiles).toHaveBeenCalledWith({
       resourceId: 'resource-1',
       threadId: 'thread-1',
       files: [
         { path: '.artifacts/report.md' },
+        { path: '.setup-ran-workdir' },
         { path: 'api/src/app.ts' },
         { path: 'docs/README.md' },
+        { path: 'poem.txt' },
         { path: 'site/index.html' },
       ],
     });
