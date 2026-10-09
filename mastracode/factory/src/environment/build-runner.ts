@@ -96,7 +96,7 @@ export class EnvironmentBuildRunner {
    */
   readonly onRepositoryPush = (event: RepositoryPushEvent): void => {
     if (!event.projectRepository.inEnvironment) return;
-    const branch = event.projectRepository.branch || event.defaultBranch;
+    const branch = event.defaultBranch;
     if (event.ref !== `refs/heads/${branch}`) return;
     void this.#deps.projects
       .getById({ id: event.factoryProjectId })
@@ -111,12 +111,24 @@ export class EnvironmentBuildRunner {
 
   /**
    * Start a run and resolve with the first step's answer; the poll step keeps
-   * running in the background. Resolves `unavailable` before the host booted.
+   * running in the background. Resolves `unavailable` before the host booted
+   * or when the host never registered the workflow, and `failed` when the run
+   * could not be created; a caller that already saved its own change must not
+   * fail on the build it merely requested.
    */
   readonly start: StartEnvironmentBuild = async (projectId, trigger) => {
     const mastra = this.#getMastra();
     if (!mastra) return { outcome: 'unavailable', reason: 'not_ready' };
-    const run = await mastra.getWorkflow(ENVIRONMENT_BUILD_WORKFLOW_ID).createRun();
+    let run: Awaited<ReturnType<typeof this.workflow.createRun>>;
+    try {
+      run = await mastra.getWorkflow(ENVIRONMENT_BUILD_WORKFLOW_ID).createRun();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      this.#logger?.info('environment build run could not be created', { factoryProjectId: projectId, reason });
+      return mastra.listWorkflows()[ENVIRONMENT_BUILD_WORKFLOW_ID]
+        ? { outcome: 'failed', reason }
+        : { outcome: 'unavailable', reason: 'no_workflow' };
+    }
     const outcome = new Promise<EnvironmentBuildOutcome>(resolve => this.#pending.set(run.runId, resolve));
     run
       .start({ inputData: { projectId, trigger } })

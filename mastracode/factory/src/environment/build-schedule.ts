@@ -28,7 +28,7 @@ export interface EnvironmentBuildSchedule {
   timezone: string | null;
 }
 
-export type ScheduleService = Pick<Schedules, 'create' | 'get' | 'list' | 'update' | 'pause' | 'resume'>;
+export type ScheduleService = Pick<Schedules, 'create' | 'get' | 'list' | 'update' | 'pause' | 'resume' | 'delete'>;
 
 function isSchedulesUnavailable(error: unknown): boolean {
   return (

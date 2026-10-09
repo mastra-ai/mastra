@@ -3627,5 +3627,25 @@ describe('factory environment sandbox context', () => {
       ]);
       warn.mockRestore();
     });
+
+    it('leaves a repository whose setup was interrupted unrecorded instead of configured', async () => {
+      const { resolver, github } = environmentFixture({
+        links: [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.runSetupCommand.mockImplementation(async (_sandbox: unknown, _dir: string, command: string) => {
+        if (command === 'pnpm docs') throw new Error('sandbox connection lost');
+      });
+
+      await expect(boot(resolver)).rejects.toThrow('sandbox connection lost');
+
+      const writes = (github.sourceControlStorage.projectRepositories as any).setBuildStatus.mock.calls.map(
+        (call: [unknown]) => call[0],
+      );
+      expect(writes).toEqual([
+        { orgId: 'org-1', id: 'project-1', status: 'configured', error: null, builtAt: expect.any(Date) },
+      ]);
+    });
   });
 });

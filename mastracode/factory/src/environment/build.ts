@@ -79,7 +79,12 @@ export function environmentBuildContext(
   };
 }
 
-/** The current default-branch head of every environment repository, keyed by slug. */
+/**
+ * The current head of every environment repository's template branch, keyed
+ * by slug. The template clones the repository default branch (a link's own
+ * branch is the session's base, checked out after boot), so that is the
+ * branch a build pins; sessions let the provider resolve the same head.
+ */
 export async function resolveEnvironmentHeads(
   sourceControl: EnvironmentBuildSourceControl,
   project: Pick<FactoryProject, 'orgId'>,
@@ -90,7 +95,7 @@ export async function resolveEnvironmentHeads(
     repositories: environment.repos.map(repo => ({
       id: repo.repositoryId,
       slug: repo.slug,
-      branch: repo.defaultBranch,
+      branch: repo.templateBranch,
     })),
   });
 }
@@ -100,7 +105,9 @@ export async function resolveEnvironmentHeads(
  * wins the leading-edge debounce claim; `schedule` and `push` skip when the
  * last build is ready and no head moved; `manual` and `settings` always
  * build. A provider that throws yields `failed` with the attempt still
- * recorded, so the next trigger sees a fresh attempt time.
+ * recorded, so the next trigger sees a fresh attempt time, and the last build
+ * id cleared, so a later `schedule` or `push` cannot mistake the previous
+ * ready build for the current template.
  */
 export async function runEnvironmentBuild(
   deps: EnvironmentBuildDeps,
@@ -160,9 +167,11 @@ export async function runEnvironmentBuild(
     };
   } catch (error) {
     const reason = redactCredentials(error instanceof Error ? error.message : String(error));
-    if (input.trigger !== 'push') {
-      await deps.projects.update({ orgId: project.orgId, id: project.id, input: { lastBuildAttemptedAt: now() } });
-    }
+    await deps.projects.update({
+      orgId: project.orgId,
+      id: project.id,
+      input: { lastBuildId: null, ...(input.trigger === 'push' ? {} : { lastBuildAttemptedAt: now() }) },
+    });
     deps.logger?.info('environment build failed', { factoryProjectId: project.id, trigger: input.trigger, reason });
     return { outcome: 'failed', reason };
   }

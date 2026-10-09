@@ -48,7 +48,7 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 export interface RepositoryPushEvent {
   orgId: string;
   factoryProjectId: string;
-  projectRepository: { id: string; inEnvironment: boolean; branch: string | null };
+  projectRepository: { id: string; inEnvironment: boolean };
   /** The pushed git ref, for example `refs/heads/main`. */
   ref: string;
   /** The repository's default branch as the provider reports it. */

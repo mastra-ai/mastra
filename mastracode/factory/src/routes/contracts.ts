@@ -135,7 +135,7 @@ export const environmentBuildSchema = z.object({
   startedAt: z.string().optional(),
   finishedAt: z.string().optional(),
   error: z.string().optional(),
-  logs: z.string().optional(),
+  logs: z.array(z.string()).optional(),
 });
 
 export const environmentBuildsResponseSchema = z.object({ builds: z.array(environmentBuildSchema) });

@@ -1332,7 +1332,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "type": "string"
               },
               "logs": {
-                "type": "string"
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
               }
             },
             "required": [
@@ -1399,7 +1402,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "type": "string"
             },
             "logs": {
-              "type": "string"
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             }
           },
           "required": [

@@ -189,7 +189,7 @@ describe('factory-environment-build workflow', () => {
     });
   });
 
-  it('starts a push run only for an opted-in project and the default branch of an environment link', async () => {
+  it('starts a push run only for an opted-in project and the default branch of an environment repository', async () => {
     const project = await seedProject(seed);
     const sandbox = new BuildingSandbox();
     let mastra: Mastra | undefined;
@@ -199,7 +199,7 @@ describe('factory-environment-build workflow', () => {
     const event = {
       orgId: 'org-1',
       factoryProjectId: project.id,
-      projectRepository: { id: 'link', inEnvironment: true, branch: null },
+      projectRepository: { id: 'link', inEnvironment: true },
       ref: 'refs/heads/main',
       defaultBranch: 'main',
     };
@@ -210,14 +210,10 @@ describe('factory-environment-build workflow', () => {
     await seed.projects.update({ orgId: 'org-1', id: project.id, input: { buildOnPushEnabled: true } });
     runner.onRepositoryPush({ ...event, ref: 'refs/heads/feature' });
     runner.onRepositoryPush({ ...event, projectRepository: { ...event.projectRepository, inEnvironment: false } });
-    runner.onRepositoryPush({ ...event, projectRepository: { ...event.projectRepository, branch: 'release' } });
-    runner.onRepositoryPush({
-      ...event,
-      projectRepository: { ...event.projectRepository, branch: 'release' },
-      ref: 'refs/heads/release',
-    });
+    // A link's own branch is the session base, not what the template clones.
+    runner.onRepositoryPush({ ...event, ref: 'refs/heads/release' });
     runner.onRepositoryPush(event);
-    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(start).toHaveBeenCalledTimes(1));
     expect(start).toHaveBeenCalledWith(project.id, 'push');
     await vi.waitFor(async () => {
       expect((await seed.projects.getById({ id: project.id }))?.lastBuildId).toBe('build-1');
@@ -242,6 +238,17 @@ describe('factory-environment-build workflow', () => {
     expect(stored?.ctx.sessionId).toBe(`environment-build:${project.id}`);
     await expect(stored?.ctx.resolveHead?.('https://github.com/acme/api')).resolves.toBe('b'.repeat(40));
     await expect(runner.readContext('missing')).resolves.toBeUndefined();
+  });
+
+  it('answers unavailable when the host never registered the workflow, instead of throwing', async () => {
+    const project = await seedProject(seed);
+    const runner = new EnvironmentBuildRunner(depsFor(seed, new BuildingSandbox()), {
+      getMastra: () => new Mastra({ logger: false, storage: new InMemoryStore({ id: 'no-workflow' }) }),
+    });
+    await expect(runner.start(project.id, 'settings')).resolves.toEqual({
+      outcome: 'unavailable',
+      reason: 'no_workflow',
+    });
   });
 
   it('is unavailable before the host booted', async () => {

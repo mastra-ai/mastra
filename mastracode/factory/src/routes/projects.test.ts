@@ -1005,7 +1005,17 @@ describe('ProjectRoutes', () => {
             return { buildId, status: 'ready', templateId: 'tpl-1' };
           },
           list: async () =>
-            this.withHistory ? [{ buildId: 'tpl-1:build-1', status: 'ready' as const, templateId: 'tpl-1' }] : [],
+            this.withHistory
+              ? [
+                  { buildId: 'tpl-1:build-1', status: 'ready' as const, templateId: 'tpl-1' },
+                  {
+                    buildId: 'tpl-1:build-0',
+                    status: 'failed' as const,
+                    error: 'clone https://x-access-token:ghs_secret@github.com/acme/api.git failed',
+                    logs: ['git clone https://x-access-token:ghs_secret@github.com/acme/api.git', 'fatal: 403'],
+                  },
+                ]
+              : [],
         };
         create(): never {
           throw new Error('not constructed in route tests');
@@ -1125,9 +1135,66 @@ describe('ProjectRoutes', () => {
         sandbox.withHistory = true;
         const history = await app.request(`/web/factory/projects/${project.id}/environment/builds`);
         expect(history.status).toBe(200);
+        // Provider output is shown to the user with clone credentials stripped.
         expect(await history.json()).toEqual({
-          builds: [{ buildId: 'tpl-1:build-1', status: 'ready', templateId: 'tpl-1' }],
+          builds: [
+            { buildId: 'tpl-1:build-1', status: 'ready', templateId: 'tpl-1' },
+            {
+              buildId: 'tpl-1:build-0',
+              status: 'failed',
+              error: 'clone https://***@github.com/acme/api.git failed',
+              logs: ['git clone https://***@github.com/acme/api.git', 'fatal: 403'],
+            },
+          ],
         });
+
+        // An id with a percent sign survives the path once, decoded by the router alone.
+        const odd = await app.request(
+          `/web/factory/projects/${project.id}/environment/builds/${encodeURIComponent('tpl%201:b')}`,
+        );
+        expect(odd.status).toBe(200);
+        expect(sandbox.reads.at(-1)?.buildId).toBe('tpl%201:b');
+      });
+
+      it('builds after a repository link, edit or unlink, and after a repository patch on the environment', async () => {
+        const { app, project, sandbox, seed } = await seedBuilding();
+        const github = seed.sourceControl.forIntegration('github');
+        const [link] = await github.projectRepositories.listByProject({ orgId: 'org-1', factoryProjectId: project.id });
+
+        const patched = await patch(app, project.id, {
+          repositories: [{ projectRepositoryId: link!.id, setupCommand: 'pnpm i' }],
+        });
+        expect(((await patched.json()) as any).environment.buildRequested).toBe(true);
+        expect(sandbox.starts).toHaveLength(1);
+
+        const edited = await app.request(`/web/factory/projects/${project.id}/repositories/${link!.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ setupCommand: 'pnpm build' }),
+        });
+        expect(edited.status).toBe(200);
+        await until(async () => sandbox.starts.length === 2);
+
+        const unlinked = await app.request(`/web/factory/projects/${project.id}/repositories/${link!.id}`, {
+          method: 'DELETE',
+        });
+        expect(unlinked.status).toBe(204);
+        // The unlink left no environment repository, so the run skipped instead of building.
+        await until(async () => (await seed.projects.getById({ id: project.id }))?.lastBuildId === 'tpl-1:build-1');
+        expect(sandbox.starts).toHaveLength(2);
+      });
+
+      it('deletes the project schedule with the project', async () => {
+        const { app, project, mastra } = await seedBuilding();
+        const enabled = await patch(app, project.id, {
+          buildTriggers: { schedule: { enabled: true, cron: '0 3 * * *' } },
+        });
+        expect(enabled.status).toBe(200);
+        await expect(mastra!.schedules.get(scheduleIdFor(project.id))).resolves.toMatchObject({ cron: '0 3 * * *' });
+
+        const deleted = await app.request(`/web/factory/projects/${project.id}`, { method: 'DELETE' });
+        expect(deleted.status).toBe(204);
+        await expect(mastra!.schedules.get(scheduleIdFor(project.id))).resolves.toBeNull();
       });
 
       it('answers 404 no_builds without a builds capability and no_history without list', async () => {

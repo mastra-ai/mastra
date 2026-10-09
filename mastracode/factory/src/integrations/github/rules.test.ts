@@ -3987,7 +3987,7 @@ describe('GithubRules push hand-off', () => {
     expect(onRepositoryPush).toHaveBeenCalledWith({
       orgId: 'org-1',
       factoryProjectId: project.id,
-      projectRepository: { id: projectRepository.id, inEnvironment: true, branch: null },
+      projectRepository: { id: projectRepository.id, inEnvironment: true },
       ref: 'refs/heads/main',
       defaultBranch: 'main',
     });

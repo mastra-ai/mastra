@@ -39,7 +39,7 @@ export function BuildHistoryBlock({
             {builds.map(build => {
               const status = BUILD_STATUS[build.status];
               const expanded = open === build.buildId;
-              const detail = build.error || build.logs;
+              const detail = build.error || (build.logs && build.logs.length > 0);
               return (
                 <li key={build.buildId} className="flex flex-col">
                   <button
@@ -82,9 +82,9 @@ export function BuildHistoryBlock({
                           {build.error}
                         </Txt>
                       )}
-                      {build.logs && (
+                      {build.logs && build.logs.length > 0 && (
                         <pre className="bg-surface2 max-h-64 overflow-auto rounded-md p-3 font-mono text-xs whitespace-pre-wrap">
-                          {build.logs}
+                          {build.logs.join('\n')}
                         </pre>
                       )}
                       {!detail && (

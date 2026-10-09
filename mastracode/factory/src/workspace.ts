@@ -396,7 +396,10 @@ export interface SessionEnvironmentRepo {
   projectRepositoryId: string;
   repositoryId: string;
   slug: string;
+  /** The session's base branch: the link's branch when set, else the repository default. */
   defaultBranch: string;
+  /** The repository's own default branch, which the template image clones and pins. */
+  templateBranch: string;
   position: number;
   setupCommand: string | undefined;
   teardownCommand: string | undefined;
@@ -481,6 +484,7 @@ export async function resolveProjectEnvironment(
       repositoryId: repository.id,
       slug: repository.slug,
       defaultBranch: link.branch || repository.defaultBranch,
+      templateBranch: repository.defaultBranch,
       position: link.position,
       setupCommand: link.setupCommand ?? undefined,
       teardownCommand: link.teardownCommand ?? undefined,
@@ -1230,8 +1234,12 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             return command ? [{ slug: state.slug, dir: state.dir, command }] : [];
           }),
         );
+      // The repository whose setup is running when the boot throws something
+      // other than a setup failure: its outcome is unknown, never `configured`.
+      let inFlight: string | undefined;
       try {
         for (const repo of repos) {
+          inFlight = repo.slug;
           const entry = gate.repos.find(candidate => candidate.slug === repo.slug);
           if (!entry) continue;
           const isPrimary = repo.projectRepositoryId === session.projectRepositoryId;
@@ -1328,6 +1336,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             });
           }
         }
+        inFlight = undefined;
         const workspaceCommand = environment!.workspaceSetupCommand;
         if (workspaceCommand && !gate.workspace.setupDone) {
           // Fatal on its first failure, skipped afterwards: like the per-repo
@@ -1356,23 +1365,25 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         }
       } finally {
         record();
-        await recordSetupResults(repos, states, failures);
+        await recordSetupResults(repos, states, failures, inFlight);
       }
       if (primaryError) throw primaryError;
     };
     // Best effort: the per-link status is informational and never fails a
     // boot. A repository whose setup ran is `configured`; one whose setup or
     // sync failed is `failed` with the redacted message; one with no setup
-    // command is left as it was.
+    // command, or whose setup was interrupted, is left as it was.
     const recordSetupResults = async (
       repos: SessionEnvironmentRepo[],
       states: SessionEnvironmentRepositoryState[],
       failures: Map<string, string>,
+      inFlight: string | undefined,
     ) => {
       const builtAt = new Date();
       try {
         for (const state of states) {
           if (state.setupStatus === 'skipped') continue;
+          if (state.slug === inFlight && state.setupStatus !== 'failed') continue;
           const repo = repos.find(candidate => candidate.slug === state.slug);
           if (!repo) continue;
           const error = failures.get(state.slug);

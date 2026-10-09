@@ -59,7 +59,8 @@ export interface FactoryEnvironmentBuild {
   startedAt?: string;
   finishedAt?: string;
   error?: string;
-  logs?: string;
+  /** Log lines, as the provider streams them. */
+  logs?: string[];
 }
 
 export interface FactoryEnvironmentBuildStart {

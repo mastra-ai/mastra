@@ -274,6 +274,40 @@ describe('runEnvironmentBuild', () => {
     expect(stored?.lastBuildAttemptedAt?.toISOString()).toBe(clock.toISOString());
   });
 
+  it('clears a stale ready build id when a settings build fails, so the next schedule rebuilds', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { lastBuildId: 'build-old', activeTemplateId: 'tpl-old', activeTemplateHeads: { 'acme/api': SHA_A } },
+    });
+    sandbox.startError = new Error('quota exceeded');
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'settings' }),
+    ).resolves.toEqual({ outcome: 'failed', reason: 'quota exceeded' });
+    expect((await seed.projects.getById({ id: project.id }))?.lastBuildId).toBeNull();
+
+    // Without the clear, the old ready build and unchanged heads would read as `unchanged`.
+    sandbox.startError = undefined;
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+    ).resolves.toMatchObject({ outcome: 'started', buildId: 'build-1' });
+    expect(sandbox.gets).toEqual([]);
+  });
+
+  it('pins the repository default branch the template clones, not a link branch', async () => {
+    const { project, github } = await seedProject(seed, ['acme/api']);
+    const [link] = await github.projectRepositories.listByProject({ orgId: 'org-1', factoryProjectId: project.id });
+    await github.projectRepositories.update({ orgId: 'org-1', id: link!.id, input: { branch: 'release' } });
+    heads.byBranch.set('acme/api@release', SHA_B);
+    const sandbox = new BuildingSandbox();
+    await expect(
+      runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'manual' }),
+    ).resolves.toMatchObject({ outcome: 'started', heads: { 'acme/api': SHA_A } });
+    await expect(sandbox.starts[0]!.ctx.resolveHead!('https://github.com/acme/api.git')).resolves.toBe(SHA_A);
+  });
+
   it('reports a head lookup failure as failed', async () => {
     const { project } = await seedProject(seed, ['acme/api']);
     heads.byBranch.clear();

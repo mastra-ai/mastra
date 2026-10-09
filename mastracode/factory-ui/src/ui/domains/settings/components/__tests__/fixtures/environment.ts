@@ -105,7 +105,7 @@ export function buildHistory(): FactoryEnvironmentBuild[] {
       startedAt: '2026-10-08T10:00:00Z',
       finishedAt: '2026-10-08T10:03:00Z',
       error: 'pnpm install exited with 1',
-      logs: 'Step 3/7 RUN pnpm install\nERR_PNPM_FETCH 404',
+      logs: ['Step 3/7 RUN pnpm install', 'ERR_PNPM_FETCH 404'],
     },
     {
       buildId: 'tpl-1:bld-1',

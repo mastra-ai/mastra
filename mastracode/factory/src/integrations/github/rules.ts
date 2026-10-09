@@ -453,7 +453,6 @@ export class GithubRules {
         projectRepository: {
           id: project.projectRepository.id,
           inEnvironment: project.projectRepository.inEnvironment,
-          branch: project.projectRepository.branch,
         },
         ref,
         defaultBranch,

@@ -1,3 +1,4 @@
+import { MastraError } from '@mastra/core/error';
 import type { StandardSchemaWithJSON } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -6,7 +7,8 @@ import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/wor
 import type { Context } from 'hono';
 
 import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
-import { ensureSchedule, invalidCronMessage, readSchedule } from '../environment/build-schedule.js';
+import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.js';
+import { redactCredentials } from '../environment/build.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
 import type {
   FactoryProject,
@@ -198,6 +200,15 @@ export interface ProjectRoutesDeps extends RouteDependencies {
 }
 
 /** What the environment reports when the factory has no sandbox configured. */
+/** Provider output is shown to the user; strip any clone credential from it first. */
+function redactBuild<T extends { error?: string; logs?: string[] }>(build: T): T {
+  return {
+    ...build,
+    ...(build.error !== undefined ? { error: redactCredentials(build.error) } : {}),
+    ...(build.logs ? { logs: build.logs.map(redactCredentials) } : {}),
+  };
+}
+
 const NO_SANDBOX: FactorySandboxDescription = {
   provider: 'none',
   settingsSchema: { type: 'object', properties: {}, additionalProperties: false },
@@ -401,7 +412,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!capability.builds.list) return context.json({ error: 'no_history' }, 404);
           const read = await capability.runner.readContext(project.id);
           if (!read) return context.json({ error: 'no_environment' }, 404);
-          return context.json({ builds: await capability.builds.list(read.ctx, read.settings) });
+          const builds = await capability.builds.list(read.ctx, read.settings);
+          return context.json({ builds: builds.map(redactBuild) });
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentBuildGet.path, {
@@ -417,15 +429,40 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!project) return context.json({ error: 'Project not found' }, 404);
           const capability = this.#builds(context);
           if ('response' in capability) return capability.response;
-          // A composite provider id (E2B's `<templateId>:<buildId>`) travels encoded.
-          const buildId = decodeURIComponent(context.req.param('buildId') ?? '');
+          // A composite provider id (E2B's `<templateId>:<buildId>`) travels
+          // encoded; Hono hands the param back decoded.
+          const buildId = context.req.param('buildId') ?? '';
           if (!buildId) return context.json({ error: 'Build not found' }, 404);
           const read = await capability.runner.readContext(project.id);
           if (!read) return context.json({ error: 'no_environment' }, 404);
-          return context.json({ build: await capability.builds.get(read.ctx, read.settings, buildId) });
+          return context.json({ build: redactBuild(await capability.builds.get(read.ctx, read.settings, buildId)) });
         },
       }),
     ];
+  }
+
+  /**
+   * A repository link, unlink or edit changes the template; a capable sandbox
+   * builds it in the background. Never fails the request that changed the link.
+   */
+  #requestBuild(projectId: string): void {
+    const runner = this.deps.environmentBuilds;
+    if (!runner || !this.deps.sandbox?.builds) return;
+    void runner.start(projectId, 'settings').catch((error: unknown) => {
+      console.warn('[factory] environment build request failed after a repository change:', error);
+    });
+  }
+
+  /** Best effort: a deleted project's cron schedule must not keep firing. */
+  async #dropSchedule(projectId: string): Promise<void> {
+    const runner = this.deps.environmentBuilds;
+    if (!runner?.scheduleAvailable) return;
+    try {
+      await runner.schedules()!.delete(scheduleIdFor(projectId));
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'SCHEDULES_NOT_FOUND') return;
+      console.warn('[factory] could not delete the environment build schedule of a deleted project:', error);
+    }
   }
 
   async #retireProjectRepositorySessions(
@@ -636,6 +673,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             }
           }
           await (await this.#projects()).delete({ orgId: tenant.orgId, id });
+          await this.#dropSchedule(id);
           return context.body(null, 204);
         },
       }),
@@ -770,6 +808,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           } catch (error) {
             console.warn('[factory] onProjectRepositoryLinked failed after a successful repository link:', error);
           }
+          this.#requestBuild(projectId);
           return context.json(
             { projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository) },
             201,
@@ -913,7 +952,10 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             runner !== undefined &&
             (JSON.stringify(project.sandboxSettings ?? {}) !== JSON.stringify(updated.sandboxSettings ?? {}) ||
               project.sandboxWorkdir !== updated.sandboxWorkdir ||
-              project.workspaceSetupCommand !== updated.workspaceSetupCommand);
+              project.workspaceSetupCommand !== updated.workspaceSetupCommand ||
+              (repositoryPatches ?? []).some(
+                ({ projectRepositoryId: _id, ...input }) => Object.keys(input).length > 0,
+              ));
           let buildRequested = false;
           if (templateChanged) {
             const outcome = await runner.start(project.id, 'settings');
@@ -944,6 +986,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             id: projectRepositoryId,
             input,
           });
+          this.#requestBuild(projectId);
           return context.json({
             projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository!),
           });
@@ -966,6 +1009,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             return context.json({ error: 'session_retirement_unavailable' }, 409);
           }
           await found.handle.projectRepositories.unlink({ orgId: tenant.orgId, id: projectRepositoryId });
+          this.#requestBuild(projectId);
           return context.body(null, 204);
         },
       }),
