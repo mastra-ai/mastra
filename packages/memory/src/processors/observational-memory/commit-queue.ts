@@ -9,8 +9,12 @@ import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
  * reflection commit runs before waiting normal commits, so a due reflection is not held behind
  * a backlog of chunk writes. A running op is never preempted.
  *
- * Ops must contain only the storage commit and the head read it needs: no model calls,
- * indexing, or other slow work.
+ * Ops hold the storage commit, the head read it needs, and in-memory work on that head (such as
+ * recomposing observation text against it). No model calls, indexing, or other slow I/O.
+ *
+ * There is no timeout. A storage call that never settles holds its key, and every later commit
+ * for that thread or resource waits behind it. A timeout could not cancel the write, and
+ * releasing the key while it still runs would break the ordering the queue provides.
  *
  * Each op runs in the async context of the caller that enqueued it (tracing spans, logger
  * correlation), not the context of the op it waited behind.
