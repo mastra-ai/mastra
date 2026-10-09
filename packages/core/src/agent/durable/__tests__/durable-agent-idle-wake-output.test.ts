@@ -2,6 +2,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
+import { AgentThreadStreamRuntime } from '../../thread-stream-runtime';
 import { createDurableAgent } from '../create-durable-agent';
 
 function makeTextModel(text: string) {
@@ -71,5 +72,42 @@ describe('idle wake sendSignal accepted.output', () => {
     expect(accepted.output).toBeDefined();
     expect(accepted.output).not.toHaveProperty('cleanup');
     await expect(accepted.output!.text).resolves.toBe('The idle wake completed.');
+  });
+
+  it('returns MastraModelOutput when a claimed DurableAgent owner is woken', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = new Agent({
+      id: 'durable-owner-agent',
+      name: 'Durable Owner Agent',
+      instructions: 'Test',
+      model: makeTextModel('The claimed owner woke.'),
+    });
+    const owner = createDurableAgent({ agent, pubsub });
+    const sender = new Agent({
+      id: 'owner-sender',
+      name: 'Owner Sender',
+      instructions: 'Test',
+      model: makeTextModel('sender response'),
+      pubsub,
+    });
+    const claim = await runtime.claimThreadOwnership(
+      owner as unknown as Agent,
+      { resourceId: 'user-1', threadId: 'owner-thread' },
+      pubsub,
+    );
+    expect(claim.claimed).toBe(true);
+
+    const accepted = await runtime.sendSignal(
+      sender,
+      { type: 'user-message', contents: 'wake up' },
+      { resourceId: 'user-1', threadId: 'owner-thread', ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+      pubsub,
+    ).accepted;
+
+    expect(accepted.action).toBe('wake');
+    expect(accepted.output).not.toHaveProperty('cleanup');
+    await expect(accepted.output!.text).resolves.toBe('The claimed owner woke.');
+
+    claim.unsubscribe();
   });
 });
