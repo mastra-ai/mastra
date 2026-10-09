@@ -1,9 +1,9 @@
 import {
-  describeUpdate,
   detectPackageManager,
   fetchLatestVersion,
   isNewerVersion,
   performUpdate,
+  planUpdate,
 } from '@mastra/code-sdk/utils/update-check';
 import { Chalk } from 'chalk';
 import {
@@ -91,21 +91,23 @@ export async function runUpdateCommand({
 
   const stopChecking = startSpinner(output, style, 'Checking for updates', { quiet: true });
   const latestVersion = await fetchLatestVersion();
-  stopChecking();
-  if (!latestVersion) {
+  if (!latestVersion || !isNewerVersion(currentVersion, latestVersion)) {
+    stopChecking();
     say(formatUpdateHeader(style, currentVersion));
-    return fail(formatRegistryError(errorStyle));
-  }
-  if (!isNewerVersion(currentVersion, latestVersion)) {
-    say(formatUpdateHeader(style, currentVersion));
+    if (!latestVersion) return fail(formatRegistryError(errorStyle));
     say(formatUpToDate(style));
     return 0;
   }
+  const pm = await detectPackageManager();
+  const plan = await planUpdate(pm, latestVersion);
+  stopChecking();
 
   say(formatUpdateHeader(style, currentVersion, latestVersion));
-  const pm = await detectPackageManager();
-  const stopInstalling = startSpinner(output, style, formatInstallingLabel(style, describeUpdate(pm, latestVersion)));
-  const outcome = await performUpdate(pm, latestVersion);
+  // Nothing to install for the user (e.g. Homebrew owns it): show the command to run instead.
+  if (!plan.willInstall) return fail(...formatUpdateOutcome(errorStyle, plan.outcome, latestVersion));
+
+  const stopInstalling = startSpinner(output, style, formatInstallingLabel(style, plan));
+  const outcome = await performUpdate(pm, latestVersion, plan);
   stopInstalling();
   if (outcome.status === 'updated') {
     say(formatUpdateOutcome(style, outcome, latestVersion).join('\n'));

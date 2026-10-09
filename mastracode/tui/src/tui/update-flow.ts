@@ -2,8 +2,8 @@
  * The update prompt and install, shared by `/update` and the startup update check.
  */
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
-import { describeUpdate, performUpdate } from '@mastra/code-sdk/utils/update-check';
-import type { PackageManager } from '@mastra/code-sdk/utils/update-check';
+import { performUpdate } from '@mastra/code-sdk/utils/update-check';
+import type { PackageManager, UpdatePlan } from '@mastra/code-sdk/utils/update-check';
 import { formatInstallingLabel, formatUpdateHeader, formatUpdateOutcome } from '../update-output.js';
 import type { UpdateStyle } from '../update-output.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
@@ -25,6 +25,8 @@ export interface UpdateOffer {
   latestVersion: string;
   pm: PackageManager;
   changelog: string | null;
+  /** From `planUpdate`; decides whether there is anything to ask. */
+  plan: UpdatePlan;
 }
 
 export interface UpdateFlowHost {
@@ -37,16 +39,31 @@ export interface UpdateFlowHost {
 /**
  * Ask whether to install `latestVersion`, then install it with a spinner.
  * On success the TUI exits and the result is printed to the shell; on failure
- * the result stays in the chat. No (and Esc, with `dismissOnCancel`) remembers
- * the version so startup doesn't offer it again.
+ * the result stays in the chat. When no install can run (e.g. Homebrew owns
+ * the install), skip the question and show the command to run instead.
+ * No remembers the version so startup doesn't offer it again; at `startup`,
+ * so do Esc and the no-install note.
  */
 export async function offerUpdate(
   host: UpdateFlowHost,
-  { currentVersion, latestVersion, pm, changelog }: UpdateOffer,
-  { dismissOnCancel = false }: { dismissOnCancel?: boolean } = {},
+  { currentVersion, latestVersion, pm, changelog, plan }: UpdateOffer,
+  { startup = false }: { startup?: boolean } = {},
 ): Promise<void> {
   const { state } = host;
-  const update = describeUpdate(pm, latestVersion);
+  const remember = () => {
+    const settings = loadSettings();
+    settings.updateDismissedVersion = latestVersion;
+    saveSettings(settings);
+  };
+
+  if (!plan.willInstall) {
+    showLines(state, [
+      formatUpdateHeader(tuiUpdateStyle, currentVersion, latestVersion),
+      ...formatUpdateOutcome(tuiUpdateStyle, plan.outcome, latestVersion),
+    ]);
+    if (startup) remember();
+    return;
+  }
 
   let question = `Mastra Code v${currentVersion} → v${latestVersion}`;
   if (changelog) question += `\n\nWhat's new\n${changelog}`;
@@ -57,7 +74,7 @@ export async function offerUpdate(
       {
         question,
         options: [
-          { label: 'Yes', description: `Install with ${update.via} and restart` },
+          { label: 'Yes', description: `Install with ${plan.via} and restart` },
           { label: 'No', description: `Skip v${latestVersion}` },
         ],
         allowCustomResponse: false,
@@ -80,8 +97,8 @@ export async function offerUpdate(
   });
 
   if (answer === 'Yes') {
-    const stopProgress = showProgress(state, formatInstallingLabel(tuiUpdateStyle, update));
-    const outcome = await performUpdate(pm, latestVersion);
+    const stopProgress = showProgress(state, formatInstallingLabel(tuiUpdateStyle, plan));
+    const outcome = await performUpdate(pm, latestVersion, plan);
     stopProgress();
     if (outcome.status === 'updated') {
       // Let the TUI repaint without the spinner (it paints at most every 16ms) so
@@ -102,10 +119,6 @@ export async function offerUpdate(
     return;
   }
 
-  if (answer === 'No' || dismissOnCancel) {
-    const settings = loadSettings();
-    settings.updateDismissedVersion = latestVersion;
-    saveSettings(settings);
-  }
+  if (answer === 'No' || startup) remember();
   if (answer === 'No') showInfo(state, `Skipped v${latestVersion}. Run /update to install it later.`);
 }

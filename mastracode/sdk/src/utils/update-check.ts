@@ -474,29 +474,37 @@ function findInstallOwner(dir: string, version: string): InstallOwner | null {
 }
 
 /**
- * What {@link performUpdate} will run for this install: the tool and the
- * command, for showing progress before it starts.
+ * What an update will do for the running install: run an install (with the
+ * tool and command it will use), or nothing, with the result to show instead.
  */
-export function describeUpdate(pm: PackageManager, targetVersion: string): { via: string; command: string } {
-  const install = locateOwnInstall();
-  const owner = install ? findInstallOwner(install.dir, targetVersion) : null;
-  if (owner) return { via: owner.name, command: owner.command };
-  return { via: pm, command: getInstallCommand(pm, targetVersion) };
-}
+export type UpdatePlan =
+  | {
+      willInstall: true;
+      /** The package manager or tool that will run the install. */
+      via: string;
+      /** The install command, as the user would type it. */
+      command: string;
+      exec: { cmd: string; args: string[] };
+    }
+  | { willInstall: false; outcome: Extract<UpdateOutcome, { status: 'unchanged' | 'failed' }> };
 
 /**
- * Update mastracode and verify the result: delegates to the tool that owns the
- * running install when we recognize it, skips the install when it isn't
- * managed by `pm`, otherwise runs the package manager. Every executed update
- * is verified against the on-disk version.
+ * Decide how to update the running install, without changing anything:
+ * delegate to the tool that owns it when we recognize it, only suggest a
+ * command when that tool can't be run for the user (Homebrew) or `pm` doesn't
+ * manage it, otherwise run `pm`. {@link performUpdate} carries out this plan,
+ * so callers can show what will happen before it starts.
  */
-export async function performUpdate(pm: PackageManager, targetVersion: string): Promise<UpdateOutcome> {
+export async function planUpdate(pm: PackageManager, targetVersion: string): Promise<UpdatePlan> {
   // The registry-provided version reaches shell commands on Windows — accept only version tokens.
   if (!/^[\w.+-]+$/.test(targetVersion)) {
     return {
-      status: 'failed',
-      message: `Auto-update aborted: unexpected version "${targetVersion}".`,
-      details: `The npm registry returned an unexpected version: "${targetVersion}".`,
+      willInstall: false,
+      outcome: {
+        status: 'failed',
+        message: `Auto-update aborted: unexpected version "${targetVersion}".`,
+        details: `The npm registry returned an unexpected version: "${targetVersion}".`,
+      },
     };
   }
 
@@ -508,27 +516,52 @@ export async function performUpdate(pm: PackageManager, targetVersion: string): 
       const message =
         `Your Mastra Code install (at ${install!.dir}) is managed by ${owner.name}. ` +
         `Update it with \`${owner.command}\`.`;
-      return { status: 'unchanged', message, command: owner.command, installDir: install!.dir, managedBy: owner.name };
+      return {
+        willInstall: false,
+        outcome: {
+          status: 'unchanged',
+          message,
+          command: owner.command,
+          installDir: install!.dir,
+          managedBy: owner.name,
+        },
+      };
     }
-    const result = await execUpdate(owner.exec.cmd, owner.exec.args);
-    return resolveUpdateOutcome({
-      pm,
-      targetVersion,
-      result,
-      install: locateOwnInstall(),
-      manualCommand: owner.command,
-      via: owner.name,
-    });
+    return { willInstall: true, via: owner.name, command: owner.command, exec: owner.exec };
   }
 
+  const command = getInstallCommand(pm, targetVersion);
   if (!(await isOwnInstallManagedBy(pm, install))) {
     const message =
       `Your Mastra Code install (at ${install!.dir}) is not managed by ${pm} — it looks like it was ` +
-      `installed by another tool. Update it with that tool, or try \`${getInstallCommand(pm, targetVersion)}\`.`;
-    return { status: 'unchanged', message, command: getInstallCommand(pm, targetVersion), installDir: install!.dir };
+      `installed by another tool. Update it with that tool, or try \`${command}\`.`;
+    return { willInstall: false, outcome: { status: 'unchanged', message, command, installDir: install!.dir } };
   }
 
-  const result = await runUpdate(pm, targetVersion);
+  return { willInstall: true, via: pm, command, exec: { cmd: pm, args: buildInstallArgs(pm, targetVersion) } };
+}
+
+/**
+ * Update mastracode following {@link planUpdate} (pass a plan already shown to
+ * the user, or let this make one), then verify the result against the version
+ * on disk.
+ */
+export async function performUpdate(
+  pm: PackageManager,
+  targetVersion: string,
+  plan?: UpdatePlan,
+): Promise<UpdateOutcome> {
+  plan ??= await planUpdate(pm, targetVersion);
+  if (!plan.willInstall) return plan.outcome;
+
+  const result = await execUpdate(plan.exec.cmd, plan.exec.args);
   // Re-locate so the version reflects what the install just wrote to disk.
-  return resolveUpdateOutcome({ pm, targetVersion, result, install: locateOwnInstall() });
+  return resolveUpdateOutcome({
+    pm,
+    targetVersion,
+    result,
+    install: locateOwnInstall(),
+    // A delegated update keeps the owning tool's command; `pm` updates keep the default wording.
+    ...(plan.via === pm ? {} : { manualCommand: plan.command, via: plan.via }),
+  });
 }

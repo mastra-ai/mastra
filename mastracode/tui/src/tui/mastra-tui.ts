@@ -28,7 +28,9 @@ import {
   fetchChangelog,
   fetchLatestVersion,
   isNewerVersion,
+  planUpdate,
 } from '@mastra/code-sdk/utils/update-check';
+import type { UpdatePlan } from '@mastra/code-sdk/utils/update-check';
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { disposeAssistantRenderState } from './assistant-render-registry.js';
@@ -1830,26 +1832,29 @@ export class MastraTUI {
       return;
     }
 
-    const [pm, changelog] = await Promise.all([detectPackageManager(), fetchChangelog(latestVersion)]);
+    const pm = await detectPackageManager();
+    const [plan, changelog] = await Promise.all([planUpdate(pm, latestVersion), fetchChangelog(latestVersion)]);
 
     // Prompt the user (and mark banner as shown so periodic checks don't repeat it)
     this.hasShownUpdateBanner = true;
-    await this.showUpdatePrompt(currentVersion, latestVersion, pm, changelog);
+    await this.showUpdatePrompt(currentVersion, latestVersion, pm, changelog, plan);
   }
 
   /**
-   * Show a Y/N prompt offering to auto-update (inline in the chat flow).
+   * Offer the update inline in the chat, or show the command to run when it
+   * can't be installed for the user.
    */
   private async showUpdatePrompt(
     currentVersion: string,
     latestVersion: string,
     pm: Awaited<ReturnType<typeof detectPackageManager>>,
     changelog: string | null,
+    plan: UpdatePlan,
   ): Promise<void> {
     await offerUpdate(
       { state: this.state, stop: () => this.stop(), exit: code => this.exit(code) },
-      { currentVersion, latestVersion, pm, changelog },
-      { dismissOnCancel: true },
+      { currentVersion, latestVersion, pm, changelog, plan },
+      { startup: true },
     );
   }
 }

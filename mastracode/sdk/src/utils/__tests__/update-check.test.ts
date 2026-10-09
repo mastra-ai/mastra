@@ -12,12 +12,12 @@ vi.mock('node:fs', () => ({ readFileSync: readFileSyncMock, realpathSync: realpa
 vi.mock('node:os', () => ({ homedir: homedirMock }));
 
 import {
-  describeUpdate,
   fetchChangelog,
   isNewerVersion,
   locateOwnInstall,
   parseChangelog,
   performUpdate,
+  planUpdate,
   resolveUpdateOutcome,
   runUpdate,
 } from '../update-check.js';
@@ -528,12 +528,72 @@ describe('performUpdate', () => {
     expect(execFileMock).not.toHaveBeenCalled();
   });
 
-  it('describes the tool and command an update will use', () => {
-    mockInstalledAt('/home/tester/.vite-plus/lib/node_modules/mastracode', '1.0.0');
-    expect(describeUpdate('npm', '2.0.0')).toEqual({ via: 'vite-plus', command: 'vp install -g mastracode@2.0.0' });
+  describe('planUpdate', () => {
+    const installCalls = () => execFileMock.mock.calls.filter(([, args]) => args[0] !== 'root');
 
-    mockInstalledAt('/global/root/mastracode', '1.0.0');
-    expect(describeUpdate('pnpm', '2.0.0')).toEqual({ via: 'pnpm', command: 'pnpm add -g mastracode@2.0.0' });
+    it('plans a pm install when the pm manages the running install, without running it', async () => {
+      mockPackageManager('/global/root');
+      mockInstalledAt('/global/root/mastracode', '1.0.0');
+
+      await expect(planUpdate('npm', '2.0.0')).resolves.toEqual({
+        willInstall: true,
+        via: 'npm',
+        command: 'npm install -g mastracode@2.0.0',
+        exec: { cmd: 'npm', args: ['install', '-g', 'mastracode@2.0.0'] },
+      });
+      expect(installCalls()).toHaveLength(0);
+    });
+
+    it('plans a delegated install for vite-plus', async () => {
+      mockInstalledAt('/home/tester/.vite-plus/lib/node_modules/mastracode', '1.0.0');
+
+      await expect(planUpdate('npm', '2.0.0')).resolves.toMatchObject({
+        willInstall: true,
+        via: 'vite-plus',
+        command: 'vp install -g mastracode@2.0.0',
+      });
+      expect(execFileMock).not.toHaveBeenCalled();
+    });
+
+    it('plans no install for Homebrew, only its command', async () => {
+      mockInstalledAt('/opt/homebrew/Cellar/mastracode/1.0.0/libexec/lib/node_modules/mastracode', '1.0.0');
+
+      await expect(planUpdate('npm', '2.0.0')).resolves.toMatchObject({
+        willInstall: false,
+        outcome: { status: 'unchanged', command: 'brew upgrade mastracode', managedBy: 'Homebrew' },
+      });
+      expect(execFileMock).not.toHaveBeenCalled();
+    });
+
+    it('plans no install when the pm does not manage the running install', async () => {
+      mockPackageManager('/global/root');
+      mockInstalledAt('/opt/vite-plus/mastracode', '1.0.0');
+
+      await expect(planUpdate('npm', '2.0.0')).resolves.toMatchObject({
+        willInstall: false,
+        outcome: {
+          status: 'unchanged',
+          command: 'npm install -g mastracode@2.0.0',
+          installDir: '/opt/vite-plus/mastracode',
+        },
+      });
+      expect(installCalls()).toHaveLength(0);
+    });
+
+    it('plans no install for a malformed version', async () => {
+      await expect(planUpdate('npm', '2.0.0; rm -rf ~')).resolves.toMatchObject({
+        willInstall: false,
+        outcome: { status: 'failed' },
+      });
+      expect(execFileMock).not.toHaveBeenCalled();
+    });
+  });
+
+  it('follows a plan it is given instead of planning again', async () => {
+    const outcome = { status: 'unchanged' as const, message: 'skip', command: 'brew upgrade mastracode' };
+
+    await expect(performUpdate('npm', '2.0.0', { willInstall: false, outcome })).resolves.toBe(outcome);
+    expect(execFileMock).not.toHaveBeenCalled();
   });
 
   it('rejects a malformed target version before running anything', async () => {

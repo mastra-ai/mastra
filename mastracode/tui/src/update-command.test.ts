@@ -1,5 +1,10 @@
 import { Writable } from 'node:stream';
-import { detectPackageManager, fetchLatestVersion, performUpdate } from '@mastra/code-sdk/utils/update-check';
+import {
+  detectPackageManager,
+  fetchLatestVersion,
+  performUpdate,
+  planUpdate,
+} from '@mastra/code-sdk/utils/update-check';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
@@ -7,7 +12,12 @@ import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
 vi.mock('@mastra/code-sdk/utils/update-check', async importOriginal => ({
   ...(await importOriginal<typeof import('@mastra/code-sdk/utils/update-check')>()),
   detectPackageManager: vi.fn(async () => 'pnpm'),
-  describeUpdate: vi.fn((pm: string, version: string) => ({ via: pm, command: `${pm} add -g mastracode@${version}` })),
+  planUpdate: vi.fn(async (pm: string, version: string) => ({
+    willInstall: true,
+    via: pm,
+    command: `${pm} add -g mastracode@${version}`,
+    exec: { cmd: pm, args: ['add', '-g', `mastracode@${version}`] },
+  })),
   fetchLatestVersion: vi.fn(),
   performUpdate: vi.fn(),
 }));
@@ -55,7 +65,7 @@ describe('runUpdateCommand', () => {
 
     const { code, text, errorText } = await run();
 
-    expect(performUpdate).toHaveBeenCalledWith('pnpm', '1.2.0');
+    expect(performUpdate).toHaveBeenCalledWith('pnpm', '1.2.0', expect.objectContaining({ willInstall: true }));
     expect(text).toBe(
       [
         'Mastra Code  v1.0.0 → v1.2.0',
@@ -112,19 +122,40 @@ describe('runUpdateCommand', () => {
     expect(code).toBe(1);
   });
 
-  it('exits 1 when another tool manages the install', async () => {
+  it('shows the Homebrew command without claiming to install when Homebrew owns the install', async () => {
     vi.mocked(fetchLatestVersion).mockResolvedValue('1.2.0');
-    vi.mocked(performUpdate).mockResolvedValue({
-      status: 'unchanged',
-      message: '',
-      command: 'brew upgrade mastracode',
-      managedBy: 'Homebrew',
+    vi.mocked(planUpdate).mockResolvedValueOnce({
+      willInstall: false,
+      outcome: { status: 'unchanged', message: '', command: 'brew upgrade mastracode', managedBy: 'Homebrew' },
     });
 
-    const { code, errorText } = await run();
+    const { code, text, errorText } = await run();
 
-    expect(errorText).toContain('! Installed with Homebrew, so update it there:');
-    expect(errorText).toContain('  brew upgrade mastracode');
+    expect(text).toBe('Mastra Code  v1.0.0 → v1.2.0\n');
+    expect(errorText).toBe('! Installed with Homebrew, so update it there:\n\n  brew upgrade mastracode\n');
+    expect(`${text}${errorText}`).not.toContain('Installing with');
+    expect(performUpdate).not.toHaveBeenCalled();
+    expect(code).toBe(1);
+  });
+
+  it('shows the command without claiming to install when the pm does not manage the install', async () => {
+    vi.mocked(fetchLatestVersion).mockResolvedValue('1.2.0');
+    vi.mocked(planUpdate).mockResolvedValueOnce({
+      willInstall: false,
+      outcome: {
+        status: 'unchanged',
+        message: '',
+        command: 'pnpm add -g mastracode@1.2.0',
+        installDir: '/opt/tools/mastracode',
+      },
+    });
+
+    const { code, text, errorText } = await run();
+
+    expect(errorText).toContain("! This Mastra Code wasn't updated");
+    expect(errorText).toContain('It was installed by another tool, at /opt/tools/mastracode');
+    expect(`${text}${errorText}`).not.toContain('Installing with');
+    expect(performUpdate).not.toHaveBeenCalled();
     expect(code).toBe(1);
   });
 
@@ -154,6 +185,7 @@ describe('runUpdateCommand', () => {
 
     await run();
 
-    expect(performUpdate).toHaveBeenCalledWith('bun', '2.0.0');
+    expect(planUpdate).toHaveBeenCalledWith('bun', '2.0.0');
+    expect(performUpdate).toHaveBeenCalledWith('bun', '2.0.0', expect.objectContaining({ via: 'bun' }));
   });
 });

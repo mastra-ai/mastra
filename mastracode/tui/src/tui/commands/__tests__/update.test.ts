@@ -6,6 +6,7 @@ const {
   detectPackageManagerMock,
   isNewerVersionMock,
   performUpdateMock,
+  planUpdateMock,
   loadSettingsMock,
   saveSettingsMock,
   showInfoMock,
@@ -20,6 +21,7 @@ const {
     detectPackageManagerMock: vi.fn(),
     isNewerVersionMock: vi.fn(),
     performUpdateMock: vi.fn(),
+    planUpdateMock: vi.fn(),
     loadSettingsMock: vi.fn(),
     saveSettingsMock: vi.fn(),
     showInfoMock: vi.fn(),
@@ -35,7 +37,7 @@ vi.mock('@mastra/code-sdk/utils/update-check', () => ({
   detectPackageManager: detectPackageManagerMock,
   isNewerVersion: isNewerVersionMock,
   performUpdate: performUpdateMock,
-  describeUpdate: (pm: string, version: string) => ({ via: pm, command: `${pm} add -g mastracode@${version}` }),
+  planUpdate: planUpdateMock,
 }));
 
 vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
@@ -59,6 +61,7 @@ vi.mock('../../components/ask-question-inline.js', () => ({
   },
 }));
 
+import { offerUpdate } from '../../update-flow.js';
 import { handleUpdateCommand } from '../update.js';
 
 const plain = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, '');
@@ -104,7 +107,50 @@ describe('handleUpdateCommand', () => {
       message: '',
       command: 'pnpm add -g mastracode@0.2.0',
     });
+    planUpdateMock.mockImplementation(async (pm: string, version: string) => ({
+      willInstall: true,
+      via: pm,
+      command: `${pm} add -g mastracode@${version}`,
+      exec: { cmd: pm, args: ['add', '-g', `mastracode@${version}`] },
+    }));
     loadSettingsMock.mockReturnValue({ updateDismissedVersion: null });
+  });
+
+  it.each([
+    [
+      'Homebrew owns the install',
+      { status: 'unchanged', message: '', command: 'brew upgrade mastracode', managedBy: 'Homebrew' },
+      ['! Installed with Homebrew, so update it there:', '', '  brew upgrade mastracode'],
+    ],
+    [
+      'the pm does not manage the install',
+      {
+        status: 'unchanged',
+        message: '',
+        command: 'pnpm add -g mastracode@0.2.0',
+        installDir: '/opt/tools/mastracode',
+      },
+      [
+        "! This Mastra Code wasn't updated",
+        '  It was installed by another tool, at /opt/tools/mastracode',
+        '',
+        'Update it with the tool that installed it, or run:  pnpm add -g mastracode@0.2.0',
+      ],
+    ],
+  ])('skips the prompt and shows the command to run when %s', async (_case, outcome, lines) => {
+    planUpdateMock.mockResolvedValue({ willInstall: false, outcome });
+    const ctx = createCtx('0.1.0');
+
+    await handleUpdateCommand(ctx);
+
+    expect(ctx.state.activeInlineQuestion).toBeUndefined();
+    expect(ctx.state.chatContainer.children).toHaveLength(0);
+    expect(shownLines()).toEqual([['Mastra Code  v0.1.0 → v0.2.0', ...lines]]);
+    const labels = showProgressMock.mock.calls.map(([, label]) => plain(label as string));
+    expect(labels).toEqual(['Checking for updates']);
+    expect(JSON.stringify(shownLines())).not.toMatch(/Install(ing)? with/);
+    expect(performUpdateMock).not.toHaveBeenCalled();
+    expect(saveSettingsMock).not.toHaveBeenCalledWith({ updateDismissedVersion: '0.2.0' });
   });
 
   it('spins while checking, then reports a registry failure without opening a prompt', async () => {
@@ -172,7 +218,7 @@ describe('handleUpdateCommand', () => {
 
     await answer(ctx, 'Yes');
 
-    expect(performUpdateMock).toHaveBeenCalledWith('pnpm', '0.2.0');
+    expect(performUpdateMock).toHaveBeenCalledWith('pnpm', '0.2.0', expect.objectContaining({ willInstall: true }));
     expect(plain(showProgressMock.mock.calls[1]![1] as string)).toBe(
       'Installing with pnpm  pnpm add -g mastracode@0.2.0',
     );
@@ -217,5 +263,28 @@ describe('handleUpdateCommand', () => {
     );
     expect(ctx.exit).toHaveBeenCalledWith(0);
     logSpy.mockRestore();
+  });
+
+  it('shows the no-install note at startup once, remembering the version', async () => {
+    const ctx = createCtx('0.1.0');
+
+    await offerUpdate(
+      { state: ctx.state, stop: ctx.stop, exit: ctx.exit },
+      {
+        currentVersion: '0.1.0',
+        latestVersion: '0.2.0',
+        pm: 'npm',
+        changelog: null,
+        plan: {
+          willInstall: false,
+          outcome: { status: 'unchanged', message: '', command: 'brew upgrade mastracode', managedBy: 'Homebrew' },
+        },
+      },
+      { startup: true },
+    );
+
+    expect(ctx.state.activeInlineQuestion).toBeUndefined();
+    expect(shownLines()[0]![0]).toBe('Mastra Code  v0.1.0 → v0.2.0');
+    expect(saveSettingsMock).toHaveBeenCalledWith({ updateDismissedVersion: '0.2.0' });
   });
 });

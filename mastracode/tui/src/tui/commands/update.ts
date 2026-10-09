@@ -4,6 +4,7 @@ import {
   fetchChangelog,
   fetchLatestVersion,
   isNewerVersion,
+  planUpdate,
 } from '@mastra/code-sdk/utils/update-check';
 import { formatRegistryError, formatUpdateHeader, formatUpToDate } from '../../update-output.js';
 import { showLines, showProgress } from '../display.js';
@@ -19,19 +20,16 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
 
   const stopChecking = showProgress(ctx.state, 'Checking for updates');
   const latestVersion = await fetchLatestVersion();
+  if (!latestVersion || !isNewerVersion(currentVersion, latestVersion)) {
+    stopChecking();
+    const result = latestVersion ? formatUpToDate(tuiUpdateStyle) : formatRegistryError(tuiUpdateStyle);
+    showLines(ctx.state, [formatUpdateHeader(tuiUpdateStyle, currentVersion), result]);
+    return;
+  }
+
+  const pm = await detectPackageManager();
+  const [plan, changelog] = await Promise.all([planUpdate(pm, latestVersion), fetchChangelog(latestVersion)]);
   stopChecking();
-
-  const header = formatUpdateHeader(tuiUpdateStyle, currentVersion);
-  if (!latestVersion) {
-    showLines(ctx.state, [header, formatRegistryError(tuiUpdateStyle)]);
-    return;
-  }
-  if (!isNewerVersion(currentVersion, latestVersion)) {
-    showLines(ctx.state, [header, formatUpToDate(tuiUpdateStyle)]);
-    return;
-  }
-
-  const [pm, changelog] = await Promise.all([detectPackageManager(), fetchChangelog(latestVersion)]);
 
   // Clear any previously dismissed version so the prompt always shows
   const settings = loadSettings();
@@ -42,6 +40,6 @@ export async function handleUpdateCommand(ctx: SlashCommandContext): Promise<voi
 
   await offerUpdate(
     { state: ctx.state, stop: () => ctx.stop(), exit: code => (ctx.exit ? ctx.exit(code) : process.exit(code)) },
-    { currentVersion, latestVersion, pm, changelog },
+    { currentVersion, latestVersion, pm, changelog, plan },
   );
 }
