@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
+import { createKnowledgeSchemaLatchTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
 import {
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
@@ -30,6 +30,23 @@ function createStore() {
 }
 
 createKnowledgeStorageTests(createStore);
+
+const latchDatabases: { name: string; connector: ReturnType<typeof resolveMongoDBConfig> }[] = [];
+createKnowledgeSchemaLatchTests(async () => {
+  const dbName = `knowledge-latch-${randomUUID()}`;
+  const isolated = resolveMongoDBConfig({
+    uri: process.env.MONGODB_URL || 'mongodb://localhost:27017/?replicaSet=rs0',
+    dbName,
+  });
+  latchDatabases.push({ name: dbName, connector: isolated });
+  await (await isolated.getCollection(TABLE_KNOWLEDGE_NODES)).insertOne({ id: 'old', name: 'Old' });
+  return {
+    store: new KnowledgeMongoDB({ connector: isolated }),
+    repair: async () => {
+      await (await isolated.getCollection(TABLE_KNOWLEDGE_NODES)).drop();
+    },
+  };
+});
 
 describe('MongoDB canonical Knowledge support', () => {
   it('advertises the canonical contract and all managed collections', () => {
@@ -278,5 +295,14 @@ describe('MongoDB canonical Knowledge support', () => {
 });
 
 afterAll(async () => {
+  const client = new MongoClient(process.env.MONGODB_URL || 'mongodb://localhost:27017/?replicaSet=rs0');
+  try {
+    for (const latch of latchDatabases) {
+      await client.db(latch.name).dropDatabase();
+      await latch.connector.close();
+    }
+  } finally {
+    await client.close();
+  }
   await connector.close();
 });
