@@ -1625,6 +1625,85 @@ describe('MastraStorageExporter', () => {
       });
     });
 
+
+  describe('flush()/shutdown() join in-flight batches', () => {
+    function makeExporter(): MastraStorageExporter {
+      return new MastraStorageExporter({
+        strategy: 'batch-with-updates',
+        maxBatchSize: 1, // every event triggers an immediate flush
+        logger: mockLogger,
+      });
+    }
+
+    it('flush() resolves only after an in-flight batch write completes', async () => {
+      const exporter = makeExporter();
+      await exporter.init({ mastra: mockMastra });
+
+      let releaseWrite!: () => void;
+      const heldWrite = new Promise<void>(resolve => {
+        releaseWrite = resolve;
+      });
+      mockObservabilityStore.batchCreateSpans.mockReturnValueOnce(heldWrite);
+
+      const createEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
+      const exportPromise = exporter.exportTracingEvent(createEvent);
+      // Let the flush start in the background without awaiting the held write.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // The batch was extracted from the live buffer and the write is in flight.
+      expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1);
+
+      let flushResolved = false;
+      const flushPromise = exporter.flush().then(() => {
+        flushResolved = true;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      // flush() must not resolve while the extracted batch is still writing,
+      // even though the live buffer is now empty.
+      expect(flushResolved).toBe(false);
+
+      releaseWrite();
+      await flushPromise;
+      await exportPromise;
+      expect(flushResolved).toBe(true);
+    });
+
+    it('shutdown() resolves only after an in-flight batch write completes', async () => {
+      const exporter = makeExporter();
+      await exporter.init({ mastra: mockMastra });
+
+      let releaseWrite!: () => void;
+      const heldWrite = new Promise<void>(resolve => {
+        releaseWrite = resolve;
+      });
+      mockObservabilityStore.batchCreateSpans.mockReturnValueOnce(heldWrite);
+
+      const createEvent = createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1');
+      const exportPromise = exporter.exportTracingEvent(createEvent);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1);
+
+      let shutdownResolved = false;
+      const shutdownPromise = exporter.shutdown().then(() => {
+        shutdownResolved = true;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(shutdownResolved).toBe(false);
+
+      releaseWrite();
+      await shutdownPromise;
+      await exportPromise;
+      expect(shutdownResolved).toBe(true);
+    });
+  });
     function createMockEvent(
       type: TracingEventType,
       traceId = 'trace-1',

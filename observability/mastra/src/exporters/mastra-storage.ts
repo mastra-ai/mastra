@@ -87,6 +87,10 @@ export class MastraStorageExporter extends BaseExporter {
   #resolvedStrategy?: TracingStorageStrategy;
   #flushTimer?: NodeJS.Timeout;
   #emitDropEvent?: (event: ObservabilityDropEvent) => void;
+  // In-flight flushBuffer() promises, so flush()/shutdown() can join batches
+  // that have already been extracted from the live buffer but are still
+  // being written to storage.
+  #activeFlushes: Set<Promise<void>> = new Set();
 
   // Signals whose storage methods threw "not implemented" — skip on future flushes
   #unsupportedSignals: Set<ObservabilityDropSignal> = new Set();
@@ -416,6 +420,22 @@ export class MastraStorageExporter extends BaseExporter {
   }
 
   /**
+   * Runs flushBuffer() once, tracking it as an in-flight flush so public
+   * flush()/shutdown() can join batches that were already extracted from the
+   * live buffer but are still being written to storage. Internal callers
+   * (handleBatchedFlush, scheduled flush) keep their own concurrency: each
+   * call flushes the events that are in the buffer at that point.
+   */
+  private flushBuffer(): Promise<void> {
+    const flush = this.flushBufferInternal();
+    this.#activeFlushes.add(flush);
+    void flush.finally(() => {
+      this.#activeFlushes.delete(flush);
+    });
+    return flush;
+  }
+
+  /**
    * Flushes the current buffer to storage.
    *
    * Creates are flushed first, then their span keys are added to allCreatedSpans.
@@ -423,7 +443,7 @@ export class MastraStorageExporter extends BaseExporter {
    * created yet are re-inserted into the live buffer for the next flush.
    * Completed spans (SPAN_ENDED) are cleaned up from allCreatedSpans after success.
    */
-  private async flushBuffer(): Promise<void> {
+  private async flushBufferInternal(): Promise<void> {
     if (!this.#observabilityStorage) {
       this.logger.debug('Cannot flush. Observability storage is not initialized');
       return;
@@ -616,6 +636,12 @@ export class MastraStorageExporter extends BaseExporter {
         bufferedEvents: this.#eventBuffer.totalSize,
       });
       await this.flushBuffer();
+      return;
+    }
+    // The live buffer is empty, but batches that were already extracted from
+    // it may still be writing to storage: join them rather than returning early.
+    if (this.#activeFlushes.size > 0) {
+      await Promise.all([...this.#activeFlushes]);
     }
   }
 
