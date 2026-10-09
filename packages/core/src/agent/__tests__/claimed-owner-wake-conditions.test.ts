@@ -135,7 +135,7 @@ describe('claimed-owner wake conditions', () => {
 
     const result = sender.sendSignal({ type: 'user-message', contents: 'are you there' }, requiredOwnerWake);
     await expect(result.accepted).rejects.toThrow(
-      `No claimed thread owner responded for ${target.resourceId}\u0000${target.threadId}`,
+      `No claimed thread owner responded for thread ${target.threadId} (resource ${target.resourceId})`,
     );
 
     // The owner is still there, so the same send succeeds as soon as it can answer.

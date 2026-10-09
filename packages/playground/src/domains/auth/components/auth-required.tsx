@@ -1,8 +1,7 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { Lock } from 'lucide-react';
-import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
-import { isAuthenticated } from '../types';
 import { AuthHeadersForm } from './auth-headers-form';
 import { LoginButton } from './login-button';
 import { withStudioBasePath } from '@/lib/studio-base-path';
@@ -107,10 +106,14 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
         <LoginButton config={capabilities.login} redirectUri={redirectUri} loginUrl={loginUrl} />
         {(capabilities.login.type === 'credentials' || capabilities.login.type === 'both') &&
           capabilities.login.signUpEnabled !== false && (
-            <div className="text-body">
-              <span className="text-muted-foreground">{"Don't have an account? "}</span>
+            <div>
+              <Txt as="span" variant="body" tone="muted">
+                {"Don't have an account? "}
+              </Txt>
               <button type="button" onClick={handleSignUp} className="text-foreground hover:underline">
-                Sign up
+                <Txt as="span" variant="body" className="block">
+                  Sign up
+                </Txt>
               </button>
             </div>
           )}

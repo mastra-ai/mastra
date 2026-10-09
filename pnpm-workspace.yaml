@@ -376,7 +376,7 @@ overrides:
   postcss@<8.5.23: 8.5.23
   ip-address@<10.7.1: 10.7.2
   mermaid@>=11.0.0-alpha.1 <11.16.1: 11.16.1
-  sharp@<0.35.4: 0.35.4
+  sharp@<0.35.5: 0.35.5
   # Vanta/Dependabot 2026-09-17 (overrides allowed): critical + remaining GHSA floors
   proxy-addr@<2.0.8: 2.0.8
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
@@ -394,7 +394,13 @@ overrides:
   deepmerge-ts@<8.0.0: 8.0.0
   toml@<4.1.2: 4.2.0
   postcss-selector-parser@>=6.1.0 <6.1.3: 6.1.3
-  postcss-selector-parser@>=7.1.0 <7.1.3: 7.1.3
+  postcss-selector-parser@>=7.1.0 <7.1.6: 7.1.6
+  source-map-js@>=1.0.0 <1.2.2: 1.2.2
+  # Vanta 2026-10-07: GHSA-6qxp-vccf-f47h (MCP sdk 1.31.0 / client 2.2.0; published @mastra/mcp pins client 2.0.0); Aikido in-major floors
+  '@modelcontextprotocol/sdk@>=1.0.0 <1.31.0': 1.31.0
+  '@modelcontextprotocol/client@>=2.0.0 <2.2.0': 2.2.0
+  '@hono/node-server@>=2.0.0 <2.1.3': 2.1.3
+  '@bufbuild/protobuf@>=2.0.0 <2.13.0': 2.13.0
   '@opentelemetry/propagator-jaeger@<2.11.0': 2.11.0
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.40': 3.0.40
   '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
@@ -526,6 +532,16 @@ overrides:
   'protobufjs@<8.8.0': 8.8.0
   'nanoid@<5.1.16': 5.1.16
   'basic-ftp@<6.2.1': 6.2.1
+  # Vanta 2026-10-05 (Aikido): in-major floors for transitive deps whose parents pin an exact
+  # vulnerable version (just-bash, @opentelemetry/configuration 0.221, @blaxel/core, @react-grab/cli,
+  # fast-xml-parser 5.10.1, style-to-object 1.0.11).
+  'modern-tar@<0.7.7': 0.7.7
+  '@opentelemetry/configuration>yaml': 2.9.1
+  'smol-toml@<1.9.0': 1.9.0
+  'strnum@<2.4.2': 2.4.2
+  'inline-style-parser@<0.2.9': 0.2.9
+  # Vanta 2026-10-08: GHSA-ch52-4w7c-c8xp (CVE-2026-93748); cacheable-request/make-fetch-happen declare ^4.1.x
+  'http-cache-semantics@<4.3.0': 4.3.0
 allowBuilds:
   '@clerk/shared': false
   '@datadog/native-appsec': false

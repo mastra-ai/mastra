@@ -26,7 +26,7 @@ export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: r
           <Info />
         </Icon>
       </TooltipTrigger>
-      <TooltipContent className="max-w-sm space-y-3 p-4 text-caption">
+      <TooltipContent className="max-w-sm space-y-3 p-4">
         <p className="text-foreground">
           Every trace is analyzed for {enabledSignals.length === 4 ? 'four' : enabledSignals.length}{' '}
           {enabledSignals.length === 1 ? 'signal' : 'signals'}, and traces with similar signals are clustered into named
@@ -38,8 +38,8 @@ export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: r
               <Txt
                 as="span"
                 variant="meta"
-                font="mono"
-                className="tracking-widest uppercase"
+
+                className="uppercase"
                 style={{ color: getSignalColor(signalName) }}
               >
                 {signalLabel(signalCatalog, signalName)}

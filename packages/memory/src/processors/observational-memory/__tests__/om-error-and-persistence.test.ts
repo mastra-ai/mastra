@@ -11,7 +11,7 @@ import { ProcessorStepSchema } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow } from '@mastra/core/workflows';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
@@ -527,6 +527,69 @@ describe('OM Error State', { timeout: 30_000 }, () => {
     expect(persistedObservationMarkerParts.map((part: any) => part.type)).toEqual(
       expect.arrayContaining(['data-om-observation-start', 'data-om-observation-failed']),
     );
+  });
+
+  it('keeps the user message and finished tool results in the thread when OM storage fails mid-run', async () => {
+    // Once the tool step finishes, OM's save of that step fails once, as a locked database would.
+    let toolRan = false;
+    const lockingTool = createTool({
+      id: 'test',
+      description: 'Trigger tool for OM testing',
+      inputSchema: z.object({ action: z.string().optional() }),
+      execute: async () => {
+        toolRan = true;
+        return { success: true, message: 'Tool executed' };
+      },
+    });
+    const memoryStore = (await store.getStore('memory'))!;
+    const saveMessages = memoryStore.saveMessages.bind(memoryStore);
+    let locked = true;
+    vi.spyOn(memoryStore, 'saveMessages').mockImplementation(async (...args) => {
+      if (toolRan && locked) {
+        locked = false;
+        throw new Error('SQLITE_BUSY: database is locked');
+      }
+      return saveMessages(...args);
+    });
+    const lockingAgent = new Agent({
+      id: 'test-locking-agent',
+      name: 'Test Locking Agent',
+      instructions: 'You are a helpful assistant. Always use the test tool first.',
+      model: createMockOmModel(longResponseText) as any,
+      tools: { test: lockingTool },
+      memory: new Memory({
+        storage: store,
+        options: {
+          observationalMemory: {
+            enabled: true,
+            observation: { model: createMockObserverModel() as any, messageTokens: 50000, bufferTokens: false },
+            reflection: { model: createMockReflectorModel() as any, observationTokens: 50000 },
+          },
+        },
+      }),
+    });
+
+    const threadId = 'test-error-keeps-turn';
+    const result = await lockingAgent.generate('Hello, I need help.', {
+      memory: { thread: threadId, resource: 'test-resource' },
+    });
+    expect(result.tripwire?.reason).toContain('SQLITE_BUSY');
+
+    const { messages } = await memoryStore.listMessages({ threadId });
+    const parts = messages.flatMap((message: any) => message.content?.parts ?? []);
+
+    expect(
+      messages.some(
+        message =>
+          message.role === 'user' &&
+          message.content.parts.some(part => part.type === 'text' && part.text.includes('Hello')),
+      ),
+    ).toBe(true);
+    expect(parts.some((part: any) => part.type === 'tool-invocation' && part.toolInvocation.state === 'result')).toBe(
+      true,
+    );
+    // The blocked step never ran, so its text is not saved.
+    expect(parts.some((part: any) => part.type === 'text' && part.text === longResponseText)).toBe(false);
   });
 });
 

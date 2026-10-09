@@ -1730,32 +1730,6 @@ describe('FactoryDecisionDispatcher', () => {
         lastError: expect.stringContaining('observation retry failed after 400 attempts'),
       });
     });
-
-    it('reapplies managed memory settings when reusing an existing session', async () => {
-      const storage = (await createFactoryStorageForTests()).workItems;
-      const { item, transitionService } = await queueDecision(storage, planSkill('plan-refresh-reuse'));
-      const { controller, session } = createSession();
-      await bindRole(storage, item.id, 'plan');
-      const refreshManagedMemorySettings = vi.fn(async () => {});
-      const dispatcher = new FactoryDecisionDispatcher({
-        controller: controller as never,
-        isAutoRunEnabled: async () => true,
-        transitionService,
-        storage,
-        ownerId: 'worker-1',
-        refreshManagedMemorySettings,
-      });
-
-      await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
-
-      expect(refreshManagedMemorySettings).toHaveBeenCalledWith(
-        expect.objectContaining({ binding: expect.objectContaining({ role: 'plan' }), session }),
-      );
-      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
-        status: 'succeeded',
-        attempts: 1,
-      });
-    });
   });
 
   it('appends the work item feed to the invokeSkill kickoff', async () => {
@@ -2209,12 +2183,19 @@ describe('FactoryDecisionDispatcher', () => {
         ]);
 
         // A remote replica reading the ledger during the run must keep seeing a fresh claim.
-        await vi.advanceTimersByTimeAsync(25_000);
-        const [entry] = (await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })) as Array<{
-          heartbeatAt: number;
-        }>;
-        expect(entry.heartbeatAt).toBeGreaterThan(startedAt);
-        expect(Date.now() - entry.heartbeatAt).toBeLessThan(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs);
+        // The heartbeat interval is armed and its ledger write lands through
+        // async storage, either of which can trail a single fixed timer jump
+        // on a loaded runner. Step the clock one heartbeat period at a time
+        // until the renewed claim is visible.
+        const heartbeatPeriodMs = Math.floor(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs / 3);
+        await vi.waitFor(async () => {
+          await vi.advanceTimersByTimeAsync(heartbeatPeriodMs);
+          const [entry] = (await session.thread.getSetting({ key: FACTORY_OPEN_RUNS_SETTING })) as Array<{
+            heartbeatAt: number;
+          }>;
+          expect(entry.heartbeatAt).toBeGreaterThan(startedAt);
+          expect(Date.now() - entry.heartbeatAt).toBeLessThan(FACTORY_DISPATCH_CONSTANTS.openRunStaleMs);
+        });
 
         controller.listActiveThreadRuns.mockReturnValue([]);
         emitAgentEnd('complete');

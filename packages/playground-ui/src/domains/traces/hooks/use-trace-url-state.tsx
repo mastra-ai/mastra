@@ -368,16 +368,8 @@ export function useTraceUrlState(
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);
-          const [firstSpanId] = spanIds;
-          if (!firstSpanId) {
-            next.delete(HIGHLIGHT_SPAN_IDS_PARAM);
-            return next;
-          }
-          next.set(HIGHLIGHT_SPAN_IDS_PARAM, spanIds.join(','));
-          // Open the detail panel on the first highlighted span.
-          next.set(SPAN_ID_PARAM, firstSpanId);
-          next.delete(TAB_PARAM);
-          next.delete(SCORE_ID_PARAM);
+          if (spanIds.length === 0) next.delete(HIGHLIGHT_SPAN_IDS_PARAM);
+          else next.set(HIGHLIGHT_SPAN_IDS_PARAM, spanIds.join(','));
           return next;
         },
         { replace: true },

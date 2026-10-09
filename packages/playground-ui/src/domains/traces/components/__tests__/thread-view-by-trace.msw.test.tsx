@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
+import '@/test/inert-resize-observer';
 import type { ListScoresResponse } from '@mastra/client-js';
-import '@/test/jsdom-polyfills';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -672,24 +672,11 @@ describe('ThreadViewByTrace', () => {
     });
 
     describe('given a scored trace', () => {
-      it('when scorerLink resolves, then "Open scorer run" links to the scorer run built by the link provider', async () => {
+      it('then the score card opens the score without an "Open scorer run" link', async () => {
         installHandlers();
         installFeedbackHandlers();
         installScore();
         renderView();
-
-        const row = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
-        fireEvent.click(row.getByRole('tab', { name: /Scores/ }));
-
-        const link = await row.findByRole('link', { name: /Open scorer run/ });
-        expect(link.getAttribute('href')).toBe('/scorers/scorer-1?scoreId=score-1');
-      });
-
-      it('when the app has no scorer route, then "Open scorer run" is hidden', async () => {
-        installHandlers();
-        installFeedbackHandlers();
-        installScore();
-        renderView({ paths: { scorerLink: () => '' } });
 
         const row = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
         fireEvent.click(row.getByRole('tab', { name: /Scores/ }));
@@ -924,7 +911,7 @@ describe('ThreadViewByTrace', () => {
       }
     });
 
-    it('opens at the latest turn and stays there while rows grow, until the reader scrolls up', async () => {
+    it('opens at the latest turn and does not move when a row grows', async () => {
       installPagedHandlers();
       const { grow } = stubScrollLayout();
       renderView({ withQueryTrace });
@@ -933,10 +920,10 @@ describe('ThreadViewByTrace', () => {
 
       await waitFor(() => expect(viewport.scrollTop).toBe(600));
 
+      // Growth only comes from the reader expanding a row: the view must stay put.
       act(() => grow(1200));
-      expect(viewport.scrollTop).toBe(800);
+      expect(viewport.scrollTop).toBe(600);
 
-      // The reader scrolls up: growth no longer pulls them back down.
       act(() => scrollReaderTo(viewport, 300));
       act(() => grow(1500));
       expect(viewport.scrollTop).toBe(300);

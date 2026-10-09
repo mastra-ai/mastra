@@ -301,6 +301,26 @@ describe('execution-time recall search context', () => {
     expect(excerpts(compact.results).reduce((sum, text) => sum + estimateTokenCount(text), 0)).toBeLessThanOrEqual(100);
   });
 
+  it('PR #25961 consumer proof: search dedupe null falls back to raw result', async () => {
+    const { search } = setup([hit('a', 'previous evidence')]);
+    const previous = await search();
+    const expected = await search([resultMessage(previous)]);
+    const current = resultMessage(previous);
+    const part = current.content.parts[0]!;
+    if (part.type !== 'tool-invocation') throw new Error('Expected a tool invocation');
+    part.providerMetadata = { mastra: { modelOutput: null } };
+    const original = structuredClone(current);
+
+    const compact = await search([current]);
+
+    expect(compact.results, 'PR25961_SEARCH_DEDUPE_NULL_RAW_FALLBACK').toContain(
+      'observation group: a\n  thread: thread; Excerpt already in current context.',
+    );
+    expect(compact).toEqual(expected);
+    expect(excerpts(compact.results)).toEqual([]);
+    expect(current).toEqual(original);
+  });
+
   it('returns compact references for all repeats, then expands again after the original results leave context', async () => {
     const { search } = setup([hit('a', 'Same evidence')]);
     const initial = await search();

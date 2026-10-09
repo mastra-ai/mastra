@@ -26,7 +26,11 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
         icon: <Share className="size-4" aria-hidden="true" />,
         label: (
           <>
-            Tap the <span className="text-foreground font-medium">Share</span> button in Chrome&rsquo;s address bar
+            Tap the{' '}
+            <Txt as="span" variant="label" tone="ink">
+              Share
+            </Txt>{' '}
+            button in Chrome&rsquo;s address bar
           </>
         ),
       };
@@ -37,7 +41,10 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
         icon: <Menu className="size-4" aria-hidden="true" />,
         label: (
           <>
-            Open the browser menu and tap <span className="text-foreground font-medium">Share</span>
+            Open the browser menu and tap{' '}
+            <Txt as="span" variant="label" tone="ink">
+              Share
+            </Txt>
           </>
         ),
       };
@@ -46,7 +53,11 @@ function shareStep(browser: IosBrowser): { icon: ReactNode; label: ReactNode } {
         icon: <Share className="size-4" aria-hidden="true" />,
         label: (
           <>
-            Tap the <span className="text-foreground font-medium">Share</span> button in Safari&rsquo;s toolbar
+            Tap the{' '}
+            <Txt as="span" variant="label" tone="ink">
+              Share
+            </Txt>{' '}
+            button in Safari&rsquo;s toolbar
           </>
         ),
       };
@@ -58,7 +69,10 @@ const commonSteps: Array<{ icon: ReactNode; label: ReactNode }> = [
     icon: <SquarePlus className="size-4" aria-hidden="true" />,
     label: (
       <>
-        Scroll down and tap <span className="text-foreground font-medium">Add to Home Screen</span>
+        Scroll down and tap{' '}
+        <Txt as="span" variant="label" tone="ink">
+          Add to Home Screen
+        </Txt>
       </>
     ),
   },
@@ -66,7 +80,11 @@ const commonSteps: Array<{ icon: ReactNode; label: ReactNode }> = [
     icon: <Smartphone className="size-4" aria-hidden="true" />,
     label: (
       <>
-        Tap <span className="text-foreground font-medium">Add</span> to install the app
+        Tap{' '}
+        <Txt as="span" variant="label" tone="ink">
+          Add
+        </Txt>{' '}
+        to install the app
       </>
     ),
   },
@@ -102,7 +120,7 @@ export function PwaInstallInstructions({ open, onOpenChange }: PwaInstallInstruc
                 >
                   {index + 1}
                 </Txt>
-                <Txt as="span" variant="body" className="text-foreground min-w-0 flex-1">
+                <Txt tone="ink" as="span" variant="body" className="min-w-0 flex-1">
                   {step.label}
                 </Txt>
                 <span className="text-muted-foreground shrink-0">{step.icon}</span>

@@ -37,15 +37,12 @@ type MetricsContextValue = {
   customRange: DateRange | undefined;
   setCustomRange: (v: DateRange | undefined) => void;
   dateRangeLabel: string;
+  comparisonLabel: string;
   filterTokens: PropertyFilterToken[];
   setFilterTokens: (tokens: PropertyFilterToken[]) => void;
   dimensionalFilter: MetricsDimensionalFilter;
   /** Stable JSON representation of `dimensionalFilter`, safe for query keys. */
   dimensionalFilterKey: string;
-  /** Base path drilldown links should target for the Traces page. */
-  tracesBasePath: string | undefined;
-  /** Base path drilldown links should target for the Logs page. */
-  logsBasePath: string | undefined;
 };
 
 export const MetricsContext = createContext<MetricsContextValue>({
@@ -54,12 +51,11 @@ export const MetricsContext = createContext<MetricsContextValue>({
   customRange: undefined,
   setCustomRange: () => {},
   dateRangeLabel: 'Last 24 hours',
+  comparisonLabel: 'vs previous 24h',
   filterTokens: [],
   setFilterTokens: () => {},
   dimensionalFilter: {},
   dimensionalFilterKey: '{}',
-  tracesBasePath: undefined,
-  logsBasePath: undefined,
 });
 
 export function useMetrics() {
@@ -77,6 +73,16 @@ function getDateRangeLabel(preset: DatePreset, customRange: DateRange | undefine
     return formatShortDate(customRange.from) ?? '';
   }
   return 'Custom range';
+}
+
+const HOUR_MS = 60 * 60 * 1000;
+
+function getComparisonLabel(preset: DatePreset, customRange: DateRange | undefined) {
+  if (preset !== 'custom') return `vs previous ${preset}`;
+  const to = customRange?.to?.getTime() ?? Date.now();
+  const from = customRange?.from?.getTime() ?? to - 24 * HOUR_MS;
+  const hours = Math.round((to - from) / HOUR_MS);
+  return `vs previous ${hours > 24 && hours % 24 === 0 ? `${hours / 24}d` : `${hours}h`}`;
 }
 
 /**
@@ -98,8 +104,6 @@ export function MetricsProvider({
   onFilterTokensChange,
   customRange,
   onCustomRangeChange,
-  tracesBasePath,
-  logsBasePath,
 }: {
   children: ReactNode;
   preset: DatePreset;
@@ -108,10 +112,6 @@ export function MetricsProvider({
   onFilterTokensChange: (tokens: PropertyFilterToken[]) => void;
   customRange?: DateRange;
   onCustomRangeChange?: (range: DateRange | undefined) => void;
-  /** Base path for drilldown links to the Traces page. Defaults to `/traces` when omitted. */
-  tracesBasePath?: string;
-  /** Base path for drilldown links to the Logs page. Defaults to `/logs` when omitted. */
-  logsBasePath?: string;
 }) {
   // Stable key for memo dependencies — the parent may re-create the tokens
   // array on every render (e.g. from `useMemo(... , [searchParams])`), but the
@@ -128,6 +128,7 @@ export function MetricsProvider({
   const dimensionalFilterKey = useMemo(() => JSON.stringify(dimensionalFilter), [dimensionalFilter]);
 
   const dateRangeLabel = getDateRangeLabel(preset, customRange);
+  const comparisonLabel = getComparisonLabel(preset, customRange);
 
   const value = useMemo<MetricsContextValue>(
     () => ({
@@ -136,12 +137,11 @@ export function MetricsProvider({
       customRange,
       setCustomRange: onCustomRangeChange ?? (() => {}),
       dateRangeLabel,
+      comparisonLabel,
       filterTokens: stableFilterTokens,
       setFilterTokens: onFilterTokensChange,
       dimensionalFilter,
       dimensionalFilterKey,
-      tracesBasePath,
-      logsBasePath,
     }),
     [
       preset,
@@ -149,12 +149,11 @@ export function MetricsProvider({
       customRange,
       onCustomRangeChange,
       dateRangeLabel,
+      comparisonLabel,
       stableFilterTokens,
       onFilterTokensChange,
       dimensionalFilter,
       dimensionalFilterKey,
-      tracesBasePath,
-      logsBasePath,
     ],
   );
 

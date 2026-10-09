@@ -114,7 +114,6 @@ describe('Subconscious project scope override', () => {
     const subconscious = new Subconscious({
       observation: [{ name: 'curate', model: 'mock/model', maxSteps: 5 }],
       defaultScope: 'resource',
-      maxScope: 'resource',
     });
     let curatorAgent: Agent | undefined;
     vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent) {
@@ -133,7 +132,9 @@ describe('Subconscious project scope override', () => {
       rawObservations: 'Project Atlas launches soon.',
       memory,
       requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
+      observationCommitted: Promise.resolve(true),
     });
+    await vi.waitFor(() => expect(curatorAgent).toBeDefined());
     const tools = await curatorAgent!.listTools();
     await (tools.knowledge_search as any).execute({ query: 'Project Atlas' }, {});
     expect(search).toHaveBeenCalled();

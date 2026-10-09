@@ -2004,6 +2004,133 @@ describe('Tracing', () => {
       rootSpan.end();
     });
 
+    it('should mark a run nested with nestUnderParent and drop its tags', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'judge',
+        attributes: { agentId: 'judge' },
+        tracingOptions: {
+          traceId: '0123456789abcdef0123456789abcdef',
+          parentSpanId: '0123456789abcdef',
+          nestUnderParent: true,
+          tags: ['judge-tag'],
+        },
+      });
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'child-llm',
+        attributes: { model: 'gpt-4' },
+      });
+      childSpan.end();
+      rootSpan.end();
+
+      // Every span of the run is marked, and the run's tags never reach the trace
+      expect(testExporter.events.length).toBeGreaterThan(0);
+      for (const event of testExporter.events) {
+        expect(event.exportedSpan.nestedUnderParent).toBe(true);
+        expect(event.exportedSpan.tags).toBeUndefined();
+      }
+      expect(rootSpan.exportSpan()?.isRootSpan).toBe(true);
+      expect(rootSpan.exportSpan()?.externalParentSpanId).toBe('0123456789abcdef');
+    });
+
+    it.each([
+      ['no parentSpanId', { traceId: '0123456789abcdef0123456789abcdef' }],
+      ['no traceId', { parentSpanId: '0123456789abcdef' }],
+      ['an invalid parentSpanId', { traceId: '0123456789abcdef0123456789abcdef', parentSpanId: 'not-a-span-id' }],
+      ['an invalid traceId', { traceId: 'not-a-trace-id', parentSpanId: '0123456789abcdef' }],
+    ])('should ignore nestUnderParent with %s', (_case, ids) => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'root-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: { ...ids, nestUnderParent: true, tags: ['root-tag'] },
+      });
+      rootSpan.end();
+      consoleError.mockRestore();
+
+      const exported = rootSpan.exportSpan();
+      expect(exported?.nestedUnderParent).toBeUndefined();
+      expect(exported?.tags).toEqual(['root-tag']);
+    });
+
+    it.each([
+      ['a bridge that starts a new trace', true, {}],
+      ['a different traceId passed to startSpan', false, { traceId: 'fedcba9876543210fedcba9876543210' }],
+      ['an invalid externalParentSpanId passed to startSpan', false, { externalParentSpanId: 'not-a-span-id' }],
+    ])('should ignore nestUnderParent with %s', (_case, withBridge, overrides) => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+        ...(withBridge ? { bridge: createMockBridge() } : {}),
+      });
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'judge',
+        attributes: { agentId: 'judge' },
+        tracingOptions: {
+          traceId: '0123456789abcdef0123456789abcdef',
+          parentSpanId: '0123456789abcdef',
+          nestUnderParent: true,
+          tags: ['judge-tag'],
+        },
+        ...overrides,
+      });
+      const childSpan = rootSpan.createChildSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'child-llm',
+        attributes: { model: 'gpt-4' },
+      });
+      childSpan.end();
+      rootSpan.end();
+      consoleError.mockRestore();
+
+      // The run is not under the requested parent, so it keeps its tags and no span is marked
+      expect(rootSpan.exportSpan()?.tags).toEqual(['judge-tag']);
+      expect(rootSpan.exportSpan()?.nestedUnderParent).toBeUndefined();
+      expect(childSpan.exportSpan()?.nestedUnderParent).toBeUndefined();
+    });
+
+    it('should not mark runs with a parentSpanId as nested by default', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      const rootSpan = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'root-agent',
+        attributes: { agentId: 'agent-1' },
+        tracingOptions: {
+          traceId: '0123456789abcdef0123456789abcdef',
+          parentSpanId: '0123456789abcdef',
+          tags: ['root-tag'],
+        },
+      });
+      rootSpan.end();
+
+      const exported = rootSpan.exportSpan();
+      expect(exported?.nestedUnderParent).toBeUndefined();
+      expect(exported?.tags).toEqual(['root-tag']);
+    });
+
     it('should handle empty tags array', () => {
       const observability = new DefaultObservabilityInstance({
         serviceName: 'test-service',
@@ -2601,6 +2728,75 @@ describe('Tracing', () => {
       });
 
       span.end();
+    });
+
+    it('should not export reserved Mastra keys, while keeping full detail for user values', () => {
+      const observability = new DefaultObservabilityInstance({
+        serviceName: 'test-service',
+        name: 'test',
+        exporters: [testExporter],
+      });
+
+      class FakeSlackAdapter {
+        appToken = 'xapp-FAKE-SLACK-TOKEN';
+        socketForwardingSecret = 'FAKE-FORWARDING-SECRET';
+      }
+      class FakeTelegramAdapter {
+        staticBotToken = '123456789:FAKE-TELEGRAM-TOKEN';
+        chat = { adapters: { slack: new FakeSlackAdapter() } };
+      }
+      class FakeMemory {
+        connectionString = 'postgres://user:FAKE-DB-PASSWORD@db/mastra';
+      }
+      class FakeWorkspace {
+        id = 'ws-1';
+        config = { sandboxApiKey: 'FAKE-SANDBOX-KEY' };
+        serializeForSpan() {
+          return { id: this.id };
+        }
+      }
+      class UserProfile {
+        name = 'Ada';
+        plan = 'pro';
+      }
+
+      const requestContext = new RequestContext();
+      // Shapes core sets on channel, delegated, and agent-controller runs.
+      requestContext.set('__mastra_chat_channel_render', {
+        adapter: new FakeTelegramAdapter(),
+        chatThread: { id: 'thread-1' },
+        platform: 'telegram',
+      });
+      requestContext.set('mastra__inheritedMemory', { agentId: 'sub-agent', memory: new FakeMemory() });
+      requestContext.set('mastra__authToken', 'FAKE-AUTH-TOKEN');
+      requestContext.set('controller', { controllerId: 'ctrl-1', workspace: new FakeWorkspace() });
+      // A user value wrapping a class instance stays fully visible.
+      requestContext.set('user', { id: 'user-123', profile: new UserProfile() });
+
+      const span = observability.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'test-agent',
+        attributes: {},
+        requestContext,
+      });
+      span.end();
+
+      const exported = testExporter.events.at(-1)!.exportedSpan.requestContext;
+      expect(exported).toEqual({
+        controller: { controllerId: 'ctrl-1', workspace: { id: 'ws-1' } },
+        user: { id: 'user-123', profile: { name: 'Ada', plan: 'pro' } },
+      });
+      const serialized = JSON.stringify(exported);
+      for (const secret of [
+        'FAKE-TELEGRAM-TOKEN',
+        'xapp-FAKE-SLACK-TOKEN',
+        'FAKE-FORWARDING-SECRET',
+        'FAKE-DB-PASSWORD',
+        'FAKE-AUTH-TOKEN',
+        'FAKE-SANDBOX-KEY',
+      ]) {
+        expect(serialized).not.toContain(secret);
+      }
     });
 
     it('should store requestContext on child spans when passed', () => {

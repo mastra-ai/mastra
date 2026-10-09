@@ -54,7 +54,7 @@ interface AgentControllerModeBase {
 
   name?: string;
 
-  /** bootstrap model default when a session enters this mode. */
+  /** Seeds sessions that start in this mode and remains the subagent fallback. Mode switches do not apply it. */
   defaultModelId?: string;
 
   /** Surfaced in mode pickers / Studio UI. Free text. */
@@ -407,16 +407,32 @@ export interface AgentControllerConfig<TState = {}> {
   observability?: ObservabilityEntrypoint;
 }
 
+/** An observational-memory role model. `auto` follows the active main model. */
+export type OMModel = 'auto' | (string & {});
+
+/** Arguments supplied when resolving an automatic observational-memory model. */
+export interface ResolveAutoOMModelArgs {
+  role: 'observer' | 'reflector';
+  currentModelId?: string;
+  state: Readonly<Record<string, unknown>>;
+}
+
 /**
  * Default configuration for Observational Memory.
  * These values are used when controller state doesn't have explicit OM values
  * (e.g., fresh thread with no persisted OM settings).
  */
 export interface AgentControllerOMConfig {
-  /** Default model ID for the observer agent */
+  /** Default observer model. Use `auto` to follow the active main model. */
+  observerModel?: OMModel;
+  /** Concrete observer model used when `observerModel` is unset or auto cannot resolve. */
   defaultObserverModelId?: string;
-  /** Default model ID for the reflector agent */
+  /** Default reflector model. Use `auto` to follow the active main model. */
+  reflectorModel?: OMModel;
+  /** Concrete reflector model used when `reflectorModel` is unset or auto cannot resolve. */
   defaultReflectorModelId?: string;
+  /** Resolve an automatic selection to a concrete model ID. */
+  resolveAutoModelId?: (args: ResolveAutoOMModelArgs) => string | undefined;
   /** Default observation threshold in tokens */
   defaultObservationThreshold?: number;
   /** Default reflection threshold in tokens */
@@ -792,6 +808,13 @@ export function defaultOMProgressState(): OMProgressState {
 // =============================================================================
 
 /**
+ * Reasoning-effort levels a session can select alongside its model. Mirrors the
+ * persisted `thinkingLevel` session-state key so a model switch can carry the
+ * level that should take effect with it.
+ */
+export type AgentControllerThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+/**
  * Events emitted by the controller that UIs can subscribe to.
  *
  * A logical message emits one `message_start` containing its initial
@@ -802,7 +825,15 @@ export function defaultOMProgressState(): OMProgressState {
  */
 export type AgentControllerEvent =
   | { type: 'mode_changed'; modeId: string; previousModeId: string }
-  | { type: 'model_changed'; modelId: string; scope?: 'global' | 'thread' | 'mode'; modeId?: string }
+  | {
+      type: 'model_changed';
+      modelId: string;
+      /**
+       * The current session thinking level, including for model-only switches.
+       * Undefined when the session has no thinking-level override.
+       */
+      thinkingLevel: AgentControllerThinkingLevel | undefined;
+    }
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: AgentControllerThread }
   | { type: 'thread_deleted'; threadId: string }
@@ -1051,8 +1082,6 @@ export interface AgentControllerRequestState<TState = unknown> {
   get: () => Readonly<TState>;
   /** Update session-owned controller state. */
   set: (updates: Partial<TState>) => Promise<void>;
-  /** Apply an update only while a caller-owned identity still matches. */
-  setIf?: (updates: Partial<TState>, shouldApply: () => boolean) => Promise<boolean>;
   /** Update session-owned controller state from the latest snapshot in a serialized transaction. */
   update: <TResult>(updater: AgentControllerRequestStateUpdater<TState, TResult>) => Promise<TResult>;
 }

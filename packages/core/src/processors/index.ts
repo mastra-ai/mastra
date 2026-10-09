@@ -23,6 +23,7 @@ import type { ChunkType } from '../stream';
 import type { DataChunkType, LanguageModelUsage, LLMStepResult, ProviderMetadata } from '../stream/types';
 import type { Workflow } from '../workflows';
 import type { OutputWriter } from '../workflows/types';
+import type { AnyWorkspace } from '../workspace/workspace';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
 
@@ -71,15 +72,11 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
   /**
    * Add a signal to the message list, rotate the response message id when supported,
    * and emit the signal as a data-* stream part when a writer is available.
-   *
-   * @experimental Agent signals are experimental and may change in a future release.
    */
   sendSignal?: (signal: AgentSignalInput) => Promise<CreatedAgentSignal>;
   /**
    * Add a named state signal to the message list, stream it when possible, and update
    * thread-level state tracking metadata.
-   *
-   * @experimental Agent state signals are experimental and may change in a future release.
    */
   sendStateSignal?: (
     signal: AgentStateSignalInput | (Omit<AgentStateSignalInput, 'id'> & { id?: string }),
@@ -365,6 +362,8 @@ export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends Proc
   model: MastraLanguageModel;
   /** The message list the prompt was built from, for provenance that the converted prompt no longer carries (e.g. per-message metadata stamps). */
   messageList?: MessageList;
+  /** The workspace of this step, the one the agent's tools use. Undefined when the agent has none. */
+  workspace?: AnyWorkspace;
   /** The current step number (0-indexed) within the agentic loop. */
   stepNumber: number;
   /** All completed steps so far. */
@@ -738,8 +737,6 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
 
   /**
    * State lane id used for `computeStateSignal` history and tracking. Defaults to the processor id.
-   *
-   * @experimental Agent state signals are experimental and may change in a future release.
    */
   stateId?: string;
 
@@ -749,8 +746,6 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * Called after this processor's `processInputStep` hook and before the model request is finalized.
    * The runtime persists version/cache-key tracking on memory thread metadata keyed by state id.
    * Returning `undefined` means the state has not changed for this step.
-   *
-   * @experimental Agent state signals are experimental and may change in a future release.
    */
   computeStateSignal?(
     args: ComputeStateSignalArgs<TTripwireMetadata>,
@@ -1021,6 +1016,7 @@ export { defaultStabilityErrorProcessors, STABILITY_ERROR_PROCESSOR_IDS } from '
 export * from './processors';
 export { CyberRefusalHandler } from './cyber-refusal-handler';
 export { PrefillErrorHandler } from './prefill-error-handler';
+export { UnsupportedFileHandler } from './unsupported-file-handler';
 export {
   ProviderHistoryCompat,
   anthropicToolIdFormat,

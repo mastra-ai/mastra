@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { AssistantRenderRegistry, getAssistantSegmentKey } from '../../assistant-render-registry.js';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import type { TUIState } from '../../state.js';
-import { handleAgentAborted, handleAgentEnd, handleAgentError } from '../agent-lifecycle.js';
+import { handleAgentAborted, handleAgentEnd, handleAgentError, handleGoalEvaluation } from '../agent-lifecycle.js';
 import type { EventHandlerContext } from '../types.js';
 
 vi.mock('@mastra/code-sdk/utils/project', () => ({
@@ -38,14 +38,13 @@ function createContext(): { ctx: EventHandlerContext; state: TUIState } {
     ui: { requestRender: vi.fn() },
     session: {
       displayState: { get: vi.fn(() => ({ isRunning: false, queuedFollowUps: 0 })) },
+      stream: { isActive: vi.fn(() => false) },
     },
     gradientAnimator: undefined,
     activeGoalJudge: undefined,
     followUpComponents: [],
     pendingTools: new Map(),
     pendingTaskToolIds: new Set(),
-    pendingQueuedActions: [],
-    pendingFollowUpMessages: [],
     pendingSlashCommands: [],
     pendingSlashCommandMessageIds: [],
     pendingSignalMessageComponentsById: new Map(),
@@ -175,5 +174,92 @@ describe('assistant render ownership at agent terminal paths', () => {
     const output = segment.component.render(80).join('\n');
     expect(output).toContain('Interrupted');
     expect(output).not.toContain('visible output');
+  });
+});
+
+describe('goal judge display at agent_end', () => {
+  function goalContext() {
+    const { ctx, state } = createContext();
+    (state as any).goalManager = {
+      getGoal: vi.fn(() => ({ status: 'active', judgeModelId: 'judge' })),
+      applyEvaluation: vi.fn(),
+    };
+    return { ctx, state };
+  }
+
+  it('removes a judge display that never received a verdict', () => {
+    const { ctx, state } = goalContext();
+    handleGoalEvaluation(ctx, { pending: true, iteration: 1, maxRuns: 10 } as any);
+    const component = state.activeGoalJudge!.component;
+    expect(state.chatContainer.children).toContain(component);
+
+    handleAgentEnd(ctx);
+
+    expect(state.activeGoalJudge).toBeUndefined();
+    expect(state.chatContainer.children).not.toContain(component);
+  });
+
+  it('keeps a completed judge display in history', () => {
+    const { ctx, state } = goalContext();
+    handleGoalEvaluation(ctx, { pending: true, iteration: 1, maxRuns: 10 } as any);
+    const component = state.activeGoalJudge!.component;
+    handleGoalEvaluation(ctx, {
+      iteration: 1,
+      maxRuns: 10,
+      status: 'active',
+      decision: 'continue',
+      reason: 'keep going',
+    } as any);
+
+    handleAgentEnd(ctx);
+
+    expect(state.chatContainer.children).toContain(component);
+  });
+});
+
+describe('queued slash commands across aborted and failed runs', () => {
+  function queueSlash(state: TUIState, command: string) {
+    state.pendingSlashCommands.push(command);
+    state.pendingSlashCommandMessageIds.push(`queued-${command}`);
+  }
+
+  it.each([
+    ['agent_aborted', handleAgentAborted],
+    ['agent_error', handleAgentError],
+  ] as const)('runs queued slash commands on %s when the thread is idle', (_name, handler) => {
+    const { ctx, state } = createContext();
+    queueSlash(state, '/first');
+    queueSlash(state, '/second');
+
+    handler(ctx);
+
+    expect(ctx.handleSlashCommand).toHaveBeenCalledTimes(1);
+    expect(ctx.handleSlashCommand).toHaveBeenCalledWith('/first');
+    expect(state.pendingSlashCommands).toEqual(['/second']);
+  });
+
+  it('keeps queued slash commands for agent_end when a follow-up run is starting', () => {
+    const { ctx, state } = createContext();
+    (state.session.stream.isActive as ReturnType<typeof vi.fn>).mockReturnValue(true);
+    queueSlash(state, '/later');
+
+    handleAgentAborted(ctx);
+
+    expect(ctx.handleSlashCommand).not.toHaveBeenCalled();
+    expect(state.pendingSlashCommands).toEqual(['/later']);
+  });
+
+  it('defers queued slash commands while core has queued follow-up messages', () => {
+    const { ctx, state } = createContext();
+    (state.session.displayState.get as ReturnType<typeof vi.fn>).mockReturnValue({
+      isRunning: false,
+      queuedFollowUps: 1,
+    });
+    queueSlash(state, '/later');
+
+    handleAgentAborted(ctx);
+
+    expect(ctx.handleSlashCommand).not.toHaveBeenCalled();
+    expect(state.pendingSlashCommands).toEqual(['/later']);
   });
 });

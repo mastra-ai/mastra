@@ -4,6 +4,8 @@ import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-l
 import { isUserAuthoredMessage } from '../agent/signals';
 import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
+import type { ActorSignal, MastraFGAPermissionInput } from '../auth/ee';
+import { MastraFGAPermissions } from '../auth/ee';
 import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
 import { GatewayManager } from '../llm/model/gateways';
@@ -183,6 +185,7 @@ export class AgentController<TState = {}> {
 
   private config: AgentControllerConfig<TState>;
   private initPromise: Promise<void> | undefined = undefined;
+  readonly #metadataWriteQueues = new Map<string, Promise<void>>();
   private browser: DynamicArgument<MastraBrowser | undefined> = undefined;
   private workspace: DynamicArgument<Workspace | undefined> = undefined;
   private intervalTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
@@ -377,20 +380,27 @@ export class AgentController<TState = {}> {
     const defaultMode = this.#defaultMode;
     session.mode.set({ modeId: defaultMode.id });
     session.setStore({
+      getAllOn: async threadId => (await session.thread.getById({ threadId }))?.metadata ?? {},
       get: key => session.thread.getSetting({ key }),
+      getThreadId: () => session.thread.getId() ?? undefined,
       set: (key, value) => session.thread.setSetting({ key, value }),
+      setOn: (threadId, key, value) => session.thread.setSettingOn({ threadId, key, value }),
+      setModelOn: (threadId, settings) => this.writeThreadMetadataValues(threadId, settings),
     });
     session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
     session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
     session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null);
     session.model.setResolver({
       getCurrentModeId: () => session.mode.get(),
+      getModeIds: () => this.config.modes.map(mode => mode.id),
       trackModelUse: this.config.modelUseCountTracker,
     });
     session.om.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
-      setState: updates => void session.state.set(updates as Partial<TState>),
+      getCurrentModelId: () => session.model.get() || undefined,
+      setState: updates => session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
+      deleteSetting: ({ key }) => session.thread.deleteSetting({ key }),
       omConfig: this.config.omConfig,
       gateways: this.config.gateways ?? [],
     });
@@ -420,6 +430,13 @@ export class AgentController<TState = {}> {
       buildSharedRunOptions: () => this.buildSharedRunOptions(session),
       buildToolsets: requestContext => this.buildToolsets(session, requestContext),
       buildRequestContext: requestContext => this.buildRequestContext(session, requestContext),
+      authorizeExecute: requestContext =>
+        this.requireAgentControllerFGA({
+          permission: MastraFGAPermissions.AGENT_CONTROLLER_EXECUTE,
+          requestContext,
+          resourceId: session.identity.getResourceId(),
+          sessionId: session.identity.getId(),
+        }),
       persistTokenUsage: () => this.persistTokenUsage(session),
       generateId: () => this.generateId(),
       resolveTransitionModeId: () => this.resolveTransitionModeId(session),
@@ -509,6 +526,13 @@ export class AgentController<TState = {}> {
     const effectiveSessionId = id ?? this.config.id;
     const effectiveOwnerId = ownerId ?? this.config.id;
     const registryKey = sessionRegistryKey(effectiveResourceId, scope);
+
+    await this.requireAgentControllerFGA({
+      permission: MastraFGAPermissions.AGENT_CONTROLLER_EXECUTE,
+      requestContext,
+      resourceId: effectiveResourceId,
+      sessionId: effectiveSessionId,
+    });
 
     // Get-or-create loop: a (resourceId, scope) pair maps to exactly one
     // durable session per AgentController. Asking for the same resource+scope
@@ -754,7 +778,16 @@ export class AgentController<TState = {}> {
    * signals as the session that owns the target thread, rather than an
    * arbitrary session.
    */
-  async getSessionByResource(resourceId: string, scope?: string): Promise<Session<TState> | undefined> {
+  async getSessionByResource(
+    resourceId: string,
+    scope?: string,
+    requestContext?: RequestContext,
+  ): Promise<Session<TState> | undefined> {
+    await this.requireAgentControllerFGA({
+      permission: MastraFGAPermissions.AGENT_CONTROLLER_READ,
+      requestContext,
+      resourceId,
+    });
     return this.#sessionsByResource.get(sessionRegistryKey(resourceId, scope));
   }
 
@@ -824,6 +857,42 @@ export class AgentController<TState = {}> {
    */
   getMastra(): Mastra | undefined {
     return this.#externalMastra ?? this.#internalMastra;
+  }
+
+  /** @internal */
+  async requireAgentControllerFGA({
+    permission,
+    requestContext,
+    resourceId,
+    sessionId,
+  }: {
+    permission: MastraFGAPermissionInput;
+    requestContext?: RequestContext;
+    resourceId?: string;
+    sessionId?: string;
+  }): Promise<void> {
+    const fgaProvider = this.getMastra()?.getServer()?.fga;
+    if (!fgaProvider) return;
+
+    const user = requestContext?.get('user');
+    const actor = requestContext?.get('actor') as ActorSignal | undefined;
+    if (!user && !actor) return;
+
+    const { requireFGA } = await import('../auth/ee/fga-check');
+    await requireFGA({
+      fgaProvider,
+      user,
+      resource: { type: 'agent-controller', id: this.id },
+      permission,
+      requestContext,
+      actor,
+      context: resourceId ? { resourceId } : undefined,
+      metadata: {
+        controllerId: this.id,
+        resourceId,
+        sessionId,
+      },
+    });
   }
 
   /**
@@ -1153,6 +1222,31 @@ export class AgentController<TState = {}> {
     }
   }
 
+  private async writeThreadMetadataValues(threadId: string, settings: Record<string, unknown>): Promise<void> {
+    if (!this.#resolveStorage()) return;
+    const previous = this.#metadataWriteQueues.get(threadId) ?? Promise.resolve();
+    const run = previous
+      .catch(() => undefined)
+      .then(async () => {
+        const memoryStorage = await this.getMemoryStorage();
+        const thread = await memoryStorage.getThreadById({ threadId });
+        if (!thread) throw new Error(`Thread ${threadId} not found`);
+        const metadata = { ...thread.metadata, ...settings };
+        for (const key of Object.keys(settings)) {
+          if (settings[key] === undefined) delete metadata[key];
+        }
+        await memoryStorage.saveThread({
+          thread: { ...thread, metadata: Object.keys(metadata).length ? metadata : undefined, updatedAt: new Date() },
+        });
+      });
+    this.#metadataWriteQueues.set(threadId, run);
+    try {
+      await run;
+    } finally {
+      if (this.#metadataWriteQueues.get(threadId) === run) this.#metadataWriteQueues.delete(threadId);
+    }
+  }
+
   private async writeThreadMetadataValue({
     threadId,
     key,
@@ -1162,36 +1256,16 @@ export class AgentController<TState = {}> {
     key: string;
     value: unknown;
   }): Promise<void> {
-    if (!this.#resolveStorage()) return;
     try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      if (thread) {
-        await memoryStorage.saveThread({
-          thread: { ...thread, metadata: { ...thread.metadata, [key]: value }, updatedAt: new Date() },
-        });
-      }
+      await this.writeThreadMetadataValues(threadId, { [key]: value });
     } catch {
       // Settings persistence is not critical
     }
   }
 
   private async removeThreadMetadataValue({ threadId, key }: { threadId: string; key: string }): Promise<void> {
-    if (!this.#resolveStorage()) return;
     try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      if (thread && thread.metadata) {
-        const metadata = { ...thread.metadata };
-        delete metadata[key];
-        await memoryStorage.saveThread({
-          thread: {
-            ...thread,
-            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-            updatedAt: new Date(),
-          },
-        });
-      }
+      await this.writeThreadMetadataValues(threadId, { [key]: undefined });
     } catch {
       // Settings removal is not critical
     }
@@ -1374,7 +1448,7 @@ export class AgentController<TState = {}> {
       throw new Error('This conversation has no message to name it from yet.');
     }
 
-    const session = resourceId ? await this.getSessionByResource(resourceId, scope) : undefined;
+    const session = resourceId ? await this.getSessionByResource(resourceId, scope, callerContext) : undefined;
     const agent = session
       ? this.getCurrentAgent(session)
       : this.propagateRuntimeServicesToAgent(this.getAgentForMode(this.#defaultMode));
@@ -2002,12 +2076,12 @@ export class AgentController<TState = {}> {
     if (!abortSignal) {
       session.run.clearAbortRequested();
     }
-    // Reconcile the in-memory model selection with the persisted per-mode model
+    // Reconcile the in-memory model selection with the persisted thread model
     // before snapshotting it into the request context. In multiplayer
     // deployments another process (or a freshly-created Session for an existing
     // thread) may have persisted a different model; the per-instance cache would
-    // otherwise run with a stale selection. No-op in the single-player TUI.
-    await session.model.syncFromPersisted({ modeId });
+    // otherwise run with a stale selection. No-op when already in sync.
+    await session.model.syncFromPersisted();
     const requestContext = await this.buildRequestContext(session, requestContextInput, {
       abortSignal,
       resourceId,
@@ -2433,17 +2507,7 @@ export class AgentController<TState = {}> {
     if (!threadId || !this.#resolveStorage()) return;
 
     try {
-      const memoryStorage = await this.getMemoryStorage();
-      const thread = await memoryStorage.getThreadById({ threadId });
-      if (thread) {
-        await memoryStorage.saveThread({
-          thread: {
-            ...thread,
-            metadata: { ...thread.metadata, tokenUsage: session.getTokenUsage() },
-            updatedAt: new Date(),
-          },
-        });
-      }
+      await this.writeThreadMetadataValues(threadId, { tokenUsage: session.getTokenUsage() });
     } catch {
       // Token persistence is not critical
     }

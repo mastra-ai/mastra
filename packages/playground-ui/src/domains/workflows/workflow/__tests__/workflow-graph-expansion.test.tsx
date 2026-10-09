@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';

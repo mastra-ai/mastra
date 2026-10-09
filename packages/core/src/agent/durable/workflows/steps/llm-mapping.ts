@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MastraFGAPermissions } from '../../../../auth/ee';
 import type { PubSub } from '../../../../events/pubsub';
 import {
   commitToolResult,
@@ -13,15 +14,18 @@ import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { DurableStepIds } from '../../constants';
+import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
   DurableAgenticExecutionOutput,
+  DurableAgenticWorkflowInput,
   SerializableDurableState,
 } from '../../types';
 import { rebuildRunToolsFromMastra } from '../../utils/resolve-runtime';
+import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 /**
  * Input schema for the durable LLM mapping step.
@@ -40,7 +44,8 @@ const durableLLMMappingInputSchema = z.object({
  * Output schema for the durable LLM mapping step
  */
 const durableLLMMappingOutputSchema = z.object({
-  messageListState: z.any(),
+  // Absent when the run keeps the transcript in workflow state.
+  messageListState: z.any().optional(),
   messageId: z.string(),
   stepResult: z.any(),
   toolResults: z.array(z.any()),
@@ -73,7 +78,7 @@ export function createDurableLLMMappingStep() {
     inputSchema: durableLLMMappingInputSchema,
     outputSchema: durableLLMMappingOutputSchema,
     execute: async params => {
-      const { inputData, mastra, requestContext } = params;
+      const { inputData, mastra, requestContext, getInitData } = params;
       const {
         llmOutput,
         toolResults,
@@ -103,7 +108,7 @@ export function createDurableLLMMappingStep() {
           threadId: state.threadId,
           resourceId: state.resourceId,
         })
-      ).deserialize(llmOutput.messageListState);
+      ).deserialize(readMessageListState(params.state, llmOutput));
 
       // A declined approval has no `result` but is fully resolved: persist it as `output-denied`
       // with the approval decision (rather than as a successful `result`) so it round-trips on
@@ -337,7 +342,7 @@ export function createDurableLLMMappingStep() {
 
       // 4. Build the output
       const output: DurableAgenticExecutionOutput = {
-        messageListState: messageList.serialize(),
+        ...(await storeMessageListState(params, messageList.serialize())),
         messageId,
         stepResult: {
           ...llmOutput.stepResult,
@@ -464,6 +469,21 @@ export function createDurableLLMMappingStep() {
         state.threadId &&
         state.resourceId
       ) {
+        const authorizationEntry = globalRunRegistry.get(_runId);
+        const authorizationRequestContext = authorizationEntry?.requestContext ?? requestContext;
+        const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
+          authorizeDurableMemory(getDurableMemoryAuthorizationChecks(authorizationEntry), {
+            mastra: mastra as Mastra | undefined,
+            user: authorizationRequestContext?.get('user'),
+            threadId: state.threadId!,
+            resourceId: state.resourceId!,
+            agentId: _agentId,
+            requestContext: authorizationRequestContext,
+            permission,
+            actor: (getInitData?.() as DurableAgenticWorkflowInput | undefined)?.options?.actor,
+          });
+        await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
+        if (!state.threadExists) await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
         try {
           // Re-read the entry: tool-call may have rebuilt the save queue into it. A connect()
           // worker in another process has none until something rebuilds it.

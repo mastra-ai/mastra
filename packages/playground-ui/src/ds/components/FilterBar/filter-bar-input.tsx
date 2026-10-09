@@ -19,6 +19,7 @@ import { Txt } from '@/ds/components/Txt';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { inputFocusBorderWithin, unstyledFormElementStyle } from '@/ds/primitives/form-element';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
@@ -176,6 +177,7 @@ function FilterBarInputImpl({
     operator,
     query,
     enabled: open && step === 'value',
+    setQuery,
     onCommit: value => {
       if (draft?.operatorId) commit(draft.fieldId, draft.operatorId, value);
     },
@@ -351,6 +353,7 @@ function FilterBarInputImpl({
             }}
             aria-label={ariaLabel}
             spellCheck={false}
+            {...passwordManagerOptOutProps}
             data-slot="filter-bar-input"
             data-step={step}
             data-target={targetGroup?.id}
@@ -422,7 +425,7 @@ function FilterBarInputImpl({
                   emptyText="No matching operator."
                 />
               )}
-              {step === 'value' && valueStep.hasSuggestions && (
+              {step === 'value' && valueStep.hasOptions && (
                 <FilterBarOptionList<FilterBarOption>
                   aria-label="Values"
                   aria-multiselectable={valueStep.isMany || undefined}
@@ -446,7 +449,7 @@ function FilterBarInputImpl({
                     variant="default"
                     disabled={!valueStep.canCommitQuery}
                     onMouseDown={e => e.preventDefault()}
-                    onClick={() => valueStep.commitFreeText()}
+                    onClick={() => valueStep.submitFreeText()}
                   >
                     Apply
                     <Kbd size="xs">↵</Kbd>
@@ -459,7 +462,7 @@ function FilterBarInputImpl({
                     size="sm"
                     variant="default"
                     onMouseDown={e => e.preventDefault()}
-                    onClick={() => valueStep.commitSelection() || valueStep.commitFreeText()}
+                    onClick={() => valueStep.commitDone()}
                   >
                     Done
                     <Kbd size="xs">{modEnterLabel}</Kbd>

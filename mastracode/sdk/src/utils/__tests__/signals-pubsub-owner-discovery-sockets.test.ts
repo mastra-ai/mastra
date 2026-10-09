@@ -100,7 +100,11 @@ describe.runIf(process.platform !== 'win32')('owner discovery sockets', () => {
 
     // The lookups worked, so the leak below is not an artifact of a dead round trip.
     expect(replies).toHaveLength(LOOKUPS);
-    expect(replySockets(rootDir)).toEqual([]);
+    // Releasing a reply topic closes its socket, and the socket file is
+    // unlinked as part of that close, so the file can outlive `clearTopic` by
+    // a tick. What must not happen is the file surviving the lookup: before
+    // the release work this list only ever grew.
+    await waitFor(() => replySockets(rootDir).length === 0, 'reply socket files to be released');
     expect(leaked).toEqual([]);
   }, 30_000);
 

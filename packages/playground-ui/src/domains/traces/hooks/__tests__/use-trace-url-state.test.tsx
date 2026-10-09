@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { act, cleanup, render } from '@testing-library/react';
 import { useCallback, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -88,16 +87,16 @@ describe('useTraceUrlState.handleSpanChangeWithTab', () => {
 const paramsNow = () => new URLSearchParams(currentSearch);
 
 describe('useTraceUrlState.handleHighlightSpans', () => {
-  it('writes the highlighted span ids, selects the first one and resets span-scoped params', () => {
+  it('writes the highlighted span ids without changing the selected span', () => {
     render(<Harness initial="traceId=t1&spanId=old&tab=feedback&scoreId=sc1" />);
 
     act(() => api.handleHighlightSpans(['root', 'tool-1', 'tool-2']));
 
     const p = paramsNow();
     expect(p.get('highlightSpanIds')).toBe('root,tool-1,tool-2');
-    expect(p.get('spanId')).toBe('root');
-    expect(p.get('tab')).toBeNull();
-    expect(p.get('scoreId')).toBeNull();
+    expect(p.get('spanId')).toBe('old');
+    expect(p.get('tab')).toBe('feedback');
+    expect(p.get('scoreId')).toBe('sc1');
     expect(setSpy).toHaveBeenCalledTimes(1);
     expect(lastNavigation()?.replace).toBe(true);
     expect(api.highlightSpanIdsParam).toEqual(['root', 'tool-1', 'tool-2']);

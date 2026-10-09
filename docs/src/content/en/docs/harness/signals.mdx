@@ -11,12 +11,6 @@ packages:
 
 **Added in:** `@mastra/core@1.39.0`
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
-
 Signals let you interact with an agent through a thread. Instead of starting every interaction with `agent.stream()`, subscribe to a thread and send messages or signals. Mastra wakes an idle agent or delivers input to its running loop; alternatively, it queues the input for the next turn.
 
 Use message APIs for user-authored input. Use `sendSignal()` for lower-level system context, such as background task notifications, policy reminders, or processor-generated context.
@@ -399,7 +393,7 @@ Use the connection tools for distinct operations:
 
 Saved connections remain in the sender thread until explicitly disconnected. Every send independently refreshes discovery and verifies the exact endpoint before routing begins. A saved connection therefore records collaboration intent. It doesn't indicate current presence.
 
-After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send whose target has no claimed thread owner at that moment isn't lost: the signal is queued in the target's notification inbox and the send reports `persist`, so it carries its reply obligation like any other queued signal. A send only returns an error once the notification has terminally failed to deliver, and that error doesn't consume its `messageId`, so the sender can retry it.
+After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send whose target has no claimed thread owner at that moment isn't lost: the signal waits in the target's notification inbox and the send reports `persist` instead of claiming delivery. The `messageId` isn't consumed either, so the sender can retry it with the same id. A send made with `expectsReply: true` returns an error in that case, because the reply obligation isn't established until the signal is delivered.
 
 ### Discover agents in other projects
 

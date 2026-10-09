@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
@@ -16,6 +17,7 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
+type OMRole = 'observer' | 'reflector';
 
 function attachmentToChoice(value: 'auto' | boolean): AttachmentChoice {
   if (value === true) return 'on';
@@ -83,10 +85,8 @@ export function OMSection({
   const attachmentsMutation = useUpdateOMObserveAttachments(resourceId, scope, factoryId);
 
   const config = omQuery.data?.config;
-  const configuredModelIds = new Set(models.map(model => model.id));
-  const observerAvailable = config !== undefined && configuredModelIds.has(config.observerModelId);
-  const reflectorAvailable = config !== undefined && configuredModelIds.has(config.reflectorModelId);
-  const modelsAvailable = observerAvailable && reflectorAvailable;
+  const modelsAvailable =
+    config?.observer.providerStatus === 'available' && config.reflector.providerStatus === 'available';
   const loading = omQuery.isPending;
   const busy =
     observerMutation.isPending ||
@@ -101,10 +101,15 @@ export function OMSection({
   ].find(error => error instanceof Error);
   const error = mutationError?.message ?? (omQuery.error instanceof Error ? omQuery.error.message : undefined);
 
-  const switchModel = (role: 'observer' | 'reflector', modelId: string) => {
+  const switchModel = (role: OMRole, modelId: string) => {
     if (!modelId) return;
     const mutation = role === 'observer' ? observerMutation : reflectorMutation;
     mutation.mutate({ modelId });
+  };
+
+  const resetModel = (role: OMRole) => {
+    const mutation = role === 'observer' ? observerMutation : reflectorMutation;
+    mutation.mutate({ modelId: 'auto' });
   };
 
   if (loading) {
@@ -116,6 +121,11 @@ export function OMSection({
   }
 
   const attachmentChoice = attachmentToChoice(config?.observeAttachments ?? 'auto');
+  // In Auto the combobox has no value, so its placeholder shows the model Auto picked.
+  const autoPlaceholder = (role: { model: string; effectiveModelId?: string | null } | undefined, fallback: string) =>
+    role?.model === 'auto' && role.effectiveModelId ? role.effectiveModelId : fallback;
+  const observerValue = config?.observer.model === 'auto' ? '' : (config?.observer.model ?? '');
+  const reflectorValue = config?.reflector.model === 'auto' ? '' : (config?.reflector.model ?? '');
   return (
     <>
       {error && (
@@ -129,30 +139,56 @@ export function OMSection({
           <Badge size="md" variant="warning">
             Model credentials required
           </Badge>
-          <Txt as="p" variant="meta" className="text-muted-foreground">
+          <Txt tone="muted" as="p" variant="meta">
             Observational-memory model calls may fail until credentials are configured.
           </Txt>
         </div>
       )}
 
       <SettingsRow label="Observer model" description="Summarizes the conversation into observations">
-        <ModelCombobox
-          models={models}
-          value={config?.observerModelId ?? ''}
-          placeholder="Select observer model…"
-          disabled={busy}
-          onValueChange={modelId => switchModel('observer', modelId)}
-        />
+        <div className="flex w-full max-w-72 items-center gap-2">
+          <Button
+            variant={config?.observer.model === 'auto' ? 'primary' : 'default'}
+            size="sm"
+            aria-label="Use automatic observer model"
+            aria-pressed={config?.observer.model === 'auto'}
+            disabled={busy || !config}
+            onClick={() => resetModel('observer')}
+          >
+            Auto
+          </Button>
+          <ModelCombobox
+            models={models}
+            value={observerValue}
+            placeholder={autoPlaceholder(config?.observer, 'Select observer model…')}
+            disabled={busy}
+            onValueChange={modelId => switchModel('observer', modelId)}
+            className="flex-1"
+          />
+        </div>
       </SettingsRow>
 
       <SettingsRow label="Reflector model" description="Distills observations into longer-term memory">
-        <ModelCombobox
-          models={models}
-          value={config?.reflectorModelId ?? ''}
-          placeholder="Select reflector model…"
-          disabled={busy}
-          onValueChange={modelId => switchModel('reflector', modelId)}
-        />
+        <div className="flex w-full max-w-72 items-center gap-2">
+          <Button
+            variant={config?.reflector.model === 'auto' ? 'primary' : 'default'}
+            size="sm"
+            aria-label="Use automatic reflector model"
+            aria-pressed={config?.reflector.model === 'auto'}
+            disabled={busy || !config}
+            onClick={() => resetModel('reflector')}
+          >
+            Auto
+          </Button>
+          <ModelCombobox
+            models={models}
+            value={reflectorValue}
+            placeholder={autoPlaceholder(config?.reflector, 'Select reflector model…')}
+            disabled={busy}
+            onValueChange={modelId => switchModel('reflector', modelId)}
+            className="flex-1"
+          />
+        </div>
       </SettingsRow>
 
       <SettingsRow label="Messages before observation" description="Message tokens processed before the observer runs.">

@@ -1,13 +1,21 @@
 import { DurableAgentDefaults } from '@mastra/core/agent/durable';
 
 import { MessageList } from '@mastra/core/agent/message-list';
+import { Mastra } from '@mastra/core/mastra';
 import type { AnyExportedSpan, ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { MockStore } from '@mastra/core/storage';
 import { Observability } from '@mastra/observability';
 import { Inngest } from 'inngest';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { InngestExecutionEngine } from '../execution-engine';
 
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 /**
  * Regression coverage for #19317: the Inngest durable engine must honor
@@ -399,6 +407,98 @@ describe('createInngestDurableAgenticWorkflow snapshot policy (#24796)', () => {
         expect(persist(status)).toBe(false);
       }
     }
+  });
+
+  it.each(['suspended', 'success'] as const)(
+    'prunes agent instructions from the persisted %s snapshot (#25977)',
+    async status => {
+      const inngest = new Inngest({ id: 'inngest-agentic-workflow-prune-tests' });
+      let handler: any;
+      vi.spyOn(inngest, 'createFunction').mockImplementation(((config: any, fn: any) => {
+        handler = fn;
+        return { id: config.id } as any;
+      }) as any);
+      const workflow = createInngestDurableAgenticWorkflow({ inngest }) as any;
+      const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: { [workflow.id]: workflow } });
+      workflow.__registerMastra(mastra);
+      workflow.getFunction();
+
+      const instructions = 'SECRET SYSTEM PROMPT';
+      const state = () => ({ agentSpanData: { attributes: { instructions } } });
+      const execute = vi.spyOn(InngestExecutionEngine.prototype, 'execute').mockResolvedValue({
+        status,
+        result: status === 'success' ? {} : undefined,
+        steps: {
+          input: state(),
+          'init-iteration-state': { status: 'success', payload: state(), output: state() },
+          [InngestDurableStepIds.AGENTIC_EXECUTION]: {
+            status,
+            payload: state(),
+            ...(status === 'success' ? { output: state() } : { suspendPayload: {} }),
+          },
+          ...(status === 'success' ? { 'map-final-output': { status: 'success', payload: state(), output: {} } } : {}),
+        },
+      } as any);
+
+      const runId = `prune-${status}`;
+      await handler({
+        event: { data: { inputData: state(), runId } },
+        step: { run: vi.fn(async (_id: string, cb: () => Promise<unknown>) => cb()) },
+        attempt: 0,
+      });
+      expect(execute).toHaveBeenCalled();
+
+      const store = await mastra.getStorage()!.getStore('workflows');
+      const snapshot = (await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId }))!;
+      expect(snapshot.status).toBe(status);
+      const { input, ...stepResults } = snapshot.context as any;
+      expect(input.agentSpanData.attributes.instructions).toBe(instructions);
+      expect(stepResults[InngestDurableStepIds.AGENTIC_EXECUTION]).toBeDefined();
+      expect(JSON.stringify(stepResults)).not.toContain(instructions);
+    },
+  );
+});
+
+describe('Inngest prepareStep system-message baseline', () => {
+  it('forwards the original system messages after a one-step override mutates the transcript', async () => {
+    const inngest = new Inngest({ id: 'inngest-prepare-step-system-message-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const steps = (workflow as any).executionGraph.steps;
+    const initEntry = findEntry(
+      steps,
+      candidate => candidate.type === 'mapping' && candidate.id === 'init-iteration-state',
+    );
+    const llmInputEntry = findEntry(
+      steps,
+      candidate => candidate.type === 'mapping' && candidate.id === 'map-to-llm-input',
+    );
+
+    const initialMessageList = new MessageList();
+    initialMessageList.addSystem('original system message');
+    const iterationState = await initEntry.mapConfig({
+      inputData: {
+        runId: 'run-1',
+        agentId: 'agent-1',
+        messageId: 'msg-1',
+        messageListState: initialMessageList.serialize(),
+        toolsMetadata: [],
+        modelConfig: {},
+        options: {},
+        state: {},
+      },
+    });
+
+    const overriddenMessageList = new MessageList().deserialize(iterationState.messageListState);
+    overriddenMessageList.replaceAllSystemMessages([{ role: 'system', content: 'step-two-only override' }]);
+    iterationState.messageListState = overriddenMessageList.serialize();
+    iterationState.iterationCount = 2;
+    iterationState.stepIndex = 2;
+
+    const mapped = await llmInputEntry.mapConfig({ inputData: iterationState });
+    expect(new MessageList().deserialize(mapped.messageListState).getSystemMessages()).toEqual([
+      { role: 'system', content: 'step-two-only override' },
+    ]);
+    expect(mapped.initialUntaggedSystemMessages).toEqual([{ role: 'system', content: 'original system message' }]);
   });
 });
 

@@ -33,7 +33,7 @@ export const quietShellDescriptionScenario: McE2eScenario = {
     const headerAt = view.search(/│ \$ /);
     const rowAt = view.search(/✓ Printing the quiet description marker/);
     if (!(previewAt >= 0 && previewAt < headerAt && headerAt < rowAt)) {
-      throw new Error(`Expected preview, then $ header, then row; got ${previewAt}, ${headerAt}, ${rowAt}`);
+      throw new Error(`Expected preview, then $ header, then row; got ${previewAt}, ${headerAt}, ${rowAt}\n\n${view}`);
     }
     runtime.printScreen('quiet shell description', terminal);
 

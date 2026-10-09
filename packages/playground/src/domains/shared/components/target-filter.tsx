@@ -1,9 +1,9 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
-import { useWorkflows } from '@mastra/playground-ui/domains/workflows/hooks/use-workflows';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { useAgents } from '@mastra/react/hooks/agents';
+import { useProcessors } from '@mastra/react/hooks/processors';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { DATASET_TARGET_TYPES, type DatasetTargetType } from '@/domains/datasets/components/target-type-options';
-import { useProcessors } from '@/domains/processors/hooks/use-processors';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 export const ALL_TARGETS = 'all';
@@ -32,12 +32,14 @@ export interface TargetFilterProps {
  * Empty strings mean "no filter" so callers can map them directly to absent URL params.
  */
 export function TargetFilter({ targetType, targetId, onTargetTypeChange, onTargetIdChange }: TargetFilterProps) {
-  const { data: agents, isLoading: agentsLoading } = useAgents({ enabled: targetType === 'agent' });
+  const { data: agents, isLoading: agentsLoading } = useAgents({ queryOptions: { enabled: targetType === 'agent' } });
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows({
-    enabled: targetType === 'workflow',
+    queryOptions: { enabled: targetType === 'workflow' },
   });
   const { data: scorers, isLoading: scorersLoading } = useScorers({ enabled: targetType === 'scorer' });
-  const { data: processors, isLoading: processorsLoading } = useProcessors({ enabled: targetType === 'processor' });
+  const { data: processors, isLoading: processorsLoading } = useProcessors({
+    queryOptions: { enabled: targetType === 'processor' },
+  });
 
   const entityOptions =
     targetType === 'agent'

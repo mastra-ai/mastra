@@ -1,10 +1,10 @@
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ArrowUpDown } from 'lucide-react';
 
 import type { BoardSort } from '../boardOrder';
-import { isBoardSort } from '../boardSort';
+import { DEFAULT_BOARD_SORT, isBoardSort } from '../boardSort';
 
-const SORT_LABELS: Record<BoardSort, string> = {
+export const BOARD_SORT_LABELS: Record<BoardSort, string> = {
   recent: 'Recently moved',
   'recent-mine': 'Recently moved by me',
   'created-newest': 'Newest on board',
@@ -21,22 +21,31 @@ export function BoardSortControl({
   onChange: (sort: BoardSort) => void;
 }) {
   return (
-    <Select
-      value={value}
-      onValueChange={(next: string) => {
-        if (isBoardSort(next)) onChange(next);
-      }}
-    >
-      <SelectTrigger size="sm" aria-label="Sort filed cards" className="w-auto shrink-0">
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        size="icon-sm"
+        variant={value === DEFAULT_BOARD_SORT ? 'default' : 'primary'}
+        aria-label={`Sort filed cards: ${BOARD_SORT_LABELS[value]}`}
+        tooltip={`Sort filed cards: ${BOARD_SORT_LABELS[value]}`}
+      >
         <ArrowUpDown aria-hidden />
-        Filed cards: {SORT_LABELS[value]}
-      </SelectTrigger>
-      <SelectContent>
-        <SelectItem value="recent">{SORT_LABELS.recent}</SelectItem>
-        {currentUserId ? <SelectItem value="recent-mine">{SORT_LABELS['recent-mine']}</SelectItem> : null}
-        <SelectItem value="created-newest">{SORT_LABELS['created-newest']}</SelectItem>
-        <SelectItem value="created-oldest">{SORT_LABELS['created-oldest']}</SelectItem>
-      </SelectContent>
-    </Select>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="start">
+        <DropdownMenu.Label>Sort filed cards</DropdownMenu.Label>
+        <DropdownMenu.RadioGroup
+          value={value}
+          onValueChange={next => {
+            if (isBoardSort(next)) onChange(next);
+          }}
+        >
+          <DropdownMenu.RadioItem value="recent">{BOARD_SORT_LABELS.recent}</DropdownMenu.RadioItem>
+          {currentUserId ? (
+            <DropdownMenu.RadioItem value="recent-mine">{BOARD_SORT_LABELS['recent-mine']}</DropdownMenu.RadioItem>
+          ) : null}
+          <DropdownMenu.RadioItem value="created-newest">{BOARD_SORT_LABELS['created-newest']}</DropdownMenu.RadioItem>
+          <DropdownMenu.RadioItem value="created-oldest">{BOARD_SORT_LABELS['created-oldest']}</DropdownMenu.RadioItem>
+        </DropdownMenu.RadioGroup>
+      </DropdownMenu.Content>
+    </DropdownMenu>
   );
 }

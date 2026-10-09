@@ -1,6 +1,7 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
-import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -84,7 +85,7 @@ export function SidebarAttention() {
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <MainSidebar.NavLink asChild link={{ name: 'Needs attention', url: '#', icon: <Inbox /> }} isActive={open}>
+      <Sidebar.NavLink asChild link={{ name: 'Needs attention', url: '#', icon: <Inbox /> }} isActive={open}>
         <PopoverTrigger id="attention-trigger" type="button" aria-label={triggerLabel(openCount, unreadCount)}>
           <span className="relative grid size-4 shrink-0 place-items-center" aria-hidden>
             <Inbox size={16} />
@@ -92,16 +93,16 @@ export function SidebarAttention() {
               <span className="bg-warning-indicator absolute -top-0.5 -right-0.5 size-1.5 rounded-full" />
             ) : null}
           </span>
-          <MainSidebar.NavLabel className="flex items-center gap-2">
+          <Sidebar.NavLabel className="flex items-center gap-2">
             <span className="min-w-0 flex-1 truncate">Needs attention</span>
             {unreadCount > 0 ? (
               <Badge variant="orange" size="sm">
                 {unreadCount}
               </Badge>
             ) : null}
-          </MainSidebar.NavLabel>
+          </Sidebar.NavLabel>
         </PopoverTrigger>
-      </MainSidebar.NavLink>
+      </Sidebar.NavLink>
       <PopoverContent
         side="right"
         align="end"
@@ -115,7 +116,7 @@ export function SidebarAttention() {
               {TAB_ORDER.map(tab => {
                 const unread = kinds ? attentionCountsIn(kinds, tab).unread : 0;
                 return (
-                  <Tab key={tab} value={tab} className="text-meta">
+                  <Tab key={tab} value={tab}>
                     {TAB[tab].label}{' '}
                     {unread > 0 ? <span className="text-muted-foreground tabular-nums">{unread}</span> : null}
                   </Tab>
@@ -151,7 +152,7 @@ export function SidebarAttention() {
             ) : items.length > 0 ? (
               <ScrollArea maxHeight="20rem">
                 <ScrollAreaViewport className="px-3.5 py-1.5">
-                  <ul className="divide-border/50 divide-y">
+                  <ul className="divide-border divide-y">
                     {items.map((item, index) => (
                       <li
                         key={item.key}
@@ -169,8 +170,10 @@ export function SidebarAttention() {
                 </ScrollAreaViewport>
               </ScrollArea>
             ) : (
-              <div className="text-caption text-placeholder flex min-h-24 items-center justify-center px-3.5 text-center">
-                {groupOpenCount > 0 ? 'Open the inbox to continue through older items.' : TAB[group].empty}
+              <div className={cn('text-placeholder', 'flex min-h-24 items-center justify-center px-3.5 text-center')}>
+                <Txt as="span" variant="caption" className="block">
+                  {groupOpenCount > 0 ? 'Open the inbox to continue through older items.' : TAB[group].empty}
+                </Txt>
               </div>
             )}
           </TabContent>
