@@ -741,7 +741,14 @@ export class PlatformSandbox extends MastraSandbox {
       // Only a provision ran the template; on reattach the stored definition
       // is whatever this instance provisioned earlier, not what is running.
       ...(mode === 'provision' && this._templateDefinition
-        ? { templateHash: templateHash(this._templateDefinition) }
+        ? {
+            templateHash: templateHash(this._templateDefinition),
+            // `exact` means the proxy booted the requested build. `pending`
+            // means it booted a prior family build or the base image while
+            // that build runs; the proxy does not say which of the two.
+            templateBoot: this.templatePending ? 'pending' : 'exact',
+            ...(this.templatePending ? { pendingTemplateId: this.templatePending.templateId } : {}),
+          }
         : {}),
     });
   }
