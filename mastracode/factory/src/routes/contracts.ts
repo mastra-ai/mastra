@@ -107,7 +107,7 @@ export const projectEnvironmentResponseSchema = z.object({
     sandbox: environmentSandboxSchema,
     /** The stored settings document; only keys the user set. */
     settings: z.record(z.string(), z.unknown()),
-    sandboxWorkdir: z.string().nullable(),
+    sandboxWorkingDirectory: z.string().nullable(),
     workspaceSetupCommand: z.string().nullable(),
     activeTemplateId: z.string().nullable(),
     activeTemplateHeads: z.record(z.string(), z.string()).nullable(),
@@ -151,8 +151,10 @@ const environmentRepositoryPatchSchema = z.object({
 
 export const updateProjectEnvironmentBodySchema = z
   .object({
-    sandboxWorkdir: nullableTrimmed(1_000)
-      .refine(value => value === null || value.startsWith('/'), { message: 'sandboxWorkdir must be absolute' })
+    sandboxWorkingDirectory: nullableTrimmed(1_000)
+      .refine(value => value === null || value.startsWith('/'), {
+        message: 'sandboxWorkingDirectory must be absolute',
+      })
       .optional(),
     /** Partial settings merged onto the stored document; null removes a key. Validated by the FactorySandbox. */
     settings: z.record(z.string(), z.unknown().nullable()).optional(),

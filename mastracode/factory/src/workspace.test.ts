@@ -3177,7 +3177,7 @@ describe('factory environment sandbox context', () => {
     const project = {
       id: 'factory-1',
       orgId: 'org-1',
-      sandboxWorkdir: '/workspace',
+      sandboxWorkingDirectory: '/workspace',
       workspaceSetupCommand: 'touch .workspace-ready',
       ...options.project,
     };
@@ -3262,7 +3262,7 @@ describe('factory environment sandbox context', () => {
     const { resolver, sandbox } = environmentFixture({
       links: twoLinks,
       project: {
-        sandboxWorkdir: '~/relative',
+        sandboxWorkingDirectory: '~/relative',
         workspaceSetupCommand: null,
       },
     });

@@ -277,7 +277,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     "bodyParams": [
       "buildTriggers",
       "repositories",
-      "sandboxWorkdir",
+      "sandboxWorkingDirectory",
       "settings",
       "workspaceSetupCommand"
     ],
@@ -1066,7 +1066,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               },
               "additionalProperties": {}
             },
-            "sandboxWorkdir": {
+            "sandboxWorkingDirectory": {
               "type": [
                 "string",
                 "null"
@@ -1267,7 +1267,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "required": [
             "sandbox",
             "settings",
-            "sandboxWorkdir",
+            "sandboxWorkingDirectory",
             "workspaceSetupCommand",
             "activeTemplateId",
             "activeTemplateHeads",
@@ -1698,7 +1698,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
-        "sandboxWorkdir": {
+        "sandboxWorkingDirectory": {
           "$ref": "#/$defs/__schema0"
         },
         "settings": {
@@ -1908,7 +1908,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               },
               "additionalProperties": {}
             },
-            "sandboxWorkdir": {
+            "sandboxWorkingDirectory": {
               "type": [
                 "string",
                 "null"
@@ -2109,7 +2109,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "required": [
             "sandbox",
             "settings",
-            "sandboxWorkdir",
+            "sandboxWorkingDirectory",
             "workspaceSetupCommand",
             "activeTemplateId",
             "activeTemplateHeads",

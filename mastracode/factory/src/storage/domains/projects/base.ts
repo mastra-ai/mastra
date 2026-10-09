@@ -18,7 +18,7 @@ export interface FactoryProject {
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
   autoApprovePlans: boolean;
   /** Workspace root in the sandbox; linked repositories are checked out beneath it. */
-  sandboxWorkdir: string | null;
+  sandboxWorkingDirectory: string | null;
   /** Provider settings document validated by the configured FactorySandbox. Only keys the user set. */
   sandboxSettings: Record<string, unknown> | null;
   /** Command run once in the workspace root after every repository's own setup. */
@@ -54,7 +54,7 @@ export interface UpdateFactoryProjectInput {
   slackWorkItemsEnabled?: boolean;
   autoRunEnabled?: boolean;
   autoApprovePlans?: boolean;
-  sandboxWorkdir?: string | null;
+  sandboxWorkingDirectory?: string | null;
   sandboxSettings?: Record<string, unknown> | null;
   workspaceSetupCommand?: string | null;
   activeTemplateId?: string | null;
@@ -78,7 +78,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     slack_work_items_enabled: { type: 'boolean', default: false },
     auto_run_enabled: { type: 'boolean', default: false },
     auto_approve_plans: { type: 'boolean', default: false },
-    sandbox_workdir: { type: 'text', nullable: true },
+    sandbox_working_directory: { type: 'text', nullable: true },
     sandbox_settings: { type: 'json', nullable: true },
     workspace_setup_command: { type: 'text', nullable: true },
     active_template_id: { type: 'text', nullable: true },
@@ -106,7 +106,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   slack_work_items_enabled: boolean;
   auto_run_enabled: boolean;
   auto_approve_plans: boolean;
-  sandbox_workdir: string | null;
+  sandbox_working_directory: string | null;
   sandbox_settings: Record<string, unknown> | null;
   workspace_setup_command: string | null;
   active_template_id: string | null;
@@ -132,7 +132,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     slackWorkItemsEnabled: row.slack_work_items_enabled,
     autoRunEnabled: row.auto_run_enabled,
     autoApprovePlans: row.auto_approve_plans ?? false,
-    sandboxWorkdir: row.sandbox_workdir ?? null,
+    sandboxWorkingDirectory: row.sandbox_working_directory ?? null,
     sandboxSettings: row.sandbox_settings ?? null,
     workspaceSetupCommand: row.workspace_setup_command ?? null,
     activeTemplateId: row.active_template_id ?? null,
@@ -233,7 +233,9 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       ...(input.slackWorkItemsEnabled !== undefined ? { slack_work_items_enabled: input.slackWorkItemsEnabled } : {}),
       ...(input.autoRunEnabled !== undefined ? { auto_run_enabled: input.autoRunEnabled } : {}),
       ...(input.autoApprovePlans !== undefined ? { auto_approve_plans: input.autoApprovePlans } : {}),
-      ...(input.sandboxWorkdir !== undefined ? { sandbox_workdir: input.sandboxWorkdir } : {}),
+      ...(input.sandboxWorkingDirectory !== undefined
+        ? { sandbox_working_directory: input.sandboxWorkingDirectory }
+        : {}),
       ...(input.sandboxSettings !== undefined ? { sandbox_settings: input.sandboxSettings } : {}),
       ...(input.workspaceSetupCommand !== undefined ? { workspace_setup_command: input.workspaceSetupCommand } : {}),
       ...(input.activeTemplateId !== undefined ? { active_template_id: input.activeTemplateId } : {}),
