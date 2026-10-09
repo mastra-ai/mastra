@@ -187,15 +187,11 @@ function RepositoryRow({
             <span className="min-w-0 truncate">{label}</span>
           </Txt>
         </span>
-        {repository.lastBuildStatus === 'failed' ? (
+        {repository.lastBuildStatus === 'failed' && (
           <Badge size="sm" variant="destructive">
             Last build failed
           </Badge>
-        ) : repository.lastBuildStatus === 'configured' ? (
-          <Txt as="span" variant="caption" tone="muted">
-            Configured
-          </Txt>
-        ) : null}
+        )}
         <span className="flex items-center gap-2" onClick={stop}>
           <Txt as="span" variant="caption" tone="muted">
             {repository.inEnvironment ? 'Cloned' : 'Not cloned'}
@@ -218,7 +214,6 @@ function RepositoryRow({
             {repository.inEnvironment
               ? 'Cloned into every session and the template build.'
               : 'Not cloned; sessions and builds skip this repository.'}
-            {repository.lastBuildStatus === 'configured' && ' Its setup command passed in the last build.'}
             {repository.lastBuildStatus === 'failed' && ' Its setup command failed in the last build:'}
           </Txt>
           {repository.lastBuildStatus === 'failed' && repository.lastBuildError && (
