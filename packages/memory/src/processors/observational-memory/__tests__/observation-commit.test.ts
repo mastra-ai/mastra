@@ -6,7 +6,12 @@ import { Extractor } from '../extractor';
 import type { ExtractorOnExtractedContext } from '../extractor';
 import { ObservationStrategy } from '../observation-strategies/base';
 import type { StrategyDeps } from '../observation-strategies/base';
-import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from '../observation-strategies/types';
+import type {
+  ObservationPersistOutcome,
+  ObservationRunOpts,
+  ObserverOutput,
+  ProcessedObservation,
+} from '../observation-strategies/types';
 
 type PersistOutcome = 'commit' | 'skip' | 'fail';
 
@@ -33,7 +38,16 @@ class CommitStrategy extends ObservationStrategy {
     return this.observationCommitted;
   }
   async prepare(): Promise<{ messages: MastraDBMessage[]; existingObservations: string }> {
-    return { messages: [], existingObservations: '' };
+    // A cycle with nothing to observe returns before the commit, so give it one message.
+    const message: MastraDBMessage = {
+      id: 'commit-message',
+      role: 'user',
+      threadId: 'commit-thread',
+      resourceId: 'commit-resource',
+      createdAt: new Date(),
+      content: { format: 2, parts: [{ type: 'text', text: 'The launch is on Friday.' }] },
+    };
+    return { messages: [message], existingObservations: '' };
   }
   async observe(): Promise<ObserverOutput> {
     const observations = 'User confirmed the launch date.';
@@ -56,9 +70,10 @@ class CommitStrategy extends ObservationStrategy {
       lastObservedAt: new Date(),
     };
   }
-  async persist(): Promise<boolean> {
+  async persist(processed: ProcessedObservation): Promise<ObservationPersistOutcome | void> {
     if (this.outcome === 'fail') throw new Error('commit failed');
-    return this.outcome === 'commit';
+    if (this.outcome === 'skip') return;
+    return { status: 'committed', processed, record: this.opts.record };
   }
   async emitStartMarkers(): Promise<void> {}
   async emitEndMarkers(): Promise<void> {}
