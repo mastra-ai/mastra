@@ -1007,6 +1007,32 @@ describe('InngestAgent parity surface', () => {
     }
   });
 
+  it('an external abortSignal asks the worker to abort a resumed run', async () => {
+    const durableAgent = makeIsolatedAgent('resume-external-abort');
+    setSuspendedSnapshot(durableAgent);
+    const sendSpy = stubInngestSend();
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish').mockResolvedValue(undefined as any);
+    const runId = 'resume-external-abort-run';
+    const abortRequests = () =>
+      publish.mock.calls.filter(
+        ([topic, event]: any[]) =>
+          topic === AGENT_CONTROL_TOPIC(runId) && event?.type === AgentControlEventTypes.ABORT_REQUEST,
+      );
+    const external = new AbortController();
+
+    const result = await durableAgent.resume(runId, { approved: true }, { abortSignal: external.signal });
+    try {
+      expect(abortRequests()).toHaveLength(0);
+      external.abort(new Error('external-cancel'));
+      expect(globalRunRegistry.get(runId)?.abortSignal?.aborted).toBe(true);
+      await vi.waitFor(() => expect(abortRequests()).toHaveLength(1));
+    } finally {
+      result.cleanup();
+      publish.mockRestore();
+      sendSpy.mockRestore();
+    }
+  });
+
   it.each([
     { closeOnSuspend: false, registrationOptions: { continuation: 'across-suspension' } },
     { closeOnSuspend: true, registrationOptions: undefined },
