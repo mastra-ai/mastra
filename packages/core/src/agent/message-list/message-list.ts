@@ -633,7 +633,12 @@ export class MessageList {
     }).deserialize(this.serialize());
   }
 
-  /** @internal */
+  /**
+   * Return the transcript view that persistence-oriented output processors should store.
+   * During final output processing, the current loop iteration may temporarily be exposed as a separate response
+   * message so processors can transform it independently. This method coalesces that temporary split while preserving
+   * the original response identity and order.
+   */
   public cloneForPersistence(): MessageList {
     if (this.responseMessageSplits.size === 0) return this;
 

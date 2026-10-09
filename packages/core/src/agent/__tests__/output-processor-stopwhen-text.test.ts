@@ -210,8 +210,8 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     const fullOutput = await stream.getFullOutput();
 
     expect(await stream.text).toBe('FIRSTMORE');
-    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', 'MORE']);
-    expect(fullOutput.text).toBe('firstMORE');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['FIRST', 'MORE']);
+    expect(fullOutput.text).toBe('FIRSTMORE');
   });
 
   it('preserves destructive processing when collapsing a feedback continuation', async () => {
@@ -300,8 +300,8 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     const fullOutput = await stream.getFullOutput();
 
     expect(await stream.text).toBe('[r] MORE');
-    expect(fullOutput.steps.map(step => step.text)).toEqual(['token:abc123 ', 'MORE']);
-    expect(fullOutput.text).toBe('token:abc123 MORE');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['[r] ', 'MORE']);
+    expect(fullOutput.text).toBe('[r] MORE');
   });
 
   it('uses processor output when collapsing rewrites in both iterations', async () => {
@@ -345,8 +345,8 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     const fullOutput = await stream.getFullOutput();
 
     expect(await stream.text).toBe('[redacted] [redacted]');
-    expect(fullOutput.steps.map(step => step.text)).toEqual(['SECRET ', '[redacted]']);
-    expect(fullOutput.text).toBe('SECRET [redacted]');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['[redacted] ', '[redacted]']);
+    expect(fullOutput.text).toBe('[redacted] [redacted]');
   });
 
   it('keeps feedback continuation steps iteration-local with an output processor', async () => {
@@ -409,8 +409,8 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     const fullOutput = await stream.getFullOutput();
 
     expect(await stream.text).toBe('FIRSTMORE');
-    expect(fullOutput.steps.map(step => step.text)).toEqual(['first', 'MORE']);
-    expect(fullOutput.text).toBe('firstMORE');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['FIRST', 'MORE']);
+    expect(fullOutput.text).toBe('FIRSTMORE');
   });
 
   it('removes final step text when its response is removed', async () => {
@@ -459,6 +459,100 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(await stream.text).toBe('first');
     expect(fullOutput.steps.map(step => step.text)).toEqual(['first', '']);
     expect(fullOutput.text).toBe('first');
+  });
+
+  it('keeps processed text on the run MessageList for onFinish after a tool-only final step', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'SECRET '), { ...askCall('c0'), toolName: 'noop' }, finish('tool-calls')],
+      [askCall('c1'), finish('tool-calls')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      tools: {
+        ask: askTool,
+        noop: createTool({
+          id: 'noop',
+          description: 'noop',
+          inputSchema: z.object({ question: z.string() }),
+          execute: async () => ({}),
+        }),
+      },
+      outputProcessors: [
+        {
+          id: 'redact-finish-messages',
+          processOutputResult: async ({ messages }) =>
+            messages.map(message => ({
+              ...message,
+              content: {
+                ...message.content,
+                parts: message.content.parts?.map(part =>
+                  part.type === 'text' ? { ...part, text: part.text.replace('SECRET', '[r]') } : part,
+                ),
+              },
+            })),
+        },
+      ],
+    });
+    let finishMessages: unknown;
+
+    const stream = await agent.stream('hi', {
+      stopWhen: stopOnAsk as any,
+      onFinish: async ({ messages }) => {
+        finishMessages = messages;
+      },
+    });
+    await stream.getFullOutput();
+
+    expect(JSON.stringify(finishMessages)).toContain('[r]');
+    expect(JSON.stringify(finishMessages)).not.toContain('SECRET');
+  });
+
+  it('provides a coalesced transcript view to custom persisting processors', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'first'), finish('stop')],
+      [...textPart('t2', 'MORE'), finish('stop')],
+    ]);
+    const persistedTranscripts: Array<{
+      splitResponseCount: number;
+      responseCount: number;
+      responseTexts: string[];
+    }> = [];
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'custom-persister',
+          processOutputResult: async ({ messages, messageList }) => {
+            const persistedResponses = messageList.cloneForPersistence().get.response.db();
+            persistedTranscripts.push({
+              splitResponseCount: messageList.get.response.db().length,
+              responseCount: persistedResponses.length,
+              responseTexts: persistedResponses.map(message =>
+                (message.content.parts ?? []).map(part => (part.type === 'text' ? part.text : '')).join(''),
+              ),
+            });
+            return messages;
+          },
+        },
+      ],
+    });
+    let iteration = 0;
+
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Continue.' } : undefined),
+    });
+    await stream.getFullOutput();
+
+    expect(persistedTranscripts).toHaveLength(1);
+    expect(persistedTranscripts[0]).toMatchObject({ splitResponseCount: 3, responseCount: 2 });
+    expect(persistedTranscripts[0]!.responseTexts).toContain('firstMORE');
   });
 
   for (const [label, rewrite, step, expected] of [
