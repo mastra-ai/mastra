@@ -20,6 +20,7 @@ import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
 import { globalRunRegistry } from '../run-registry';
+import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 
 function makeSnapshot(
   runId: string,
@@ -310,6 +311,45 @@ describe('DurableAgent.recoverActiveRuns', () => {
     expect(bad?.status).toBe('failed');
     expect(bad?.error).toBeInstanceOf(Error);
     expect(bad?.error?.message).toBe('boom-run-bad');
+  });
+
+  it('replays a boot-recovered run via observe() after recovery finishes (#26433)', async () => {
+    const runId = 'run-replay';
+    await seed(store, makeSnapshot(runId, 'running', { agentId: 'agent-A', threadId: 't', resourceId: 'r' }), 'r');
+    const restart = vi.fn(async () => {
+      await emitChunkEvent(agent.pubsub, runId, {
+        type: 'text-delta',
+        runId,
+        from: 'AGENT',
+        payload: { text: 'recovered output' },
+      } as any);
+      await emitFinishEvent(agent.pubsub, runId, {
+        output: { text: 'recovered output', steps: [] },
+        stepResult: { reason: 'stop' },
+      } as any);
+      return { status: 'success' as const };
+    });
+    vi.spyOn(agent, 'getWorkflow').mockReturnValue({
+      createRun: vi.fn(async () => ({ restart, runId })),
+      restart,
+      deleteWorkflowRunById: vi.fn(async () => {}),
+    } as any);
+
+    const { succeeded } = await agent.recoverActiveRuns();
+    expect(succeeded).toBe(1);
+
+    const observed = await agent.observe(runId, { offset: 0, idleTimeoutMs: 2000 });
+    const types: string[] = [];
+    let text = '';
+    for await (const chunk of observed.fullStream as AsyncIterable<any>) {
+      types.push(chunk.type);
+      if (chunk.type === 'text-delta') text += chunk.payload.text;
+    }
+    observed.detach();
+
+    expect(types).not.toContain('error');
+    expect(types).toContain('finish');
+    expect(text).toBe('recovered output');
   });
 
   it('restarts a specific run when `runId` is given and skips discovery', async () => {
