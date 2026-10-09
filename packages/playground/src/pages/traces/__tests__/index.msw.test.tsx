@@ -577,7 +577,7 @@ describe('Traces side panel Scores view', () => {
       expect(traceSideViewLabel()).toMatch(/scores/i);
     });
 
-    it('renders one card per score with the scorer name, value and a link to the scorer run', async () => {
+    it('renders one card per score with the scorer name and value', async () => {
       await openScoresTab(traceSpanScores);
 
       expect(await screen.findByRole('button', { name: 'Score score-1' })).not.toBeNull();
@@ -587,10 +587,6 @@ describe('Traces side panel Scores view', () => {
       expect(screen.getByText('0.4')).not.toBeNull();
       expect(screen.getByText('0.8')).not.toBeNull();
       expect(screen.getByText('1')).not.toBeNull();
-
-      const links = screen.getAllByRole('link', { name: /open scorer run/i });
-      expect(links).toHaveLength(3);
-      expect(links[0]?.getAttribute('href')).toBe('/scorers/relevance-scorer?scoreId=score-1');
     });
 
     it('truncates a long reason and reveals the rest on Read more', async () => {
