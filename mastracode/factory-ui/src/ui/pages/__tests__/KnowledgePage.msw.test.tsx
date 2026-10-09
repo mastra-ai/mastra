@@ -1303,7 +1303,7 @@ describe('KnowledgePage', () => {
     await waitFor(() => expect(router.state.location.search).toContain(`scope=${memoryId}`));
   });
 
-  it('defaults to the list below the md breakpoint', async () => {
+  it('defaults to the list below the md breakpoint and toggles to the graph', async () => {
     const matchMedia = vi.spyOn(window, 'matchMedia').mockImplementation(
       query =>
         ({
@@ -1323,6 +1323,10 @@ describe('KnowledgePage', () => {
 
       expect(await screen.findByTestId('knowledge-list')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'list' })).toHaveAttribute('aria-pressed', 'true');
+
+      fireEvent.click(screen.getByRole('button', { name: 'graph' }));
+      expect(await screen.findAllByTestId('knowledge-node')).not.toHaveLength(0);
+      expect(screen.queryByTestId('knowledge-list')).not.toBeInTheDocument();
     } finally {
       matchMedia.mockRestore();
     }
