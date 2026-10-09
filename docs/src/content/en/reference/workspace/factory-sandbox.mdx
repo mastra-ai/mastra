@@ -10,7 +10,7 @@ packages:
 
 A `FactorySandbox` is the one object a host gives `MastraFactory` to describe where sessions run. It owns the session sandbox constructor, the repository template built for a session, the schema of settings a user can tune per project, and optionally the ability to build that template ahead of time.
 
-Factory passes the project's settings document to `create` on every session boot (empty until a settings surface stores one) and serves the schema as JSON Schema to clients. Factory never knows which provider is behind the object.
+Factory passes the project's stored settings to `create` on every session boot and serves the schema as JSON Schema to clients. Everything provider-specific stays inside the object: Factory only calls the contract and reads `provider` for display.
 
 ## Usage
 
@@ -34,7 +34,7 @@ export const factory = new MastraFactory({
 | - | - | - | - |
 | `PlatformFactorySandbox` | `@mastra/platform-workspace` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get` |
 | `E2BFactorySandbox` | `@mastra/e2b` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get`, `list` |
-| `DockerFactorySandbox` | `@mastra/docker` | `baseImage`, `owner` | No |
+| `DockerFactorySandbox` | `@mastra/docker` | `baseImage`, `owner` | `start`, `get` |
 | `LocalFactorySandbox` | `@mastra/factory` | None | No |
 
 Each provider class takes the same runtime options as its sandbox class (minus `id`, `sandboxId` and `template`, which the class fills in per session), plus `template` options for the repository template and `defaults` for settings the environment leaves unset.
@@ -45,15 +45,15 @@ import { E2BFactorySandbox } from '@mastra/e2b'
 import { DockerFactorySandbox } from '@mastra/docker'
 import { LocalFactorySandbox } from '@mastra/factory'
 
-new PlatformFactorySandbox({ accessToken, environmentId, projectId })
-new E2BFactorySandbox({ apiKey: process.env.E2B_API_KEY })
+new PlatformFactorySandbox() // reads MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_ENVIRONMENT_ID
+new E2BFactorySandbox() // reads E2B_API_KEY
 new DockerFactorySandbox({ defaults: { baseImage: 'node:22-slim' } })
 new LocalFactorySandbox({ root: '/var/sandboxes', env: { PATH: process.env.PATH! } })
 ```
 
 `LocalFactorySandbox` runs every session on the host machine under `join(root, sessionId)`.
 
-A setting the environment leaves unset is absent from the stored document. The provider applies its own default for it (2 CPUs, 1024 MB and a 5 minute idle timeout on platform and E2B, overridable through `defaults`), and factory only stores values the user typed.
+A setting the environment leaves unset is absent from the stored document. The provider applies its own default for it (2 CPUs, 1024 MB and a 5 minute idle timeout on Platform and E2B, overridable through `defaults`), and Factory stores only the values that were set.
 
 ### Callback form
 
@@ -107,28 +107,55 @@ abstract class FactorySandbox<TSettings extends Record<string, unknown> = Record
 ]}
 />
 
-Extend `FactorySandbox` from `@mastra/core/workspace`; the base class sets the `Symbol.for('mastra.factory.sandbox')` brand factory detects, never by shape.
+To write your own provider, extend `FactorySandbox` from `@mastra/core/workspace`. Factory recognizes subclasses by a brand the base class sets, so a plain object with the same shape isn't accepted.
 
 ```typescript
 import { FactorySandbox } from '@mastra/core/workspace'
 import type { FactorySandboxContext } from '@mastra/core/workspace'
-import { z } from 'zod'
+import type { PublicSchema } from '@mastra/core/schema'
 
-const settings = z.object({ region: z.enum(['us', 'eu']).optional() })
+interface Settings {
+  region?: 'us' | 'eu'
+}
 
-class MyFactorySandbox extends FactorySandbox<z.infer<typeof settings>> {
+class MyFactorySandbox extends FactorySandbox<Settings> {
   readonly provider = 'my-cloud'
-  readonly settings = settings
+  readonly settings: PublicSchema<Settings> = {
+    type: 'object',
+    properties: { region: { type: 'string', enum: ['us', 'eu'], default: 'us' } },
+    additionalProperties: false,
+  }
 
-  create(ctx: FactorySandboxContext, { region }: z.infer<typeof settings>) {
-    return new MyCloudSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId, region })
+  create(ctx: FactorySandboxContext, settings: Settings) {
+    return new MyCloudSandbox({
+      id: ctx.sessionId,
+      sandboxId: ctx.sandboxId,
+      template: this.template(ctx, settings),
+      workingDirectory: ctx.workingDirectory,
+      region: settings.region ?? 'us',
+    })
+  }
+
+  // Optional: the sandbox template image Factory can build ahead of time
+  template(ctx: FactorySandboxContext, settings: Settings) {
+    return myCloudTemplate(ctx, settings)
+  }
+
+  // Optional: build that template ahead of time and report on it
+  readonly builds = {
+    start: async (ctx: FactorySandboxContext, settings: Settings) =>
+      myCloud.startBuild(this.template(ctx, settings)),
+    get: async (ctx: FactorySandboxContext, settings: Settings, buildId: string) =>
+      myCloud.buildStatus(buildId),
+    list: async (ctx: FactorySandboxContext, settings: Settings) =>
+      myCloud.builds(this.template(ctx, settings).name),
   }
 }
 ```
 
 ## FactorySandboxContext
 
-Everything factory knows about the session, passed to `create`, `template` and the build methods.
+Everything Factory knows about the session, passed to `create`, `template` and the build methods.
 
 <PropertiesTable
   content={[
@@ -155,14 +182,34 @@ Everything factory knows about the session, passed to `create`, `template` and t
   },
   {
     name: 'repos',
-    type: 'FactorySandboxRepository[]',
-    description: 'Several repositories for one session, each with its own access and setup command.',
+    type: 'Array<{ getRepositoryAccess, setupCommand? }>',
+    description:
+      'Every repository of the session environment in position order, each with its own access resolver and setup command. Set instead of getRepositoryAccess when the environment has repositories.',
+    isOptional: true,
+  },
+  {
+    name: 'workspaceSetupCommand',
+    type: 'string | string[]',
+    description: 'Command run once at the workspace root after every repository is set up. Only with repos.',
+    isOptional: true,
+  },
+  {
+    name: 'continueOnSetupFailure',
+    type: 'boolean',
+    description: 'Record a failing repository setup and continue the build instead of failing it. Only with repos.',
+    isOptional: true,
+  },
+  {
+    name: 'workingDirectory',
+    type: 'string',
+    description: 'Absolute workspace root the repositories check out under. The provider default when absent.',
     isOptional: true,
   },
   {
     name: 'resolveHead',
-    type: '(cloneUrl, ref?) => Promise<string | undefined>',
-    description: 'Pins a repository head without a network call when factory already knows it.',
+    type: '(cloneUrl, token?) => Promise<string | undefined>',
+    description:
+      'Resolves the commit a repository template pins, given its clone URL and the credential minted for it. When absent, the provider resolves the default branch head itself.',
     isOptional: true,
   },
 ]}
