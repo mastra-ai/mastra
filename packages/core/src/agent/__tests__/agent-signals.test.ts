@@ -4281,6 +4281,7 @@ describe('Agent signals', () => {
 
     try {
       await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+      await waitForCondition(() => stream._getImmediateText() === 'first response');
       const result = agent.sendMessage('message by run id', { runId: stream.runId });
 
       expect(result.signal.id).toBe(`message_custom_${threadId}_${resourceId}`);
@@ -6961,6 +6962,7 @@ describe('Agent signals', () => {
       memory: { thread: 'active-priority-notification-thread', resource: 'active-priority-notification-user' },
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+    await waitForCondition(() => stream._getImmediateText() === 'active response');
 
     const high = await agent.sendNotificationSignal(
       { source: 'github', kind: 'ci-status', priority: 'high', summary: 'CI failed' },
@@ -7058,6 +7060,7 @@ describe('Agent signals', () => {
     });
     const streamText = stream.text;
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+    await waitForCondition(() => stream._getImmediateText() === 'response 1');
 
     const result = await agent.sendNotificationSignal(
       { source: 'github', kind: 'ci-status', priority: 'high', summary: 'CI failed on main' },
@@ -7270,6 +7273,7 @@ describe('Agent signals', () => {
     });
     const streamText = stream.text;
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+    await waitForCondition(() => stream._getImmediateText() === 'medium response 1');
 
     const dispatchResult = await dispatchDueNotifications({
       mastra,
@@ -7716,6 +7720,7 @@ describe('Agent signals', () => {
       memory: { thread: 'active-message-thread', resource: 'active-message-user' },
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+    await waitForCondition(() => stream._getImmediateText() === 'first response');
     const result = agent.sendMessage(
       {
         contents: 'Hello while active',
@@ -7931,6 +7936,136 @@ describe('Agent signals', () => {
       _waitUntilFinished: () => finished,
     } as any;
   }
+
+  it('notifies only the owning run synchronously after pending input is queued', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = { id: 'pending-notification-agent' } as Agent<any, any, any, any>;
+    const target = { resourceId: 'pending-user', threadId: 'pending-thread' };
+    const runId = 'pending-run';
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    await runtime.registerRun(
+      agent,
+      createFakeThreadRun(runId, finished),
+      { memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    const admitted: string[][] = [];
+    const unsubscribe = runtime.subscribePendingSignals(
+      runId,
+      () => {
+        admitted.push(runtime.drainPendingSignals(runId, pubsub).map(signal => signal.id));
+      },
+      pubsub,
+    );
+    const observer = vi.fn();
+    const unobserve = runtime.subscribePendingSignals('not-an-owner', observer, pubsub);
+    try {
+      const first = runtime.sendMessage(agent, 'first', target, pubsub);
+      expect(admitted).toEqual([[first.signal.id]]);
+      await first.accepted;
+      await pubsub.flush();
+      expect(admitted).toHaveLength(1); // The publisher's own echo must not notify twice.
+      expect(observer).not.toHaveBeenCalled();
+      for (const behavior of ['discard', 'persist'] as const) {
+        const ignored = runtime.sendSignal(
+          agent,
+          { type: 'notification', contents: 'ignored', transient: true },
+          { ...target, ifActive: { behavior } },
+          pubsub,
+        );
+        await ignored.accepted;
+      }
+      const wrongResource = runtime.sendMessage(
+        agent,
+        'wrong resource',
+        { ...target, resourceId: 'other-user', ifIdle: { behavior: 'discard' } },
+        pubsub,
+      );
+      const wrongThread = runtime.sendMessage(
+        agent,
+        'wrong thread',
+        { ...target, threadId: 'other-thread', ifIdle: { behavior: 'discard' } },
+        pubsub,
+      );
+      await Promise.all([wrongResource.accepted, wrongThread.accepted]);
+      const queued = runtime.queueMessage(agent, 'idle only', target, pubsub);
+      await queued.accepted;
+      runtime.cancelQueuedMessages(agent, { ...target, signalIds: [queued.signal.id] }, pubsub);
+      expect(admitted).toHaveLength(1);
+      unsubscribe();
+      const next = runtime.sendMessage(agent, 'after unsubscribe', target, pubsub);
+      await next.accepted;
+      expect(admitted).toHaveLength(1);
+      expect(runtime.drainPendingSignals(runId, pubsub).map(signal => signal.id)).toEqual([next.signal.id]);
+    } finally {
+      unsubscribe();
+      unobserve();
+      finish();
+    }
+  });
+
+  it('preserves input queued before registration and removes listeners after failed startup', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = { id: 'reserved-notification-agent' } as Agent<any, any, any, any>;
+    const target = { resourceId: 'reserved-user', threadId: 'reserved-thread' };
+    const runId = 'reserved-notification-run';
+    const options = { runId, memory: { resource: target.resourceId, thread: target.threadId } };
+    await runtime.waitForCrossAgentThreadRun(agent, options, pubsub);
+    const before = runtime.sendMessage(agent, 'before listener', target, pubsub);
+    const listener = vi.fn();
+    const unsubscribe = runtime.subscribePendingSignals(runId, listener, pubsub);
+    expect(runtime.drainPendingSignals(runId, pubsub, 'pre-run').map(signal => signal.id)).toEqual([before.signal.id]);
+    const after = runtime.sendMessage(agent, 'after listener', target, pubsub);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(runtime.drainPendingSignals(runId, pubsub, 'pre-run').map(signal => signal.id)).toEqual([after.signal.id]);
+    runtime.releaseThreadRunReservation(runId, pubsub);
+    // Reusing the identity proves startup cleanup removed the old listener, even without its unsubscribe.
+    await runtime.waitForCrossAgentThreadRun(agent, options, pubsub);
+    const replacement = runtime.sendMessage(agent, 'replacement reservation', target, pubsub);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(runtime.drainPendingSignals(runId, pubsub, 'pre-run').map(signal => signal.id)).toEqual([
+      replacement.signal.id,
+    ]);
+    unsubscribe();
+    runtime.releaseThreadRunReservation(runId, pubsub);
+  });
+
+  it('removes pending-input listeners when the owning run completes', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new EventEmitterPubSub();
+    const agent = { id: 'completed-notification-agent' } as Agent<any, any, any, any>;
+    const target = { resourceId: 'completed-user', threadId: 'completed-thread' };
+    const runId = 'completed-notification-run';
+    let finish!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    await runtime.registerRun(
+      agent,
+      createFakeThreadRun(runId, finished),
+      { memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    const listener = vi.fn();
+    const unsubscribe = runtime.subscribePendingSignals(runId, listener, pubsub);
+    finish();
+    await vi.waitFor(() => expect(runtime.getThreadState(target, pubsub)).toBe('idle'));
+    await runtime.waitForCrossAgentThreadRun(
+      agent,
+      { runId, memory: { resource: target.resourceId, thread: target.threadId } },
+      pubsub,
+    );
+    const signal = runtime.sendMessage(agent, 'replacement', target, pubsub);
+    expect(listener).not.toHaveBeenCalled();
+    expect(runtime.drainPendingSignals(runId, pubsub, 'pre-run').map(item => item.id)).toEqual([signal.signal.id]);
+    unsubscribe();
+    runtime.releaseThreadRunReservation(runId, pubsub);
+  });
 
   it('restores the failed signal at the queue head ahead of later queued signals', async () => {
     const runtime = new AgentThreadStreamRuntime();
@@ -11054,6 +11189,7 @@ describe('Agent signals', () => {
       memory: { thread: 'active-thread', resource: 'active-user' },
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+    await waitForCondition(() => stream._getImmediateText() === 'first response');
 
     const firstSignalResult = await agent.sendSignal(
       { type: 'user-message', contents: 'First signal while running' },
@@ -11064,6 +11200,7 @@ describe('Agent signals', () => {
 
     releaseFirst();
     await waitForCondition(() => streamCount === 2);
+    await waitForCondition(() => stream._getImmediateText() === 'first responsefirst signal response');
 
     const secondSignalResult = await agent.sendSignal(
       { type: 'user-message', contents: 'Second signal while running' },
@@ -11260,11 +11397,12 @@ describe('Agent signals', () => {
   it('interrupts an active reasoning stream to drain thread-targeted follow-up signals', async () => {
     const prompts: any[][] = [];
     let callCount = 0;
-    let releaseReasoningChunk: (() => void) | undefined;
-    let finishFirstCall: (() => void) | undefined;
+    let reasoningReady = false;
+    let providerAborted = false;
+    const onAbort = vi.fn();
 
     const model = new MockLanguageModelV2({
-      doStream: async ({ prompt }) => {
+      doStream: async ({ prompt, abortSignal }) => {
         callCount += 1;
         const callIndex = callCount;
         prompts.push(prompt);
@@ -11284,16 +11422,14 @@ describe('Agent signals', () => {
                 });
                 controller.enqueue({ type: 'reasoning-start', id: 'reasoning-1' });
                 controller.enqueue({ type: 'reasoning-delta', id: 'reasoning-1', delta: 'thinking' });
-                await new Promise<void>(resolve => (releaseReasoningChunk = resolve));
-                controller.enqueue({ type: 'reasoning-delta', id: 'reasoning-1', delta: ' still thinking' });
-                await new Promise<void>(resolve => (finishFirstCall = resolve));
-                controller.enqueue({ type: 'reasoning-end', id: 'reasoning-1' });
-                controller.enqueue({
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
-                });
-                controller.close();
+                abortSignal?.addEventListener(
+                  'abort',
+                  () => {
+                    providerAborted = true;
+                    controller.error(abortSignal.reason);
+                  },
+                  { once: true },
+                );
               },
             }),
           };
@@ -11334,9 +11470,13 @@ describe('Agent signals', () => {
 
     const stream = await agent.stream('Hello', {
       memory: { thread: 'interleaved-reasoning-thread', resource: 'interleaved-reasoning-user' },
+      onAbort,
+      onChunk: chunk => {
+        if (chunk.type === 'reasoning-delta') reasoningReady = true;
+      },
     });
     await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
-    await waitForCondition(() => !!releaseReasoningChunk);
+    await waitForCondition(() => reasoningReady);
 
     const signalResult = await agent.sendSignal(
       { type: 'user-message', contents: 'Stop reasoning and answer this' },
@@ -11344,14 +11484,14 @@ describe('Agent signals', () => {
     );
     await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
 
-    releaseReasoningChunk?.();
-    await waitForCondition(() => !!finishFirstCall);
-    finishFirstCall?.();
     await waitForCondition(() => callCount === 2);
+    expect(providerAborted).toBe(true);
 
     const run = await runPromise;
     expect(run.value.text).toContain('signal response');
     expect(JSON.stringify(prompts[1])).toContain('Stop reasoning and answer this');
+    expect(JSON.stringify(prompts[1])).not.toContain('thinking');
+    expect(onAbort).not.toHaveBeenCalled();
 
     subscription.unsubscribe();
   });
@@ -11907,6 +12047,7 @@ describe('Agent signals', () => {
         memory: { thread: 'run-id-thread', resource: 'run-id-user' },
       });
       await expect(waitForActiveRun(subscription)).resolves.toBe(stream.runId);
+      await waitForCondition(() => stream._getImmediateText() === 'run id first response');
 
       const runIdSignalResult = agent.sendSignal({ type, contents: 'Hello by run id' }, { runId: stream.runId });
       await expect(runIdSignalResult.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
