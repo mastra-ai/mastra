@@ -1,7 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import type { FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
 import { toast } from '@mastra/playground-ui/components/Toaster';
@@ -41,9 +41,9 @@ function schemaProperties(schema: Record<string, unknown>): Array<[string, Setti
 
 /**
  * The provider's own sandbox settings, one row per property of the schema the
- * route serves. Each row commits its own PATCH; an empty field means the
- * provider default (the placeholder), never a value factory stores on the
- * user's behalf. A provider with nothing to tune says so.
+ * route serves, rendered inside the caller's container. Each row commits its
+ * own PATCH; an empty field means the provider default (the placeholder),
+ * never a value factory stores on the user's behalf.
  */
 export function SandboxBlock({
   environment,
@@ -55,28 +55,16 @@ export function SandboxBlock({
   onSave: SaveEnvironment;
 }) {
   const saveSetting = (key: string, value: unknown | null) => onSave({ settings: { [key]: value } });
-  const properties = schemaProperties(environment.sandbox.settingsSchema);
-  if (properties.length === 0) {
-    return (
-      <Txt as="p" variant="meta" tone="faint">
-        This sandbox has no settings to tune.
-      </Txt>
-    );
-  }
-  return (
-    <SettingsContainer>
-      {properties.map(([key, schema]) => (
-        <SettingRow
-          key={key}
-          name={key}
-          schema={schema}
-          value={environment.settings[key]}
-          disabled={disabled}
-          onCommit={value => saveSetting(key, value)}
-        />
-      ))}
-    </SettingsContainer>
-  );
+  return schemaProperties(environment.sandbox.settingsSchema).map(([key, schema]) => (
+    <SettingRow
+      key={key}
+      name={key}
+      schema={schema}
+      value={environment.settings[key]}
+      disabled={disabled}
+      onCommit={value => saveSetting(key, value)}
+    />
+  ));
 }
 
 function SettingRow({

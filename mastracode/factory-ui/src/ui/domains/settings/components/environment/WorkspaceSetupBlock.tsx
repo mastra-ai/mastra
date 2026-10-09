@@ -1,21 +1,25 @@
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import type { ReactNode } from 'react';
 
 import { CommittedInput, type SaveEnvironment } from './CommittedInput';
 
 /**
- * Where the repositories are cloned and the one command that runs there after
- * every repository is cloned and set up.
+ * Where the repositories are cloned, the one command that runs there after
+ * every repository is set up, then whatever rows the caller adds (the
+ * provider's own settings).
  */
 export function WorkspaceSetupBlock({
   workdir,
   command,
   disabled,
   onSave,
+  children,
 }: {
   workdir: string | null;
   command: string | null;
   disabled: boolean;
   onSave: SaveEnvironment;
+  children?: ReactNode;
 }) {
   return (
     <SettingsContainer>
@@ -31,7 +35,7 @@ export function WorkspaceSetupBlock({
         </div>
       </SettingsRow>
       <SettingsRow
-        label="Command"
+        label="Workspace setup"
         description="Runs in the working directory after every repository's setup, while the template builds."
       >
         <div className="w-full lg:max-w-96">
@@ -44,6 +48,7 @@ export function WorkspaceSetupBlock({
           />
         </div>
       </SettingsRow>
+      {children}
     </SettingsContainer>
   );
 }

@@ -49,7 +49,7 @@ function renderEnvironmentSettings() {
 }
 
 describe('Environment settings', () => {
-  it('renders Template and Advanced, the working directory next to the setup command under Template', async () => {
+  it('renders one Template subsection with the working directory, the setup command and the provider settings', async () => {
     useFactory();
     useEnvironment(environmentPayload());
 
@@ -57,7 +57,7 @@ describe('Environment settings', () => {
 
     expect(await screen.findByRole('heading', { name: 'Template' })).toBeInTheDocument();
     const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
-    expect(headings).toEqual(['Template', 'Advanced']);
+    expect(headings).toEqual(['Template']);
     const workdir = screen.getByRole('textbox', { name: 'Working directory' });
     const command = screen.getByRole('textbox', { name: 'Workspace setup command' });
     expect(workdir.closest('section')).toBe(command.closest('section'));
@@ -294,7 +294,6 @@ describe('Environment settings', () => {
 
     expect(await screen.findByText(/Sandboxes run on a custom sandbox\./)).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Working directory' })).toBeInTheDocument();
-    expect(screen.getByText('This sandbox has no settings to tune.')).toBeInTheDocument();
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
   });
 

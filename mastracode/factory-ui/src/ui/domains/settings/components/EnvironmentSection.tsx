@@ -13,9 +13,8 @@ import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
- * The Factory's environment: what every session's sandbox boots from. The
- * Template subsection holds the ordered repositories and the workspace setup,
- * the Advanced subsection the sandbox provider's own settings.
+ * The Factory's environment: what every session's sandbox boots from: the
+ * repositories, the workspace setup and the sandbox provider's own settings.
  */
 export function EnvironmentSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -100,11 +99,10 @@ function EnvironmentBlocks({
             command={environment.workspaceSetupCommand}
             disabled={disabled}
             onSave={save}
-          />
+          >
+            <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
+          </WorkspaceSetupBlock>
         </div>
-      </SettingsSubsection>
-      <SettingsSubsection scope="factory" title="Advanced" description="The sandbox provider's own settings.">
-        <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
       </SettingsSubsection>
     </div>
   );
