@@ -51,12 +51,16 @@ function recordPatches(holder: { environment: FactoryEnvironmentPayload }, build
       const patch = (await request.json()) as FactoryEnvironmentPatch;
       patches.push(patch);
       const schedule = patch.buildTriggers?.schedule;
-      if (schedule?.cron && holder.environment.buildTriggers) {
+      if (schedule && holder.environment.buildTriggers) {
         holder.environment = {
           ...holder.environment,
           buildTriggers: {
             ...holder.environment.buildTriggers,
-            schedule: { ...holder.environment.buildTriggers.schedule, cron: schedule.cron },
+            schedule: {
+              ...holder.environment.buildTriggers.schedule,
+              enabled: schedule.enabled,
+              ...(schedule.cron ? { cron: schedule.cron } : {}),
+            },
           },
         };
       }
@@ -169,13 +173,14 @@ describe('Environment builds', () => {
     expect(await screen.findByText('Enter a whole number between 0 and 1440')).toBeInTheDocument();
     expect(patches).toHaveLength(2);
 
-    await user.click(screen.getByRole('switch', { name: 'Rebuild on a schedule' }));
+    await user.click(screen.getByRole('combobox', { name: 'Build frequency' }));
+    await user.click(await screen.findByRole('option', { name: 'Daily' }));
     await waitFor(() =>
       expect(patches.at(-1)).toEqual({ buildTriggers: { schedule: { enabled: true, cron: '0 3 * * *' } } }),
     );
   });
 
-  it('shows the schedule notice and disables the switch when the host has no schedules', async () => {
+  it('explains and locks the schedule when the host has no schedules', async () => {
     const holder = {
       environment: environmentPayload({
         buildTriggers: buildTriggers({
@@ -189,7 +194,7 @@ describe('Environment builds', () => {
     renderEnvironmentSettings();
 
     expect(await screen.findByText(/Needs a storage adapter with schedules/)).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Rebuild on a schedule' })).toBeDisabled();
+    expect(screen.getByRole('combobox', { name: 'Build frequency' })).toBeDisabled();
     expect(screen.getByRole('switch', { name: 'Rebuild on push' })).toBeEnabled();
   });
 
@@ -210,7 +215,8 @@ describe('Environment builds', () => {
 
     const frequency = await screen.findByRole('combobox', { name: 'Build frequency' });
     expect(frequency).toHaveTextContent('Daily');
-    expect(screen.getByRole('combobox', { name: 'Build time' })).toHaveTextContent('03:00');
+    expect(screen.getByText(/Rebuilds daily at 03:00 UTC/)).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Build time' })).toHaveTextContent('03:00 UTC');
     expect(screen.queryByRole('combobox', { name: 'Build day' })).toBeNull();
     expect(screen.queryByRole('textbox', { name: 'Build schedule cron' })).toBeNull();
 
@@ -243,6 +249,10 @@ describe('Environment builds', () => {
       expect(patches.at(-1)).toEqual({ buildTriggers: { schedule: { enabled: true, cron: '0 */6 * * *' } } }),
     );
     expect(patches).toHaveLength(4);
+
+    await user.click(screen.getByRole('combobox', { name: 'Build frequency' }));
+    await user.click(await screen.findByRole('option', { name: 'Off' }));
+    await waitFor(() => expect(patches.at(-1)).toEqual({ buildTriggers: { schedule: { enabled: false } } }));
   });
 
   it('lists the provider history and opens a failed build to its logs', async () => {

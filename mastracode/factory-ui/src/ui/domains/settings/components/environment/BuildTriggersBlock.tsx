@@ -30,35 +30,11 @@ export function BuildTriggersRows({
 
   return (
     <>
-      <SettingsRow
-        label="Rebuild on a schedule"
-        description={
-          schedule.scheduleAvailable
-            ? 'Rebuild on a cron schedule when a repository head moved.'
-            : 'Needs a storage adapter with schedules. Build now and push builds still work.'
-        }
-      >
-        <Switch
-          aria-label="Rebuild on a schedule"
-          checked={schedule.enabled}
-          disabled={disabled || !schedule.scheduleAvailable}
-          onCheckedChange={enabled =>
-            void onSave({
-              buildTriggers: {
-                schedule: enabled ? { enabled, cron: schedule.cron ?? DEFAULT_CRON } : { enabled },
-              },
-            })
-          }
-        />
-      </SettingsRow>
-      {schedule.enabled && (
-        <ScheduleRows
-          cron={schedule.cron ?? DEFAULT_CRON}
-          timezone={schedule.timezone ?? 'UTC'}
-          disabled={disabled}
-          onCommit={saveCron}
-        />
-      )}
+      <ScheduleRows
+        schedule={schedule}
+        disabled={disabled}
+        onCommit={cron => (cron ? saveCron(cron) : onSave({ buildTriggers: { schedule: { enabled: false } } }))}
+      />
       <SettingsRow label="Rebuild on push" description="Rebuild after a push to a repository's default branch.">
         <Switch
           aria-label="Rebuild on push"
@@ -93,12 +69,13 @@ export function BuildTriggersRows({
   );
 }
 
-type Frequency = 'daily' | 'weekly' | 'custom';
+type Frequency = 'off' | 'daily' | 'weekly' | 'custom';
 
+const FREQUENCY_LABEL: Record<Frequency, string> = { off: 'Off', daily: 'Daily', weekly: 'Weekly', custom: 'Custom' };
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
-/** A cron the preset rows can express: on the hour, every day or one weekday. */
+/** A cron the preset controls can express: on the hour, every day or one weekday. */
 function parsePreset(cron: string): { frequency: 'daily' | 'weekly'; hour: number; day: number } | null {
   const match = /^0 (\d{1,2}) \* \* (\*|[0-6])$/.exec(cron.trim());
   if (!match) return null;
@@ -113,109 +90,150 @@ function presetCron(frequency: 'daily' | 'weekly', hour: number, day: number) {
 
 const pad = (hour: number) => `${String(hour).padStart(2, '0')}:00`;
 
+function describe(frequency: Frequency, cron: string, hour: number, day: number, timezone: string) {
+  switch (frequency) {
+    case 'off':
+      return 'Rebuild on a schedule when a repository head moved.';
+    case 'daily':
+      return `Rebuilds daily at ${pad(hour)} ${timezone}, when a repository head moved.`;
+    case 'weekly':
+      return `Rebuilds every ${DAYS[day]} at ${pad(hour)} ${timezone}, when a repository head moved.`;
+    case 'custom':
+      return `Rebuilds on \`${cron}\` (${timezone}), when a repository head moved.`;
+  }
+}
+
 /**
- * The schedule as rows: how often, which day, what time, or a cron expression
- * for anything the presets cannot say. The stored value is always a cron.
+ * One row: how often the template rebuilds, with an inset under it holding
+ * the day and time for the presets, or the cron expression for custom. The
+ * stored value is always a cron; Off disables the trigger. An empty commit
+ * means Off.
  */
 function ScheduleRows({
-  cron,
-  timezone,
+  schedule,
   disabled,
   onCommit,
 }: {
-  cron: string;
-  timezone: string;
+  schedule: FactoryEnvironmentBuildTriggers['schedule'];
   disabled: boolean;
   onCommit: (cron: string) => Promise<unknown>;
 }) {
+  const cron = schedule.cron ?? DEFAULT_CRON;
+  const timezone = schedule.timezone ?? 'UTC';
   const preset = parsePreset(cron);
-  const [custom, setCustom] = useState(preset === null);
-  const frequency: Frequency = custom || preset === null ? 'custom' : preset.frequency;
+  const [custom, setCustom] = useState(schedule.enabled && preset === null);
+  const frequency: Frequency = !schedule.enabled ? 'off' : custom || preset === null ? 'custom' : preset.frequency;
   const hour = preset?.hour ?? 3;
   const day = preset?.day ?? 1;
+  const locked = disabled || !schedule.scheduleAvailable;
 
   const pick = (next: Frequency) => {
+    if (next === 'off') {
+      setCustom(false);
+      void onCommit('');
+      return;
+    }
     if (next === 'custom') {
       setCustom(true);
+      if (!schedule.enabled) void onCommit(cron);
       return;
     }
     setCustom(false);
     void onCommit(presetCron(next, hour, day));
   };
 
+  const hourSelect = (onPick: (hour: number) => void) => (
+    <Select value={String(hour)} onValueChange={next => onPick(Number(next))} disabled={locked}>
+      <SelectTrigger size="sm" aria-label="Build time" className="w-auto">
+        {pad(hour)} {timezone}
+      </SelectTrigger>
+      <SelectContent>
+        {HOURS.map(value => (
+          <SelectItem key={value} value={String(value)}>
+            {pad(value)}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+
   return (
-    <>
-      <SettingsRow label="Frequency" description="How often the template rebuilds when a repository head moved.">
-        <Select value={frequency} onValueChange={next => pick(next as Frequency)} disabled={disabled}>
+    <div className="flex flex-col">
+      <SettingsRow
+        label="Build schedule"
+        description={
+          schedule.scheduleAvailable
+            ? describe(frequency, cron, hour, day, timezone)
+            : 'Needs a storage adapter with schedules. Build now and push builds still work.'
+        }
+      >
+        <Select value={frequency} onValueChange={next => pick(next as Frequency)} disabled={locked}>
           <SelectTrigger size="sm" aria-label="Build frequency" className="w-auto">
-            {frequency === 'daily' ? 'Daily' : frequency === 'weekly' ? 'Weekly' : 'Custom'}
+            {FREQUENCY_LABEL[frequency]}
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="daily">Daily</SelectItem>
-            <SelectItem value="weekly">Weekly</SelectItem>
-            <SelectItem value="custom">Custom</SelectItem>
+            {(Object.keys(FREQUENCY_LABEL) as Frequency[]).map(value => (
+              <SelectItem key={value} value={value}>
+                {FREQUENCY_LABEL[value]}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </SettingsRow>
-      {frequency === 'weekly' && (
-        <SettingsRow label="Day" description="Which day of the week.">
-          <Select
-            value={String(day)}
-            onValueChange={next => void onCommit(presetCron('weekly', hour, Number(next)))}
-            disabled={disabled}
-          >
-            <SelectTrigger size="sm" aria-label="Build day" className="w-auto">
-              {DAYS[day]}
-            </SelectTrigger>
-            <SelectContent>
-              {DAYS.map((name, index) => (
-                <SelectItem key={name} value={String(index)}>
-                  {name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </SettingsRow>
+      {frequency !== 'off' && (
+        <div className="bg-surface3 text-muted-foreground text-ui-sm mx-4 mb-3 flex flex-wrap items-center gap-2 rounded-md px-3 py-2">
+          {frequency === 'daily' && (
+            <>
+              <span>Rebuild at</span>
+              {hourSelect(next => void onCommit(presetCron('daily', next, day)))}
+            </>
+          )}
+          {frequency === 'weekly' && (
+            <>
+              <span>On</span>
+              <Select
+                value={String(day)}
+                onValueChange={next => void onCommit(presetCron('weekly', hour, Number(next)))}
+                disabled={locked}
+              >
+                <SelectTrigger size="sm" aria-label="Build day" className="w-auto">
+                  {DAYS[day]}
+                </SelectTrigger>
+                <SelectContent>
+                  {DAYS.map((name, index) => (
+                    <SelectItem key={name} value={String(index)}>
+                      {name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <span>at</span>
+              {hourSelect(next => void onCommit(presetCron('weekly', next, day)))}
+            </>
+          )}
+          {frequency === 'custom' && (
+            <>
+              <span>Cron</span>
+              <span className="w-48">
+                <CommittedInput
+                  label="Build schedule cron"
+                  value={cron}
+                  placeholder={DEFAULT_CRON}
+                  disabled={locked}
+                  onCommit={next => {
+                    if (!next) {
+                      toast.error('Enter a cron expression');
+                      return Promise.reject(new Error('cron is required'));
+                    }
+                    return onCommit(next);
+                  }}
+                />
+              </span>
+              <span>{timezone}</span>
+            </>
+          )}
+        </div>
       )}
-      {frequency !== 'custom' && (
-        <SettingsRow label="Time" description={`On the hour, ${timezone}.`}>
-          <Select
-            value={String(hour)}
-            onValueChange={next => void onCommit(presetCron(frequency, Number(next), day))}
-            disabled={disabled}
-          >
-            <SelectTrigger size="sm" aria-label="Build time" className="w-auto">
-              {pad(hour)}
-            </SelectTrigger>
-            <SelectContent>
-              {HOURS.map(value => (
-                <SelectItem key={value} value={String(value)}>
-                  {pad(value)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </SettingsRow>
-      )}
-      {frequency === 'custom' && (
-        <SettingsRow label="Cron expression" description={`Five fields, ${timezone}.`}>
-          <div className="w-full lg:max-w-96">
-            <CommittedInput
-              label="Build schedule cron"
-              value={cron}
-              placeholder={DEFAULT_CRON}
-              disabled={disabled}
-              onCommit={next => {
-                if (!next) {
-                  toast.error('Enter a cron expression');
-                  return Promise.reject(new Error('cron is required'));
-                }
-                return onCommit(next);
-              }}
-            />
-          </div>
-        </SettingsRow>
-      )}
-    </>
+    </div>
   );
 }
