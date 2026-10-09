@@ -166,6 +166,44 @@ describe('Subconscious knowledge write tools', () => {
     expect(orgNode.scope).toEqual(['org:acme']);
   });
 
+  it('creates the session scope under its project on the first thread-level write', async () => {
+    const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
+    const memory = new Memory({ storage: new InMemoryStore(), knowledge });
+    const store = await knowledge.getStorage();
+    const tools = createKnowledgeWriteTools(memory, { scope, sourceThreadId: 'alpha', defaultScope: 'resource' });
+
+    await tools.knowledge_create!.execute?.({ name: 'Resource Note', kind: 'note', text: 'Project-wide.' }, {} as any);
+    expect((await store.listScopeNodes({ addresses: ['thread:alpha'] })).scopes).toEqual([]);
+
+    await tools.knowledge_create!.execute?.(
+      { name: 'Session Note', kind: 'note', text: 'Only this session.', scope: 'thread' },
+      {} as any,
+    );
+    await tools.knowledge_append!.execute?.(
+      { node: (await store.resolveNode({ name: 'Session Note', scope }))!.id, text: 'More.', scope: 'thread' },
+      {} as any,
+    );
+
+    const { scopes } = await store.listScopeNodes({ withinAddress: 'org:acme' });
+    const byAddress = new Map(scopes.map(node => [node.address, node]));
+    expect([...byAddress.keys()].sort()).toEqual(['org:acme', 'resource:user-42', 'thread:alpha']);
+    expect(byAddress.get('thread:alpha')?.parentIds).toEqual([byAddress.get('resource:user-42')!.id]);
+    expect(byAddress.get('resource:user-42')?.parentIds).toEqual([byAddress.get('org:acme')!.id]);
+  });
+
+  it('keeps the thread-level write when vouching its session scope fails', async () => {
+    const knowledge = new Knowledge({ id: 'mastra', storage: new InMemoryStore() });
+    const memory = new Memory({ storage: new InMemoryStore(), knowledge });
+    vi.spyOn(knowledge, 'materializeScope').mockRejectedValue(new Error('vouch failed'));
+    const tools = createKnowledgeWriteTools(memory, { scope, sourceThreadId: 'alpha', defaultScope: 'resource' });
+
+    const result = (await tools.knowledge_create!.execute?.(
+      { name: 'Session Note', kind: 'note', text: 'Only this session.', scope: 'thread' },
+      {} as any,
+    )) as any;
+    expect(result.record.scope).toEqual(scope);
+  });
+
   it('rejects structural placement outside the curator frontier', async () => {
     const { tools } = await structuralFixture();
 

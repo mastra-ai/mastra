@@ -31,6 +31,11 @@ type KnowledgeWriteToolsMemory = {
         __getVisibleStructureScopes(
           scope: KnowledgeScope,
         ): Array<{ address: string; name: string; description?: string; heldAncestors?: string[] }>;
+        materializeScope?(input: {
+          address: string;
+          contextualScopeAddress: string;
+          parentAddresses?: string[];
+        }): Promise<unknown>;
       }
     | undefined;
   storage?: {
@@ -104,10 +109,54 @@ function resolveNodePlacement(
   };
 }
 
+/**
+ * Materialize the org → resource → thread scope chain for a thread-level write, so the session
+ * exists as a scope node under its project as soon as it holds knowledge, not only after a viewer
+ * asks for it. Materialization is create-only; existing scopes keep their names and parents.
+ */
+async function vouchThreadScopeChain(memory: KnowledgeWriteToolsMemory, scope: KnowledgeScope): Promise<void> {
+  const knowledge = memory.getKnowledgeInstance?.();
+  if (!knowledge?.materializeScope) return;
+  const org = scope.find(address => address.startsWith('org:'));
+  const resource = scope.find(address => address.startsWith('resource:'));
+  const thread = scope.find(address => address.startsWith('thread:'))!;
+  const chain: Array<{ address: string; contextualScopeAddress: string; parentAddresses?: string[] }> = [];
+  if (org) chain.push({ address: org, contextualScopeAddress: org });
+  if (resource) {
+    chain.push({
+      address: resource,
+      contextualScopeAddress: org ?? resource,
+      ...(org ? { parentAddresses: [org] } : {}),
+    });
+  }
+  const threadParent = resource ?? org;
+  chain.push({
+    address: thread,
+    contextualScopeAddress: threadParent ?? thread,
+    ...(threadParent ? { parentAddresses: [threadParent] } : {}),
+  });
+  const store = await getStore(memory);
+  const { scopes } = await store.listScopeNodes({ addresses: chain.map(link => link.address) });
+  const existing = new Set(scopes.map(node => node.address));
+  for (const link of chain) {
+    if (!existing.has(link.address)) await knowledge.materializeScope(link);
+  }
+}
+
 export function createKnowledgeWriteTools(
   memory: KnowledgeWriteToolsMemory,
   options: KnowledgeWriteToolsOptions,
 ): Record<string, ToolAction<any, any, any>> {
+  let threadScopeVouch: Promise<void> | undefined;
+  /** After a successful thread-level write; a vouch failure never fails the write and is retried on the next one. */
+  async function vouchThreadScope(scope: KnowledgeScope): Promise<void> {
+    if (!scope.some(address => address.startsWith('thread:'))) return;
+    threadScopeVouch ??= vouchThreadScopeChain(memory, scope).catch(() => {
+      threadScopeVouch = undefined;
+    });
+    await threadScopeVouch;
+  }
+
   async function resolveWritableNode(id: string) {
     const store = await getStore(memory);
     const node = await store.getNode(id);
@@ -163,6 +212,7 @@ export function createKnowledgeWriteTools(
           resolutionScope: options.scope,
           defaultScope: nodeScope,
         });
+        await vouchThreadScope(recordScope);
         return { node, record };
       },
     }),
@@ -189,7 +239,7 @@ export function createKnowledgeWriteTools(
         const scope = resolveWriteScope(options, value.scope);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
-        return store.appendKnowledge({
+        const record = await store.appendKnowledge({
           node: parent.id,
           text: value.text,
           scope,
@@ -198,6 +248,8 @@ export function createKnowledgeWriteTools(
           resolutionScope: options.scope,
           defaultScope: expandKnowledgeScope(options.scope, options.defaultScope),
         });
+        await vouchThreadScope(scope);
+        return record;
       },
     }),
     knowledge_remove: createTool({
@@ -333,7 +385,9 @@ export function createKnowledgeWriteTools(
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
         requireVisible(record.scope, options, 'KnowledgeRecord');
         const scope = resolveWriteScope(options, value.scope);
-        return store.rescopeKnowledge({ id: record.id, scope });
+        const rescoped = await store.rescopeKnowledge({ id: record.id, scope });
+        await vouchThreadScope(scope);
+        return rescoped;
       },
     }),
     knowledge_write_node_description: createTool({
@@ -406,13 +460,15 @@ export function createKnowledgeWriteTools(
         if (!existing) {
           if (value.expectedVersion !== undefined)
             throw new Error('expectedVersion is only valid for an existing node.');
-          return store.createNode({
+          const node = await store.createNode({
             name,
             kind: value.kind ?? 'document',
             content: value.content,
             scope,
             resolutionScope: options.scope,
           });
+          await vouchThreadScope(scope);
+          return node;
         }
         if (value.expectedVersion === undefined) throw new Error('Updating node content requires expectedVersion.');
         return store.updateNode({
