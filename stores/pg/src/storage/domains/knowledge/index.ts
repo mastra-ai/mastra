@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 
 import {
@@ -553,10 +554,11 @@ export class KnowledgePG extends KnowledgeStorage {
   readonly #rawReadExecutor: Executor;
   readonly #rawDb: PgDB;
   #initError?: Error;
+  readonly #schemaAccess = new AsyncLocalStorage<true>();
 
-  // A failed schema check latches: every operation rethrows it until init() succeeds or dangerouslyReset() runs.
+  // A failed schema check latches: every operation rethrows it until init() or dangerouslyReset() succeeds.
   #guard<T>(handle: T): T {
-    if (this.#initError) throw this.#initError;
+    if (this.#initError && !this.#schemaAccess.getStore()) throw this.#initError;
     return handle;
   }
   get #client(): DbClient {
@@ -592,9 +594,10 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   async init(): Promise<void> {
-    this.#initError = undefined;
     try {
-      await this.#init();
+      // The retry runs with schema access; concurrent callers stay latched until it succeeds.
+      await this.#schemaAccess.run(true, () => this.#init());
+      this.#initError = undefined;
     } catch (error) {
       const { KnowledgeSchemaError } = await loadKnowledgeCore();
       if (error instanceof KnowledgeSchemaError) this.#initError = error;
@@ -783,13 +786,13 @@ export class KnowledgePG extends KnowledgeStorage {
   }
 
   override async dangerouslyReset(): Promise<void> {
-    this.#initError = undefined;
+    // The latch clears only when the follow-up init() succeeds, so a failed reset stays latched.
     const schema = this.#schemaName ? `"${parseSchemaName(this.#schemaName)}".` : '';
     const tables = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()]
       .map(table => `${schema}"${table}"`)
       .join(', ');
     try {
-      await this.#client.query(`DROP TABLE IF EXISTS ${tables}`);
+      await this.#rawClient.query(`DROP TABLE IF EXISTS ${tables}`);
     } catch (error) {
       if (!isDependentObjectsError(error)) throw error;
       const { KnowledgeSchemaError } = await loadKnowledgeCore();
