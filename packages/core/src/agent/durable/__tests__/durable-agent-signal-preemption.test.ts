@@ -82,6 +82,34 @@ async function collect(stream: AsyncIterable<ChunkType>, chunks: ChunkType[] = [
   return chunks;
 }
 
+// Waits that only settle once interruption works. Bounded so a broken interrupt path fails
+// fast instead of running into the 120s test timeout for every case in this file.
+const SETTLE_MS = 5_000;
+
+function within<T>(promise: Promise<T> | undefined, ms = SETTLE_MS): Promise<T | undefined> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Did not settle within ${ms}ms`)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+/** Cleanup variant: never throws, so it can't mask the failure that reached `finally`. */
+async function settle(promise: Promise<unknown> | undefined): Promise<void> {
+  await within(promise).catch(() => {});
+}
+
+/** A provider request that only ends when cancelled, or fails once the bound passes. */
+function rejectOnAbort(abortSignal: AbortSignal): Promise<never> {
+  return within(
+    new Promise<never>((_, reject) =>
+      abortSignal.addEventListener('abort', () => reject(abortSignal.reason), { once: true }),
+    ),
+  ) as Promise<never>;
+}
+
 function barrier() {
   let release!: () => void;
   const promise = new Promise<void>(resolve => {
@@ -118,9 +146,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
           );
           if (phase === 'ttfb') {
             started = true;
-            await new Promise((_, reject) =>
-              abortSignal.addEventListener('abort', () => reject(abortSignal.reason), { once: true }),
-            );
+            await rejectOnAbort(abortSignal);
             throw new Error('Unreachable');
           }
           return {
@@ -182,8 +208,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         for (const admission of admissions)
           await expect(admission.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
         await vi.waitFor(() => expect(providerAborted).toBe(true));
-        await consumption;
-        await entry.workflowExecution;
+        await within(consumption);
+        await within(entry.workflowExecution);
         expect(prompts).toHaveLength(2);
         const replacement = JSON.stringify(prompts[1]);
         for (const marker of ['SIGNAL_MARKER_A', 'SIGNAL_MARKER_B'])
@@ -217,8 +243,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         }
       } finally {
         stream.abort();
-        await consumption.catch(() => {});
-        await globalRunRegistry.get(stream.runId)?.workflowExecution;
+        await settle(consumption);
+        await settle(globalRunRegistry.get(stream.runId)?.workflowExecution);
         stream.cleanup();
         await customPubsub?.close();
       }
@@ -291,8 +317,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       await vi.waitFor(() => expect(prompts).toHaveLength(2));
       await transport.deliverPending();
       replacement.release();
-      await consumption;
-      await entry.workflowExecution;
+      await within(consumption);
+      await within(entry.workflowExecution);
       expect(chunks.some(chunk => chunk.type.startsWith('reasoning-'))).toBe(false);
       expect(JSON.stringify(chunks)).not.toContain('DELAYED_SIGNATURE');
       expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(1);
@@ -308,8 +334,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
     } finally {
       replacement.release();
       stream.abort();
-      await consumption.catch(() => {});
-      await entry.workflowExecution;
+      await settle(consumption);
+      await settle(entry.workflowExecution);
       stream.cleanup();
       await customPubsub?.close();
     }
@@ -375,8 +401,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       await (
         await agent.sendSignal({ type: 'user', contents: 'STRUCTURE_SIGNAL' }, scope)
       ).accepted;
-      await consumption;
-      await entry.workflowExecution;
+      await within(consumption);
+      await within(entry.workflowExecution);
       expect(prompts).toHaveLength(2);
       expect(structuringPrompts).toHaveLength(1);
       expect(JSON.stringify(structuringPrompts)).not.toContain('STRUCTURE_DISCARDED');
@@ -385,8 +411,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       expect(JSON.stringify((await memory.recall(scope)).messages)).not.toContain('STRUCTURE_DISCARDED');
     } finally {
       stream.abort();
-      await consumption.catch(() => {});
-      await entry.workflowExecution;
+      await settle(consumption);
+      await settle(entry.workflowExecution);
       stream.cleanup();
       await customPubsub?.close();
     }
@@ -477,8 +503,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       await (
         await agent.sendSignal({ type: 'user', contents: 'ORDINAL_SIGNAL' }, scope)
       ).accepted;
-      await consumption;
-      await entry.workflowExecution;
+      await within(consumption);
+      await within(entry.workflowExecution);
       expect(prompts).toHaveLength(4);
       expect(toolCalls).toBe(2);
       expect(snapshots.map(snapshot => snapshot.ordinal)).toEqual([0, 1, 1, 2]);
@@ -496,8 +522,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
     } finally {
       stream.abort();
-      await consumption.catch(() => {});
-      await entry.workflowExecution;
+      await settle(consumption);
+      await settle(entry.workflowExecution);
       stream.cleanup();
       await customPubsub?.close();
     }
@@ -568,8 +594,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       await new Promise(resolve => setTimeout(resolve, 50));
       expect(prompts).toHaveLength(1);
       held.release();
-      await consumption;
-      await entry.workflowExecution;
+      await within(consumption);
+      await within(entry.workflowExecution);
       expect(prompts).toHaveLength(2);
       expect(JSON.stringify(prompts[1])).toContain('PROCESSOR_REPLACEMENT');
       expect(JSON.stringify(prompts[1])).not.toContain('STALE_PROCESSOR_REASONING');
@@ -581,8 +607,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
     } finally {
       held.release();
       stream.abort();
-      await consumption.catch(() => {});
-      await entry.workflowExecution;
+      await settle(consumption);
+      await settle(entry.workflowExecution);
       stream.cleanup();
       await customPubsub?.close();
     }
@@ -639,8 +665,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       ).accepted;
       expect(prompts).toHaveLength(0);
       held.release();
-      await consumption;
-      await entry.workflowExecution;
+      await within(consumption);
+      await within(entry.workflowExecution);
       expect(prompts).toHaveLength(1);
       expect(JSON.stringify(prompts[0])).toContain('QUEUED_INPUT');
       expect(JSON.stringify(prompts[0])).toContain('PROCESSOR_HISTORY');
@@ -656,8 +682,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
     } finally {
       held.release();
       stream.abort();
-      await consumption.catch(() => {});
-      await entry.workflowExecution;
+      await settle(consumption);
+      await settle(entry.workflowExecution);
       stream.cleanup();
       await customPubsub?.close();
     }
@@ -705,7 +731,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
     const entry = globalRunRegistry.get(stream.runId)!;
     try {
       await collect(stream.fullStream);
-      await entry.workflowExecution;
+      await within(entry.workflowExecution);
       expect(prompts).toHaveLength(2);
       expect(JSON.stringify(prompts[1])).toContain('GAP_SIGNAL');
     } finally {
@@ -748,9 +774,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
           if (!abortSignal) throw new Error('Expected abort signal');
           providerSignals.push(abortSignal);
           if (prompts.length === 6) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
-          await new Promise((_, reject) =>
-            abortSignal.addEventListener('abort', () => reject(abortSignal.reason), { once: true }),
-          );
+          await rejectOnAbort(abortSignal);
           throw new Error('Unreachable');
         },
       }),
@@ -776,8 +800,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         ).accepted;
         await vi.waitFor(() => expect(providerSignals[index]?.aborted).toBe(true));
       }
-      await consumption;
-      await entry.workflowExecution;
+      await within(consumption);
+      await within(entry.workflowExecution);
       expect(prompts).toHaveLength(6);
       for (let index = 0; index < 5; index++)
         expect(JSON.stringify(prompts[index + 1])).toContain(`BUDGET_SIGNAL_${index}`);
@@ -804,8 +828,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       stream.cleanup();
     } finally {
       stream.abort();
-      await consumption.catch(() => {});
-      await entry.workflowExecution;
+      await settle(consumption);
+      await settle(entry.workflowExecution);
       stream.cleanup();
       await customPubsub?.close();
     }
@@ -922,8 +946,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         await vi.waitFor(() => expect(entry.abortSignal?.aborted).toBe(true), { timeout: 2_500 });
         expect(prompts).toHaveLength(priorAccepted ? 2 : 1);
         held.release();
-        await consumption;
-        await entry.workflowExecution;
+        await within(consumption);
+        await within(entry.workflowExecution);
         expect(prompts).toHaveLength(priorAccepted ? 2 : 1);
         expect(toolCalls).toBe(priorAccepted ? 1 : 0);
         expect(onStepFinish).toHaveBeenCalledTimes(priorAccepted ? 1 : 0);
@@ -959,8 +983,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       } finally {
         held.release();
         stream.abort();
-        await consumption.catch(() => {});
-        await entry.workflowExecution;
+        await settle(consumption);
+        await settle(entry.workflowExecution);
         stream.cleanup();
         await customPubsub?.close();
       }
@@ -1024,8 +1048,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         await (
           await agent.sendSignal({ type: 'user', contents: 'CLOSE_VISIBLE_REASONING' }, scope)
         ).accepted;
-        await consumption;
-        await entry.workflowExecution;
+        await within(consumption);
+        await within(entry.workflowExecution);
         const starts = chunks.filter(chunk => chunk.type === 'reasoning-start');
         const ends = chunks.filter(chunk => chunk.type === 'reasoning-end');
         expect(ends.map(chunk => chunk.payload.id)).toEqual(starts.map(chunk => chunk.payload.id));
@@ -1034,8 +1058,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         expect(ends[0]?.payload.providerMetadata).toBeUndefined();
       } finally {
         stream.abort();
-        await consumption.catch(() => {});
-        await entry.workflowExecution;
+        await settle(consumption);
+        await settle(entry.workflowExecution);
         stream.cleanup();
         await customPubsub?.close();
       }
@@ -1111,8 +1135,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       entry.drainPendingSignals = drain;
       await vi.waitFor(() => expect(entry.abortSignal?.aborted).toBe(true), { timeout: 2500 });
       held.release();
-      await consumption;
-      await entry.workflowExecution;
+      await within(consumption);
+      await within(entry.workflowExecution);
       expect(drain).not.toHaveBeenCalled();
       expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
       expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
@@ -1125,8 +1149,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       if (queuedSignalId) agent.cancelQueuedMessages({ ...scope, signalIds: [queuedSignalId] });
       held.release();
       stream.abort();
-      await consumption.catch(() => {});
-      await entry.workflowExecution;
+      await settle(consumption);
+      await settle(entry.workflowExecution);
       stream.cleanup();
       await customPubsub?.close();
     }
@@ -1207,8 +1231,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       await (
         await agent.sendSignal({ type: 'user', contents: 'FALLBACK_SIGNAL' }, scope)
       ).accepted;
-      await consumption;
-      await entry.workflowExecution;
+      await within(consumption);
+      await within(entry.workflowExecution);
       expect(primaryCalls).toBe(2);
       expect(prompts).toHaveLength(2);
       expect(onStepFinish).toHaveBeenCalledTimes(1);
@@ -1220,8 +1244,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       expect(chunks.some(chunk => chunk.type === 'error' || chunk.type === 'abort')).toBe(false);
     } finally {
       stream.abort();
-      await consumption.catch(() => {});
-      await entry.workflowExecution;
+      await settle(consumption);
+      await settle(entry.workflowExecution);
       stream.cleanup();
       await customPubsub?.close();
     }
@@ -1335,8 +1359,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         ).accepted;
         expect(requestSignal?.aborted).not.toBe(true);
         held.release();
-        await consumption;
-        await entry.workflowExecution;
+        await within(consumption);
+        await within(entry.workflowExecution);
         expect(requests).toBe(2);
         expect(prompts).toHaveLength(source === 'cached' ? 1 : 2);
         expect(JSON.stringify(prompts.at(-1))).toContain('AFTER_COMPLETION_SIGNAL');
@@ -1348,8 +1372,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       } finally {
         held.release();
         stream.abort();
-        await consumption.catch(() => {});
-        await entry.workflowExecution;
+        await settle(consumption);
+        await settle(entry.workflowExecution);
         stream.cleanup();
         await customPubsub?.close();
       }
@@ -1449,8 +1473,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         expect(prompts).toHaveLength(1);
         expect(toolCalls).toBe(0);
         held.release();
-        await consumption;
-        await entry.workflowExecution;
+        await within(consumption);
+        await within(entry.workflowExecution);
         expect(prompts).toHaveLength(2);
         expect(signals.every(signal => !signal.aborted)).toBe(true);
         expect(toolCalls).toBe(boundary === 'tool' ? 1 : 0);
@@ -1463,8 +1487,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       } finally {
         held.release();
         stream.abort();
-        await consumption.catch(() => {});
-        await entry.workflowExecution;
+        await settle(consumption);
+        await settle(entry.workflowExecution);
         stream.cleanup();
         await customPubsub?.close();
       }
