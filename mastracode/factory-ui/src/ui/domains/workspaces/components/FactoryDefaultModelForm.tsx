@@ -36,11 +36,17 @@ export function FactoryDefaultModelForm({
   const modelId = choice.models.find(model => model.id === selectedModelId)?.id ?? choice.suggestedModelId ?? '';
 
   if (choice.isPending) return <SkeletonRows label="Loading models" rows={2} rowClassName="h-9 w-full" />;
-  if (choice.catalogError) {
+  if (choice.catalogError || choice.models.length === 0) {
     return (
-      <Txt as="p" variant="caption" className="text-destructive-foreground m-0" role="alert">
-        {choice.catalogError.message}
-      </Txt>
+      <div className="flex flex-col items-start gap-3">
+        <Txt as="p" variant="caption" role="alert">
+          {choice.catalogError?.message ?? 'No models are available for this connection yet.'}
+        </Txt>
+        <div className="flex gap-2">
+          <Button onClick={choice.retry}>Retry</Button>
+          <Button onClick={onChangeProvider}>Change provider</Button>
+        </div>
+      </div>
     );
   }
 

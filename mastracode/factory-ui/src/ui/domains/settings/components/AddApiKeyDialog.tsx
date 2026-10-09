@@ -12,11 +12,12 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useState } from 'react';
+import { useContext, useState } from 'react';
 
 import type { ProviderInfo } from '../../../../api/types';
 import { useOrgKeyAdminQuery, useSaveProviderKey } from '../../../../hooks/use-providers';
 import { providerDisplayName } from './provider-display-name';
+import { ProviderConnectionNoticeContext } from './provider-connection-notice';
 
 interface AddApiKeyDialogProps {
   provider: ProviderInfo;
@@ -41,6 +42,7 @@ export function AddApiKeyDialog({
   onClose,
 }: AddApiKeyDialogProps) {
   const displayName = providerDisplayName(provider.provider);
+  const connectionNotice = useContext(ProviderConnectionNoticeContext);
   const saveKeyMutation = useSaveProviderKey();
   const orgKeyAdminQuery = useOrgKeyAdminQuery();
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
@@ -61,7 +63,7 @@ export function AddApiKeyDialog({
 
   const saveKey = async () => {
     const key = keyDraft.trim();
-    if (!key) return;
+    if (!key || saveKeyMutation.isPending) return;
     try {
       await saveKeyMutation.mutateAsync({
         provider: provider.provider,
@@ -88,12 +90,18 @@ export function AddApiKeyDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogBody>
+          {connectionNotice && (
+            <Txt variant="caption" tone="muted" role="note">
+              {connectionNotice}
+            </Txt>
+          )}
           <Input
             autoFocus
             type="password"
             aria-label={`API key for ${displayName}`}
             placeholder="Paste API key"
             value={keyDraft}
+            disabled={saveKeyMutation.isPending}
             onChange={event => setKeyDraft(event.target.value)}
             onKeyDown={event => {
               if (event.key === 'Enter') void saveKey();
@@ -129,7 +137,7 @@ export function AddApiKeyDialog({
             </Txt>
           )}
           {error && (
-            <Txt as="p" variant="caption" className="text-destructive-foreground">
+            <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
               {error}
             </Txt>
           )}

@@ -37,6 +37,7 @@ export interface ProviderConnection {
   activeOAuth?: ActiveProviderOAuth;
   isConfigured: (provider: ProviderInfo, method?: ProviderConnectionMethod) => boolean;
   canConfigure: (provider: ProviderInfo, method?: ProviderConnectionMethod) => boolean;
+  retry: () => void;
   clear: () => void;
   chooseSignInProvider: (provider: ProviderInfo) => void;
   chooseKeyProvider: (provider: ProviderInfo) => void;
@@ -54,7 +55,7 @@ export function providerCredentialMethod(
   provider: ProviderInfo,
   scope?: ProviderCredentialScope,
 ): ProviderConnectionMethod | undefined {
-  if (provider.source === 'deployment') return 'api_key';
+  if (provider.source === 'deployment') return scope === 'user' ? undefined : 'api_key';
   if (scope === 'org') {
     if (provider.orgCredential) return provider.orgCredential;
     if (provider.orgKey || provider.source === 'stored-org') return 'api_key';
@@ -82,6 +83,13 @@ export function matchesProviderQuery(provider: ProviderInfo, query: string): boo
     provider.provider.toLowerCase().includes(normalized) ||
     providerDisplayName(provider.provider).toLowerCase().includes(normalized)
   );
+}
+
+function offersApiKey(provider: ProviderInfo): boolean {
+  if (provider.envVar || !provider.oauth?.supported) return true;
+  if (provider.userCredential === 'api_key' || provider.orgCredential === 'api_key') return true;
+  // `orgKey` also represents shared OAuth. It is not an API-key capability.
+  return ['stored-org', 'stored-user', 'stored'].includes(provider.source);
 }
 
 /** Pick a model provider and connect it, by browser sign-in or by API key. */
@@ -153,12 +161,7 @@ export function useProviderConnection({
     // A provider can offer both methods; sign-in support must not hide API-key access.
     signInProviders: providers.filter(candidate => candidate.oauth?.supported === true),
     keyProviders: providers.filter(
-      candidate =>
-        Boolean(candidate.envVar) ||
-        candidate.oauth?.supported !== true ||
-        candidate.userCredential === 'api_key' ||
-        candidate.orgCredential === 'api_key' ||
-        candidate.orgKey === true,
+      candidate => !(authEnabled && scope === 'user' && candidate.source === 'deployment') && offersApiKey(candidate),
     ),
     provider,
     connected: provider ? isConfigured(provider, selection?.method) : false,
@@ -170,6 +173,10 @@ export function useProviderConnection({
     activeOAuth,
     isConfigured,
     canConfigure,
+    retry: () => {
+      void providersQuery.refetch();
+      if (scope !== undefined) void authQuery.refetch();
+    },
     clear: () => select(undefined),
     chooseSignInProvider: chosen => {
       if (!canConfigure(chosen, 'oauth')) return;

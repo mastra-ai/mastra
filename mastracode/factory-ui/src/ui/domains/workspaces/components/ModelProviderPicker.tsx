@@ -23,9 +23,12 @@ export function ModelProviderPicker({
   if (connection.isPending) return <SkeletonRows label="Loading model providers" rows={3} rowClassName="h-9 w-full" />;
   if (connection.catalogError)
     return (
-      <Txt variant="caption" role="alert">
-        {connection.catalogError.message}
-      </Txt>
+      <div className="flex flex-col items-start gap-3">
+        <Txt variant="caption" role="alert">
+          {connection.catalogError.message}
+        </Txt>
+        <Button onClick={connection.retry}>Retry</Button>
+      </div>
     );
 
   const visible = connection.keyProviders.filter(provider => matchesProviderQuery(provider, search));

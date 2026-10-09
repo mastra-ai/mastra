@@ -1,13 +1,13 @@
 import { http, HttpResponse, delay } from 'msw';
 import { z } from 'zod';
 import type { PlatformProviderConnection } from '../src/ui/domains/factory/services/platformConnect';
-import type { AvailableModelOption } from '../src/hooks/useAvailableModels';
-import type { ProviderInfo } from '../src/api/types';
 import { gitLabProjectRepository } from '../src/ui/domains/factory/services/gitlab';
 import type { GitLabProject } from '../src/ui/domains/factory/services/gitlab';
 import type { GithubRepo, GithubStatus } from '../src/ui/domains/workspaces/services/github';
 import { modelSetupPresetSchema } from '../src/ui/domains/workspaces/services/modelSetupPreset';
 import type { SaveModelSetupPreset } from '../src/ui/domains/workspaces/services/modelSetupPreset';
+
+import { clearDemoSessions, providerHandlers } from './provider-connections';
 
 const prefix = 'factory-onboarding-preview.';
 export const demoKey = (key: string) => `${prefix}${key}`;
@@ -46,11 +46,6 @@ const gitlabRepos = gitlabProjects.flatMap(project => {
   const repo = gitLabProjectRepository(project);
   return repo ? [repo] : [];
 });
-const models: AvailableModelOption[] = [
-  { id: 'openai/gpt-5.6-sol', provider: 'openai', modelName: 'gpt-5.6-sol', hasApiKey: true },
-  { id: 'openai/gpt-6.1-sol', provider: 'openai', modelName: 'gpt-6.1-sol', hasApiKey: true },
-  { id: 'anthropic/claude-fable-5', provider: 'anthropic', modelName: 'claude-fable-5', hasApiKey: true },
-];
 const selectedRepo = () =>
   [...repos, ...gitlabRepos].find(repo => repo.name === sessionStorage.getItem(demoKey('name'))) ?? repos[0]!;
 const project = () => ({
@@ -68,25 +63,8 @@ const repository = () => ({
     defaultBranch: selectedRepo().defaultBranch,
   },
 });
-const providers = (): ProviderInfo[] =>
-  ['openai', 'anthropic'].map(provider => ({
-    provider,
-    envVar: provider === 'openai' ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY',
-    source: 'stored-org',
-    orgCredential: sessionStorage.getItem(demoKey(`org-${provider}`)) === 'oauth' ? 'oauth' : 'api_key',
-    orgKey: sessionStorage.getItem(demoKey(`org-${provider}`)) !== 'oauth',
-    oauth: { supported: true, modes: ['paste-code'] },
-    ...(sessionStorage.getItem(demoKey(`personal-${provider}`))
-      ? {
-          userCredential:
-            sessionStorage.getItem(demoKey(`personal-${provider}`)) === 'oauth'
-              ? ('oauth' as const)
-              : ('api_key' as const),
-        }
-      : {}),
-  }));
-
 export function resetDemo() {
+  clearDemoSessions();
   for (const key of Object.keys(sessionStorage)) {
     if (key.startsWith(prefix) || key.startsWith('mastracode.factory-onboarding.')) sessionStorage.removeItem(key);
   }
@@ -228,8 +206,7 @@ export const handlers = [
     sessionStorage.setItem(demoKey(`platform-${result.data.integrationId}`), 'active');
     return HttpResponse.json({ ok: true });
   }),
-  http.get('*/web/config/providers', () => HttpResponse.json({ providers: providers(), orgKeyAdmin: true })),
-  http.get('*/web/config/models', () => HttpResponse.json({ models })),
+  ...providerHandlers,
   http.get('*/web/config/default-model', () =>
     HttpResponse.json({ modelId: sessionStorage.getItem(demoKey('personal-model')) }),
   ),
@@ -240,31 +217,6 @@ export const handlers = [
     sessionStorage.setItem(demoKey('personal-model'), body.modelId);
     return HttpResponse.json({ ok: true, modelId: body.modelId });
   }),
-  http.put('*/web/config/providers/:provider/key', async ({ params, request }) => {
-    // Read only the scope; never persist or send the submitted demo key anywhere.
-    const body = await request.json();
-    const scope = body && typeof body === 'object' && 'scope' in body && body.scope === 'org' ? 'org' : 'personal';
-    sessionStorage.setItem(demoKey(`${scope}-${params.provider}`), 'api_key');
-    return HttpResponse.json({ success: true });
-  }),
-  http.post('*/web/config/providers/:provider/oauth/start', async ({ params, request }) => {
-    const body = await request.json();
-    const scope = body && typeof body === 'object' && 'scope' in body && body.scope === 'org' ? 'org' : 'personal';
-    sessionStorage.setItem(demoKey(`oauth-scope-${params.provider}`), scope);
-    return HttpResponse.json({
-      sessionId: `demo-${params.provider}`,
-      kind: 'paste-code',
-      url: `${location.origin}/?demo-provider=${params.provider}`,
-      instructions: 'Preview only: enter DEMO to simulate provider sign-in. No real account is connected.',
-      expiresAt: Date.now() + 600_000,
-    });
-  }),
-  http.post('*/web/config/providers/:provider/oauth/complete', ({ params }) => {
-    const scope = sessionStorage.getItem(demoKey(`oauth-scope-${params.provider}`)) ?? 'personal';
-    sessionStorage.setItem(demoKey(`${scope}-${params.provider}`), 'oauth');
-    return HttpResponse.json({ status: 'complete' });
-  }),
-  http.delete('*/web/config/providers/:provider/oauth/session/:session', () => HttpResponse.json({ ok: true })),
   http.all('*/web/*', () =>
     HttpResponse.json({ error: 'This action is outside the onboarding preview.' }, { status: 404 }),
   ),

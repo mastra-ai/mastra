@@ -2,6 +2,7 @@ import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { setupWorker } from 'msw/browser';
+import { ProviderConnectionNoticeContext } from '../src/ui/domains/settings/components/provider-connection-notice';
 import { DemoProviderAuthorization } from './DemoProviderAuthorization';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -62,17 +63,19 @@ async function start() {
       <TooltipProvider>
         <QueryClientProvider client={client}>
           <ApiConfigProvider baseUrl="">
-            {url.searchParams.has('demo-provider') ? (
-              <DemoProviderAuthorization />
-            ) : (
-              <MemoryRouter>
-                <Routes>
-                  <Route path="/" element={<EmptyFactoryState onSaveModelPreset={saveDemoModelSetupPreset} />} />
-                  <Route path="/factories/:id" element={<Complete />} />
-                </Routes>
-              </MemoryRouter>
-            )}
-            <Toaster />
+            <ProviderConnectionNoticeContext value="Preview only: enter DEMO. Do not use a real API key; no live account is connected.">
+              {url.searchParams.has('demo-provider') ? (
+                <DemoProviderAuthorization sessionId={url.searchParams.get('session') ?? ''} />
+              ) : (
+                <MemoryRouter>
+                  <Routes>
+                    <Route path="/" element={<EmptyFactoryState onSaveModelPreset={saveDemoModelSetupPreset} />} />
+                    <Route path="/factories/:id" element={<Complete />} />
+                  </Routes>
+                </MemoryRouter>
+              )}
+              <Toaster />
+            </ProviderConnectionNoticeContext>
           </ApiConfigProvider>
         </QueryClientProvider>
       </TooltipProvider>
