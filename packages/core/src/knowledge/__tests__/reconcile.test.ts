@@ -138,7 +138,7 @@ describe('Knowledge structure reconciliation', () => {
       materializeKnowledgeScopePlan(
         {
           'org:$orgId': { children: [{ address: 'team:$orgId', name: 'Team' }] },
-          'team:$teamId': { access: [{ principal: 'org:x', role: 'reader' }] },
+          'team:$teamId': { access: [{ principal: 'org:x', role: 'readonly' }] },
         },
         { address: 'org:a', contextualScopeAddress: 'org:a' },
       ),
