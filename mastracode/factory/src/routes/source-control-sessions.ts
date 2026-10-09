@@ -405,7 +405,6 @@ function projectSessionRoutes(
   return [
     registerApiRoute(path, {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
@@ -425,7 +424,6 @@ function projectSessionRoutes(
     }),
     registerApiRoute(path, {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
@@ -565,7 +563,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
     ...projectSessionRoutes('/web/github/projects/:id/sessions', options, resolveOwnerProfiles),
     registerApiRoute('/web/user-sessions/:sessionId', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
@@ -761,7 +758,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {
       method: 'DELETE',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
@@ -894,7 +890,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
     }),
     registerApiRoute('/web/user-sessions/:sessionId/title', {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;

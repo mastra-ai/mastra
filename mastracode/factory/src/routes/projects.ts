@@ -518,7 +518,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     return [
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectList.path, {
         method: FACTORY_ROUTE_CONTRACTS.projectList.method,
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -528,7 +527,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectCreate.path, {
         method: FACTORY_ROUTE_CONTRACTS.projectCreate.method,
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -543,7 +541,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectGet.path, {
         method: FACTORY_ROUTE_CONTRACTS.projectGet.method,
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -557,7 +554,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectUpdate.path, {
         method: FACTORY_ROUTE_CONTRACTS.projectUpdate.method,
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -599,7 +595,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.path, {
         method: FACTORY_ROUTE_CONTRACTS.projectApplyDefaultModel.method,
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -688,7 +683,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectDelete.path, {
         method: FACTORY_ROUTE_CONTRACTS.projectDelete.method,
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -719,7 +713,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute('/web/factory/projects/:id/source-control-connections', {
         method: 'GET',
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -758,7 +751,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute('/web/factory/projects/:id/source-control-connections', {
         method: 'POST',
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -784,7 +776,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute('/web/factory/projects/:id/source-control-connections/:connectionId', {
         method: 'DELETE',
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -809,7 +800,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute('/web/factory/projects/:id/source-control-connections/:connectionId/repositories', {
         method: 'POST',
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -1001,7 +991,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute('/web/factory/projects/:id/repositories/:projectRepositoryId', {
         method: 'PATCH',
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
@@ -1026,7 +1015,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       }),
       registerApiRoute('/web/factory/projects/:id/repositories/:projectRepositoryId', {
         method: 'DELETE',
-        requiresAuth: false,
         handler: async routeContext => {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);

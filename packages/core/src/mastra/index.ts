@@ -67,7 +67,7 @@ import { metadataEqual, targetsEqual } from '../schedules/row-diff';
 import { Schedules } from '../schedules/schedules';
 import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
-import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
+import type { ApiRoute, Middleware, MiddlewarePhase, ServerConfig, StudioConfig } from '../server/types';
 import type { SignalProvider } from '../signals/signal-provider';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { InMemoryStore } from '../storage';
@@ -866,6 +866,7 @@ export class Mastra<
   #serverMiddleware: Array<{
     handler: (c: any, next: () => Promise<void>) => Promise<Response | void>;
     path: string;
+    phase?: MiddlewarePhase;
   }> = [];
 
   #storage?: MastraCompositeStore;
@@ -6739,6 +6740,7 @@ export class Mastra<
       return {
         handler: m.handler,
         path: m.path || '/api/*',
+        ...(m.phase ? { phase: m.phase } : {}),
       };
     });
   }

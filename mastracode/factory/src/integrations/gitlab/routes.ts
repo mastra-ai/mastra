@@ -282,7 +282,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
     routes.push(
       registerApiRoute('/web/gitlab/status', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const diagnostics = gitlab.diagnostics();
           if (!enabled) {
@@ -331,7 +330,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
       }),
       registerApiRoute('/web/gitlab/projects', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const resolved = await resolveOrgTenant(loose(c), auth);
           if ('response' in resolved) return resolved.response;
@@ -377,7 +375,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
       }),
       registerApiRoute('/web/gitlab/projects/registration', {
         method: 'POST',
-        requiresAuth: false,
         handler: async c => {
           const resolved = await resolveOrgTenant(loose(c), auth);
           if ('response' in resolved) return resolved.response;
@@ -414,7 +411,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
       }),
       registerApiRoute('/web/gitlab/projects/:id/prs', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const resolved = await resolveOrgTenant(loose(c), auth);
           if ('response' in resolved) return resolved.response;
@@ -471,7 +467,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
       }),
       registerApiRoute('/web/gitlab/projects/:id/prs/:number', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const resolved = await resolveOrgTenant(loose(c), auth);
           if ('response' in resolved) return resolved.response;
@@ -518,7 +513,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
     routes.push(
       registerApiRoute('/web/gitlab/issues', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const resolved = await resolveOrgTenant(loose(c), auth);
           if ('response' in resolved) return resolved.response;
@@ -582,7 +576,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
     routes.push(
       registerApiRoute('/web/gitlab/issues/:issueId', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const resolved = await resolveOrgTenant(loose(c), auth);
           if ('response' in resolved) return resolved.response;
@@ -630,7 +623,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
     routes.push(
       registerApiRoute('/web/gitlab/subscriptions', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           await auth.ensureUser(loose(c));
           const tenant = auth.tenant(loose(c));

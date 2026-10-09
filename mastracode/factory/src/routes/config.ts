@@ -939,14 +939,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     return [
       registerApiRoute('/web/config/features', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c =>
           c.json({ knowledge: options.features?.knowledge ?? false, mcp: options.features?.mcp ?? false }),
       }),
 
       registerApiRoute('/web/config/providers', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           try {
             // Tenant mode lists the caller's rows and never exposes the
@@ -985,7 +983,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/providers/:provider/key', {
         method: 'PUT',
-        requiresAuth: false,
         handler: async c => {
           const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: options.modelCredentials });
           if ('response' in ctx) return ctx.response;
@@ -1039,7 +1036,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/providers/:provider/key', {
         method: 'DELETE',
-        requiresAuth: false,
         handler: async c => {
           const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: options.modelCredentials });
           if ('response' in ctx) return ctx.response;
@@ -1074,7 +1070,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/custom-providers', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const ctx = await resolveCustomProvidersContext({
             c: loose(c),
@@ -1093,7 +1088,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/custom-providers', {
         method: 'POST',
-        requiresAuth: false,
         handler: async c => {
           const ctx = await resolveCustomProvidersContext({
             c: loose(c),
@@ -1137,7 +1131,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/custom-providers/:id', {
         method: 'DELETE',
-        requiresAuth: false,
         handler: async c => {
           const ctx = await resolveCustomProvidersContext({
             c: loose(c),
@@ -1162,7 +1155,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/models', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           try {
             const allTenantCredentials = await listTenantCredentialsForRequest({
@@ -1264,7 +1256,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/default-model', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const context = await resolveModelDefaultsContext({
             c: loose(c),
@@ -1364,7 +1355,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/default-model', {
         method: 'PUT',
-        requiresAuth: false,
         handler: async c => {
           const context = await resolveModelDefaultsContext({
             c: loose(c),
@@ -1425,7 +1415,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/default-model', {
         method: 'DELETE',
-        requiresAuth: false,
         handler: async c => {
           const context = await resolveModelDefaultsContext({
             c: loose(c),
@@ -1448,7 +1437,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/om', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const sessionId = c.req.query('sessionId');
           const threadId = c.req.query('threadId');
@@ -1490,7 +1478,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/om/:role/model', {
         method: 'PUT',
-        requiresAuth: false,
         handler: async c => {
           const role = c.req.param('role');
           if (role !== 'observer' && role !== 'reflector') {
@@ -1558,7 +1545,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/om/thresholds', {
         method: 'PUT',
-        requiresAuth: false,
         handler: async c => {
           let body: {
             sessionId?: unknown;
@@ -1632,7 +1618,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/om/observe-attachments', {
         method: 'PUT',
-        requiresAuth: false,
         handler: async c => {
           let body: {
             sessionId?: unknown;
