@@ -750,6 +750,95 @@ describe('InngestAgent parity surface', () => {
     },
   );
 
+  describe('defaultOptions callbacks (#26527)', () => {
+    function makeAgentWithDefaultCallbacks(id: string, fired: string[]) {
+      const durableAgent = createInngestAgent({
+        agent: new Agent({
+          id,
+          name: id,
+          instructions: 'Test',
+          model: createMockModel() as any,
+          defaultOptions: {
+            onStepFinish: () => {
+              fired.push('default:onStepFinish');
+            },
+            onFinish: () => {
+              fired.push('default:onFinish');
+            },
+          },
+        }),
+        inngest,
+      });
+      (durableAgent.pubsub as any).inner = new EventEmitterPubSub();
+      return durableAgent;
+    }
+
+    async function publishStepAndFinish(durableAgent: ReturnType<typeof makeIsolatedAgent>, runId: string) {
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.STEP_FINISH,
+        data: { stepResult: { reason: 'stop' } },
+      });
+      await publishStreamEvent(durableAgent, runId, {
+        type: AgentStreamEventTypes.FINISH,
+        data: { output: { text: 'Done.', steps: [] }, stepResult: { reason: 'stop' } },
+      });
+    }
+
+    it('fires defaultOptions callbacks from stream() when none are passed at call time', async () => {
+      const fired: string[] = [];
+      const durableAgent = makeAgentWithDefaultCallbacks('default-callbacks-stream', fired);
+      const sendSpy = stubInngestSend();
+
+      const result = await durableAgent.stream([{ role: 'user', content: 'hi' }]);
+      try {
+        await publishStepAndFinish(durableAgent, result.runId);
+        await vi.waitFor(() => expect(fired).toEqual(['default:onStepFinish', 'default:onFinish']));
+      } finally {
+        result.cleanup();
+        sendSpy.mockRestore();
+      }
+    });
+
+    it('lets call-time callbacks override defaultOptions callbacks in stream()', async () => {
+      const fired: string[] = [];
+      const durableAgent = makeAgentWithDefaultCallbacks('default-callbacks-override', fired);
+      const sendSpy = stubInngestSend();
+
+      const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], {
+        onStepFinish: () => {
+          fired.push('call:onStepFinish');
+        },
+        onFinish: () => {
+          fired.push('call:onFinish');
+        },
+      });
+      try {
+        await publishStepAndFinish(durableAgent, result.runId);
+        await vi.waitFor(() => expect(fired).toEqual(['call:onStepFinish', 'call:onFinish']));
+      } finally {
+        result.cleanup();
+        sendSpy.mockRestore();
+      }
+    });
+
+    it('fires defaultOptions callbacks from resume() when none are passed at call time', async () => {
+      const fired: string[] = [];
+      const durableAgent = makeAgentWithDefaultCallbacks('default-callbacks-resume', fired);
+      setSuspendedSnapshot(durableAgent);
+      const sendSpy = stubInngestSend();
+      const runId = 'default-callbacks-resume-run';
+
+      const result = await durableAgent.resume(runId, { approved: true });
+      try {
+        await publishStepAndFinish(durableAgent, runId);
+        await vi.waitFor(() => expect(fired).toEqual(['default:onStepFinish', 'default:onFinish']));
+      } finally {
+        result.cleanup();
+        sendSpy.mockRestore();
+      }
+    });
+  });
+
   it('continues the existing thread run when resume() finds a live continuation', async () => {
     const durableAgent = makeIsolatedAgent('resume-thread-continuation');
     setSuspendedSnapshot(durableAgent);

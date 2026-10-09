@@ -146,6 +146,19 @@ const STREAM_CLEANUP = Symbol('mastra.durable.inngest.streamCleanup');
 const RESUME_SNAPSHOT_WAIT_MS = 10_000;
 const RESUME_SNAPSHOT_POLL_MS = 100;
 
+/**
+ * Merges the wrapped agent's `defaultOptions` under the call options, matching
+ * core `DurableAgent`, so lifecycle callbacks configured as defaults fire unless
+ * the caller overrides them.
+ */
+async function withDefaultOptions<T extends { requestContext?: AgentExecutionOptions<any>['requestContext'] }>(
+  agent: Agent<any, any, any>,
+  options: T | undefined,
+): Promise<T> {
+  const defaults = await agent.getDefaultOptions({ requestContext: options?.requestContext });
+  return deepMerge((defaults ?? {}) as Record<string, unknown>, (options ?? {}) as Record<string, unknown>) as T;
+}
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -959,6 +972,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }) as Promise<InngestAgentStreamResult<TOutput>>;
       }
 
+      const callbackOptions = await withDefaultOptions(agent, streamOptions);
+
       // 1. Prepare for durable execution
       const preparation = await prepareForDurableExecution<TOutput>({
         agent: agent as Agent<string, any, TOutput>,
@@ -1037,33 +1052,33 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         threadId,
         resourceId,
         structuredOutput: registryEntry.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
-        onChunk: streamOptions?.onChunk,
-        onStepFinish: streamOptions?.onStepFinish,
+        onChunk: callbackOptions.onChunk,
+        onStepFinish: callbackOptions.onStepFinish,
         onFinish: async result => {
           try {
-            await streamOptions?.onFinish?.(result);
+            await callbackOptions.onFinish?.(result);
           } finally {
             finalizeGlobalRegistry();
           }
         },
         onError: async errorArg => {
           try {
-            await streamOptions?.onError?.(errorArg);
+            await callbackOptions.onError?.(errorArg);
           } finally {
             finalizeGlobalRegistry();
           }
         },
-        onSuspended: streamOptions?.onSuspended,
+        onSuspended: callbackOptions.onSuspended,
         onAbort: async data => {
           try {
-            await (streamOptions?.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
+            await (callbackOptions.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
           } finally {
             finalizeGlobalRegistry();
           }
         },
-        onIterationComplete: streamOptions?.onIterationComplete
+        onIterationComplete: callbackOptions.onIterationComplete
           ? async data => {
-              await (streamOptions.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
+              await (callbackOptions.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
             }
           : undefined,
         closeOnSuspend: streamOptions?.closeOnSuspend ?? false,
@@ -1156,6 +1171,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ) as Promise<InngestAgentStreamResult<TOutput>>;
       }
 
+      const callbackOptions = await withDefaultOptions(agent, resumeOptions);
       const existingRegistryEntry = globalRunRegistry.get(runId);
       const priorExecution = existingRegistryEntry?.workflowExecution;
 
@@ -1232,26 +1248,26 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         threadId: resumeOptions?.threadId,
         resourceId: resumeOptions?.resourceId,
         structuredOutput: existingEntry.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
-        onChunk: resumeOptions?.onChunk,
-        onStepFinish: resumeOptions?.onStepFinish,
+        onChunk: callbackOptions.onChunk,
+        onStepFinish: callbackOptions.onStepFinish,
         onFinish: async result => {
           try {
-            await resumeOptions?.onFinish?.(result);
+            await callbackOptions.onFinish?.(result);
           } finally {
             finalizeResumeRegistry();
           }
         },
         onError: async errorArg => {
           try {
-            await resumeOptions?.onError?.(errorArg);
+            await callbackOptions.onError?.(errorArg);
           } finally {
             finalizeResumeRegistry();
           }
         },
-        onSuspended: resumeOptions?.onSuspended,
+        onSuspended: callbackOptions.onSuspended,
         onAbort: async data => {
           try {
-            await (resumeOptions?.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
+            await (callbackOptions.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
           } finally {
             finalizeResumeRegistry();
           }
