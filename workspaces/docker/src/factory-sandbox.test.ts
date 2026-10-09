@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { DockerFactorySandbox } from './factory-sandbox';
 import { DockerSandbox } from './sandbox';
+import * as repoTemplate from './template/repo-template';
 import { createDockerRepoTemplate } from './template/repo-template';
 import type { DockerTemplate, DockerTemplateBuildResult } from './template/template';
 
@@ -162,6 +163,24 @@ describe('DockerFactorySandbox', () => {
     expect(created.workingDirectory).toBe('/srv/repos');
     const resolved = await sandbox.template(context(), {})!();
     expect(resolved.dockerfile).toContain('/srv/repos');
+  });
+
+  it('builds the template on the daemon the sandbox connects to unless the template names its own', () => {
+    const spy = vi.spyOn(repoTemplate, 'createDockerRepoTemplate');
+    try {
+      const remote = { host: 'docker.internal', port: 2375 };
+      new DockerFactorySandbox({ dockerOptions: remote }).template(context(), {});
+      expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ dockerOptions: remote }));
+      new DockerFactorySandbox({
+        dockerOptions: remote,
+        template: { dockerOptions: { socketPath: '/var/run/build.sock' } },
+      }).template(context(), {});
+      expect(spy).toHaveBeenLastCalledWith(
+        expect.objectContaining({ dockerOptions: { socketPath: '/var/run/build.sock' } }),
+      );
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('uses image as the base image with a repository and as the runtime image without one', async () => {
