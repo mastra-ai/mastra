@@ -3914,6 +3914,16 @@ export class DurableAgent<
           throw error;
         }
         if (runError) throw runError;
+        // With auto-cleanup disabled nothing else releases a finished run.
+        // Its snapshot is deleted on every terminal except suspension.
+        if (this.#cleanupTimeoutMs === 0) {
+          const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+          const stillSuspended = await workflowsStore?.getWorkflowRunById({
+            runId: targetRunId,
+            workflowName: DurableStepIds.AGENTIC_LOOP,
+          });
+          if (!stillSuspended) cleanup();
+        }
         recovered.push({ runId: targetRunId, status: 'success' });
         succeeded++;
       } catch (error) {

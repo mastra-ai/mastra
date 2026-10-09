@@ -84,9 +84,25 @@ describe('thread stream remote-run liveness', () => {
       sourceId: 'recoverer',
       part: { type: 'tool-call-approval', payload: { toolCallId: 'call-2', toolName: 'refund' } },
     });
+    // A backend redelivering the crashed segment must not displace the recovered one.
+    await emit({ type: 'run-registered', runId: harness.runId, streamId: harness.streamId, streamSeq: 1 });
+    await emit({
+      type: 'stream-part',
+      runId: harness.runId,
+      streamId: harness.streamId,
+      sourceId: 'crashed',
+      part: { type: 'text-delta', payload: { text: 'stale' } },
+    });
+    await emit({
+      type: 'stream-part',
+      runId: harness.runId,
+      streamId: recoveredStreamId,
+      sourceId: 'recoverer',
+      part: { type: 'tool-call-resumed', payload: { toolCallId: 'call-2' } },
+    });
     await flush();
 
-    expect(collected.map(part => part.type)).toEqual(['tool-call', 'tool-call-approval']);
+    expect(collected.map(part => part.type)).toEqual(['tool-call', 'tool-call-approval', 'tool-call-resumed']);
     expect(subscription.activeRunId()).toBe(harness.runId);
 
     subscription.unsubscribe();

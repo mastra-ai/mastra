@@ -192,6 +192,31 @@ describe('DurableAgent.recoverActiveRuns', () => {
     globalRunRegistry.delete('run-suspends');
   });
 
+  it('cleans up a finished recovered run when cleanupTimeoutMs is 0 (#25891)', async () => {
+    const baseAgent = new Agent({ id: 'agent-Z', name: 'agent-Z', instructions: 'x', model: makeMockModel() });
+    const zeroStore = new InMemoryStore();
+    const zeroAgent = createDurableAgent({ agent: baseAgent, cleanupTimeoutMs: 0 });
+    void new Mastra({ agents: { 'agent-Z': zeroAgent as any }, storage: zeroStore });
+    await seed(
+      zeroStore,
+      makeSnapshot('run-done', 'running', { agentId: 'agent-Z', threadId: 't', resourceId: 'r' }),
+      'r',
+    );
+    const workflows = (await zeroStore.getStore('workflows'))!;
+    vi.spyOn(zeroAgent, 'getWorkflow').mockReturnValue({
+      createRun: vi.fn(async () => ({
+        restart: vi.fn(async () => {
+          await workflows.deleteWorkflowRunById({ workflowName: DurableStepIds.AGENTIC_LOOP, runId: 'run-done' });
+          return { status: 'success' };
+        }),
+      })),
+    } as any);
+
+    const { succeeded } = await zeroAgent.recoverActiveRuns();
+    expect(succeeded).toBe(1);
+    expect(globalRunRegistry.get('run-done')).toBeUndefined();
+  });
+
   it('honors discovery filters (threadId)', async () => {
     await seed(
       store,
