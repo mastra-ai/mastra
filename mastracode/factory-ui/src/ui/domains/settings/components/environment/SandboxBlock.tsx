@@ -56,30 +56,26 @@ export function SandboxBlock({
 }) {
   const saveSetting = (key: string, value: unknown | null) => onSave({ settings: { [key]: value } });
   const properties = schemaProperties(environment.sandbox.settingsSchema);
-  return (
-    <div className="flex flex-col gap-2">
-      <Txt as="h3" variant="label">
-        Sandbox
+  if (properties.length === 0) {
+    return (
+      <Txt as="p" variant="meta" tone="faint">
+        This sandbox has no settings to tune.
       </Txt>
-      {properties.length === 0 ? (
-        <Txt as="p" variant="meta" tone="faint">
-          This sandbox has no settings to tune.
-        </Txt>
-      ) : (
-        <SettingsContainer>
-          {properties.map(([key, schema]) => (
-            <SettingRow
-              key={key}
-              name={key}
-              schema={schema}
-              value={environment.settings[key]}
-              disabled={disabled}
-              onCommit={value => saveSetting(key, value)}
-            />
-          ))}
-        </SettingsContainer>
-      )}
-    </div>
+    );
+  }
+  return (
+    <SettingsContainer>
+      {properties.map(([key, schema]) => (
+        <SettingRow
+          key={key}
+          name={key}
+          schema={schema}
+          value={environment.settings[key]}
+          disabled={disabled}
+          onCommit={value => saveSetting(key, value)}
+        />
+      ))}
+    </SettingsContainer>
   );
 }
 

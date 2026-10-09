@@ -66,50 +66,38 @@ export function RepositoriesBlock({
     onSave({ repositories: repositoriesPatch([...nextLive, ...dead], change) });
 
   return (
-    <div className="flex flex-col gap-2">
-      <Txt as="h3" variant="label">
-        Repositories
-      </Txt>
-      <Txt as="p" variant="meta" tone="muted">
-        Repositories cloned into each new sandbox, in this order.
-      </Txt>
-      <SettingsContainer className="divide-y-0 p-2">
-        <ContentBlocks
-          items={live}
-          onChange={next => {
-            // A drop in place changes nothing the route would see.
-            const order = (list: FactoryEnvironmentRepository[]) => list.map(r => r.projectRepositoryId).join('\n');
-            if (disabled || order(next) === order(live)) return;
-            void save(next);
-          }}
-          className="flex min-w-0 flex-col gap-px"
-        >
-          {live.map((repository, index) => (
-            <ContentBlock
-              key={repository.projectRepositoryId}
-              draggableId={repository.projectRepositoryId}
-              index={index}
-            >
-              {dragHandleProps => (
-                <RepositoryRow
-                  repository={repository}
-                  position={index + 1}
-                  provider={providers[repository.projectRepositoryId] ?? 'github'}
-                  disabled={disabled}
-                  dragHandleProps={dragHandleProps}
-                  onToggle={inEnvironment =>
-                    void save(live, { projectRepositoryId: repository.projectRepositoryId, inEnvironment })
-                  }
-                  onCommands={commands =>
-                    save(live, { projectRepositoryId: repository.projectRepositoryId, ...commands })
-                  }
-                />
-              )}
-            </ContentBlock>
-          ))}
-        </ContentBlocks>
-      </SettingsContainer>
-    </div>
+    <SettingsContainer className="divide-y-0 p-2">
+      <ContentBlocks
+        items={live}
+        onChange={next => {
+          // A drop in place changes nothing the route would see.
+          const order = (list: FactoryEnvironmentRepository[]) => list.map(r => r.projectRepositoryId).join('\n');
+          if (disabled || order(next) === order(live)) return;
+          void save(next);
+        }}
+        className="flex min-w-0 flex-col gap-px"
+      >
+        {live.map((repository, index) => (
+          <ContentBlock key={repository.projectRepositoryId} draggableId={repository.projectRepositoryId} index={index}>
+            {dragHandleProps => (
+              <RepositoryRow
+                repository={repository}
+                position={index + 1}
+                provider={providers[repository.projectRepositoryId] ?? 'github'}
+                disabled={disabled}
+                dragHandleProps={dragHandleProps}
+                onToggle={inEnvironment =>
+                  void save(live, { projectRepositoryId: repository.projectRepositoryId, inEnvironment })
+                }
+                onCommands={commands =>
+                  save(live, { projectRepositoryId: repository.projectRepositoryId, ...commands })
+                }
+              />
+            )}
+          </ContentBlock>
+        ))}
+      </ContentBlocks>
+    </SettingsContainer>
   );
 }
 
@@ -210,12 +198,6 @@ function RepositoryRow({
       </div>
       {expanded && (
         <div className="flex flex-col gap-3 px-2 pt-1 pb-3 pl-9">
-          <Txt as="p" variant="meta" tone="muted">
-            {repository.inEnvironment
-              ? 'Cloned into every session and the template build.'
-              : 'Not cloned; sessions and builds skip this repository.'}
-            {repository.lastBuildStatus === 'failed' && ' Its setup command failed in the last build:'}
-          </Txt>
           {repository.lastBuildStatus === 'failed' && repository.lastBuildError && (
             <Txt as="p" font="mono" variant="meta" className="text-destructive whitespace-pre-wrap">
               {repository.lastBuildError}

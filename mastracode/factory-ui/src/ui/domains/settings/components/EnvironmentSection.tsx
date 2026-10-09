@@ -86,20 +86,22 @@ function EnvironmentBlocks({
       <SettingsSubsection
         scope="factory"
         title="Template"
-        description={`The template every session's sandbox starts from. ${providerLine(environment.sandbox.provider)}`}
+        description={`Repositories cloned into each new sandbox, in this order. ${providerLine(environment.sandbox.provider)}`}
       >
-        <RepositoriesBlock
-          repositories={environment.repositories}
-          providers={providers}
-          disabled={disabled}
-          onSave={save}
-        />
-        <WorkspaceSetupBlock
-          workdir={environment.sandboxWorkdir}
-          command={environment.workspaceSetupCommand}
-          disabled={disabled}
-          onSave={save}
-        />
+        <div className="flex flex-col gap-4">
+          <RepositoriesBlock
+            repositories={environment.repositories}
+            providers={providers}
+            disabled={disabled}
+            onSave={save}
+          />
+          <WorkspaceSetupBlock
+            workdir={environment.sandboxWorkdir}
+            command={environment.workspaceSetupCommand}
+            disabled={disabled}
+            onSave={save}
+          />
+        </div>
       </SettingsSubsection>
       <SettingsSubsection scope="factory" title="Advanced" description="The sandbox provider's own settings.">
         <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
