@@ -129,18 +129,18 @@ describe('durable agent abort on a connect worker', () => {
     await stopInngestDevServer(devServer);
   });
 
-  it('stops generation on the worker and terminates the stream with finishReason "abort"', async () => {
+  it('stops generation on the worker and terminates the stream with finishReason "aborted"', async () => {
     const { buildAbortAgent } = await import('./fixtures/abort-agent');
     const { durableAgent } = buildAbortAgent({ dbUrl, agentId, inngestPort: INNGEST_PORT });
 
     let abortPayload: unknown;
-    let finishReason: string | undefined;
+    let finished = false;
     const result = await durableAgent.stream('Count slowly.', {
       onAbort: data => {
         abortPayload = data;
       },
-      onFinish: data => {
-        finishReason = data.finishReason;
+      onFinish: () => {
+        finished = true;
       },
     });
 
@@ -169,11 +169,11 @@ describe('durable agent abort on a connect worker', () => {
     expect(aborted).toBe(true);
     // When the control topic is dropped (#22543), the worker never receives the
     // abort-request, streams to natural completion, and finishReason resolves to
-    // 'stop' with onAbort never firing. All three signals derive from the FINISH
-    // event the worker publishes after gracefully catching the AbortError.
+    // 'stop' with onFinish firing instead of onAbort.
     expect(abortPayload).toBeDefined();
-    expect(finishReason).toBe('abort');
-    await expect(result.output.finishReason).resolves.toBe('abort');
+    // An aborted run ends through onAbort, never onFinish.
+    expect(finished).toBe(false);
+    await expect(result.output.finishReason).resolves.toBe('aborted');
   });
 
   // #25156: aborting through the agent (as `POST /agents/:id/threads/abort` and
@@ -190,14 +190,14 @@ describe('durable agent abort on a connect worker', () => {
     const scope = { threadId: `abort-thread-${Date.now()}`, resourceId: 'abort-resource' };
 
     let abortPayload: unknown;
-    let finishReason: string | undefined;
+    let finished = false;
     const result = await durableAgent.stream('Count slowly.', {
       memory: { thread: scope.threadId, resource: scope.resourceId },
       onAbort: data => {
         abortPayload = data;
       },
-      onFinish: data => {
-        finishReason = data.finishReason;
+      onFinish: () => {
+        finished = true;
       },
     });
 
@@ -219,8 +219,9 @@ describe('durable agent abort on a connect worker', () => {
 
     expect(acknowledged).toBe(true);
     expect(abortPayload).toBeDefined();
-    expect(finishReason).toBe('abort');
-    await expect(result.output.finishReason).resolves.toBe('abort');
+    // An aborted run ends through onAbort, never onFinish.
+    expect(finished).toBe(false);
+    await expect(result.output.finishReason).resolves.toBe('aborted');
   }
 
   it('abortThreadStream stops the run on the worker', async () => {
@@ -238,14 +239,14 @@ describe('durable agent abort on a connect worker', () => {
 
     const controller = new AbortController();
     let abortPayload: unknown;
-    let finishReason: string | undefined;
+    let finished = false;
     const result = await durableAgent.stream('Count slowly.', {
       abortSignal: controller.signal,
       onAbort: data => {
         abortPayload = data;
       },
-      onFinish: data => {
-        finishReason = data.finishReason;
+      onFinish: () => {
+        finished = true;
       },
     });
 
@@ -266,8 +267,9 @@ describe('durable agent abort on a connect worker', () => {
 
     expect(controller.signal.aborted).toBe(true);
     expect(abortPayload).toBeDefined();
-    expect(finishReason).toBe('abort');
-    await expect(result.output.finishReason).resolves.toBe('abort');
+    // An aborted run ends through onAbort, never onFinish.
+    expect(finished).toBe(false);
+    await expect(result.output.finishReason).resolves.toBe('aborted');
   });
 
   it('fails fast when the worker dies after readiness', async () => {
