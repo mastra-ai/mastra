@@ -168,14 +168,6 @@
     outline-offset: 0;
   }
 
-  /* With the app shell mounted the page scrolls inside its card, so the
-     document bouncing would drag the whole shell along. Pages without the
-     shell scroll the document and keep the native bounce. The x axis stays
-     free for swipe-to-navigate. */
-  html:has([data-slot='app-shell']) {
-    overscroll-behavior-y: none;
-  }
-
   body {
     background-color: var(--sidebar);
     color: var(--foreground);
