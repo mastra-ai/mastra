@@ -341,4 +341,101 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(fullOutput.steps.map(step => step.text)).toEqual(['abcdef', 'ghij']);
     expect(fullOutput.text).toBe('abcdefghij');
   });
+
+  it('reconciles the final step when a processor keeps the response and appends a revised one', async () => {
+    const model = scriptedModel([[...textPart('t1', 'abcdef'), finish('stop')]]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'append-revised-response',
+          processOutputResult: async ({ messages }) => {
+            const response = messages.findLast(
+              message => message.role === 'assistant' && !message.content?.metadata?.completionResult,
+            );
+            if (!response) return messages;
+            const parts = (response.content?.parts ?? []).map(part =>
+              part.type === 'text' ? { ...part, text: 'REVISED' } : part,
+            );
+            return [
+              ...messages,
+              {
+                ...response,
+                id: `${response.id}-revised`,
+                content: {
+                  ...response.content,
+                  content: parts.map(part => (part.type === 'text' ? part.text : '')).join(''),
+                  parts,
+                },
+              },
+            ];
+          },
+        },
+      ],
+    });
+
+    const stream = await agent.stream('hi', { maxSteps: 1 });
+    const fullOutput = await stream.getFullOutput();
+
+    // Keeping the original response means the id it had before processing still resolves, so an id
+    // lookup alone reports the stale message. The reconciled step text must come from the response
+    // the resolved output text is read from, otherwise the step disagrees with the streamed text.
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['REVISED']);
+    expect(fullOutput.text).toBe('REVISED');
+    expect(await stream.text).toBe('REVISED');
+  });
+
+  it('keeps a continuation step scoped to its iteration when a processor appends a revised response', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'abcdef'), finish('stop')],
+      [...textPart('t2', 'ghij'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'append-revised-response',
+          processOutputResult: async ({ messages }) => {
+            const response = messages.findLast(
+              message => message.role === 'assistant' && !message.content?.metadata?.completionResult,
+            );
+            if (!response) return messages;
+            const parts = (response.content?.parts ?? []).map(part =>
+              part.type === 'text' ? { ...part, text: 'REVISED' } : part,
+            );
+            return [
+              ...messages,
+              {
+                ...response,
+                id: `${response.id}-revised`,
+                content: {
+                  ...response.content,
+                  content: parts.map(part => (part.type === 'text' ? part.text : '')).join(''),
+                  parts,
+                },
+              },
+            ];
+          },
+        },
+      ],
+    });
+
+    let iteration = 0;
+    const stream = await agent.stream('hi', {
+      maxSteps: 2,
+      onIterationComplete: async () => (++iteration === 1 ? { continue: true, feedback: 'Now say more.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    // The earlier iteration keeps its model text; the final step still carries only the appended
+    // revision, so full output accumulates the per-iteration step text instead of the whole response.
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['abcdef', 'REVISED']);
+    expect(fullOutput.text).toBe('abcdefREVISED');
+  });
 });

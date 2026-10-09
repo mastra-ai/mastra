@@ -1275,9 +1275,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   );
 
                   const responseMessages = self.messageList.get.response.db();
+                  // Reconcile against the message the resolved output text is read from, not the
+                  // pre-processing message matched by id: a processor can retain that message and
+                  // append a revised response, in which case the id match returns the stale original
+                  // and the step text disagrees with `getFullOutput()`. Fall back to the id match in
+                  // the corner case where no non-completion response remains to resolve text from.
                   const processedStepMessage = stepMessage
-                    ? (responseMessages.find(message => message.id === stepMessage.id) ??
-                      resolveOutputMessageSkippingCompletionChecks(self.messageList))
+                    ? (resolveOutputMessageSkippingCompletionChecks(self.messageList) ??
+                      responseMessages.find(message => message.id === stepMessage.id))
                     : undefined;
                   const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
                   const processedStepParts = processedStepMessage?.content?.parts;
