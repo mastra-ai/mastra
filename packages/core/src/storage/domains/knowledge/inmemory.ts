@@ -1,7 +1,6 @@
 import type { InMemoryDB } from '../inmemory-db';
 import {
   canonicalizeKnowledgeNodeId,
-  canonicalizeKnowledgeRecordScopeIds,
   canonicalizeKnowledgeScopeIds,
   createKnowledgeUlid,
   isKnowledgeNodeVisible,
@@ -621,7 +620,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const nodeId = nodeReferenceId(input.node);
     const parent = this.#db.knowledgeNodes.get(nodeId);
     if (!parent || parent.deletedAt) throw new KnowledgeNotFoundError('node', nodeId);
-    const scopeIds = canonicalizeKnowledgeRecordScopeIds(input.scopeIds);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     this.#assertScopeNodes(scopeIds);
     this.#assertScopeNodes(input.resolutionScopeIds ?? scopeIds);
     const now = new Date();
@@ -763,7 +763,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const record = this.#db.knowledgeRecords.get(id);
     if (!record) throw new KnowledgeNotFoundError('record', id);
     if (record.version !== version) throw new KnowledgeConflictError(id);
-    const canonical = canonicalizeKnowledgeRecordScopeIds(scopeIds);
+    const canonical = canonicalizeKnowledgeScopeIds(scopeIds);
+    if (canonical.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     this.#assertScopeNodes(canonical);
     const oldScopeIds = this.#recordScopeIds(record.id);
     const updated = { ...record, version: record.version + 1, updatedAt: new Date() };

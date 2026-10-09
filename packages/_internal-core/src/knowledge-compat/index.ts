@@ -265,12 +265,6 @@ export function canonicalizeKnowledgeScopeIds(scopeIds: string[]): string[] {
   return [...new Set(scopeIds.map(canonicalizeKnowledgeNodeId))].sort();
 }
 
-export function canonicalizeKnowledgeRecordScopeIds(scopeIds: string[]): string[] {
-  const canonical = canonicalizeKnowledgeScopeIds(scopeIds);
-  if (canonical.length === 0) throw new Error('Knowledge records require at least one scope.');
-  return canonical;
-}
-
 export function knowledgeScopeIdsKey(scopeIds: string[]): string {
   return canonicalizeKnowledgeScopeIds(scopeIds).join('\u001f');
 }
