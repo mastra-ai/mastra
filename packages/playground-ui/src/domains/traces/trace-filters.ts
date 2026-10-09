@@ -275,8 +275,8 @@ export function hasAnyTraceFilterParams(params: URLSearchParams): boolean {
 
 /** Every operator the trace query API supports, keyed by the UI id that goes in the URL. */
 export const TRACE_FILTER_BAR_OPERATORS: (FilterBarOperator & { id: TraceFilterOperatorId })[] = [
-  { id: 'is', label: 'is' },
-  { id: 'isNot', label: 'is not' },
+  { id: 'is', label: 'is', widensTo: 'in' },
+  { id: 'isNot', label: 'is not', widensTo: 'notIn' },
   { id: 'in', label: 'is any of', arity: 'many' },
   { id: 'notIn', label: 'is none of', arity: 'many' },
   { id: 'exists', label: 'exists', arity: 'none' },
