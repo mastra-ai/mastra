@@ -41,6 +41,10 @@ exports[`Subconscious knowledge write tools > keeps snapshots of all ten public 
     "$schema": "http://json-schema.org/draft-07/schema#",
     "additionalProperties": false,
     "properties": {
+      "confirmDistinct": {
+        "description": "Set true only after a previous call reported similar existing nodes and this node is genuinely a different thing.",
+        "type": "boolean",
+      },
       "kind": {
         "minLength": 1,
         "type": "string",

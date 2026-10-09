@@ -1,4 +1,4 @@
-import type { KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '@mastra/core/storage';
+import type { KnowledgeNode, KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '@mastra/core/storage';
 import {
   MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
   MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
@@ -94,8 +94,8 @@ function rungOf(address: string): KnowledgeScopeLevel | undefined {
 }
 
 /**
- * Resolve the node placement argument. A rung sets the node's identity scope directly.
- * Without a rung the node takes the first record's level, so a node is never narrower than
+ * Resolve the node placement argument. A rung sets the node's identity scope, widened to the
+ * first record's level when the rung is narrower. Without a rung the node takes the first record's level, so a node is never narrower than
  * the record created with it. A structural scope address must be inside the host-configured
  * frontier visible to the curator's held scope; the node is placed there and its identity
  * scope widens to the structural scope's held identity ancestor, so the node is readable
@@ -109,7 +109,12 @@ async function resolveNodePlacement(
 ): Promise<{ nodeScope: KnowledgeScope; scopeAddresses?: string[] }> {
   const firstRecordLevel = recordLevel ?? options.defaultScope;
   if (placement !== undefined && (SCOPE_RUNGS as readonly string[]).includes(placement)) {
-    return { nodeScope: expandKnowledgeScope(options.scope, placement as KnowledgeScopeLevel) };
+    return {
+      nodeScope: expandKnowledgeScope(
+        options.scope,
+        broadestLevel([placement as KnowledgeScopeLevel, firstRecordLevel]),
+      ),
+    };
   }
   if (placement === undefined) {
     return { nodeScope: expandKnowledgeScope(options.scope, firstRecordLevel) };
@@ -124,6 +129,65 @@ async function resolveNodePlacement(
     nodeScope: expandKnowledgeScope(options.scope, broadestLevel([firstRecordLevel, ...ancestorLevels])),
     scopeAddresses: [placement],
   };
+}
+
+/**
+ * Widen a node's identity scope to a record's scope when the node is narrower, so everyone who can
+ * read a record can also read the node it belongs to.
+ */
+async function ensureNodeCoversRecord(
+  store: KnowledgeStorage,
+  node: KnowledgeNode,
+  recordScope: KnowledgeScope,
+): Promise<KnowledgeNode> {
+  if (isKnowledgeScopeVisible(node.scope, recordScope)) return node;
+  return store.updateNode({ id: node.id, version: node.version, scope: recordScope });
+}
+
+const ISO_DATE = /\d{4}-\d{2}-\d{2}(?:[t ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:z|[+-]\d{2}:?\d{2})?)?/g;
+
+/** Name words with dates and punctuation removed, so "Payments-Service (2026-10-08)" matches "payments service". */
+function nameWords(name: string): string[] {
+  return name
+    .toLocaleLowerCase()
+    .replace(ISO_DATE, ' ')
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean);
+}
+
+function namesOverlap(a: string[], b: string[]): boolean {
+  if (a.length === 0 || b.length === 0) return false;
+  const [shorter, longer] = a.length <= b.length ? [a, b] : [b, a];
+  const words = new Set(longer);
+  return shorter.every(word => words.has(word));
+}
+
+/**
+ * Visible nodes that likely describe the same thing as `name`: an exact canonical name match at any
+ * visible scope (for example, the same entity first captured in another session), or names that
+ * match once case, punctuation, and dates are ignored, or where one name's words all appear in the other.
+ */
+async function findSimilarNodes(
+  store: KnowledgeStorage,
+  scope: KnowledgeScope,
+  name: string,
+): Promise<{ exact?: KnowledgeNode; similar: Array<{ id: string; name: string }> }> {
+  const words = nameWords(name);
+  const probe = [...words].sort((a, b) => b.length - a.length)[0];
+  if (!probe) return { similar: [] };
+  const canonical = name.trim().toLocaleLowerCase();
+  const seen = new Set<string>();
+  const similar: Array<{ id: string; name: string }> = [];
+  for (const hit of await store.search({ query: probe, scope, limit: 50 })) {
+    if (hit.type !== 'node' || seen.has(hit.id)) continue;
+    seen.add(hit.id);
+    if (hit.name.trim().toLocaleLowerCase() === canonical) {
+      const exact = await store.getNode(hit.id);
+      if (exact && !exact.mergedInto) return { exact, similar: [] };
+    }
+    if (namesOverlap(words, nameWords(hit.name))) similar.push({ id: hit.id, name: hit.name });
+  }
+  return { similar };
 }
 
 /**
@@ -196,6 +260,11 @@ export function createKnowledgeWriteTools(
           nodeScope: nodePlacementSchema,
           scope: scopeLevelSchema,
           when: dateTimeSchema,
+          confirmDistinct: {
+            type: 'boolean',
+            description:
+              'Set true only after a previous call reported similar existing nodes and this node is genuinely a different thing.',
+          },
         },
         required: ['name', 'kind', 'text'],
         additionalProperties: false,
@@ -208,19 +277,35 @@ export function createKnowledgeWriteTools(
           nodeScope?: string;
           scope?: KnowledgeScopeLevel;
           when?: string;
+          confirmDistinct?: boolean;
         };
         requireRecordTextWithinBound(value.text);
         const store = await getStore(memory);
+        let existing: KnowledgeNode | undefined;
+        if (!value.confirmDistinct) {
+          const { exact, similar } = await findSimilarNodes(store, options.scope, value.name);
+          existing = exact;
+          if (similar.length > 0) {
+            throw new Error(
+              `Similar nodes already exist: ${similar.map(node => `${node.id} "${node.name}"`).join(', ')}. Append to one of them with knowledge_append, or retry with confirmDistinct: true if this is a different thing.`,
+            );
+          }
+        }
         const { nodeScope, scopeAddresses } = await resolveNodePlacement(memory, options, value.nodeScope, value.scope);
         const recordScope = resolveWriteScope(options, value.scope);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
-        const node = await store.createNode({
-          name: value.name,
-          kind: value.kind,
-          scope: nodeScope,
-          ...(scopeAddresses ? { scopeAddresses } : {}),
-        });
+        const node = await ensureNodeCoversRecord(
+          store,
+          await store.createNode({
+            name: value.name,
+            kind: value.kind,
+            // An exact-name visible node is reused rather than duplicated at another scope.
+            scope: existing?.scope ?? nodeScope,
+            ...(scopeAddresses ? { scopeAddresses } : {}),
+          }),
+          recordScope,
+        );
         const record = await store.appendKnowledge({
           node: node.id,
           text: value.text,
@@ -258,6 +343,7 @@ export function createKnowledgeWriteTools(
         const scope = resolveWriteScope(options, value.scope);
         const when = value.when ? new Date(value.when) : undefined;
         if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
+        await ensureNodeCoversRecord(store, parent, scope);
         const record = await store.appendKnowledge({
           node: parent.id,
           text: value.text,
@@ -404,6 +490,8 @@ export function createKnowledgeWriteTools(
         if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
         requireVisible(record.scope, options, 'KnowledgeRecord');
         const scope = resolveWriteScope(options, value.scope);
+        const node = await store.getNode(record.node);
+        if (node && !node.mergedInto) await ensureNodeCoversRecord(store, node, scope);
         const rescoped = await store.rescopeKnowledge({ id: record.id, scope });
         await vouchThreadScope(scope);
         return rescoped;

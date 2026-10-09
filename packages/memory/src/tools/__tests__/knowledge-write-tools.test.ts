@@ -304,6 +304,67 @@ describe('Subconscious knowledge write tools', () => {
     ).rejects.toThrow("Structural scope is outside the curator's visible scope: features:memory");
   });
 
+  it('points the curator at similar visible nodes instead of creating a near-duplicate', async () => {
+    const { store, tools } = await fixture();
+    const existing = await store.createNode({ name: 'Payments Service', kind: 'service', scope });
+    const createNode = vi.spyOn(store, 'createNode');
+
+    for (const name of ['payments-service (2026-10-08)', 'Payments', 'Payments Service API']) {
+      await expect(
+        tools.knowledge_create!.execute?.({ name, kind: 'service', text: 'Deploys run nightly.' }, {} as any),
+      ).rejects.toThrow(`Similar nodes already exist: ${existing.id} "Payments Service"`);
+    }
+    expect(createNode).not.toHaveBeenCalled();
+
+    // The exact canonical name reuses the node; an unrelated name and a confirmed distinct node are created.
+    const reused = (await tools.knowledge_create!.execute?.(
+      { name: 'payments service', kind: 'service', text: 'Deploys run nightly.' },
+      {} as any,
+    )) as any;
+    expect(reused.node.id).toBe(existing.id);
+    const unrelated = (await tools.knowledge_create!.execute?.(
+      { name: 'Billing Ledger', kind: 'service', text: 'Ledger entries are immutable.' },
+      {} as any,
+    )) as any;
+    expect(unrelated.node.id).not.toBe(existing.id);
+    const confirmed = (await tools.knowledge_create!.execute?.(
+      { name: 'Payments', kind: 'team', text: 'The payments team owns checkout.', confirmDistinct: true },
+      {} as any,
+    )) as any;
+    expect(confirmed.node).toMatchObject({ name: 'Payments', kind: 'team' });
+    expect(confirmed.node.id).not.toBe(existing.id);
+  });
+
+  it('keeps every node at least as broad as its records', async () => {
+    const { store, tools } = await fixture();
+    const resourceScope = scope.slice(0, 2);
+
+    const created = (await tools.knowledge_create!.execute?.(
+      { name: 'Deploy Pipeline', kind: 'system', text: 'Builds run on merge.', nodeScope: 'thread', scope: 'resource' },
+      {} as any,
+    )) as any;
+    expect(created.node.scope).toEqual(resourceScope);
+
+    const threadNode = await store.createNode({ name: 'Release Train', kind: 'process', scope });
+    await tools.knowledge_append!.execute?.(
+      { node: threadNode.id, text: 'Releases ship every Tuesday.', scope: 'org' },
+      {} as any,
+    );
+    expect((await store.getNode(threadNode.id))?.scope).toEqual(['org:acme']);
+
+    const reused = await store.createNode({ name: 'Oncall Rotation', kind: 'process', scope });
+    const record = await store.appendKnowledge({
+      node: reused,
+      text: 'Rotation changes weekly.',
+      scope,
+      sourceThreadId: 'alpha',
+      resolutionScope: scope,
+      defaultScope: scope,
+    });
+    await tools.knowledge_rescope!.execute?.({ recordId: record.id, scope: 'resource' }, {} as any);
+    expect((await store.getNode(reused.id))?.scope).toEqual(resourceScope);
+  });
+
   it('rejects over-long record text on create and append before writing a node or record', async () => {
     const { store, source, tools } = await fixture();
     const createNode = vi.spyOn(store, 'createNode');
