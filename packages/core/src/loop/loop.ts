@@ -81,6 +81,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     backgroundTaskManagerConfig: _internal?.backgroundTaskManagerConfig,
     skipBgTaskWait: _internal?.skipBgTaskWait,
     drainPendingSignals: _internal?.drainPendingSignals,
+    subscribePendingSignals: _internal?.subscribePendingSignals,
     initialSignalEchoes: _internal?.initialSignalEchoes ? [..._internal.initialSignalEchoes] : undefined,
     // Forward the tool payload transform policy. Every other consumed field is
     // rebuilt here and this bag is what hydrates the run scope, so omitting it
