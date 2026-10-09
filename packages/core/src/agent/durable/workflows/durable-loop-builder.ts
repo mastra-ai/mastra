@@ -787,15 +787,6 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       const isFinal = decision.isFinal;
       await emitStepFinish(!isFinal);
 
-      // Each iteration's assistant response is a distinct message, mirroring
-      // the non-durable agentic loop. The mutated state.messageId flows into
-      // the next singleIterationWorkflow input via map-to-llm-input.
-      if (!isFinal) {
-        const boundaryList = createRunMessageList({ mastra: rt.mastra }).deserialize(transcript.messageListState);
-        state.messageId = boundaryList.rotateResponseMessageId();
-        transcript.messageListState = boundaryList.serialize();
-      }
-
       // Emit an iteration-complete event for observability. This fires after
       // every iteration (including the last one) so client-side callbacks
       // (via stream-adapter) can track progress. The in-process callback
