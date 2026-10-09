@@ -7,12 +7,10 @@ import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
   hydrateFactorySession,
-  refreshFactorySessionMemorySettings,
   resolveFactoryDefaultModelId,
   resolveFactorySourceControl,
   resolveFactorySourceRepository,
 } from './factory-session.js';
-import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from './memory-settings-hydration.js';
 
 type FactorySessionHandle = Parameters<typeof hydrateFactorySession>[0];
 
@@ -51,8 +49,8 @@ function createSessionDouble() {
   const calls: string[] = [];
   const session = {
     om: {
-      observer: { modelId: () => undefined, switchModel: vi.fn(async () => void calls.push('observer')) },
-      reflector: { modelId: () => undefined, switchModel: vi.fn(async () => void calls.push('reflector')) },
+      observer: { switchModel: vi.fn(async () => void calls.push('observer')) },
+      reflector: { switchModel: vi.fn(async () => void calls.push('reflector')) },
     },
     state: { get: () => ({}), set: vi.fn(async () => void calls.push('state')) },
     model: { switch: vi.fn(async () => void calls.push('model')) },
@@ -277,62 +275,30 @@ describe('ensureFactorySourceSession', () => {
 });
 
 describe('hydrateFactorySession', () => {
-  it("applies the factory project's stored memory settings and the factory default model", async () => {
+  it('applies only the factory default model and leaves memory settings invocation-scoped', async () => {
     const { session, double } = createSessionDouble();
-    const memorySettings = {
-      get: vi.fn(async () => ({
-        observerModelId: 'anthropic/claude-fable-5',
-        reflectorModelId: 'anthropic/claude-opus-5',
-        observationThreshold: 3,
-        reflectionThreshold: 7,
-        observeAttachments: true,
-      })),
-    };
 
     await hydrateFactorySession(session, {
       orgId: 'org-1',
-      factoryProjectId: 'proj-1',
       defaultModelId: 'anthropic/claude-opus-5',
-      memorySettings: memorySettings as never,
     });
 
-    expect(memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:proj-1' });
-    expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-fable-5' });
-    expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
-    expect(double.state.set).toHaveBeenCalledWith({
-      observationThreshold: 3,
-      reflectionThreshold: 7,
-      observeAttachments: true,
-    });
     expect(double.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
     for (const agentType of ['explore', 'plan', 'execute']) {
       expect(double.subagents.model.set).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5', agentType });
     }
-  });
-
-  it('can derive the memory fallback from a user model without changing the factory run model', async () => {
-    const { session, double } = createSessionDouble();
-    const memorySettings = { get: vi.fn(async () => null) };
-
-    await hydrateFactorySession(session, {
-      orgId: 'org-1',
-      factoryProjectId: 'proj-1',
-      defaultModelId: 'openai/gpt-5.6',
-      observationalMemoryModelId: 'deepseek/deepseek-chat',
-      memorySettings: memorySettings as never,
-    });
-
-    expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
-    expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
-    expect(double.om.observer.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
-    expect(double.om.reflector.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
-    expect(double.model.switch).toHaveBeenCalledWith('openai/gpt-5.6');
+    expect(double.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(double.om.reflector.switchModel).not.toHaveBeenCalled();
+    expect(double.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
+    expect(double.state.set).not.toHaveBeenCalledWith(
+      expect.objectContaining({ observationThreshold: expect.any(Number) }),
+    );
   });
 
   it('leaves the session on its default model when the project has none', async () => {
     const { session, double } = createSessionDouble();
 
-    await hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1' });
+    await hydrateFactorySession(session, { orgId: 'org-1' });
 
     expect(double.model.switch).not.toHaveBeenCalled();
     expect(double.subagents.model.set).not.toHaveBeenCalled();
@@ -341,23 +307,10 @@ describe('hydrateFactorySession', () => {
     expect(double.state.set).toHaveBeenCalledWith({ factoryOrgId: 'org-1' });
   });
 
-  it('resets to the built-in memory defaults when memory settings are omitted', async () => {
-    const { session, double } = createSessionDouble();
-
-    await hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1' });
-
-    expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
-    expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: DEFAULT_OM_MODEL_ID });
-    expect(double.state.set).toHaveBeenCalledWith({
-      observationThreshold: DEFAULT_OBSERVATION_THRESHOLD,
-      reflectionThreshold: DEFAULT_REFLECTION_THRESHOLD,
-    });
-  });
-
   it('marks the session unresolved when the caller has no organization', async () => {
     const { session, double } = createSessionDouble();
 
-    await hydrateFactorySession(session, { orgId: '  ', factoryProjectId: 'proj-1' });
+    await hydrateFactorySession(session, { orgId: '  ' });
 
     expect(double.state.set).toHaveBeenCalledWith({ factoryOrgUnresolved: true });
     expect(double.state.set).not.toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: expect.anything() }));
@@ -369,7 +322,7 @@ describe('hydrateFactorySession', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     await expect(
-      hydrateFactorySession(session, { orgId: 'org-1', factoryProjectId: 'proj-1', defaultModelId: 'openai/retired' }),
+      hydrateFactorySession(session, { orgId: 'org-1', defaultModelId: 'openai/retired' }),
     ).resolves.toBeUndefined();
 
     expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply factory default model', {
@@ -386,7 +339,6 @@ describe('hydrateFactorySession', () => {
 
     await hydrateFactorySession(session, {
       orgId: 'org-1',
-      factoryProjectId: 'proj-1',
       defaultModelId: 'openai/gpt-5.6',
     });
 
@@ -397,76 +349,6 @@ describe('hydrateFactorySession', () => {
       modelId: 'openai/gpt-5.6',
       error: 'explore unavailable',
     });
-    warn.mockRestore();
-  });
-
-  it('still applies the default model when memory settings fail to load', async () => {
-    const { session, double } = createSessionDouble();
-    const memorySettings = { get: vi.fn(async () => Promise.reject(new Error('storage down'))) };
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    await hydrateFactorySession(session, {
-      orgId: 'org-1',
-      factoryProjectId: 'proj-1',
-      defaultModelId: 'anthropic/claude-opus-5',
-      memorySettings: memorySettings as never,
-    });
-
-    expect(warn).toHaveBeenCalledWith('[Factory Start] Failed to apply observational-memory settings', {
-      error: 'storage down',
-    });
-    expect(double.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
-    warn.mockRestore();
-  });
-});
-
-describe('refreshFactorySessionMemorySettings', () => {
-  it("reapplies the project's current OM models to a reused session", async () => {
-    const { session, double } = createSessionDouble();
-    const memorySettings = {
-      get: vi.fn(async () => ({
-        observerModelId: 'anthropic/claude-fable-5',
-        reflectorModelId: 'anthropic/claude-opus-5',
-        observationThreshold: 3,
-        reflectionThreshold: 7,
-        observeAttachments: true,
-      })),
-    };
-    const projects = { get: vi.fn(async () => ({ defaultModelId: 'anthropic/claude-opus-5' })) };
-
-    await refreshFactorySessionMemorySettings(session, {
-      orgId: 'org-1',
-      factoryProjectId: 'proj-1',
-      projects: projects as never,
-      memorySettings: memorySettings as never,
-    });
-
-    expect(memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:proj-1' });
-    expect(double.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-fable-5' });
-    expect(double.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'anthropic/claude-opus-5' });
-    // Reuse only reapplies OM/memory settings — it must not touch the run model.
-    expect(double.model.switch).not.toHaveBeenCalled();
-  });
-
-  it('swallows and logs a settings lookup failure so the reused run still proceeds', async () => {
-    const { session } = createSessionDouble();
-    const memorySettings = { get: vi.fn(async () => Promise.reject(new Error('storage down'))) };
-    const projects = { get: vi.fn(async () => null) };
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    await expect(
-      refreshFactorySessionMemorySettings(session, {
-        orgId: 'org-1',
-        factoryProjectId: 'proj-1',
-        projects: projects as never,
-        memorySettings: memorySettings as never,
-      }),
-    ).resolves.toBeUndefined();
-
-    expect(warn).toHaveBeenCalledWith(
-      '[Factory dispatch] Failed to reapply observational-memory settings on session reuse',
-      { error: 'storage down' },
-    );
     warn.mockRestore();
   });
 });

@@ -47,6 +47,7 @@ export const goalJudgeOmModelIsolationScenario = {
   name: 'goal-judge-om-model-isolation',
   description: 'Keeps the main OM model state isolated across a distinct-model goal judge waiting checkpoint.',
   testName: 'does not activate OM for the goal judge model after waiting and a user follow-up',
+  enableObservationalMemory: true,
   useOpenAIModel: true,
   aimockFixture: 'goal-judge-om-model-isolation.json',
   env() {

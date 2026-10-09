@@ -1508,6 +1508,11 @@ describe('session start (onSessionStart)', () => {
       switchModel: vi.fn(async ({ modelId }: { modelId: string }) => {
         current = modelId;
       }),
+      switchSelection: vi.fn(
+        async ({ selection }: { selection: { mode: 'auto' } | { mode: 'model'; modelId: string } }) => {
+          if (selection.mode === 'model') current = selection.modelId;
+        },
+      ),
     };
   }
 
@@ -1611,7 +1616,7 @@ describe('session start (onSessionStart)', () => {
     ]);
   });
 
-  it("derives observational memory from the sender's provider credentials", async () => {
+  it("keeps observational memory invocation-scoped when applying the sender's model", async () => {
     const deps = makeStartDeps({
       defaultModelId: 'openai/gpt-5.6',
       userDefaultModel: 'deepseek/deepseek-chat',
@@ -1620,14 +1625,12 @@ describe('session start (onSessionStart)', () => {
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
-    expect(session.om.observer.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
-    expect(session.om.reflector.switchModel).not.toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
     expect(session.model.switch).toHaveBeenLastCalledWith('deepseek/deepseek-chat');
   });
 
-  it('realigns observational memory when the sender model cannot be applied', async () => {
+  it('does not materialize observational memory when the sender model cannot be applied', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const deps = makeStartDeps({
       defaultModelId: 'anthropic/claude-opus-5',
@@ -1638,9 +1641,8 @@ describe('session start (onSessionStart)', () => {
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(session.om.observer.switchModel).toHaveBeenLastCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
-    expect(session.om.reflector.switchModel).toHaveBeenLastCalledWith({ modelId: 'anthropic/claude-haiku-4-5' });
-    expect(session.om.observer.switchModel).not.toHaveBeenLastCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalledWith("[slack] Failed to apply the sender's default model", {
       modelId: 'deepseek/deepseek-chat',
       error: 'missing credentials',
@@ -1696,57 +1698,25 @@ describe('session start (onSessionStart)', () => {
     expect(warn).toHaveBeenCalled();
   });
 
-  it('applies the owner observational-memory settings, matching the web kickoff', async () => {
-    const deps = makeStartDeps({ memoryRecord: { observerModelId: 'openai/gpt-5.4-mini', observationThreshold: 111 } });
+  it('leaves observational-memory settings for per-invocation resolution', async () => {
+    const deps = makeStartDeps();
     const session = makeSession();
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(deps.memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'factory-project:fp-1' });
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'openai/gpt-5.4-mini' });
-    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ observationThreshold: 111 }));
-    // The sender's own row is read too, and an absent one simply leaves the
-    // project's configuration in place.
-    expect(deps.memorySettings.get).toHaveBeenCalledWith({ orgId: 'org-1', userId: 'user-1' });
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
+    expect(session.state.set).not.toHaveBeenCalledWith(
+      expect.objectContaining({ observationThreshold: expect.anything() }),
+    );
+    expect(session.state.set).not.toHaveBeenCalledWith(
+      expect.objectContaining({ reflectionThreshold: expect.anything() }),
+    );
   });
 
-  // Observational memory is the sender's to configure: a thread they are talking
-  // to should observe the way their own settings say, not the way the project's
-  // shared row does.
-  it("applies the linked sender's own memory settings over the project's", async () => {
-    const deps = makeStartDeps({
-      memoryRecord: { observerModelId: 'anthropic/claude-haiku-4-5', observationThreshold: 111 },
-      personalMemoryRecord: { observerModelId: 'openai/gpt-5.4-mini', observationThreshold: 222 },
-    });
-    const session = makeSession();
-
-    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
-
-    // Applied last, so the sender's row is what the session ends up running.
-    expect(session.om.observer.switchModel).toHaveBeenLastCalledWith({ modelId: 'openai/gpt-5.4-mini' });
-    expect(session.om.observer.modelId()).toBe('openai/gpt-5.4-mini');
-    expect(session.state.set).toHaveBeenLastCalledWith(expect.objectContaining({ observationThreshold: 222 }));
-  });
-
-  // The row is authoritative only for what the sender saved. A knob they never
-  // touched must keep the project's value rather than snapping back to the
-  // built-in default — the factory's provider may be the only credentialed one.
-  it("keeps the project's memory settings for the knobs the sender never saved", async () => {
-    const deps = makeStartDeps({
-      memoryRecord: { observerModelId: 'anthropic/claude-haiku-4-5', observationThreshold: 111 },
-      personalMemoryRecord: { observerModelId: null, observationThreshold: 222 },
-    });
-    const session = makeSession();
-
-    await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
-
-    expect(session.om.observer.modelId()).toBe('anthropic/claude-haiku-4-5');
-    expect(session.state.set).toHaveBeenLastCalledWith(expect.objectContaining({ observationThreshold: 222 }));
-  });
-
-  // A restarted process restores the generation model from the thread, then
-  // uses that provider while reapplying the project and sender memory settings.
-  it('migrates the legacy model before reapplying memory settings on restart', async () => {
+  // A restarted process restores the generation model from the thread. Memory
+  // settings are resolved per invocation, so the restart does not apply them.
+  it('migrates the legacy model on restart without applying memory settings', async () => {
     const deps = makeStartDeps({
       personalMemoryRecord: { reflectionThreshold: 333 },
     });
@@ -1762,9 +1732,8 @@ describe('session start (onSessionStart)', () => {
 
     await createChannelSessionStartHook(deps as any)(startArgs(session) as any);
 
-    expect(session.om.observer.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
-    expect(session.om.reflector.switchModel).toHaveBeenCalledWith({ modelId: 'deepseek/deepseek-v4-flash' });
-    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ reflectionThreshold: 333 }));
+    expect(session.om.observer.switchModel).not.toHaveBeenCalled();
+    expect(session.om.reflector.switchModel).not.toHaveBeenCalled();
     // Still no model re-resolution: the migrated thread choice remains authoritative.
     expect(deps.modelDefaults.get).not.toHaveBeenCalled();
     expect(deps.projects.getById).not.toHaveBeenCalled();
@@ -1774,25 +1743,6 @@ describe('session start (onSessionStart)', () => {
     expect(settings.has('modeModelId_build')).toBe(false);
     expect(settings.has('modeModelId_plan')).toBe(false);
     expect(settings.has('modeModelId_fast')).toBe(false);
-  });
-
-  // Reaching a storage domain can fail on its own (uninitialized table, a
-  // transient read error). The sender's settings are a preference, not a
-  // prerequisite for answering their message.
-  it("falls back to the project's memory settings when the sender's row cannot be read", async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const deps = makeStartDeps({
-      memoryRecord: { observerModelId: 'anthropic/claude-haiku-4-5', observationThreshold: 111 },
-      personalMemoryLookupError: new Error('memory settings unavailable'),
-    });
-    const session = makeSession();
-
-    await expect(createChannelSessionStartHook(deps as any)(startArgs(session) as any)).resolves.toBeUndefined();
-
-    expect(warn).toHaveBeenCalled();
-    expect(session.om.observer.modelId()).toBe('anthropic/claude-haiku-4-5');
-    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ observationThreshold: 111 }));
-    expect(session.model.switch).toHaveBeenCalledWith('anthropic/claude-opus-5');
   });
 
   // The durable record of a deliberate choice: either an earlier start or the

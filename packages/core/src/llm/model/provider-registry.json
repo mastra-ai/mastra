@@ -3854,6 +3854,8 @@
         "kimi-k3",
         "kimi-k3-fast",
         "kimi-k3-flex",
+        "mimo-v2.6-pro",
+        "mimo-v2.6-pro-flex",
         "qwen-3.8-27b",
         "qwen-3.8-27b-flex",
         "qwen3.6-35b",
@@ -6088,9 +6090,7 @@
       "apiKeyHeader": "Authorization",
       "name": "Charm Hyper",
       "models": [
-        "deepseek-v4-flash",
         "deepseek-v4-flash-0731",
-        "deepseek-v4-pro",
         "deepseek-v4-pro-0813",
         "deepseek-v4.1-flash",
         "gemma-4-26b-a4b-it",
@@ -8024,6 +8024,7 @@
         "google/gemini-3.7-flash",
         "google/gemini-3.8-flash",
         "google/gemini-flash-latest",
+        "google/gemini-nano-banana-2.1",
         "google/gemini-pro-latest",
         "greenference/deepseek-v4.1-flash",
         "greenference/gpt-oss-20b",
@@ -8141,7 +8142,6 @@
         "tencent/deepseek-v4-pro-0813",
         "tencent/hy3",
         "tencent/hy4-preview",
-        "tencent/step-5-preview",
         "tensorx/deepseek/deepseek-v4-flash-0731",
         "tensorx/deepseek/deepseek-v4-pro-0813",
         "tensorx/deepseek/deepseek-v4.1-flash",
@@ -8177,6 +8177,7 @@
         "vertex/gemini-3.8-flash@eu",
         "vertex/gemini-3.8-flash@us",
         "vertex/gemini-flash-latest",
+        "vertex/gemini-nano-banana-2.1",
         "vertex/gemini-pro-latest",
         "xai/grok-4.20-0309-non-reasoning",
         "xai/grok-4.20-0309-reasoning",
@@ -8541,6 +8542,9 @@
         },
         "gpt-5-codex": {
           "npm": "@ai-sdk/openai"
+        },
+        "mistral-large-4": {
+          "npm": "@ai-sdk/mistral"
         },
         "minimax-m3-free": {
           "npm": "@ai-sdk/anthropic"
@@ -13954,6 +13958,8 @@
       "kimi-k3",
       "kimi-k3-fast",
       "kimi-k3-flex",
+      "mimo-v2.6-pro",
+      "mimo-v2.6-pro-flex",
       "qwen-3.8-27b",
       "qwen-3.8-27b-flex",
       "qwen3.6-35b",
@@ -15527,9 +15533,7 @@
       "qwen/qwen3.5-9b"
     ],
     "hyper": [
-      "deepseek-v4-flash",
       "deepseek-v4-flash-0731",
-      "deepseek-v4-pro",
       "deepseek-v4-pro-0813",
       "deepseek-v4.1-flash",
       "gemma-4-26b-a4b-it",
@@ -16777,6 +16781,7 @@
       "google/gemini-3.7-flash",
       "google/gemini-3.8-flash",
       "google/gemini-flash-latest",
+      "google/gemini-nano-banana-2.1",
       "google/gemini-pro-latest",
       "greenference/deepseek-v4.1-flash",
       "greenference/gpt-oss-20b",
@@ -16894,7 +16899,6 @@
       "tencent/deepseek-v4-pro-0813",
       "tencent/hy3",
       "tencent/hy4-preview",
-      "tencent/step-5-preview",
       "tensorx/deepseek/deepseek-v4-flash-0731",
       "tensorx/deepseek/deepseek-v4-pro-0813",
       "tensorx/deepseek/deepseek-v4.1-flash",
@@ -16930,6 +16934,7 @@
       "vertex/gemini-3.8-flash@eu",
       "vertex/gemini-3.8-flash@us",
       "vertex/gemini-flash-latest",
+      "vertex/gemini-nano-banana-2.1",
       "vertex/gemini-pro-latest",
       "xai/grok-4.20-0309-non-reasoning",
       "xai/grok-4.20-0309-reasoning",

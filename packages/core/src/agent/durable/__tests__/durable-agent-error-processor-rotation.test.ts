@@ -474,6 +474,7 @@ describe('durable error-processor resolution', () => {
       expect(rebuilt.errorProcessors!.map(processor => processor.id)).toEqual([
         'provider-history-compat',
         'prefill-error-handler',
+        'unsupported-file-handler',
         'stream-error-retry-processor',
       ]);
     });

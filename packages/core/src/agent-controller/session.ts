@@ -51,6 +51,7 @@ import type {
   AgentControllerThinkingLevel,
   AgentControllerThread,
   ModelUseCountTracker,
+  OMModel,
   PermissionPolicy,
   PermissionRules,
   TokenUsage,
@@ -239,6 +240,8 @@ const RESERVED_THREAD_METADATA_KEYS = [
   MODE_ID_KEY,
   'observerModelId',
   'reflectorModelId',
+  'observerModelSelection',
+  'reflectorModelSelection',
   'observationThreshold',
   'reflectionThreshold',
   'tokenUsage',
@@ -418,6 +421,8 @@ export interface SessionMachinery {
   buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput>;
   /** Resolve the effective request context for a run, layering controller defaults. */
   buildRequestContext(requestContext?: RequestContext): Promise<RequestContext>;
+  /** Authorize an actor-driven operation before it changes session state. */
+  authorizeExecute?(requestContext?: RequestContext): Promise<void>;
   /** Persist the session's running token usage to thread metadata. */
   persistTokenUsage(): Promise<void>;
   /** Generate a new id (thread ids, message ids) using the host's id strategy. */
@@ -1081,11 +1086,23 @@ export class SessionThread {
       }
 
       // Restore schema prerequisites before validating persisted preferences.
-      if (meta?.observerModelId) {
+      // Observer/reflector selection intent is restored with its IDs; a legacy
+      // concrete ID without a selection remains an explicit selection.
+      const observerSelection = meta?.observerModelSelection;
+      if (typeof observerSelection === 'string') {
+        updates.observerModelSelection = observerSelection;
+        updates.observerModelId = observerSelection === 'auto' ? undefined : observerSelection;
+      } else if (typeof meta?.observerModelId === 'string') {
         updates.observerModelId = meta.observerModelId;
+        updates.observerModelSelection = meta.observerModelId;
       }
-      if (meta?.reflectorModelId) {
+      const reflectorSelection = meta?.reflectorModelSelection;
+      if (typeof reflectorSelection === 'string') {
+        updates.reflectorModelSelection = reflectorSelection;
+        updates.reflectorModelId = reflectorSelection === 'auto' ? undefined : reflectorSelection;
+      } else if (typeof meta?.reflectorModelId === 'string') {
         updates.reflectorModelId = meta.reflectorModelId;
+        updates.reflectorModelSelection = meta.reflectorModelId;
       }
       const hasObservationThreshold = typeof meta?.observationThreshold === 'number';
       const hasReflectionThreshold = typeof meta?.reflectionThreshold === 'number';
@@ -2177,6 +2194,8 @@ interface SessionOMRoleConfig {
   role: 'observer' | 'reflector';
   /** Session-state / thread-settings key holding this role's model id. */
   modelIdKey: 'observerModelId' | 'reflectorModelId';
+  /** Session-state / thread-settings key holding this role's selection intent. */
+  selectionKey: 'observerModelSelection' | 'reflectorModelSelection';
   /** Session-state key holding this role's threshold. */
   thresholdKey: 'observationThreshold' | 'reflectionThreshold';
   /** Resolve this role's default model id from `omConfig`. */
@@ -2195,8 +2214,10 @@ class SessionOMRole {
   readonly #config: SessionOMRoleConfig;
   readonly #bus: SessionBus;
   #getState: (() => Record<string, unknown>) | undefined;
-  #setState: ((updates: Record<string, unknown>) => void) | undefined;
+  #getCurrentModelId: (() => string | undefined) | undefined;
+  #setState: ((updates: Record<string, unknown>) => Promise<void>) | undefined;
   #setSetting: ((args: { key: string; value: unknown }) => Promise<void>) | undefined;
+  #deleteSetting: ((args: { key: string }) => Promise<void>) | undefined;
   #omConfig: AgentControllerOMConfig | undefined;
   #gateways: MastraModelGatewayInterface[] | undefined;
 
@@ -2208,22 +2229,52 @@ class SessionOMRole {
   /** @internal Injected by {@link SessionOM.setResolver}. */
   setWiring(wiring: {
     getState: () => Record<string, unknown>;
-    setState: (updates: Record<string, unknown>) => void;
+    getCurrentModelId: () => string | undefined;
+    setState: (updates: Record<string, unknown>) => Promise<void>;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
+    deleteSetting: (args: { key: string }) => Promise<void>;
     omConfig?: AgentControllerOMConfig;
     gateways?: MastraModelGatewayInterface[];
   }): void {
     this.#getState = wiring.getState;
+    this.#getCurrentModelId = wiring.getCurrentModelId;
     this.#setState = wiring.setState;
     this.#setSetting = wiring.setSetting;
+    this.#deleteSetting = wiring.deleteSetting;
     this.#omConfig = wiring.omConfig;
     this.#gateways = wiring.gateways;
   }
 
-  /** This role's model id from session state, falling back to `omConfig`. */
+  /** This role's configured model. `auto` follows the active main model. */
+  model(): OMModel | undefined {
+    const state = this.#getState?.() ?? {};
+    const selection = state[this.#config.selectionKey];
+    if (typeof selection === 'string' && selection.length > 0) return selection;
+
+    const modelId = state[this.#config.modelIdKey];
+    if (typeof modelId === 'string') return modelId;
+
+    const configuredModel =
+      this.#config.role === 'observer' ? this.#omConfig?.observerModel : this.#omConfig?.reflectorModel;
+    return configuredModel ?? this.#config.defaultModelId(this.#omConfig);
+  }
+
+  /** This role's effective concrete model id. */
   modelId(): string | undefined {
-    const fromState = this.#getState?.()[this.#config.modelIdKey];
-    return (typeof fromState === 'string' ? fromState : undefined) ?? this.#config.defaultModelId(this.#omConfig);
+    const model = this.model();
+    if (model !== 'auto') return model;
+
+    try {
+      const resolved = this.#omConfig?.resolveAutoModelId?.({
+        role: this.#config.role,
+        currentModelId: this.#getCurrentModelId?.(),
+        state: this.#getState?.() ?? {},
+      });
+      if (resolved) return resolved;
+    } catch {
+      // Automatic resolution is fail-soft and falls through to the concrete default.
+    }
+    return this.#config.defaultModelId(this.#omConfig);
   }
 
   /** This role's threshold from session state, falling back to `omConfig`. */
@@ -2233,10 +2284,8 @@ class SessionOMRole {
   }
 
   /**
-   * Resolve this role's model id to a model instance via the configured
-   * gateways, or undefined when unset. The bare model id string is routed
-   * through {@link ModelRouterLanguageModel}, which selects the matching
-   * gateway (or the built-in defaults) and resolves provider auth.
+   * Resolve this role's effective model id to a model instance via the
+   * configured gateways, or undefined when unset.
    */
   resolvedModel(): MastraModelConfig | undefined {
     const modelId = this.modelId();
@@ -2244,11 +2293,27 @@ class SessionOMRole {
     return new ModelRouterLanguageModel(modelId as `${string}/${string}`, this.#gateways);
   }
 
-  /** Switch this role's model: update session state, persist, and emit. */
-  async switchModel({ modelId }: { modelId: string }): Promise<void> {
-    this.#setState?.({ [this.#config.modelIdKey]: modelId });
-    await this.#setSetting?.({ key: this.#config.modelIdKey, value: modelId });
-    this.#bus.emit({ type: 'om_model_changed', role: this.#config.role, modelId });
+  /** Switch this role's model, persist it, and emit the effective concrete model. */
+  async switchModel({ modelId }: { modelId: OMModel }): Promise<void> {
+    if (modelId === 'auto') {
+      await this.#setState?.({
+        [this.#config.selectionKey]: modelId,
+        [this.#config.modelIdKey]: undefined,
+      });
+      await this.#deleteSetting?.({ key: this.#config.modelIdKey });
+    } else {
+      await this.#setState?.({
+        [this.#config.selectionKey]: modelId,
+        [this.#config.modelIdKey]: modelId,
+      });
+      await this.#setSetting?.({ key: this.#config.modelIdKey, value: modelId });
+    }
+    await this.#setSetting?.({ key: this.#config.selectionKey, value: modelId });
+
+    const effectiveModelId = this.modelId();
+    if (effectiveModelId) {
+      this.#bus.emit({ type: 'om_model_changed', role: this.#config.role, modelId: effectiveModelId });
+    }
   }
 }
 
@@ -2268,6 +2333,7 @@ class SessionOM {
       {
         role: 'observer',
         modelIdKey: 'observerModelId',
+        selectionKey: 'observerModelSelection',
         thresholdKey: 'observationThreshold',
         defaultModelId: omConfig => omConfig?.defaultObserverModelId,
         defaultThreshold: omConfig => omConfig?.defaultObservationThreshold,
@@ -2278,6 +2344,7 @@ class SessionOM {
       {
         role: 'reflector',
         modelIdKey: 'reflectorModelId',
+        selectionKey: 'reflectorModelSelection',
         thresholdKey: 'reflectionThreshold',
         defaultModelId: omConfig => omConfig?.defaultReflectorModelId,
         defaultThreshold: omConfig => omConfig?.defaultReflectionThreshold,
@@ -2293,8 +2360,10 @@ class SessionOM {
    */
   setResolver(options: {
     getState: () => Record<string, unknown>;
-    setState: (updates: Record<string, unknown>) => void;
+    getCurrentModelId: () => string | undefined;
+    setState: (updates: Record<string, unknown>) => Promise<void>;
     setSetting: (args: { key: string; value: unknown }) => Promise<void>;
+    deleteSetting: (args: { key: string }) => Promise<void>;
     omConfig?: AgentControllerOMConfig;
     gateways?: MastraModelGatewayInterface[];
   }): void {
@@ -4106,9 +4175,11 @@ export class Session<TState = unknown> {
   sendSignalToThread(
     input: AgentSignalInput,
     target: { resourceId: string; threadId: string },
+    options?: { requestContext?: RequestContext },
   ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true }> } {
     const signal = createSignal(input);
     const accepted = Promise.resolve().then(async () => {
+      await this.machinery.authorizeExecute?.(options?.requestContext);
       const resourceId = this.identity.getResourceId();
       const thread = target.resourceId === resourceId ? await this.thread.getById({ threadId: target.threadId }) : null;
       if (!thread || thread.resourceId !== resourceId) {
@@ -4239,6 +4310,7 @@ export class Session<TState = unknown> {
     );
     const signal = submittedWhileWorking ? asInterjection(submitted) : submitted;
     const accepted = Promise.resolve().then(async () => {
+      await this.machinery.authorizeExecute?.(requestContextInput);
       const threadId = await this.thread.ensureId({ requestContext: requestContextInput });
 
       const agent = this.machinery.getAgent();
@@ -4398,6 +4470,7 @@ export class Session<TState = unknown> {
     options: SessionSendNotificationSignalOptions = {},
   ): Promise<SendAgentNotificationSignalResult> {
     const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
+    await this.machinery.authorizeExecute?.(requestContextInput);
     const threadId = await this.thread.ensureId({ requestContext: requestContextInput });
 
     const agent = this.machinery.getAgent();
@@ -4518,6 +4591,7 @@ export class Session<TState = unknown> {
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
   }): Promise<void> {
+    await this.machinery.authorizeExecute?.(requestContextInput);
     const wasActive = this.stream.isActive();
     const target = await this.prepareMessageTarget({
       requestContext: requestContextInput,
@@ -4584,6 +4658,7 @@ export class Session<TState = unknown> {
   /** Queue a follow-up through the Agent runtime, or send it immediately while idle. */
   async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     if (!this.run.isRunning()) return this.sendMessage({ content, requestContext });
+    await this.machinery.authorizeExecute?.(requestContext);
     const threadId = this.thread.getId();
     if (!threadId) return;
     const resourceId = this.identity.getResourceId();
@@ -4825,6 +4900,9 @@ export class Session<TState = unknown> {
       abortSignal: inputAbortSignal ?? this.run.ensureAbortController().signal,
       requestContext,
       toolsets: await this.machinery.buildToolsets(requestContext),
+      // Without the shared budget the resumed run falls back to the agent's
+      // default maxSteps (~5) and ends mid-task as "complete".
+      streamOptions: this.machinery.buildSharedRunOptions(),
     });
   }
 
@@ -4881,6 +4959,9 @@ export class Session<TState = unknown> {
       abortSignal: inputAbortSignal ?? this.run.ensureAbortController().signal,
       requestContext,
       toolsets: await this.machinery.buildToolsets(requestContext),
+      // Without the shared budget the resumed run falls back to the agent's
+      // default maxSteps (~5) and ends mid-task as "complete".
+      streamOptions: this.machinery.buildSharedRunOptions(),
     });
   }
 
