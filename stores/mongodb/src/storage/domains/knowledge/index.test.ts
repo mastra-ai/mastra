@@ -199,7 +199,7 @@ describe('MongoDB canonical Knowledge support', () => {
     }
   });
 
-  it('leaves incidental Knowledge collections untouched until explicit activation', async () => {
+  it('leaves incidental v1 Knowledge collections untouched until explicit activation replaces them', async () => {
     const uri = process.env.MONGODB_URL || 'mongodb://localhost:27017/?replicaSet=rs0';
     const dbName = `knowledge-rollout-${randomUUID()}`;
     const client = new MongoClient(uri);
@@ -219,9 +219,13 @@ describe('MongoDB canonical Knowledge support', () => {
       }
       expect(await nodes.listIndexes().toArray()).toEqual(indexes);
       expect(await db.listCollections({ name: TABLE_KNOWLEDGE_SCHEMA }).toArray()).toEqual([]);
-      await expect(new KnowledgeMongoDB({ connector: isolated }).init()).rejects.toThrow(KnowledgeSchemaError);
-      expect(await nodes.listIndexes().toArray()).toEqual(indexes);
-      expect(await db.listCollections({ name: TABLE_KNOWLEDGE_SCHEMA }).toArray()).toEqual([]);
+      await new KnowledgeMongoDB({ connector: isolated }).init();
+      expect((await nodes.listIndexes().toArray()).map(index => index.key)).not.toContainEqual({
+        type: 1,
+        scopeKey: 1,
+        canonicalName: 1,
+      });
+      expect(await db.collection(TABLE_KNOWLEDGE_SCHEMA).findOne({ id: 'canonical' })).not.toBeNull();
       expect(await db.collection('unrelated_sentinel').findOne({ value: 'preserved' })).not.toBeNull();
     } finally {
       await client.db(dbName).dropDatabase();
