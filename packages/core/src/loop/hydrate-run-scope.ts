@@ -25,6 +25,7 @@ import {
   RESOURCE_ID_KEY,
   SAVE_QUEUE_MANAGER_KEY,
   SKIP_BG_TASK_WAIT_KEY,
+  SUBSCRIBE_PENDING_SIGNALS_KEY,
   THREAD_EXISTS_KEY,
   THREAD_ID_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
@@ -61,6 +62,7 @@ export function hydrateRunScopeFromInternal(mastra: Mastra, runId: string, inter
     scope.set(BACKGROUND_TASK_MANAGER_CONFIG_KEY, internal.backgroundTaskManagerConfig);
   if (internal.skipBgTaskWait !== undefined) scope.set(SKIP_BG_TASK_WAIT_KEY, internal.skipBgTaskWait);
   if (internal.drainPendingSignals) scope.set(DRAIN_PENDING_SIGNALS_KEY, internal.drainPendingSignals);
+  if (internal.subscribePendingSignals) scope.set(SUBSCRIBE_PENDING_SIGNALS_KEY, internal.subscribePendingSignals);
   if (internal.initialSignalEchoes) scope.set(INITIAL_SIGNAL_ECHOES_KEY, internal.initialSignalEchoes);
   if (internal.toolPayloadTransform) scope.set(TOOL_PAYLOAD_TRANSFORM_KEY, internal.toolPayloadTransform);
 }
