@@ -40,6 +40,7 @@ type IterationData = {
   processorRetryCount?: number;
   fallbackModelIndex?: number;
   processorRetryFeedback?: string;
+  backgroundTaskPending?: boolean;
 };
 
 describe('createLLMExecutionStep gateway provider tools', () => {
@@ -2108,14 +2109,19 @@ describe('createLLMExecutionStep gateway provider tools', () => {
       } as any,
     } as unknown as OuterLLMRun<{}>);
 
-    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+    const result = await llmExecutionStep.execute(
+      createExecuteParams({ ...createIterationInput(), backgroundTaskPending: true }),
+    );
 
     expect(doStream).toHaveBeenCalledTimes(1);
     expect(onAbort).toHaveBeenCalledOnce();
     // Nothing streamed before the abort, so the partial text is an empty string
     // rather than undefined.
     expect(onAbort).toHaveBeenCalledWith(expect.objectContaining({ text: '' }));
-    expect(result.stepResult).toMatchObject({ reason: 'tripwire', isContinued: false });
+    expect(result).toMatchObject({
+      backgroundTaskPending: true,
+      stepResult: { reason: 'abort', isContinued: false },
+    });
   });
 
   it('hands onAbort the text streamed before the abort', async () => {

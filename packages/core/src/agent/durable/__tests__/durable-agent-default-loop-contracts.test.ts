@@ -22,26 +22,12 @@
  * `iter-throws` throws from `onIterationComplete` and has no throwing mapper,
  * `mapper-throws` throws from `toModelOutput` and installs no hook.
  *
- * COR-1412 (declared below, for durable and evented): the durable loop emits
- * `step-finish` before the continuation decision is made, which makes the flag
- * wrong in both directions. `iter-stop` stops on the step it just finished, and
- * durable and evented report `stepResult.isContinued: true` where plain reports
- * `false` — so `channels/output-processor.ts:196`, which closes a render queue
- * only on a `step-finish` whose `isContinued !== true`, never closes for a run
- * that stops on a tool step. `iter-feedback` asks for one more iteration, and
- * durable and evented report `false` for the iteration that was continuing,
- * i.e. they claim a run still in progress had stopped (finding F-2.1, the same
- * mechanism as F-1). Durable and evented also resolve only the last iteration's
- * text, so that parity declaration derives their expected resolved text from
- * plain's stream. Plain's stream and resolved full output both contain the full
- * `firstMORE` response.
- *
- * Each declaration derives engine differences from plain's own observation
- * rather than ignoring the field, so these legs fail again the moment either
- * side is fixed (and the helper refuses a declaration that stops reproducing at
- * all). Plain's values are pinned literally, read from the observation the helper
- * returns. The two throwing legs are the only ones driven directly: a rejected
- * run leaves the helper nothing to record.
+ * The `iter-feedback` leg carries no declarations: plain resolves the previous
+ * iteration's text exactly once (COR-1416) and the wrapped engines report the
+ * continuation flag for the iteration that asked for it, so all three engines
+ * agree on the whole snapshot. Plain's values are pinned literally, read from
+ * the observation the helper returns. The two throwing legs are the only ones
+ * driven directly: a rejected run leaves the helper nothing to record.
  */
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
@@ -61,8 +47,6 @@ import {
   textOnlyTape,
   toolCallTape,
   type CapturedRequest,
-  type EngineDifference,
-  type EngineObservation,
   type ModelScript,
   type ParityEngine,
   type ParitySnapshot,
@@ -170,68 +154,6 @@ function stepFinishStepResults(turn: ParitySnapshot): Array<{ isContinued?: unkn
     .map(payload => (payload?.stepResult ?? {}) as { isContinued?: unknown; reason?: unknown });
 }
 
-/** Rewrites one turn's `step-finish` flags with `rewrite`, leaving every other leaf alone. */
-function rewriteStepFinishFlags(
-  turn: ParitySnapshot,
-  rewrite: (isContinued: unknown, reason: unknown, index: number) => unknown,
-): ParitySnapshot {
-  const seen = { count: 0 };
-  const chunkPayloads = turn.chunkPayloads.map((payload, index) => {
-    if (turn.chunkTypes[index] !== 'step-finish') return payload;
-    const stepResult = ((payload as { stepResult?: Record<string, unknown> } | undefined)?.stepResult ?? {}) as Record<
-      string,
-      unknown
-    >;
-    const flagIndex = seen.count++;
-    return {
-      ...(payload as Record<string, unknown>),
-      stepResult: { ...stepResult, isContinued: rewrite(stepResult.isContinued, stepResult.reason, flagIndex) },
-    };
-  });
-  return { ...turn, chunkPayloads };
-}
-
-/**
- * COR-1412, `iter-stop`: the run stops on the step it just finished, and durable and evented report
- * that step as continuing (`isContinued: true`) where plain reports `false`.
- */
-function terminatingStepStaysContinued(plain: EngineObservation): EngineObservation {
-  return {
-    ...plain,
-    turns: plain.turns.map(turn => rewriteStepFinishFlags(turn, () => true)),
-  };
-}
-
-/**
- * COR-1412, `iter-feedback`: durable and evented report the iteration that was continuing as stopped.
- * Their resolved full output is only the last iteration's text, so the expected resolved text is
- * derived from plain's stream, which matches plain's full output.
- */
-function continuingIterationAndResolvedText(plain: EngineObservation): EngineObservation {
-  return {
-    ...plain,
-    turns: plain.turns.map(turn => {
-      const flagsRewritten = rewriteStepFinishFlags(turn, (isContinued, _reason, index) =>
-        index === 0 ? false : isContinued,
-      );
-      const streamed = turn.streamedText;
-      return { ...flagsRewritten, fullOutput: { ...turn.fullOutput, text: streamed } };
-    }),
-  };
-}
-
-const COR_1412_ITER_STOP: EngineDifference = {
-  reason:
-    'COR-1412: durable and evented emit the terminating step-finish before the continuation decision, so the step an iter-stop run ends on reports stepResult.isContinued: true where plain reports false (channels/output-processor.ts:196 only closes a render queue on isContinued !== true).',
-  expect: terminatingStepStaysContinued,
-};
-
-const COR_1412_ITER_FEEDBACK: EngineDifference = {
-  reason:
-    'COR-1412: durable and evented emit step-finish before the continuation decision, so the iteration that asked for feedback reports stepResult.isContinued: false where plain reports true. Durable and evented resolve only the last iteration’s text, so the expectation derives their resolved text from plain’s stream.',
-  expect: continuingIterationAndResolvedText,
-};
-
 async function runOrdinaryVariant(variant: OrdinaryVariant) {
   const commits = new Map<ParityEngine, number>();
   const hookCalls = new Map<ParityEngine, HookCall[]>();
@@ -243,10 +165,6 @@ async function runOrdinaryVariant(variant: OrdinaryVariant) {
   const results = await expectEngineParity({
     engines: ENGINES,
     model: variant === 'iter-feedback' ? feedbackScript() : stepScript(3),
-    differences:
-      variant === 'iter-feedback'
-        ? { durable: COR_1412_ITER_FEEDBACK, evented: COR_1412_ITER_FEEDBACK }
-        : { durable: COR_1412_ITER_STOP, evented: COR_1412_ITER_STOP },
     buildAgent: ({ engine, model }) => {
       const onCommit = () => commits.set(engine, commits.get(engine)! + 1);
       return new Agent({
@@ -373,16 +291,16 @@ describe('T18 default loop contracts (plain, durable, evented)', () => {
       // call, so it streamed no text, and the hook was consulted once (iteration 1).
       expect(turn.streamedText).toBe('');
       expect(hookCalls.get(engine), `${engine}: the iteration hook was consulted once`).toHaveLength(1);
+      expect(stepFinishStepResults(turn), `${engine}: the stopping step did not continue`).toEqual([
+        { isContinued: false, reason: 'tool-calls' },
+      ]);
     }
 
-    // plain's reference values, read off the observation the helper returned. The stopping step did
-    // not continue — that is what `channels/output-processor.ts:196` reads to close a render queue,
-    // and it is the value durable and evented report as `true` (COR-1412, declared above).
+    // Plain's remaining reference values, read off the observation the helper returned.
     const plainTurn = results.plain!.turns.at(-1)!;
     expect(commits.get('plain')).toBe(1);
     expect(hookCalls.get('plain')).toEqual([{ iteration: 1, isFinal: false, text: '' }]);
     expect(plainTurn.fullOutput.text).toBe('');
-    expect(stepFinishStepResults(plainTurn)).toEqual([{ isContinued: false, reason: 'tool-calls' }]);
     expect(plainTurn.chunkTypes).toEqual(['start', 'step-start', 'tool-call', 'tool-result', 'step-finish', 'finish']);
   });
 
@@ -399,11 +317,13 @@ describe('T18 default loop contracts (plain, durable, evented)', () => {
       // own text rather than the feedback message, so the second call reads `MORE`.
       expect(hookCalls.get(engine), `${engine}: the iteration hook was consulted twice`).toHaveLength(2);
       expect(hookCalls.get(engine)?.[1]?.text, `${engine}: the hook saw the second iteration's text`).toBe('MORE');
+      expect(stepFinishStepResults(turn), `${engine}: feedback continued only the first iteration`).toEqual([
+        { isContinued: true, reason: 'stop' },
+        { isContinued: false, reason: 'stop' },
+      ]);
     }
 
-    // Plain's reference values, plus the declared COR-1412 divergence. Iteration 1 continued (the
-    // hook asked for feedback) and iteration 2 did not; durable and evented report `false` for the
-    // continuing iteration. Plain's resolved full output now matches the text its stream emitted.
+    // Plain's resolved full output carries the response exactly once, matching the stream.
     const plainTurn = results.plain!.turns.at(-1)!;
     expect(hookCalls.get('plain')).toEqual([
       { iteration: 1, isFinal: true, text: 'first' },
@@ -411,10 +331,6 @@ describe('T18 default loop contracts (plain, durable, evented)', () => {
     ]);
     expect(plainTurn.streamedText).toBe('firstMORE');
     expect(plainTurn.fullOutput.text).toBe('firstMORE');
-    expect(stepFinishStepResults(plainTurn)).toEqual([
-      { isContinued: true, reason: 'stop' },
-      { isContinued: false, reason: 'stop' },
-    ]);
     expect(plainTurn.chunkTypes).toEqual([
       'start',
       'step-start',

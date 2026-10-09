@@ -14,17 +14,6 @@
  * falls back is a race, not a fact about the engine), so it is not asserted
  * here either.
  *
- * The engines do disagree on the abort surface itself, and that disagreement is
- * declared rather than hidden: plain finalises the parked step before it
- * terminates, so its stream carries the aborted step's `tool-result` a second
- * time and its finish chunk reports `reason: 'tripwire'`, while durable and
- * evented abort without that chunk and report `abort`. That is COR-1415, a
- * plain-side difference. It is declared below with an `expect` that maps plain's
- * observation onto what the wrapped engines produce, so every other field is
- * still compared exactly; plain's own values stay pinned literally so the
- * reference cannot drift with the fix. When COR-1415 lands the declaration stops
- * reproducing and the test fails until the declaration is removed.
- *
  * Three fidelity gaps are deliberate, because closing them would make the file
  * red for reasons outside this case's contract:
  *   - The harness waits up to a second after the abort before asserting that no
@@ -47,7 +36,7 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { globalRunRegistry } from '../run-registry';
 import type { Deferred } from './abort-parity-support';
-import { ABORT_ARTIFACT, aborted, deferred, toolResultCount } from './abort-parity-support';
+import { aborted, deferred, toolResultCount } from './abort-parity-support';
 import type {
   EngineHandle,
   EngineParityResults,
@@ -105,6 +94,7 @@ interface EngineCaseState {
   release: Deferred<void>;
   toolLog: number[];
   callbacks: string[];
+  iterations: Array<{ iteration: number; finishReason: string; isFinal: boolean }>;
   accepted?: boolean;
   snapshot?: ParitySnapshot;
 }
@@ -118,7 +108,6 @@ async function runT14(variant: Variant): Promise<{
 
   const scenario: EngineParityScenario = {
     model: stepScript(STEP_COUNT),
-    differences: { durable: ABORT_ARTIFACT, evented: ABORT_ARTIFACT },
     buildAgent: ({ engine, model }: { engine: ParityEngine; model: LanguageModelV2 }) => {
       const parked = deferred<void>();
       const release = deferred<void>();
@@ -139,7 +128,7 @@ async function runT14(variant: Variant): Promise<{
           return { done: n };
         },
       });
-      states.set(engine, { memory, parked, release, toolLog, callbacks: [] });
+      states.set(engine, { memory, parked, release, toolLog, callbacks: [], iterations: [] });
       return new Agent({
         id: AGENT_ID,
         name: AGENT_ID,
@@ -162,6 +151,10 @@ async function runT14(variant: Variant): Promise<{
         ...(variant === 'signal' ? { abortSignal: controller.signal } : {}),
         onAbort: () => {
           state.callbacks.push('onAbort');
+        },
+        onIterationComplete: ({ iteration, finishReason, isFinal }) => {
+          state.iterations.push({ iteration, finishReason, isFinal });
+          return { continue: true };
         },
         onFinish: () => {
           state.callbacks.push('onFinish');
@@ -209,6 +202,11 @@ describe('T14 abort parity', () => {
       }
 
       expectPlainT14Reference(results.plain!);
+      expect(states.get('plain')!.iterations).toEqual([
+        { iteration: 1, finishReason: 'tool-calls', isFinal: false },
+        { iteration: 2, finishReason: 'tool-calls', isFinal: false },
+        { iteration: 3, finishReason: 'abort', isFinal: true },
+      ]);
     });
   }
 });
@@ -218,12 +216,6 @@ describe('T14 abort parity', () => {
  * reference, so pinning its values stops a plain-side change from silently
  * moving that reference and keeping the engines "in parity".
  *
- * Plain finalises the parked, abort-observing step before it terminates: the
- * aborted step's tool result is delivered a second time (the extra
- * `tool-result` after the second `step-finish`) and the run finishes with
- * `reason: 'tripwire'`. This is plain's abort surface and is the reference the
- * harness's own recorded plain cell has
- * (`results/2026-09-29T20-29-45.968Z/plain-run-none-head`).
  */
 function expectPlainT14Reference(result: EngineRunResult): void {
   const snapshot = result.turns.at(-1)!;
@@ -237,11 +229,10 @@ function expectPlainT14Reference(result: EngineRunResult): void {
     'tool-call',
     'tool-result',
     'step-finish',
-    'tool-result',
     'abort',
     'finish',
   ]);
   expect(snapshot.finishReason).toBe('aborted');
-  expect(snapshot.finishChunk?.reason).toBe('tripwire');
-  expect(snapshot.toolResults).toHaveLength(3);
+  expect(snapshot.finishChunk?.reason).toBe('abort');
+  expect(snapshot.toolResults).toHaveLength(2);
 }
