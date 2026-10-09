@@ -897,6 +897,53 @@ describe('ProjectRoutes', () => {
       expect(await seed.projects.getById({ id: project.id })).toMatchObject({ sandboxSettings: { cpuCount: 4 } });
     });
 
+    it('drops stored keys the current provider does not declare instead of refusing every later update', async () => {
+      const { seed, project, app } = await seedEnvironment();
+      await patch(app, project.id, { settings: { cpuCount: 4, memoryMb: 1024 } });
+
+      // The host restarts on a provider with a different schema; the E2B-style document is still stored.
+      class ImageFactorySandbox extends FactorySandbox<{ baseImage?: string }> {
+        readonly provider = 'image';
+        readonly settings = {
+          type: 'object',
+          properties: { baseImage: { type: 'string' } },
+          additionalProperties: false,
+        } as const;
+        create(_ctx: FactorySandboxContext) {
+          throw new Error('not constructed in route tests');
+        }
+      }
+      const switched = new Hono();
+      switched.use('*', async (context, next) => {
+        context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(
+        switched as never,
+        projectRoutes(seed, ['github'], undefined, undefined, { sandbox: new ImageFactorySandbox() }),
+      );
+
+      // The stale keys are pruned the first time they make the merge fail; the new value lands.
+      const response = await patch(switched, project.id, { settings: { baseImage: 'node:22' } });
+      expect(response.status).toBe(200);
+      expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+        sandboxSettings: { baseImage: 'node:22' },
+      });
+
+      // A key the patch itself sets is never pruned: an unknown key in the patch is still refused.
+      const refused = await patch(switched, project.id, { settings: { cpuCount: 2 } });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({ error: 'invalid_environment' });
+      expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+        sandboxSettings: { baseImage: 'node:22' },
+      });
+
+      // A patch that is itself invalid reports its own issues, not the pruning.
+      const invalid = await patch(switched, project.id, { settings: { baseImage: 7 } });
+      expect(invalid.status).toBe(400);
+      expect(JSON.stringify(await invalid.json())).toContain('baseImage');
+    });
+
     it('reports no sandbox and refuses settings when the factory has none configured', async () => {
       const seed = await createFactoryStorageForTests();
       const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
