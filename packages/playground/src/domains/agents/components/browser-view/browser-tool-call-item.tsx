@@ -1,9 +1,9 @@
 import { Code } from '@mastra/playground-ui/components/Code';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { BrowserToolCallEntry } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronRight, Check, X, Loader2 } from 'lucide-react';
+import { Check, X, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
@@ -94,9 +94,7 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
         aria-expanded={isExpanded}
         className="flex w-full items-center gap-2 px-3 py-0.5 text-left hover:bg-fill-subtle"
       >
-        <ChevronRight
-          className={cn('h-3 w-3 shrink-0 text-muted-foreground transition-transform', isExpanded && 'rotate-90')}
-        />
+        <DisclosureChevron direction="right" className="h-3 w-3 text-muted-foreground" />
 
         <StatusDot status={entry.status} />
 

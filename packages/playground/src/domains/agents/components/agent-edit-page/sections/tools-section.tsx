@@ -1,9 +1,9 @@
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { useTools } from '@mastra/react/hooks/tools';
-import { ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';
 import { Controller, useWatch } from 'react-hook-form';
@@ -42,7 +42,7 @@ export function ToolsSection({ control, error, readOnly = false }: ToolsSectionP
     <div className="rounded-md border border-border bg-background">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
         <CollapsibleTrigger className="flex w-full items-center gap-1 bg-card p-3">
-          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          <DisclosureChevron direction="right" className="h-4 w-4 text-muted-foreground" />
           <SectionTitle icon={<ToolsIcon className="text-span-tool" />}>
             Tools{count > 0 && <span className="text-muted-foreground">({count})</span>}
           </SectionTitle>

@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import {
   Field,
   FieldError,
@@ -15,7 +16,7 @@ import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { JudgeIcon } from '@mastra/playground-ui/icons/JudgeIcon';
-import { Trash2, ChevronRight } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { Control } from 'react-hook-form';
 import { Controller, useWatch } from 'react-hook-form';
@@ -95,7 +96,7 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
               <Collapsible open={isOpen} onOpenChange={setIsOpen}>
                 <div className="flex items-center justify-between bg-card p-3">
                   <CollapsibleTrigger className="flex w-full items-center gap-1">
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    <DisclosureChevron direction="right" className="h-4 w-4 text-muted-foreground" />
                     <SectionTitle icon={<JudgeIcon className="text-muted-foreground" />}>
                       Scorers{count > 0 && <span className="text-muted-foreground">({count})</span>}
                     </SectionTitle>
