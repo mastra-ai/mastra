@@ -191,8 +191,20 @@ async function measureRun(engine: 'default' | 'evented', toolIterations: number)
   }
   result?.cleanup?.();
 
-  // The durable engine keeps persisting after the stream closes, so wait for
-  // writes to quiesce before measuring.
+  // Draining `fullStream` does not mean the writes are done: the durable loop
+  // emits `FINISH` before its workflow step returns, and the evented step-end
+  // handler then merges the result (and prunes) some time later. Wait for the
+  // run itself to reach a terminal state first — the handler that performs
+  // those trailing writes also drives that transition — then wait for writes to
+  // quiesce, so a lull between `FINISH` and those writes cannot end the wait.
+  const runDeadline = Date.now() + 30_000;
+  while (Date.now() < runDeadline) {
+    const run = await workflowsStore.getWorkflowRunById({ runId: result?.runId });
+    const status = run?.snapshot?.status;
+    if (!run || status === 'success' || status === 'failed') break;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
   let seen = -1;
   while (seen !== stats.writes) {
     seen = stats.writes;
