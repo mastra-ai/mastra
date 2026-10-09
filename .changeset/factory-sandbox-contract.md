@@ -25,8 +25,14 @@ class MyFactorySandbox extends FactorySandbox<Settings> {
     additionalProperties: false,
   };
 
-  create(ctx: FactorySandboxContext, { region = 'us' }: Settings) {
-    return new MyCloudSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId, region });
+  create(ctx: FactorySandboxContext, settings: Settings) {
+    return new MyCloudSandbox({
+      id: ctx.sessionId,
+      sandboxId: ctx.sandboxId,
+      template: this.template(ctx, settings),
+      workingDirectory: ctx.workingDirectory,
+      region: settings.region ?? 'us',
+    });
   }
 
   // Optional: the sandbox template image Factory can build ahead of time
