@@ -59,7 +59,7 @@ export function OnboardingPreview({
   personalConnectionMethod,
 }: OnboardingPreviewProps) {
   return (
-    <aside className="onboarding-preview hidden min-w-0 px-8 pt-52 lg:block xl:px-12" aria-label="Factory preview">
+    <aside className="onboarding-preview min-w-0 px-8 pt-52 lg:block xl:px-12" aria-label="Factory preview">
       <div className="onboarding-diagram relative mx-auto w-full max-w-150">
         <OnboardingFigure
           figure={journeyFigure}

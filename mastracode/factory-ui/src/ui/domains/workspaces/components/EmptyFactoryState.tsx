@@ -100,15 +100,15 @@ export function EmptyFactoryState({ onSaveModelPreset }: { onSaveModelPreset?: S
   const meta = onboardingStepMeta(step, preset);
 
   return (
-    <main className="bg-background text-foreground min-h-dvh pb-20">
-      <div className="grid min-h-[calc(100dvh-5rem)] w-full grid-cols-1 lg:grid-cols-[minmax(400px,44%)_minmax(0,1fr)]">
-        <section className="relative z-3 flex min-w-0 flex-col px-6 py-5 sm:px-10 lg:px-12 lg:py-8 xl:px-16">
-          <div className="mb-4 flex items-center gap-3 lg:mb-8">
+    <main className="onboarding-page bg-background text-foreground min-h-dvh pb-20">
+      <div className="onboarding-layout grid min-h-[calc(100dvh-5rem)] w-full grid-cols-1 lg:grid-cols-[minmax(400px,44%)_minmax(0,1fr)]">
+        <section className="onboarding-form-column relative z-3 flex min-w-0 flex-col px-6 py-5 sm:px-10 lg:px-12 lg:py-8 xl:px-16">
+          <div className="onboarding-brand mb-4 flex items-center gap-3 lg:mb-8">
             <LogoWithoutText className="w-6" aria-hidden="true" />
             <Txt variant="label">Factory</Txt>
           </div>
-          <div className="w-full max-w-lg lg:pt-20">
-            <div className="mb-6">
+          <div className="onboarding-content w-full max-w-lg lg:pt-20">
+            <div className="onboarding-back mb-6">
               <div className="h-8">
                 {previousStep && (
                   <Button
@@ -128,16 +128,21 @@ export function EmptyFactoryState({ onSaveModelPreset }: { onSaveModelPreset?: S
               </div>
             </div>
 
-            <Txt as="h1" variant="hero" className="min-h-[2lh] max-w-lg text-balance">
+            <Txt as="h1" variant="hero" className="onboarding-heading min-h-[2lh] max-w-lg text-balance">
               {meta.title}
             </Txt>
             {meta.description && (
-              <Txt as="p" variant="caption" tone="muted" className="mt-3 min-h-[2lh] max-w-md lg:mt-4">
+              <Txt
+                as="p"
+                variant="caption"
+                tone="muted"
+                className="onboarding-description mt-3 min-h-[2lh] max-w-md lg:mt-4"
+              >
                 {meta.description}
               </Txt>
             )}
 
-            <div key={step} className="onboarding-reveal mt-6 w-full lg:mt-8">
+            <div key={step} className="onboarding-form onboarding-reveal mt-6 w-full lg:mt-8">
               {step === 'initial' && <InitialFactoryStep onContinue={() => goTo('vcs')} />}
               {step === 'vcs' && (
                 <VcsFactoryStep

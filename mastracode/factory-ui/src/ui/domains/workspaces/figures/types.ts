@@ -12,7 +12,7 @@ export interface FigureDefinition {
       stage: HTMLElement;
       svg: SVGSVGElement;
       read: { textContent: string };
-      onIntakeFrame?: (x: number, y: number, opacity: number) => void;
+      onIntakeFrame?: (index: number, x: number, y: number, opacity: number) => void;
     },
     intensity: number,
   ) => {

@@ -8,13 +8,31 @@ import type { OnboardingSource } from './OnboardingPreview';
 import { OnboardingAnnotation } from './OnboardingAnnotation';
 
 const SOURCES = {
-  linear: { name: 'Linear', Icon: LinearIcon, example: 'Add repository search', id: 'ENG-124', kind: 'Issue' },
-  jira: { name: 'Jira', Icon: JiraIcon, example: 'Improve sign-in errors', id: 'APP-124', kind: 'Issue' },
+  linear: {
+    name: 'Linear',
+    Icon: LinearIcon,
+    example: 'Add repository search',
+    id: 'ENG-124',
+    previousId: 'ENG-123',
+    previousExample: 'Fix keyboard focus',
+    kind: 'Issue',
+  },
+  jira: {
+    name: 'Jira',
+    Icon: JiraIcon,
+    example: 'Improve sign-in errors',
+    id: 'APP-124',
+    previousId: 'APP-123',
+    previousExample: 'Keep sessions alive',
+    kind: 'Issue',
+  },
   'incident-io': {
     name: 'incident.io',
     Icon: IncidentIoIcon,
     example: 'Add a health check',
     id: 'INC-124',
+    previousId: 'INC-123',
+    previousExample: 'Retry failed requests',
     kind: 'Follow-up',
   },
 };
@@ -29,7 +47,7 @@ export function OnboardingIntakePreview({ source }: { source: OnboardingSource }
     jira: jira.data?.some(item => item.status === 'active') === true,
     'incident-io': incident.data?.some(item => item.status === 'active') === true,
   };
-  const { name, Icon, example, id, kind } = SOURCES[source];
+  const { name, Icon, example, id, previousId, previousExample, kind } = SOURCES[source];
   return (
     <section aria-label="Work intake preview" className="relative h-full">
       <OnboardingAnnotation x={28} y={24} width={148}>
@@ -49,7 +67,7 @@ export function OnboardingIntakePreview({ source }: { source: OnboardingSource }
         <Txt variant="meta" tone="muted">
           {id} · {kind}
         </Txt>
-        <Txt variant="caption" className="mt-2">
+        <Txt variant="caption" tone="muted" className="mt-2">
           {example}
         </Txt>
       </OnboardingAnnotation>
@@ -82,17 +100,22 @@ export function OnboardingIntakePreview({ source }: { source: OnboardingSource }
           </Txt>
         </div>
       </OnboardingAnnotation>
-      <div className="onboarding-intake-card absolute min-w-0">
-        <div className="flex items-center gap-1.5">
-          <Icon className="text-muted-foreground size-3 shrink-0" />
-          <Txt variant="meta" tone="muted">
-            {id}
+      {[
+        { id, title: example },
+        { id: previousId, title: previousExample },
+      ].map((card, index) => (
+        <div key={index} className="onboarding-intake-card absolute min-w-0" data-card={index + 1}>
+          <div className="flex items-center gap-1.5">
+            <Icon className="text-muted-foreground size-3 shrink-0" />
+            <Txt variant="meta" tone="muted">
+              {card.id}
+            </Txt>
+          </div>
+          <Txt variant="caption" tone="muted" className="onboarding-ticket-title mt-1.5">
+            {card.title}
           </Txt>
         </div>
-        <Txt variant="caption" className="mt-2">
-          {example}
-        </Txt>
-      </div>
+      ))}
       <OnboardingAnnotation x={28} y={302} width={344}>
         <Txt variant="meta" tone="muted">
           Choose what to bring in after setup.

@@ -24,10 +24,15 @@ export function OnboardingFigure({
     const element = stage.current;
     if (!element) return;
     const desktop = window.matchMedia('(min-width: 1024px)');
+    let mounted = false;
     let stop = () => {};
     function syncVisibility() {
+      if (!element) return;
+      const visible = desktop.matches || (element.clientWidth >= 260 && element.clientHeight >= 208);
+      if (visible === mounted) return;
       stop();
-      if (!element || !desktop.matches) return;
+      mounted = visible;
+      if (!visible) return;
       HL.inject(document);
       const svg = HL.mk('svg', { viewBox: '0 0 400 320', 'aria-hidden': 'true' }, element);
       const read = {
@@ -45,10 +50,10 @@ export function OnboardingFigure({
           svg,
           read,
           // Keep the HTML card crisp and on the same clock as its SVG surface.
-          onIntakeFrame: (x, y, opacity) => {
-            diagram?.style.setProperty('--intake-card-x', `${x / 4}%`);
-            diagram?.style.setProperty('--intake-card-y', `${y / 3.2}%`);
-            diagram?.style.setProperty('--intake-card-opacity', String(opacity));
+          onIntakeFrame: (index, x, y, opacity) => {
+            diagram?.style.setProperty(`--intake-${index}-x`, `${x / 4}%`);
+            diagram?.style.setProperty(`--intake-${index}-y`, `${y / 3.2}%`);
+            diagram?.style.setProperty(`--intake-${index}-opacity`, String(opacity));
           },
         },
         figure.range[1],
@@ -63,15 +68,18 @@ export function OnboardingFigure({
         drawing.destroy();
         svg.remove();
         handle.current = undefined;
-        diagram?.style.removeProperty('--intake-card-x');
-        diagram?.style.removeProperty('--intake-card-y');
-        diagram?.style.removeProperty('--intake-card-opacity');
+        for (const index of [1, 2]) {
+          for (const axis of ['x', 'y', 'opacity']) diagram?.style.removeProperty(`--intake-${index}-${axis}`);
+        }
       };
     }
     syncVisibility();
     desktop.addEventListener('change', syncVisibility);
+    const observer = new ResizeObserver(syncVisibility);
+    observer.observe(element);
     return () => {
       desktop.removeEventListener('change', syncVisibility);
+      observer.disconnect();
       stop();
     };
   }, [figure]);

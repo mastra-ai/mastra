@@ -80,10 +80,10 @@
   aspect-ratio: 5 / 4;
 }
 .onboarding-intake-card {
-  left: var(--intake-card-x, 9%);
-  top: var(--intake-card-y, 61.25%);
+  left: var(--intake-1-x, 9%);
+  top: var(--intake-1-y, 60.625%);
   width: 22%;
-  opacity: var(--intake-card-opacity, 1);
+  opacity: var(--intake-1-opacity, 1);
 }
 .onboarding-scene {
   opacity: 0;
@@ -104,5 +104,99 @@
     transition:
       opacity 200ms ease-out 480ms,
       visibility 0s;
+  }
+}
+
+.onboarding-intake-card[data-card='2'] {
+  left: var(--intake-2-x, 39%);
+  top: var(--intake-2-y, 60.625%);
+  opacity: var(--intake-2-opacity, 1);
+}
+/* A visual earns its space; the form stays reachable on short screens. */
+@media (max-width: 1023px) {
+  .onboarding-page {
+    height: 100dvh;
+    min-height: 0;
+    padding-bottom: 76px;
+    overflow: hidden;
+  }
+  .onboarding-layout {
+    height: 100%;
+    min-height: 0;
+    padding: 20px 24px 8px;
+    grid-template-areas: 'brand' 'back' 'heading' 'description' 'form' 'visual';
+    grid-template-rows: auto auto auto auto auto minmax(0, 1fr);
+  }
+  .onboarding-form-column,
+  .onboarding-content {
+    display: contents;
+  }
+  .onboarding-brand {
+    grid-area: brand;
+    margin-bottom: 12px;
+  }
+  .onboarding-back {
+    grid-area: back;
+    margin-bottom: 12px;
+  }
+  .onboarding-heading {
+    grid-area: heading;
+    min-height: 0;
+    max-width: none;
+  }
+  .onboarding-description {
+    grid-area: description;
+    min-height: 0;
+    margin-top: 8px;
+  }
+  .onboarding-form {
+    grid-area: form;
+    margin-top: 16px;
+    max-width: none;
+    width: 100%;
+    max-height: 53dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: 2px;
+  }
+  .onboarding-form > section,
+  .onboarding-form > div {
+    max-width: none;
+    width: 100%;
+  }
+  .onboarding-preview {
+    grid-area: visual;
+    container-type: size;
+    display: block;
+    padding: 0;
+    min-height: 0;
+    width: 100%;
+  }
+  .onboarding-diagram {
+    width: min(100cqw, 125cqh, 400px);
+    height: auto;
+    display: none;
+  }
+  @container (min-width: 260px) and (min-height: 208px) {
+    .onboarding-diagram {
+      display: block;
+    }
+  }
+  .onboarding-ticket-title {
+    display: none;
+  }
+  .onboarding-scene-detail {
+    display: none;
+  }
+}
+@media (min-width: 600px) and (max-width: 1023px) {
+  .onboarding-layout {
+    padding-inline: 40px;
+  }
+  .onboarding-diagram {
+    width: min(100cqw, 125cqh, 500px);
+  }
+  .onboarding-ticket-title {
+    display: block;
   }
 }
