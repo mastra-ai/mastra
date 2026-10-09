@@ -10,16 +10,13 @@
 import { Text } from '@earendil-works/pi-tui';
 import { BOX_INDENT, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
-import type { QuietToolDisplayMode } from './tool-execution-interface.js';
 import { WidthAwareContainer } from './width-aware-container.js';
 
-const COLLAPSED_PROMPT_LINES = 4;
 const BODY_INDENT = BOX_INDENT + 2;
 
 export interface ScheduleFireOptions {
   prompt: string;
   attributes: Record<string, unknown>;
-  quietDisplayMode?: QuietToolDisplayMode;
   quietPreviewLineLimit?: number;
 }
 
@@ -36,7 +33,6 @@ function normalizeQuietPreviewLineLimit(limit: number | undefined): number {
 export class ScheduleFireComponent extends WidthAwareContainer {
   private readonly promptLines: string[];
   private readonly attributes: Record<string, unknown>;
-  private quietDisplayMode: QuietToolDisplayMode;
   private quietPreviewLineLimit: number;
   private expanded = false;
 
@@ -44,19 +40,12 @@ export class ScheduleFireComponent extends WidthAwareContainer {
     super();
     this.promptLines = options.prompt.trim().split('\n');
     this.attributes = options.attributes;
-    this.quietDisplayMode = options.quietDisplayMode ?? 'normal';
     this.quietPreviewLineLimit = normalizeQuietPreviewLineLimit(options.quietPreviewLineLimit);
   }
 
   setExpanded(expanded: boolean): void {
     if (this.expanded === expanded) return;
     this.expanded = expanded;
-    this.rebuild();
-  }
-
-  setQuietModeDisplay(mode: QuietToolDisplayMode): void {
-    if (this.quietDisplayMode === mode) return;
-    this.quietDisplayMode = mode;
     this.rebuild();
   }
 
@@ -75,7 +64,7 @@ export class ScheduleFireComponent extends WidthAwareContainer {
     this.clear();
     this.addChild(new Text(this.header(), BOX_INDENT, 0));
 
-    const collapsedLimit = this.quietDisplayMode === 'quiet' ? this.quietPreviewLineLimit : COLLAPSED_PROMPT_LINES;
+    const collapsedLimit = this.quietPreviewLineLimit;
     // Hiding a single line would cost the same space as the "1 more line" hint, so show it instead.
     const limit =
       this.expanded || this.promptLines.length <= collapsedLimit + 1 ? this.promptLines.length : collapsedLimit;

@@ -32,7 +32,12 @@ describe('completed shell/process background status', () => {
     '%s preserves terminal background badges',
     toolName => {
       for (const isError of [false, true]) {
-        const component = new ToolExecutionComponentEnhanced(toolName, { command: 'echo done', pid: '123' }, {}, ui);
+        const component = new ToolExecutionComponentEnhanced(
+          toolName,
+          { command: 'echo done', pid: '123' },
+          { collapsedByDefault: false },
+          ui,
+        );
         component.setBackgroundTaskId('shell-task');
         component.updateResult({ content: [{ type: 'text', text: 'done' }], isError });
         expect(stripAnsi(component.render(120).join('\n'))).toContain(`${isError ? '✗' : '✓'} background · shell-task`);
@@ -44,7 +49,12 @@ describe('completed shell/process background status', () => {
 
   it('marks nonzero shell exits as failed with and without background identity', () => {
     for (const background of [false, true]) {
-      const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'example' }, {}, ui);
+      const component = new ToolExecutionComponentEnhanced(
+        'execute_command',
+        { command: 'example' },
+        { collapsedByDefault: false },
+        ui,
+      );
       if (background) component.setBackgroundTaskId('shell-task');
       component.updateResult({ content: [{ type: 'text', text: 'Error: failed\n\nExit code: 1' }], isError: false });
       const output = stripAnsi(component.render(120).join('\n'));
@@ -54,14 +64,24 @@ describe('completed shell/process background status', () => {
   });
 
   it('colors the status dot red when a shell command exits nonzero', () => {
-    const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'cat CHANGELOG.md' }, {}, ui);
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'cat CHANGELOG.md' },
+      { collapsedByDefault: false },
+      ui,
+    );
     component.updateResult({ content: [{ type: 'text', text: 'No such file\n\nExit code: 1' }], isError: false });
     const title = component.render(120).find(line => stripAnsi(line).includes('cat CHANGELOG.md'))!;
     expect(title).toContain(theme.fg('error', '•'));
   });
 
   it('does not treat error-looking output from a successful command as a failure', () => {
-    const component = new ToolExecutionComponentEnhanced('execute_command', { command: 'grep -n error src' }, {}, ui);
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'grep -n error src' },
+      { collapsedByDefault: false },
+      ui,
+    );
     component.updateResult({ content: [{ type: 'text', text: '12:  ? { error: envelope.error }' }], isError: false });
     const output = stripAnsi(component.render(120).join('\n'));
     expect(output).toContain('•');
@@ -79,30 +99,14 @@ describe('agent_signal_send rendering', () => {
     expectsReply: true,
   };
 
-  it('shows the full sent message and routing outcome', () => {
-    const component = new ToolExecutionComponentEnhanced('agent_signal_send', args, {}, ui);
-    component.updateResult({
-      content: [{ type: 'text', text: 'Delivered high signal to "Peer Reviewer" in run run-1' }],
-      isError: false,
-    });
-
-    const visible = stripAnsi(component.render(80).join('\n'));
-    expect(visible).toContain('target:');
-    expect(visible).toContain(args.targetId);
-    expect(visible).toContain('priority: high');
-    expect(visible).toContain('expects reply: yes');
-    expect(visible).toContain('Please review the auth refactor.');
-    expect(visible).toContain('Focus on session renewal.');
-    expect(visible).toContain('Report any blocking issues.');
-    expect(visible).toContain('Delivered high signal to "Peer Reviewer" in run run-1');
-  });
-
-  it.each([
-    ['standard', {}],
-    ['quiet', { quietDisplayMode: 'quiet' as const, quietPreviewLineLimit: 20, collapsedByDefault: true }],
-  ])('preserves paragraphs and grapheme clusters in %s mode', (mode, options) => {
+  it('preserves paragraphs and grapheme clusters in the compact preview', () => {
     const message = `First paragraph.\n\n${'👩‍💻'.repeat(40)}`;
-    const component = new ToolExecutionComponentEnhanced('agent_signal_send', { ...args, message }, options, ui);
+    const component = new ToolExecutionComponentEnhanced(
+      'agent_signal_send',
+      { ...args, message },
+      { quietPreviewLineLimit: 20, collapsedByDefault: true },
+      ui,
+    );
     component.updateResult({
       content: [{ type: 'text', text: 'Delivered high signal to "Peer Reviewer" in run run-1' }],
       isError: false,
@@ -114,8 +118,7 @@ describe('agent_signal_send rendering', () => {
     expect(emojiParagraph - firstParagraph).toBe(2);
     const visible = lines.join('\n');
     const graphemes = visible.match(/👩‍💻/gu) ?? [];
-    if (mode === 'standard') expect(graphemes).toHaveLength(40);
-    else expect(graphemes.length).toBeGreaterThan(0);
+    expect(graphemes.length).toBeGreaterThan(0);
     expect(visible.replaceAll('👩‍💻', '')).not.toMatch(/[👩💻‍�]/u);
   });
 
@@ -125,7 +128,7 @@ describe('agent_signal_send rendering', () => {
     const component = new ToolExecutionComponentEnhanced(
       'agent_signal_send',
       { ...args, message },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 8, collapsedByDefault: true },
+      { quietPreviewLineLimit: 8, collapsedByDefault: true },
       ui,
     );
 
@@ -144,7 +147,7 @@ describe('agent_signal_send rendering', () => {
     const component = new ToolExecutionComponentEnhanced(
       'agent_signal_send',
       args,
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 2, collapsedByDefault: true },
+      { quietPreviewLineLimit: 2, collapsedByDefault: true },
       ui,
     );
     component.updateResult({
@@ -169,7 +172,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'mastra_expert',
       { question: 'How does tool streaming work?' },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 2, collapsedByDefault: true },
+      { quietPreviewLineLimit: 2, collapsedByDefault: true },
       ui,
     );
 
@@ -201,7 +204,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'mastra_expert',
       { question: 'How does tool streaming work?' },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 2, collapsedByDefault: true },
+      { quietPreviewLineLimit: 2, collapsedByDefault: true },
       ui,
     );
 
@@ -220,7 +223,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'src/example.ts', offset: 10, limit: 5, showLineNumbers: true },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -246,7 +249,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'src/example.ts', offset: 1, limit: 1, showLineNumbers: true },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 8, collapsedByDefault: true },
+      { quietPreviewLineLimit: 8, collapsedByDefault: true },
       ui,
     );
     const longLine = `     1→const value = '${'x'.repeat(400)}';`;
@@ -269,7 +272,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: 'src/large.ts', content: hugeContent },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      { quietPreviewLineLimit: 4, collapsedByDefault: true },
       ui,
     );
 
@@ -286,7 +289,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: 'src/large.ts', content: `const stableStart = '${'x'.repeat(3_000)}';` },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      { quietPreviewLineLimit: 4, collapsedByDefault: true },
       ui,
     );
 
@@ -302,7 +305,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'string_replace_lsp',
       { path: 'src/large.ts', old_string: oldString },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      { quietPreviewLineLimit: 4, collapsedByDefault: true },
       ui,
     );
 
@@ -319,7 +322,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: 'src/example.ts', content: 'first\nsecond\nthird\nfourth' },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      { quietPreviewLineLimit: 4, collapsedByDefault: true },
       ui,
     );
 
@@ -341,7 +344,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'string_replace_lsp',
       { path: 'src/example.ts', old_string: 'old first\nold second\nold third\nold fourth' },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      { quietPreviewLineLimit: 4, collapsedByDefault: true },
       ui,
     );
 
@@ -371,7 +374,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'mastra_expert',
       { question: 'Explain previews' },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      { quietPreviewLineLimit: 4, collapsedByDefault: true },
       ui,
     );
 
@@ -389,7 +392,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: 'src/example.ts', content: '' },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      { quietPreviewLineLimit: 4, collapsedByDefault: true },
       ui,
     );
 
@@ -413,7 +416,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: 'src/example.ts', content: 'first\nsecond\nthird\nfourth' },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      { quietPreviewLineLimit: 4, collapsedByDefault: true },
       ui,
     );
 
@@ -433,7 +436,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'mastra_expert',
       { question: 'Explain previews' },
-      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      { quietPreviewLineLimit: 4, collapsedByDefault: true },
       ui,
     );
     component.setCompactToolHasFollowingContinuation(true);
@@ -458,7 +461,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: '/tmp/quiet-prefix-demo/project/src/tui/rendering/beta-widget.ts', offset: 1, limit: 3 },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -473,7 +476,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'mastracode/src/' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -488,7 +491,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'mastracode/s' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -503,7 +506,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'mastracode/src' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -518,7 +521,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'mastracode/src' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -533,7 +536,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'mastracode/src/tui/comments' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -548,7 +551,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'mastracode/src/tui/components/tool-execution-enhanced.ts' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -563,7 +566,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'mastracode/lib/' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -579,7 +582,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: '/tmp/commands/settings.ts', offset: 1, limit: 2 },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -594,7 +597,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'src/example.ts', offset: 10, limit: 5, showLineNumbers: true },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -609,7 +612,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'find_files',
       { path: 'src', pattern: '**/*.ts' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -632,7 +635,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'web_search',
       { query: 'muted cli-highlight theme' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -659,94 +662,11 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).not.toContain('sources');
   });
 
-  it('renders normal Anthropic web search results without encrypted content', () => {
-    const component = new ToolExecutionComponentEnhanced('web_search_20250305', { query: 'mastra docs' }, {}, ui);
-
-    component.updateResult({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify([
-            {
-              title: 'Mastra Docs',
-              url: 'https://mastra.ai/docs',
-              pageAge: '1 week ago',
-              encryptedContent: 'do-not-render-this-blob',
-            },
-            {
-              title: 'Mastra Reference',
-              url: 'https://mastra.ai/reference',
-              encryptedContent: 'another-hidden-blob',
-            },
-          ]),
-        },
-      ],
-      isError: false,
-    });
-
-    const output = stripAnsi(component.render(120).join('\n'));
-    expect(output).toContain('Mastra Docs (1 week ago)');
-    expect(output).toContain('https://mastra.ai/docs');
-    expect(output).toContain('Mastra Reference');
-    expect(output).toContain('• web_search "mastra docs"');
-    expect(output).not.toContain('encryptedContent');
-    expect(output).not.toContain('do-not-render-this-blob');
-  });
-
-  it('renders normal OpenAI web search sources and falls back to the result action query', () => {
-    const component = new ToolExecutionComponentEnhanced('web_search', {}, {}, ui);
-
-    component.updateResult({
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            action: { query: 'latest mastra release' },
-            sources: [
-              { title: 'Release notes', url: 'https://mastra.ai/changelog' },
-              { url: 'https://github.com/mastra-ai/mastra/releases' },
-            ],
-          }),
-        },
-      ],
-      isError: false,
-    });
-
-    const output = stripAnsi(component.render(120).join('\n'));
-    expect(output).toContain('Release notes');
-    expect(output).toContain('https://mastra.ai/changelog');
-    expect(output).toContain('https://github.com/mastra-ai/mastra/releases');
-    expect(output).toContain('• web_search "latest mastra release"');
-    expect(output).not.toContain('sources');
-    expect(output).not.toContain('action');
-  });
-
-  it('passes Tavily markdown through normal web search rendering without JSON double-formatting', () => {
-    const component = new ToolExecutionComponentEnhanced('web_search', { query: 'agent frameworks' }, {}, ui);
-
-    component.updateResult({
-      content: [
-        {
-          type: 'text',
-          text: 'Answer: Mastra is an agent framework.\n\n## Mastra\nhttps://mastra.ai\nBuild agents and workflows.',
-        },
-      ],
-      isError: false,
-    });
-
-    const output = stripAnsi(component.render(120).join('\n'));
-    expect(output).toContain('Answer: Mastra is an agent framework.');
-    expect(output).toContain('## Mastra');
-    expect(output).toContain('https://mastra.ai');
-    expect(output).toContain('• web_search "agent frameworks"');
-    expect(output).not.toContain('"Answer:');
-  });
-
   it('colors quiet compact tool labels by status', () => {
     const active = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'src/example.ts' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     expect(stripAnsi(active.render(100).join('\n'))).toContain('▐view▌src/example.ts');
@@ -754,7 +674,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const complete = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'src/example.ts' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     complete.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
@@ -765,7 +685,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'package.json' },
-      { quietDisplayMode: 'normal', collapsedByDefault: false },
+      { collapsedByDefault: true },
       ui,
     );
     const placeholder = 'Background task started. Task ID: task-1. The tool "view" is running in the background.';
@@ -782,18 +702,16 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
 
     component.updateResult({ content: [{ type: 'text', text: 'completed result' }], isError: false });
     output = stripAnsi(component.render(100).join('\n'));
-    expect(output).toContain('✓ background · task-1');
-    expect(output).toContain('completed result');
+    expect(output).toContain('▐view▌package.json▌ ✓ background · task-1');
 
     component.updateResult({ content: [{ type: 'text', text: 'failed result' }], isError: true });
     output = stripAnsi(component.render(100).join('\n'));
-    expect(output).toContain('✗ background · task-1');
-    expect(output).toContain('failed result');
+    expect(output).toContain('▐view▌package.json▌ ✗ background · task-1');
 
     const cancelled = new ToolExecutionComponentEnhanced(
       'find_files',
       { path: '.' },
-      { quietDisplayMode: 'normal', collapsedByDefault: false },
+      { collapsedByDefault: true },
       ui,
     );
     cancelled.setBackgroundTaskId('task-2');
@@ -812,7 +730,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'src/example.ts' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, compactToolModeColor: modeColor },
+      { collapsedByDefault: true, compactToolModeColor: modeColor },
       ui,
     );
 
@@ -832,7 +750,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'ask_user',
       {},
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -852,7 +770,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'string_replace_lsp',
       { path: 'src/example.ts', old_string: 'missing', new_string: 'replacement' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -870,7 +788,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'string_replace_lsp',
       { path: 'src/example.ts', old_string: 'old', new_string: 'new' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -893,7 +811,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'string_replace_lsp',
       { path: 'src/example.ts', old_string: 'old value' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -929,7 +847,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: '/tmp/example.ts', content: "import { x } from 'y';\nconsole.log(x);" },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -951,7 +869,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: '/tmp/example.ts', content: 'first line\nsecond line' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -970,7 +888,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: '/tmp/example.ts', content: 'if (ok) {\n  return value;\n}' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -982,7 +900,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: '/tmp/example.ts', content: 'first line\nsecond line' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      { collapsedByDefault: true, quietPreviewLineLimit: 0 },
       ui,
     );
 
@@ -1000,7 +918,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
         path: '/tmp/example.ts',
         content: 'const first = 1;\nconst second = 2;\nconst third = 3;\nconst fourth = 4;',
       },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 3 },
+      { collapsedByDefault: true, quietPreviewLineLimit: 3 },
       ui,
     );
 
@@ -1021,7 +939,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
         content:
           'const first = 1;\nconst second = 2;\nconst third = 3;\nconst fourth = 4;\nconst fifth = 5;\nconst sixth = 6;\nconst seventh = 7;\nconst eighth = 8;\nconst ninth = 9;',
       },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -1038,13 +956,13 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const first = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: '/tmp/a.ts', content: 'const first = 1;' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     const second = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: '/tmp/b.ts', content: 'const second = 2;\nconst third = 3;' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -1062,7 +980,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: '/tmp/a.ts', content: 'const first = 1;' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      { collapsedByDefault: true, quietPreviewLineLimit: 0 },
       ui,
     );
 
@@ -1077,7 +995,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: '/tmp/a.ts', content: 'const first = 1;' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      { collapsedByDefault: true, quietPreviewLineLimit: 0 },
       ui,
     );
 
@@ -1093,7 +1011,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: '/tmp/a.ts', content: 'const first = 1;\nconst second = 2;' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -1111,7 +1029,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'search_content',
       { pattern: 'foo' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -1145,7 +1063,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'skill',
       { name: 'testing-mastracode-tui' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
 
@@ -1162,7 +1080,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'pnpm test', description: 'Running the tests', cwd: '/tmp/w' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      { collapsedByDefault: true, quietPreviewLineLimit: 2 },
       ui,
     );
     component.updateResult(
@@ -1191,7 +1109,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       const component = new ToolExecutionComponentEnhanced(
         'execute_command',
         { command: 'pnpm test', description, cwd: '/tmp/w' },
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+        { collapsedByDefault: true, quietPreviewLineLimit: 2 },
         ui,
       );
       return component;
@@ -1225,7 +1143,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       new ToolExecutionComponentEnhanced(
         'execute_command',
         { command: 'pnpm test', description, cwd: '/tmp/w' },
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 3 },
+        { collapsedByDefault: true, quietPreviewLineLimit: 3 },
         ui,
       );
     const first = make('Building');
@@ -1253,7 +1171,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'seq 1 5' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      { collapsedByDefault: true, quietPreviewLineLimit: 0 },
       ui,
     );
     component.updateResult({ content: [{ type: 'text', text: '1\n2\n3\n4\n5' }], isError: false }, false);
@@ -1271,7 +1189,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 1 },
+      { collapsedByDefault: true, quietPreviewLineLimit: 1 },
       ui,
     );
     component.updateResult({ content: [{ type: 'text', text: 'out 1\nout 2\nout 3' }], isError: false }, false);
@@ -1296,7 +1214,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command, description: 'Drilling into the first of 15 failures', cwd: '/tmp/work' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      { collapsedByDefault: true, quietPreviewLineLimit: 0 },
       ui,
     );
     component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
@@ -1313,12 +1231,6 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(expanded).toContain("$ python3 - <<'EOF'");
     expect(expanded).toContain('open(p)');
     expect(expanded).not.toContain('Drilling into');
-
-    component.setExpanded(false);
-    component.setQuietModeDisplay('normal');
-    const normal = stripAnsi(component.render(80).join('\n'));
-    expect(normal).toContain("$ python3 - <<'EOF'");
-    expect(normal).not.toContain('Drilling into');
   });
 
   describe('grouped quiet shell rows (preview lines = None)', () => {
@@ -1326,7 +1238,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       const component = new ToolExecutionComponentEnhanced(
         'execute_command',
         args,
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: limit },
+        { collapsedByDefault: true, quietPreviewLineLimit: limit },
         ui,
       );
       if (result) {
@@ -1385,7 +1297,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       const view = new ToolExecutionComponentEnhanced(
         'view',
         { path: 'a.ts' },
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        { collapsedByDefault: true, quietPreviewLineLimit: 0 },
         ui,
       );
       expect(getSpacingBetweenComponents(root, view)).toBe(1);
@@ -1397,7 +1309,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
         new ToolExecutionComponentEnhanced(
           'execute_command',
           args,
-          { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0, projectRoot: '/work/repo' },
+          { collapsedByDefault: true, quietPreviewLineLimit: 0, projectRoot: '/work/repo' },
           ui,
         );
       expect(inRepo({ command: 'ls', description: 'Listing' }).getCompactToolGroupKey()).toBe('$ /work/repo');
@@ -1589,7 +1501,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       const component = new ToolExecutionComponentEnhanced(
         'execute_command',
         { command: 'git status', description: 'Checking for uncommitted changes' },
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+        { collapsedByDefault: true, quietPreviewLineLimit: 2 },
         ui,
       );
       component.updateResult({ content: [{ type: 'text', text: 'clean' }], isError: false }, false);
@@ -1610,7 +1522,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'git status', description: '  \n ' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      { collapsedByDefault: true, quietPreviewLineLimit: 2 },
       ui,
     );
     component.updateResult({ content: [{ type: 'text', text: 'clean' }], isError: false }, false);
@@ -1627,7 +1539,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      { collapsedByDefault: false },
       ui,
     );
     component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
@@ -1650,7 +1562,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
       const component = new ToolExecutionComponentEnhanced(
         'execute_command',
         { command },
-        { quietDisplayMode: 'normal', collapsedByDefault: true },
+        { collapsedByDefault: false },
         ui,
       );
       component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
@@ -1665,7 +1577,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'cd /Users/example/ws' },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      { collapsedByDefault: false },
       ui,
     );
     component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
@@ -1674,11 +1586,11 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
   });
 
   it('shows where the command runs when it has both a cwd arg and a cd prefix', () => {
-    const render = (command: string, quietDisplayMode: 'normal' | 'quiet') => {
+    const render = (command: string, display: 'expanded' | 'compact') => {
       const component = new ToolExecutionComponentEnhanced(
         'execute_command',
         { command, cwd: '/Users/example/real-cwd' },
-        { quietDisplayMode, collapsedByDefault: true, projectRoot: '/work/repo' },
+        { collapsedByDefault: display === 'compact', projectRoot: '/work/repo' },
         ui,
       );
       component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
@@ -1686,23 +1598,23 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     };
 
     // The shell starts in cwd, and an absolute cd moves it elsewhere.
-    const absolute = render('cd /Users/example/somewhere-else && npm run build', 'normal').visible;
+    const absolute = render('cd /Users/example/somewhere-else && npm run build', 'expanded').visible;
     expect(absolute).toContain('$ npm run build');
     expect(absolute).toContain('in /Users/example/somewhere-else');
     // A relative cd moves it within cwd.
-    expect(render('cd packages/core && npm run build', 'normal').visible).toContain(
+    expect(render('cd packages/core && npm run build', 'expanded').visible).toContain(
       'in /Users/example/real-cwd/packages/core',
     );
-    expect(render('cd packages/core && npm run build', 'quiet').component.getCompactToolGroupKey()).toBe(
+    expect(render('cd packages/core && npm run build', 'compact').component.getCompactToolGroupKey()).toBe(
       '$ /Users/example/real-cwd/packages/core',
     );
-    expect(render('npm run build', 'quiet').component.getCompactToolGroupKey()).toBe('$ /Users/example/real-cwd');
+    expect(render('npm run build', 'compact').component.getCompactToolGroupKey()).toBe('$ /Users/example/real-cwd');
 
     // A relative cd from a home cwd moves from the home directory, not from `~` as literal text.
     const fromHome = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'cd .. && ls', cwd: '~' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, projectRoot: '/work/repo' },
+      { collapsedByDefault: true, projectRoot: '/work/repo' },
       ui,
     );
     expect(fromHome.getCompactToolGroupKey()).toBe(`$ ${dirname(homedir())}`);
@@ -1714,7 +1626,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'ls /definitely-not-a-real-path', description: 'Listing a missing path' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      { collapsedByDefault: true, quietPreviewLineLimit: 2 },
       ui,
     );
     component.updateResult(
@@ -1768,7 +1680,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const described = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'ls', description: `Listing${hostile} files` },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 2 },
+      { collapsedByDefault: true, quietPreviewLineLimit: 2 },
       ui,
     );
     described.updateResult(
@@ -1787,7 +1699,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const bare = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: `ls${hostile} -la`, cwd: `/tmp/work${hostile}dir` },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+      { collapsedByDefault: true, quietPreviewLineLimit: 0 },
       ui,
     );
     bare.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
@@ -1800,7 +1712,7 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'git remote -v' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     const remoteLine = 'fork_truffle-dev    https://github.com/truffle-dev/mastra.git (push)'.repeat(4);
@@ -1832,7 +1744,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      { collapsedByDefault: false },
       ui,
     );
 
@@ -1851,7 +1763,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       {},
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     component.updateArgs({ path: 'src/example.ts', content: 'first line\nsecond line' });
@@ -1868,7 +1780,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'printf lines' },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      { collapsedByDefault: false },
       ui,
     );
 
@@ -1885,7 +1797,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      { collapsedByDefault: false },
       ui,
     );
 
@@ -1901,7 +1813,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: 'printf START-' },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      { collapsedByDefault: false },
       ui,
     );
 
@@ -1920,7 +1832,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      { collapsedByDefault: false },
       ui,
     );
 
@@ -1936,7 +1848,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      { collapsedByDefault: false },
       ui,
     );
 
@@ -1951,7 +1863,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      { collapsedByDefault: false },
       ui,
     );
 
@@ -1970,7 +1882,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      { collapsedByDefault: false },
       ui,
     );
 
@@ -1989,7 +1901,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      { collapsedByDefault: false },
       ui,
     );
 
@@ -2005,7 +1917,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      { collapsedByDefault: false },
       ui,
     );
 
@@ -2024,7 +1936,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command },
-      { quietDisplayMode: 'normal', collapsedByDefault: true },
+      { collapsedByDefault: false },
       ui,
     );
 
@@ -2037,7 +1949,7 @@ Test plan:
     const first = new ToolExecutionComponentEnhanced(
       'string_replace_lsp',
       { path: 'packages/app/src/example.ts', old_string: 'a', new_string: 'b' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     first.updateResult(
@@ -2048,7 +1960,7 @@ Test plan:
     const second = new ToolExecutionComponentEnhanced(
       'string_replace_lsp',
       { path: 'packages/app/src/example.ts', old_string: 'b', new_string: 'c' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     second.setCompactToolContinuation(true, 'packages/app/src/example.ts:4-4');
@@ -2078,7 +1990,7 @@ Test plan:
         path: '/tmp/project/apps/web/src/features/checkout/components/payment-method-selector.ts',
         new_string: 'const suffix = true;',
       },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     component.updateResult(
@@ -2107,7 +2019,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'string_replace_lsp',
       {},
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     component.setCompactToolContinuation(true);
@@ -2121,7 +2033,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'string_replace_lsp',
       {},
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     component.setCompactToolContinuation(
@@ -2138,7 +2050,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'string_replace_lsp',
       { path: 'mastracode/src/tui/handlers/tool.ts', new_string: 'reconcileToolBoundaries(ctx);' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     component.setCompactToolContinuation(true, 'mastracode/src/tui/handlers/tool.ts');
@@ -2152,7 +2064,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'string_replace_lsp',
       { path: 'src/example.ts', old_string: 'missing', new_string: 'replacement' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     component.updateResult({ content: [{ type: 'text', text: 'Error: missing replacement' }], isError: true }, false);
@@ -2170,7 +2082,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'browser_goto',
       { url: 'https://example.com' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     component.updateResult({ content: [{ type: 'text', text: 'navigated' }], isError: false }, false);
@@ -2186,7 +2098,7 @@ Test plan:
     const evaluate = new ToolExecutionComponentEnhanced(
       'browser_evaluate',
       { script: 'document.title' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     evaluate.updateResult(
@@ -2200,7 +2112,7 @@ Test plan:
     const snapshot = new ToolExecutionComponentEnhanced(
       'browser_snapshot',
       { interactiveOnly: false, maxDepth: 3 },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     snapshot.updateResult(
@@ -2220,7 +2132,7 @@ Test plan:
     const processOutput = new ToolExecutionComponentEnhanced(
       'get_process_output',
       { pid: '1234' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     processOutput.updateResult(
@@ -2231,7 +2143,7 @@ Test plan:
     const stat = new ToolExecutionComponentEnhanced(
       'file_stat',
       { path: 'src/example.ts' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     stat.updateResult(
@@ -2245,7 +2157,7 @@ Test plan:
     const generic = new ToolExecutionComponentEnhanced(
       'custom_tool',
       { file: 'src/example.ts', line: 1 },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     generic.updateResult({ content: [{ type: 'text', text: '{"action":"exit","count":2}' }], isError: false }, false);
@@ -2267,7 +2179,7 @@ Test plan:
     const component = new ToolExecutionComponentEnhanced(
       'write_file',
       { path: 'src/example.ts' },
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       ui,
     );
     component.setCompactToolContinuation(true, 'src/other.ts');
@@ -2294,7 +2206,7 @@ Test plan:
       const component = new ToolExecutionComponentEnhanced(
         toolName,
         args,
-        { quietDisplayMode: 'quiet', collapsedByDefault: true },
+        { collapsedByDefault: true },
         ui,
       );
       const visible = stripAnsi(component.render(120).join('\n'));

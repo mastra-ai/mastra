@@ -122,7 +122,6 @@ function createCallbacks(overrides: Partial<SettingsCallbacks> = {}): SettingsCa
     onYoloChange: vi.fn(),
     onThinkingLevelChange: vi.fn(),
     onEscapeAsCancelChange: vi.fn(),
-    onQuietModeChange: vi.fn(),
     onQuietModeMaxToolPreviewLinesChange: vi.fn(),
     onStorageBackendChange: vi.fn(),
     onExperimentalGithubSignalsChange: vi.fn(),

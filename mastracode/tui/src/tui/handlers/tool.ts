@@ -38,7 +38,6 @@ function createPostToolAssistantComponent(ctx: EventHandlerContext, toolCallId: 
   const messageId = state.streamingMessage?.id;
   if (!messageId) {
     const component = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-    component.setQuietModeDisplay('quiet');
     state.streamingComponent = component;
     ctx.addChildBeforeFollowUps(component);
     return component;
@@ -54,7 +53,6 @@ export function isTaskMutationTool(toolName: string): boolean {
 
 function applyQuietDisplayForNewTool(ctx: EventHandlerContext, component: ToolExecutionComponentEnhanced): void {
   component.setCompactToolModeColor(getCurrentModeColor(ctx));
-  component.setQuietModeDisplay('quiet');
   component.setQuietPreviewLineLimit(ctx.state.previewLines);
 }
 
@@ -475,7 +473,7 @@ export function handleToolStart(ctx: EventHandlerContext, toolCallId: string, to
       const component = new ToolExecutionComponentEnhanced(
         toolName,
         args,
-        { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+        { showImages: false, collapsedByDefault: !state.toolOutputExpanded, fullRender: true },
         state.ui,
       );
       component.setExpanded(state.toolOutputExpanded);
@@ -633,7 +631,7 @@ export function handleToolInputStart(ctx: EventHandlerContext, toolCallId: strin
     const component = new ToolExecutionComponentEnhanced(
       toolName,
       {},
-      { showImages: false, collapsedByDefault: !state.toolOutputExpanded },
+      { showImages: false, collapsedByDefault: !state.toolOutputExpanded, fullRender: true },
       state.ui,
     );
     component.setExpanded(state.toolOutputExpanded);

@@ -19,16 +19,16 @@ function createCtx() {
 }
 
 describe('OM event handlers', () => {
-  it('removes an existing buffering marker when quiet mode suppresses buffering start', () => {
+  it('starts a new buffering cycle without adding a chat marker', () => {
     const { ctx, state } = createCtx();
-    const marker = new Container();
-    state.chatContainer.addChild(marker);
-    state.activeBufferingMarker = marker as any;
+    state.activeActivationMarker = new Container() as any;
+    state.activeActivationData = {} as any;
 
-    handleOMBufferingStart(ctx, 'observation', 100);
+    handleOMBufferingStart(ctx);
 
-    expect(state.activeBufferingMarker).toBeUndefined();
-    expect(state.chatContainer.children).not.toContain(marker);
+    expect(state.activeActivationMarker).toBeUndefined();
+    expect(state.activeActivationData).toBeUndefined();
+    expect(state.chatContainer.children).toHaveLength(0);
     expect(state.ui.requestRender).toHaveBeenCalled();
   });
 

@@ -33,25 +33,8 @@ describe('TaskProgressComponent', () => {
     expect(component.render(120)).toEqual([]);
   });
 
-  it('keeps current task rendering when tasks are active', () => {
+  it('renders an item-aware summary when tasks are active', () => {
     const component = new TaskProgressComponent();
-
-    component.updateTasks([
-      { id: 'one', content: 'Do the thing', activeForm: 'Doing the thing', status: 'in_progress' },
-      { id: 'two', content: 'Do the next thing', activeForm: 'Doing the next thing', status: 'pending' },
-    ]);
-
-    const lines = component.render(120).map(line => stripAnsi(line));
-
-    expect(lines[0]).toBe('');
-    expect(lines[1]).toContain('Tasks [0/2 completed]');
-    expect(lines[2]).toContain('Doing the thing');
-    expect(lines[3]).toContain('Do the next thing');
-  });
-
-  it('renders an item-aware summary when quiet mode is active', () => {
-    const component = new TaskProgressComponent();
-    component.setQuietMode(true);
 
     component.updateTasks([
       { id: 'one', content: 'Inspect task progress', activeForm: 'Inspecting task progress', status: 'completed' },
@@ -75,7 +58,6 @@ describe('TaskProgressComponent', () => {
 
   it('wraps quiet summaries between tasks without wrapping individual task items', () => {
     const component = new TaskProgressComponent();
-    component.setQuietMode(true);
 
     component.updateTasks([
       { id: 'one', content: 'Inspect task progress', activeForm: 'Inspecting task progress', status: 'completed' },
@@ -103,7 +85,6 @@ describe('TaskProgressComponent', () => {
 
   it('wraps quiet summaries using terminal display width for wide characters', () => {
     const component = new TaskProgressComponent();
-    component.setQuietMode(true);
 
     component.updateTasks([
       { id: 'one', content: '界'.repeat(35), activeForm: 'Doing wide work', status: 'pending' },
@@ -117,27 +98,8 @@ describe('TaskProgressComponent', () => {
     expect(lines[2]).toBe('       ○ Done');
   });
 
-  it('updates between expanded and quiet task rendering', () => {
-    const component = new TaskProgressComponent();
-
-    component.updateTasks([
-      { id: 'one', content: 'Do the thing', activeForm: 'Doing the thing', status: 'in_progress' },
-      { id: 'two', content: 'Do the next thing', activeForm: 'Doing the next thing', status: 'pending' },
-    ]);
-
-    expect(component.render(120).map(line => stripAnsi(line))).toHaveLength(4);
-
-    component.setQuietMode(true);
-    const quietLines = component.render(120).map(line => stripAnsi(line));
-
-    expect(quietLines).toHaveLength(2);
-    expect(quietLines[1]).toContain('Doing the thing');
-    expect(quietLines[1]).toContain('Do the next thing');
-  });
-
   it('renders nothing again after all tasks complete', () => {
     const component = new TaskProgressComponent();
-    component.setQuietMode(true);
 
     component.updateTasks([{ id: 'one', content: 'Done', activeForm: 'Doing', status: 'completed' }]);
 

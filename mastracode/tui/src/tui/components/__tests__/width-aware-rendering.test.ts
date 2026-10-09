@@ -178,7 +178,6 @@ describe('width-aware custom component rendering', () => {
       { id: 'active', content: source, activeForm: source, status: 'in_progress' },
       { id: 'pending', content: source, activeForm: source, status: 'pending' },
     ]);
-    component.setQuietMode(true);
     expectReflow(component);
     expect(component.getTasks().map(task => task.status)).toEqual(['in_progress', 'pending']);
   });
@@ -187,7 +186,7 @@ describe('width-aware custom component rendering', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: source },
-      { quietDisplayMode: 'quiet', collapsedByDefault: false },
+      { collapsedByDefault: false },
       ui,
     );
     component.appendStreamingOutput(source);

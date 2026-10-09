@@ -33,7 +33,6 @@ export function formatTaskProgressLine(task: TaskItemInput, indent = '    '): st
 
 export class TaskProgressComponent extends WidthAwareContainer {
   private tasks: TaskItemInput[] = [];
-  private quietMode = false;
 
   constructor() {
     super();
@@ -45,11 +44,6 @@ export class TaskProgressComponent extends WidthAwareContainer {
    */
   updateTasks(tasks: TaskItemInput[]): void {
     this.tasks = tasks;
-    this.rebuild();
-  }
-
-  setQuietMode(enabled: boolean): void {
-    this.quietMode = enabled;
     this.rebuild();
   }
 
@@ -72,22 +66,8 @@ export class TaskProgressComponent extends WidthAwareContainer {
 
     this.addChild(new Spacer(1));
 
-    if (this.quietMode) {
-      for (const line of this.formatQuietTaskLines(completed, total, width)) {
-        this.addChild(new Text(line, 0, 0));
-      }
-      return;
-    }
-
-    // Progress header
-    const headerText =
-      '  ' + theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${completed}/${total} completed]`);
-
-    this.addChild(new Text(headerText, 0, 0));
-
-    // Render each task
-    for (const task of this.tasks) {
-      this.addChild(new Text(formatTaskProgressLine(task), 0, 0));
+    for (const line of this.formatQuietTaskLines(completed, total, width)) {
+      this.addChild(new Text(line, 0, 0));
     }
   }
 

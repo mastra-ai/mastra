@@ -464,13 +464,6 @@ describe('addUserMessage', () => {
     expect(summaryLines[1]).toContain('github: 2, goal-judge: 1');
     expect(summaryLines.join('\n')).not.toContain('notification_inbox');
 
-    // Turning quiet mode off restores the full rendering.
-    notification.setQuietModeDisplay('normal');
-    summary.setQuietModeDisplay('normal');
-    const full = stripAnsi(notification.render(100).join('\n'));
-    expect(full).toContain('high · ci-status · delivered');
-    expect(full).toContain('detail line 6');
-    expect(stripAnsi(summary.render(100).join('\n'))).toContain('notification_inbox');
   });
 
   it('keeps the quiet notification ellipsis inside the terminal width', () => {

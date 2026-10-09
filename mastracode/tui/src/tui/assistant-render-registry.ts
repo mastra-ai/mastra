@@ -309,11 +309,9 @@ export function ensureAssistantRenderSegment(
   precedingToolCallId?: string,
 ): AssistantMessageComponent {
   const key = getAssistantSegmentKey(messageId, precedingToolCallId);
-  const { segment, created } = state.assistantRenderRegistry.start(messageId, key, () => {
-    const component = new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme());
-    component.setQuietModeDisplay('quiet');
-    return component;
-  });
+  const { segment, created } = state.assistantRenderRegistry.start(messageId, key, () =>
+    new AssistantMessageComponent(undefined, state.hideThinkingBlock, getMarkdownTheme()),
+  );
   state.streamingComponent = segment.component;
   if (created) addChild(segment.component);
   return segment.component;

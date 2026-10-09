@@ -231,7 +231,6 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: MastraDBM
       );
       component.setExpanded(state.toolOutputExpanded);
       component.setCompactToolModeColor(getCurrentModeColor(ctx));
-      component.setQuietModeDisplay('quiet');
       component.setQuietPreviewLineLimit(state.previewLines);
       ctx.addChildBeforeFollowUps(component);
       state.pendingTools.set(tool.toolCallId, component);

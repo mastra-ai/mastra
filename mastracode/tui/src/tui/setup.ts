@@ -318,7 +318,6 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.ui.addChild(state.chatContainer);
   // Task progress (between chat and editor, visible only when tasks exist)
   state.taskProgress = new TaskProgressComponent();
-  state.taskProgress.setQuietMode(true);
   state.ui.addChild(state.taskProgress);
   if (state.options.backgroundToolsEnabled) {
     state.ui.addChild(state.globalBackgroundNoticeContainer);

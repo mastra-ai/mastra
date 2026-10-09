@@ -616,7 +616,6 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       kind: notification.kind,
       priority: notification.priority,
       status: notification.status,
-      quietDisplayMode: 'quiet',
       quietPreviewLineLimit: state.previewLines,
       backgroundCompletion,
     });
@@ -638,7 +637,6 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       message: summary.message,
       pending: summary.pending,
       bySource: summary.bySource,
-      quietDisplayMode: 'quiet',
     });
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
@@ -680,7 +678,6 @@ export function addUserMessage(state: TUIState, message: MastraDBMessage, option
     const component = new ScheduleFireComponent({
       prompt: exactDisplayText,
       attributes: signalAttributes,
-      quietDisplayMode: 'quiet',
       quietPreviewLineLimit: state.previewLines,
     });
     component.setExpanded(state.toolOutputExpanded);
@@ -994,7 +991,6 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
         if (accumulatedParts.length === 0 && !(isFinal && hasTerminalMetadata(message))) return;
         const textMessage = buildAssistantSlice(message, accumulatedParts, { includeTerminalMetadata: isFinal });
         const textComponent = new AssistantMessageComponent(textMessage, state.hideThinkingBlock, getMarkdownTheme());
-        textComponent.setQuietModeDisplay('quiet');
         state.chatContainer.addChild(textComponent);
         accumulatedParts = [];
       };
@@ -1256,7 +1252,6 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
 
           if (!replacedWithInline) {
             toolComponent.setCompactToolModeColor(getCurrentModeColor(state));
-            toolComponent.setQuietModeDisplay('quiet');
             toolComponent.setQuietPreviewLineLimit(state.previewLines);
             state.chatContainer.addChild(toolComponent);
             state.allToolComponents.push(toolComponent);

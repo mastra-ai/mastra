@@ -132,7 +132,6 @@ describe('pruneChatContainer', () => {
       'lastSubmitPlanComponent',
       'omProgressComponent',
       'activeOMMarker',
-      'activeBufferingMarker',
       'activeActivationMarker',
       'activeActivationProviderChangeMarker',
       'taskProgress',

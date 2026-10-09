@@ -29,10 +29,7 @@ import {
   handleOMReflectionEnd,
   handleOMFailed,
   handleOMBufferingStart,
-  handleOMBufferingEnd,
-  handleOMBufferingFailed,
   handleOMActivation,
-  handleOMThreadTitleUpdated,
   handleAskQuestion,
   handleSandboxAccessRequest,
   handlePlanApproval,
@@ -528,15 +525,7 @@ export async function dispatchEvent(
       break;
 
     case 'om_buffering_start':
-      handleOMBufferingStart(ectx, event.operationType, event.tokensToBuffer);
-      break;
-
-    case 'om_buffering_end':
-      handleOMBufferingEnd(ectx, event.operationType, event.tokensBuffered, event.bufferedTokens, event.observations);
-      break;
-
-    case 'om_buffering_failed':
-      handleOMBufferingFailed(ectx, event.operationType, event.error);
+      handleOMBufferingStart(ectx);
       break;
 
     case 'om_activation': {
@@ -571,7 +560,6 @@ export async function dispatchEvent(
     case 'om_thread_title_updated':
       if (event.threadId !== state.session.thread.getId()) break;
       setCurrentThreadTitle(state, event.newTitle);
-      handleOMThreadTitleUpdated(ectx, event.newTitle, event.oldTitle);
       ectx.updateStatusLine();
       break;
 

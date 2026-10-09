@@ -27,7 +27,7 @@ function quietTool(name = 'view'): ToolExecutionComponentEnhanced {
   const component = new ToolExecutionComponentEnhanced(
     name,
     { path: 'src/example.ts', command: 'echo hi' },
-    { quietDisplayMode: 'quiet' },
+    {},
     ui,
   );
   component.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
@@ -114,14 +114,14 @@ describe('ChatBoundarySpacer', () => {
     const first = new ToolExecutionComponentEnhanced(
       'view',
       { path: 'src/example.ts' },
-      { quietDisplayMode: 'quiet' },
+      {},
       ui,
     );
     const second = completeTool(
       new ToolExecutionComponentEnhanced(
         'view',
         { path: 'src/example.ts', offset: 1, limit: 1 },
-        { quietDisplayMode: 'quiet' },
+        {},
         ui,
       ),
     );
@@ -140,7 +140,7 @@ describe('ChatBoundarySpacer', () => {
         new ToolExecutionComponentEnhanced(
           'view',
           { path: 'mastracode/src/tui/components/tool-execution-enhanced.ts', offset: 301, limit: 84 },
-          { quietDisplayMode: 'quiet' },
+          {},
           ui,
         ),
       ),
@@ -148,7 +148,7 @@ describe('ChatBoundarySpacer', () => {
         new ToolExecutionComponentEnhanced(
           'view',
           { path: 'mastracode/src/tui/chat-boundary-reconciliation.ts', offset: 1, limit: 45 },
-          { quietDisplayMode: 'quiet' },
+          {},
           ui,
         ),
       ),
@@ -156,7 +156,7 @@ describe('ChatBoundarySpacer', () => {
         new ToolExecutionComponentEnhanced(
           'view',
           { path: 'mastracode/src/tui/chat-boundary-reconciliation.ts', offset: 50, limit: 10 },
-          { quietDisplayMode: 'quiet' },
+          {},
           ui,
         ),
       ),
@@ -220,14 +220,13 @@ describe('ChatBoundarySpacer', () => {
         } as never,
         true,
       );
-      component.setQuietModeDisplay('quiet');
       return component;
     };
     const shell = (description: string) => {
       const component = new ToolExecutionComponentEnhanced(
         'execute_command',
         { command: 'git log', description, cwd: '/tmp/work' },
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        { collapsedByDefault: true, quietPreviewLineLimit: 0 },
         ui,
       );
       component.updateResult({ content: [{ type: 'text', text: 'out' }], isError: false }, false);
@@ -258,7 +257,7 @@ describe('ChatBoundarySpacer', () => {
       const component = new ToolExecutionComponentEnhanced(
         'execute_command',
         { command: 'x', description, cwd: '/tmp/w' },
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        { collapsedByDefault: true, quietPreviewLineLimit: 0 },
         ui,
       );
       component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
@@ -294,14 +293,13 @@ describe('ChatBoundarySpacer', () => {
         } as never,
         true,
       );
-      component.setQuietModeDisplay('quiet');
       return component;
     };
     const shell = (description: string) => {
       const component = new ToolExecutionComponentEnhanced(
         'execute_command',
         { command: 'x', description, cwd: '/tmp/w' },
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        { collapsedByDefault: true, quietPreviewLineLimit: 0 },
         ui,
       );
       component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
@@ -328,7 +326,7 @@ describe('ChatBoundarySpacer', () => {
       new ToolExecutionComponentEnhanced(
         'execute_command',
         args,
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        { collapsedByDefault: true, quietPreviewLineLimit: 0 },
         ui,
       );
     const done = make({ command: 'cd /tmp && gh api graphql', description: 'Reading PR reviews' });
@@ -383,7 +381,7 @@ describe('ChatBoundarySpacer', () => {
       new ToolExecutionComponentEnhanced(
         'execute_command',
         args,
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        { collapsedByDefault: true, quietPreviewLineLimit: 0 },
         ui,
       );
     const root = make({ command: 'sed -n 1,5p file.ts', description: 'Reading the processor block' });

@@ -52,12 +52,7 @@ vi.mock('../components/surface.js', () => ({
 }));
 
 vi.mock('../components/task-progress.js', () => ({
-  TaskProgressComponent: class {
-    quietMode: boolean | undefined;
-    setQuietMode(value: boolean) {
-      this.quietMode = value;
-    }
-  },
+  TaskProgressComponent: class {},
 }));
 
 vi.mock('../components/idle-counter.js', () => ({
@@ -151,7 +146,6 @@ describe('buildLayout startup header', () => {
     expect(uiChildren[7]).toBe(state.globalBackgroundNoticeContainer);
     expect(uiChildren[8]).toBe(state.editorContainer);
     expect(uiChildren[9]).toBe(state.footer);
-    expect(state.taskProgress.quietMode).toBe(true);
     expect(editorChildren).toEqual([state.idleCounter, editor]);
     expect(footerChildren).toEqual([state.statusLine, state.memoryStatusLine]);
     expect(updateStatusLine).toHaveBeenCalledWith(state);

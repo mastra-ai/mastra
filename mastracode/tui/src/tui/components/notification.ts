@@ -3,7 +3,6 @@ import chalk from 'chalk';
 import { BOX_INDENT, mastra, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { card } from './surface.js';
-import type { QuietToolDisplayMode } from './tool-execution-interface.js';
 import { WidthAwareContainer } from './width-aware-container.js';
 
 export interface NotificationOptions {
@@ -12,7 +11,6 @@ export interface NotificationOptions {
   kind?: string;
   priority?: string;
   status?: string;
-  quietDisplayMode?: QuietToolDisplayMode;
   quietPreviewLineLimit?: number;
   backgroundCompletion?: {
     taskId: string;
@@ -85,21 +83,13 @@ function wrapText(value: string, maxWidth: number): string[] {
 
 export class NotificationComponent extends WidthAwareContainer {
   private readonly options: NotificationOptions;
-  private quietDisplayMode: QuietToolDisplayMode;
   private quietPreviewLineLimit: number;
   private expanded = false;
 
   constructor(options: NotificationOptions) {
     super();
     this.options = options;
-    this.quietDisplayMode = options.quietDisplayMode ?? 'normal';
     this.quietPreviewLineLimit = normalizeQuietPreviewLineLimit(options.quietPreviewLineLimit);
-  }
-
-  setQuietModeDisplay(mode: QuietToolDisplayMode): void {
-    if (this.quietDisplayMode === mode) return;
-    this.quietDisplayMode = mode;
-    this.rebuild();
   }
 
   setQuietPreviewLineLimit(limit: number): void {
@@ -121,7 +111,7 @@ export class NotificationComponent extends WidthAwareContainer {
     // Expanding (ctrl+e) is a request to see everything, so it overrides quiet
     // trimming. Collapsed background completions are already a single line —
     // that is their quiet form — and their detail rows only exist once expanded.
-    const quiet = this.quietDisplayMode === 'quiet' && !this.expanded;
+    const quiet = !this.expanded;
     if (options.backgroundCompletion && !this.expanded) {
       const completion = options.backgroundCompletion;
       const failed = options.status === 'failed';

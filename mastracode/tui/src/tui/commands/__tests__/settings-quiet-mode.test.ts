@@ -47,21 +47,19 @@ function createSettings() {
 }
 
 function createCtx() {
-  const tool = { setQuietModeDisplay: vi.fn(), setQuietPreviewLineLimit: vi.fn(), setCompactToolModeColor: vi.fn() };
+  const tool = { setQuietPreviewLineLimit: vi.fn(), setCompactToolModeColor: vi.fn() };
   const notification = new NotificationComponent({
     message: ['line one', 'line two', 'line three', 'line four'].join('\n'),
     source: 'github',
     priority: 'high',
     kind: 'ci-status',
     status: 'delivered',
-    quietDisplayMode: 'quiet',
     quietPreviewLineLimit: 2,
   });
   const summary = new NotificationSummaryComponent({
     message: '2 pending notifications',
     pending: 2,
     bySource: { github: 2 },
-    quietDisplayMode: 'quiet',
   });
   const ctx = {
     state: {
@@ -126,7 +124,6 @@ describe('/settings preview lines callbacks', () => {
     );
     expect(ctx.state.previewLines).toBe(3);
     expect(tool.setQuietPreviewLineLimit).toHaveBeenLastCalledWith(3);
-    expect(tool.setQuietModeDisplay).not.toHaveBeenCalled();
     const rendered = stripAnsi(notification.render(80).join('\n'));
     expect(rendered).toContain('line three…');
     expect(rendered).not.toContain('line four');

@@ -346,7 +346,6 @@ export interface TUIState {
   // ── Observational Memory ──────────────────────────────────────────────
   omProgressComponent?: OMProgressComponent;
   activeOMMarker?: OMMarkerComponent;
-  activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
   activeActivationData?: OMMarkerData;
   activeActivationProviderChangeMarker?: OMMarkerComponent;

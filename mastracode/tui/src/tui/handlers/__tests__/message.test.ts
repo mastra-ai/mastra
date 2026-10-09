@@ -716,7 +716,7 @@ describe('handleMessageUpdate assistant streaming', () => {
     const tool = new ToolExecutionComponentEnhanced(
       'write_file',
       {},
-      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      { collapsedByDefault: true },
       state.ui,
     );
     tool.updateArgs({ path: 'src/example.ts', content: 'first line\nsecond line' });
