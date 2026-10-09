@@ -47,4 +47,37 @@ describe('FactoryProjectsStorage', () => {
     expect(await seed.projects.delete({ orgId: 'org-1', id: first.id })).toMatchObject({ id: first.id });
     expect(await seed.projects.get({ orgId: 'org-1', id: first.id })).toBeNull();
   });
+
+  it('round-trips every environment field and clears them with null', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
+    expect(project).toMatchObject({
+      sandboxWorkingDirectory: null,
+      sandboxSettings: null,
+      workspaceSetupCommand: null,
+      activeTemplateId: null,
+      activeTemplateHeads: null,
+    });
+
+    const environment = {
+      sandboxWorkingDirectory: '/home/user/workspace',
+      sandboxSettings: { cpuCount: 8, memoryMb: 16384 },
+      workspaceSetupCommand: 'touch .ready',
+      activeTemplateId: 'tpl-1',
+      activeTemplateHeads: { 'mastra-ai/mastra': 'abc123' },
+    };
+    expect(await seed.projects.update({ orgId: 'org-1', id: project.id, input: environment })).toMatchObject(
+      environment,
+    );
+    expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toMatchObject(environment);
+
+    const cleared = {
+      sandboxWorkingDirectory: null,
+      sandboxSettings: null,
+      workspaceSetupCommand: null,
+      activeTemplateId: null,
+      activeTemplateHeads: null,
+    };
+    expect(await seed.projects.update({ orgId: 'org-1', id: project.id, input: cleared })).toMatchObject(cleared);
+  });
 });

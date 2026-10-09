@@ -1,9 +1,16 @@
+import type { StandardSchemaWithJSON } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import { describeFactorySandbox, normalizeFactorySandboxSettings } from '@mastra/core/workspace';
+import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type {
+  FactoryProject,
+  FactoryProjectsStorage,
+  UpdateFactoryProjectInput,
+} from '../storage/domains/projects/base.js';
 import type {
   ProjectRepository,
   SourceControlRepository,
@@ -182,14 +189,66 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'listRunBindings' | 'get'>;
   /** Controller used to reach the thread store behind each active binding. */
   controller?: ModelApplyController;
+  /** The factory's normalized sandbox; describes and validates the environment settings. */
+  sandbox?: FactorySandbox;
 }
+
+/** What the environment reports when the factory has no sandbox configured. */
+const NO_SANDBOX: FactorySandboxDescription = {
+  provider: 'none',
+  settingsSchema: { type: 'object', properties: {}, additionalProperties: false },
+  capabilities: { template: false, builds: { available: false, history: false } },
+};
 
 export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   readonly #versionControlIntegrationIds: Set<string>;
+  #sandboxDescription: FactorySandboxDescription | undefined;
+  #settingsSchema: StandardSchemaWithJSON | undefined;
 
   constructor(deps: ProjectRoutesDeps) {
     super(deps);
     this.#versionControlIntegrationIds = new Set(deps.versionControlIntegrationIds ?? []);
+  }
+
+  #describeSandbox(): FactorySandboxDescription {
+    if (!this.deps.sandbox) return NO_SANDBOX;
+    this.#sandboxDescription ??= describeFactorySandbox(this.deps.sandbox);
+    return this.#sandboxDescription;
+  }
+
+  /**
+   * Merge a settings patch onto the stored document (null removes a key) and
+   * validate the result through the sandbox's schema. Returns the issues when
+   * the merged document is rejected.
+   *
+   * A stored key the current schema does not declare is left over from another
+   * provider or an older schema. When the merged document fails validation, the
+   * merge retries without those keys so one stale value cannot lock every later
+   * update; keys the patch itself sets are never pruned.
+   */
+  async #mergeSettings(
+    stored: Record<string, unknown>,
+    patch: Record<string, unknown | null>,
+  ): Promise<
+    { merged: Record<string, unknown> | null } | { issues: ReadonlyArray<{ message: string; path?: unknown }> }
+  > {
+    const merged: Record<string, unknown> = { ...stored };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === null) delete merged[key];
+      else merged[key] = value;
+    }
+    this.#settingsSchema ??= normalizeFactorySandboxSettings(this.deps.sandbox!);
+    const result = await this.#settingsSchema['~standard'].validate(merged);
+    if (!result.issues) return { merged: Object.keys(merged).length > 0 ? merged : null };
+
+    const declared = this.#describeSandbox().settingsSchema.properties ?? {};
+    const pruned = Object.fromEntries(
+      Object.entries(merged).filter(([key]) => key in patch || Object.hasOwn(declared, key)),
+    );
+    if (Object.keys(pruned).length === Object.keys(merged).length) return { issues: result.issues };
+    const retried = await this.#settingsSchema['~standard'].validate(pruned);
+    if (retried.issues) return { issues: result.issues };
+    return { merged: Object.keys(pruned).length > 0 ? pruned : null };
   }
 
   async #projects(): Promise<FactoryProjectsStorage> {
@@ -232,6 +291,56 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
   async #repositoryPayload(handle: SourceControlStorageHandle, orgId: string, projectRepository: ProjectRepository) {
     const repository = await handle.repositories.get({ orgId, id: projectRepository.repositoryId });
     return { ...projectRepository, repository };
+  }
+
+  /** Every link of the project across every handle, with the handle that owns it, in position order. */
+  async #environmentLinks(orgId: string, projectId: string) {
+    const links: Array<{ handle: SourceControlStorageHandle; projectRepository: ProjectRepository }> = [];
+    for (const handle of await this.#handles()) {
+      for (const projectRepository of await handle.projectRepositories.listByProject({
+        orgId,
+        factoryProjectId: projectId,
+      })) {
+        links.push({ handle, projectRepository });
+      }
+    }
+    return links.sort(
+      (a, b) =>
+        a.projectRepository.position - b.projectRepository.position ||
+        a.projectRepository.createdAt.getTime() - b.projectRepository.createdAt.getTime(),
+    );
+  }
+
+  async #environmentPayload(orgId: string, project: FactoryProject) {
+    const repositories = [];
+    for (const { handle, projectRepository } of await this.#environmentLinks(orgId, project.id)) {
+      const repository = await handle.repositories.get({ orgId, id: projectRepository.repositoryId });
+      repositories.push({
+        projectRepositoryId: projectRepository.id,
+        connectionId: projectRepository.connectionId,
+        repositoryId: projectRepository.repositoryId,
+        slug: repository?.slug ?? null,
+        defaultBranch: repository?.defaultBranch ?? null,
+        position: projectRepository.position,
+        inEnvironment: projectRepository.inEnvironment,
+        setupCommand: projectRepository.setupCommand,
+        teardownCommand: projectRepository.teardownCommand,
+        lastBuildStatus: projectRepository.lastBuildStatus,
+        lastBuildError: projectRepository.lastBuildError,
+        lastBuiltAt: projectRepository.lastBuiltAt,
+      });
+    }
+    return {
+      environment: {
+        sandbox: this.#describeSandbox(),
+        settings: project.sandboxSettings ?? {},
+        sandboxWorkingDirectory: project.sandboxWorkingDirectory,
+        workspaceSetupCommand: project.workspaceSetupCommand,
+        activeTemplateId: project.activeTemplateId,
+        activeTemplateHeads: project.activeTemplateHeads,
+        repositories,
+      },
+    };
   }
 
   async #retireProjectRepositorySessions(
@@ -580,6 +689,88 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             { projectRepository: await this.#repositoryPayload(found.handle, tenant.orgId, projectRepository) },
             201,
           );
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentGet.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentGet.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          return context.json(await this.#environmentPayload(tenant.orgId, project));
+        },
+      }),
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.path, {
+        method: FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.method,
+        requiresAuth: false,
+        handler: async routeContext => {
+          const context = loose(routeContext);
+          const tenant = await this.#resolveTenant(context);
+          if ('response' in tenant) return tenant.response;
+          const projectId = context.req.param('id');
+          if (!projectId || !UUID_RE.test(projectId)) return context.json({ error: 'Project not found' }, 404);
+          const project = await this.#project(tenant.orgId, projectId);
+          if (!project) return context.json({ error: 'Project not found' }, 404);
+          const parsed = FACTORY_ROUTE_CONTRACTS.projectEnvironmentUpdate.bodySchema.safeParse(await readJson(context));
+          if (!parsed.success) return context.json({ error: 'invalid_environment' }, 400);
+          const { repositories: repositoryPatches, settings: settingsPatch, ...projectInput } = parsed.data;
+          const input: UpdateFactoryProjectInput = projectInput;
+          if (settingsPatch !== undefined) {
+            if (!this.deps.sandbox) return context.json({ error: 'no_sandbox' }, 400);
+            const result = await this.#mergeSettings(project.sandboxSettings ?? {}, settingsPatch);
+            if ('issues' in result) {
+              return context.json(
+                {
+                  error: 'invalid_environment',
+                  issues: result.issues.map(issue => ({
+                    message: issue.message,
+                    path: Array.isArray(issue.path)
+                      ? issue.path.map(segment =>
+                          typeof segment === 'object' && segment !== null && 'key' in segment ? segment.key : segment,
+                        )
+                      : [],
+                  })),
+                },
+                400,
+              );
+            }
+            input.sandboxSettings = result.merged;
+          }
+
+          // Resolve every listed link before writing anything, so a foreign id leaves the project untouched.
+          const links = new Map(
+            (await this.#environmentLinks(tenant.orgId, projectId)).map(link => [link.projectRepository.id, link]),
+          );
+          for (const patch of repositoryPatches ?? []) {
+            if (!links.has(patch.projectRepositoryId))
+              return context.json({ error: 'Project repository not found' }, 404);
+          }
+          // A reorder must cover every link, or two links would share a position.
+          if (
+            repositoryPatches?.some(patch => patch.position !== undefined) &&
+            repositoryPatches.length !== links.size
+          ) {
+            return context.json({ error: 'invalid_environment' }, 400);
+          }
+
+          let updated = project;
+          if (Object.keys(input).length > 0) {
+            updated = (await (await this.#projects()).update({ orgId: tenant.orgId, id: projectId, input })) ?? project;
+          }
+          for (const { projectRepositoryId, ...input } of repositoryPatches ?? []) {
+            if (Object.keys(input).length === 0) continue;
+            await links.get(projectRepositoryId)!.handle.projectRepositories.update({
+              orgId: tenant.orgId,
+              id: projectRepositoryId,
+              input,
+            });
+          }
+          return context.json(await this.#environmentPayload(tenant.orgId, updated));
         },
       }),
       registerApiRoute('/web/factory/projects/:id/repositories/:projectRepositoryId', {

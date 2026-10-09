@@ -61,6 +61,88 @@ export const updateProjectBodySchema = z
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' });
 
+const environmentRepositorySchema = z.object({
+  projectRepositoryId: z.string(),
+  connectionId: z.string(),
+  repositoryId: z.string(),
+  // Null when the repository row behind the link is missing.
+  slug: z.string().nullable(),
+  defaultBranch: z.string().nullable(),
+  position: z.number().int(),
+  inEnvironment: z.boolean(),
+  setupCommand: z.string().nullable(),
+  teardownCommand: z.string().nullable(),
+  lastBuildStatus: z.enum(['unbuilt', 'configured', 'failed']),
+  lastBuildError: z.string().nullable(),
+  lastBuiltAt: z.string().nullable(),
+});
+
+/** The configured FactorySandbox as factory describes it: provider id, JSON Schema of its settings, capabilities. */
+export const environmentSandboxSchema = z.object({
+  provider: z.string(),
+  settingsSchema: z.record(z.string(), z.unknown()),
+  capabilities: z.object({
+    template: z.boolean(),
+    builds: z.object({ available: z.boolean(), history: z.boolean() }),
+  }),
+});
+
+export const projectEnvironmentResponseSchema = z.object({
+  environment: z.object({
+    sandbox: environmentSandboxSchema,
+    /** The stored settings document; only keys the user set. */
+    settings: z.record(z.string(), z.unknown()),
+    sandboxWorkingDirectory: z.string().nullable(),
+    workspaceSetupCommand: z.string().nullable(),
+    activeTemplateId: z.string().nullable(),
+    activeTemplateHeads: z.record(z.string(), z.string()).nullable(),
+    repositories: z.array(environmentRepositorySchema),
+  }),
+});
+
+const environmentRepositoryPatchSchema = z.object({
+  projectRepositoryId: uuidSchema,
+  position: z.number().int().min(1).optional(),
+  inEnvironment: z.boolean().optional(),
+  setupCommand: nullableTrimmed(2_000).optional(),
+  teardownCommand: nullableTrimmed(2_000).optional(),
+});
+
+export const updateProjectEnvironmentBodySchema = z
+  .object({
+    sandboxWorkingDirectory: nullableTrimmed(1_000)
+      .refine(value => value === null || value.startsWith('/'), {
+        message: 'sandboxWorkingDirectory must be absolute',
+      })
+      .optional(),
+    /** Partial settings merged onto the stored document; null removes a key. Validated by the FactorySandbox. */
+    settings: z.record(z.string(), z.unknown().nullable()).optional(),
+    workspaceSetupCommand: nullableTrimmed(2_000).optional(),
+    repositories: z
+      .array(environmentRepositoryPatchSchema)
+      .max(100)
+      .superRefine((entries, ctx) => {
+        const ids = new Set(entries.map(entry => entry.projectRepositoryId));
+        if (ids.size !== entries.length) {
+          ctx.addIssue({ code: 'custom', message: 'Each repository may be listed once' });
+        }
+        const positions = entries.flatMap(entry => (entry.position === undefined ? [] : [entry.position]));
+        if (positions.length === 0) return;
+        const expected = Array.from({ length: entries.length }, (_, index) => index + 1);
+        if (
+          positions.length !== entries.length ||
+          [...positions].sort((a, b) => a - b).some((p, i) => p !== expected[i])
+        ) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'Positions must be a permutation of 1..n over the listed repositories',
+          });
+        }
+      })
+      .optional(),
+  })
+  .refine(input => Object.keys(input).length > 0, { message: 'At least one environment field is required' });
+
 const stagesSchema = z
   .array(
     z
@@ -349,6 +431,21 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     bodySchema: updateProjectBodySchema,
     responseSchema: projectResponseSchema,
+  },
+  projectEnvironmentGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/environment',
+    description: 'Get the sandbox environment of a Factory project: provider settings and its repositories in order',
+    pathSchema: projectPathSchema,
+    responseSchema: projectEnvironmentResponseSchema,
+  },
+  projectEnvironmentUpdate: {
+    method: 'PATCH',
+    path: '/web/factory/projects/:id/environment',
+    description: 'Update the sandbox environment of a Factory project: provider settings, repository order and setup',
+    pathSchema: projectPathSchema,
+    bodySchema: updateProjectEnvironmentBodySchema,
+    responseSchema: projectEnvironmentResponseSchema,
   },
   projectApplyDefaultModel: {
     method: 'POST',

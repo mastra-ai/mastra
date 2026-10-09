@@ -15,6 +15,16 @@ export interface FactoryProject {
   autoRunEnabled: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
   autoApprovePlans: boolean;
+  /** Workspace root in the sandbox; linked repositories are checked out beneath it. */
+  sandboxWorkingDirectory: string | null;
+  /** Provider settings document validated by the configured FactorySandbox. Only keys the user set. */
+  sandboxSettings: Record<string, unknown> | null;
+  /** Command run once in the workspace root after every repository's own setup. */
+  workspaceSetupCommand: string | null;
+  /** Template id of the environment's current build, written by the build path. */
+  activeTemplateId: string | null;
+  /** Repository slug → commit the active template was built at. */
+  activeTemplateHeads: Record<string, string> | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +42,11 @@ export interface UpdateFactoryProjectInput {
   slackWorkItemsEnabled?: boolean;
   autoRunEnabled?: boolean;
   autoApprovePlans?: boolean;
+  sandboxWorkingDirectory?: string | null;
+  sandboxSettings?: Record<string, unknown> | null;
+  workspaceSetupCommand?: string | null;
+  activeTemplateId?: string | null;
+  activeTemplateHeads?: Record<string, string> | null;
 }
 
 export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
@@ -46,6 +61,13 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     slack_work_items_enabled: { type: 'boolean', default: false },
     auto_run_enabled: { type: 'boolean', default: false },
     auto_approve_plans: { type: 'boolean', default: false },
+    sandbox_working_directory: { type: 'text', nullable: true },
+    sandbox_settings: { type: 'json', nullable: true },
+    workspace_setup_command: { type: 'text', nullable: true },
+    active_template_id: { type: 'text', nullable: true },
+    active_template_heads: { type: 'json', nullable: true },
+    /** Set once the source-control domain has backfilled positions and the oldest link's workdir onto the project. */
+    environment_backfilled_at: { type: 'timestamp', nullable: true },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
   },
@@ -62,6 +84,12 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   slack_work_items_enabled: boolean;
   auto_run_enabled: boolean;
   auto_approve_plans: boolean;
+  sandbox_working_directory: string | null;
+  sandbox_settings: Record<string, unknown> | null;
+  workspace_setup_command: string | null;
+  active_template_id: string | null;
+  active_template_heads: Record<string, string> | null;
+  environment_backfilled_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -77,6 +105,11 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     slackWorkItemsEnabled: row.slack_work_items_enabled,
     autoRunEnabled: row.auto_run_enabled,
     autoApprovePlans: row.auto_approve_plans ?? false,
+    sandboxWorkingDirectory: row.sandbox_working_directory ?? null,
+    sandboxSettings: row.sandbox_settings ?? null,
+    workspaceSetupCommand: row.workspace_setup_command ?? null,
+    activeTemplateId: row.active_template_id ?? null,
+    activeTemplateHeads: row.active_template_heads ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -168,6 +201,13 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       ...(input.slackWorkItemsEnabled !== undefined ? { slack_work_items_enabled: input.slackWorkItemsEnabled } : {}),
       ...(input.autoRunEnabled !== undefined ? { auto_run_enabled: input.autoRunEnabled } : {}),
       ...(input.autoApprovePlans !== undefined ? { auto_approve_plans: input.autoApprovePlans } : {}),
+      ...(input.sandboxWorkingDirectory !== undefined
+        ? { sandbox_working_directory: input.sandboxWorkingDirectory }
+        : {}),
+      ...(input.sandboxSettings !== undefined ? { sandbox_settings: input.sandboxSettings } : {}),
+      ...(input.workspaceSetupCommand !== undefined ? { workspace_setup_command: input.workspaceSetupCommand } : {}),
+      ...(input.activeTemplateId !== undefined ? { active_template_id: input.activeTemplateId } : {}),
+      ...(input.activeTemplateHeads !== undefined ? { active_template_heads: input.activeTemplateHeads } : {}),
       updated_at: new Date(),
     }));
     return row ? toFactoryProject(row) : null;

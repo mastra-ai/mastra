@@ -1,3 +1,5 @@
+import { FactorySandbox } from '@mastra/core/workspace';
+import type { FactorySandboxContext } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -685,5 +687,351 @@ describe('ProjectRoutes', () => {
         })
       ).status,
     ).toBe(400);
+  });
+
+  describe('environment', () => {
+    /** A provider with two integer settings, strict about unknown keys. */
+    class StubFactorySandbox extends FactorySandbox<{ cpuCount?: number; memoryMb?: number }> {
+      readonly provider = 'stub';
+      readonly settings = {
+        type: 'object',
+        properties: {
+          // A schema default is advertised to the UI and never written by factory (D8).
+          cpuCount: { type: 'integer', minimum: 1, maximum: 64, default: 2 },
+          memoryMb: { type: 'integer', minimum: 512 },
+        },
+        additionalProperties: false,
+      } as const;
+      create(_ctx: FactorySandboxContext) {
+        throw new Error('not constructed in route tests');
+      }
+    }
+
+    async function seedEnvironment() {
+      const seed = await createFactoryStorageForTests();
+      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
+      const github = seed.sourceControl.forIntegration('github');
+      const installation = await github.installations.upsert({
+        orgId: 'org-1',
+        connectedByUserId: 'user-1',
+        externalId: 'gh-1',
+        accountName: 'acme',
+      });
+      const connection = await github.connections.create({
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        installationId: installation.id,
+        createdByUserId: 'user-1',
+      });
+      const links = [];
+      for (const slug of ['acme/docs', 'acme/api', 'acme/web']) {
+        const repository = await github.repositories.upsert({
+          orgId: 'org-1',
+          input: { installationId: installation.id, externalId: slug, slug, defaultBranch: 'main' },
+        });
+        links.push(
+          await github.projectRepositories.link({
+            orgId: 'org-1',
+            connectionId: connection.id,
+            repositoryId: repository.id,
+            createdByUserId: 'user-1',
+            branch: 'main',
+            sandboxProvider: 'local',
+            sandboxWorkdir: '/workspace',
+            setupCommand: 'pnpm i',
+          }),
+        );
+      }
+      const app = new Hono();
+      app.use('*', async (context, next) => {
+        context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(
+        app as never,
+        projectRoutes(seed, ['github'], undefined, undefined, { sandbox: new StubFactorySandbox() }),
+      );
+      return { seed, project, github, links, app };
+    }
+
+    const patch = (app: Hono, projectId: string, body: unknown) =>
+      app.request(`/web/factory/projects/${projectId}/environment`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    it('reads the provider schema and empty settings with the ordered repositories, and writes settings, order and membership', async () => {
+      const { seed, project, links, app, github } = await seedEnvironment();
+
+      const read = await app.request(`/web/factory/projects/${project.id}/environment`);
+      expect(read.status).toBe(200);
+      const initial = (await read.json()) as { environment: Record<string, unknown> };
+      expect(initial.environment).toMatchObject({
+        sandbox: {
+          provider: 'stub',
+          settingsSchema: { type: 'object', additionalProperties: false },
+          capabilities: { template: false, builds: { available: false, history: false } },
+        },
+        settings: {},
+        sandboxWorkingDirectory: null,
+        workspaceSetupCommand: null,
+        activeTemplateId: null,
+        activeTemplateHeads: null,
+      });
+      expect(
+        Object.keys(
+          (initial.environment.sandbox as { settingsSchema: { properties: object } }).settingsSchema.properties,
+        ),
+      ).toEqual(['cpuCount', 'memoryMb']);
+      // An unset setting is absent from the stored document; nothing is written on read.
+      expect(await seed.projects.getById({ id: project.id })).toMatchObject({ sandboxSettings: null });
+      expect(
+        (initial.environment.repositories as Array<Record<string, unknown>>).map(r => [
+          r.slug,
+          r.position,
+          r.inEnvironment,
+          r.lastBuildStatus,
+        ]),
+      ).toEqual([
+        ['acme/docs', 1, true, 'unbuilt'],
+        ['acme/api', 2, true, 'unbuilt'],
+        ['acme/web', 3, true, 'unbuilt'],
+      ]);
+
+      const updated = await patch(app, project.id, {
+        sandboxWorkingDirectory: '/home/user',
+        settings: { cpuCount: 8 },
+        workspaceSetupCommand: 'pnpm -r build',
+        repositories: [
+          { projectRepositoryId: links[2]!.id, position: 1 },
+          { projectRepositoryId: links[0]!.id, position: 2, inEnvironment: false, setupCommand: null },
+          { projectRepositoryId: links[1]!.id, position: 3, teardownCommand: 'docker compose down' },
+        ],
+      });
+      expect(updated.status).toBe(200);
+      const after = (await updated.json()) as { environment: Record<string, unknown> };
+      expect(after.environment).toMatchObject({
+        sandboxWorkingDirectory: '/home/user',
+        settings: { cpuCount: 8 },
+        workspaceSetupCommand: 'pnpm -r build',
+      });
+      expect(await seed.projects.getById({ id: project.id })).toMatchObject({ sandboxSettings: { cpuCount: 8 } });
+      expect(
+        (after.environment.repositories as Array<Record<string, unknown>>).map(r => [
+          r.slug,
+          r.position,
+          r.inEnvironment,
+          r.setupCommand,
+          r.teardownCommand,
+        ]),
+      ).toEqual([
+        ['acme/web', 1, true, 'pnpm i', null],
+        ['acme/docs', 2, false, null, null],
+        ['acme/api', 3, true, 'pnpm i', 'docker compose down'],
+      ]);
+      // Existing per-link fields are untouched by the environment route.
+      const stored = await github.projectRepositories.get({ orgId: 'org-1', id: links[0]!.id });
+      expect(stored).toMatchObject({ branch: 'main', sandboxProvider: 'local', sandboxWorkdir: '/workspace' });
+
+      // Re-reading returns the same shape the PATCH returned.
+      const reread = (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as unknown;
+      expect(reread).toEqual(after);
+
+      // Build-status fields in the body are ignored, not written.
+      const mixed = await patch(app, project.id, {
+        settings: { memoryMb: 1024 },
+        repositories: [{ projectRepositoryId: links[1]!.id, inEnvironment: false, lastBuildStatus: 'failed' }],
+      });
+      expect(mixed.status).toBe(200);
+      expect(await github.projectRepositories.get({ orgId: 'org-1', id: links[1]!.id })).toMatchObject({
+        inEnvironment: false,
+        lastBuildStatus: 'unbuilt',
+      });
+
+      // The patch merged onto the stored document.
+      expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+        sandboxSettings: { cpuCount: 8, memoryMb: 1024 },
+      });
+
+      // A key the user never set is absent even though the schema declares a default for it.
+      await patch(app, project.id, { settings: { cpuCount: null } });
+      expect((await seed.projects.getById({ id: project.id }))?.sandboxSettings).toEqual({ memoryMb: 1024 });
+      await patch(app, project.id, { settings: { cpuCount: 8 } });
+
+      // null removes a key and hands it back to the provider default; an empty document is stored as null.
+      const cleared = await patch(app, project.id, { settings: { cpuCount: null } });
+      expect(cleared.status).toBe(200);
+      expect(((await cleared.json()) as { environment: Record<string, unknown> }).environment).toMatchObject({
+        settings: { memoryMb: 1024 },
+      });
+      await patch(app, project.id, { settings: { memoryMb: null } });
+      expect(await seed.projects.getById({ id: project.id })).toMatchObject({ sandboxSettings: null });
+      expect(
+        (
+          (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as {
+            environment: Record<string, unknown>;
+          }
+        ).environment.settings,
+      ).toEqual({});
+    });
+
+    it('rejects settings the provider schema refuses, naming the field', async () => {
+      const { project, app, seed } = await seedEnvironment();
+      await patch(app, project.id, { settings: { cpuCount: 4 } });
+
+      for (const [settings, field] of [
+        [{ cpuCount: 'two' }, 'cpuCount'],
+        [{ cpuCount: 65 }, 'cpuCount'],
+        [{ memoryMb: 256 }, 'memoryMb'],
+        // Ajv reports the extra key in its message, not the path.
+        [{ unknown: 1 }, 'additional properties'],
+      ] as const) {
+        const response = await patch(app, project.id, { settings });
+        expect(response.status, JSON.stringify(settings)).toBe(400);
+        const body = (await response.json()) as { error: string; issues: Array<{ message: string; path: unknown[] }> };
+        expect(body.error).toBe('invalid_environment');
+        expect(JSON.stringify(body.issues)).toContain(field);
+      }
+      // A rejected merge leaves the stored document untouched.
+      expect(await seed.projects.getById({ id: project.id })).toMatchObject({ sandboxSettings: { cpuCount: 4 } });
+    });
+
+    it('drops stored keys the current provider does not declare instead of refusing every later update', async () => {
+      const { seed, project, app } = await seedEnvironment();
+      await patch(app, project.id, { settings: { cpuCount: 4, memoryMb: 1024 } });
+
+      // The host restarts on a provider with a different schema; the E2B-style document is still stored.
+      class ImageFactorySandbox extends FactorySandbox<{ baseImage?: string }> {
+        readonly provider = 'image';
+        readonly settings = {
+          type: 'object',
+          properties: { baseImage: { type: 'string' } },
+          additionalProperties: false,
+        } as const;
+        create(_ctx: FactorySandboxContext) {
+          throw new Error('not constructed in route tests');
+        }
+      }
+      const switched = new Hono();
+      switched.use('*', async (context, next) => {
+        context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(
+        switched as never,
+        projectRoutes(seed, ['github'], undefined, undefined, { sandbox: new ImageFactorySandbox() }),
+      );
+
+      // The stale keys are pruned the first time they make the merge fail; the new value lands.
+      const response = await patch(switched, project.id, { settings: { baseImage: 'node:22' } });
+      expect(response.status).toBe(200);
+      expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+        sandboxSettings: { baseImage: 'node:22' },
+      });
+
+      // A key the patch itself sets is never pruned: an unknown key in the patch is still refused.
+      const refused = await patch(switched, project.id, { settings: { cpuCount: 2 } });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({ error: 'invalid_environment' });
+      expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+        sandboxSettings: { baseImage: 'node:22' },
+      });
+
+      // A patch that is itself invalid reports its own issues, not the pruning.
+      const invalid = await patch(switched, project.id, { settings: { baseImage: 7 } });
+      expect(invalid.status).toBe(400);
+      expect(JSON.stringify(await invalid.json())).toContain('baseImage');
+    });
+
+    it('reports no sandbox and refuses settings when the factory has none configured', async () => {
+      const seed = await createFactoryStorageForTests();
+      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
+      const app = new Hono();
+      app.use('*', async (context, next) => {
+        context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(app as never, projectRoutes(seed));
+
+      const read = (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as {
+        environment: { sandbox: { provider: string }; settings: object };
+      };
+      expect(read.environment.sandbox).toEqual({
+        provider: 'none',
+        settingsSchema: { type: 'object', properties: {}, additionalProperties: false },
+        capabilities: { template: false, builds: { available: false, history: false } },
+      });
+      expect(read.environment.settings).toEqual({});
+
+      const refused = await patch(app, project.id, { settings: { cpuCount: 2 } });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toEqual({ error: 'no_sandbox' });
+      expect((await patch(app, project.id, { sandboxWorkingDirectory: '/home/user' })).status).toBe(200);
+    });
+
+    it('rejects invalid payloads without writing anything', async () => {
+      const { project, links, app } = await seedEnvironment();
+      const before = (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as unknown;
+
+      const cases: unknown[] = [
+        {},
+        { settings: 'cpu' },
+        { settings: { cpuCount: 'two' } },
+        { sandboxWorkingDirectory: 'relative/path' },
+        { repositories: [{ projectRepositoryId: links[0]!.id, position: 2 }] },
+        // A reorder that lists only some of the project's links.
+        {
+          repositories: [
+            { projectRepositoryId: links[0]!.id, position: 1 },
+            { projectRepositoryId: links[1]!.id, position: 2 },
+          ],
+        },
+        {
+          repositories: [
+            { projectRepositoryId: links[0]!.id, position: 1 },
+            { projectRepositoryId: links[1]!.id, position: 1 },
+          ],
+        },
+        {
+          repositories: [
+            { projectRepositoryId: links[0]!.id, position: 1 },
+            { projectRepositoryId: links[0]!.id, position: 2 },
+          ],
+        },
+        {
+          repositories: [{ projectRepositoryId: links[0]!.id, position: 1 }, { projectRepositoryId: links[1]!.id }],
+        },
+      ];
+      for (const body of cases) {
+        const response = await patch(app, project.id, body);
+        expect(response.status, JSON.stringify(body)).toBe(400);
+        expect(await response.json()).toMatchObject({ error: 'invalid_environment' });
+      }
+
+      const foreign = await patch(app, project.id, {
+        settings: { cpuCount: 2 },
+        repositories: [{ projectRepositoryId: '00000000-0000-4000-8000-000000000000', inEnvironment: false }],
+      });
+      expect(foreign.status).toBe(404);
+
+      const after = (await (await app.request(`/web/factory/projects/${project.id}/environment`)).json()) as unknown;
+      expect(after).toEqual(before);
+    });
+
+    it('scopes the environment to the organization', async () => {
+      const { seed, project, links } = await seedEnvironment();
+      const app = new Hono();
+      app.use('*', async (context, next) => {
+        context.set('factoryAuthUser' as never, { workosId: 'user-2', organizationId: 'org-2' } as never);
+        await next();
+      });
+      mountApiRoutes(app as never, projectRoutes(seed, ['github']));
+      expect((await app.request(`/web/factory/projects/${project.id}/environment`)).status).toBe(404);
+      expect(
+        (await patch(app, project.id, { repositories: [{ projectRepositoryId: links[0]!.id, inEnvironment: false }] }))
+          .status,
+      ).toBe(404);
+    });
   });
 });
