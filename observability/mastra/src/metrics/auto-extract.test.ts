@@ -381,7 +381,7 @@ describe('AutoExtractedMetrics', () => {
       tier_index: 0,
       error: 'partial_cost',
     });
-    expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00009);
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000108, 10);
     expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.costMetadata).toEqual({
       pricing_id: 'openai-gpt-4o-mini',
       tier_index: 0,
@@ -417,14 +417,10 @@ describe('AutoExtractedMetrics', () => {
       },
     });
     expect(byName('mastra_model_output_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00009);
-    expect(byName('mastra_model_output_reasoning_tokens')!.metric.costContext).toEqual({
-      provider: 'openai',
-      model: 'gpt-4o-mini',
-      costMetadata: {
-        pricing_id: 'openai-gpt-4o-mini',
-        tier_index: 0,
-        error: 'no_pricing_for_usage_type',
-      },
+    expect(byName('mastra_model_output_reasoning_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000018, 10);
+    expect(byName('mastra_model_output_reasoning_tokens')!.metric.costContext?.costMetadata).toEqual({
+      pricing_id: 'openai-gpt-4o-mini',
+      tier_index: 0,
     });
   });
 
@@ -614,7 +610,7 @@ describe('AutoExtractedMetrics', () => {
     expect(byName('mastra_model_input_cache_write_tokens')!.metric.costContext?.estimatedCost).toBeUndefined();
   });
 
-  it('should keep total output cost only when no output detail row has a successful cost', () => {
+  it('should price reasoning tokens at the output rate when the model has no reasoning rate', () => {
     setup();
     const span = createMockSpan({
       type: SpanType.MODEL_GENERATION,
@@ -643,22 +639,13 @@ describe('AutoExtractedMetrics', () => {
     const byName = (name: string) => emittedMetrics.find(m => m.metric.name === name);
     expect(byName('mastra_model_total_input_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000015);
     expect(byName('mastra_model_input_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000015);
-    expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00003);
+    expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000048, 10);
     expect(byName('mastra_model_total_output_tokens')!.metric.costContext?.costMetadata).toEqual({
       pricing_id: 'openai-gpt-4o-mini',
       tier_index: 0,
-      error: 'partial_cost',
     });
     expect(byName('mastra_model_output_text_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.00003);
-    expect(byName('mastra_model_output_reasoning_tokens')!.metric.costContext).toEqual({
-      provider: 'openai',
-      model: 'gpt-4o-mini',
-      costMetadata: {
-        pricing_id: 'openai-gpt-4o-mini',
-        tier_index: 0,
-        error: 'no_pricing_for_usage_type',
-      },
-    });
+    expect(byName('mastra_model_output_reasoning_tokens')!.metric.costContext?.estimatedCost).toBeCloseTo(0.000018, 10);
   });
 
   it('should use detail costs for both modes when all non-zero detail meters are priced', () => {
