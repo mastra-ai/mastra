@@ -16,6 +16,10 @@ import { tsConfigPaths } from '../plugins/tsconfig-paths';
 import { workspacePackageResolver } from '../plugins/workspace-package-resolver';
 import { slash } from '../utils';
 
+/**
+ * Creates a Rollup bundle that only keeps the given Mastra config option (e.g. `server`) from the entry file,
+ * so it can be loaded without initializing the rest of the Mastra instance.
+ */
 export async function extractMastraOptionBundler(
   name: keyof MastraConfig,
   entryFile: string,
@@ -37,7 +41,7 @@ export async function extractMastraOptionBundler(
     plugins: [
       tsConfigPaths(),
       // inline workspace packages (which may ship raw TypeScript) so they get transpiled below
-      workspacePackageResolver({ workspaceMap, projectRoot }),
+      workspacePackageResolver({ workspaceMap, projectRoot, logger }),
       // transpile typescript to something we understand
       esbuild(),
       optimizeLodashImports({

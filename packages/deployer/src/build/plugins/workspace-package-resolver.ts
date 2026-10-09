@@ -1,4 +1,5 @@
 import { pathToFileURL } from 'node:url';
+import type { IMastraLogger } from '@mastra/core/logger';
 import { resolveModule } from 'local-pkg';
 import type { Plugin } from 'rollup';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
@@ -17,15 +18,20 @@ const TYPESCRIPT_EXTENSIONS = /\.(?:ts|tsx|mts|cts)$/;
 export function workspacePackageResolver({
   workspaceMap,
   projectRoot,
+  logger,
 }: {
   workspaceMap: Map<string, WorkspacePackageInfo>;
   projectRoot: string;
+  logger?: IMastraLogger;
 }): Plugin {
   const workspaceLocations = Array.from(workspaceMap.values(), ({ location }) => slash(location))
     // Longest first so nested workspace packages win over their parents
     .sort((a, b) => b.length - a.length);
   const appLocation = slash(projectRoot);
 
+  /**
+   * Returns the location of the workspace package that contains `file`, if any.
+   */
   const findOwningWorkspace = (file: string) => {
     const normalizedFile = slash(file);
 
@@ -34,6 +40,10 @@ export function workspacePackageResolver({
 
   return {
     name: 'workspace-package-resolver',
+    /**
+     * Inlines TypeScript workspace packages and externalizes bare imports made from inside them by absolute path.
+     * Returns `null` to fall back to the default resolution.
+     */
     resolveId(id, importer) {
       if (!importer || !workspaceMap.size || !isBareModuleSpecifier(id)) {
         return null;
@@ -51,6 +61,7 @@ export function workspacePackageResolver({
 
       const resolvedPath = resolveModule(id, { paths: [pathToFileURL(importer).href] });
       if (!resolvedPath) {
+        logger?.warn('Could not resolve import while extracting Mastra options', { id, importer });
         return null;
       }
 

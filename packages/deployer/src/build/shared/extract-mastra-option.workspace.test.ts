@@ -8,6 +8,7 @@ import { extractMastraOption } from './extract-mastra-option';
 const _dirname = dirname(fileURLToPath(import.meta.url));
 const mastraCoreDir = join(_dirname, '../../../node_modules/@mastra/core');
 
+/** Writes `value` as pretty-printed JSON to `path`. */
 async function writeJson(path: string, value: unknown) {
   await writeFile(path, JSON.stringify(value, null, 2));
 }
