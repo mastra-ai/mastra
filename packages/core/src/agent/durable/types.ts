@@ -617,6 +617,11 @@ export interface AgentStepFinishEventData {
 }
 
 /**
+ * Payload passed to a durable agent's `onStepFinish` callback: the step-finish event data plus the run it belongs to.
+ */
+export type DurableAgentStepFinishResult = AgentStepFinishEventData & { runId: string };
+
+/**
  * Finish event data
  */
 export interface AgentFinishEventData {

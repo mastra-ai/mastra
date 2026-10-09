@@ -2,4 +2,6 @@
 '@mastra/core': patch
 ---
 
-Fixed durable and evented agents (including `createInngestAgent`) so `onStepFinish` and `onFinish` callbacks include `runId`, matching the regular Agent. `onFinish` now also includes `model`, `messages`, `object`, `error` and `usedFallbackValue`, so callbacks shared across runs can tell which run an event came from and read its structured output. Fixes #26524.
+Durable and evented agents now include `runId` in `onStepFinish` and `onFinish`, matching the regular Agent. This also applies to `createInngestAgent`. Use `runId` to tell which run an event came from when callbacks are shared across runs.
+
+`onFinish` also now includes `model`, `messages`, `object`, `error` and `usedFallbackValue`. You can read the structured output and response messages directly in the callback. Fixes #26524.

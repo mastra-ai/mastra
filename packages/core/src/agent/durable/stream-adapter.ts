@@ -28,6 +28,7 @@ import type {
   AgentStreamEvent,
   AgentChunkEventData,
   AgentStepFinishEventData,
+  DurableAgentStepFinishResult,
   AgentFinishEventData,
   AgentErrorEventData,
   AgentSuspendedEventData,
@@ -111,7 +112,7 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** Callback when chunk is received */
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Callback when step finishes */
-  onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+  onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
   /** Callback when execution finishes — routed through MastraModelOutput for rich step data */
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   /** Lifecycle hook called after the FINISH event closes the stream (for cleanup scheduling) */
@@ -248,7 +249,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
   // Match the plain Agent (model.loop.ts), which stamps the run id onto every step payload.
   const onStepFinishWithRunId = onStepFinish
-    ? (data: AgentStepFinishEventData) => onStepFinish({ ...data, runId } as AgentStepFinishEventData)
+    ? (data: AgentStepFinishEventData) => onStepFinish({ ...data, runId })
     : undefined;
 
   // Track subscription state
@@ -480,7 +481,6 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               const steps = (data.output?.steps ?? []) as any[];
               const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
               const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
-              const responseMessages = messageList.get.response.aiV5.model();
               // The structured object is parsed while the output drains the (now closed) chunk
               // stream; awaiting it starts that drain when nobody is consuming the stream.
               const object = structuredOutput?.schema
@@ -489,7 +489,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               await onFinish({
                 runId,
                 ...(model.modelId && model.provider && model.version ? { model } : {}),
-                messages: responseMessages.length > 0 ? responseMessages : (steps.at(-1)?.response?.messages ?? []),
+                messages: messageList.get.response.aiV5.model(),
                 object,
                 usedFallbackValue: output.usedFallbackValue,
                 error: output.error,

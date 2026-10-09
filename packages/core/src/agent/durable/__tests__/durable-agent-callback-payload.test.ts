@@ -70,6 +70,20 @@ describe('durable agent callback payloads', () => {
     return runId;
   }
 
+  it('exposes runId on the typed onStepFinish payload', async () => {
+    const stepRunIds: string[] = [];
+    const { output, runId, cleanup } = await wrap('durable', 'typed').stream('hi', {
+      onStepFinish: payload => {
+        stepRunIds.push(payload.runId);
+      },
+    });
+    await output.consumeStream();
+    cleanup();
+
+    expect(stepRunIds.length).toBeGreaterThan(0);
+    expect(stepRunIds.every(id => id === runId)).toBe(true);
+  });
+
   for (const engine of engines) {
     for (const mode of modes) {
       it(`${engine} ${mode}: carries the caller's runId and onFinish fields`, async () => {
@@ -157,7 +171,15 @@ describe('durable agent callback payloads', () => {
   }
 
   it('fires onFinish with the structured object when nobody consumes the stream', async () => {
-    const wrapped = wrap('durable', JSON.stringify({ city: 'Rome' }));
+    const wrapped = createDurableAgent({
+      agent: new Agent({
+        id: 'payload-agent-unconsumed-structured',
+        name: 'Payload Agent',
+        instructions: 'Test',
+        model: createTextModel(JSON.stringify({ city: 'Rome' })) as LanguageModelV2,
+      }),
+      pubsub,
+    });
     const finished = new Promise<any>(resolve => {
       void wrapped.stream('hi', {
         structuredOutput: { schema: z.object({ city: z.string() }) },
@@ -190,5 +212,11 @@ describe('durable agent callback payloads', () => {
 
     expect(finishPayloads).toHaveLength(1);
     expect(finishPayloads[0].runId).toBe(runId);
+    expect(finishPayloads[0].messages).toEqual([
+      expect.objectContaining({
+        role: 'assistant',
+        content: [expect.objectContaining({ type: 'text', text: 'unconsumed' })],
+      }),
+    ]);
   });
 });
