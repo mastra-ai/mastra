@@ -616,9 +616,7 @@ export class MastraFactory {
       pubsub: eventBus,
     });
 
-    // Detect an instance by its brand, not its shape: the alpha config also
-    // had a `create` key. No probing at boot; that would construct a sandbox
-    // for a fake session.
+    // Detect an instance by its brand, not its shape: the alpha config also had a `create` key.
     const sandboxOption = this.#config.sandbox;
     let sandboxConfig: FactorySandbox | undefined;
     if (sandboxOption === undefined || isFactorySandbox(sandboxOption)) {
