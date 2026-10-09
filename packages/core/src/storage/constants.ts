@@ -936,21 +936,32 @@ export const TABLE_MEMORY_RUN_FENCES = 'mastra_memory_run_fences';
 
 /**
  * Run ownership records for workflows stores that support run fencing.
- * `leaseExpiresAt` is epoch milliseconds on the database clock, null once
- * released. Records outlive their run so generations stay monotonic.
+ * `leaseExpiresAt` and `updatedAt` are epoch milliseconds on the database
+ * clock; `leaseExpiresAt` is null once released. `updatedAt` is refreshed by
+ * every claim, renewal and release and anchors `workflows.runOwnership`
+ * retention. A run's first generation is the store clock in epoch
+ * milliseconds, so a run claimed again after its record was pruned still gets
+ * a higher generation.
  */
 export const WORKFLOW_RUN_OWNERS_SCHEMA: Record<string, StorageColumn> = {
   runId: { type: 'text', nullable: false, primaryKey: true },
-  generation: { type: 'integer', nullable: false },
+  generation: { type: 'bigint', nullable: false },
   ownerId: { type: 'text', nullable: false },
   leaseExpiresAt: { type: 'bigint', nullable: true },
+  updatedAt: { type: 'bigint', nullable: false },
 };
 
-/** The claim each run's memory writes must carry, for memory stores that support run fencing. */
+/**
+ * The claim each run's memory writes must carry, for memory stores that support run fencing.
+ * `retiredAt` is epoch milliseconds on the database clock, set once the
+ * execution holding the fence settles and cleared when the fence is raised
+ * again. It anchors `memory.runFences` retention; NULL rows are never pruned.
+ */
 export const MEMORY_RUN_FENCES_SCHEMA: Record<string, StorageColumn> = {
   runId: { type: 'text', nullable: false, primaryKey: true },
-  generation: { type: 'integer', nullable: false },
+  generation: { type: 'bigint', nullable: false },
   ownerId: { type: 'text', nullable: false },
+  retiredAt: { type: 'bigint', nullable: true },
 };
 
 /**
