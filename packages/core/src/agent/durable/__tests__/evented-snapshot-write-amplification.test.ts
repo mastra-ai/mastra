@@ -234,14 +234,14 @@ describe('evented durable snapshot retention (COR-1431)', () => {
   it('does not retain completed-step history in the evented running snapshot', async () => {
     const defaultSmall = await measureRun('default', 4);
     const eventedSmall = await measureRun('evented', 4);
-    const defaultLarge = await measureRun('default', 8);
-    const eventedLarge = await measureRun('evented', 8);
+    const defaultLarge = await measureRun('default', 16);
+    const eventedLarge = await measureRun('evented', 16);
 
     const rows = [
       ['default', 4, defaultSmall],
       ['evented', 4, eventedSmall],
-      ['default', 8, defaultLarge],
-      ['evented', 8, eventedLarge],
+      ['default', 16, defaultLarge],
+      ['evented', 16, eventedLarge],
     ] as const;
     for (const [engine, iters, s] of rows) {
       // eslint-disable-next-line no-console
@@ -259,12 +259,14 @@ describe('evented durable snapshot retention (COR-1431)', () => {
 
     // Regression: evented must not accumulate per-completed-step history in the
     // running write. Pre-fix it held one `accumulatedSteps` copy per completed
-    // step (9 at both 4 and 8 iterations); post-fix only the active step's
-    // transient copies remain, matching the default engine's order (COR-1431).
+    // step (9, and rising with the run length); post-fix it keeps only a small
+    // constant margin over the default engine regardless of run length
+    // (COR-1431).
     expect(eventedLarge.maxRunningAccumulatedSteps).toBeLessThanOrEqual(defaultLarge.maxRunningAccumulatedSteps + 3);
     expect(eventedLarge.maxDuplicatesPerWrite).toBeLessThanOrEqual(defaultLarge.maxDuplicatesPerWrite + 2);
 
-    // ...and that constant must not grow with the number of iterations.
+    // ...and that constant must not grow with the number of iterations, so the
+    // 4x jump from the small to the large run changes nothing.
     expect(eventedLarge.maxRunningAccumulatedSteps).toBeLessThanOrEqual(eventedSmall.maxRunningAccumulatedSteps + 1);
     expect(eventedLarge.maxDuplicatesPerWrite).toBeLessThanOrEqual(eventedSmall.maxDuplicatesPerWrite + 2);
     expect(eventedLarge.maxRunningMessageListState).toBeLessThanOrEqual(eventedSmall.maxRunningMessageListState + 1);

@@ -410,6 +410,58 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
+  /**
+   * Applies the workflow's `pruneSnapshot` hook to a single completed step
+   * result before it is written by `updateWorkflowResults`, so the prune rides
+   * the same atomic merge write instead of a second full-row read-modify-write.
+   *
+   * The merge write bypasses the prune hook, so a completed step would keep its
+   * full `payload`/`output` — for the durable loop, the whole iteration state
+   * (`accumulatedSteps`/`messageListState`) — and the stored row (which every
+   * merge re-reads and re-serializes) grows with each step until the process
+   * OOMs (COR-1431). Returns `storedResult` unchanged when the workflow has no
+   * `pruneSnapshot` option. The hook needs the surrounding run context
+   * (`activeStepsPath`, `activePaths`, `serializedStepGraph`) to decide what a
+   * restart still reads, so it is invoked with a synthesized running snapshot.
+   *
+   * Live execution keeps the FULL result (the caller stores `storedResult` in
+   * its in-memory `stepResults`); only the persisted record is pruned, matching
+   * the default engine, which treats its in-memory `stepResults` as truth.
+   */
+  private pruneStepResultForPersist({
+    workflow,
+    stepId,
+    storedResult,
+    stepResults,
+    executionPath,
+    activeStepsPath,
+  }: {
+    workflow: Workflow | undefined;
+    stepId: string;
+    storedResult: StepResult<any, any, any, any>;
+    stepResults: Record<string, StepResult<any, any, any, any>> | undefined;
+    executionPath: number[];
+    activeStepsPath: Record<string, number[]>;
+  }): StepResult<any, any, any, any> {
+    const pruneSnapshot = workflow?.options?.pruneSnapshot;
+    if (!pruneSnapshot) return storedResult;
+    try {
+      const synthesized = {
+        status: 'running',
+        context: { ...(stepResults ?? {}), [stepId]: storedResult },
+        activePaths: executionPath,
+        activeStepsPath,
+        serializedStepGraph: workflow?.serializedStepGraph,
+      } as unknown as WorkflowRunState;
+      const pruned = pruneSnapshot({ snapshot: synthesized, workflowStatus: 'running' });
+      return (pruned?.context?.[stepId] as StepResult<any, any, any, any>) ?? storedResult;
+    } catch (error) {
+      // Pruning is a size optimization — never fail the step over it.
+      this.mastra.getLogger()?.warn?.(`Failed to prune step result for step ${stepId}: ${error}`);
+      return storedResult;
+    }
+  }
+
   __registerMastra(mastra: Mastra) {
     super.__registerMastra(mastra);
     this.stepExecutor.__registerMastra(mastra);
@@ -3005,6 +3057,22 @@ export class WorkflowEventProcessor extends EventProcessor {
       // surfaced to users.
       const storedResult = branchStateDelta ? { ...prevResult, __stateDelta: branchStateDelta } : prevResult;
 
+      // This merge write bypasses the workflow's `pruneSnapshot` hook, so prune
+      // the completed step's result here and persist it in the same atomic
+      // write (COR-1431): a separate post-merge full-row write could erase a
+      // concurrent step's result. Parallel branches are pruned once instead, by
+      // `aggregateBranchResults`.
+      const persistedResult = isParallelBranch
+        ? storedResult
+        : this.pruneStepResultForPersist({
+            workflow,
+            stepId,
+            storedResult,
+            stepResults,
+            executionPath,
+            activeStepsPath,
+          });
+
       // Record the workflow state in the same write as a sequential step's result, so a
       // restart after this point resumes with the state this step produced. Branches of a
       // parallel/conditional entry skip it: their full state would clobber sibling updates;
@@ -3013,7 +3081,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflowName: workflow.id,
         runId,
         stepId,
-        result: storedResult,
+        result: persistedResult,
         requestContext,
         ...(isParallelBranch ? {} : { state: currentState }),
       });
@@ -3024,21 +3092,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       // snapshot), it returns `{}`. In both cases the event payload is the
       // source of truth — merge prevResult into the inline stepResults instead
       // of treating it as a hard early-return.
+      // Storage holds the pruned record; keep the full one in memory so live
+      // steps downstream see the same result the default engine keeps.
       if (!newStepResults || Object.keys(newStepResults).length === 0) {
         stepResults = { ...(stepResults ?? {}), [stepId]: storedResult };
       } else {
-        stepResults = newStepResults;
-      }
-
-      // This merge write bypasses the workflow's `pruneSnapshot` hook, so a
-      // completed step would keep its full `payload`/`output` — for the durable
-      // loop, `accumulatedSteps`/`messageListState` — and the stored row (which
-      // every merge re-reads and re-serializes) would grow with each step until
-      // the process OOMs (COR-1431). Prune here as the default engine does on
-      // each `persistStepUpdate`; parallel branches are pruned once instead, by
-      // `aggregateBranchResults`.
-      if (!isParallelBranch) {
-        await this.pruneAndRepersistSnapshot({ workflow, workflowId, runId });
+        stepResults = { ...newStepResults, [stepId]: storedResult };
       }
     }
 
