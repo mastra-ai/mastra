@@ -27,4 +27,4 @@ new Mastra({
 
 The Hono adapter now also keeps renewed session cookies on custom route responses.
 
-Factory now authenticates every request once, through core route auth. Its `/web/*` routes are private by default; only sign-in/connect flows, signature-verified webhooks, and the Slack connect landing stay public. Organization selection, personal-org bootstrap, and message authorship run as an `afterAuth` step. This closes several `/web/*` routes that answered without a session.
+Factory now authenticates every request once, through core route auth. Its `/web/*` routes are private by default; only sign-in/connect flows, signature-verified webhooks, and the Slack connect landing stay public. Organization selection, personal-org bootstrap, and message authorship run as an `afterAuth` step. This closes several `/web/*` routes that answered without a session. `/auth/me` now also forwards a renewed session cookie.
