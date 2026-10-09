@@ -62,7 +62,10 @@ function setupHandlers() {
       HttpResponse.json(params.datasetId === 'dataset-1' ? datasetVersionsResponse : emptyVersionsResponse),
     ),
     http.get(`${BASE_URL}/api/agents`, () =>
-      HttpResponse.json({ 'agent-1': { name: 'Agent One', instructions: '', tools: {}, workflows: {} } }),
+      HttpResponse.json({
+        'agent-1': { name: 'Agent One', instructions: '', tools: {}, workflows: {} },
+        'agent-2': { name: 'Agent Two', instructions: '', tools: {}, workflows: {} },
+      }),
     ),
     http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json({})),
     http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
@@ -245,24 +248,84 @@ describe('ExperimentTriggerDialog', () => {
   });
 
   describe('experiment name and description', () => {
-    it('should disable Run until a name is entered', async () => {
-      // Given a dataset and a target are selected
+    it('should default the name to the target name and a short id', async () => {
+      // Given a dataset is selected
       setupHandlers();
       renderDialog();
       await screen.findByRole('combobox', { name: 'Select a dataset...' });
       await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());
       selectOption('Select a dataset...', 'dataset-1');
+
+      // When a target is picked
       await pickAgentTarget();
 
-      // When the name is empty
-      expect(nameInput().value).toBe('');
-      // Then Run is disabled
-      expect((runButton() as HTMLButtonElement).disabled).toBe(true);
-
-      // When a name is typed
-      typeName('Prompt v2');
-      // Then Run is enabled
+      // Then the name is filled in and Run is enabled without typing
+      expect(nameInput().value).toMatch(/^agent-one-[0-9a-f]{4}$/);
       expect((runButton() as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('should update the default name when the target changes', async () => {
+      // Given a target is picked
+      setupHandlers();
+      renderDialog();
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+      await pickAgentTarget();
+      const suffix = nameInput().value.replace('agent-one-', '');
+
+      // When another target is picked
+      selectOption('Select agent', 'agent-2');
+
+      // Then the name follows the new target and keeps its short id
+      expect(nameInput().value).toBe(`agent-two-${suffix}`);
+    });
+
+    it('should keep a name the user typed when the target changes', async () => {
+      // Given the user typed their own name
+      setupHandlers();
+      renderDialog();
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+      await pickAgentTarget();
+      typeName('Prompt v2');
+
+      // When another target is picked
+      selectOption('Select agent', 'agent-2');
+
+      // Then the typed name stays
+      expect(nameInput().value).toBe('Prompt v2');
+    });
+
+    it('should run with the default name', async () => {
+      // Given a dataset and a target and no typed name
+      const { triggerCalls } = setupHandlers();
+      renderDialog({ initialDatasetId: 'dataset-1', initialTargetType: 'agent', initialTargetId: 'agent-1' });
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+      await waitFor(() => expect(nameInput().value).toMatch(/^agent-one-[0-9a-f]{4}$/));
+      const defaultName = nameInput().value;
+
+      // When the run is triggered
+      fireEvent.click(runButton());
+
+      // Then the default name is sent
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.name).toBe(defaultName);
+    });
+
+    it('should fall back to the default name when the field is cleared', async () => {
+      // Given a dataset and a target
+      const { triggerCalls } = setupHandlers();
+      renderDialog({ initialDatasetId: 'dataset-1', initialTargetType: 'agent', initialTargetId: 'agent-1' });
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+      await waitFor(() => expect(nameInput().value).toMatch(/^agent-one-[0-9a-f]{4}$/));
+      const defaultName = nameInput().value;
+
+      // When the user clears the name and runs
+      typeName('');
+      expect((runButton() as HTMLButtonElement).disabled).toBe(false);
+      fireEvent.click(runButton());
+
+      // Then the default name is sent
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.name).toBe(defaultName);
     });
 
     it('should send name and description when running', async () => {
@@ -350,16 +413,13 @@ describe('ExperimentTriggerDialog', () => {
   describe('readiness status', () => {
     const status = () => screen.getByTestId('experiment-run-status');
 
-    it('should list the missing fields and enable Run once name, dataset and target are set', async () => {
+    it('should list the missing fields and enable Run once dataset and target are set', async () => {
       setupHandlers();
       renderDialog();
       await screen.findByRole('combobox', { name: 'Select a dataset...' });
 
-      expect(status().textContent).toContain('Missing name, dataset, target');
-      expect((runButton() as HTMLButtonElement).disabled).toBe(true);
-
-      typeName('Prompt v2');
       expect(status().textContent).toContain('Missing dataset, target');
+      expect((runButton() as HTMLButtonElement).disabled).toBe(true);
 
       await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());
       selectOption('Select a dataset...', 'dataset-1');
@@ -372,16 +432,17 @@ describe('ExperimentTriggerDialog', () => {
 
     it('should submit on Ctrl+Enter only when the form is ready', async () => {
       const { triggerCalls } = setupHandlers();
-      renderDialog({ initialDatasetId: 'dataset-1', initialTargetType: 'agent', initialTargetId: 'agent-1' });
+      renderDialog({ initialTargetType: 'agent', initialTargetId: 'agent-1' });
       await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      await waitFor(() => expect(screen.getByRole('option', { name: 'Agent One' })).toBeDefined());
+      await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());
 
-      // Not ready (no name): shortcut is ignored
+      // Not ready (no dataset): shortcut is ignored
       fireEvent.keyDown(nameInput(), { key: 'Enter', ctrlKey: true });
       await new Promise(resolve => setTimeout(resolve, 20));
       expect(triggerCalls).toHaveLength(0);
 
       // Ready: shortcut submits
+      selectOption('Select a dataset...', 'dataset-1');
       typeName('Prompt v2');
       fireEvent.keyDown(nameInput(), { key: 'Enter', ctrlKey: true });
       await waitFor(() => expect(triggerCalls).toHaveLength(1));

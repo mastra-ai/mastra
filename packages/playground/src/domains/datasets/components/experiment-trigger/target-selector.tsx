@@ -1,8 +1,6 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { useAgents } from '@mastra/react/hooks/agents';
-import { useWorkflows } from '@mastra/react/hooks/workflows';
-import { useScorers } from '@/domains/scores/hooks/use-scorers';
+import { useTargetOptions } from './use-target-options';
 
 export type TargetType = 'agent' | 'workflow' | 'scorer';
 
@@ -21,33 +19,7 @@ const targetTypeOptions = [
 ];
 
 export function TargetSelector({ targetType, setTargetType, targetId, setTargetId, container }: TargetSelectorProps) {
-  const { data: agents, isLoading: agentsLoading } = useAgents();
-  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({});
-  const { data: scorers, isLoading: scorersLoading } = useScorers();
-
-  // Get list of targets based on selected type
-  const targetOptions =
-    targetType === 'agent'
-      ? Object.entries(agents ?? {}).map(([id, agent]) => ({
-          value: id,
-          label: agent.name ?? id,
-        }))
-      : targetType === 'workflow'
-        ? Object.entries(workflows ?? {}).map(([id, workflow]) => ({
-            value: id,
-            label: workflow.name ?? id,
-          }))
-        : targetType === 'scorer'
-          ? Object.entries(scorers ?? {}).map(([id, scorer]) => ({
-              value: id,
-              label: scorer.scorer?.config?.name ?? id,
-            }))
-          : [];
-
-  const isTargetsLoading =
-    (targetType === 'agent' && agentsLoading) ||
-    (targetType === 'workflow' && workflowsLoading) ||
-    (targetType === 'scorer' && scorersLoading);
+  const { targetOptions, isLoading: isTargetsLoading } = useTargetOptions(targetType);
 
   // Reset targetId when type changes
   const handleTypeChange = (value: string) => {

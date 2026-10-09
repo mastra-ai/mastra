@@ -28,9 +28,11 @@ import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DatasetCombobox } from '../dataset-combobox';
 import { DatasetVersions } from '../dataset-versions';
+import { buildDefaultExperimentName, createExperimentNameSuffix } from './default-experiment-name';
 import { ScorerSelector } from './scorer-selector';
 import type { TargetType } from './target-selector';
 import { TargetSelector } from './target-selector';
+import { useTargetOptions } from './use-target-options';
 
 export interface ExperimentTriggerDialogProps {
   initialDatasetId?: string;
@@ -129,7 +131,8 @@ export function ExperimentTriggerDialog({
   onSuccess,
 }: ExperimentTriggerDialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const [name, setName] = useState(initialName ?? '');
+  const [typedName, setTypedName] = useState<string | null>(initialName ?? null);
+  const [nameSuffix, setNameSuffix] = useState(createExperimentNameSuffix);
   const [description, setDescription] = useState(initialDescription ?? '');
   const [datasetId, setDatasetId] = useState(initialDatasetId ?? '');
   const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
@@ -140,6 +143,11 @@ export function ExperimentTriggerDialog({
   const [requestContextRaw, setRequestContextRaw] = useState('');
 
   const { triggerExperiment } = useDatasetMutations();
+  const { targetOptions } = useTargetOptions(targetType);
+  const targetName = targetOptions.find(option => option.value === targetId)?.label;
+  const defaultName = targetName ? buildDefaultExperimentName(targetName, nameSuffix) : '';
+  const name = typedName ?? defaultName;
+  const runName = name.trim() || defaultName;
   const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
   const { total: itemCount } = useDatasetItems({
     datasetId: datasetId,
@@ -154,10 +162,10 @@ export function ExperimentTriggerDialog({
 
   const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
 
-  const canRun = Boolean(datasetId && targetType && targetId && name.trim());
+  const canRun = Boolean(datasetId && targetType && targetId && runName);
   const isRunning = triggerExperiment.isPending;
 
-  const missing = [!name.trim() && 'name', !datasetId && 'dataset', !targetId && 'target'].filter(Boolean);
+  const missing = [!datasetId && 'dataset', !targetId && 'target'].filter(Boolean);
   const hasRequestContext = hasSchema
     ? Object.values(requestContextValues).some(v => v !== undefined && v !== '')
     : requestContextRaw.trim().length > 0;
@@ -170,7 +178,8 @@ export function ExperimentTriggerDialog({
   };
 
   const resetState = () => {
-    setName(initialName ?? '');
+    setTypedName(initialName ?? null);
+    setNameSuffix(createExperimentNameSuffix());
     setDescription(initialDescription ?? '');
     setDatasetId(initialDatasetId ?? '');
     setVersion(initialDatasetVersion ?? null);
@@ -202,7 +211,7 @@ export function ExperimentTriggerDialog({
   };
 
   const handleRun = async () => {
-    if (!datasetId || !targetType || !targetId || !name.trim()) return;
+    if (!datasetId || !targetType || !targetId || !runName) return;
 
     let requestContext: Record<string, unknown> | undefined;
     try {
@@ -216,7 +225,7 @@ export function ExperimentTriggerDialog({
     try {
       const result = await triggerExperiment.mutateAsync({
         datasetId,
-        name: name.trim(),
+        name: runName,
         description: description.trim() || undefined,
         targetType,
         targetId,
@@ -261,12 +270,11 @@ export function ExperimentTriggerDialog({
         <DialogBody>
           <div className="space-y-4">
             <Field>
-              <FieldLabel required>Name</FieldLabel>
+              <FieldLabel>Name</FieldLabel>
               <Input
-                required
                 value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="Enter experiment name"
+                onChange={e => setTypedName(e.target.value)}
+                placeholder={defaultName || 'Enter experiment name'}
                 autoFocus
                 disabled={isRunning}
               />
