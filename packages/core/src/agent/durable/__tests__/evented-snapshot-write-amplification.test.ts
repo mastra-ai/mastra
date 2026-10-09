@@ -160,6 +160,9 @@ async function measureRun(engine: 'default' | 'evented', toolIterations: number)
       const serialized = typeof snap === 'string' ? snap : JSON.stringify(snap ?? {});
       const status = (typeof snap === 'string' ? undefined : snap?.status) ?? '?';
       records.push({ method, workflowName, status, bytes: serialized.length });
+      // Counted here (not when aggregating below) so the quiesce wait after the
+      // run can observe progress as writes land.
+      stats.writes += 1;
       // Measured across all `running` writes: with the prune removed the
       // evented merge keeps the full completed-step history and this count
       // rises (9 vs 4), so the check fails rather than passing vacuously.
@@ -197,7 +200,6 @@ async function measureRun(engine: 'default' | 'evented', toolIterations: number)
   }
 
   for (const record of records) {
-    stats.writes += 1;
     stats.totalBytes += record.bytes;
     stats.peakBytes = Math.max(stats.peakBytes, record.bytes);
     if (record.status === 'running') {
@@ -253,5 +255,6 @@ describe('evented durable snapshot retention (COR-1431)', () => {
     // ...and that constant must not grow with the number of iterations.
     expect(eventedLarge.maxRunningAccumulatedSteps).toBeLessThanOrEqual(eventedSmall.maxRunningAccumulatedSteps + 1);
     expect(eventedLarge.maxDuplicatesPerWrite).toBeLessThanOrEqual(eventedSmall.maxDuplicatesPerWrite + 2);
+    expect(eventedLarge.maxRunningMessageListState).toBeLessThanOrEqual(eventedSmall.maxRunningMessageListState + 1);
   }, 240000);
 });
