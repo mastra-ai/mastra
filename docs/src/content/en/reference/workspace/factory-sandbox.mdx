@@ -30,12 +30,12 @@ export const factory = new MastraFactory({
 
 ## Provider classes
 
-| Class | Package | Settings | Builds | |
-| - | - | - | - | - |
-| `PlatformFactorySandbox` | `@mastra/platform-workspace` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get` | |
-| `E2BFactorySandbox` | `@mastra/e2b` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get`, `list` | |
-| `DockerFactorySandbox` | `@mastra/docker` | `baseImage`, `owner` | No | |
-| `LocalFactorySandbox` | `@mastra/factory` | None | No | |
+| Class | Package | Settings | Builds |
+| - | - | - | - |
+| `PlatformFactorySandbox` | `@mastra/platform-workspace` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get` |
+| `E2BFactorySandbox` | `@mastra/e2b` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get`, `list` |
+| `DockerFactorySandbox` | `@mastra/docker` | `baseImage`, `owner` | No |
+| `LocalFactorySandbox` | `@mastra/factory` | None | No |
 
 Each provider class takes the same runtime options as its sandbox class (minus `id`, `sandboxId` and `template`, which the class fills in per session), plus `template` options for the repository template and `defaults` for settings the environment leaves unset.
 
