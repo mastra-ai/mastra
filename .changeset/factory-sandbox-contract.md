@@ -11,14 +11,19 @@ Added `FactorySandbox`, the contract a host implements to plug a sandbox provide
 ```ts
 import { FactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandboxContext } from '@mastra/core/workspace';
-import { z } from 'zod';
+import type { PublicSchema } from '@mastra/core/schema';
 
-const settings = z.object({ region: z.enum(['us', 'eu']).optional() });
-type Settings = z.infer<typeof settings>;
+interface Settings {
+  region?: 'us' | 'eu';
+}
 
 class MyFactorySandbox extends FactorySandbox<Settings> {
   readonly provider = 'my-cloud';
-  readonly settings = settings;
+  readonly settings: PublicSchema<Settings> = {
+    type: 'object',
+    properties: { region: { type: 'string', enum: ['us', 'eu'], default: 'us' } },
+    additionalProperties: false,
+  };
 
   create(ctx: FactorySandboxContext, { region = 'us' }: Settings) {
     return new MyCloudSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId, region });
