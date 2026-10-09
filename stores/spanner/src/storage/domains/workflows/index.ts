@@ -37,6 +37,7 @@ const RUN_OWNERS_TABLE = quoteIdent(TABLE_WORKFLOW_RUN_OWNERS, 'table name');
 const RUN_ID = quoteIdent('runId', 'column name');
 const OWNER_ID = quoteIdent('ownerId', 'column name');
 const LEASE_EXPIRES_AT = quoteIdent('leaseExpiresAt', 'column name');
+const UPDATED_AT = quoteIdent('updatedAt', 'column name');
 
 type RunOwnerRow = {
   generation: number | string;
@@ -266,9 +267,11 @@ export class WorkflowsSpanner extends WorkflowsStorage {
           if (expectedGeneration !== undefined && expectedGeneration !== 0) {
             return { acquired: false, record: null };
           }
+          // The first generation comes from the database clock, so a claim
+          // after this row is pruned still outranks a surviving fence.
           await tx.runUpdate({
-            sql: `INSERT INTO ${RUN_OWNERS_TABLE} (${RUN_ID}, generation, ${OWNER_ID}, ${LEASE_EXPIRES_AT})
-                  VALUES (@runId, 1, @ownerId, ${DB_NOW_MS} + @leaseMs)`,
+            sql: `INSERT INTO ${RUN_OWNERS_TABLE} (${RUN_ID}, generation, ${OWNER_ID}, ${LEASE_EXPIRES_AT}, ${UPDATED_AT})
+                  VALUES (@runId, ${DB_NOW_MS}, @ownerId, ${DB_NOW_MS} + @leaseMs, ${DB_NOW_MS})`,
             params: { runId, ownerId, leaseMs },
           });
           return { acquired: true, record: (await readRunOwner(tx, runId))! };
@@ -279,7 +282,8 @@ export class WorkflowsSpanner extends WorkflowsStorage {
         }
         await tx.runUpdate({
           sql: `UPDATE ${RUN_OWNERS_TABLE}
-                SET generation = generation + 1, ${OWNER_ID} = @ownerId, ${LEASE_EXPIRES_AT} = ${DB_NOW_MS} + @leaseMs
+                SET generation = generation + 1, ${OWNER_ID} = @ownerId, ${LEASE_EXPIRES_AT} = ${DB_NOW_MS} + @leaseMs,
+                    ${UPDATED_AT} = ${DB_NOW_MS}
                 WHERE ${RUN_ID} = @runId`,
           params: { runId, ownerId, leaseMs },
         });
@@ -295,7 +299,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
       return await inTransaction(this.db, async tx => {
         const [count] = await tx.runUpdate({
           sql: `UPDATE ${RUN_OWNERS_TABLE}
-                SET ${LEASE_EXPIRES_AT} = ${DB_NOW_MS} + @leaseMs
+                SET ${LEASE_EXPIRES_AT} = ${DB_NOW_MS} + @leaseMs, ${UPDATED_AT} = ${DB_NOW_MS}
                 WHERE ${RUN_ID} = @runId AND generation = @generation AND ${OWNER_ID} = @ownerId
                   AND ${LEASE_EXPIRES_AT} IS NOT NULL`,
           params: { leaseMs, runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
@@ -312,7 +316,7 @@ export class WorkflowsSpanner extends WorkflowsStorage {
     try {
       return await inTransaction(this.db, async tx => {
         const [count] = await tx.runUpdate({
-          sql: `UPDATE ${RUN_OWNERS_TABLE} SET ${LEASE_EXPIRES_AT} = NULL
+          sql: `UPDATE ${RUN_OWNERS_TABLE} SET ${LEASE_EXPIRES_AT} = NULL, ${UPDATED_AT} = ${DB_NOW_MS}
                 WHERE ${RUN_ID} = @runId AND generation = @generation AND ${OWNER_ID} = @ownerId`,
           params: { runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
         });

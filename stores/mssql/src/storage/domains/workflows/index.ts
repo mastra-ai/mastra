@@ -177,14 +177,16 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           if (expectedGeneration !== undefined && expectedGeneration !== 0) {
             return { acquired: false, record: null };
           }
+          // The first generation comes from the database clock, so a claim
+          // after this row is pruned still outranks a surviving fence.
           await transaction
             .request()
             .input('runId', runId)
             .input('ownerId', ownerId)
             .input('leaseMs', sql.BigInt, leaseMs)
             .query(
-              `INSERT INTO ${table} ([runId], [generation], [ownerId], [leaseExpiresAt])
-               VALUES (@runId, 1, @ownerId, ${DB_NOW_MS} + @leaseMs)`,
+              `INSERT INTO ${table} ([runId], [generation], [ownerId], [leaseExpiresAt], [updatedAt])
+               VALUES (@runId, ${DB_NOW_MS}, @ownerId, ${DB_NOW_MS} + @leaseMs, ${DB_NOW_MS})`,
             );
           return { acquired: true, record: (await this.#readRunOwner(transaction, runId))! };
         }
@@ -193,11 +195,12 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           .input('runId', runId)
           .input('ownerId', ownerId)
           .input('leaseMs', sql.BigInt, leaseMs)
-          .input('expectedGeneration', sql.Int, expectedGeneration ?? null)
+          .input('expectedGeneration', sql.BigInt, expectedGeneration ?? null)
           .input('force', sql.Bit, force === true)
           .query(
             `UPDATE ${table}
-             SET [generation] = [generation] + 1, [ownerId] = @ownerId, [leaseExpiresAt] = ${DB_NOW_MS} + @leaseMs
+             SET [generation] = [generation] + 1, [ownerId] = @ownerId, [leaseExpiresAt] = ${DB_NOW_MS} + @leaseMs,
+                 [updatedAt] = ${DB_NOW_MS}
              WHERE [runId] = @runId
                AND (@expectedGeneration IS NULL OR [generation] = @expectedGeneration)
                AND (@force = 1 OR [leaseExpiresAt] IS NULL OR [leaseExpiresAt] <= ${DB_NOW_MS})`,
@@ -216,12 +219,12 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         const updated = await transaction
           .request()
           .input('runId', fence.runId)
-          .input('generation', sql.Int, fence.generation)
+          .input('generation', sql.BigInt, fence.generation)
           .input('ownerId', fence.ownerId)
           .input('leaseMs', sql.BigInt, leaseMs)
           .query(
             `UPDATE ${this.#runOwnersTable}
-             SET [leaseExpiresAt] = ${DB_NOW_MS} + @leaseMs
+             SET [leaseExpiresAt] = ${DB_NOW_MS} + @leaseMs, [updatedAt] = ${DB_NOW_MS}
              WHERE [runId] = @runId AND [generation] = @generation AND [ownerId] = @ownerId
                AND [leaseExpiresAt] IS NOT NULL`,
           );
@@ -238,10 +241,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       const updated = await this.pool
         .request()
         .input('runId', fence.runId)
-        .input('generation', sql.Int, fence.generation)
+        .input('generation', sql.BigInt, fence.generation)
         .input('ownerId', fence.ownerId)
         .query(
-          `UPDATE ${this.#runOwnersTable} SET [leaseExpiresAt] = NULL
+          `UPDATE ${this.#runOwnersTable} SET [leaseExpiresAt] = NULL, [updatedAt] = ${DB_NOW_MS}
            WHERE [runId] = @runId AND [generation] = @generation AND [ownerId] = @ownerId`,
         );
       return updated.rowsAffected[0] === 1;

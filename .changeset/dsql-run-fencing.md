@@ -6,4 +6,6 @@ Added run fencing for durable agents. Aurora DSQL stores now reject writes from 
 
 Claims are kept in two new tables, `mastra_workflow_run_owners` and `mastra_memory_run_fences`, which are created on init. If you set `disableInit: true`, create them before upgrading. Durable agent runs fail to start until the tables exist.
 
+`storage.prune()` doesn't cover these tables on Aurora DSQL yet, so their rows are kept.
+
 Requires `@mastra/core` 1.76.0 or a later 1.x release.

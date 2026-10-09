@@ -31,7 +31,7 @@ import type {
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
-import { assertRunFence, inTransaction, withRunFence } from '../../db/run-fencing';
+import { assertRunFence, DB_NOW_MS, inTransaction, withRunFence } from '../../db/run-fencing';
 import { quoteIdent } from '../../db/utils';
 import { buildDateRangeFilter, transformFromSpannerRow } from '../utils';
 
@@ -154,6 +154,7 @@ export class MemorySpanner extends MemoryStorage {
     const table = quoteIdent(TABLE_MEMORY_RUN_FENCES, 'table name');
     const runIdCol = quoteIdent('runId', 'column name');
     const ownerIdCol = quoteIdent('ownerId', 'column name');
+    const retiredAtCol = quoteIdent('retiredAt', 'column name');
     try {
       return await inTransaction(this.db, async tx => {
         // The read locks the row until commit, so concurrent raises serialize.
@@ -171,19 +172,46 @@ export class MemorySpanner extends MemoryStorage {
           return true;
         }
         const generation = Number(row.generation);
-        if (generation < fence.generation) {
-          await tx.runUpdate({
-            sql: `UPDATE ${table} SET generation = @generation, ${ownerIdCol} = @ownerId WHERE ${runIdCol} = @runId`,
-            params: { runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
-          });
-          return true;
-        }
-        return generation === fence.generation && String(row.ownerId) === fence.ownerId;
+        const raises = generation < fence.generation;
+        const reaffirms = generation === fence.generation && String(row.ownerId) === fence.ownerId;
+        if (!raises && !reaffirms) return false;
+        // Every write un-retires the fence.
+        await tx.runUpdate({
+          sql: `UPDATE ${table} SET generation = @generation, ${ownerIdCol} = @ownerId, ${retiredAtCol} = NULL
+                WHERE ${runIdCol} = @runId`,
+          params: { runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
+        });
+        return true;
       });
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('SPANNER', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    const table = quoteIdent(TABLE_MEMORY_RUN_FENCES, 'table name');
+    try {
+      return await inTransaction(this.db, async tx => {
+        const [count] = await tx.runUpdate({
+          sql: `UPDATE ${table} SET ${quoteIdent('retiredAt', 'column name')} = ${DB_NOW_MS}
+                WHERE ${quoteIdent('runId', 'column name')} = @runId AND generation = @generation
+                  AND ${quoteIdent('ownerId', 'column name')} = @ownerId`,
+          params: { runId: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
+        });
+        return count === 1;
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('SPANNER', 'RETIRE_RUN_FENCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: fence.runId },

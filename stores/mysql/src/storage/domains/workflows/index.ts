@@ -58,6 +58,7 @@ const RUN_OWNERS_TABLE = formatTableName(TABLE_WORKFLOW_RUN_OWNERS as TABLE_NAME
 const RUN_ID = quoteIdentifier('runId', 'column name');
 const OWNER_ID = quoteIdentifier('ownerId', 'column name');
 const LEASE_EXPIRES_AT = quoteIdentifier('leaseExpiresAt', 'column name');
+const UPDATED_AT = quoteIdentifier('updatedAt', 'column name');
 const RUN_OWNER_COLUMNS = `generation, ${OWNER_ID} AS ownerId, ${LEASE_EXPIRES_AT} AS leaseExpiresAt, ${DB_NOW_MS} AS nowMs`;
 
 function toRunOwnershipRecord(runId: string, row: RowDataPacket): RunOwnershipRecord {
@@ -226,9 +227,11 @@ export class WorkflowsMySQL extends WorkflowsStorage {
           if (expectedGeneration !== undefined && expectedGeneration !== 0) {
             return { acquired: false, record: null };
           }
+          // A run's first generation is the database clock, so a run claimed
+          // again after its record was pruned still gets a higher generation.
           await connection.execute(
-            `INSERT INTO ${RUN_OWNERS_TABLE} (${RUN_ID}, generation, ${OWNER_ID}, ${LEASE_EXPIRES_AT})
-             VALUES (?, 1, ?, ${DB_NOW_MS} + ?)`,
+            `INSERT INTO ${RUN_OWNERS_TABLE} (${RUN_ID}, generation, ${OWNER_ID}, ${LEASE_EXPIRES_AT}, ${UPDATED_AT})
+             VALUES (?, GREATEST(1, ${DB_NOW_MS}), ?, ${DB_NOW_MS} + ?, ${DB_NOW_MS})`,
             [runId, ownerId, leaseMs],
           );
           return { acquired: true, record: (await readRunOwner(connection, runId))! };
@@ -237,7 +240,8 @@ export class WorkflowsMySQL extends WorkflowsStorage {
         // this statement reads the database clock after any wait for it.
         await connection.execute(
           `UPDATE ${RUN_OWNERS_TABLE}
-           SET generation = generation + 1, ${OWNER_ID} = ?, ${LEASE_EXPIRES_AT} = ${DB_NOW_MS} + ?
+           SET generation = generation + 1, ${OWNER_ID} = ?, ${LEASE_EXPIRES_AT} = ${DB_NOW_MS} + ?,
+               ${UPDATED_AT} = ${DB_NOW_MS}
            WHERE ${RUN_ID} = ?
              AND (? IS NULL OR generation = ?)
              AND (? OR ${LEASE_EXPIRES_AT} IS NULL OR ${LEASE_EXPIRES_AT} <= ${DB_NOW_MS})`,
@@ -260,7 +264,7 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       return await inTransaction(this.pool, async connection => {
         await connection.execute(
           `UPDATE ${RUN_OWNERS_TABLE}
-           SET ${LEASE_EXPIRES_AT} = ${DB_NOW_MS} + ?
+           SET ${LEASE_EXPIRES_AT} = ${DB_NOW_MS} + ?, ${UPDATED_AT} = ${DB_NOW_MS}
            WHERE ${RUN_ID} = ? AND generation = ? AND ${OWNER_ID} = ? AND ${LEASE_EXPIRES_AT} IS NOT NULL`,
           [leaseMs, fence.runId, fence.generation, fence.ownerId],
         );
@@ -278,7 +282,7 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     try {
       return await inTransaction(this.pool, async connection => {
         await connection.execute(
-          `UPDATE ${RUN_OWNERS_TABLE} SET ${LEASE_EXPIRES_AT} = NULL
+          `UPDATE ${RUN_OWNERS_TABLE} SET ${LEASE_EXPIRES_AT} = NULL, ${UPDATED_AT} = ${DB_NOW_MS}
            WHERE ${RUN_ID} = ? AND generation = ? AND ${OWNER_ID} = ?`,
           [fence.runId, fence.generation, fence.ownerId],
         );
