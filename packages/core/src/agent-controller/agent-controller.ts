@@ -190,6 +190,7 @@ export class AgentController<TState = {}> {
   private config: AgentControllerConfig<TState>;
   private initPromise: Promise<void> | undefined = undefined;
   readonly #metadataWriteQueues = new Map<string, Promise<void>>();
+  readonly #pendingTokenUsage = new Map<string, { usage: TokenUsage; total?: TokenUsage; revision: number }>();
   private browser: DynamicArgument<MastraBrowser | undefined> = undefined;
   private workspace: DynamicArgument<Workspace | undefined> = undefined;
   private intervalTimers = new Map<string, { timer: NodeJS.Timeout; shutdown?: () => void | Promise<void> }>();
@@ -2606,13 +2607,33 @@ export class AgentController<TState = {}> {
   private createUsageRecorder(threadId: string | null): (step: { usage?: unknown }) => Promise<void> {
     return async step => {
       const usage = toStepTokenUsage(step.usage);
-      if (!threadId || !usage) return;
+      if (!threadId || !usage || !this.#resolveStorage()) return;
+      let pending = this.#pendingTokenUsage.get(threadId);
+      if (!pending) {
+        pending = { usage: createEmptyTokenUsage(), revision: 0 };
+        this.#pendingTokenUsage.set(threadId, pending);
+      }
+      pending.usage = addTokenUsage(pending.usage, usage);
+      if (pending.total) pending.total = addTokenUsage(pending.total, usage);
+      pending.revision++;
+      const measurement = pending;
+      let savedRevision = 0;
       try {
-        await this.writeThreadMetadataValues(threadId, metadata => ({
-          tokenUsage: addTokenUsage({ ...createEmptyTokenUsage(), ...(metadata.tokenUsage as TokenUsage) }, usage),
-        }));
+        await this.writeThreadMetadataValues(threadId, metadata => {
+          // Retain the owner's target total until acknowledged. Retrying the same
+          // total also handles a write that committed before reporting failure.
+          measurement.total ??= addTokenUsage(
+            { ...createEmptyTokenUsage(), ...(metadata.tokenUsage as TokenUsage) },
+            measurement.usage,
+          );
+          savedRevision = measurement.revision;
+          return { tokenUsage: { ...measurement.total } };
+        });
+        if (measurement.revision === savedRevision && this.#pendingTokenUsage.get(threadId) === measurement) {
+          this.#pendingTokenUsage.delete(threadId);
+        }
       } catch {
-        // Token persistence is not critical
+        // The next execution step retries this thread's outstanding measurements.
       }
     };
   }

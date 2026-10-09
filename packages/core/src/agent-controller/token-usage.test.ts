@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { Mastra } from '../mastra';
+import { MockMemory } from '../memory/mock';
 import { InMemoryStore } from '../storage/mock';
+import { MastraLanguageModelV2Mock } from '../test-utils/llm-mock';
+import { createTool } from '../tools';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
 import { createEmptyTokenUsage } from './types';
@@ -358,6 +363,258 @@ describe('step-finish token usage extraction', () => {
     expect(session.getTokenUsage().totalTokens).toBe(150);
     expect(events.filter(event => event.type === 'usage_update')).toHaveLength(1);
   });
+
+  it.each(['read', 'write', 'committed-write'])('retains unsaved owner usage after a %s failure', async failure => {
+    const storage = new InMemoryStore();
+    const owner = createController(storage);
+    await owner.init();
+    const source = await owner.createSession({ id: 'usage-owner', ownerId: 'usage-owner' });
+    const threadId = source.thread.requireId();
+    const memory = (await storage.getStore('memory'))!;
+    const recorder = source.machinery.buildSharedRunOptions().onStepFinish!;
+    const continuationRecorder = source.machinery.buildSharedRunOptions().onStepFinish!;
+    const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2, reasoningTokens: 1 };
+    await recorder({ usage });
+    let injected = 0;
+    const read = memory.getThreadById.bind(memory);
+    const save = memory.saveThread.bind(memory);
+    const spy =
+      failure === 'read'
+        ? vi.spyOn(memory, 'getThreadById').mockImplementationOnce(async () => {
+            injected++;
+            throw new Error('Injected read failure');
+          })
+        : vi.spyOn(memory, 'saveThread').mockImplementationOnce(async input => {
+            injected++;
+            if (failure === 'committed-write') await save(input);
+            throw new Error('Injected write failure');
+          });
+    try {
+      await recorder({ usage });
+      expect(injected).toBe(1);
+      spy.mockRestore();
+      await source.thread.create({ id: 'other-usage-thread' });
+      await continuationRecorder({ usage });
+      expect((await read({ threadId }))?.metadata?.tokenUsage).toMatchObject({
+        promptTokens: 3,
+        completionTokens: 3,
+        totalTokens: 6,
+        reasoningTokens: 3,
+      });
+      expect((await read({ threadId: source.thread.requireId() }))?.metadata?.tokenUsage).toBeUndefined();
+      await source.thread.switch({ threadId });
+      expect(source.getTokenUsage().totalTokens).toBe(6);
+    } finally {
+      spy.mockRestore();
+      await owner.destroy();
+    }
+  });
+
+  it.each([false, true])(
+    'projects replayed saved totals without adding them again (read failure: %s)',
+    async failRead => {
+      const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+      await session.machinery.buildSharedRunOptions().onStepFinish!({ usage });
+      await session.thread.loadMetadata();
+      expect(session.getTokenUsage().totalTokens).toBe(2);
+      const spy = failRead
+        ? vi.spyOn(session.thread, 'getById').mockRejectedValueOnce(new Error('Injected projection read failure'))
+        : undefined;
+      try {
+        await (session as any).processStream({ fullStream: mockStream(usage) });
+        expect(session.getTokenUsage().totalTokens).toBe(2);
+        await session.machinery.buildSharedRunOptions().onStepFinish!({ usage });
+        await (session as any).processStream({ fullStream: mockStream(usage) });
+        expect(session.getTokenUsage().totalTokens).toBe(4);
+        expect(session.displayState.get().tokenUsage?.totalTokens).toBe(4);
+      } finally {
+        spy?.mockRestore();
+      }
+    },
+  );
+
+  it.each(['none', 'read', 'write'])('keeps concurrent owner recorders in one total (failure: %s)', async failure => {
+    const storage = new InMemoryStore();
+    controller = createController(storage);
+    await controller.init();
+    session = await controller.createSession({ id: 'concurrent-usage', ownerId: 'concurrent-usage' });
+    const memory = (await storage.getStore('memory'))!;
+    const save = memory.saveThread.bind(memory);
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const spy =
+      failure === 'read'
+        ? vi.spyOn(memory, 'getThreadById').mockImplementationOnce(async () => {
+            entered.resolve();
+            await release.promise;
+            throw new Error('Injected concurrent read failure');
+          })
+        : vi.spyOn(memory, 'saveThread').mockImplementationOnce(async input => {
+            entered.resolve();
+            await release.promise;
+            if (failure === 'write') throw new Error('Injected concurrent save failure');
+            return save(input);
+          });
+    const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+    const first = session.machinery.buildSharedRunOptions().onStepFinish!({ usage });
+    let second: Promise<void> | undefined;
+    try {
+      await entered.promise;
+      second = session.machinery.buildSharedRunOptions().onStepFinish!({ usage });
+      release.resolve();
+      await Promise.all([first, second]);
+      expect(
+        (await memory.getThreadById({ threadId: session.thread.requireId() }))?.metadata?.tokenUsage,
+      ).toMatchObject({ totalTokens: 4 });
+    } finally {
+      release.resolve();
+      await first;
+      await second;
+      spy.mockRestore();
+    }
+  });
+
+  it.each([false, true])(
+    'does not project a stale usage read after navigation (return to source: %s)',
+    async returnToSource => {
+      const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+      await session.machinery.buildSharedRunOptions().onStepFinish!({ usage });
+      const threadId = session.thread.requireId();
+      const saved = await session.thread.getById({ threadId });
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const spy = vi.spyOn(session.thread, 'getById').mockImplementationOnce(async () => {
+        entered.resolve();
+        await release.promise;
+        return saved;
+      });
+      const replay = (session as any).processStream({ fullStream: mockStream(usage) });
+      try {
+        await entered.promise;
+        await session.thread.create({ id: 'projection-successor' });
+        if (returnToSource) {
+          await session.thread.switch({ threadId });
+          await session.machinery.buildSharedRunOptions().onStepFinish!({ usage });
+          await session.thread.loadMetadata();
+        }
+        const displayBefore = session.displayState.get().tokenUsage;
+        release.resolve();
+        await replay;
+        expect(session.getTokenUsage().totalTokens).toBe(returnToSource ? 4 : 0);
+        expect(session.displayState.get().tokenUsage).toEqual(displayBefore);
+      } finally {
+        release.resolve();
+        await replay;
+        spy.mockRestore();
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'projects a real late listener without writing usage (owner write failure: %s)',
+    async failWrite => {
+      const storage = new InMemoryStore();
+      const secondStep = Promise.withResolvers<ReadableStreamDefaultController>();
+      let calls = 0;
+      const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+      const agent = new Agent({
+        id: 'late-listener-usage-agent',
+        name: 'Late listener usage',
+        instructions: 'Call the tool, then respond.',
+        memory: new MockMemory({ storage }),
+        tools: {
+          continue_work: createTool({
+            id: 'continue_work',
+            description: 'Continue work',
+            inputSchema: z.object({}),
+            execute: async () => 'ok',
+          }),
+        },
+        model: new MastraLanguageModelV2Mock({
+          doStream: async () => ({
+            stream: new ReadableStream({
+              start(output) {
+                output.enqueue({ type: 'stream-start', warnings: [] });
+                if (++calls === 1) {
+                  output.enqueue({
+                    type: 'tool-call',
+                    toolCallId: 'continue-1',
+                    toolName: 'continue_work',
+                    input: '{}',
+                  });
+                  output.enqueue({ type: 'finish', finishReason: 'tool-calls', usage });
+                  output.close();
+                } else {
+                  output.enqueue({ type: 'text-start', id: 'response-1' });
+                  secondStep.resolve(output);
+                }
+              },
+            }),
+          }),
+        }),
+      });
+      new Mastra({ agents: { agent }, storage, logger: false });
+      const owner = new AgentController({
+        id: 'late-listener-usage',
+        agent,
+        storage,
+        workspace: createMockWorkspace(),
+        initialState: { yolo: true },
+        modes: [{ id: 'default', name: 'Default', default: true }],
+      });
+      await owner.init();
+      const first = await owner.createSession({ id: 'first', ownerId: 'shared-usage', scope: 'first' });
+      const threadId = first.thread.requireId();
+      const memory = (await storage.getStore('memory'))!;
+      const save = memory.saveThread.bind(memory);
+      let failures = 0;
+      const saveSpy = vi.spyOn(memory, 'saveThread').mockImplementation(async input => {
+        if (failWrite && input.thread.metadata?.tokenUsage && failures++ === 0)
+          throw new Error('Injected execution save failure');
+        return save(input);
+      });
+      const sending = first.sendMessage({ content: 'Start' });
+      const second = await owner.createSession({
+        id: 'second',
+        ownerId: 'shared-usage',
+        scope: 'second',
+        createInitialThread: false,
+      });
+      try {
+        const output = await secondStep.promise;
+        if (!failWrite) {
+          await vi.waitFor(async () =>
+            expect((await memory.getThreadById({ threadId }))?.metadata?.tokenUsage).toMatchObject({ totalTokens: 2 }),
+          );
+        }
+        await second.thread.switch({ threadId });
+        await vi.waitFor(() => {
+          expect(second.run.getRunId()).toBe(first.run.getRunId());
+          expect(second.getTokenUsage().totalTokens).toBe(2);
+        });
+        output.enqueue({ type: 'text-delta', id: 'response-1', delta: 'Done' });
+        output.enqueue({ type: 'text-end', id: 'response-1' });
+        output.enqueue({ type: 'finish', finishReason: 'stop', usage });
+        output.close();
+        await sending;
+        await vi.waitFor(() => {
+          expect(second.run.isRunning()).toBe(false);
+          expect(second.getTokenUsage().totalTokens).toBe(4);
+          expect(second.displayState.get().tokenUsage?.totalTokens).toBe(4);
+        });
+        expect(first.getTokenUsage().totalTokens).toBe(4);
+        expect((await memory.getThreadById({ threadId }))?.metadata?.tokenUsage).toMatchObject({ totalTokens: 4 });
+        if (failWrite) expect(failures).toBeGreaterThanOrEqual(2);
+      } finally {
+        saveSpy.mockRestore();
+        first.abort();
+        second.stream.detach();
+        first.stream.detach();
+        await sending.catch(() => {});
+        await owner.destroy();
+      }
+    },
+  );
 
   it('preserves the running tally when metadata read fails', async () => {
     const storage = new InMemoryStore();

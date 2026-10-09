@@ -27,7 +27,8 @@ import {
   getDisplayTransform,
   toStepTokenUsage,
 } from './stream-content';
-import type { ActiveSubagentState, AgentControllerEvent } from './types';
+import { createEmptyTokenUsage } from './types';
+import type { ActiveSubagentState, AgentControllerEvent, TokenUsage } from './types';
 
 /**
  * The transient state of a single in-flight agent stream: the assistant message
@@ -1159,11 +1160,29 @@ export class SessionRunEngine {
           state.currentMessage.content.parts.every(
             part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result',
           );
-        // Subscribers only project usage for display. The executing run persists
-        // it to the thread through its step-finish callback.
         const stepUsage = toStepTokenUsage(getRecord(getPayload(chunk).output)?.usage);
         if (stepUsage) {
-          this.#session.addUsage(stepUsage);
+          const bindingGeneration = this.#session.run.bindingGeneration();
+          let savedUsage: TokenUsage | undefined;
+          try {
+            // The execution callback finishes before this chunk is broadcast.
+            // Replace the hydrated total, rather than adding already-saved replay.
+            if (state.threadId) {
+              const thread = await this.#session.thread.getById({ threadId: state.threadId });
+              savedUsage = thread?.metadata?.tokenUsage as TokenUsage | undefined;
+            }
+          } catch {
+            // Keep the last projection if storage cannot be read; replay is not a new measurement.
+            break;
+          }
+          if (
+            this.#session.run.bindingGeneration() !== bindingGeneration ||
+            this.#session.thread.getId() !== state.threadId ||
+            this.#session.identity.getResourceId() !== state.resourceId
+          )
+            break;
+          if (savedUsage) this.#session.setTokenUsage({ ...createEmptyTokenUsage(), ...savedUsage });
+          else this.#session.addUsage(stepUsage);
           this.#session.emit({ type: 'usage_update', usage: stepUsage });
         }
         break;
