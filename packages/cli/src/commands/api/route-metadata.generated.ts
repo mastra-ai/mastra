@@ -1633,6 +1633,23 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /knowledge/:instanceKey/importers/:importerId/webhook": {
+    "method": "POST",
+    "path": "/knowledge/:instanceKey/importers/:importerId/webhook",
+    "pathParams": [
+      "instanceKey",
+      "importerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "payload"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /scores/scorers": {
     "method": "GET",
     "path": "/scores/scorers",
