@@ -295,7 +295,7 @@ requestContext.set(MASTRA_THREAD_ID_KEY, threadId)
 | - | - |
 | `MASTRA_RESOURCE_ID_KEY` | Forces all memory operations to use this resource ID. The server validates that accessed threads belong to this resource and returns 403 if not. |
 | `MASTRA_THREAD_ID_KEY` | Forces thread operations to use this thread ID, overriding client-provided values |
-| `MASTRA_MESSAGE_AUTHOR_KEY` | Names who sent a user message as `{ id, name?, avatarUrl? }`. Agent-controller sessions copy it onto every message the request sends as `providerMetadata.mastra.author`, so a thread shared by several people can show who wrote what. |
+| `MASTRA_MESSAGE_AUTHOR_KEY` | Names who sent a user message as `{ id, name?, avatarUrl? }`. Agent-controller sessions persist it at `content.metadata.signal.author` and mirror it to `providerMetadata.mastra.author` for compatibility, so a thread shared by several people can show who wrote what. |
 
 These keys are used to implement user isolation in multi-tenant applications. See [Authorization middleware](/docs/server/middleware#authorization-user-isolation) for usage examples.
 

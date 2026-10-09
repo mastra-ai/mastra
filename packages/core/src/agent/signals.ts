@@ -21,6 +21,7 @@ type SignalFilePart = {
 
 export type AgentSignalContents = string | Array<TextPart | FilePart>;
 export type AgentSignalAttributes = Record<string, string | number | boolean | null | undefined>;
+export type MessageAuthor = { id: string; name?: string; avatarUrl?: string };
 export type AgentStateSignalMode = 'snapshot' | 'delta';
 
 export type AgentStateSignalInput = {
@@ -42,6 +43,7 @@ export type AgentMessageInput =
       contents: AgentSignalContents;
       attributes?: AgentSignalAttributes;
       metadata?: Record<string, unknown>;
+      author?: MessageAuthor;
       providerOptions?: MastraProviderMetadata;
     };
 
@@ -53,6 +55,7 @@ type AgentSignalInputBase = {
   contents: AgentSignalContents;
   attributes?: AgentSignalAttributes;
   metadata?: Record<string, unknown>;
+  author?: MessageAuthor;
   /**
    * Provider options attached to the resulting prompt turn. Surfaces as `providerOptions` on the
    * `UserModelMessage` sent to the model and as `content.providerMetadata` on the persisted DB
@@ -99,6 +102,7 @@ export type AgentSignalDataPart = {
     acceptedAt?: string;
     attributes?: AgentSignalAttributes;
     metadata?: Record<string, unknown>;
+    author?: MessageAuthor;
     providerOptions?: MastraProviderMetadata;
     transient?: boolean;
   };
@@ -140,6 +144,32 @@ export function isUserAuthoredMessage(message: MastraDBMessage): boolean {
   const signal = message.content?.metadata?.signal;
   if (typeof signal !== 'object' || signal === null || !('type' in signal)) return false;
   return signal.type === 'user' || signal.type === 'user-message';
+}
+
+function parseMessageAuthor(author: unknown): MessageAuthor | undefined {
+  if (!author || typeof author !== 'object' || Array.isArray(author)) return undefined;
+  const { id, name, avatarUrl } = author as Partial<Record<keyof MessageAuthor, unknown>>;
+  if (typeof id !== 'string' || !id) return undefined;
+  return {
+    id,
+    ...(typeof name === 'string' ? { name } : {}),
+    ...(typeof avatarUrl === 'string' ? { avatarUrl } : {}),
+  };
+}
+
+/** Returns the authenticated author stamped on a persisted user signal. */
+export function getMessageAuthor(message: MastraDBMessage): MessageAuthor | undefined {
+  const signal = message.content?.metadata?.signal;
+  const canonicalAuthor =
+    signal && typeof signal === 'object' && !Array.isArray(signal)
+      ? parseMessageAuthor((signal as Record<string, unknown>).author)
+      : undefined;
+  if (canonicalAuthor) return canonicalAuthor;
+
+  const mastra = message.content?.providerMetadata?.mastra;
+  return mastra && typeof mastra === 'object' && !Array.isArray(mastra)
+    ? parseMessageAuthor((mastra as Record<string, unknown>).author)
+    : undefined;
 }
 
 /**
@@ -494,6 +524,7 @@ function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: Sig
       ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
       ...(signal.attributes ? { attributes: signal.attributes } : {}),
       ...(signal.metadata ? { metadata: signal.metadata } : {}),
+      ...(signal.author ? { author: signal.author } : {}),
       ...(signal.providerOptions ? { providerOptions: signal.providerOptions } : {}),
       ...(signal.transient ? { transient: true } : {}),
     },
@@ -544,6 +575,7 @@ function signalToDBMessage(
           ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
           ...(signal.attributes ? { attributes: signal.attributes } : {}),
           ...(signal.metadata ? { metadata: signal.metadata } : {}),
+          ...(signal.author ? { author: signal.author } : {}),
           ...(signal.transient ? { transient: true } : {}),
         },
       },
@@ -657,6 +689,7 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
       signalMetadata?.metadata && typeof signalMetadata.metadata === 'object' && !Array.isArray(signalMetadata.metadata)
         ? (signalMetadata.metadata as AgentSignalInput['metadata'])
         : undefined,
+    author: getMessageAuthor(message),
     providerOptions:
       providerMetadata && typeof providerMetadata === 'object' && !Array.isArray(providerMetadata)
         ? (providerMetadata as MastraProviderMetadata)

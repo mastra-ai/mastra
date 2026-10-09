@@ -6,6 +6,7 @@ import type {
   AgentSignalContents,
   AgentSignalInput,
   CreatedAgentSignal,
+  MessageAuthor,
 } from '../agent/signals';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type {
@@ -4894,6 +4895,7 @@ export class Session<TState = unknown> {
           tracingOptions?: TracingOptions;
           requestContext?: RequestContext;
           untilIdle?: boolean | { maxIdleMs?: number };
+          author?: MessageAuthor;
           /**
            * Provider options attached to the resulting prompt turn. Surfaces as
            * `providerOptions` on the `UserModelMessage` sent to the model and as
@@ -4967,13 +4969,15 @@ export class Session<TState = unknown> {
     // detached, which the run engine does only after that run has ended.
     const abortedStreamTeardown =
       submittedAbortRequested && !submittedIsRunning && this.stream.isOpen() ? this.#watchStreamTeardown() : undefined;
+    const requestAuthor = readMessageAuthor(requestContextInput);
     const submitted = createSignal(
       'content' in input
         ? {
             type: 'user',
             tagName: 'user',
             contents: input.content,
-            providerOptions: withMessageAuthor(input.providerOptions, readMessageAuthor(requestContextInput)),
+            author: input.author ?? requestAuthor,
+            providerOptions: withMessageAuthor(input.providerOptions, input.author ?? requestAuthor),
           }
         : input,
     );
@@ -5248,6 +5252,7 @@ export class Session<TState = unknown> {
     tracingOptions,
     requestContext: requestContextInput,
     untilIdle,
+    author,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
@@ -5255,6 +5260,7 @@ export class Session<TState = unknown> {
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
     untilIdle?: boolean | { maxIdleMs?: number };
+    author?: MessageAuthor;
   }): Promise<void> {
     const wasActive = this.stream.isActive();
     const signal = this.sendSignal(
@@ -5264,6 +5270,7 @@ export class Session<TState = unknown> {
         tracingOptions,
         requestContext: requestContextInput,
         untilIdle,
+        author,
       },
       { requireDelivery: true },
     );
@@ -5285,12 +5292,14 @@ export class Session<TState = unknown> {
     tracingContext,
     tracingOptions,
     requestContext: requestContextInput,
+    author,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
     tracingContext?: TracingContext;
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
+    author?: MessageAuthor;
   }): Promise<void> {
     await this.machinery.authorizeExecute?.(requestContextInput);
     const wasActive = this.stream.isActive();
@@ -5304,10 +5313,16 @@ export class Session<TState = unknown> {
       abortSignal: wasActive ? new AbortController().signal : undefined,
     });
     const messageInput = this.createMessageInput({ content, files });
-    const providerOptions = withMessageAuthor(undefined, readMessageAuthor(requestContextInput));
+    const messageAuthor = author ?? readMessageAuthor(requestContextInput);
+    const providerOptions = withMessageAuthor(undefined, messageAuthor);
     const result = this.machinery
       .getAgent()
-      .queueMessage(providerOptions ? { contents: messageInput, providerOptions } : messageInput, target);
+      .queueMessage(
+        messageAuthor || providerOptions
+          ? { contents: messageInput, ...(messageAuthor ? { author: messageAuthor } : {}), providerOptions }
+          : messageInput,
+        target,
+      );
 
     if (wasActive) {
       await result.accepted;
@@ -5317,9 +5332,17 @@ export class Session<TState = unknown> {
   }
 
   /** Abort the current run and send steering input without clearing queued follow-ups. */
-  async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
+  async steer({
+    content,
+    requestContext,
+    author,
+  }: {
+    content: string;
+    requestContext?: RequestContext;
+    author?: MessageAuthor;
+  }): Promise<void> {
     this.abort();
-    await this.sendMessage({ content, requestContext });
+    await this.sendMessage({ content, requestContext, author });
   }
 
   ensureFollowUpBinding(agent: Agent, resourceId: string, threadId: string) {
