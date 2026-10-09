@@ -105,6 +105,47 @@ describe('thread ownership (#24878)', () => {
     runB.complete();
   });
 
+  it('ignores a redelivered run-registered for a finished run whose record was already cleaned up', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new LeasePubSub();
+    pubsub.retain = true;
+    const threadId = 'redelivery-owner-thread';
+    const resourceId = 'redelivery-owner-user';
+    const topic = `agent.thread-stream.${encodeURIComponent([resourceId, threadId].join('\u0000'))}`;
+    const agent = {
+      id: 'redelivery-owner-agent',
+      getMemory: async () => ({
+        getThreadById: async ({ threadId }: { threadId: string }) => ({ id: threadId }),
+        recall: async () => ({ messages: [], hasMore: false }),
+      }),
+    } as unknown as Agent<any, any, any, any>;
+
+    // Run A finishes and its local record is removed, as a durable run's is.
+    const runA = registerRun(runtime, agent, pubsub, 'run-a', threadId, resourceId);
+    await runA.registered;
+    const registeredA = pubsub
+      .retainedEvents(topic)
+      .find(event => event.data?.type === 'run-registered' && event.runId === 'run-a');
+    expect(registeredA).toBeDefined();
+    runA.complete();
+    await nextTicks(20);
+
+    const runB = registerRun(runtime, agent, pubsub, 'run-b', threadId, resourceId);
+    await runB.registered;
+
+    const subscription = await runtime.subscribeToThread(agent, { threadId, resourceId }, pubsub);
+    await nextTicks(20);
+    expect(subscription.activeRunId()).toBe('run-b');
+
+    // Same-source redelivery (e.g. a reclaimed stream entry) while B still runs.
+    await pubsub.publish(topic, registeredA);
+    await nextTicks(20);
+
+    expect(subscription.activeRunId()).toBe('run-b');
+    subscription.unsubscribe();
+    runB.complete();
+  });
+
   it('delivers a thread-targeted signal to an active run owned by another instance', async () => {
     const ownerRuntime = new AgentThreadStreamRuntime();
     const senderRuntime = new AgentThreadStreamRuntime();

@@ -4467,9 +4467,15 @@ export class AgentThreadStreamRuntime {
         // (record cleaned up, lease released) where deferral would strand the
         // run because its terminal event was already processed.
         // A finished local record must not displace a different active run.
+        // Without a record (already cleaned up), a redelivered registration
+        // must not displace a different local run that still blocks the thread.
         const currentActiveRunId = state.activeThreadRunIds.get(key);
+        const currentActiveRecord = currentActiveRunId ? state.threadRunsById.get(currentActiveRunId) : undefined;
         const displacesActiveRun =
-          localRecord !== undefined && currentActiveRunId !== undefined && currentActiveRunId !== data.runId;
+          currentActiveRunId !== undefined &&
+          currentActiveRunId !== data.runId &&
+          (localRecord !== undefined ||
+            (currentActiveRecord !== undefined && this.#isThreadBlockingRun(state, currentActiveRecord)));
         const sameSourceLive =
           !backlog && !displacesActiveRun && data.sourceId !== undefined && data.sourceId === this.#getSourceId();
         // A nonblocking local record is never live via the lease: fallback lease
@@ -4477,7 +4483,8 @@ export class AgentThreadStreamRuntime {
         const live =
           localRecord !== undefined
             ? this.#isThreadBlockingRun(state, localRecord) || sameSourceLive
-            : sameSourceLive || (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId));
+            : !displacesActiveRun &&
+              (sameSourceLive || (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId)));
         if (live) {
           state.activeThreadRunIds.set(key, data.runId);
           state.activeThreadStreamIds.set(key, data.streamId);
