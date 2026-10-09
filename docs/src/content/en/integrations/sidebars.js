@@ -243,6 +243,7 @@ const sidebars = {
             iconDark: 'https://cdn.simpleicons.org/railway/white?viewbox=auto&size=28',
           },
         },
+        { type: 'doc', id: 'sandboxes/smol', label: 'Smol' },
         {
           type: 'doc',
           id: 'sandboxes/vercel',
