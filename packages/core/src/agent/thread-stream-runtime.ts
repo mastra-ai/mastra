@@ -2483,6 +2483,11 @@ export class AgentThreadStreamRuntime {
     return this.#getState(pubsub).threadRunsById.has(runId);
   }
 
+  /** Whether the run's original stream is still live and carries its resumed segments. */
+  hasRunContinuation(runId: string, pubsub?: PubSub): boolean {
+    return this.#getState(pubsub).threadRunsById.get(runId)?.continuation?.canContinue() === true;
+  }
+
   /** Capture whether the currently registered continuation publishes its terminal stream part. */
   captureThreadRunTerminalPublish(runId: string, pubsub?: PubSub): (() => boolean) | undefined {
     return this.#getState(pubsub).threadRunsById.get(runId)?.continuation?.didPublishTerminal;

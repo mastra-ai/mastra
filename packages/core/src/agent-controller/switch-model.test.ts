@@ -574,7 +574,6 @@ describe('session.model.switch', () => {
     const { controller, session } = await createSession(undefined, storage);
     await session.thread.create();
     await session.model.switch('openai/gpt-4o', { thinkingLevel: 'low' });
-    session.setTokenUsage({ promptTokens: 10, completionTokens: 5, totalTokens: 15 });
     const memory = (await storage.getStore('memory'))!;
     const save = memory.saveThread.bind(memory);
     let release = () => {};
@@ -590,7 +589,10 @@ describe('session.model.switch', () => {
       await saveGate;
       return save(args);
     });
-    const persisting = controller['persistTokenUsage'](session);
+    // The executing run records its step usage through the same metadata queue.
+    const persisting = session.machinery.buildSharedRunOptions().onStepFinish!({
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+    });
     await saveStarted;
     const switching = session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
     try {
@@ -602,7 +604,11 @@ describe('session.model.switch', () => {
     await Promise.all([persisting, switching]);
     expect(await session.thread.getSetting({ key: 'currentModelId' })).toBe('openai/gpt-5.5');
     expect(await session.thread.getSetting({ key: 'thinkingLevel' })).toBe('high');
-    expect(await session.thread.getSetting({ key: 'tokenUsage' })).toEqual(session.getTokenUsage());
+    expect(await session.thread.getSetting({ key: 'tokenUsage' })).toMatchObject({
+      promptTokens: 10,
+      completionTokens: 5,
+      totalTokens: 15,
+    });
   });
 
   it('tracks model selection via modelUseCountTracker', async () => {

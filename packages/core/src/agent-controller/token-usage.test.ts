@@ -112,7 +112,7 @@ describe('step-finish token usage extraction', () => {
     });
   });
 
-  it('persists richer token usage in thread metadata', async () => {
+  it('persists richer token usage from the executing run, not from stream subscribers', async () => {
     const storage = new InMemoryStore();
     controller = createController(storage);
     await controller.init();
@@ -127,24 +127,25 @@ describe('step-finish token usage extraction', () => {
       cacheCreationInputTokens: 5,
       raw: { provider: 'test-provider' },
     };
+    const readStoredUsage = async () => {
+      const memory = await storage.getStore('memory');
+      return (await memory?.getThreadById({ threadId: thread.id }))?.metadata?.tokenUsage;
+    };
 
+    // A subscriber only displays usage.
     await (session as any).processStream({ fullStream: mockStream(usage) });
+    expect(await readStoredUsage()).toBeUndefined();
 
-    await expect
-      .poll(async () => {
-        const memory = await storage.getStore('memory');
-        const savedThread = await memory?.getThreadById({ threadId: thread.id });
-        return savedThread?.metadata?.tokenUsage;
-      })
-      .toEqual({
-        promptTokens: 100,
-        completionTokens: 50,
-        totalTokens: 220,
-        reasoningTokens: 70,
-        cachedInputTokens: 25,
-        cacheCreationInputTokens: 5,
-        raw: { provider: 'test-provider' },
-      });
+    await session.machinery.buildSharedRunOptions().onStepFinish!({ usage });
+    await expect.poll(readStoredUsage).toEqual({
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 220,
+      reasoningTokens: 70,
+      cachedInputTokens: 25,
+      cacheCreationInputTokens: 5,
+      raw: { provider: 'test-provider' },
+    });
   });
 
   it('accumulates token usage across multiple step-finish chunks', async () => {

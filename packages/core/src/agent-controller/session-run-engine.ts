@@ -22,13 +22,12 @@ import {
   SUSPENDED_RUN_MEMORY_KEY,
 } from './session';
 import {
-  addOptionalUsageField,
   describeNonSuccessFinishReason,
   describeServerSideFallback,
   getDisplayTransform,
-  getUsageNumber,
+  toStepTokenUsage,
 } from './stream-content';
-import type { ActiveSubagentState, AgentControllerEvent, TokenUsage } from './types';
+import type { ActiveSubagentState, AgentControllerEvent } from './types';
 
 /**
  * The transient state of a single in-flight agent stream: the assistant message
@@ -1160,7 +1159,13 @@ export class SessionRunEngine {
           state.currentMessage.content.parts.every(
             part => part.type === 'tool-invocation' && part.toolInvocation.state === 'result',
           );
-        await this.processStepUsage(chunk, requestContext);
+        // Subscribers only project usage for display. The executing run persists
+        // it to the thread through its step-finish callback.
+        const stepUsage = toStepTokenUsage(getRecord(getPayload(chunk).output)?.usage);
+        if (stepUsage) {
+          this.#session.addUsage(stepUsage);
+          this.#session.emit({ type: 'usage_update', usage: stepUsage });
+        }
         break;
       }
 
@@ -1731,75 +1736,6 @@ export class SessionRunEngine {
     }
     this.#session.stream.detach();
     this.#session.run.reset();
-  }
-
-  async processStepUsage(chunk: StreamChunk, requestContext: RequestContext): Promise<void> {
-    const usage = getRecord(getPayload(chunk).output)?.usage;
-    const usageRecord = getRecord(usage);
-    if (usageRecord) {
-      // A step whose usage payload carries no usable primary count (missing,
-      // nested-object, or all-undefined shapes) must NOT be coerced into a
-      // {0,0,0} tally: doing so fabricates a false `usage_update` event and
-      // persists a false zero that is indistinguishable from a measured zero.
-      // Only fold/persist/emit when at least one primary count is present.
-      // A genuine measured zero arrives as an explicit numeric 0, which
-      // `getUsageNumber` reports as present.
-      const rawPrompt = getUsageNumber(usageRecord, 'promptTokens') ?? getUsageNumber(usageRecord, 'inputTokens');
-      const rawCompletion =
-        getUsageNumber(usageRecord, 'completionTokens') ?? getUsageNumber(usageRecord, 'outputTokens');
-      const rawTotal = getUsageNumber(usageRecord, 'totalTokens');
-      const hasPrimaryCount = rawPrompt !== undefined || rawCompletion !== undefined || rawTotal !== undefined;
-      if (hasPrimaryCount) {
-        const promptTokens = rawPrompt ?? 0;
-        const completionTokens = rawCompletion ?? 0;
-        const totalTokens = rawTotal ?? promptTokens + completionTokens;
-        const stepUsage: TokenUsage = {
-          promptTokens,
-          completionTokens,
-          totalTokens,
-        };
-        addOptionalUsageField(stepUsage, 'reasoningTokens', getUsageNumber(usageRecord, 'reasoningTokens'));
-        addOptionalUsageField(stepUsage, 'cachedInputTokens', getUsageNumber(usageRecord, 'cachedInputTokens'));
-        addOptionalUsageField(
-          stepUsage,
-          'cacheCreationInputTokens',
-          getUsageNumber(usageRecord, 'cacheCreationInputTokens'),
-        );
-        addOptionalUsageField(
-          stepUsage,
-          'cacheCreationInputTokens5m',
-          getUsageNumber(usageRecord, 'cacheCreationInputTokens5m'),
-        );
-        addOptionalUsageField(
-          stepUsage,
-          'cacheCreationInputTokens1h',
-          getUsageNumber(usageRecord, 'cacheCreationInputTokens1h'),
-        );
-        if (usageRecord.raw !== undefined) {
-          stepUsage.raw = usageRecord.raw;
-        }
-
-        if (this.#machinery.recordTokenUsage) {
-          const payload = getPayload(chunk);
-          const messageId = getString(payload.messageId) ?? getString(payload.id);
-          // A continued step carries the next response's message id; its final
-          // step can reuse that id, but is not a continuation.
-          const stepKey = messageId
-            ? JSON.stringify([messageId, getRecord(payload.stepResult)?.isContinued === true])
-            : undefined;
-          await this.#machinery.recordTokenUsage(
-            stepUsage,
-            requestContext,
-            'runId' in chunk ? (chunk.runId ?? undefined) : undefined,
-            stepKey,
-          );
-        } else {
-          this.#session.addUsage(stepUsage);
-          this.#machinery.persistTokenUsage().catch(() => {});
-          this.#session.emit({ type: 'usage_update', usage: stepUsage });
-        }
-      }
-    }
   }
 
   async processSubscribedThreadStream(subscription: AgentThreadSubscription<StreamChunk, true>): Promise<void> {
