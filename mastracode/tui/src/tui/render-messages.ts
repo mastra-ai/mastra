@@ -1255,7 +1255,6 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             toolComponent.setQuietPreviewLineLimit(state.previewLines);
             state.chatContainer.addChild(toolComponent);
             state.allToolComponents.push(toolComponent);
-          } else {
           }
         } else if (part.kind === 'account-switch') {
           flushAccumulated();
