@@ -118,7 +118,9 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   const container = page.locator('[data-testid="knowledge-graph-container"]');
   await expect.poll(async () => (await container.boundingBox())?.height ?? 0).toBeGreaterThan(100);
 
+  // Selecting highlights; the selection toolbar's Details action opens the record list.
   await page.locator('.react-flow__node[data-id="payments"]').dispatchEvent('click');
+  await page.getByRole('toolbar', { name: 'Selected knowledge' }).getByRole('button', { name: 'Details' }).click();
   await expect(page.getByText(/Payments uses/)).toBeVisible();
 
   await page.getByRole('tab', { name: 'activity' }).click();

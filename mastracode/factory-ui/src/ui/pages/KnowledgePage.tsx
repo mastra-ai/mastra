@@ -22,11 +22,13 @@ import { KnowledgeGraph } from '../domains/factory/components/knowledge/Knowledg
 import { KnowledgeFlyout } from '../domains/factory/components/knowledge/KnowledgeFlyout';
 import { KnowledgeApprovals } from '../domains/factory/components/knowledge/KnowledgeApprovals';
 import { KnowledgeImports } from '../domains/factory/components/knowledge/KnowledgeImports';
+import { KnowledgeList } from '../domains/factory/components/knowledge/KnowledgeList';
 import { KnowledgeScopeFlyout } from '../domains/factory/components/knowledge/KnowledgeScopeFlyout';
 import { KnowledgeSearch } from '../domains/factory/components/knowledge/KnowledgeSearch';
 import type { Arrivals, DiffBaseline } from '../domains/factory/components/knowledge/graphDiff';
 import { computeArrivals } from '../domains/factory/components/knowledge/graphDiff';
 import type {
+  KnowledgeGraphNode,
   KnowledgeRung,
   KnowledgeScopeTreePayload,
   KnowledgeSearchResult,
@@ -119,7 +121,9 @@ function ScopeTree({
   loadingMore,
   loadMoreFailed,
   onLoadMore,
+  className,
 }: {
+  className?: string;
   tree: KnowledgeScopeTreePayload | undefined;
   selectedScopeId: string | undefined;
   onSelectScope: (scopeId: string) => void;
@@ -130,7 +134,10 @@ function ScopeTree({
   onLoadMore: () => void;
 }) {
   return (
-    <aside aria-label="Knowledge scopes" className="border-border bg-card w-48 shrink-0 rounded-lg border p-3">
+    <aside
+      aria-label="Knowledge scopes"
+      className={cn('border-border bg-card shrink-0 overflow-y-auto rounded-lg border p-3', className)}
+    >
       <Txt as="h2" variant="caption" className="text-foreground mb-2 font-semibold">
         Scopes
       </Txt>
@@ -396,6 +403,8 @@ function writeRungScope(params: URLSearchParams, rung: KnowledgeRung, threadId: 
   params.delete('thread');
 }
 
+type KnowledgeLayout = 'graph' | 'list';
+
 function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | undefined }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const threadId = searchParams.get('thread') ?? undefined;
@@ -408,6 +417,23 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   const importerId = searchParams.get('importer') ?? undefined;
   const runId = searchParams.get('run') ?? undefined;
   const proposalId = searchParams.get('proposal') ?? undefined;
+  // Small screens read the lens as a tappable list; `?layout=` keeps an explicit choice linkable.
+  const [defaultLayout] = useState<KnowledgeLayout>(() =>
+    typeof window !== 'undefined' &&
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(max-width: 767px)').matches
+      ? 'list'
+      : 'graph',
+  );
+  const requestedLayout = searchParams.get('layout');
+  const layout: KnowledgeLayout =
+    requestedLayout === 'list' || requestedLayout === 'graph' ? requestedLayout : defaultLayout;
+  const setLayout = (next: KnowledgeLayout) =>
+    setSearchParams(params => {
+      const copy = new URLSearchParams(params);
+      copy.set('layout', next);
+      return copy;
+    });
   // `?scope=` is an identity rung ('org', 'resource', or 'thread' alongside
   // ?thread=) or a scope-tree node id; without it the view resolves the
   // project scope (or the session scope inside a thread).
@@ -430,7 +456,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     return nodeId ? [{ nodeId, name: searchParams.get('nodeName') ?? nodeId }] : [];
   });
   const selected = trail.at(-1) ?? null;
-  const setSelected = (entry: TrailEntry | null) => setTrail(entry ? [entry] : []);
+  // Selecting highlights; details open only on an explicit action (the Details button, a second
+  // tap on the selected node, a search result, or a deep link), so exploring never covers the canvas.
+  const [detailsOpen, setDetailsOpen] = useState(() => searchParams.has('node'));
+  const setSelected = (entry: TrailEntry | null, { open = false }: { open?: boolean } = {}) => {
+    setDetailsOpen(Boolean(entry) && open);
+    setTrail(entry ? [entry] : []);
+  };
   useEffect(() => {
     setSearchParams(
       params => {
@@ -492,17 +524,24 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       return copy;
     });
   };
-  const selectScope = (scopeId: string) => {
+  const selectScope = (scopeId: string, { open = false }: { open?: boolean } = {}) => {
     setSelected(null);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
       copy.set('scope', scopeId);
-      // Selecting a scope changes the lens and opens that scope's detail
-      // surface; the URL carries both so the result is linkable.
-      copy.set('details', 'scope');
+      // Selecting a scope changes the lens; its detail surface opens on request.
+      // The URL carries both so the result is linkable.
+      if (open) copy.set('details', 'scope');
+      else copy.delete('details');
       return copy;
     });
   };
+  const openScopeDetails = () =>
+    setSearchParams(params => {
+      const copy = new URLSearchParams(params);
+      copy.set('details', 'scope');
+      return copy;
+    });
   const closeScopeDetails = () =>
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
@@ -514,10 +553,10 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
   const scopeDetailsOpen = searchParams.get('details') === 'scope';
   const selectSearchResult = (result: KnowledgeSearchResult) => {
     if (result.type === 'scope') {
-      selectScope(result.id);
+      selectScope(result.id, { open: true });
       return;
     }
-    setSelected({ nodeId: result.id, name: result.name, rung: result.rung });
+    setSelected({ nodeId: result.id, name: result.name, rung: result.rung }, { open: true });
     setView('explore');
   };
 
@@ -559,38 +598,83 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       </Txt>
     );
   } else {
+    const graphPayload = graphQuery.data;
+    const clickNode = (node: KnowledgeGraphNode) => {
+      if (node.isScope) {
+        // Scope selection is identical in the tree and canvas: switch the lens; tapping the
+        // already-selected scope again opens its detail surface.
+        selectScope(node.id, { open: node.id === selectedScopeId });
+        return;
+      }
+      // First tap selects and highlights; tapping the selected node again opens its details.
+      setSelected({ nodeId: node.id, name: node.name }, { open: selected?.nodeId === node.id });
+    };
+    const toolbarTarget =
+      selected && !detailsOpen
+        ? { name: selected.name, open: () => setDetailsOpen(true) }
+        : !selected && lensScope && !scopeDetailsOpen
+          ? { name: lensScope.name, open: openScopeDetails }
+          : undefined;
     body = (
-      <div
-        className="relative min-h-0 flex-1"
-        data-testid="knowledge-graph-container"
-        onPointerDownCapture={onActivity}
-        onPointerMoveCapture={onActivity}
-        onWheelCapture={onActivity}
-      >
-        <KnowledgeGraph
-          payload={graphQuery.data}
-          arrivals={arrivals}
-          focusedId={selected?.nodeId ?? null}
-          focusedRecordId={selected?.recordId ?? null}
-          // A structural member listing carries no edges — label every member
-          // so the lens reads as a directory, not a field of dots.
-          labelAll={Boolean(selection.scopeNodeId)}
-          onFocusChange={id => {
-            // A graph click starts a fresh trail; a pane click clears it.
-            if (!id) return setTrail([]);
-            const node = graphQuery.data?.nodes.find(entry => entry.id === id);
-            setTrail([{ nodeId: id, name: node?.name ?? id }]);
-          }}
-          onNodeClick={node =>
-            node.isScope ? selectScope(node.id) : setSelected({ nodeId: node.id, name: node.name })
-          }
-          onEdgeClick={edge => {
-            // Selecting an edge selects AND expands the supporting knowledge record (A7).
-            const node = graphQuery.data?.nodes.find(entry => entry.id === edge.source);
-            setSelected({ nodeId: edge.source, name: node?.name ?? edge.source, recordId: edge.recordId });
-          }}
-        />
-        {selected && factoryProjectId && selectedScopeId ? (
+      // Details sit beside the canvas on desktop (never over it) and as a bottom sheet below md.
+      <div className="flex min-h-0 flex-1">
+        <div
+          className="relative min-h-0 min-w-0 flex-1"
+          data-testid="knowledge-graph-container"
+          onPointerDownCapture={onActivity}
+          onPointerMoveCapture={onActivity}
+          onWheelCapture={onActivity}
+        >
+          {layout === 'list' ? (
+            <KnowledgeList
+              payload={graphPayload}
+              rootScopeId={selectedScopeId}
+              selectedNodeId={selected?.nodeId}
+              selectedRecordId={selected?.recordId}
+              onNodeClick={clickNode}
+              onRecordClick={(node, recordId) =>
+                // Tapping a record is an explicit request to read it.
+                setSelected({ nodeId: node.id, name: node.name, recordId }, { open: true })
+              }
+            />
+          ) : (
+            <KnowledgeGraph
+              payload={graphPayload}
+              arrivals={arrivals}
+              focusedId={selected?.nodeId ?? null}
+              focusedRecordId={selected?.recordId ?? null}
+              // A structural member listing carries no edges — label every member
+              // so the lens reads as a directory, not a field of dots.
+              labelAll={Boolean(selection.scopeNodeId)}
+              onFocusChange={id => {
+                // A pane click clears the selection; node clicks are handled by onNodeClick.
+                if (!id) setSelected(null);
+              }}
+              onNodeClick={clickNode}
+              onEdgeClick={edge => {
+                // Selecting an edge selects its source node and the supporting knowledge record (A7),
+                // which the details panel expands once opened.
+                const node = graphPayload.nodes.find(entry => entry.id === edge.source);
+                setSelected({ nodeId: edge.source, name: node?.name ?? edge.source, recordId: edge.recordId });
+              }}
+            />
+          )}
+          {toolbarTarget ? (
+            <div
+              role="toolbar"
+              aria-label="Selected knowledge"
+              className="border-border bg-card shadow-overlay absolute bottom-3 left-1/2 z-10 flex max-w-[90%] -translate-x-1/2 items-center gap-2 rounded-full border py-1 pr-1 pl-3"
+            >
+              <Txt as="span" variant="caption" className="text-foreground truncate">
+                {toolbarTarget.name}
+              </Txt>
+              <Button type="button" size="sm" variant="ghost" onClick={toolbarTarget.open}>
+                Details
+              </Button>
+            </div>
+          ) : null}
+        </div>
+        {selected && detailsOpen && factoryProjectId && selectedScopeId ? (
           <KnowledgeFlyout
             factoryProjectId={factoryProjectId}
             nodeId={selected.nodeId}
@@ -606,16 +690,16 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
                   : [...current.slice(0, -1), { ...current[current.length - 1]!, recordId: recordId ?? undefined }],
               )
             }
-            onClose={() => setTrail([])}
+            onClose={() => setSelected(null)}
             onNodeRef={name => {
               // A clicked [[wikilink]] gets the full node-click treatment (A7):
               // ego focus + cluster zoom + flyout swap, PUSHED onto the trail.
-              const target = graphQuery.data?.nodes.find(node => node.name.toLowerCase() === name.toLowerCase());
+              const target = graphPayload.nodes.find(node => node.name.toLowerCase() === name.toLowerCase());
               if (target && target.id !== selected.nodeId)
                 setTrail(current => [...current, { nodeId: target.id, name: target.name }]);
             }}
           />
-        ) : scopeDetailsOpen && lensScope && factoryProjectId ? (
+        ) : !selected && scopeDetailsOpen && lensScope && factoryProjectId ? (
           <KnowledgeScopeFlyout
             factoryProjectId={factoryProjectId}
             scope={lensScope}
@@ -694,8 +778,27 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
               </button>
             ))}
           </div>
-          <div className="w-full max-w-sm">
-            <KnowledgeSearch factoryProjectId={factoryProjectId} threadId={threadId} onSelect={selectSearchResult} />
+          <div className="flex w-full max-w-sm items-start gap-2">
+            {activeView === 'explore' ? (
+              <div className="flex gap-1" role="group" aria-label="Knowledge layout">
+                {(['graph', 'list'] as const).map(option => (
+                  <button
+                    key={option}
+                    type="button"
+                    aria-pressed={layout === option}
+                    className={`rounded-md px-3 py-1.5 text-sm capitalize ${
+                      layout === option ? 'bg-fill text-foreground' : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                    onClick={() => setLayout(option)}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            ) : null}
+            <div className="min-w-0 flex-1">
+              <KnowledgeSearch factoryProjectId={factoryProjectId} threadId={threadId} onSelect={selectSearchResult} />
+            </div>
           </div>
         </div>
         <Breadcrumb
@@ -705,11 +808,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
           onTrailClick={index => setTrail(current => current.slice(0, index + 1))}
         />
       </header>
-      <div className="flex min-h-0 flex-1 gap-4">
+      <div className={cn('flex min-h-0 flex-1 gap-4', layout === 'list' && 'flex-col')}>
         <ScopeTree
+          className={layout === 'list' ? 'max-h-48 w-full' : 'w-48'}
           tree={scopeQuery.data}
           selectedScopeId={selectedScopeId}
-          onSelectScope={selectScope}
+          // Same as the canvas: the first tap switches the lens, a second tap opens its details.
+          onSelectScope={scopeId => selectScope(scopeId, { open: scopeId === selectedScopeId })}
           onProjectClick={backToProject}
           hasMore={scopeQuery.hasNextPage}
           loadingMore={scopeQuery.isFetchingNextPage}
@@ -730,7 +835,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
             onSelectProposal={selectProposal}
             onOpenRun={openImportRun}
             onOpenNode={(nodeId, name) => {
-              setTrail([{ nodeId, name }]);
+              setSelected({ nodeId, name }, { open: true });
               setView('explore');
             }}
             explore={body}
