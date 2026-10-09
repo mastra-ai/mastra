@@ -439,6 +439,15 @@ describe('/auth routes', () => {
     expect(mockEnsureOrganization).toHaveBeenCalledWith('user_me');
   });
 
+  it('/auth/me forwards a renewed session cookie', async () => {
+    mockAuthenticate.mockResolvedValue({ workosId: 'user_me', email: 'user@example.com' });
+    mockConsumePendingResponseHeaders.mockReturnValue({ 'Set-Cookie': 'wos-session=v2; Path=/; Max-Age=1209600' });
+    const { app } = await buildApp();
+    const res = await app.request('/auth/me', { headers: { cookie: 'wos-session=v1' } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('set-cookie')).toContain('wos-session=v2');
+  });
+
   it('/auth/me surfaces the organization id and stable user id to the SPA', async () => {
     mockAuthenticate.mockResolvedValue({
       workosId: 'user_1',
