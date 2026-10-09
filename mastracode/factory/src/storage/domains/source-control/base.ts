@@ -560,7 +560,7 @@ interface ProjectRepositoryDbRow extends Record<string, unknown> {
 /** The environment columns on `factory_projects` the backfill reads and writes. */
 interface EnvironmentProjectRow extends Record<string, unknown> {
   id: string;
-  sandbox_workdir: string | null;
+  sandbox_working_directory: string | null;
   environment_backfilled_at: Date | null;
 }
 
@@ -844,7 +844,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
             FACTORY_PROJECTS,
             { id: project.id },
             {
-              sandbox_workdir: project.sandbox_workdir ?? oldest?.sandbox_workdir ?? null,
+              sandbox_working_directory: project.sandbox_working_directory ?? oldest?.sandbox_workdir ?? null,
               environment_backfilled_at: new Date(),
             },
           );
