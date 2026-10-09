@@ -87,3 +87,49 @@ describe('durable agent persists processOutputStream output (#26335)', () => {
     expect(stored).toBe('The card number is [REDACTED].');
   });
 });
+
+const toReasoning: Processor = {
+  id: 'to-reasoning',
+  async processOutputStream({ part }) {
+    if (part.type !== 'text-delta' || !part.payload.text.includes('SECRET')) return part;
+    return { ...part, type: 'reasoning-delta', payload: { id: 'r', text: 'moved' } } as any;
+  },
+};
+
+describe('durable agent persists processor-changed chunk type (#26335)', () => {
+  it.each(['plain', 'durable'] as const)('%s stores a retyped chunk under its new type', async kind => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: `rt-${kind}`,
+      name: 'rt',
+      instructions: 'rt',
+      model: textModel(),
+      outputProcessors: [toReasoning],
+      memory: new MockMemory({ storage }),
+    });
+    const registered =
+      kind === 'plain'
+        ? agent
+        : createEventedAgent({ agent, pubsub: new EventEmitterPubSub(), cache: new InMemoryServerCache() });
+    const mastra = new Mastra({ storage, logger: false, agents: { rt: registered as any } });
+    const a = mastra.getAgent('rt') as any;
+    const out = await a.stream('go', { memory: { thread: `rt-${kind}`, resource: 'r' } });
+    for await (const _ of kind === 'plain' ? out.fullStream : out.output.fullStream);
+    out.cleanup?.();
+
+    const memoryStore: any = await storage.getStore('memory');
+    let parts: any[] = [];
+    for (let i = 0; i < 50 && !parts.length; i++) {
+      const { messages } = await memoryStore.listMessages({ threadId: `rt-${kind}` });
+      parts = messages.filter((m: any) => m.role === 'assistant').flatMap((m: any) => m.content.parts);
+      if (!parts.length) await new Promise(r => setTimeout(r, 20));
+    }
+    const text = parts
+      .filter(p => p.type === 'text')
+      .map(p => p.text)
+      .join('');
+    expect(text).not.toContain('SECRET');
+    expect(text).not.toContain('moved');
+    expect(parts.some(p => p.type === 'reasoning')).toBe(true);
+  });
+});
