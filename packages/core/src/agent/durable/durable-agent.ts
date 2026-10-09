@@ -601,6 +601,11 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   /** Callback when the recovered run suspends again */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /**
+   * Close the recovered stream once the run suspends (e.g. awaiting tool
+   * approval) so callers can hand off to `resume()`. Defaults to `false`.
+   */
+  closeOnSuspend?: boolean;
+  /**
    * Optional abort signal for the recovered segment. Forwarded onto a fresh
    * internal `AbortController` installed on the run's registry entry, so
    * `result.abort()` and the external signal can both cancel the recovered run.
@@ -1067,8 +1072,9 @@ export class DurableAgent<
           }
         },
         onSuspended: options?.onSuspended,
-        // Keep recovered runs observable if they suspend again so a later
-        // resume or recovery can pick them up.
+        // Close (when requested) on the persisted workflow result in recover(),
+        // not on the SUSPENDED event, which can precede a resumable snapshot.
+        closeOnSuspend: false,
         messageList,
         structuredOutput: registryEntry.structuredOutput,
         requestContext: registryEntry.requestContext,
@@ -1099,7 +1105,7 @@ export class DurableAgent<
         this.getPubSub(),
         {
           strict: true,
-          continuation: 'across-suspension',
+          ...(options?.closeOnSuspend ? {} : { continuation: 'across-suspension' as const }),
           validate: () => recoveryLease.assertOwned(),
         },
       );
@@ -3296,6 +3302,14 @@ export class DurableAgent<
           recoverAgentSpan?.end({ output: { text: finalOutput?.text } });
           await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
           recoveryLease.assertOwned();
+        }
+        if (result?.status === 'suspended' && options?.closeOnSuspend) {
+          // Same contract as resume(): close on the persisted suspension,
+          // after flushing and delivering already-published events.
+          await this.pubsub.flush();
+          await stream.waitForEventDelivery();
+          recoveryLease.assertOwned();
+          stream.detach();
         }
         // Snapshot cleanup runs for every non-suspended terminal (success or
         // failed) so storage stays bounded — mirrors the start()/resume()
