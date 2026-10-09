@@ -456,6 +456,41 @@ describe('createSourceControlTools', () => {
       expect(Object.keys(crSchema.shape).sort()).toEqual(['body', 'draft', 'repository', 'title']);
     });
 
+    it('reads, comments on and merges a change request in another environment repository', async () => {
+      const setup = await fixture();
+      const built = await tools(setup);
+
+      await (built.source_control_get_change_request!.execute as any)({
+        changeRequestId: 18,
+        repository: 'acme/other',
+      });
+      await (built.source_control_list_change_request_reviews!.execute as any)({
+        changeRequestId: 18,
+        repository: 'acme/other',
+      });
+
+      expect(setup.getPullRequest).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceId: 'acme/other', pullRequestId: '18' }),
+      );
+      expect(setup.listReviews).toHaveBeenCalledWith(
+        expect.objectContaining({ sourceId: 'acme/other', pullRequestId: '18' }),
+      );
+      expect(setup.getRepositoryTarget).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repo-2' });
+      for (const name of [
+        'source_control_get_change_request',
+        'source_control_comment_change_request',
+        'source_control_merge_change_request',
+        'source_control_update_diff_comment',
+        'source_control_resolve_diff_thread',
+      ] as const) {
+        expect(built[name]!.description).toContain('acme/repo, acme/other');
+        expect(Object.keys((built[name]!.inputSchema as any).shape)).toContain('repository');
+      }
+      await expect(
+        (built.source_control_get_change_request!.execute as any)({ changeRequestId: 18, repository: 'nope/x' }),
+      ).rejects.toThrow("Repository 'nope/x' is not in this Factory's environment.");
+    });
+
     it("pushes the session's own repository by default and records the row", async () => {
       const setup = await fixture();
       const built = await tools(setup);
