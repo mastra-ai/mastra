@@ -20,6 +20,7 @@ import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
 import type { ObservabilityEntrypoint, ObservabilityInstance } from '../../../observability';
 import { InMemoryStore } from '../../../storage';
+import { createTool } from '../../../tools';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../../workflows/types';
 import { Agent } from '../../agent';
 import { agentThreadStreamRuntime } from '../../thread-stream-runtime';
@@ -181,6 +182,29 @@ describe('DurableAgent.recover(runId)', () => {
     expect(entry?.workflowExecution).toBeInstanceOf(Promise);
 
     await entry?.workflowExecution;
+    cleanup();
+  });
+
+  it('restores the agent tools so the recovered model step is offered them (#25890)', async () => {
+    const lookup = createTool({ id: 'lookup', description: 'lookup', execute: async () => ({ ok: true }) });
+    const baseAgent = new Agent({
+      id: 'agent-T',
+      name: 'agent-T',
+      instructions: 'x',
+      model: makeMockModel(),
+      tools: { lookup },
+    });
+    const toolAgent = createDurableAgent({ agent: baseAgent });
+    const toolStore = new InMemoryStore();
+    void new Mastra({ agents: { 'agent-T': toolAgent as any }, storage: toolStore });
+    await seed(toolStore, 'run-tools', 'running', 'agent-T');
+    stubWorkflow(toolAgent, 'success');
+
+    const { cleanup } = await toolAgent.recover('run-tools');
+
+    expect(Object.keys(globalRunRegistry.get('run-tools')?.tools ?? {})).toContain('lookup');
+
+    await globalRunRegistry.get('run-tools')?.workflowExecution;
     cleanup();
   });
 
