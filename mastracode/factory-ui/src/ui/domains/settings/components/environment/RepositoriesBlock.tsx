@@ -5,8 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { ChevronDown, GripVertical } from 'lucide-react';
-import { useState } from 'react';
+import { GripVertical } from 'lucide-react';
 
 import type {
   FactoryEnvironmentRepository,
@@ -49,7 +48,7 @@ function splitRows(repositories: FactoryEnvironmentRepository[]) {
   };
 }
 
-/** The ordered repository list: drag to reorder, include or exclude, expand for setup, teardown and status. */
+/** The ordered repository list: one card each, drag to reorder, include or exclude, setup and teardown inside. */
 export function RepositoriesBlock({
   repositories,
   providers,
@@ -66,43 +65,36 @@ export function RepositoriesBlock({
     onSave({ repositories: repositoriesPatch([...nextLive, ...dead], change) });
 
   return (
-    <SettingsContainer className="divide-y-0 p-2">
-      <ContentBlocks
-        items={live}
-        onChange={next => {
-          // A drop in place changes nothing the route would see.
-          const order = (list: FactoryEnvironmentRepository[]) => list.map(r => r.projectRepositoryId).join('\n');
-          if (disabled || order(next) === order(live)) return;
-          void save(next);
-        }}
-        className="flex min-w-0 flex-col gap-px"
-      >
-        {live.map((repository, index) => (
-          <ContentBlock key={repository.projectRepositoryId} draggableId={repository.projectRepositoryId} index={index}>
-            {dragHandleProps => (
-              <RepositoryRow
-                repository={repository}
-                position={index + 1}
-                provider={providers[repository.projectRepositoryId] ?? 'github'}
-                disabled={disabled}
-                dragHandleProps={dragHandleProps}
-                onToggle={inEnvironment =>
-                  void save(live, { projectRepositoryId: repository.projectRepositoryId, inEnvironment })
-                }
-                onCommands={commands =>
-                  save(live, { projectRepositoryId: repository.projectRepositoryId, ...commands })
-                }
-              />
-            )}
-          </ContentBlock>
-        ))}
-      </ContentBlocks>
-    </SettingsContainer>
+    <ContentBlocks
+      items={live}
+      onChange={next => {
+        // A drop in place changes nothing the route would see.
+        const order = (list: FactoryEnvironmentRepository[]) => list.map(r => r.projectRepositoryId).join('\n');
+        if (disabled || order(next) === order(live)) return;
+        void save(next);
+      }}
+      className="flex min-w-0 flex-col gap-4"
+    >
+      {live.map((repository, index) => (
+        <ContentBlock key={repository.projectRepositoryId} draggableId={repository.projectRepositoryId} index={index}>
+          {dragHandleProps => (
+            <RepositoryRow
+              repository={repository}
+              position={index + 1}
+              provider={providers[repository.projectRepositoryId] ?? 'github'}
+              disabled={disabled}
+              dragHandleProps={dragHandleProps}
+              onToggle={inEnvironment =>
+                void save(live, { projectRepositoryId: repository.projectRepositoryId, inEnvironment })
+              }
+              onCommands={commands => save(live, { projectRepositoryId: repository.projectRepositoryId, ...commands })}
+            />
+          )}
+        </ContentBlock>
+      ))}
+    </ContentBlocks>
   );
 }
-
-/** Keeps a click on a control inside the header row from toggling the row. */
-const stop = (event: React.SyntheticEvent) => event.stopPropagation();
 
 function RepositoryRow({
   repository,
@@ -121,28 +113,11 @@ function RepositoryRow({
   onToggle: (inEnvironment: boolean) => void;
   onCommands: (commands: { setupCommand?: string | null; teardownCommand?: string | null }) => Promise<unknown>;
 }) {
-  const [expanded, setExpanded] = useState(false);
   const label = repository.slug ?? '';
 
-  const toggleExpanded = () => setExpanded(v => !v);
-
   return (
-    <div className="rounded-md">
-      <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={expanded}
-        aria-label={`${expanded ? 'Hide' : 'Show'} details for ${label}`}
-        className="group/row hover:bg-surface3 flex w-full cursor-pointer items-center gap-3 rounded-md px-2 py-2"
-        onClick={toggleExpanded}
-        onKeyDown={event => {
-          if (event.target !== event.currentTarget) return;
-          if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            toggleExpanded();
-          }
-        }}
-      >
+    <SettingsContainer className="group/row">
+      <div className="flex items-center gap-3 px-4 py-3">
         <Tooltip>
           <TooltipTrigger
             render={
@@ -150,11 +125,6 @@ function RepositoryRow({
                 {...dragHandleProps}
                 className="text-muted-foreground flex size-5 shrink-0 cursor-grab items-center justify-center"
                 aria-label={`Drag ${label}`}
-                onClick={stop}
-                onPointerDown={event => {
-                  stop(event);
-                  dragHandleProps?.onPointerDown?.(event);
-                }}
               />
             }
           >
@@ -180,7 +150,7 @@ function RepositoryRow({
             Last build failed
           </Badge>
         )}
-        <span className="flex items-center gap-2" onClick={stop}>
+        <span className="flex items-center gap-2">
           <Txt as="span" variant="caption" tone="muted">
             {repository.inEnvironment ? 'Cloned' : 'Not cloned'}
           </Txt>
@@ -198,42 +168,30 @@ function RepositoryRow({
             <TooltipContent className="pointer-events-none">Include in the environment</TooltipContent>
           </Tooltip>
         </span>
-        <ChevronDown
-          aria-hidden
-          className={`text-muted-foreground size-4 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`}
-        />
       </div>
-      {expanded && (
-        <div className="bg-surface3 divide-border mx-2 mb-2 flex flex-col divide-y rounded-md">
-          {repository.lastBuildStatus === 'failed' && repository.lastBuildError && (
-            <Txt as="p" font="mono" variant="meta" className="text-destructive px-2 py-2 whitespace-pre-wrap">
-              {repository.lastBuildError}
-            </Txt>
-          )}
-          <SettingsRow label="Setup" description="Runs in this checkout after it is cloned, before the agent starts.">
-            <div className="w-full lg:max-w-96">
-              <CommittedInput
-                label={`Setup command for ${label}`}
-                value={repository.setupCommand ?? ''}
-                placeholder="e.g. pnpm i && pnpm build"
-                disabled={disabled}
-                onCommit={value => onCommands({ setupCommand: value || null })}
-              />
-            </div>
-          </SettingsRow>
-          <SettingsRow label="Teardown" description="Runs when the session is retired, and again if setup fails.">
-            <div className="w-full lg:max-w-96">
-              <CommittedInput
-                label={`Teardown command for ${label}`}
-                value={repository.teardownCommand ?? ''}
-                placeholder="e.g. docker compose down"
-                disabled={disabled}
-                onCommit={value => onCommands({ teardownCommand: value || null })}
-              />
-            </div>
-          </SettingsRow>
-        </div>
+      {repository.lastBuildStatus === 'failed' && repository.lastBuildError && (
+        <Txt as="p" font="mono" variant="meta" className="text-destructive px-4 py-2 whitespace-pre-wrap">
+          {repository.lastBuildError}
+        </Txt>
       )}
-    </div>
+      <SettingsRow label="Setup" description="Runs in this checkout after it is cloned, before the agent starts.">
+        <CommittedInput
+          label={`Setup command for ${label}`}
+          value={repository.setupCommand ?? ''}
+          placeholder="e.g. pnpm i && pnpm build"
+          disabled={disabled}
+          onCommit={value => onCommands({ setupCommand: value || null })}
+        />
+      </SettingsRow>
+      <SettingsRow label="Teardown" description="Runs when the session is retired, and again if setup fails.">
+        <CommittedInput
+          label={`Teardown command for ${label}`}
+          value={repository.teardownCommand ?? ''}
+          placeholder="e.g. docker compose down"
+          disabled={disabled}
+          onCommit={value => onCommands({ teardownCommand: value || null })}
+        />
+      </SettingsRow>
+    </SettingsContainer>
   );
 }
