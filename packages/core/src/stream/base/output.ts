@@ -215,12 +215,15 @@ export type FullOutput<OUTPUT = undefined> = {
  * processor deliberately clearing the text to `''`. Never collapse the two with
  * a truthiness check: a redacting processor must be able to produce empty text.
  */
-function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string | undefined {
+function resolveOutputMessageSkippingCompletionChecks(messageList: MessageList): MastraDBMessage | undefined {
   const responseDbMessages = messageList.get.response.db();
-  const hasCompletionCheckMessages = responseDbMessages.some(m => m.content?.metadata?.completionResult);
-  const lastRealMessage = hasCompletionCheckMessages
+  return responseDbMessages.some(m => m.content?.metadata?.completionResult)
     ? responseDbMessages.findLast(m => !m.content?.metadata?.completionResult)
     : responseDbMessages[responseDbMessages.length - 1];
+}
+
+function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): string | undefined {
+  const lastRealMessage = resolveOutputMessageSkippingCompletionChecks(messageList);
   if (!lastRealMessage) return undefined;
   if (lastRealMessage.role === 'assistant' && lastRealMessage.content?.parts) {
     const stepParts = messageList.partsSinceStepBoundary(lastRealMessage);
@@ -228,11 +231,35 @@ function resolveOutputTextSkippingCompletionChecks(messageList: MessageList): st
       return stepParts.map(p => (p.type === 'text' ? p.text : '')).join('');
     }
   }
+  const hasCompletionCheckMessages = messageList.get.response.db().some(m => m.content?.metadata?.completionResult);
   const converted = hasCompletionCheckMessages
     ? convertMessages([lastRealMessage]).to('AIV4.Core')
     : messageList.get.response.aiV4.core();
   const lastConverted = converted[converted.length - 1];
   return lastConverted ? coreContentToString(lastConverted.content) : undefined;
+}
+
+function findIterationPartOffset(
+  messageList: MessageList,
+  message: MastraDBMessage,
+  stepText: string,
+): number | undefined {
+  const parts = message.content?.parts;
+  if (!parts) return undefined;
+
+  const stepParts = messageList.partsSinceStepBoundary(message);
+  if (stepParts.length < parts.length) return parts.length - stepParts.length;
+  if (!stepText) return parts.length;
+
+  let suffixText = '';
+  for (let index = parts.length - 1; index >= 0; index--) {
+    const part = parts[index];
+    if (part?.type === 'text') suffixText = part.text + suffixText;
+    if (suffixText === stepText) return index;
+    if (!stepText.endsWith(suffixText)) return undefined;
+  }
+
+  return undefined;
 }
 
 export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
@@ -1152,9 +1179,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   // Run output processors when NOT in LLM execution step context
                   // (i.e., when this is the final MastraModelOutput for the agent)
 
-                  // Capture original text before processing for comparison
                   const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
-                  const originalText = lastStep?.text || '';
+                  const lastStepText = lastStep?.text || '';
 
                   const outputResult: OutputResult = {
                     text: self.#bufferedText.join(''),
@@ -1177,6 +1203,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     );
                   }
 
+                  const outputTextBeforeProcessing = resolveOutputTextSkippingCompletionChecks(self.messageList);
+                  const stepMessage = resolveOutputMessageSkippingCompletionChecks(self.messageList);
+                  const stepMessageParts = stepMessage?.content?.parts;
+                  const iterationPartOffset = stepMessage
+                    ? findIterationPartOffset(self.messageList, stepMessage, lastStepText)
+                    : undefined;
+
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
                     resolveObservabilityContext(options),
@@ -1186,27 +1219,38 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     outputResult,
                   );
 
-                  // Get text from the latest response message (the last assistant message)
+                  const responseMessages = self.messageList.get.response.db();
+                  const processedStepMessage = stepMessage
+                    ? responseMessages.find(message => message.id === stepMessage.id)
+                    : undefined;
                   const outputText = resolveOutputTextSkippingCompletionChecks(self.messageList);
+                  const processedStepParts = processedStepMessage?.content?.parts;
+                  const stepText =
+                    outputText !== outputTextBeforeProcessing
+                      ? processedStepMessage &&
+                        processedStepParts &&
+                        stepMessageParts &&
+                        processedStepParts.length === stepMessageParts.length &&
+                        iterationPartOffset !== undefined
+                        ? processedStepParts
+                            .slice(iterationPartOffset)
+                            .map(part => (part.type === 'text' ? part.text : ''))
+                            .join('')
+                        : (outputText ?? '')
+                      : undefined;
 
-                  // Only update the last step's text if output processors actually modified it
-                  // This preserves text from retry scenarios where step.text is already correct.
-                  // Compare against undefined, not truthiness, so a processor clearing the text
-                  // to '' still overwrites the step text instead of leaking the original.
-                  if (
-                    self.#status !== 'canceled' &&
-                    lastStep &&
-                    outputText !== undefined &&
-                    outputText !== originalText
-                  ) {
-                    lastStep.text = outputText;
+                  // Earlier buffered steps retain their model text, so only the final step of a continuation
+                  // is reconciled against the processor's output. Compare against undefined, not truthiness,
+                  // so clearing to '' applies when the processor removes that iteration's response.
+                  if (self.#status !== 'canceled' && lastStep && stepText !== undefined && stepText !== lastStepText) {
+                    lastStep.text = stepText;
                   }
 
                   // Use the processed text when a response message exists, even if the
                   // processor intentionally emptied it. Only fall back to the raw model
                   // text when there is no processed message at all.
                   this.resolvePromises({
-                    text: outputText ?? originalText,
+                    text: outputText ?? lastStepText,
                     finishReason: self.#finishReason,
                   });
 
@@ -1215,8 +1259,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
                     response = {
                       ...otherMetadata,
-                      messages: messageList.get.response.aiV5.model(),
-                      uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
+                      messages: self.messageList.get.response.aiV5.model(),
+                      uiMessages:
+                        self.messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                     };
                   }
 
