@@ -1,4 +1,5 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import { resolveModelConfig } from '../../../llm/model/resolve-model';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { StreamInternal } from '../../../loop/types';
@@ -174,6 +175,37 @@ async function rebuildProcessorPipeline(options: {
   }
 }
 
+/** True when the registry entry was seeded in this process (not a cross-process placeholder). */
+function isHydratedRegistryEntry(entry: RunRegistryEntry | undefined): boolean {
+  const model = entry?.model as (MastraLanguageModel & { __metadataOnly?: boolean }) | undefined;
+  return !!entry && entry.isPlaceholder !== true && !!model && model.__metadataOnly !== true;
+}
+
+/**
+ * Throws when call-time `toolsets` tools named in the durable options are missing
+ * after a cross-process rebuild, instead of silently running without them.
+ */
+function assertToolsetToolsAvailable(
+  tools: Record<string, unknown>,
+  toolsetToolNames: string[] | undefined,
+  agentId: string,
+  runId: string,
+): void {
+  const missingToolsetTools = (toolsetToolNames ?? []).filter(name => !(name in tools));
+  if (missingToolsetTools.length > 0) {
+    throw new MastraError({
+      id: 'DURABLE_AGENT_TOOLSETS_UNAVAILABLE',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text:
+        `Call-time toolsets tool(s) ${missingToolsetTools.map(n => `"${n}"`).join(', ')} are not available ` +
+        `to durable agent "${agentId}" in this worker process. Toolset tools contain server-side code that ` +
+        `cannot be serialized across processes; register them on the agent (statically or via requestContext) instead.`,
+      details: { agentId, runId, missingTools: missingToolsetTools.join(',') },
+    });
+  }
+}
+
 /**
  * Resolve all runtime dependencies needed for durable step execution.
  *
@@ -223,9 +255,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   // real model instance (every in-process seeding site stores the live model;
   // placeholders and metadata-only stubs do not).
   const globalEntry = globalRunRegistry.get(runId);
-  const registryModel = globalEntry?.model as (MastraLanguageModel & { __metadataOnly?: boolean }) | undefined;
-  const hasHydratedEntry =
-    !!globalEntry && globalEntry.isPlaceholder !== true && !!registryModel && registryModel.__metadataOnly !== true;
+  const hasHydratedEntry = isHydratedRegistryEntry(globalEntry);
   // Prefer the full toolset over `tools`: after the first step `tools` holds the
   // per-step snapshot the model was shown (possibly narrowed by processors such
   // as ToolSearchProcessor), and seeding from it would drop every tool the
@@ -266,6 +296,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
         autoResumeSuspendedTools: input.options?.autoResumeSuspendedTools,
         clientTools: input.options?.clientTools as ToolsInput | undefined,
       });
+      assertToolsetToolsAvailable(tools, input.options?.toolsetToolNames, agentId, runId);
 
       model =
         (await (agent as any).getModel?.({ requestContext: resolveRequestContext })) ??
@@ -307,6 +338,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       rehydratedFromMastra = true;
     } catch (error) {
       if (error instanceof DurableProcessorRebuildError) throw error;
+      if ((input.options?.toolsetToolNames?.length ?? 0) > 0) throw error;
       logger?.debug?.(`[DurableAgent:${agentId}] Failed to get agent from Mastra: ${error}`);
       model = resolveModel(input.modelConfig, mastra);
     }
@@ -468,6 +500,11 @@ export async function rebuildRunToolsFromMastra(options: {
       clientTools: execOptions?.clientTools as ToolsInput | undefined,
     });
 
+    // A hydrated entry means the caller's process still holds the toolset tools
+    // (e.g. a memoryless run rebuilding only for a save queue), so nothing was lost.
+    const toolsetsLocal = isHydratedRegistryEntry(globalRunRegistry.get(runId));
+    if (!toolsetsLocal) assertToolsetToolsAvailable(tools, execOptions?.toolsetToolNames, agentId, runId);
+
     const memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
     const workspace = await (agent as any).getWorkspace?.({ requestContext: resolveRequestContext });
     const saveQueueManager = makeSaveQueueManager(memory, mastra);
@@ -547,7 +584,12 @@ export async function rebuildRunToolsFromMastra(options: {
     };
   } catch (error) {
     if (error instanceof DurableProcessorRebuildError) throw error;
+
     const entry = globalRunRegistry.get(runId);
+    // Falling back would silently drop call-time toolsets, so surface the failure.
+    if ((execOptions?.toolsetToolNames?.length ?? 0) > 0 && !isHydratedRegistryEntry(entry)) {
+      throw error;
+    }
     if (agentResolved && options.rehydrateProcessors && (!entry?.outputProcessors || !entry.processorStates)) {
       throw new DurableProcessorRebuildError(agentId, error);
     }
