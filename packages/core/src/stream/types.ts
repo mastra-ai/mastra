@@ -207,7 +207,7 @@ export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   dynamic?: boolean;
   title?: string;
   /** Tool-owned metadata for UI hosts (e.g. `app` holds the MCP App UI pointer). */
-  toolMetadata?: Record<string, unknown>;
+  toolMetadata?: JSONObject;
   /**
    * W3C trace context carrier for client-side tool execution.
    *
@@ -241,7 +241,7 @@ interface ToolCallInputStreamingStartPayload {
   providerMetadata?: ProviderMetadata;
   dynamic?: boolean;
   title?: string;
-  toolMetadata?: Record<string, unknown>;
+  toolMetadata?: JSONObject;
   observability?: ClientObservabilityCarrier;
 }
 

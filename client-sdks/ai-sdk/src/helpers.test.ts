@@ -560,8 +560,14 @@ describe('MCP App pointer', () => {
         controller.close();
       },
     });
-    let last: any;
-    for await (const message of readUIMessageStream({ stream })) last = message;
+    const snapshots: any[] = [];
+    for await (const message of readUIMessageStream({ stream })) snapshots.push(structuredClone(message));
+    const early = snapshots.find(m => m.parts.some((p: any) => p.toolCallId === 'c1'));
+    expect(early.parts.find((p: any) => p.toolCallId === 'c1')).toMatchObject({
+      state: 'input-streaming',
+      toolMetadata: { app },
+    });
+    const last = snapshots.at(-1);
     const part = last.parts.find((p: any) => p.toolCallId === 'c1');
     expect(part.toolMetadata).toEqual({ app });
   });

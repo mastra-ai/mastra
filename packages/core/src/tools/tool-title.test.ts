@@ -23,6 +23,9 @@ describe('withToolTitle MCP App pointer', () => {
     const chunk = { type: 'tool-call', payload: { toolCallId: 'c' } };
     expect(withToolTitle(chunk, { mcp: { _meta: {} } } as any)).toBe(chunk);
     expect(withToolTitle(chunk, undefined)).toBe(chunk);
+    for (const resourceUri of ['', 'ui://', 'https://w/view']) {
+      expect(withToolTitle(chunk, { mcp: { _meta: { ui: { resourceUri } } } } as any)).toBe(chunk);
+    }
     const text = { type: 'text-delta', payload: {} };
     expect(withToolTitle(text, tool)).toBe(text);
   });
