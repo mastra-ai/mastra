@@ -99,6 +99,27 @@ describe('FactoryEnvironmentStateProcessor', () => {
     expect(contents).toContain('2. acme/mastra at /home/user/mastra on (detached) (default main, setup skipped)');
   });
 
+  it('names a one-repository environment by its checkout as the working directory, with no multi-repository advice', async () => {
+    recordSessionEnvironment('sess-1', {
+      workingDirectory: '/home/user',
+      repositories: [environment.repositories[0]!],
+    });
+    const processor = new FactoryEnvironmentStateProcessor();
+
+    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
+
+    expect(signal).toMatchObject({
+      attributes: { workingDirectory: '/home/user/template-docs-expert', repositories: 1 },
+    });
+    const contents = (signal as { contents: string }).contents;
+    expect(contents).toContain(
+      'Factory environment: 1 repository, acme/template-docs-expert at /home/user/template-docs-expert, your working directory.',
+    );
+    expect(contents).toContain('1. acme/template-docs-expert at /home/user/template-docs-expert on factory/issue-7');
+    expect(contents).not.toContain('repositories under');
+    expect(contents).not.toContain('Run git and project commands inside the repository directory');
+  });
+
   it('is quiet while the snapshot in the window matches, and emits again when the set changes', async () => {
     recordSessionEnvironment('sess-1', environment);
     const processor = new FactoryEnvironmentStateProcessor();

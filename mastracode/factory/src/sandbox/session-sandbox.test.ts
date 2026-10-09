@@ -13,8 +13,10 @@ import {
   getSessionSandbox,
   peekSessionSandbox,
   resolveSessionWorkdir,
+  sessionLayout,
 } from './session-sandbox.js';
 import type { SessionEnvironmentGate, SessionSetupGate } from './session-sandbox.js';
+import { repositoryDirectoryName } from './workdir.js';
 
 afterEach(() => {
   __clearSessionSandboxesForTests();
@@ -136,6 +138,68 @@ describe('session sandbox memo', () => {
       }),
     ).toThrow('boom');
     expect(peekSessionSandbox('sess-1')).toBeUndefined();
+  });
+});
+
+describe('session layout', () => {
+  const local = (id: string) =>
+    ({ id, provider: 'local', status: 'pending', workingDirectory: '/home/user' }) as unknown as WorkspaceSandbox;
+
+  it('is undefined until the workdir resolved', () => {
+    const entry = getSessionSandbox('sess-1', 'acme/api', () => ({ id: 'sb', provider: 'remote' }) as never);
+    expect(sessionLayout(entry)).toBeUndefined();
+    expect(sessionLayout(undefined)).toBeUndefined();
+  });
+
+  it('roots a one-repository session at its checkout with no prefix', () => {
+    const entry = getSessionSandbox('sess-1', 'acme/api', () => local('sb'), ['acme/api']);
+    expect(sessionLayout(entry)).toEqual({
+      root: '/home/user/api',
+      repos: [{ slug: 'acme/api', dir: '/home/user/api', prefix: '' }],
+    });
+  });
+
+  it('a session with no environment repositories at all is laid out from its own repository', () => {
+    const entry = getSessionSandbox('sess-1', 'acme/api', () => local('sb'), []);
+    expect(sessionLayout(entry)).toEqual({
+      root: '/home/user/api',
+      repos: [{ slug: 'acme/api', dir: '/home/user/api', prefix: '' }],
+    });
+  });
+
+  it('roots a multi-repository session at the workspace root with one prefixed directory per repository', () => {
+    const slugs = ['mastra-ai/mastra', 'mastra-ai/platform', 'mastra-ai/mastra-website'];
+    // The own-repository slug differs in case from the environment list; it still maps onto the checkout.
+    const entry = getSessionSandbox('sess-1', 'Mastra-AI/Mastra', () => local('sb'), slugs);
+    const layout = sessionLayout(entry)!;
+    expect(layout.root).toBe('/home/user');
+    expect(layout.repos).toEqual([
+      { slug: 'mastra-ai/mastra', dir: '/home/user/Mastra', prefix: 'Mastra/' },
+      { slug: 'mastra-ai/platform', dir: '/home/user/platform', prefix: 'platform/' },
+      { slug: 'mastra-ai/mastra-website', dir: '/home/user/mastra-website', prefix: 'mastra-website/' },
+    ]);
+    expect(layout.repos[0]!.dir).toBe(entry.workdir);
+    // Every directory follows the boot's rule: `<root>/<repositoryDirectoryName(slug)>`.
+    for (const repo of layout.repos.slice(1)) {
+      expect(repo.dir).toBe(`${layout.root}/${repositoryDirectoryName(repo.slug)}`);
+    }
+  });
+
+  it('getSessionSandbox refreshes the repositories on a memoized entry and clears them when passed none', () => {
+    const entry = getSessionSandbox('sess-1', 'acme/api', () => local('sb'), ['acme/api', 'acme/docs']);
+    expect(sessionLayout(entry)!.repos).toHaveLength(2);
+    const same = getSessionSandbox('sess-1', 'acme/api', () => local('other'), ['acme/api', 'acme/docs', 'acme/site']);
+    expect(same).toBe(entry);
+    expect(sessionLayout(entry)!.repos.map(repo => repo.prefix)).toEqual(['api/', 'docs/', 'site/']);
+    getSessionSandbox('sess-1', 'acme/api', () => local('other'), []);
+    expect(sessionLayout(entry)).toEqual({
+      root: '/home/user/api',
+      repos: [{ slug: 'acme/api', dir: '/home/user/api', prefix: '' }],
+    });
+    // Omitting the list leaves the memoized one alone.
+    getSessionSandbox('sess-1', 'acme/api', () => local('other'), ['acme/api', 'acme/docs']);
+    getSessionSandbox('sess-1', 'acme/api', () => local('other'));
+    expect(sessionLayout(entry)!.repos).toHaveLength(2);
   });
 });
 

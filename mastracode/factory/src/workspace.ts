@@ -782,52 +782,57 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       await finishStart();
     };
     const constructSessionEntry = () =>
-      getSessionSandbox(session.id, repoFullName, () => {
-        // The provider reads its own settings (resources, images) from the
-        // project's stored document, never from the context.
-        const sandbox = factorySandbox.create(
-          {
-            sessionId: session.id,
-            // Physical VM id persisted from a prior start (undefined on first
-            // start). Providers that reattach by physical id use it to resume the
-            // original VM instead of provisioning a replacement.
-            sandboxId: session.sandboxId ?? undefined,
-            repoFullName,
-            ...(environment
-              ? environmentSandboxContext(environment, {
-                  orgId: session.orgId,
-                  getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
-                })
-              : {
-                  // Stored nullable; the context speaks `undefined` for absent.
-                  setupCommand: projectRepository.setupCommand ?? undefined,
-                  // Deferred call, only dereferenced when a provider needs the repo
-                  // outside the VM (template build time).
-                  getRepositoryAccess: () =>
-                    sourceControl.versionControl.getRepositoryAccess({
-                      orgId: session.orgId,
-                      repositoryId: repository.id,
-                    }),
-                }),
-          },
-          sandboxSettings,
-        );
-        // Attached inside the construction closure, so exactly once per
-        // instance — `constructSessionEntry` runs on every open and would
-        // stack a wrapper per call. Factory's setup runs first: a hook the
-        // callback installed itself expects a prepared workspace.
-        sandbox.setOnStart(previous => async args => {
-          await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
-            await setupHook(args);
+      getSessionSandbox(
+        session.id,
+        repoFullName,
+        () => {
+          // The provider reads its own settings (resources, images) from the
+          // project's stored document, never from the context.
+          const sandbox = factorySandbox.create(
+            {
+              sessionId: session.id,
+              // Physical VM id persisted from a prior start (undefined on first
+              // start). Providers that reattach by physical id use it to resume the
+              // original VM instead of provisioning a replacement.
+              sandboxId: session.sandboxId ?? undefined,
+              repoFullName,
+              ...(environment
+                ? environmentSandboxContext(environment, {
+                    orgId: session.orgId,
+                    getRepositoryAccess: args => sourceControl.versionControl.getRepositoryAccess(args),
+                  })
+                : {
+                    // Stored nullable; the context speaks `undefined` for absent.
+                    setupCommand: projectRepository.setupCommand ?? undefined,
+                    // Deferred call, only dereferenced when a provider needs the repo
+                    // outside the VM (template build time).
+                    getRepositoryAccess: () =>
+                      sourceControl.versionControl.getRepositoryAccess({
+                        orgId: session.orgId,
+                        repositoryId: repository.id,
+                      }),
+                  }),
+            },
+            sandboxSettings,
+          );
+          // Attached inside the construction closure, so exactly once per
+          // instance: `constructSessionEntry` runs on every open and would
+          // stack a wrapper per call. Factory's setup runs first: a hook the
+          // callback installed itself expects a prepared workspace.
+          sandbox.setOnStart(previous => async args => {
+            await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
+              await setupHook(args);
+            });
+            await previous?.(args);
           });
-          await previous?.(args);
-        });
-        // Only a freshly constructed instance starts eagerly; the start itself
-        // waits for this resolver to finish because the start hook reads
-        // bindings declared further down.
-        startEagerly = eagerSandboxStart;
-        return sandbox;
-      });
+          // Only a freshly constructed instance starts eagerly; the start itself
+          // waits for this resolver to finish because the start hook reads
+          // bindings declared further down.
+          startEagerly = eagerSandboxStart;
+          return sandbox;
+        },
+        environment?.repos.map(repo => repo.slug) ?? [],
+      );
     let startEagerly = false;
     const fireEagerStart = () => {
       if (!startEagerly) return;
@@ -839,12 +844,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         });
     };
     const sessionEntry = constructSessionEntry();
-    // The session's working directory as the agent sees it: the workspace
-    // root for an environment session (D2), the checkout otherwise.
-    // `resolveSessionWorkdir` keeps pointing at the session's own repository
-    // so the PR tools and the start hook run git in the right checkout.
+    // The session's working directory as the agent sees it: the checkout
+    // when the environment holds one repository, the workspace root with a
+    // directory per repository when it holds several (D2). The file routes
+    // read the same layout from the memo. `resolveSessionWorkdir` keeps
+    // pointing at the session's own repository so the PR tools and the start
+    // hook run git in the right checkout.
+    const multiRepo = (environment?.repos.length ?? 0) > 1;
     const sessionWorkdir = (checkout: string | undefined): string | undefined =>
-      checkout === undefined ? undefined : environment ? path.posix.dirname(checkout) : checkout;
+      checkout === undefined ? undefined : multiRepo ? path.posix.dirname(checkout) : checkout;
     const workdir = sessionWorkdir(sessionEntry.workdir);
     const isLocalSandbox = sessionEntry.sandbox.provider === 'local';
     // The SDK system prompt uses `state.projectPath` without falling back to
@@ -1422,7 +1430,14 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return sessionWorkdir(checkout) ?? checkout;
       },
     });
-    const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
+    // Project skill roots live in the session's own checkout. The filesystem
+    // is rooted at the workspace root in a multi-repository session, so the
+    // roots are prefixed with that checkout's directory (the boot's rule for
+    // where the repository materializes).
+    const skillRoot = multiRepo ? `${repositoryDirectoryName(repoFullName)}/` : '';
+    const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'].map(
+      skillPath => `${skillRoot}${skillPath}`,
+    );
     const guardedSkillFallback = new UnmaterializedAwareSkillSource(
       filesystem,
       () => sessionEntry.sandbox.status === 'running',
