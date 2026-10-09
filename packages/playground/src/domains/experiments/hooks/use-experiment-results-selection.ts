@@ -1,10 +1,10 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { useCallback, useMemo, useState } from 'react';
 
 import { useAddTagToResults } from './use-add-tag-to-results';
 import { useExperimentTagVocabulary } from './use-experiment-tag-vocabulary';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 
 export interface UseExperimentResultsSelectionArgs {
   datasetId: string;

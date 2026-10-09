@@ -23,7 +23,7 @@
  * so in-flight OAuth states survive a deploy.
  */
 
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /** Verified tenant and optional Factory context carried by a signed `state`. */
 export interface StateTenant {
@@ -71,7 +71,7 @@ const STATE_MAX_AGE_MS = 10 * 60 * 1000;
  */
 export function createStateSigner(secret?: string): StateSigner {
   const stable = typeof secret === 'string' && secret.length > 0;
-  const key = stable ? secret : randomBytes(32).toString('hex');
+  const key = stable ? secret : Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(32))).toString('hex');
   return {
     stable,
     sign(orgId: string, userId: string, context?: { factoryProjectId?: string }): string {
@@ -79,7 +79,7 @@ export function createStateSigner(secret?: string): StateSigner {
         orgId,
         userId,
         ...(context?.factoryProjectId ? { factoryProjectId: context.factoryProjectId } : {}),
-        nonce: randomBytes(8).toString('hex'),
+        nonce: Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(8))).toString('hex'),
         issuedAt: Date.now(),
       };
       const body = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');

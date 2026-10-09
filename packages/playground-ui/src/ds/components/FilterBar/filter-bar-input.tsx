@@ -3,7 +3,7 @@ import { BracesIcon, ListFilterIcon, Search } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { flushSync } from 'react-dom';
-import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel } from './filter-bar-chip';
+import { FILTER_BAR_CONTROL_SIZE, FilterBarFieldLabel, alwaysHighlightProps } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { findGroup } from './filter-bar-tree';
@@ -19,6 +19,7 @@ import { Txt } from '@/ds/components/Txt';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { inputFocusBorderWithin, unstyledFormElementStyle } from '@/ds/primitives/form-element';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
@@ -176,6 +177,7 @@ function FilterBarInputImpl({
     operator,
     query,
     enabled: open && step === 'value',
+    setQuery,
     onCommit: value => {
       if (draft?.operatorId) commit(draft.fieldId, draft.operatorId, value);
     },
@@ -326,9 +328,7 @@ function FilterBarInputImpl({
           if (next) setOpen(true);
           else close();
         }}
-        // ComboboxRoot's typings narrow `autoHighlight` to boolean, but the runtime (shared with
-        // AutocompleteRoot) supports 'always': highlight the first item as soon as the list opens.
-        autoHighlight={'always' as unknown as boolean}
+        {...alwaysHighlightProps}
         modal={false}
       >
         <div
@@ -353,6 +353,7 @@ function FilterBarInputImpl({
             }}
             aria-label={ariaLabel}
             spellCheck={false}
+            {...passwordManagerOptOutProps}
             data-slot="filter-bar-input"
             data-step={step}
             data-target={targetGroup?.id}
@@ -424,7 +425,7 @@ function FilterBarInputImpl({
                   emptyText="No matching operator."
                 />
               )}
-              {step === 'value' && valueStep.hasSuggestions && (
+              {step === 'value' && valueStep.hasOptions && (
                 <FilterBarOptionList<FilterBarOption>
                   aria-label="Values"
                   aria-multiselectable={valueStep.isMany || undefined}
@@ -448,7 +449,7 @@ function FilterBarInputImpl({
                     variant="default"
                     disabled={!valueStep.canCommitQuery}
                     onMouseDown={e => e.preventDefault()}
-                    onClick={() => valueStep.commitFreeText()}
+                    onClick={() => valueStep.submitFreeText()}
                   >
                     Apply
                     <Kbd size="xs">↵</Kbd>
@@ -461,7 +462,7 @@ function FilterBarInputImpl({
                     size="sm"
                     variant="default"
                     onMouseDown={e => e.preventDefault()}
-                    onClick={() => valueStep.commitSelection() || valueStep.commitFreeText()}
+                    onClick={() => valueStep.commitDone()}
                   >
                     Done
                     <Kbd size="xs">{modEnterLabel}</Kbd>

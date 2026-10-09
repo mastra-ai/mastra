@@ -264,6 +264,26 @@ class HangingUnsubscribePubSub extends ControlledLeasePubSub {
   }
 }
 
+/**
+ * Models an acknowledgement the owner publishes successfully but that never
+ * reaches the sender — a lost reply, not a rejected publish. The owner records
+ * the reply as published, so it never re-sends it, and the caller waits out its
+ * acceptance timeout. This is the transport failure that makes a sender retry a
+ * logical message it has no way to know was already accepted.
+ */
+class DroppingAcceptanceReplyPubSub extends ControlledLeasePubSub {
+  droppedAcceptanceReplies = 0;
+
+  override async publish(topic: string, event: any): Promise<void> {
+    if (this.droppedAcceptanceReplies > 0 && event?.data?.type === 'idle-signal-accepted') {
+      this.droppedAcceptanceReplies -= 1;
+      this.publishedData.push(event.data);
+      return;
+    }
+    await super.publish(topic, event);
+  }
+}
+
 async function readNextRun(iterator: AsyncIterator<any>) {
   const nextRun = await readNextRunWithParts(iterator);
   if (nextRun.done) return nextRun;
@@ -412,7 +432,7 @@ describe('Agent signals', () => {
     expect(reminderSignal.toLLMMessage()).toEqual({
       role: 'user',
       content:
-        '<system-reminder type="dynamic-agents-md" path="/tmp/AGENTS.md" enabled="true">Use &lt;safe&gt; content &amp; continue</system-reminder>',
+        '<system-reminder enabled="true" path="/tmp/AGENTS.md" type="dynamic-agents-md">Use &lt;safe&gt; content &amp; continue</system-reminder>',
     });
     expect(reminderSignal.toDataPart().data.attributes).toEqual({
       type: 'dynamic-agents-md',
@@ -1010,6 +1030,85 @@ describe('Agent signals', () => {
     } finally {
       firstSubscription.unsubscribe();
       secondSubscription.unsubscribe();
+    }
+  });
+
+  it('does not seed a replacement subscriber with an aborted run that has not terminalized (#24174)', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = { id: 'aborted-seed-agent' } as Agent<any, any, any, any>;
+    const threadId = 'aborted-seed-thread';
+    const resourceId = 'aborted-seed-user';
+    const memory = { thread: threadId, resource: resourceId };
+
+    const registerRun = (runId: string, parts: any[]) => {
+      runtime.prepareRunOptions({ runId, memory } as any);
+      let finish!: () => void;
+      const finished = new Promise<void>(resolve => {
+        finish = resolve;
+      });
+      let streamController!: ReadableStreamDefaultController<any>;
+      const fullStream = new ReadableStream({
+        start(controller) {
+          streamController = controller;
+          for (const part of parts) controller.enqueue(part);
+        },
+      });
+      runtime.registerRun(
+        agent,
+        { runId, status: 'running', fullStream, _waitUntilFinished: () => finished } as any,
+        {
+          memory,
+        } as any,
+      );
+      return (closingParts: any[]) => {
+        for (const part of closingParts) streamController.enqueue(part);
+        streamController.close();
+        finish();
+      };
+    };
+
+    const firstSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+    const firstIterator = firstSubscription.stream[Symbol.asyncIterator]();
+    let secondSubscription: Awaited<ReturnType<typeof runtime.subscribeToThread>> | undefined;
+
+    try {
+      const firstPart = firstIterator.next();
+      const endRun1 = registerRun('aborted-seed-run-1', [{ type: 'start', runId: 'aborted-seed-run-1' }]);
+      expect((await withTimeout(firstPart, 'first subscriber never saw run 1')).value).toMatchObject({
+        runId: 'aborted-seed-run-1',
+      });
+
+      // The consumer detaches before the abort, so no subscriber clears run 1's active entry.
+      firstSubscription.unsubscribe();
+      expect(runtime.abortRun('aborted-seed-run-1')).toBe(true);
+      await new Promise(resolve => setTimeout(resolve, 10));
+      expect(runtime.getActiveThreadRunId({ threadId, resourceId })).toBe('aborted-seed-run-1');
+
+      // A replacement subscription opened while run 1 is aborted but not yet terminalized.
+      secondSubscription = await runtime.subscribeToThread(agent, { threadId, resourceId });
+      const secondIterator = secondSubscription.stream[Symbol.asyncIterator]();
+      const secondRun = readNextRun(secondIterator);
+
+      // Run 1 then emits its abort chunk and closes.
+      endRun1([{ type: 'abort', runId: 'aborted-seed-run-1', payload: {} }]);
+      await new Promise(resolve => setTimeout(resolve, 10));
+
+      registerRun('aborted-seed-run-2', [
+        { type: 'start', runId: 'aborted-seed-run-2' },
+        { type: 'text-delta', runId: 'aborted-seed-run-2', payload: { id: 't', text: 'follow-up' } },
+        {
+          type: 'finish',
+          runId: 'aborted-seed-run-2',
+          payload: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, finishReason: 'stop' },
+        },
+      ])([]);
+
+      // The replacement subscriber sees only the follow-up, never a replay of the aborted run.
+      const received = await withTimeout(secondRun, 'replacement subscriber never received the follow-up run');
+      expect(received.value).toMatchObject({ runId: 'aborted-seed-run-2', text: 'follow-up' });
+    } finally {
+      firstSubscription.unsubscribe();
+      secondSubscription?.unsubscribe();
     }
   });
 
@@ -1986,6 +2085,654 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('deduplicates a retried logical message when the acceptance reply is lost', async () => {
+    const pubsub = new DroppingAcceptanceReplyPubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+      'first retried owner response',
+      'duplicate retried owner response',
+    );
+    const ownerAgent = new Agent({
+      id: 'retry-logical-owner',
+      name: 'Retry Logical Owner',
+      instructions: 'Test',
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'retry-logical-sender',
+      name: 'Retry Logical Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'retry-logical-user', threadId: 'retry-logical-thread' };
+    const attributes = { messageId: 'retry-logical-message', sourcePeerId: 'retry-logical-peer' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const firstRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+    pubsub.droppedAcceptanceReplies = 1;
+
+    try {
+      const firstSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'wake the owner exactly once', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await waitForCondition(() => getStreamCount() === 1);
+      await waitForCondition(() => pubsub.publishedData.some(data => data?.type === 'idle-signal-accepted'));
+      const originalRunId = pubsub.publishedData.find(data => data?.type === 'idle-signal-accepted')?.runId;
+      expect(originalRunId).toBeTruthy();
+
+      // The sender never received that acknowledgement, so it retries the same
+      // logical message. The retry mints a fresh transport request id, which the
+      // request-id dedup cannot catch, so the owner must recognise the logical
+      // identity and report the acceptance it already made instead of waking again.
+      const retrySignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'wake the owner exactly once', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(retrySignal.accepted).resolves.toMatchObject({ action: 'deliver', runId: originalRunId });
+      expect(getStreamCount()).toBe(1);
+
+      releaseFirst();
+      await firstRun;
+      await pubsub.flush();
+      expect(getStreamCount()).toBe(1);
+      expect(pubsub.publishedData.filter(data => data?.type === 'idle-signal-rejected')).toHaveLength(0);
+      // The first attempt stays pending until its acceptance timeout; swallow the
+      // eventual rejection so it cannot surface as an unhandled rejection.
+      void firstSignal.accepted.catch(() => {});
+    } finally {
+      releaseFirst();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('resolves a retry of a completed logical message to the completed run', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+      'completed retried owner response',
+      'unexpected duplicate owner response',
+    );
+    const ownerAgent = new Agent({
+      id: 'retry-completed-owner',
+      name: 'Retry Completed Owner',
+      instructions: 'Test',
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'retry-completed-sender',
+      name: 'Retry Completed Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'retry-completed-user', threadId: 'retry-completed-thread' };
+    const attributes = { messageId: 'retry-completed-message', sourcePeerId: 'retry-completed-peer' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const firstRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+
+    try {
+      const firstSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'complete the owner run once', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      const firstAccepted = await firstSignal.accepted;
+      expect(firstAccepted).toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => getStreamCount() === 1);
+
+      releaseFirst();
+      await expect(firstRun).resolves.toMatchObject({ value: { text: 'completed retried owner response' } });
+
+      const retrySignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'complete the owner run once', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(retrySignal.accepted).resolves.toMatchObject({
+        action: 'deliver',
+        runId: (firstAccepted as { runId: string }).runId,
+      });
+      await pubsub.flush();
+      expect(getStreamCount()).toBe(1);
+    } finally {
+      releaseFirst();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('reports the terminal cancellation to a retry of a cancelled queued message', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+      'held owner response',
+      'unexpected drained owner response',
+    );
+    const ownerAgent = new Agent({
+      id: 'retry-cancelled-owner',
+      name: 'Retry Cancelled Owner',
+      instructions: 'Test',
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'retry-cancelled-sender',
+      name: 'Retry Cancelled Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'retry-cancelled-user', threadId: 'retry-cancelled-thread' };
+    const attributes = { messageId: 'retry-cancelled-message', sourcePeerId: 'retry-cancelled-peer' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const firstRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+
+    try {
+      const holdSignal = senderRuntime.sendSignal(
+        senderAgent,
+        {
+          type: 'user-message',
+          contents: 'hold the thread',
+          attributes: { messageId: 'retry-cancelled-hold', sourcePeerId: 'retry-cancelled-peer' },
+        },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(holdSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => getStreamCount() === 1);
+
+      const queuedSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then cancel', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(queuedSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      expect(getStreamCount()).toBe(1);
+
+      const cancelled = ownerRuntime.cancelQueuedMessages(
+        ownerAgent,
+        { ...target, signalIds: [queuedSignal.signal.id] },
+        pubsub,
+      );
+      expect(cancelled.cancelledSignalIds).toEqual([queuedSignal.signal.id]);
+
+      const retrySignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then cancel', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(retrySignal.accepted).rejects.toThrow('cancelled before it ran');
+      expect(getStreamCount()).toBe(1);
+
+      releaseFirst();
+      await expect(firstRun).resolves.toMatchObject({ value: { text: 'held owner response' } });
+      await pubsub.flush();
+      expect(getStreamCount()).toBe(1);
+    } finally {
+      releaseFirst();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('releases the logical message reservation when the owner rejects its stream options, so a retry can route', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const model = createTextStreamModel('routed owner response');
+    const ownerAgent = new Agent({
+      id: 'retry-stream-options-owner',
+      name: 'Retry Stream Options Owner',
+      instructions: 'Test',
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'retry-stream-options-sender',
+      name: 'Retry Stream Options Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'retry-stream-options-user', threadId: 'retry-stream-options-thread' };
+    const attributes = { messageId: 'retry-stream-options-message', sourcePeerId: 'retry-stream-options-peer' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    // Only the first wake attempt fails to resolve its options. Claiming the thread
+    // must still be able to resolve them, so the flag is raised after the claim.
+    let failNextStreamOptions = false;
+    const claim = await ownerRuntime.claimThreadOwnership(
+      ownerAgent,
+      {
+        resourceId: target.resourceId,
+        threadId: target.threadId,
+        streamOptions: () => {
+          if (failNextStreamOptions) {
+            failNextStreamOptions = false;
+            throw new Error('retry stream options rejected');
+          }
+          return {};
+        },
+      },
+      pubsub,
+    );
+    failNextStreamOptions = true;
+
+    try {
+      const firstSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'route the retried wake', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      // The attempt never admitted a run, so the sender must be told it failed
+      // rather than that this logical message was already accepted.
+      await expect(firstSignal.accepted).rejects.toThrow('retry stream options rejected');
+      expect(model.doStreamCalls ?? []).toHaveLength(0);
+
+      // The retry carries the same logical identity. Its fresh transport request id
+      // cannot reach the reservation, so only releasing it on the failed attempt lets
+      // this wake route instead of being resolved to a run that never started.
+      const retryRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+      const retrySignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'route the retried wake', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(retrySignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      // A leaked reservation resolves the retry without running it, so assert the
+      // wake actually reached the model before waiting on the run to finish.
+      await waitForCondition(() => (model.doStreamCalls ?? []).length === 1);
+      await expect(retryRun).resolves.toMatchObject({ value: { text: 'routed owner response' } });
+      expect(failNextStreamOptions).toBe(false);
+      expect(model.doStreamCalls ?? []).toHaveLength(1);
+    } finally {
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('holds a concurrent retry until the first admission resolves, so a rejected wake is not reported as delivered', async () => {
+    const scope = { resourceId: 'race-admission', threadId: 'race-admission' };
+    const pubsub = new ControlledLeasePubSub();
+    const model = createTextStreamModel('unused');
+    const agent = new Agent({ id: 'race-admission', name: 'Race Admission', instructions: 'Test', model, pubsub });
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const entering = new Promise<void>(resolve => {
+      entered = resolve;
+    });
+    let streamOptionsCalls = 0;
+    const claim = await agent.claimThreadOwnership({
+      ...scope,
+      streamOptions: async () => {
+        streamOptionsCalls += 1;
+        entered();
+        await gate;
+        throw new Error('concurrent retry rejected');
+      },
+    });
+    const attributes = { messageId: 'race-admission-message', sourcePeerId: 'race-admission-peer' };
+    const first = agent.sendSignal({ type: 'user-message', contents: 'race the admission', attributes }, scope);
+    void first.accepted.catch(() => {});
+    try {
+      // The first delivery has reserved the logical message and is still resolving
+      // its admission: it has neither queued nor started a run, and may still reject.
+      await entering;
+
+      // The retry carries the same logical identity with a fresh transport request
+      // id, so only the shared reservation can recognise it. It must wait for the
+      // first attempt's real admission instead of being answered from the
+      // provisional reservation, which would report a delivery for a wake that
+      // never ran.
+      const retry = agent.sendSignal({ type: 'user-message', contents: 'race the admission', attributes }, scope);
+      let retrySettled = false;
+      const retryAccepted = retry.accepted.then(
+        value => {
+          retrySettled = true;
+          return value;
+        },
+        error => {
+          retrySettled = true;
+          throw error;
+        },
+      );
+      void retryAccepted.catch(() => {});
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(retrySettled).toBe(false);
+      // The retry did not start an admission of its own while the first was pending.
+      expect(streamOptionsCalls).toBe(1);
+
+      release();
+      await expect(first.accepted).rejects.toThrow('concurrent retry rejected');
+      await expect(retryAccepted).rejects.toThrow('concurrent retry rejected');
+      expect(model.doStreamCalls).toHaveLength(0);
+    } finally {
+      release();
+      claim.unsubscribe();
+    }
+  });
+
+  it('reports a failed run to a retry of the same logical message instead of running it again', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const model = createTextStreamModel('owner response that should never stream');
+    let failNextRun = false;
+    const ownerAgent = new Agent({
+      id: 'retry-failed-owner',
+      name: 'Retry Failed Owner',
+      instructions: async () => {
+        if (failNextRun) {
+          failNextRun = false;
+          throw new Error('owner preparation failed');
+        }
+        return 'Test';
+      },
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'retry-failed-sender',
+      name: 'Retry Failed Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'retry-failed-user', threadId: 'retry-failed-thread' };
+    const attributes = { messageId: 'retry-failed-message', sourcePeerId: 'retry-failed-peer' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+    // Raised only once the owner is claimed, so claiming the thread can still resolve
+    // the owner's instructions.
+    failNextRun = true;
+
+    try {
+      const firstSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'run once and fail', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(firstSignal.accepted).rejects.toThrow('owner preparation failed');
+
+      // The failed attempt did run, so its identity stays recorded: the retry must
+      // learn the original turn failed rather than repeat its tools.
+      const retrySignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'run once and fail', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(retrySignal.accepted).rejects.toThrow('owner preparation failed');
+      expect(model.doStreamCalls ?? []).toHaveLength(0);
+    } finally {
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('reports a queued run failure to a retry of the same logical message', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+      'held owner response',
+      'queued owner response',
+    );
+    let failNextRun = false;
+    const ownerAgent = new Agent({
+      id: 'retry-queued-failed-owner',
+      name: 'Retry Queued Failed Owner',
+      instructions: async () => {
+        if (failNextRun) {
+          failNextRun = false;
+          throw new Error('queued owner preparation failed');
+        }
+        return 'Test';
+      },
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'retry-queued-failed-sender',
+      name: 'Retry Queued Failed Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'retry-queued-failed-user', threadId: 'retry-queued-failed-thread' };
+    const holdAttributes = { messageId: 'retry-queued-failed-hold', sourcePeerId: 'retry-queued-failed-peer' };
+    const attributes = { messageId: 'retry-queued-failed-message', sourcePeerId: 'retry-queued-failed-peer' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+
+    try {
+      // Hold the thread so the logical message under test is queued behind a run
+      // rather than admitted directly.
+      const holdSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'hold the thread', attributes: holdAttributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(holdSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => getStreamCount() === 1);
+
+      const queuedSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then fail', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(queuedSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+      // The queued wake is the one that fails: arm the failing instructions once it
+      // is queued and only the drain is left to run it.
+      failNextRun = true;
+      releaseFirst();
+      await waitForCondition(() =>
+        pubsub.publishedData.some(
+          data => data?.type === 'run-failed' && data?.error === 'queued owner preparation failed',
+        ),
+      );
+
+      // The queued run started and failed, so its identity must stay recorded on
+      // that failure: the retry has to learn the turn failed rather than resolve to
+      // a run that already errored.
+      const retrySignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then fail', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(retrySignal.accepted).rejects.toThrow('queued owner preparation failed');
+      expect(getStreamCount()).toBe(1);
+    } finally {
+      releaseFirst();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('lets a retry of a queued wake route when the drain cannot hand over the lease', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+      'held owner response',
+      'routed owner response',
+    );
+    const ownerAgent = new Agent({
+      id: 'retry-drain-lease-owner',
+      name: 'Retry Drain Lease Owner',
+      instructions: 'Test',
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'retry-drain-lease-sender',
+      name: 'Retry Drain Lease Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'retry-drain-lease-user', threadId: 'retry-drain-lease-thread' };
+    const holdAttributes = { messageId: 'retry-drain-lease-hold', sourcePeerId: 'retry-drain-lease-peer' };
+    const attributes = { messageId: 'retry-drain-lease-message', sourcePeerId: 'retry-drain-lease-peer' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+
+    try {
+      // Hold the thread so the logical message under test is queued behind a run.
+      const holdSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'hold the thread', attributes: holdAttributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(holdSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => getStreamCount() === 1);
+
+      const queuedSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then lose the lease', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(queuedSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+      // Only a SYNCHRONOUS throw reaches the drain's catch; an async provider
+      // rejection is handled as a lease-lost handoff instead. The drain that
+      // follows the held run performs the first lease transfer of this exchange.
+      vi.spyOn(pubsub, 'transferLease').mockImplementationOnce(() => {
+        throw new Error('lease backend down');
+      });
+      releaseFirst();
+      await waitForCondition(() =>
+        pubsub.publishedData.some(data => data?.type === 'run-failed' && data?.error === 'lease backend down'),
+      );
+
+      // The queued wake never started and is not retried from the queue, so its
+      // identity must not keep claiming delivery: the retry has to route and run
+      // instead of resolving to a wake that never happened.
+      const retrySignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then lose the lease', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(retrySignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => getStreamCount() === 2);
+    } finally {
+      releaseFirst();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
+  it('keeps the cancellation of a draining wake when the drain cannot hand over the lease', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+      'held cancel response',
+      'cancelled drain response',
+    );
+    const ownerAgent = new Agent({
+      id: 'cancel-drain-lease-owner',
+      name: 'Cancel Drain Lease Owner',
+      instructions: 'Test',
+      model,
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'cancel-drain-lease-sender',
+      name: 'Cancel Drain Lease Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'cancel-drain-lease-user', threadId: 'cancel-drain-lease-thread' };
+    const holdAttributes = { messageId: 'cancel-drain-lease-hold', sourcePeerId: 'cancel-drain-lease-peer' };
+    const attributes = { messageId: 'cancel-drain-lease-message', sourcePeerId: 'cancel-drain-lease-peer' };
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+
+    try {
+      // Hold the thread so the logical message under test is queued behind a run.
+      const holdSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'hold the thread', attributes: holdAttributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(holdSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await waitForCondition(() => getStreamCount() === 1);
+
+      const queuedSignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then cancel', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(queuedSignal.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+      // The drain that follows the held run cancels the message it is about to
+      // start and then loses the lease. Only a SYNCHRONOUS throw reaches the
+      // drain's catch, so the cancellation must land synchronously with it.
+      vi.spyOn(pubsub, 'transferLease').mockImplementationOnce(() => {
+        ownerRuntime.cancelQueuedMessages(
+          ownerAgent,
+          { resourceId: target.resourceId, threadId: target.threadId, signalIds: [queuedSignal.signal.id] },
+          pubsub,
+        );
+        throw new Error('lease backend down');
+      });
+      releaseFirst();
+      await waitForCondition(() =>
+        pubsub.publishedData.some(data => data?.type === 'run-failed' && data?.error === 'lease backend down'),
+      );
+
+      // The cancellation is the outcome the sender must observe: a retry of the
+      // cancelled message is told it was cancelled rather than quietly starting
+      // the turn the user cancelled.
+      const retrySignal = senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents: 'queue then cancel', attributes },
+        { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+      await expect(retrySignal.accepted).rejects.toThrow('The accepted message was cancelled before it ran');
+      expect(getStreamCount()).toBe(1);
+    } finally {
+      releaseFirst();
+      claim.unsubscribe();
+      subscription.unsubscribe();
+    }
+  });
+
   it.each(['released', 'expired', 'rejected'] as const)(
     'does not retain controls or execute a claim whose options are %s',
     async outcome => {
@@ -2681,6 +3428,126 @@ describe('Agent signals', () => {
 
     claim.unsubscribe();
     subscription.unsubscribe();
+  });
+
+  it('delivers a claimed-owner wake when the owner answers discovery after the first attempt window', async () => {
+    class SlowDiscoveryPubSub extends EventEmitterPubSub {
+      override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
+        const [topic, event] = args;
+        if (
+          topic === 'agent.thread-owner-discovery' &&
+          (event.data as { type?: string } | undefined)?.type === 'thread-owner-request'
+        ) {
+          await new Promise(resolve => setTimeout(resolve, 150));
+        }
+        return super.publish(...args);
+      }
+    }
+    const pubsub = new SlowDiscoveryPubSub();
+    const ownerRuntime = agentThreadStreamRuntime;
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const ownerAgent = new Agent({
+      id: 'slow-discovery-owner-agent',
+      name: 'Slow Discovery Owner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+      pubsub,
+    });
+    const senderAgent = new Agent({
+      id: 'slow-discovery-sender-agent',
+      name: 'Slow Discovery Sender Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    const target = { resourceId: 'slow-discovery-user', threadId: 'slow-discovery-thread' };
+
+    const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+    const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+    expect(claim.claimed).toBe(true);
+
+    const signalResult = senderRuntime.sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'wake the slow owner' },
+      { ...target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+      pubsub,
+    );
+    await expect(signalResult.accepted).resolves.toMatchObject({ action: 'deliver' });
+    await nextRun;
+
+    claim.unsubscribe();
+    subscription.unsubscribe();
+  });
+
+  it('paces claimed-owner discovery retries when pubsub publish fails immediately', async () => {
+    let discoveryRequests = 0;
+    class FailingDiscoveryPubSub extends EventEmitterPubSub {
+      override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
+        const [topic, event] = args;
+        if (
+          topic === 'agent.thread-owner-discovery' &&
+          (event.data as { type?: string } | undefined)?.type === 'thread-owner-request'
+        ) {
+          discoveryRequests++;
+          throw new Error('pubsub unavailable');
+        }
+        return super.publish(...args);
+      }
+    }
+    const pubsub = new FailingDiscoveryPubSub();
+    const senderAgent = new Agent({
+      id: 'failing-discovery-sender-agent',
+      name: 'Failing Discovery Sender Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+
+    const signalResult = new AgentThreadStreamRuntime().sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'wake nobody' },
+      {
+        resourceId: 'failing-discovery-user',
+        threadId: 'failing-discovery-thread',
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+      },
+      pubsub,
+    );
+    // The whole message survives storage and display: no NUL from the internal thread key.
+    await expect(signalResult.accepted).rejects.toThrow(
+      'No claimed thread owner responded for thread failing-discovery-thread (resource failing-discovery-user) within 1000ms',
+    );
+    // 100 + 200 + 400 + remaining 300ms fits in the 1s budget.
+    expect(discoveryRequests).toBeLessThanOrEqual(4);
+  });
+
+  it('escapes NUL characters inside ids in thread-owner errors', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const senderAgent = new Agent({
+      id: 'nul-id-sender-agent',
+      name: 'NUL Id Sender Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+
+    const signalResult = new AgentThreadStreamRuntime().sendSignal(
+      senderAgent,
+      { type: 'user-message', contents: 'wake nobody' },
+      {
+        resourceId: 'nul\0user',
+        threadId: 'nul\0thread',
+        ifIdle: { behavior: 'wake', requireClaimedOwner: true },
+      },
+      pubsub,
+    );
+    const error = await signalResult.accepted.then(
+      () => undefined,
+      (error: Error) => error,
+    );
+    expect(error?.message).toBe('No claimed thread owner responded for thread nul\\0user\\0nul\\0thread within 1000ms');
+    expect(error?.message).not.toContain('\0');
   });
 
   it('clears the owner-discovery reply topic when discovery times out without an owner', async () => {
@@ -3516,6 +4383,63 @@ describe('Agent signals', () => {
         ]);
       } finally {
         observer?.unsubscribe();
+        releaseFirst();
+      }
+    });
+
+    it('queues a retained signal this runtime only forwarded when it later owns the run', async () => {
+      const scope = { resourceId: 'forwarded-replay', threadId: 'forwarded-replay' };
+      const pubsub = new ControlledLeasePubSub();
+      const topic = `agent.thread-stream.${encodeURIComponent(`${scope.resourceId}\u0000${scope.threadId}`)}`;
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'follow-up');
+      const agent = new Agent({ id: 'forwarded-replay', name: 'Forwarded', instructions: 'Test', model, pubsub });
+      try {
+        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+        const ownSourceId = pubsub.publishedData.find(data => typeof data.sourceId === 'string')?.sourceId;
+        expect(ownSourceId).toBeTypeOf('string');
+        // Retained replay of a signal this runtime forwarded to a previous owner (lease-lost path)
+        // and therefore never queued locally.
+        const signal = createSignal({ id: 'forwarded-n2', type: 'user-message', contents: 'forwarded notification' });
+        await pubsub.publish(topic, {
+          type: 'signal-enqueued',
+          data: {
+            type: 'signal-enqueued',
+            runId: first.runId,
+            sourceId: ownSourceId,
+            signal: signal.toDataPart().data,
+          },
+        });
+        await pubsub.flush();
+        await nextTick();
+        releaseFirst();
+        await first.text;
+        await vi.waitFor(() => expect(getStreamCount()).toBe(2));
+        await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt).split('forwarded notification')).toHaveLength(2);
+      } finally {
+        releaseFirst();
+      }
+    });
+
+    it('does not re-queue the echo of a signal this runtime queued locally', async () => {
+      const scope = { resourceId: 'local-echo', threadId: 'local-echo' };
+      const pubsub = new ControlledLeasePubSub();
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'follow-up');
+      const agent = new Agent({ id: 'local-echo', name: 'Echo', instructions: 'Test', model, pubsub });
+      try {
+        const first = await agent.stream('initial', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+        await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+        await agent.sendSignal({ type: 'user-message', contents: 'local follow-up' }, scope).accepted;
+        await pubsub.flush();
+        await nextTick();
+        releaseFirst();
+        await first.text;
+        await vi.waitFor(() => expect(getStreamCount()).toBe(2));
+        await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+        expect(getStreamCount()).toBe(2);
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt).split('local follow-up')).toHaveLength(2);
+      } finally {
         releaseFirst();
       }
     });
@@ -5539,6 +6463,52 @@ describe('Agent signals', () => {
     }
   });
 
+  it('answers every signal sent to an aborted run in one follow-up run, then queued messages one at a time', async () => {
+    const scope = { resourceId: 'abort-batch-user', threadId: 'abort-batch-thread' };
+    const pubsub = new EventEmitterPubSub();
+    const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel('first', 'next');
+    const agent = new Agent({
+      id: 'abort-batch',
+      name: 'Abort batch',
+      instructions: 'Test',
+      model,
+      memory: new MockMemory(),
+      pubsub,
+    });
+    const subscription = await agent.subscribeToThread(scope);
+    const stream = await agent.stream('initial', { memory: { thread: scope.threadId, resource: scope.resourceId } });
+
+    try {
+      await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+      for (const contents of ['sent A', 'sent B', 'sent C']) {
+        await agent.sendSignal({ type: 'user-message', contents }, scope).accepted;
+      }
+      await agent.queueMessage('queued X', scope).accepted;
+      await agent.queueMessage('queued Y', scope).accepted;
+      expect(subscription.abort()).toBe(true);
+      releaseFirst();
+      await stream.text;
+
+      await vi.waitFor(() => expect(getStreamCount()).toBe(4));
+      await vi.waitFor(() => expect(agentThreadStreamRuntime.getActiveThreadRunId(scope, pubsub)).toBeUndefined());
+      expect(getStreamCount()).toBe(4);
+
+      const followUp = JSON.stringify(model.doStreamCalls[1]?.prompt);
+      const positions = ['sent A', 'sent B', 'sent C'].map(contents => followUp.indexOf(contents));
+      expect(positions.every(position => position >= 0)).toBe(true);
+      expect(positions).toEqual([...positions].sort((a, b) => a - b));
+      expect(followUp).not.toContain('queued X');
+
+      const queuedX = JSON.stringify(model.doStreamCalls[2]?.prompt);
+      expect(queuedX).toContain('queued X');
+      expect(queuedX).not.toContain('queued Y');
+      expect(JSON.stringify(model.doStreamCalls[3]?.prompt)).toContain('queued Y');
+    } finally {
+      releaseFirst();
+      subscription.unsubscribe();
+    }
+  });
+
   it('persists external state signals with cache-key tracking', async () => {
     const memory = new MockMemory();
     await memory.createThread({ threadId: 'state-thread', resourceId: 'state-user' });
@@ -6998,6 +7968,54 @@ describe('Agent signals', () => {
     expect(restored).toHaveLength(2);
     expect(restored[0]).toMatchObject({ contents: 'first steer' });
     expect(restored[1]).toMatchObject({ contents: 'second steer' });
+  });
+
+  it('queues a retained signal it queued locally but forwarded during drain when it later owns the run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const streamMock = vi.fn();
+    const agent = { id: 'drain-forward-agent', stream: streamMock } as unknown as Agent<any, any, any, any>;
+    const threadId = 'drain-forward-thread';
+    const resourceId = 'drain-forward-user';
+    const options = { memory: { thread: threadId, resource: resourceId } } as any;
+    let finishRun!: () => void;
+    const finished = new Promise<void>(resolve => {
+      finishRun = resolve;
+    });
+
+    runtime.registerRun(agent, createFakeThreadRun('drain-forward-run', finished), options, pubsub);
+    const queued = runtime.sendMessage(agent, 'drained notification', { resourceId, threadId }, pubsub);
+    await expect(queued.accepted).resolves.toMatchObject({ action: 'deliver', runId: 'drain-forward-run' });
+    const enqueued = pubsub.publishedData.find(data => data.type === 'signal-enqueued');
+    expect(enqueued).toBeDefined();
+
+    // Another runtime wins the lease at handoff, so the drain forwards the signal instead of running it.
+    vi.spyOn(pubsub, 'transferLease').mockImplementationOnce(async key => {
+      pubsub.owners.set(key, 'other-owner-run');
+      return false;
+    });
+    finishRun();
+    await waitForCondition(() =>
+      pubsub.publishedData.some(data => data.type === 'signal-enqueued' && data.runId === 'other-owner-run'),
+    );
+    expect(streamMock).not.toHaveBeenCalled();
+    const forwarded = pubsub.publishedData.find(
+      data => data.type === 'signal-enqueued' && data.runId === 'other-owner-run',
+    );
+
+    // The other owner dies before consuming it; this runtime takes over its run and retained events replay.
+    pubsub.owners.clear();
+    runtime.registerRun(agent, createFakeThreadRun('other-owner-run', new Promise<void>(() => {})), options, pubsub);
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    // The original local enqueue is still a self-echo and must not be queued again.
+    await pubsub.publish(topic, { type: 'signal-enqueued', data: enqueued });
+    await pubsub.publish(topic, { type: 'signal-enqueued', data: forwarded });
+    await pubsub.flush();
+    await nextTick();
+
+    const restored = runtime.drainPendingSignals('other-owner-run', pubsub);
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).toMatchObject({ contents: 'drained notification' });
   });
 
   it('releases the thread lease with the failed run id when the handoff starts nothing', async () => {

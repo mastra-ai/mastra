@@ -1,9 +1,8 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations, useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 import { useCallback, useMemo } from 'react';
 
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
-import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { ExperimentResultDetail } from '@/domains/experiments/components/experiment-result-detail';
 import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
@@ -34,7 +33,11 @@ export function ExperimentItemPanel({ withQueryTrace, withFeedback }: Experiment
 
   const result = useMemo(() => (itemId ? results.find(r => r.itemId === itemId) : undefined), [results, itemId]);
 
-  const { data: scoresByItemId } = useScoresByExperimentId(experimentId, experimentStatus);
+  const { data: scoresByItemId } = useScoresByExperimentId({
+    experimentId: experimentId,
+    experimentStatus: experimentStatus,
+    queryOptions: { enabled: Boolean(experimentId) },
+  });
   const { updateExperimentResult } = useDatasetMutations();
 
   const flagForReview = useCallback(

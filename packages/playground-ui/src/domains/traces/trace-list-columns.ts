@@ -28,7 +28,7 @@ export const TRACE_CUSTOM_COLUMN_LABELS: Record<TraceCustomColumn, string> = {
   traceId: 'Trace ID',
   threadId: 'Thread ID',
   resourceId: 'Resource ID',
-  entityId: 'Entity ID',
+  entityId: 'Primitive ID',
 };
 
 export type TraceColumnPreferences = {
@@ -37,12 +37,8 @@ export type TraceColumnPreferences = {
   readonly metadataKeys: readonly string[];
 };
 
-export type TraceUsageSummary = {
-  inputTokens?: number;
-  outputTokens?: number;
-  estimatedCost?: number;
-  costUnit?: string;
-};
+import type { TraceUsageSummary } from '@mastra/react/hooks/traces';
+export type { TraceUsageSummary };
 
 export const DEFAULT_TRACE_COLUMN_PREFERENCES: TraceColumnPreferences = {
   visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],
@@ -116,11 +112,27 @@ export function serializeTraceColumnPreferences(preferences: TraceColumnPreferen
   });
 }
 
+/** Stable key per column of `buildTraceListColumns`, in the same order. Used to persist the column order. */
+export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): string[] {
+  const visible = new Set(preferences.visibleColumns);
+  const keys = ['startTime'];
+  if (visible.has('type')) keys.push('type');
+  keys.push('name');
+  if (visible.has('input')) keys.push('input');
+  keys.push('status');
+  for (const column of ['duration', 'endTime', 'environment', ...TRACE_USAGE_COLUMNS] as const) {
+    if (visible.has(column)) keys.push(column);
+  }
+  keys.push(...preferences.customColumns.map(field => `custom:${field}`));
+  keys.push(...preferences.metadataKeys.map(key => `metadata:${key}`));
+  return keys;
+}
+
 export function buildTraceListColumns(preferences: TraceColumnPreferences): string {
   const visible = new Set(preferences.visibleColumns);
   // Name is bounded when Input is visible so Input (1fr) absorbs the free space;
   // without Input, Name is the flexible track that fills the grid.
-  const columns = ['9rem'];
+  const columns = ['11rem'];
 
   if (visible.has('type')) columns.push('7rem');
   columns.push(visible.has('input') ? '14rem' : 'minmax(8rem,1fr)');
@@ -129,7 +141,7 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
   columns.push('6rem');
 
   if (visible.has('duration')) columns.push('7rem');
-  if (visible.has('endTime')) columns.push('9rem');
+  if (visible.has('endTime')) columns.push('11rem');
   if (visible.has('environment')) columns.push('8rem');
   if (visible.has('inputTokens')) columns.push('8rem');
   if (visible.has('outputTokens')) columns.push('8rem');
@@ -149,7 +161,7 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
 
 const RUN_PREFIX_PATTERN = /^(?:agent|workflow|scorer) run: '(.+?)'(.*)$/;
 
-/** Core names root spans `agent run: 'id'` (+ optional ` (resumed)`); the Type column already carries
+/** Core names root spans `agent run: 'id'` (+ optional ` (resumed)`); the Primitive type column already carries
  *  the kind, so the list shows just the id and any suffix. Core names are untouched for exporters. */
 export function displayTraceName<T extends string | null | undefined>(name: T): T {
   if (!name) return name;

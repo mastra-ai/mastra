@@ -1,17 +1,20 @@
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useInfiniteDatasets, useExperiments } from '@mastra/react/hooks/datasets';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { HeaderCreateAction } from '@/components/ui/header-create-action';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { DatasetsList, DatasetsToolbar, getDatasetTagOptions } from '@/domains/datasets';
+import { DatasetsList } from '@/domains/datasets/components/datasets-list/datasets-list';
+import { DatasetsListSkeleton } from '@/domains/datasets/components/datasets-list/datasets-list-skeleton';
+import { getDatasetTagOptions } from '@/domains/datasets/components/datasets-list/helpers';
 import { NoDatasetsInfo } from '@/domains/datasets/components/datasets-list/no-datasets-info';
-import { useInfiniteDatasets } from '@/domains/datasets/hooks/use-datasets';
-import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
+import { DatasetsToolbar } from '@/domains/datasets/components/datasets-toolbar';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { useTargetFilterParams } from '@/domains/shared/hooks/use-target-filter-params';
 
@@ -45,14 +48,15 @@ export default function Datasets() {
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
-  } = useInfiniteDatasets({ targetType, targetId }, orderBy);
+  } = useInfiniteDatasets({ filter: { targetType, targetId }, orderBy: orderBy });
   const { data: experimentsData, isLoading: isLoadingExperiments, error: errorExperiments } = useExperiments();
 
   const experiments = useMemo(() => experimentsData?.experiments ?? [], [experimentsData?.experiments]);
   const datasetTagOptions = useMemo(() => getDatasetTagOptions(datasets), [datasets]);
 
-  const isLoading = isLoadingDatasets || isLoadingExperiments;
-  const error = errorDatasets || errorExperiments;
+  const needsExperimentsForFilter = experimentFilter !== 'all';
+  const isLoading = isLoadingDatasets || (needsExperimentsForFilter && isLoadingExperiments);
+  const error = errorDatasets || (needsExperimentsForFilter ? errorExperiments : undefined);
 
   const navigate = useNavigate();
   const openCreatePage = () => void navigate('/datasets/new');
@@ -132,19 +136,49 @@ export default function Datasets() {
       }
     >
       <h1 className="sr-only">Datasets</h1>
-      <DatasetsList
-        datasets={datasets}
-        experiments={experiments}
-        isLoading={isLoading}
-        search={search}
-        experimentFilter={experimentFilter}
-        tagFilter={tagFilter}
-        isFetchingNextPage={isFetchingNextPage}
-        hasNextPage={hasNextPage}
-        setEndOfListElement={setEndOfListElement}
-        sort={sort}
-        onSortChange={onSortChange}
-      />
+      {isLoading ? (
+        <DatasetsListSkeleton />
+      ) : (
+        <DatasetsList
+          datasets={datasets}
+          experiments={experiments}
+          renderTrailingCell={dataset => {
+            if (isLoadingExperiments) {
+              return (
+                <Txt
+                  as="span"
+                  variant="caption"
+                  tone="muted"
+                  aria-label={`Loading experiment summary for ${dataset.name}`}
+                >
+                  …
+                </Txt>
+              );
+            }
+            if (errorExperiments) {
+              return (
+                <Txt
+                  as="span"
+                  variant="caption"
+                  tone="muted"
+                  aria-label={`Experiment summary unavailable for ${dataset.name}`}
+                >
+                  Unavailable
+                </Txt>
+              );
+            }
+            return null;
+          }}
+          search={search}
+          experimentFilter={experimentFilter}
+          tagFilter={tagFilter}
+          isFetchingNextPage={isFetchingNextPage}
+          hasNextPage={hasNextPage}
+          setEndOfListElement={setEndOfListElement}
+          sort={sort}
+          onSortChange={onSortChange}
+        />
+      )}
     </PageLayout>
   );
 }

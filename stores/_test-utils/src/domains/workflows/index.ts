@@ -93,6 +93,20 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       expect(snapshot.context?.[stepId1]?.status).toBe('completed');
     });
 
+    it('returns status and timestamp in summary mode', async () => {
+      const { snapshot, runId } = createSampleWorkflowSnapshot('success');
+      await workflowsStorage.persistWorkflowSnapshot({ workflowName: 'summary_test', runId, snapshot });
+
+      const { runs, total } = await workflowsStorage.listWorkflowRuns({ workflowName: 'summary_test', summary: true });
+      expect(total).toBe(1);
+      expect(runs[0]!.runId).toBe(runId);
+      const parsed = (
+        typeof runs[0]!.snapshot === 'string' ? JSON.parse(runs[0]!.snapshot) : runs[0]!.snapshot
+      ) as WorkflowRunState;
+      expect(parsed.status).toBe('success');
+      expect(parsed.timestamp).toBe(snapshot.timestamp);
+    });
+
     it('filters by status', async () => {
       const workflowName1 = 'filter_test_1';
       const workflowName2 = 'filter_test_2';
@@ -832,6 +846,55 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
           startedAt: expect.any(Number),
           endedAt: expect.any(Number),
         },
+      });
+    });
+
+    it('should record workflow state together with the step result', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping workflow results with state test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: { __state: { counter: 0 } } } as any,
+      });
+
+      const stepResult = {
+        status: 'success' as const,
+        output: { data: 'test' },
+        payload: {},
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+      };
+
+      const returnedContext = await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-1',
+        result: stepResult,
+        requestContext: {},
+        state: { counter: 1 },
+      });
+      expect(returnedContext).toEqual({ 'step-1': stepResult, __state: { counter: 1 } });
+
+      // Omitting state leaves the recorded state untouched.
+      await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-2',
+        result: stepResult,
+        requestContext: {},
+      });
+
+      const finalSnapshot = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      expect(finalSnapshot?.context).toEqual({
+        'step-1': stepResult,
+        'step-2': stepResult,
+        __state: { counter: 1 },
       });
     });
 

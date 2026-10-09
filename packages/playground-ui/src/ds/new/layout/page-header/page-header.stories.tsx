@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { BotIcon } from 'lucide-react';
+import { ArrowLeftIcon, BotIcon } from 'lucide-react';
 
 import { PageHeader } from './page-header';
 import { Badge } from '@/ds/components/Badge';
@@ -43,7 +43,7 @@ function PageHeaderStory({
         {showTitle && <PageHeader.Title isLoading={isLoading}>{title}</PageHeader.Title>}
         {showMeta && (
           <PageHeader.Meta beside={metaBeside}>
-            <Badge variant="green">Active</Badge>
+            <Badge variant="success">Active</Badge>
             {!metaBeside && <span className="font-mono text-meta text-placeholder">agent_8f3a91b2</span>}
           </PageHeader.Meta>
         )}
@@ -61,7 +61,21 @@ function PageHeaderStory({
 const meta = {
   title: 'Layout/PageHeader',
   component: PageHeaderStory,
-  parameters: { layout: 'centered' },
+  tags: ['autodocs'],
+  parameters: {
+    layout: 'centered',
+    docs: {
+      description: {
+        component: [
+          'PageHeader groups a page title, description, metadata and actions. `spacing="default"` is the default and keeps the existing padding and normal-flow eyebrow layout.',
+          'Use `spacing="breathing"` only on a specific page-level header in a bar-less PageLayout when that page should align with related pages that have a breadcrumb or header-actions bar. A missing bar alone does not require breathing spacing.',
+          'Breathing spacing reserves 40px above the heading. An optional PageHeader.Eyebrow sits inside that band, so adding or removing it does not move the title.',
+          'Keep the default when PageLayout renders a bar, in compact toolbars or action rows such as agent-builder lists, or when the surrounding layout already supplies the top space. Breathing spacing does not detect a bar or turn itself off when one appears; the caller owns that choice. Do not make it a global default or use it for general section spacing.',
+          'See Layout/PageLayout → Top Bar Spacing Comparison for the intended alignment and the unchanged bar-less default.',
+        ].join('\n\n'),
+      },
+    },
+  },
   args: {
     description: 'Searches trusted sources and writes cited summaries.',
     isLoading: false,
@@ -104,7 +118,7 @@ export const MetaBeside: Story = {
       <PageHeader>
         <PageHeader.Title>production</PageHeader.Title>
         <PageHeader.Meta beside>
-          <Badge variant="green">Live</Badge>
+          <Badge variant="success">Live</Badge>
         </PageHeader.Meta>
         <PageHeader.Action>
           <Button size="sm">Settings</Button>
@@ -115,13 +129,78 @@ export const MetaBeside: Story = {
   ),
 };
 
+export const MetaBesideLargeIcon: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Icon>
+          <span className="grid size-8 place-items-center">
+            <BotIcon />
+          </span>
+        </PageHeader.Icon>
+        <PageHeader.Title>Frontend Notion</PageHeader.Title>
+        <PageHeader.Meta beside>
+          <Badge variant="green" emphasis="subtle" size="sm">
+            Active
+          </Badge>
+        </PageHeader.Meta>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const EyebrowBackLink: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Eyebrow>
+          <a href="#alerts">
+            <ArrowLeftIcon aria-hidden />
+            Back to alerts
+          </a>
+        </PageHeader.Eyebrow>
+        <PageHeader.Title>Create alert</PageHeader.Title>
+        <PageHeader.Action>
+          <Button size="sm">Save draft</Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const EverySlotWrapping: Story = {
+  render: () => (
+    <div className="w-80 py-10">
+      <PageHeader>
+        <PageHeader.Eyebrow>
+          <a href="#agents">
+            <ArrowLeftIcon aria-hidden />
+            Back to agents
+          </a>
+        </PageHeader.Eyebrow>
+        <PageHeader.Icon>
+          <BotIcon strokeWidth={2.5} />
+        </PageHeader.Icon>
+        <PageHeader.Title>Customer support escalation agent</PageHeader.Title>
+        <PageHeader.Meta beside>
+          <Badge variant="green">Live</Badge>
+        </PageHeader.Meta>
+        <PageHeader.Description>Routes urgent tickets to the on-call team.</PageHeader.Description>
+        <PageHeader.Action>
+          <Button size="sm">Edit</Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </div>
+  ),
+};
+
 export const MetaBoth: Story = {
   render: () => (
     <StoryFrame>
       <PageHeader>
         <PageHeader.Title>production</PageHeader.Title>
         <PageHeader.Meta beside>
-          <Badge variant="green">Live</Badge>
+          <Badge variant="success">Live</Badge>
         </PageHeader.Meta>
         <PageHeader.Meta>
           <span className="font-mono text-meta text-placeholder">env_01j9</span>
@@ -173,7 +252,7 @@ export const MetaOnly: Story = {
     <StoryFrame>
       <PageHeader>
         <PageHeader.Meta>
-          <Badge variant="green">Meta only</Badge>
+          <Badge variant="success">Meta only</Badge>
         </PageHeader.Meta>
       </PageHeader>
     </StoryFrame>
@@ -196,6 +275,21 @@ export const ActionOnly: Story = {
       <PageHeader>
         <PageHeader.Action>
           <Button size="sm">Action only</Button>
+        </PageHeader.Action>
+      </PageHeader>
+    </StoryFrame>
+  ),
+};
+
+export const LargeAction: Story = {
+  render: () => (
+    <StoryFrame>
+      <PageHeader>
+        <PageHeader.Title>API Keys</PageHeader.Title>
+        <PageHeader.Action>
+          <Button variant="primary" size="lg">
+            Create API key
+          </Button>
         </PageHeader.Action>
       </PageHeader>
     </StoryFrame>
@@ -228,31 +322,6 @@ export const Loading: Story = {
         <PageHeader.Title isLoading />
         <PageHeader.Description isLoading />
       </PageHeader>
-    </StoryFrame>
-  ),
-};
-
-export const LegacyProps: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageHeader
-        title="Legacy header"
-        description="The legacy prop API remains supported."
-        icon={<BotIcon strokeWidth={2.5} />}
-      />
-    </StoryFrame>
-  ),
-};
-
-export const LegacyLoading: Story = {
-  render: () => (
-    <StoryFrame>
-      <PageHeader
-        title="Legacy header"
-        description="The legacy prop API remains supported."
-        icon={<BotIcon strokeWidth={2.5} />}
-        isLoading
-      />
     </StoryFrame>
   ),
 };

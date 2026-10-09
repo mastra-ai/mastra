@@ -140,12 +140,14 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     return this.executeWithRetry(
       () =>
@@ -186,7 +188,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
             // Merge the new step result using element-wise array merging
             // (critical for concurrent foreach iteration results)
-            mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+            mergeWorkflowStepResult({ snapshot, stepId, result, requestContext, state });
 
             // Upsert the snapshot within the same transaction
             const now = new Date().toISOString();
@@ -259,8 +261,8 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
             // Update the snapshot within the same transaction
             await tx.execute({
-              sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = jsonb(?) WHERE workflow_name = ? AND run_id = ?`,
-              args: [safeStringify(updatedSnapshot), workflowName, runId],
+              sql: `UPDATE ${TABLE_WORKFLOW_SNAPSHOT} SET snapshot = jsonb(?), updatedAt = ? WHERE workflow_name = ? AND run_id = ?`,
+              args: [safeStringify(updatedSnapshot), new Date().toISOString(), workflowName, runId],
             });
 
             await tx.commit();
@@ -407,6 +409,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     resourceId,
     threadId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -471,7 +474,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
       const offset = usePagination ? page! * normalizedPerPage : 0;
       const result = await this.#client.execute({
-        sql: `SELECT workflow_name, run_id, resourceId, json(snapshot) as snapshot, createdAt, updatedAt FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${usePagination ? ` LIMIT ? OFFSET ?` : ''}`,
+        sql: `SELECT workflow_name, run_id, resourceId, ${summary ? `json_object('status', json_extract(snapshot, '$.status'), 'timestamp', json_extract(snapshot, '$.timestamp'))` : 'json(snapshot)'} as snapshot, createdAt, updatedAt FROM ${TABLE_WORKFLOW_SNAPSHOT} ${whereClause} ORDER BY createdAt DESC${usePagination ? ` LIMIT ? OFFSET ?` : ''}`,
         args: usePagination ? [...args, normalizedPerPage, offset] : args,
       });
 

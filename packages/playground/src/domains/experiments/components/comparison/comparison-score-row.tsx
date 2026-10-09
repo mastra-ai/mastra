@@ -1,6 +1,7 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { ScoreDelta } from './score-delta';
-import { useLinkComponent } from '@/lib/framework';
 
 export interface ComparisonScoreRowProps {
   scorerId: string;
@@ -23,17 +24,21 @@ export function ComparisonScoreRow({ scorerId, value, delta, reason }: Compariso
         <Link
           href={paths.scorerLink(scorerId)}
           aria-label={`Open ${scorerId}`}
-          className="flex min-w-0 items-center gap-1.5 text-subheading text-foreground hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+          className="flex min-w-0 items-center gap-1.5 text-foreground hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
         >
           <ScorersIcon />
-          <span className="min-w-0 truncate">{scorerId}</span>
+          <Txt as="span" variant="subheading" className="min-w-0 truncate">
+            {scorerId}
+          </Txt>
         </Link>
         <div className="flex items-center gap-3">
-          <span className="text-body text-muted-foreground tabular-nums">{value != null ? value.toFixed(2) : '-'}</span>
+          <Txt as="span" tone="muted" className="tabular-nums">
+            {value != null ? value.toFixed(2) : '-'}
+          </Txt>
           {delta != null && <ScoreDelta delta={delta} />}
         </div>
       </div>
-      {reason && <p className="text-body text-muted-foreground">{reason}</p>}
+      {reason && <Txt tone="muted">{reason}</Txt>}
     </div>
   );
 }

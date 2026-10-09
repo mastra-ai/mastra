@@ -1,4 +1,5 @@
-import { formatOmError } from './error';
+import { formatOmError, getOmFailureMetadata } from './error';
+import type { OmFailurePolicy } from './error';
 import type {
   DataOmActivationPart,
   DataOmBufferingEndPart,
@@ -88,6 +89,9 @@ export function createObservationFailedMarker(params: {
   startedAt: string;
   tokensAttempted: number;
   error: unknown;
+  failurePolicy?: OmFailurePolicy;
+  /** The runner is about to retry this cycle, so the failure is not final. */
+  retrying?: boolean;
   recordId: string;
   threadId: string;
 }): DataOmObservationFailedPart {
@@ -103,6 +107,8 @@ export function createObservationFailedMarker(params: {
       durationMs,
       tokensAttempted: params.tokensAttempted,
       error: formatOmError(params.error),
+      ...getOmFailureMetadata(params.error, params.failurePolicy ?? 'abort'),
+      ...(params.retrying ? { retrying: true } : {}),
       recordId: params.recordId,
       threadId: params.threadId,
     },
@@ -181,6 +187,7 @@ export function createBufferingFailedMarker(params: {
   startedAt: string;
   tokensAttempted: number;
   error: unknown;
+  failurePolicy?: OmFailurePolicy;
   recordId: string;
   threadId: string;
 }): DataOmBufferingFailedPart {
@@ -196,6 +203,7 @@ export function createBufferingFailedMarker(params: {
       durationMs,
       tokensAttempted: params.tokensAttempted,
       error: formatOmError(params.error),
+      ...getOmFailureMetadata(params.error, params.failurePolicy ?? 'abort'),
       recordId: params.recordId,
       threadId: params.threadId,
     },

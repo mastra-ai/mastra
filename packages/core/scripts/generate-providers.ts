@@ -16,6 +16,7 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
     attachmentCapabilities,
     temperatureCapabilities,
     structuredOutputCapabilities,
+    reasoningCapabilities,
     failedGateways,
   } = await fetchProvidersFromGateways(gateways);
 
@@ -38,6 +39,7 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
     attachmentCapabilities,
     temperatureCapabilities,
     structuredOutputCapabilities,
+    reasoningCapabilities,
   );
 
   // Write registry files to dist/ (for build output)
@@ -51,6 +53,7 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
     attachmentCapabilities,
     temperatureCapabilities,
     structuredOutputCapabilities,
+    reasoningCapabilities,
   );
 
   // Log summary
@@ -64,6 +67,12 @@ async function generateProviderRegistry(gateways: MastraModelGateway[]) {
   const tempProviderCount = Object.keys(temperatureCapabilities).length;
   const tempModelCount = Object.values(temperatureCapabilities).reduce((sum, models) => sum + models.length, 0);
   console.info(`Temperature-capable: ${tempModelCount} models across ${tempProviderCount} providers`);
+  const reasoningProviderCount = Object.keys(reasoningCapabilities).length;
+  const reasoningModelCount = Object.values(reasoningCapabilities).reduce(
+    (sum, models) => sum + Object.keys(models).length,
+    0,
+  );
+  console.info(`Reasoning options: ${reasoningModelCount} models across ${reasoningProviderCount} providers`);
 }
 
 // Main execution

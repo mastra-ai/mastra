@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowDownRightIcon, ArrowUpRightIcon } from 'lucide-react';
 
@@ -11,12 +12,15 @@ interface ScoreDeltaProps {
  * plus the absolute difference, both in the system positive/negative hue.
  */
 export function ScoreDelta({ delta }: ScoreDeltaProps) {
-  const tone = delta > 0 ? 'text-positive1' : delta < 0 ? 'text-negative1' : 'text-muted-foreground';
+  const tone =
+    delta > 0 ? 'text-success-indicator' : delta < 0 ? 'text-destructive-foreground' : 'text-muted-foreground';
 
   return (
-    <span className={cn('inline-flex min-w-20 items-center gap-1 text-body tabular-nums', tone)}>
-      <span className="inline-block w-3">{delta > 0 ? '+' : delta < 0 ? '-' : ''}</span>
-      {Math.abs(delta).toFixed(2)}
+    <span className={cn('inline-flex min-w-20 items-center gap-1 tabular-nums', tone)}>
+      <Txt as="span" className="inline-block w-3">
+        {delta > 0 ? '+' : delta < 0 ? '-' : ''}
+      </Txt>
+      <Txt as="span">{Math.abs(delta).toFixed(2)}</Txt>
       {delta > 0 ? (
         <ArrowUpRightIcon className="size-3.5" />
       ) : delta < 0 ? (

@@ -1,5 +1,5 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MockAgent, setGlobalDispatcher } from 'undici';
 import { InMemoryChannelsStorage } from '@mastra/core/storage';
 import { Mastra } from '@mastra/core';
@@ -18,6 +18,7 @@ import {
   normalizeCommands,
   resolveDiscordAdapterConfig,
 } from './index';
+import { SNAPSHOT_TTL_MS } from './reconcile';
 
 const API_ORIGIN = 'https://discord.com';
 const APP = {
@@ -71,13 +72,43 @@ function makeProvider(config: Partial<ConstructorParameters<typeof DiscordProvid
   return { provider, storage };
 }
 
+/**
+ * Read the request body handed to an undici mock reply callback as UTF-8 text.
+ *
+ * undici 8 no longer surfaces a `fetch` string body verbatim to mock replies: an
+ * iterable/async-iterable body (what `fetch` uses internally) arrives as a
+ * stream/chunk array, so `String(opts.body)` yields "[object Object]" and parsing
+ * throws. Reply callbacks that need the body must therefore be async and read it.
+ */
+async function readMockBody(body: unknown): Promise<string> {
+  if (body == null) return '';
+  if (typeof body === 'string') return body;
+  if (body instanceof Uint8Array) return Buffer.from(body).toString('utf8');
+
+  const chunks: Uint8Array[] = [];
+  const collect = (chunk: unknown) => {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk, 'utf8') : Buffer.from(chunk as Uint8Array));
+  };
+
+  if (Array.isArray(body)) {
+    for (const chunk of body) collect(chunk);
+  } else if (typeof body === 'object' && Symbol.asyncIterator in body) {
+    for await (const chunk of body as AsyncIterable<unknown>) collect(chunk);
+  } else {
+    return String(body);
+  }
+  // Join the raw bytes before decoding: a multibyte character split across two
+  // chunks would otherwise decode into two replacement characters.
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 /** Stub `GET /applications/@me` — the bot-token validation call. */
-function stubValidateApp(opts: { ok?: boolean; name?: string } = {}) {
-  const { ok = true, name = 'Test App' } = opts;
+function stubValidateApp(opts: { ok?: boolean; name?: string; verifyKey?: string; id?: string } = {}) {
+  const { ok = true, name = 'Test App', verifyKey = APP.publicKey, id = APP.applicationId } = opts;
   mockAgent
     .get(API_ORIGIN)
     .intercept({ path: '/api/v10/applications/@me', method: 'GET' })
-    .reply(ok ? 200 : 401, ok ? { id: APP.applicationId, name } : { message: '401: Unauthorized', code: 0 });
+    .reply(ok ? 200 : 401, ok ? { id, name, verify_key: verifyKey } : { message: '401: Unauthorized', code: 0 });
 }
 
 /** Stub `GET /guilds/{id}` —200 when the bot is a member, 403 otherwise. */
@@ -91,18 +122,42 @@ function stubGuild(guildId: string, present: boolean) {
     );
 }
 
+/** Stub one `GET /users/@me/guilds` page: guild ids, or a failure status. */
+function stubBotGuilds(idsOrError: string[] | { status: number }) {
+  const interceptor = mockAgent
+    .get(API_ORIGIN)
+    .intercept({ path: '/api/v10/users/@me/guilds?limit=200', method: 'GET' });
+  if (Array.isArray(idsOrError)) {
+    interceptor.reply(
+      200,
+      idsOrError.map(id => ({ id, name: `Guild ${id}` })),
+    );
+  } else {
+    interceptor.reply(idsOrError.status, { message: 'oops', code: 0 });
+  }
+}
+
 /** Persistently stub the guild command PUT, capturing every payload. */
 function stubGuildCommands(guildId: string, appId: string = APP.applicationId): () => Record<string, unknown>[] {
   const calls: Record<string, unknown>[] = [];
   mockAgent
     .get(API_ORIGIN)
     .intercept({ path: `/api/v10/applications/${appId}/guilds/${guildId}/commands`, method: 'PUT' })
-    .reply(200, opts => {
-      calls.push(JSON.parse(String(opts.body)));
+    .reply(200, async opts => {
+      calls.push(JSON.parse(await readMockBody(opts.body)));
       return [];
     })
     .persist();
   return () => calls;
+}
+
+/** Stub one guild command PUT that only resolves after `ms` (in-flight races). */
+function stubDelayedGuildCommands(guildId: string, ms: number, appId: string = APP.applicationId) {
+  mockAgent
+    .get(API_ORIGIN)
+    .intercept({ path: `/api/v10/applications/${appId}/guilds/${guildId}/commands`, method: 'PUT' })
+    .reply(200, [])
+    .delay(ms);
 }
 
 /** Persistently stub the global command PUT, capturing every payload. */
@@ -111,8 +166,8 @@ function stubGlobalCommands(appId: string = APP.applicationId): () => Record<str
   mockAgent
     .get(API_ORIGIN)
     .intercept({ path: `/api/v10/applications/${appId}/commands`, method: 'PUT' })
-    .reply(200, opts => {
-      calls.push(JSON.parse(String(opts.body)));
+    .reply(200, async opts => {
+      calls.push(JSON.parse(await readMockBody(opts.body)));
       return [];
     })
     .persist();
@@ -135,6 +190,14 @@ describe('DiscordProvider — discovery + skeleton', () => {
   it('is not configured without app credentials', () => {
     const provider = new DiscordProvider({ storage: new InMemoryChannelsStorage() });
     expect(provider.getInfo().isConfigured).toBe(false);
+  });
+
+  it('is configured with only a bot token (rest is backfilled from Discord)', () => {
+    const provider = new DiscordProvider({
+      storage: new InMemoryChannelsStorage(),
+      app: { botToken: APP.botToken },
+    });
+    expect(provider.getInfo().isConfigured).toBe(true);
   });
 
   it('mounts a single POST interactions route (requiresAuth false — Ed25519, not bearer)', () => {
@@ -183,6 +246,48 @@ describe('DiscordProvider.connect', () => {
     expect(await storage.getConfig('discord')).toBeNull();
   });
 
+  it('backfills applicationId + publicKey from /applications/@me when only a bot token is supplied', async () => {
+    const { provider, storage } = makeProvider({ app: { botToken: APP.botToken } });
+    // A single-use interceptor: a second /applications/@me call would find no
+    // matching stub and fail — proving the backfill's validation is reused
+    // rather than repeated by connect().
+    stubValidateApp();
+
+    const result = await provider.connect('agent-1');
+
+    expect(result).toMatchObject({ type: 'oauth' });
+    // client_id in the invite URL comes from the backfilled application id.
+    const url = new URL((result as { authorizationUrl: string }).authorizationUrl);
+    expect(url.searchParams.get('client_id')).toBe(APP.applicationId);
+    // The completed config is persisted so later webhooks/restores never
+    // depend on the Discord API again.
+    const stored = (await storage.getConfig('discord')) as { data: Record<string, unknown> } | null;
+    expect(stored?.data).toMatchObject({ publicKey: APP.publicKey, applicationId: APP.applicationId });
+  });
+
+  it('keeps explicitly supplied fields over backfilled ones', async () => {
+    const explicitAppId = '999999999999999999';
+    const { provider, storage } = makeProvider({
+      app: { botToken: APP.botToken, applicationId: explicitAppId },
+    });
+    stubValidateApp();
+
+    await provider.connect('agent-1');
+
+    const stored = (await storage.getConfig('discord')) as { data: Record<string, unknown> } | null;
+    // publicKey was missing → backfilled from verify_key; applicationId was
+    // supplied → kept as-is.
+    expect(stored?.data).toMatchObject({ publicKey: APP.publicKey, applicationId: explicitAppId });
+  });
+
+  it('rejects the connect when the bot token is invalid in the backfill path, persisting nothing', async () => {
+    const { provider, storage } = makeProvider({ app: { botToken: APP.botToken } });
+    stubValidateApp({ ok: false });
+
+    await expect(provider.connect('agent-1')).rejects.toThrow(/rejected the bot token/i);
+    expect(await storage.getConfig('discord')).toBeNull();
+  });
+
   it('binds immediately when the bot is already in the target guild', async () => {
     const { provider } = makeProvider();
     stubValidateApp();
@@ -209,6 +314,34 @@ describe('DiscordProvider.connect', () => {
     expect(result).toMatchObject({ type: 'oauth' });
     const inst = await provider.getInstallation('agent-1');
     expect(inst).toMatchObject({ status: 'pending', guildIds: [] });
+  });
+
+  it('does not flip a concurrently-activated install back to pending on re-connect', async () => {
+    const seen: string[] = [];
+    const { provider } = makeProvider({ onInstall: i => void seen.push(i.agentId) });
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1'); // pending invite
+    const pending = await provider.getInstallation('agent-1');
+
+    // The operator clicks Connect again; the re-connect reads the (still
+    // pending) row, then parks on token validation — and a first interaction
+    // activates the install in that window. The re-connect's pending save
+    // must re-read behind the activation chain and keep the active row — an
+    // unserialized save would flip it back to pending and drop the guild.
+    mockAgent
+      .get(API_ORIGIN)
+      .intercept({ path: '/api/v10/applications/@me', method: 'GET' })
+      .reply(200, { id: APP.applicationId, name: 'Test App', verify_key: APP.publicKey })
+      .delay(30);
+    stubGuildCommands(GUILD);
+    const reconnect = provider.connect('agent-1');
+    await provider.activateGuild(pending!.webhookId, GUILD);
+    const result = await reconnect;
+
+    expect(result).toMatchObject({ type: 'immediate', installationId: pending!.id });
+    expect(await provider.getInstallation('agent-1')).toMatchObject({ status: 'active', guildIds: [GUILD] });
+    expect(seen).toEqual(['agent-1']); // onInstall fired by the activation only
   });
 
   it('enforces one active install per agent (reconnect requires disconnect)', async () => {
@@ -303,6 +436,283 @@ describe('DiscordProvider.activateGuild — lazy activation (first interaction)'
   });
 });
 
+describe('DiscordProvider — pending-install reconcile (invite completed in another tab)', () => {
+  it('snapshots the bot’s guild membership on the pending install, stamped with app + time', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([GUILD]); // a guild the bot was already in when the invite was issued
+
+    await provider.connect('agent-1');
+
+    const pending = await provider.getInstallation('agent-1');
+    expect(pending).toMatchObject({
+      status: 'pending',
+      guildSnapshot: [GUILD],
+      snapshotApplicationId: APP.applicationId,
+    });
+    expect(pending?.snapshotAt).toBeInstanceOf(Date);
+  });
+
+  it('listInstallations is a pure read — it never fetches membership or mutates installs', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1'); // pending WITH a reconcilable snapshot
+
+    // No stubBotGuilds registered: a membership fetch would throw under
+    // disableNetConnect. The install must come back exactly as stored.
+    const installs = await provider.listInstallations();
+    expect(installs[0]).toMatchObject({ agentId: 'agent-1', status: 'pending' });
+  });
+
+  it('activates the install off reconcileInstallation when exactly one guild appeared since the invite', async () => {
+    const seen: string[] = [];
+    const { provider } = makeProvider({ onInstall: i => void seen.push(i.agentId) });
+    stubValidateApp();
+    stubBotGuilds([]); // snapshot: bot in no guilds at invite time
+    await provider.connect('agent-1');
+
+    stubBotGuilds([GUILD]); // operator finished the invite in another tab
+    stubGuildCommands(GUILD); // activation registers the new guild's commands
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ agentId: 'agent-1', status: 'active' });
+    expect(seen).toEqual(['agent-1']);
+    const full = await provider.getInstallation('agent-1');
+    expect(full).toMatchObject({ status: 'active', guildIds: [GUILD] });
+    // The reconcile baseline is spent once a guild is confirmed.
+    expect(full?.guildSnapshot).toBeUndefined();
+    expect(full?.snapshotAt).toBeUndefined();
+    expect(full?.snapshotApplicationId).toBeUndefined();
+  });
+
+  it('returns null for an agent with no installation', async () => {
+    const { provider } = makeProvider();
+    expect(await provider.reconcileInstallation('ghost')).toBeNull();
+  });
+
+  it('returns an active installation as-is without fetching membership', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubGuild(GUILD, true);
+    stubGuildCommands(GUILD);
+    await provider.connect('agent-1', { guildId: GUILD }); // eager bind — active
+
+    // No stubBotGuilds registered: an unexpected fetch would throw under
+    // disableNetConnect.
+    const info = await provider.reconcileInstallation('agent-1');
+    expect(info).toMatchObject({ status: 'active' });
+  });
+
+  it('stays pending when multiple guilds appeared (ambiguous diff), keeping the snapshot', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+
+    stubBotGuilds([GUILD, OTHER_GUILD]);
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'pending' });
+    expect((await provider.getInstallation('agent-1'))?.guildSnapshot).toEqual([]);
+  });
+
+  it('stays pending when the same new guild could belong to two pending installs', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-2');
+
+    stubBotGuilds([GUILD]); // one new guild, two possible claimants — can't tell whose
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'pending' });
+    const installs = await provider.listInstallations();
+    expect(installs.map(i => i.status)).toEqual(['pending', 'pending']);
+  });
+
+  it('never claims a guild another install already owns, even when it is new to this snapshot', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1'); // pending, snapshot []
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-2'); // pending, snapshot []
+
+    // agent-2 activates on GUILD through a first interaction — GUILD joined
+    // after both snapshots were taken, so it still looks "new" to agent-1.
+    stubGuildCommands(GUILD);
+    const agent2 = await provider.getInstallation('agent-2');
+    await provider.activateGuild(agent2!.webhookId, GUILD);
+
+    stubBotGuilds([GUILD]);
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'pending' });
+    expect((await provider.getInstallation('agent-2'))?.guildIds).toEqual([GUILD]);
+  });
+
+  it('stays pending when the membership listing fails (reconcile is best-effort)', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+
+    stubBotGuilds({ status: 500 });
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'pending' });
+  });
+
+  it('skips the membership fetch when the agent’s install carries no baseline', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds({ status: 500 }); // snapshot fails at connect time
+    await provider.connect('agent-1');
+
+    // No stubBotGuilds registered: the pre-check must skip the fetch — an
+    // unexpected one would throw under disableNetConnect.
+    const info = await provider.reconcileInstallation('agent-1');
+    expect(info).toMatchObject({ status: 'pending' });
+  });
+
+  it('does not reconcile once the invite claim window has expired', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { provider } = makeProvider();
+      stubValidateApp();
+      stubBotGuilds([]);
+      await provider.connect('agent-1');
+
+      vi.setSystemTime(Date.now() + SNAPSHOT_TTL_MS + 1);
+      // No stubBotGuilds registered: an expired window must skip the
+      // membership fetch entirely. The abandoned flow activates only via a
+      // first interaction now.
+      const info = await provider.reconcileInstallation('agent-1');
+      expect(info).toMatchObject({ status: 'pending' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('re-connecting after the claim window expired takes a fresh snapshot', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const { provider } = makeProvider();
+      stubValidateApp();
+      stubBotGuilds([]);
+      await provider.connect('agent-1'); // baseline: no guilds
+
+      // The bot joined GUILD for unrelated reasons during the dead window —
+      // an expired baseline must not attribute it to the revived flow.
+      vi.setSystemTime(Date.now() + SNAPSHOT_TTL_MS + 1);
+      stubValidateApp();
+      stubBotGuilds([GUILD]);
+      await provider.connect('agent-1');
+
+      expect((await provider.getInstallation('agent-1'))?.guildSnapshot).toEqual([GUILD]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('defers to first-interaction activation when any live pending install lacks a baseline', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds({ status: 500 }); // snapshot fails — agent-1 is pending with NO baseline
+    await provider.connect('agent-1');
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-2'); // baseline: no guilds
+
+    // One new guild appears. Counted against agent-2's baseline alone it looks
+    // unambiguous — but it could just as well be agent-1's invite landing, and
+    // agent-1 has no baseline to say otherwise. Nobody may claim it.
+    stubBotGuilds([GUILD]);
+    const info = await provider.reconcileInstallation('agent-2');
+
+    expect(info).toMatchObject({ status: 'pending' });
+    const installs = await provider.listInstallations();
+    expect(installs.map(i => i.status)).toEqual(['pending', 'pending']);
+  });
+
+  it('does not auto-activate an explicitly targeted install on a different guild', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubGuild(GUILD, false); // target requested, bot not a member → invite flow
+    stubBotGuilds([]);
+    await provider.connect('agent-1', { guildId: GUILD });
+
+    // A different guild appears — not what the caller asked for. It can still
+    // activate through a real first interaction, never from membership alone.
+    stubBotGuilds([OTHER_GUILD]);
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'pending' });
+  });
+
+  it('auto-activates an explicitly targeted install once its target appears', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubGuild(GUILD, false);
+    stubBotGuilds([]);
+    await provider.connect('agent-1', { guildId: GUILD });
+
+    stubBotGuilds([GUILD]);
+    stubGuildCommands(GUILD);
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'active' });
+    expect((await provider.getInstallation('agent-1'))?.guildIds).toEqual([GUILD]);
+  });
+
+  it('re-connecting while pending preserves the original reconcile baseline', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1'); // baseline: no guilds
+
+    // The operator completes the invite, then clicks connect again before any
+    // reconcile ran. A fresh snapshot would now include the new guild and hide
+    // it from the diff forever — the original baseline must survive. (No
+    // stubBotGuilds here: a re-snapshot would throw under disableNetConnect.)
+    stubValidateApp();
+    await provider.connect('agent-1');
+    expect((await provider.getInstallation('agent-1'))?.guildSnapshot).toEqual([]);
+
+    stubBotGuilds([GUILD]);
+    stubGuildCommands(GUILD);
+    const info = await provider.reconcileInstallation('agent-1');
+
+    expect(info).toMatchObject({ status: 'active' });
+  });
+
+  it('activates a completed invite exactly once across concurrent reconcile calls', async () => {
+    const seen: string[] = [];
+    const { provider } = makeProvider({ onInstall: i => void seen.push(i.agentId) });
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+
+    // ONE membership stub: concurrent reconciles must share a single pass (a
+    // second fetch would throw under disableNetConnect).
+    stubBotGuilds([GUILD]);
+    stubGuildCommands(GUILD);
+    const [a, b] = await Promise.all([
+      provider.reconcileInstallation('agent-1'),
+      provider.reconcileInstallation('agent-1'),
+    ]);
+
+    expect(a).toMatchObject({ status: 'active' });
+    expect(b).toMatchObject({ status: 'active' });
+    expect(seen).toEqual(['agent-1']);
+  });
+});
+
 describe('DiscordProvider.disconnect', () => {
   it('removes the installation', async () => {
     const { provider } = makeProvider();
@@ -319,6 +729,26 @@ describe('DiscordProvider.disconnect', () => {
 
   it('throws when no installation exists', async () => {
     await expect(makeProvider().provider.disconnect('ghost')).rejects.toThrow(/no discord installation/i);
+  });
+
+  it('cannot be resurrected by an activation whose command PUT is still in flight', async () => {
+    const { provider } = makeProvider();
+    stubValidateApp();
+    stubBotGuilds([]);
+    await provider.connect('agent-1');
+    const pending = await provider.getInstallation('agent-1');
+
+    // The activation's command PUT is still in flight when disconnect lands.
+    // The delete must serialize behind the activation — otherwise the post-PUT
+    // command-version save re-creates the row disconnect just removed.
+    stubDelayedGuildCommands(GUILD, 50);
+    const activation = provider.activateGuild(pending!.webhookId, GUILD);
+    await new Promise(resolve => setTimeout(resolve, 10)); // let it reach the PUT
+    await provider.disconnect('agent-1');
+    await activation;
+
+    expect(await provider.getInstallation('agent-1')).toBeNull();
+    expect(await provider.listInstallations()).toHaveLength(0);
   });
 });
 
@@ -559,6 +989,79 @@ describe('DiscordProvider.configure — cache invalidation', () => {
     const stored = await new DiscordInstallStore(storage, undefined).getAppConfig();
     expect(stored?.publicKey).toBe('fedcba9876543210');
     expect(stored?.botToken).toBe(APP.botToken); // untouched fields survive
+  });
+
+  it('replaces the app config when a different bot token is supplied — no stale publicKey survives', async () => {
+    const { provider, storage } = makeProvider();
+    stubValidateApp();
+    await provider.connect('agent-1'); // persists app A's config (incl. its Ed25519 key)
+
+    // Switch to application B: only its token is known. Merging would keep
+    // A's publicKey verifying B's inbound webhooks — it must be dropped.
+    await provider.configure({ botToken: 'bot-token-B' });
+
+    const stored = await new DiscordInstallStore(storage, undefined).getAppConfig();
+    expect(stored).toBeNull();
+
+    // The next resolution derives B's identity from B's token, not A's leftovers.
+    const B = { id: '444444444444444444', verifyKey: 'bbbbbbbbbbbbbbbb' };
+    stubValidateApp({ id: B.id, verifyKey: B.verifyKey });
+    const result = await provider.connect('agent-2');
+    const url = new URL((result as { authorizationUrl: string }).authorizationUrl);
+    expect(url.searchParams.get('client_id')).toBe(B.id);
+    const persisted = await new DiscordInstallStore(storage, undefined).getAppConfig();
+    expect(persisted).toMatchObject({ botToken: 'bot-token-B', publicKey: B.verifyKey, applicationId: B.id });
+  });
+
+  it('ignores stale DISCORD_PUBLIC_KEY / DISCORD_APPLICATION_ID env when the token is supplied via configure()', async () => {
+    // Deployment leftover: env still describes app A while the platform
+    // connection supplies app B's token. Per-field env fallback would complete
+    // the config with A's Ed25519 key and skip the /applications/@me backfill
+    // — the exact forgery path the token-switch replacement closes.
+    process.env.DISCORD_BOT_TOKEN = APP.botToken;
+    process.env.DISCORD_PUBLIC_KEY = APP.publicKey;
+    process.env.DISCORD_APPLICATION_ID = APP.applicationId;
+    const storage = new InMemoryChannelsStorage();
+    const provider = new DiscordProvider({ storage });
+
+    await provider.configure({ botToken: 'bot-token-B' });
+
+    // Identity must come from B's token, not the env leftovers.
+    const B = { id: '555555555555555555', verifyKey: 'cccccccccccccccc' };
+    stubValidateApp({ id: B.id, verifyKey: B.verifyKey });
+    const result = await provider.connect('agent-1');
+    const url = new URL((result as { authorizationUrl: string }).authorizationUrl);
+    expect(url.searchParams.get('client_id')).toBe(B.id);
+    const persisted = await new DiscordInstallStore(storage, undefined).getAppConfig();
+    expect(persisted).toMatchObject({ botToken: 'bot-token-B', publicKey: B.verifyKey, applicationId: B.id });
+  });
+
+  it('drops a stale stored config from a previous process when configured with a different token', async () => {
+    // Simulate a restart: storage still holds app A's config, but the platform
+    // connection now points at app B.
+    const storage = new InMemoryChannelsStorage();
+    await new DiscordInstallStore(storage, undefined).saveAppConfig(APP);
+    const provider = new DiscordProvider({ storage });
+
+    await provider.configure({ botToken: 'bot-token-B' });
+
+    expect(await new DiscordInstallStore(storage, undefined).getAppConfig()).toBeNull();
+    expect(provider.isConfigured()).toBe(true); // B's token alone is enough
+  });
+
+  it('still merges when the same bot token is re-supplied alongside a rotated key', async () => {
+    const { provider, storage } = makeProvider();
+    stubValidateApp();
+    await provider.connect('agent-1');
+
+    await provider.configure({ botToken: APP.botToken, publicKey: 'fedcba9876543210' });
+
+    const stored = await new DiscordInstallStore(storage, undefined).getAppConfig();
+    expect(stored).toMatchObject({
+      botToken: APP.botToken,
+      publicKey: 'fedcba9876543210',
+      applicationId: APP.applicationId, // untouched field survives the merge
+    });
   });
 
   it('drops adapters when the app config is cleared', async () => {

@@ -1,7 +1,7 @@
+import { useTraceQuery } from '@mastra/react/hooks/traces';
+import type { TraceQueryArgs, UseTraceQueryArgs } from '@mastra/react/hooks/traces';
 import { useEffect, useState } from 'react';
 import { toTracesListViewTraces } from '../components/traces-list-view-adapter';
-import { useTraceQuery } from './use-trace-query';
-import type { TraceQueryArgs, UseTraceQueryArgs } from './use-trace-query';
 
 export interface UseTracesListSourceArgs {
   query: (now: Date) => TraceQueryArgs;
@@ -10,6 +10,8 @@ export interface UseTracesListSourceArgs {
   initialAutoRefetch?: boolean;
   withQueryTrace?: boolean;
   legacyFilters?: UseTraceQueryArgs['legacyFilters'];
+  /** Rows per page; defaults to `TRACE_QUERY_PER_PAGE`. */
+  limit?: number;
   enabled?: boolean;
 }
 
@@ -20,16 +22,20 @@ export function useTracesListSource({
   initialAutoRefetch = true,
   withQueryTrace,
   legacyFilters,
+  limit,
   enabled,
 }: UseTracesListSourceArgs) {
   const [now, setNow] = useState(() => new Date());
   const [autoRefetch, setAutoRefetch] = useState(initialAutoRefetch);
   const result = useTraceQuery({
+    queryOptions: {
+      traceQuery: { refetchInterval: autoRefetch && !rolling ? 10_000 : false, refetchOnWindowFocus: autoRefetch },
+      legacy: { refetchInterval: autoRefetch && !rolling ? 10_000 : false, refetchOnWindowFocus: autoRefetch },
+    },
     query: orderBy ? { ...buildQuery(now), orderBy } : buildQuery(now),
-    refetchInterval: autoRefetch && !rolling ? 10_000 : false,
-    refetchOnWindowFocus: autoRefetch,
     withQueryTrace,
     legacyFilters,
+    limit,
     enabled,
   });
 

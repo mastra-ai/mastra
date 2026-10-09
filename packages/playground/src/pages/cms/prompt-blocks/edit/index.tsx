@@ -1,9 +1,11 @@
-import type { UpdateStoredPromptBlockParams } from '@mastra/client-js';
+import type { StoredPromptBlockResponse, UpdateStoredPromptBlockParams } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Form } from '@mastra/playground-ui/components/Form';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -28,11 +30,10 @@ import {
   DeletePromptBlockAction,
 } from '@/domains/prompt-blocks';
 import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
-import { useLinkComponent } from '@/lib/framework';
 
 const crumbs = [navCrumb('/prompts'), { id: 'prompt-block', Component: PromptBlockCrumb }];
 
-type StoredPromptBlockData = NonNullable<ReturnType<typeof useStoredPromptBlock>['data']>;
+type StoredPromptBlockData = StoredPromptBlockResponse;
 
 function buildUpdateParams(values: PromptBlockFormValues): UpdateStoredPromptBlockParams {
   return {
@@ -66,13 +67,14 @@ function CmsPromptBlocksEditForm({
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const { navigate, paths } = useLinkComponent();
-  const { updateStoredPromptBlock } = useStoredPromptBlockMutations(blockId);
+  const { updateStoredPromptBlock } = useStoredPromptBlockMutations({ blockId: blockId });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
   const { data: versionData } = usePromptBlockVersion({
     blockId,
     versionId: selectedVersionId ?? '',
+    queryOptions: { enabled: !!blockId && !!selectedVersionId },
   });
 
   const isViewingVersion = !!selectedVersionId && !!versionData;
@@ -211,9 +213,9 @@ function CmsPromptBlocksEditForm({
           </div>
         </Notice>
       )}
-      <form className="h-full">
+      <Form className="h-full">
         <PromptBlockEditMain form={form} formResetKey={formResetKey} />
-      </form>
+      </Form>
     </AgentEditLayout>
   );
 }
@@ -224,10 +226,15 @@ function CmsPromptBlocksEditPage() {
   const selectedVersionId = searchParams.get('versionId');
 
   const { isCmsAvailable } = useIsCmsAvailable();
-  const { data: block, isLoading } = useStoredPromptBlock(blockId, { status: 'draft' });
+  const { data: block, isLoading } = useStoredPromptBlock({
+    blockId: blockId,
+    status: 'draft',
+    queryOptions: { enabled: Boolean(blockId) },
+  });
   const { data: versionsData } = usePromptBlockVersions({
     blockId: blockId ?? '',
     params: { orderBy: { direction: 'DESC' } },
+    queryOptions: { enabled: !!blockId },
   });
 
   const activeVersionId = block?.activeVersionId;

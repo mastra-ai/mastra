@@ -147,7 +147,7 @@ Returns:
 interface IndexStats {
   dimension: number
   count: number
-  metric: 'cosine' | 'euclidean' | 'dotproduct'
+  metric?: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
 
@@ -224,24 +224,29 @@ Query results are returned in this format:
 interface QueryResult {
   id: string
   score: number
-  metadata: Record<string, any>
+  metadata?: Record<string, any>
   vector?: number[] // Only included if includeVector is true
+  document?: string // Only returned by stores that keep document content
 }
 ```
 
 ## Error handling
 
-The store throws typed errors that can be caught:
+The store throws `MastraError` instances from `@mastra/core/error`:
 
 ```typescript
+import { MastraError } from '@mastra/core/error'
+
 try {
   await store.query({
     indexName: 'index_name',
     queryVector: queryVector,
   })
 } catch (error) {
-  if (error instanceof VectorStoreError) {
-    console.log(error.code) // 'connection_failed' | 'invalid_dimension' | etc
+  if (error instanceof MastraError) {
+    console.log(error.id) // 'MASTRA_VECTOR_ASTRA_QUERY_FAILED'
+    console.log(error.domain) // 'MASTRA_VECTOR'
+    console.log(error.category) // 'USER' | 'THIRD_PARTY'
     console.log(error.details) // Additional error context
   }
 }

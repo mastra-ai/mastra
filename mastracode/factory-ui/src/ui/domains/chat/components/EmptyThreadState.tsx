@@ -1,19 +1,23 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Logo } from '@mastra/playground-ui/components/Logo';
-import { ChevronDown } from 'lucide-react';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
+import { textStyle } from '@mastra/playground-ui/primitives/text';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useParams } from 'react-router';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 
 const emptyThreadClass =
   'flex w-full min-w-0 max-w-full flex-1 flex-col items-center justify-center px-6 py-12 text-center';
 
-function FactoryMetadata({ label, value }: { label: string; value: string }) {
+function FactoryMetadata({ label, value, font = 'mono' }: { label: string; value: string; font?: 'body' | 'mono' }) {
   return (
     <div className="grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] gap-2">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="text-foreground min-w-0 truncate">{value}</dd>
+      <dt className={textStyle({ variant: 'caption', tone: 'muted' })}>{label}</dt>
+      <dd className={cn(textStyle({ variant: 'caption', tone: 'ink', font }), 'min-w-0 truncate')}>{value}</dd>
     </div>
   );
 }
@@ -33,12 +37,12 @@ export function EmptyThreadState() {
   return (
     <section className={emptyThreadClass} aria-labelledby="empty-thread-title">
       <Logo size="md" aria-label="Mastra Code" />
-      <h1 id="empty-thread-title" className="text-display text-foreground mt-7 tracking-tight text-balance">
+      <Txt as="h1" variant="display" tone="ink" id="empty-thread-title" className="mt-7 text-balance">
         What can I help you build?
-      </h1>
-      <p className="text-body text-muted-foreground mt-2 max-w-lg leading-relaxed text-pretty">
+      </Txt>
+      <Txt variant="body-sm" tone="muted" className="mt-2 max-w-lg text-pretty">
         Ask about this codebase, plan a change, or describe something that isn&apos;t working.
-      </p>
+      </Txt>
 
       <div className="mt-7 flex w-full max-w-2xl flex-wrap justify-center gap-2" aria-label="Suggested prompts">
         <Button
@@ -63,19 +67,20 @@ export function EmptyThreadState() {
         </Button>
       </div>
 
-      <details className="group text-caption text-muted-foreground mt-8 w-full max-w-lg min-w-0">
-        <summary className="hover:text-foreground focus-visible:outline-accent1 flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 [&::-webkit-details-marker]:hidden">
-          <span>
-            Working in <span className="text-foreground font-medium">{activeFactory.name}</span>
-          </span>
-          <ChevronDown
-            aria-hidden="true"
-            size={14}
-            className="transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
-          />
+      <details className="text-muted-foreground group mt-8 w-full max-w-lg min-w-0">
+        <summary
+          className={`hover:text-foreground flex cursor-pointer list-none items-center justify-center gap-1.5 rounded-full px-3 py-2 transition-colors [&::-webkit-details-marker]:hidden ${focusRing}`}
+        >
+          <Txt as="span" variant="caption">
+            Working in{' '}
+            <Txt as="span" variant="column" tone="ink">
+              {activeFactory.name}
+            </Txt>
+          </Txt>
+          <DisclosureChevron className="size-3.5 group-open:rotate-180" />
         </summary>
-        <dl className="mx-auto mt-3 grid w-full min-w-0 gap-1 text-left font-mono leading-relaxed">
-          <FactoryMetadata label="Factory" value={activeFactory.name} />
+        <dl className="mx-auto mt-3 grid w-full min-w-0 gap-1 text-left">
+          <FactoryMetadata label="Factory" value={activeFactory.name} font="body" />
           {resourceId && <FactoryMetadata label="Resource ID" value={resourceId} />}
           {gitBranch && <FactoryMetadata label="Branch" value={gitBranch} />}
           {projectPath && <FactoryMetadata label="Workspace" value={projectPath} />}

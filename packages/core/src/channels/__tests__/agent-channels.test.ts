@@ -1,12 +1,22 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { format } from 'node:util';
+import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { Author, FetchOptions, Message, Thread } from 'chat';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { Agent } from '../../agent';
+import type { MastraDBMessage } from '../../agent/message-list';
+import type { AgentSignalInput } from '../../agent/signals';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
+import { ConsoleLogger } from '../../logger';
+import type { IMastraLogger, LogFilter } from '../../logger';
 import { RequestContext } from '../../request-context';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
+import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
+import type { ChannelHandler } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -633,6 +643,273 @@ describe('AgentChannels', () => {
       expect(requestContext.get('channel')).toBeDefined();
     });
 
+    describe('function-form toolDisplay owns the resolved approval card (#23512)', () => {
+      async function setup(toolDisplay: (event: any) => any, isDM = false) {
+        const adapter = createMockAdapter('slack');
+        (adapter as any).isDM = vi.fn(() => isDM);
+        const channels = new AgentChannels({ adapters: { slack: { adapter, toolDisplay } } });
+        channels.__setAgent(mockAgent);
+        channels.__setLogger({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any);
+        await channels.initialize(makeMastra());
+        (channels as any).findThreadMapping = vi
+          .fn()
+          .mockResolvedValue({ thread: { id: 'mastra-thread-1', resourceId: 'resource-1' } });
+        (channels as any).pendingApprovalCards.set('tool-call-1', {
+          runId: 'run-1',
+          toolName: 'deleteCustomerTool',
+          args: { id: 'c-1' },
+        });
+        const dispatchApproval = vi.fn().mockResolvedValue(undefined);
+        const dispatchDecline = vi.fn().mockResolvedValue(undefined);
+        (channels as any).dispatchApproval = dispatchApproval;
+        (channels as any).dispatchDecline = dispatchDecline;
+        const click = (actionId: string) =>
+          (channels.sdk as any).processAction({
+            ...makeActionEvent(adapter, actionId),
+            thread: { id: 'channel-1:thread-1', channelId: 'channel-1', isDM: false },
+          });
+        return { adapter, click, dispatchApproval, dispatchDecline };
+      }
+
+      it('edits the card with the renderer output on approve', async () => {
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'approved' ? { kind: 'post', message: 'Onaylandı' } : undefined,
+        );
+        const { adapter, click, dispatchApproval } = await setup(toolDisplay);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(toolDisplay).toHaveBeenCalledWith(
+          expect.objectContaining({
+            kind: 'approved',
+            toolCallId: 'tool-call-1',
+            toolName: 'deleteCustomerTool',
+            args: { id: 'c-1' },
+          }),
+          { mode: 'static', platform: 'slack' },
+        );
+        expect(adapter.editMessage).toHaveBeenCalledWith('channel-1:thread-1', 'card-1', 'Onaylandı');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('edits the card with the renderer output on deny and passes byUser', async () => {
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'denied' ? { kind: 'post', message: `Reddedildi: ${event.byUser}` } : undefined,
+        );
+        const { adapter, click, dispatchDecline } = await setup(toolDisplay);
+
+        await click('tool_deny:tool-call-1');
+
+        expect(toolDisplay).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'denied', byUser: 'Clicker' }),
+          expect.anything(),
+        );
+        expect(adapter.editMessage).toHaveBeenCalledWith('channel-1:thread-1', 'card-1', 'Reddedildi: Clicker');
+        expect(dispatchDecline).toHaveBeenCalledTimes(1);
+      });
+
+      it('passes byUser as undefined when denied in a DM', async () => {
+        const toolDisplay = vi.fn(() => undefined);
+        const { click } = await setup(toolDisplay, true);
+
+        await click('tool_deny:tool-call-1');
+
+        expect(toolDisplay).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'denied', byUser: undefined }),
+          expect.anything(),
+        );
+      });
+
+      const fallbackRenderers: [string, (event: any) => any][] = [
+        ['returns undefined', () => undefined],
+        ['returns a blank message', () => ({ kind: 'post', message: '  ' })],
+        [
+          'throws',
+          () => {
+            throw new Error('boom');
+          },
+        ],
+      ];
+
+      describe.each([
+        ['approve', 'tool_approve:tool-call-1', 'Approved', 'dispatchApproval'],
+        ['deny', 'tool_deny:tool-call-1', 'Denied', 'dispatchDecline'],
+      ] as const)('on %s', (_action, actionId, expected, dispatchKey) => {
+        it.each(fallbackRenderers)(
+          'falls back to the default card when the renderer %s',
+          async (_label, toolDisplay) => {
+            const ctx = await setup(toolDisplay);
+
+            await ctx.click(actionId);
+
+            expect(ctx.adapter.editMessage).toHaveBeenCalledTimes(1);
+            const message = ctx.adapter.editMessage.mock.calls[0]![2];
+            expect(typeof message === 'string' ? message.trim() : message).toBeTruthy();
+            expect(JSON.stringify(message)).toContain(expected);
+            expect(ctx[dispatchKey]).toHaveBeenCalledTimes(1);
+          },
+        );
+      });
+    });
+
+    describe('approval requester check', () => {
+      async function setup(record: Record<string, unknown>, mastra = makeMastra()) {
+        const adapter = createMockAdapter('discord');
+        const channels = new AgentChannels({ adapters: { discord: adapter } });
+        channels.__setAgent(mockAgent);
+        const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        channels.__setLogger(logger as any);
+        await channels.initialize(mastra);
+        (channels as any).findThreadMapping = vi
+          .fn()
+          .mockResolvedValue({ thread: { id: 'mastra-thread-1', resourceId: 'resource-1' } });
+        (channels as any).pendingApprovalCards.set('tool-call-1', {
+          runId: 'run-1',
+          toolName: 'lookup',
+          args: {},
+          ...record,
+        });
+        const dispatchApproval = vi.fn().mockResolvedValue(undefined);
+        const dispatchDecline = vi.fn().mockResolvedValue(undefined);
+        (channels as any).dispatchApproval = dispatchApproval;
+        (channels as any).dispatchDecline = dispatchDecline;
+        const click = (actionId: string, userId: string) =>
+          (channels.sdk as any).processAction({
+            ...makeActionEvent(adapter, actionId),
+            user: { userId, userName: userId, fullName: userId },
+            thread: { id: 'channel-1:thread-1', channelId: 'channel-1', isDM: false },
+          });
+        return { adapter, channels, logger, dispatchApproval, dispatchDecline, click };
+      }
+
+      it('ignores approve and decline clicks from a user other than the requester', async () => {
+        const { adapter, logger, dispatchApproval, dispatchDecline, click } = await setup({ requesterId: 'alice' });
+
+        await click('tool_approve:tool-call-1', 'mallory');
+        await click('tool_deny:tool-call-1', 'mallory');
+
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        expect(dispatchDecline).not.toHaveBeenCalled();
+        expect(adapter.editMessage).not.toHaveBeenCalled();
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('only alice may answer'), expect.anything());
+      });
+
+      it('lets the requester approve', async () => {
+        const { dispatchApproval, click } = await setup({ requesterId: 'alice' });
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('checks the requester when the approval is recovered from stored messages', async () => {
+        const messages = [
+          {
+            role: 'assistant',
+            content: {
+              metadata: {
+                pendingToolApprovals: {
+                  lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                },
+              },
+            },
+          },
+          {
+            role: 'user',
+            content: {
+              providerMetadata: { mastra: { channels: { discord: { author: { userId: 'alice' } } } } },
+            },
+          },
+        ];
+        const { channels, dispatchApproval, click } = await setup({}, {
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+        } as any);
+        (channels as any).pendingApprovalCards.clear();
+
+        await click('tool_approve:tool-call-1', 'mallory');
+        expect(dispatchApproval).not.toHaveBeenCalled();
+
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('ignores all clicks when stored messages cannot identify a single requester', async () => {
+        const author = (userId: string) => ({
+          role: 'user',
+          content: { providerMetadata: { mastra: { channels: { discord: { author: { userId } } } } } },
+        });
+        const messages = [
+          {
+            role: 'assistant',
+            content: {
+              metadata: {
+                pendingToolApprovals: {
+                  lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                },
+              },
+            },
+          },
+          author('bob'),
+          author('alice'),
+        ];
+        const { channels, dispatchApproval, click } = await setup({}, {
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+        } as any);
+        (channels as any).pendingApprovalCards.clear();
+
+        await click('tool_approve:tool-call-1', 'bob');
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).not.toHaveBeenCalled();
+      });
+
+      it('keeps a stashed requester when the run id is recovered from stored messages', async () => {
+        const author = (userId: string) => ({
+          role: 'user',
+          content: { providerMetadata: { mastra: { channels: { discord: { author: { userId } } } } } },
+        });
+        const messages = [
+          {
+            role: 'assistant',
+            content: {
+              metadata: {
+                pendingToolApprovals: {
+                  lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                },
+              },
+            },
+          },
+          author('bob'),
+          author('alice'),
+        ];
+        const { dispatchApproval, click } = await setup({ requesterId: 'alice' }, {
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+        } as any);
+
+        await click('tool_approve:tool-call-1', 'bob');
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        await click('tool_approve:tool-call-1', 'alice');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('keeps the permissive behavior when no requester was recorded', async () => {
+        const { dispatchApproval, click } = await setup({});
+        await click('tool_approve:tool-call-1', 'mallory');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('stamps the requester onto approval records posted through the render context', async () => {
+        const { channels } = await setup({});
+        const ctx = (channels as any)._buildRenderContext(
+          { id: 'channel-1:thread-1', channelId: 'channel-1' },
+          'discord',
+          { requesterId: 'alice' },
+        );
+        ctx.onApprovalPosted('tool-call-2', { displayName: 'x', argsSummary: '', startedAt: 0 });
+        expect((channels as any).pendingApprovalCards.get('tool-call-2').requesterId).toBe('alice');
+      });
+    });
+
     it('does not register action handling when disabled', async () => {
       const chatMod = await getChatModule();
       const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onAction');
@@ -719,6 +996,144 @@ describe('AgentChannels', () => {
           }),
         }),
       );
+    });
+
+    describe('bot display name (#25603)', () => {
+      async function sendAndGetChannel(channels: AgentChannels, mockMastra: any, messageId: string) {
+        const chatThread = {
+          id: 'channel-1:thread-1',
+          channelId: 'channel-1',
+          isDM: false,
+          adapter: channels.adapters.slack,
+          isSubscribed: vi.fn().mockResolvedValue(true),
+          subscribe: vi.fn().mockResolvedValue(undefined),
+          mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+          messages: (async function* () {})(),
+        } as any;
+        const message = {
+          id: messageId,
+          text: '@helper say hi',
+          author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+          attachments: [],
+        } as any;
+        mockAgent.sendMessage.mockClear();
+        await (channels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+        expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
+        const options = mockAgent.sendMessage.mock.calls[0]![1];
+        return options.ifIdle.streamOptions.requestContext.get('channel');
+      }
+
+      async function setup(adapterOverrides: Record<string, unknown>) {
+        const adapter = Object.assign(createMockAdapter('slack'), {
+          userName: 'acme-bot',
+          botUserId: 'UBOT',
+          ...adapterOverrides,
+        });
+        const channels = new AgentChannels({ adapters: { slack: adapter } });
+        channels.__setAgent(mockAgent);
+        channels.__setLogger({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any);
+        const memoryStore = new InMemoryMemory({ db: new InMemoryDB() });
+        const mockMastra = { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
+        await channels.initialize(mockMastra);
+        return { channels, mockMastra };
+      }
+
+      it('adds the current display name from adapter.getUser and resolves it once', async () => {
+        const getUser = vi
+          .fn()
+          .mockResolvedValue({ userId: 'UBOT', userName: 'helper', fullName: 'Helper', isBot: true });
+        const { channels, mockMastra } = await setup({ getUser });
+
+        const first = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        expect(first).toMatchObject({
+          botUserId: 'UBOT',
+          botUserName: 'acme-bot',
+          botDisplayName: 'helper',
+          botMention: '<@UBOT>',
+        });
+
+        const second = await sendAndGetChannel(channels, mockMastra, 'message-2');
+        expect(second.botDisplayName).toBe('helper');
+        expect(getUser).toHaveBeenCalledTimes(1);
+        expect(getUser).toHaveBeenCalledWith('UBOT');
+      });
+
+      it('omits the display name when it matches the adapter userName', async () => {
+        const getUser = vi.fn().mockResolvedValue({ userId: 'UBOT', userName: 'acme-bot', fullName: '', isBot: true });
+        const { channels, mockMastra } = await setup({ getUser });
+
+        const channel = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        expect(channel.botUserName).toBe('acme-bot');
+        expect(channel).not.toHaveProperty('botDisplayName');
+      });
+
+      it('omits the display name when the adapter has no getUser', async () => {
+        const { channels, mockMastra } = await setup({});
+
+        const channel = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        expect(channel.botUserName).toBe('acme-bot');
+        expect(channel).not.toHaveProperty('botDisplayName');
+      });
+
+      it('still processes the message when getUser fails and retries on the next event', async () => {
+        const getUser = vi
+          .fn()
+          .mockRejectedValueOnce(new Error('users.info failed'))
+          .mockResolvedValueOnce({ userId: 'UBOT', userName: 'helper', fullName: 'Helper', isBot: true });
+        const { channels, mockMastra } = await setup({ getUser });
+
+        const first = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        expect(first).not.toHaveProperty('botDisplayName');
+
+        const second = await sendAndGetChannel(channels, mockMastra, 'message-2');
+        expect(second.botDisplayName).toBe('helper');
+        expect(getUser).toHaveBeenCalledTimes(2);
+      });
+
+      it('retries on the next event when getUser resolves to null', async () => {
+        const getUser = vi
+          .fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce({ userId: 'UBOT', userName: 'helper', fullName: 'Helper', isBot: true });
+        const { channels, mockMastra } = await setup({ getUser });
+
+        const first = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        expect(first).not.toHaveProperty('botDisplayName');
+
+        const second = await sendAndGetChannel(channels, mockMastra, 'message-2');
+        expect(second.botDisplayName).toBe('helper');
+        expect(getUser).toHaveBeenCalledTimes(2);
+      });
+
+      it('resolves each bot identity separately when one adapter serves several installations', async () => {
+        const names: Record<string, string> = { UBOT_A: 'helper-a', UBOT_B: 'helper-b' };
+        const getUser = vi.fn(async (userId: string) => ({
+          userId,
+          userName: names[userId]!,
+          fullName: names[userId]!,
+          isBot: true,
+        }));
+        const { channels, mockMastra } = await setup({ getUser, botUserId: 'UBOT_A' });
+        const adapter = channels.adapters.slack as any;
+
+        const a1 = await sendAndGetChannel(channels, mockMastra, 'message-1');
+        adapter.botUserId = 'UBOT_B';
+        const b1 = await sendAndGetChannel(channels, mockMastra, 'message-2');
+        adapter.botUserId = 'UBOT_A';
+        const a2 = await sendAndGetChannel(channels, mockMastra, 'message-3');
+        adapter.botUserId = 'UBOT_B';
+        const b2 = await sendAndGetChannel(channels, mockMastra, 'message-4');
+
+        expect([a1, a2].map(c => [c.botUserId, c.botDisplayName])).toEqual([
+          ['UBOT_A', 'helper-a'],
+          ['UBOT_A', 'helper-a'],
+        ]);
+        expect([b1, b2].map(c => [c.botUserId, c.botDisplayName])).toEqual([
+          ['UBOT_B', 'helper-b'],
+          ['UBOT_B', 'helper-b'],
+        ]);
+        expect(getUser.mock.calls).toEqual([['UBOT_A'], ['UBOT_B']]);
+      });
     });
 
     describe('suspended tool auto-resume', () => {
@@ -1661,6 +2076,406 @@ describe('AgentChannels', () => {
       } as any;
     }
 
+    describe('handler error diagnostics', () => {
+      afterEach(() => vi.restoreAllMocks());
+
+      function embeddedRecord(line: string) {
+        const json = line.slice(line.indexOf('Error handling message ') + 'Error handling message '.length);
+        for (let end = 1; end <= json.length; end++) {
+          if (json[end - 1] !== '}') continue;
+          try {
+            return JSON.parse(json.slice(0, end));
+          } catch {
+            // Nested objects and trailing console metadata are not the complete record.
+          }
+        }
+        throw new Error('No complete JSON diagnostic on the first physical line');
+      }
+
+      async function fixture(
+        thrown: unknown,
+        options: {
+          platform?: string;
+          threadId?: string;
+          formatError?: (error: Error) => string;
+          logger?: IMastraLogger;
+        } = {},
+      ) {
+        const chatMod = await getChatModule();
+        let handler: (...args: any[]) => Promise<void> = async () => {
+          throw new Error('Handler not registered');
+        };
+        vi.spyOn(chatMod.Chat.prototype, 'onDirectMessage').mockImplementation(fn => {
+          handler = fn as typeof handler;
+          return chatMod.Chat.prototype;
+        });
+        const platform = options.platform ?? 'slack';
+        const channels = new AgentChannels({
+          adapters: { [platform]: { adapter: createMockAdapter(platform), formatError: options.formatError } },
+        });
+        channels.__setAgent(mockAgent);
+        const mastra = makeMastra();
+        await channels.initialize(mastra);
+        const storage = vi.spyOn(mastra, 'getStorage').mockImplementation(() => {
+          throw thrown;
+        });
+        const output = vi.spyOn(console, 'error').mockImplementation(() => {});
+        channels.__setLogger(options.logger ?? new ConsoleLogger());
+        const thread = makeChatThread({
+          id: options.threadId ?? 'slack:C123:1790610846.868069',
+          adapter: channels.adapters[platform],
+          post: vi.fn().mockResolvedValue(undefined),
+        });
+        const incoming = { ...message, id: '1790610846.868069', author: { userId: 'U123' } };
+        return {
+          thread,
+          incoming,
+          storage,
+          output,
+          run: (skipped: any[] = []) => handler(thread, incoming, {}, { skipped }),
+          record: () => {
+            expect(output).toHaveBeenCalledTimes(1);
+            const rendered = format(...output.mock.calls[0]!);
+            expect(rendered).toMatch(/^\[CHANNEL\] \[/);
+            const record = embeddedRecord(rendered.split('\n')[0]!);
+            expect(JSON.parse(JSON.stringify(output.mock.calls[0]![1]))).toEqual(record);
+            return record;
+          },
+        };
+      }
+
+      it('puts selected pre-session error messages and exact correlation on the first console line', async () => {
+        const cause = new Error('SYNTHETIC_DATABASE_CAUSE');
+        const error = new Error('SYNTHETIC_PRE_SESSION_FAILURE', { cause });
+        const f = await fixture(error);
+        await f.run();
+        expect(f.storage).toHaveBeenCalled();
+        expect(mockAgent.sendMessage).not.toHaveBeenCalled();
+        expect(f.record()).toEqual({
+          platform: 'slack',
+          threadId: 'slack:C123:1790610846.868069',
+          messageId: '1790610846.868069',
+          authorId: 'U123',
+          error: {
+            message: error.message,
+            cause: { message: cause.message },
+          },
+        });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: SYNTHETIC_PRE_SESSION_FAILURE');
+      });
+
+      it('logs a string throw as a message', async () => {
+        const f = await fixture('plain string');
+        await f.run();
+        expect(f.record().error).toEqual({ message: 'plain string' });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: plain string');
+      });
+
+      it('passes the original Error to the custom formatter', async () => {
+        const error = new Error('failure');
+        const formatError = vi.fn(() => 'custom feedback');
+        const f = await fixture(error, { formatError });
+        await f.run();
+        expect(f.record().error.message).toBe('failure');
+        expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('custom feedback');
+      });
+
+      it.each(['toJSON', 'frozen', 'circular', 'bigint', 'cause', 'toString'])(
+        'extracts selected fields and continues to later senders for %s',
+        async kind => {
+          const error = new Error('failure');
+          if (kind === 'toJSON') {
+            Object.assign(error, {
+              toJSON: () => {
+                throw new Error('serializer failed');
+              },
+            });
+          } else if (kind === 'frozen') {
+            Object.freeze(error);
+          } else if (kind === 'circular') {
+            Object.assign(error, { self: error });
+          } else if (kind === 'bigint') {
+            Object.assign(error, { value: 1n });
+          } else if (kind === 'toString') {
+            Object.assign(error, {
+              value: 1n,
+              toString: () => {
+                throw new Error('coercion failed');
+              },
+            });
+          } else {
+            error.cause = error;
+          }
+          const f = await fixture(error);
+          f.storage.mockImplementationOnce(() => {
+            throw error;
+          });
+          f.storage.mockImplementationOnce(() => {
+            throw new Error('later failure');
+          });
+          await expect(f.run([{ ...f.incoming, id: 'earlier', author: { userId: 'OTHER' } }])).resolves.toBeUndefined();
+          expect(f.thread.post).toHaveBeenNthCalledWith(1, '❌ Error: failure');
+          expect(f.thread.post).toHaveBeenNthCalledWith(2, '❌ Error: later failure');
+          expect(f.output).toHaveBeenCalledTimes(2);
+          const records = f.output.mock.calls.map(call => embeddedRecord(format(...call).split('\n')[0]!));
+          expect(records[0].error).toEqual({
+            message: 'failure',
+            ...(kind === 'cause' ? { cause: { message: 'failure' } } : {}),
+          });
+          expect(records[1].error.message).toBe('later failure');
+          expect(records.map(record => record.authorId)).toEqual(['OTHER', 'U123']);
+        },
+      );
+
+      it('omits payloads, stacks and deeper causes without invoking custom serializers', async () => {
+        const toJSON = vi.fn(() => ({ message: 'SENTINEL_SERIALIZER' }));
+        const stack = vi.fn(() => 'SENTINEL_STACK');
+        const cause = Object.assign(new Error('database unavailable'), {
+          cause: new Error('SENTINEL_DEEP_CAUSE'),
+          request: { headers: { authorization: 'SENTINEL_TOKEN' } },
+          toJSON,
+        });
+        const error = Object.assign(new Error('session failed', { cause }), {
+          details: { errorMessage: 'SENTINEL_UNUSED_FALLBACK', body: 'SENTINEL_BODY' },
+          response: { body: 'SENTINEL_RESPONSE' },
+          toJSON,
+        });
+        Object.defineProperty(error, 'stack', { get: stack });
+        Object.defineProperty(cause, 'stack', { get: stack });
+        const f = await fixture(error);
+        await f.run();
+        expect(f.record().error).toEqual({
+          message: 'session failed',
+          cause: { message: 'database unavailable' },
+        });
+        expect(toJSON).not.toHaveBeenCalled();
+        expect(stack).not.toHaveBeenCalled();
+        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
+        expect(JSON.stringify(f.output.mock.calls[0]![1])).not.toContain('SENTINEL');
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: session failed');
+      });
+
+      it('includes Mastra classification without details or custom toJSON output', async () => {
+        const error = new MastraError(
+          {
+            id: 'CHANNEL_STORAGE_FAILED',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.SYSTEM,
+            text: 'session failed',
+            details: { errorMessage: 'SENTINEL_UNUSED_FALLBACK', token: 'SENTINEL_TOKEN' },
+          },
+          new Error('database unavailable'),
+        );
+        const toJSON = vi.spyOn(error, 'toJSON');
+        const formatError = vi.fn(() => 'custom feedback');
+        const f = await fixture(error, { formatError });
+        await f.run();
+        expect(f.record().error).toEqual({
+          message: 'session failed',
+          code: 'CHANNEL_STORAGE_FAILED',
+          domain: 'STORAGE',
+          category: 'SYSTEM',
+          cause: { message: 'database unavailable' },
+        });
+        expect(toJSON).not.toHaveBeenCalled();
+        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
+        expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
+      });
+
+      it('does not serialize non-string Mastra classification fields', async () => {
+        const toJSON = vi.fn(() => 'SENTINEL_CLASSIFICATION');
+        const error = Object.assign(
+          new MastraError({
+            id: 'INVALID_CLASSIFICATION',
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.SYSTEM,
+            text: 'failure',
+          }),
+          { id: { toJSON }, domain: { toJSON }, category: { toJSON } },
+        );
+        const f = await fixture(error);
+        await f.run();
+        expect(f.record().error).toEqual({ message: 'failure' });
+        expect(toJSON).not.toHaveBeenCalled();
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: failure');
+      });
+
+      it('reads each Mastra classification field once before selecting its string value', async () => {
+        const toJSON = vi.fn(() => ({ privateData: 'SENTINEL_CLASSIFICATION' }));
+        const id = vi.fn().mockReturnValueOnce('CHANNEL_STORAGE_FAILED').mockReturnValue({ toJSON });
+        const domain = vi.fn().mockReturnValueOnce('STORAGE').mockReturnValue({ toJSON });
+        const category = vi.fn().mockReturnValueOnce('SYSTEM').mockReturnValue({ toJSON });
+        const error = new MastraError({
+          id: 'CHANNEL_STORAGE_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.SYSTEM,
+          text: 'failure',
+        });
+        Object.defineProperties(error, { id: { get: id }, domain: { get: domain }, category: { get: category } });
+        const f = await fixture(error);
+        await f.run();
+        expect(f.record().error).toEqual({
+          message: 'failure',
+          code: 'CHANNEL_STORAGE_FAILED',
+          domain: 'STORAGE',
+          category: 'SYSTEM',
+        });
+        expect(id).toHaveBeenCalledTimes(1);
+        expect(domain).toHaveBeenCalledTimes(1);
+        expect(category).toHaveBeenCalledTimes(1);
+        expect(toJSON).not.toHaveBeenCalled();
+        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: failure');
+      });
+
+      it.each([
+        { details: { errorMessage: 'fallback message', token: 'SENTINEL_TOKEN' } },
+        { message: '', details: { errorMessage: 'fallback message', token: 'SENTINEL_TOKEN' } },
+        new MastraError({
+          id: 'EMPTY_MESSAGE',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          text: '',
+          details: { errorMessage: 'fallback message', token: 'SENTINEL_TOKEN' },
+        }),
+      ])('uses only details.errorMessage when no useful message is available (%#)', async error => {
+        const f = await fixture(error, { formatError: () => 'feedback' });
+        await f.run();
+        expect(f.record().error.message).toBe('fallback message');
+        expect(f.record().error).not.toHaveProperty('details');
+        expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('feedback');
+      });
+
+      it.each(['cause message', { details: { errorMessage: 'cause message', token: 'SENTINEL_TOKEN' } }])(
+        'extracts only the immediate cause message (%#)',
+        async cause => {
+          const f = await fixture(new Error('failure', { cause }));
+          await f.run();
+          expect(f.record().error).toEqual({ message: 'failure', cause: { message: 'cause message' } });
+        },
+      );
+
+      it.each(['', { details: { errorMessage: '' } }])('omits an empty immediate cause message (%#)', async cause => {
+        const f = await fixture(new Error('failure', { cause }));
+        await f.run();
+        expect(f.record().error).toEqual({ message: 'failure' });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: failure');
+      });
+
+      it.each([null, undefined, '', { details: { errorMessage: '' } }, { details: { token: 'SENTINEL_TOKEN' } }])(
+        'uses a static message for a throw without a useful message (%#)',
+        async error => {
+          const f = await fixture(error, { formatError: () => 'feedback' });
+          await f.run();
+          expect(f.record().error).toEqual({ message: 'Unknown error' });
+          expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('feedback');
+        },
+      );
+
+      it('keeps feedback working if reading the selected cause fails', async () => {
+        const error = new Error('failure');
+        Object.defineProperty(error, 'cause', {
+          get: () => {
+            throw new Error('SENTINEL_GETTER');
+          },
+        });
+        const f = await fixture(error);
+        await f.run();
+        expect(f.record().error).toEqual({ message: 'Error details unavailable' });
+        expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: failure');
+      });
+
+      it('retains ConsoleLogger filter and observability export envelopes', async () => {
+        const filter = vi.fn<LogFilter>(() => true);
+        const sink = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+        const logger = new ConsoleLogger({ filter });
+        logger.__attachObservability({
+          resolveTraceFields: () => undefined,
+          getLogSink: () => sink,
+          options: { correlation: true, export: true },
+        });
+        const error = Object.assign(new Error('failure'), { request: { authorization: 'SENTINEL_TOKEN' } });
+        const f = await fixture(error, { logger });
+        await f.run();
+        const record = f.record();
+        expect(filter).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            component: 'CHANNEL',
+            level: 'error',
+            args: [record],
+          }),
+        );
+        expect(embeddedRecord(filter.mock.calls[0]![0].message)).toEqual(record);
+        expect(sink.error).toHaveBeenCalledExactlyOnceWith(expect.any(String), record);
+        expect(JSON.parse(JSON.stringify(sink.error.mock.calls[0]![1]))).toEqual(record);
+        expect(embeddedRecord(sink.error.mock.calls[0]![0])).toEqual(record);
+        expect(JSON.parse(JSON.stringify(filter.mock.calls[0]![0].args))).toEqual([record]);
+        expect(JSON.stringify(sink.error.mock.calls)).not.toContain('SENTINEL');
+        expect(JSON.stringify(filter.mock.calls)).not.toContain('SENTINEL');
+      });
+
+      it('retains structured metadata in a custom IMastraLogger', async () => {
+        const capture = vi.fn();
+        const logger: IMastraLogger = {
+          debug: vi.fn(),
+          info: vi.fn(),
+          warn: vi.fn(),
+          error: capture,
+          trackException: vi.fn(),
+          getTransports: () => new Map(),
+          listLogs: async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false }),
+          listLogsByRunId: async () => ({ logs: [], total: 0, page: 1, perPage: 100, hasMore: false }),
+        };
+        const error = new Error('failure');
+        const f = await fixture(error, { logger });
+        await f.run();
+        expect(capture).toHaveBeenCalledTimes(1);
+        const [text, metadata] = capture.mock.calls[0]!;
+        const record = embeddedRecord(text);
+        expect(JSON.parse(JSON.stringify(metadata))).toEqual(record);
+        expect(record).toMatchObject({
+          platform: 'slack',
+          threadId: f.thread.id,
+          messageId: f.incoming.id,
+          authorId: 'U123',
+        });
+        expect(metadata.error).toEqual(record.error);
+      });
+
+      it('keeps deliberate refusal silent and produces no ordinary error diagnostic', async () => {
+        const f = await fixture(new ChannelSessionRejectedError('refused'));
+        await f.run();
+        expect(f.output).not.toHaveBeenCalled();
+        expect(f.thread.post).not.toHaveBeenCalled();
+      });
+
+      it.each(['formatter', 'post'])('preserves existing %s failure behavior', async mode => {
+        const formatError = vi.fn(() => {
+          if (mode === 'formatter') throw new Error('formatter failed');
+          return 'feedback';
+        });
+        const f = await fixture(new Error('failure'), { formatError });
+        if (mode === 'post') f.thread.post.mockRejectedValue(new Error('post failed'));
+        await expect(f.run()).resolves.toBeUndefined();
+        expect(f.record().error.message).toBe('failure');
+        expect(f.thread.post).toHaveBeenCalledTimes(mode === 'post' ? 1 : 0);
+      });
+
+      it('continues to the next sender after an ordinary failed run', async () => {
+        const f = await fixture(new Error('failure'));
+        await f.run([{ ...f.incoming, id: 'earlier', author: { userId: 'OTHER' } }]);
+        expect(f.storage).toHaveBeenCalledTimes(2);
+        expect(f.thread.post).toHaveBeenCalledTimes(2);
+        expect(f.output).toHaveBeenCalledTimes(2);
+        expect(f.output.mock.calls.map(call => embeddedRecord(format(...call).split('\n')[0]!).authorId)).toEqual([
+          'OTHER',
+          'U123',
+        ]);
+      });
+    });
+
     it('passes the resolved Mastra instance to a custom handler as ctx.mastra', async () => {
       const chatMod = await getChatModule();
       // Capture the wrapper AgentChannels registers with the Chat SDK so we can
@@ -1693,9 +2508,383 @@ describe('AgentChannels', () => {
         mastra: mockMastra,
         requestContext: expect.any(RequestContext),
         signalMetadata: {},
+        skipped: [],
       });
 
       spy.mockRestore();
+    });
+
+    it('gives a custom handler the messages batched by the SDK as ctx.skipped', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn(async () => {});
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const earlier = { ...message, id: 'msg-earlier', text: 'first part' };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, message, {}, { skipped: [earlier], totalSinceLastHandler: 2 });
+
+      const ctx = onDirectMessage.mock.calls[0]![3] as { skipped: unknown[] };
+      expect(ctx.skipped).toEqual([earlier]);
+
+      spy.mockRestore();
+    });
+
+    it('merges batched messages into one agent turn, oldest first', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const dispatches: any[] = [];
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatches.push(args);
+      });
+
+      const first = { ...message, id: 'm1', text: 'first part', formatted: undefined, attachments: [] };
+      const second = { ...message, id: 'm2', text: 'second part', formatted: undefined, attachments: [] };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, second, {}, { skipped: [first], totalSinceLastHandler: 2 });
+
+      expect(dispatches).toHaveLength(1);
+      const serialized = JSON.stringify(dispatches[0].signalContents);
+      expect(serialized).toContain('first part');
+      expect(serialized).toContain('second part');
+      expect(serialized.indexOf('first part')).toBeLessThan(serialized.indexOf('second part'));
+
+      spy.mockRestore();
+    });
+
+    it('does not repeat batched messages as thread history on a first mention', async () => {
+      const chatMod = await getChatModule();
+      let registeredMentionWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onNewMention').mockImplementation((handler: any) => {
+        registeredMentionWrapper = handler;
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const dispatches: any[] = [];
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatches.push(args);
+      });
+      let historySignals: any[] = [];
+      vi.spyOn(channels as any, 'persistThreadHistorySignals').mockImplementation(async (args: any) => {
+        historySignals = await args.buildSignals();
+        return true;
+      });
+
+      const first = { ...message, id: 'm1', text: 'first part', formatted: undefined, attachments: [] };
+      const second = { ...message, id: 'm2', text: 'second part', formatted: undefined, attachments: [] };
+      const older = { ...message, id: 'm0', text: 'older chatter', formatted: undefined, attachments: [] };
+      const chatThread = makeChatThread({
+        adapter: channels.adapters.discord,
+        isDM: false,
+        isSubscribed: vi.fn().mockResolvedValue(false),
+        // newest-first, as the SDK yields them
+        messages: (async function* () {
+          yield second;
+          yield first;
+          yield older;
+        })(),
+      });
+      await registeredMentionWrapper!(chatThread, second, { skipped: [first], totalSinceLastHandler: 2 });
+
+      // The batched messages are the trigger, not history; only the older
+      // message is persisted as a history row.
+      expect(historySignals.map(s => s.contents)).toEqual(['older chatter']);
+      const serialized = JSON.stringify(dispatches[0].signalContents);
+      expect(serialized).not.toContain('older chatter');
+      expect(serialized).not.toContain('[Thread context');
+      expect(serialized.split('first part')).toHaveLength(2);
+
+      spy.mockRestore();
+    });
+
+    it("dispatches another sender's batched messages as their own turn", async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const dispatches: any[] = [];
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+        dispatches.push(args);
+      });
+
+      const fromOther = {
+        ...message,
+        id: 'm1',
+        text: 'other user text',
+        author: { userId: 'user-2', userName: 'mallory' },
+        attachments: [],
+      };
+      const current = { ...message, id: 'm2', text: 'my text', formatted: undefined, attachments: [] };
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, current, {}, { skipped: [fromOther], totalSinceLastHandler: 2 });
+
+      expect(dispatches).toHaveLength(2);
+      const firstTurn = JSON.stringify(dispatches[0].signalContents);
+      const secondTurn = JSON.stringify(dispatches[1].signalContents);
+      expect(firstTurn).toContain('other user text');
+      expect(firstTurn).not.toContain('my text');
+      expect(secondTurn).toContain('my text');
+      expect(secondTurn).not.toContain('other user text');
+      expect(dispatches[0].attributes.messageId).toBe('m1');
+      expect(dispatches[1].attributes.messageId).toBe('m2');
+
+      spy.mockRestore();
+    });
+
+    it("isolates each sender's run and keeps going when one run is refused", async () => {
+      const chatMod = await getChatModule();
+      const { ChannelSessionRejectedError } = await import('../errors');
+      let registeredDMWrapper: ((...args: any[]) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const contexts: any[] = [];
+      const onDirectMessage = vi.fn((thread: any, msg: any, defaultHandler: any, ctx: any) => {
+        contexts.push(ctx);
+        ctx.requestContext.set('tenant', msg.author.userId ?? 'anon');
+        return defaultHandler(thread, msg);
+      });
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+      });
+      channels.__setAgent(mockAgent);
+      await channels.initialize(makeMastra());
+
+      const calls: { id: string; tenant: unknown }[] = [];
+      vi.spyOn(channels as any, 'processChatMessage').mockImplementation(async (...args: any[]) => {
+        calls.push({ id: args[1].id, tenant: args[3].get('tenant') });
+        if (args[1].id === 'a') throw new ChannelSessionRejectedError('no');
+      });
+
+      const author = (userId?: string) => ({ userId, userName: userId ?? 'anon' });
+      const skipped = [
+        { ...message, id: 'a', author: author('user-a') },
+        { ...message, id: 'anon1', author: author(undefined) },
+        { ...message, id: 'anon2', author: author(undefined) },
+      ];
+      const current = { ...message, id: 'c', author: author('user-c') };
+      await registeredDMWrapper!(
+        makeChatThread({ adapter: channels.adapters.discord }),
+        current,
+        {},
+        {
+          skipped,
+          totalSinceLastHandler: 4,
+        },
+      );
+
+      // One handler call per sender run, each with its own fresh context.
+      expect(onDirectMessage.mock.calls.map(c => c[1].id)).toEqual(['a', 'anon1', 'anon2', 'c']);
+      expect(new Set(contexts.map(c => c.requestContext)).size).toBe(4);
+      for (const ctx of contexts) expect(ctx.skipped).toEqual([]);
+      expect(calls).toEqual([
+        { id: 'a', tenant: 'user-a' },
+        { id: 'anon1', tenant: 'anon' },
+        { id: 'anon2', tenant: 'anon' },
+        { id: 'c', tenant: 'user-c' },
+      ]);
+
+      spy.mockRestore();
+    });
+
+    function registerDM(
+      handlers: Record<string, unknown>,
+      method: 'onDirectMessage' | 'onNewMention' = 'onDirectMessage',
+    ) {
+      return (async () => {
+        const chatMod = await getChatModule();
+        let wrapper: ((...args: any[]) => Promise<unknown>) | undefined;
+        const spy = vi.spyOn(chatMod.Chat.prototype as any, method).mockImplementation((handler: any) => {
+          wrapper = handler;
+        });
+        const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') }, handlers });
+        channels.__setAgent(mockAgent);
+        await channels.initialize(makeMastra());
+        const processed: any[][] = [];
+        vi.spyOn(channels as any, 'processChatMessage').mockImplementation(async (...args: any[]) => {
+          processed.push(args);
+        });
+        const thread = makeChatThread({ adapter: channels.adapters.discord });
+        const batch = (current: any, skipped: any[]) =>
+          method === 'onDirectMessage'
+            ? wrapper!(thread, current, {}, { skipped, totalSinceLastHandler: skipped.length + 1 })
+            : wrapper!(thread, current, { skipped, totalSinceLastHandler: skipped.length + 1 });
+        return { channels, processed, batch, restore: () => spy.mockRestore() };
+      })();
+    }
+    const from = (id: string, userId: string | undefined, extra: Record<string, unknown> = {}) => ({
+      ...message,
+      id,
+      author: { userId, userName: userId ?? 'anon' },
+      ...extra,
+    });
+
+    it('gives each sender run its own skipped messages and run-bound defaultHandler', async () => {
+      const onDirectMessage = vi.fn((thread: any, msg: any, defaultHandler: any) => defaultHandler(thread, msg));
+      const h = await registerDM({ onDirectMessage });
+      const [A1, B1, B2, A2] = [from('A1', 'user-a'), from('B1', 'user-b'), from('B2', 'user-b'), from('A2', 'user-a')];
+      await h.batch(A2, [A1, B1, B2]);
+
+      expect(onDirectMessage.mock.calls.map(c => [c[1].id, c[3].skipped.map((m: any) => m.id)])).toEqual([
+        ['A1', []],
+        ['B2', ['B1']],
+        ['A2', []],
+      ]);
+      // processChatMessage(thread, message, mastra, requestContext, signalMetadata, skipped, batchIds)
+      expect(h.processed.map(a => [a[1].id, a[5].map((m: any) => m.id), [...a[6]]])).toEqual([
+        ['A1', [], ['A1', 'B1', 'B2', 'A2']],
+        ['B2', ['B1'], ['A1', 'B1', 'B2', 'A2']],
+        ['A2', [], ['A1', 'B1', 'B2', 'A2']],
+      ]);
+      h.restore();
+    });
+
+    it('logs a throwing handler, keeps going with later senders, and re-throws the first error', async () => {
+      const onDirectMessage = vi.fn(async (thread: any, msg: any, defaultHandler: any) => {
+        if (msg.id === 'A1') throw new Error('host boom');
+        await defaultHandler(thread, msg);
+      });
+      const h = await registerDM({ onDirectMessage });
+      const log = vi.spyOn(h.channels as any, 'log');
+      await expect(h.batch(from('B1', 'user-b'), [from('A1', 'user-a')])).rejects.toThrow('host boom');
+
+      expect(onDirectMessage).toHaveBeenCalledTimes(2);
+      expect(h.processed.map(a => a[1].id)).toEqual(['B1']);
+      expect(log).toHaveBeenCalledExactlyOnceWith(
+        'error',
+        'Custom channel handler failed; continuing with later senders',
+        {
+          platform: 'discord',
+          threadId: 'channel-1:thread-1',
+          messageId: 'A1',
+          authorId: 'user-a',
+          error: expect.objectContaining({ message: 'host boom' }),
+        },
+      );
+      h.restore();
+    });
+
+    it('logs every later handler error since only the first is re-thrown', async () => {
+      const onDirectMessage = vi.fn(async (_thread: any, msg: any) => {
+        throw new Error(msg.id === 'A1' ? 'boom1' : 'boom2');
+      });
+      const h = await registerDM({ onDirectMessage });
+      const log = vi.spyOn(h.channels as any, 'log');
+      await expect(h.batch(from('B1', 'user-b'), [from('A1', 'user-a')])).rejects.toThrow('boom1');
+
+      expect(log.mock.calls.map(c => [c[1], (c[2] as any).error.message])).toEqual([
+        ['Custom channel handler failed; continuing with later senders', 'boom1'],
+        ['Custom channel handler failed for another sender in the batch', 'boom2'],
+      ]);
+      h.restore();
+    });
+
+    it('still rejects when a handler throws undefined', async () => {
+      const onDirectMessage = vi.fn(async () => {
+        throw undefined;
+      });
+      const h = await registerDM({ onDirectMessage });
+      await expect(h.batch(from('B1', 'user-b'), [from('A1', 'user-a')])).rejects.toBeUndefined();
+      expect(onDirectMessage).toHaveBeenCalledTimes(2);
+      h.restore();
+    });
+
+    it('propagates an unbatched handler throw without logging', async () => {
+      const onDirectMessage = vi.fn(async () => {
+        throw new Error('solo boom');
+      });
+      const h = await registerDM({ onDirectMessage });
+      const log = vi.spyOn(h.channels as any, 'log');
+      await expect(h.batch(from('A1', 'user-a'), [])).rejects.toThrow('solo boom');
+      expect(onDirectMessage).toHaveBeenCalledTimes(1);
+      expect(log).not.toHaveBeenCalled();
+      h.restore();
+    });
+
+    it('dispatches an unbatched message through the handler exactly once', async () => {
+      const onDirectMessage = vi.fn((thread: any, msg: any, defaultHandler: any) => defaultHandler(thread, msg));
+      const h = await registerDM({ onDirectMessage });
+      await h.batch(from('A1', 'user-a'), []);
+      expect(onDirectMessage).toHaveBeenCalledTimes(1);
+      expect(h.processed).toHaveLength(1);
+      expect(onDirectMessage.mock.calls[0]![3].skipped).toEqual([]);
+      h.restore();
+    });
+
+    it('never groups messages without a userId', async () => {
+      const onDirectMessage = vi.fn((thread: any, msg: any, defaultHandler: any) => defaultHandler(thread, msg));
+      const h = await registerDM({ onDirectMessage });
+      await h.batch(from('anon3', undefined), [from('anon1', undefined), from('anon2', undefined)]);
+      expect(onDirectMessage.mock.calls.map(c => [c[1].id, c[3].skipped])).toEqual([
+        ['anon1', []],
+        ['anon2', []],
+        ['anon3', []],
+      ]);
+      h.restore();
+    });
+
+    it('gives each run fresh signal metadata and continues past a run that skips defaultHandler', async () => {
+      const seen: unknown[] = [];
+      const onDirectMessage = vi.fn(async (thread: any, msg: any, defaultHandler: any, ctx: any) => {
+        seen.push(ctx.signalMetadata.x);
+        ctx.signalMetadata.x = msg.id;
+        if (msg.id === 'B1') return; // host refuses the middle sender
+        await defaultHandler(thread, msg);
+      });
+      const h = await registerDM({ onDirectMessage });
+      await h.batch(from('C1', 'user-c'), [from('A1', 'user-a'), from('B1', 'user-b')]);
+      expect(seen).toEqual([undefined, undefined, undefined]);
+      expect(h.processed.map(a => [a[1].id, a[4]])).toEqual([
+        ['A1', { x: 'A1' }],
+        ['C1', { x: 'C1' }],
+      ]);
+      h.restore();
+    });
+
+    it('runs the custom onMention handler once per sender in a mention batch', async () => {
+      const onMention = vi.fn((thread: any, msg: any, defaultHandler: any) => defaultHandler(thread, msg));
+      const h = await registerDM({ onMention }, 'onNewMention');
+      await h.batch(from('A1', 'user-a', { isMention: true }), [from('B1', 'user-b', { isMention: false })]);
+      expect(onMention.mock.calls.map(c => [c[1].id, c[1].isMention])).toEqual([
+        ['B1', false],
+        ['A1', true],
+      ]);
+      expect(h.processed.map(a => a[1].id)).toEqual(['B1', 'A1']);
+      h.restore();
     });
 
     it('gives a custom handler the request context for the run', async () => {
@@ -1899,4 +3088,827 @@ describe('extractUrls', () => {
     const text = 'Link: <https://example.com> or (https://other.com)';
     expect(extractUrls(text)).toEqual(['https://example.com', 'https://other.com']);
   });
+});
+
+/** Builds a Chat SDK `Message` from the fields a test cares about; the rest get inert defaults. */
+function makeMessage(partial: Partial<Message> & Pick<Message, 'id' | 'author'>): Message {
+  return {
+    threadId: 'channel-1:thread-1',
+    text: '',
+    formatted: { type: 'root', children: [] },
+    raw: {},
+    attachments: [],
+    metadata: { dateSent: new Date(0), edited: false },
+    ...partial,
+  };
+}
+
+describe('thread history', () => {
+  const BASE_TIME = Date.UTC(2026, 8, 29, 10, 0, 0);
+  const alice: Author = { userId: 'U1', userName: 'alice', fullName: 'Alice', isBot: false, isMe: false };
+  const bob: Author = { userId: 'U2', userName: 'bob', fullName: 'Bob', isBot: false, isMe: false };
+  const bot: Author = { userId: 'B1', userName: 'otherbot', fullName: 'Other Bot', isBot: true, isMe: false };
+
+  function historyMessage(i: number, overrides: Partial<Message> = {}) {
+    return makeMessage({
+      id: `h${i}`,
+      text: `message ${i}`,
+      author: i % 2 === 0 ? alice : bob,
+      metadata: { dateSent: new Date(BASE_TIME + i * 1000), edited: false },
+      ...overrides,
+    });
+  }
+
+  /** `history` is oldest first; the fake thread yields it newest first like the SDK. */
+  function makeChatThread(
+    history: Message[],
+    overrides: Record<string, unknown> = {},
+    options: { forwardFetch?: ReturnType<typeof vi.fn> } = {},
+  ): Thread {
+    const forwardFetch = options.forwardFetch ?? vi.fn();
+    return {
+      id: 'channel-1:thread-1',
+      channelId: 'channel-1',
+      isDM: false,
+      isSubscribed: vi.fn().mockResolvedValue(false),
+      subscribe: vi.fn().mockResolvedValue(undefined),
+      mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+      messages: {
+        async *[Symbol.asyncIterator]() {
+          for (let i = history.length - 1; i >= 0; i--) yield history[i];
+        },
+      },
+      allMessages: {
+        async *[Symbol.asyncIterator]() {
+          forwardFetch();
+          for (const m of history) yield m;
+        },
+      },
+      ...overrides,
+      // Intentionally partial: only the members the history path touches.
+    } as unknown as Thread;
+  }
+
+  function makeMastra() {
+    const db = new InMemoryDB();
+    const memoryStore = new InMemoryMemory({ db });
+    return { getStorage: () => ({ getStore: () => memoryStore }), getServer: () => null } as any;
+  }
+
+  const trigger = makeMessage({
+    id: 'trigger',
+    text: '@TestBot hi there',
+    author: alice,
+    metadata: { dateSent: new Date(BASE_TIME + 100_000), edited: false },
+  });
+
+  async function setup(options: { agent?: any; threadContext?: Record<string, unknown>; spyHook?: boolean } = {}) {
+    const chatMod = await getChatModule();
+    let wrapper: ((...args: any[]) => unknown) | undefined;
+    vi.spyOn(chatMod.Chat.prototype as any, 'onNewMention').mockImplementation((handler: any) => {
+      wrapper = handler;
+    });
+    const agent = options.agent ?? createMockAgent();
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const channels = new AgentChannels({
+      adapters: { slack: createMockAdapter('slack') },
+      ...(options.threadContext ? { threadContext: options.threadContext } : {}),
+    });
+    channels.__setAgent(agent);
+    channels.__setLogger(logger as any);
+    await channels.initialize(makeMastra());
+
+    const dispatches: any[] = [];
+    vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async (args: any) => {
+      dispatches.push(args);
+    });
+    let signals: AgentSignalInput[] = [];
+    const hook = vi.spyOn(channels as any, 'persistThreadHistorySignals');
+    if (options.spyHook !== false) {
+      hook.mockImplementation(async (args: any) => {
+        signals = await args.buildSignals();
+        return true;
+      });
+    }
+    return {
+      channels,
+      agent,
+      logger,
+      hook,
+      dispatches,
+      signals: () => signals,
+      run: (chatThread: Thread, message: Message = trigger) => {
+        (chatThread as { adapter?: unknown }).adapter ??= channels.adapters.slack;
+        return wrapper!(chatThread, message, { skipped: [], totalSinceLastHandler: 1 });
+      },
+    };
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it('persists root, gap marker and the recent window as attributed rows', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const history = Array.from({ length: 15 }, (_, i) => historyMessage(i, i === 7 ? { author: bot } : {}));
+    await t.run(makeChatThread(history));
+
+    const signals = t.signals();
+    const mastraThreadId = t.dispatches[0].thread.id;
+    expect(signals).toHaveLength(11);
+    expect(signals.map(s => s.contents)).toEqual([
+      'message 0',
+      '[… 5 earlier Slack messages omitted]',
+      ...Array.from({ length: 9 }, (_, i) => `message ${i + 6}`),
+    ]);
+    expect(signals.map(s => s.id)).toEqual([
+      `thread-history:${mastraThreadId}:h0`,
+      `thread-history:${mastraThreadId}:gap`,
+      ...Array.from({ length: 9 }, (_, i) => `thread-history:${mastraThreadId}:h${i + 6}`),
+    ]);
+    for (const s of signals) {
+      expect(s.type).toBe('user');
+      expect(s.attributes.source).toBe('thread-history');
+    }
+    expect(signals[0].attributes).toEqual({
+      messageId: 'h0',
+      authorName: 'Alice',
+      authorId: 'U1',
+      authorMention: '<@U1>',
+      source: 'thread-history',
+    });
+    expect(signals[0].createdAt).toEqual(new Date(BASE_TIME));
+    expect(signals[1].attributes).toEqual({ source: 'thread-history', kind: 'gap', omitted: '5' });
+    expect(signals[1].createdAt).toEqual(new Date(BASE_TIME + 1));
+    // Platform badge without an author, so clients can tag the marker as channel context.
+    expect(signals[1].providerOptions).toEqual({ mastra: { channels: { slack: {} } } });
+    const botRow = signals.find(s => s.attributes.messageId === 'h7')!;
+    expect(botRow.attributes).toMatchObject({ authorName: 'Other Bot', authorId: 'B1', isBot: 'true' });
+    for (let i = 2; i < signals.length; i++) {
+      expect(signals[i].createdAt).toEqual(history[i + 4].metadata.dateSent);
+      expect(signals[i].providerOptions.mastra.channels.slack.author).toMatchObject({
+        userId: history[i + 4].author.userId,
+      });
+    }
+
+    expect(t.dispatches).toHaveLength(1);
+    const serialized = JSON.stringify(t.dispatches[0].signalContents);
+    expect(serialized).not.toContain('[Thread context');
+    expect(serialized).not.toContain('message 0');
+    expect(serialized).toContain('hi there');
+  });
+
+  it('emits no gap and no separate root when the root falls inside the window', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    await t.run(makeChatThread(Array.from({ length: 4 }, (_, i) => historyMessage(i))));
+    expect(t.signals().map(s => s.contents)).toEqual(['message 0', 'message 1', 'message 2', 'message 3']);
+  });
+
+  it('emits the root without a gap when it immediately precedes the window', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    await t.run(makeChatThread(Array.from({ length: 10 }, (_, i) => historyMessage(i))));
+    const contents = t.signals().map(s => s.contents);
+    expect(contents).toHaveLength(10);
+    expect(contents[0]).toBe('message 0');
+    expect(contents).not.toContain(expect.stringContaining('omitted'));
+  });
+
+  it('emits only the root and the gap marker when maxMessages is 1', async () => {
+    const t = await setup({ threadContext: { maxMessages: 1 } });
+    await t.run(makeChatThread(Array.from({ length: 5 }, (_, i) => historyMessage(i))));
+    expect(t.signals().map(s => s.contents)).toEqual(['message 0', '[… 4 earlier Slack messages omitted]']);
+  });
+
+  it('falls back to monotonic timestamps for messages without a valid dateSent', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const history = Array.from({ length: 6 }, (_, i) =>
+      historyMessage(i, i === 2 ? { metadata: {} } : i === 4 ? { metadata: { dateSent: new Date('nope') } } : {}),
+    );
+    await t.run(makeChatThread(history));
+    const stamps = t.signals().map(s => (s.createdAt as Date).getTime());
+    expect(stamps).toHaveLength(6);
+    for (let i = 1; i < stamps.length; i++) expect(stamps[i]).toBeGreaterThan(stamps[i - 1]!);
+    expect(stamps.at(-1)!).toBeLessThanOrEqual(Date.now());
+  });
+
+  it('keeps an untimestamped first row before later rows with real timestamps', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const history = Array.from({ length: 4 }, (_, i) => historyMessage(i, i === 0 ? { metadata: {} } : {}));
+    await t.run(makeChatThread(history));
+    const stamps = t.signals().map(s => (s.createdAt as Date).getTime());
+    expect(stamps).toHaveLength(4);
+    for (let i = 1; i < stamps.length; i++) expect(stamps[i]).toBeGreaterThan(stamps[i - 1]!);
+    // Real timestamps are preserved; the fallback sits just before the first real one.
+    expect(stamps.slice(1)).toEqual([1, 2, 3].map(i => BASE_TIME + i * 1000));
+    expect(stamps[0]).toBeLessThan(BASE_TIME + 1000);
+  });
+
+  describe('omitted-count cap', () => {
+    it('renders 500+ and fetches the root from the front of the thread past the cap', async () => {
+      const t = await setup({ threadContext: { maxMessages: 10 } });
+      const forwardFetch = vi.fn();
+      await t.run(
+        makeChatThread(
+          Array.from({ length: 600 }, (_, i) => historyMessage(i)),
+          {},
+          { forwardFetch },
+        ),
+      );
+      const signals = t.signals();
+      expect(forwardFetch).toHaveBeenCalledTimes(1);
+      expect(signals[0].contents).toBe('message 0');
+      expect(signals[1].contents).toBe('[… 500+ earlier Slack messages omitted]');
+      expect(signals[1].attributes.omitted).toBe('500+');
+      expect(signals).toHaveLength(11);
+    });
+
+    it('treats exactly cap + window prior messages as a cap hit', async () => {
+      const t = await setup({ threadContext: { maxMessages: 10 } });
+      const forwardFetch = vi.fn();
+      // 9 recent + 500 walked = the walk stops before seeing the root.
+      await t.run(
+        makeChatThread(
+          Array.from({ length: 510 }, (_, i) => historyMessage(i)),
+          {},
+          { forwardFetch },
+        ),
+      );
+      expect(forwardFetch).toHaveBeenCalledTimes(1);
+      expect(t.signals()[1].contents).toBe('[… 500+ earlier Slack messages omitted]');
+    });
+
+    it('keeps the exact count when the walk reaches the root at the cap boundary', async () => {
+      const t = await setup({ threadContext: { maxMessages: 10 } });
+      const forwardFetch = vi.fn();
+      // 9 recent + 500 walked, the 500th walked being the root itself.
+      await t.run(
+        makeChatThread(
+          Array.from({ length: 509 }, (_, i) => historyMessage(i)),
+          {},
+          { forwardFetch },
+        ),
+      );
+      expect(forwardFetch).toHaveBeenCalledTimes(1);
+      expect(t.signals()[0].contents).toBe('message 0');
+      expect(t.signals()[1].contents).toBe('[… 499 earlier Slack messages omitted]');
+    });
+
+    it('needs no forward fetch when the walk exhausts before the cap', async () => {
+      const t = await setup({ threadContext: { maxMessages: 10 } });
+      const forwardFetch = vi.fn();
+      await t.run(
+        makeChatThread(
+          Array.from({ length: 508 }, (_, i) => historyMessage(i)),
+          {},
+          { forwardFetch },
+        ),
+      );
+      expect(forwardFetch).not.toHaveBeenCalled();
+      expect(t.signals()[1].contents).toBe('[… 498 earlier Slack messages omitted]');
+    });
+  });
+
+  it('drops the gap marker but keeps the recent rows when the root fetch fails', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const chatThread = makeChatThread(
+      Array.from({ length: 600 }, (_, i) => historyMessage(i)),
+      {
+        allMessages: {
+          async *[Symbol.asyncIterator]() {
+            throw new Error('forward boom');
+          },
+        },
+      },
+    );
+    await t.run(chatThread);
+    const contents = t.signals().map(s => s.contents);
+    expect(contents).toHaveLength(9);
+    expect(contents[0]).toBe('message 591');
+    expect(t.logger.warn).toHaveBeenCalledWith(
+      '[slack] Failed to fetch thread root message',
+      expect.objectContaining({
+        platform: 'slack',
+        threadId: 'channel-1:thread-1',
+        error: expect.objectContaining({ message: 'forward boom' }),
+      }),
+    );
+  });
+
+  it('persists nothing but still dispatches the trigger when the history walk fails', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const chatThread = makeChatThread([], {
+      messages: {
+        async *[Symbol.asyncIterator]() {
+          throw new Error('backward boom');
+        },
+      },
+    });
+    await t.run(chatThread);
+    expect(t.hook).not.toHaveBeenCalled();
+    expect(t.dispatches).toHaveLength(1);
+    expect(t.logger.warn).toHaveBeenCalledWith(
+      '[slack] Failed to fetch thread history',
+      expect.objectContaining({
+        platform: 'slack',
+        threadId: 'channel-1:thread-1',
+        error: expect.objectContaining({ message: 'backward boom' }),
+      }),
+    );
+  });
+
+  it('routes history attachments like live attachments', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const png = {
+      type: 'image',
+      mimeType: 'image/png',
+      name: 'shot.png',
+      url: 'https://files.example/shot.png',
+      fetchData: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
+    };
+    const zip = {
+      type: 'file',
+      mimeType: 'application/zip',
+      name: 'bundle.zip',
+      url: 'https://files.example/bundle.zip',
+    };
+    const gone = {
+      type: 'image',
+      mimeType: 'image/jpeg',
+      name: 'gone.jpg',
+      url: 'https://files.example/gone.jpg',
+      fetchData: vi.fn().mockRejectedValue(new Error('404')),
+    };
+    const history = [
+      historyMessage(0, { attachments: [png] }),
+      historyMessage(1, { attachments: [zip] }),
+      historyMessage(2, { text: '', attachments: [gone] }),
+    ];
+    await t.run(makeChatThread(history));
+    const [withPng, withZip, withGone] = t.signals();
+
+    expect(withPng.contents).toEqual([
+      { type: 'text', text: 'message 0' },
+      { type: 'text', text: '[Attached image/png file: shot.png]' },
+      {
+        type: 'file',
+        data: expect.stringMatching(/^data:image\/png;base64,/),
+        mediaType: 'image/png',
+        filename: 'shot.png',
+      },
+    ]);
+    expect(withZip.contents).toEqual([
+      { type: 'text', text: 'message 1' },
+      { type: 'text', text: '[Attached file: bundle.zip (application/zip) — https://files.example/bundle.zip]' },
+    ]);
+    expect(withGone.contents).toEqual(expect.stringContaining('[Attachment unavailable: gone.jpg'));
+  });
+
+  it('skips the history walk for subscribed threads, DMs and maxMessages: 0', async () => {
+    const subscribed = await setup();
+    await subscribed.run(makeChatThread([historyMessage(0)], { isSubscribed: vi.fn().mockResolvedValue(true) }));
+    expect(subscribed.hook).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+
+    const dm = await setup();
+    const dmThread = makeChatThread([historyMessage(0)], { isDM: true });
+    await dm.run(dmThread);
+    expect(dm.hook).not.toHaveBeenCalled();
+    expect(dmThread.isSubscribed).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+
+    const disabled = await setup({ threadContext: { maxMessages: 0 } });
+    const disabledThread = makeChatThread([historyMessage(0)]);
+    await disabled.run(disabledThread);
+    expect(disabled.hook).not.toHaveBeenCalled();
+    expect(disabledThread.isSubscribed).not.toHaveBeenCalled();
+    for (const t of [subscribed, dm, disabled]) expect(t.dispatches).toHaveLength(1);
+  });
+
+  describe('base persist hook', () => {
+    function persistingAgent() {
+      const agent = createMockAgent();
+      const memory = { saveMessages: vi.fn().mockResolvedValue(undefined) };
+      agent.getMemory = vi.fn().mockResolvedValue(memory);
+      agent.sendSignal = vi.fn();
+      return Object.assign(agent, { memory });
+    }
+
+    it('writes every row to memory in one batch without waking the agent', async () => {
+      const agent = persistingAgent();
+      const t = await setup({ agent, threadContext: { maxMessages: 10 }, spyHook: false });
+      await t.run(makeChatThread(Array.from({ length: 15 }, (_, i) => historyMessage(i))));
+
+      await expect(t.hook.mock.results[0]!.value).resolves.toBe(true);
+      expect(agent.sendSignal).not.toHaveBeenCalled();
+      expect(agent.memory.saveMessages).toHaveBeenCalledTimes(1);
+      const memory = t.dispatches[0].memory;
+      const { messages } = agent.memory.saveMessages.mock.calls[0][0];
+      expect(messages).toHaveLength(11);
+      expect(messages.map(m => m.id)).toEqual([
+        `thread-history:${memory.thread}:h0`,
+        `thread-history:${memory.thread}:gap`,
+        ...Array.from({ length: 9 }, (_, i) => `thread-history:${memory.thread}:h${i + 6}`),
+      ]);
+      for (const m of messages) {
+        expect(m).toMatchObject({ role: 'signal', type: 'user', threadId: memory.thread, resourceId: memory.resource });
+      }
+      expect(messages[0].createdAt).toEqual(new Date(BASE_TIME));
+      expect(messages[0].content.metadata.signal.attributes).toMatchObject({
+        messageId: 'h0',
+        source: 'thread-history',
+      });
+      expect(messages[1].content.metadata.signal.attributes.kind).toBe('gap');
+      // The trigger itself is dispatched separately, never through the batch write.
+      expect(t.dispatches).toHaveLength(1);
+      expect(JSON.stringify(t.dispatches[0].signalContents)).not.toContain('[Thread context');
+    });
+
+    it('falls back to the legacy text block when the batch write fails', async () => {
+      const agent = persistingAgent();
+      agent.memory.saveMessages.mockRejectedValue(new Error('write boom'));
+      const t = await setup({ agent, threadContext: { maxMessages: 10 }, spyHook: false });
+      await t.run(makeChatThread(Array.from({ length: 15 }, (_, i) => historyMessage(i))));
+      // History is only collected on the first mention, so a lost write must
+      // not lose the context: the legacy block carries it on the trigger.
+      await expect(t.hook.mock.results[0]!.value).resolves.toBe(false);
+      expect(t.logger.warn).toHaveBeenCalledWith(
+        '[slack] Failed to persist thread history messages',
+        expect.objectContaining({
+          platform: 'slack',
+          threadId: 'channel-1:thread-1',
+          messageId: 'trigger',
+          rows: 11,
+          error: expect.objectContaining({ message: 'write boom' }),
+        }),
+      );
+      expect(t.dispatches).toHaveLength(1);
+      const text = t.dispatches[0].signalContents as string;
+      expect(text).toContain('[Thread context — messages in this thread before you joined]');
+      expect(text).toContain('[… 5 earlier Slack messages omitted]');
+      expect(text).toContain('(msg:h0): message 0');
+    });
+
+    it('logs and dispatches the trigger without a legacy block when building the rows fails', async () => {
+      const agent = persistingAgent();
+      const t = await setup({ agent, threadContext: { maxMessages: 10 }, spyHook: false });
+      vi.spyOn(t.channels as any, 'buildThreadHistorySignals').mockRejectedValue(new Error('build boom'));
+      await t.run(makeChatThread(Array.from({ length: 3 }, (_, i) => historyMessage(i))));
+      await expect(t.hook.mock.results[0]!.value).resolves.toBe(true);
+      expect(agent.memory.saveMessages).not.toHaveBeenCalled();
+      expect(t.logger.warn).toHaveBeenCalledWith(
+        '[slack] Failed to build thread history messages',
+        expect.objectContaining({ platform: 'slack', error: expect.objectContaining({ message: 'build boom' }) }),
+      );
+      expect(t.dispatches).toHaveLength(1);
+      expect(JSON.stringify(t.dispatches[0].signalContents)).not.toContain('[Thread context');
+    });
+
+    it('renders the legacy text block for an agent without memory', async () => {
+      const agent = createMockAgent();
+      agent.sendSignal = vi.fn();
+      const t = await setup({ agent, threadContext: { maxMessages: 10 }, spyHook: false });
+      const history = Array.from({ length: 15 }, (_, i) => historyMessage(i, i === 7 ? { author: bot } : {}));
+      await t.run(makeChatThread(history));
+
+      await expect(t.hook.mock.results[0]!.value).resolves.toBe(false);
+      expect(agent.sendSignal).not.toHaveBeenCalled();
+      expect(t.dispatches).toHaveLength(1);
+      const text = t.dispatches[0].signalContents as string;
+      expect(text.split('\n\n')[0]!.split('\n')).toEqual([
+        '[Thread context — messages in this thread before you joined]',
+        '[Alice (<@U1>)] (msg:h0): message 0',
+        '[… 5 earlier Slack messages omitted]',
+        '[Alice (<@U1>)] (msg:h6): message 6',
+        '[Other Bot (<@B1>) (bot)] (msg:h7): message 7',
+        ...Array.from({ length: 7 }, (_, k) => {
+          const i = k + 8;
+          return `[${i % 2 === 0 ? 'Alice (<@U1>)' : 'Bob (<@U2>)'}] (msg:h${i}): message ${i}`;
+        }),
+      ]);
+      expect(text).toContain('hi there');
+    });
+  });
+});
+
+describe('thread history end to end', () => {
+  const BASE_TIME = Date.UTC(2026, 8, 29, 11, 0, 0);
+  const alice: Author = { userId: 'U1', userName: 'alice', fullName: 'Alice', isBot: false, isMe: false };
+  const bob: Author = { userId: 'U2', userName: 'bob', fullName: 'Bob', isBot: false, isMe: false };
+  const bot: Author = { userId: 'B1', userName: 'otherbot', fullName: 'Other Bot', isBot: true, isMe: false };
+  const THREAD_ID = 'C1:1700000000.000100';
+
+  function fixtureMessage(i: number, overrides: Partial<Message> = {}) {
+    return makeMessage({
+      id: `h${i}`,
+      threadId: THREAD_ID,
+      text: `message ${i}`,
+      author: i % 2 === 0 ? alice : bob,
+      metadata: { dateSent: new Date(BASE_TIME + i * 1000), edited: false },
+      ...overrides,
+    });
+  }
+
+  /** Adapter whose fetchMessages pages over `prior` honoring direction/cursor/limit. */
+  function createFixtureAdapter(prior: Message[]) {
+    const adapter = createMockAdapter('slack');
+    adapter.isDM = () => false;
+    adapter.fetchMessages = vi.fn(async (_threadId: string, options: FetchOptions = {}) => {
+      const pageSize = options.limit ?? 5;
+      if (options.direction === 'forward') {
+        const start = options.cursor ? Number(options.cursor) : 0;
+        const messages = prior.slice(start, start + pageSize);
+        const end = start + messages.length;
+        return { messages, nextCursor: end < prior.length ? String(end) : undefined };
+      }
+      // backward: pages of chronological messages, newest page first
+      const end = options.cursor ? Number(options.cursor) : prior.length;
+      const start = Math.max(0, end - pageSize);
+      return { messages: prior.slice(start, end), nextCursor: start > 0 ? String(start) : undefined };
+    });
+    return adapter;
+  }
+
+  async function createHarness(options: { prior: Message[]; state?: unknown } = { prior: [] }) {
+    const { MockLanguageModelV2, convertArrayToReadableStream } = await import('@internal/ai-sdk-v5/test');
+    const { Mastra } = await import('../../mastra');
+    const { InMemoryStore } = await import('../../storage/mock');
+    const { MockMemory } = await import('../../memory/mock');
+
+    const prompts: LanguageModelV2Prompt[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: 't-1' },
+            { type: 'text-delta', id: 't-1', delta: 'Hello' },
+            { type: 'text-end', id: 't-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        };
+      },
+    });
+    const storage = new InMemoryStore();
+    const adapter = createFixtureAdapter(options.prior);
+    const channels = new AgentChannels({
+      adapters: { slack: adapter },
+      threadContext: { maxMessages: 10 },
+      ...(options.state ? { state: options.state } : {}),
+    });
+    const agent = new Agent({
+      id: 'e2e-agent',
+      name: 'e2e-agent',
+      instructions: 'test',
+      model,
+      // Recall enough history for the root row to reach the prompt: memory's
+      // `lastMessages` must cover root + gap + the recent window.
+      memory: new MockMemory({ storage, options: { lastMessages: 50 } }),
+      channels,
+    });
+    const mastra = new Mastra({ storage, agents: { agent } });
+    await channels.initialize(mastra);
+
+    const mention = (id: string) =>
+      fixtureMessage(0, {
+        id,
+        text: '@TestBot what was the first message?',
+        author: alice,
+        metadata: { dateSent: new Date(BASE_TIME + 100_000), edited: false },
+      });
+    const storedRows = async () => {
+      const memoryStore = await storage.getStore('memory');
+      const threads = await memoryStore!.listThreads({ page: 0, perPage: 10 });
+      const thread = threads.threads[0]!;
+      const { messages } = await memoryStore!.listMessages({ threadId: thread.id, page: 0, perPage: 100 });
+      return { thread, messages: [...messages].sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt)) };
+    };
+    return {
+      channels,
+      adapter,
+      prompts,
+      mention,
+      storedRows,
+      deliver: (m: Message) => (channels.sdk as any).processMessage(adapter, THREAD_ID, m),
+    };
+  }
+
+  it('persists prior thread messages as attributed rows and prompts with them before the trigger', async () => {
+    const png = {
+      type: 'image',
+      mimeType: 'image/png',
+      name: 'shot.png',
+      url: 'https://files.example/shot.png',
+      fetchData: vi.fn().mockResolvedValue(new Uint8Array([137, 80, 78, 71])),
+    };
+    const prior = Array.from({ length: 15 }, (_, i) =>
+      fixtureMessage(i, i === 7 ? { author: bot } : i === 9 ? { attachments: [png] } : {}),
+    );
+    const h = await createHarness({ prior });
+    await h.deliver(h.mention('trigger-1'));
+
+    const { thread, messages } = await h.storedRows();
+    const userRows = messages.filter(m => m.type === 'user');
+    // No row carries the legacy text block; history arrives as its own rows:
+    // root + gap + 9 recent + trigger.
+    expect(JSON.stringify(userRows.map(m => m.content))).not.toContain('[Thread context');
+    expect(userRows).toHaveLength(12);
+    const attrs = (m: MastraDBMessage) => m.content.metadata?.signal?.attributes ?? {};
+    expect(userRows.slice(0, 11).map(m => m.id)).toEqual([
+      `thread-history:${thread.id}:h0`,
+      `thread-history:${thread.id}:gap`,
+      ...Array.from({ length: 9 }, (_, i) => `thread-history:${thread.id}:h${i + 6}`),
+    ]);
+    for (const row of userRows.slice(0, 11)) expect(attrs(row).source).toBe('thread-history');
+    expect(attrs(userRows[0])).toMatchObject({ messageId: 'h0', authorName: 'Alice', authorId: 'U1' });
+    expect(new Date(userRows[0]!.createdAt)).toEqual(new Date(BASE_TIME));
+    expect(attrs(userRows[1])).toMatchObject({ kind: 'gap', omitted: '5' });
+    expect(attrs(userRows.find(m => attrs(m).messageId === 'h7'))).toMatchObject({ isBot: 'true' });
+    const trigger = userRows[11]!;
+    expect(attrs(trigger).source).toBeUndefined();
+    expect(attrs(trigger).messageId).toBe('trigger-1');
+    expect(JSON.stringify(trigger.content)).not.toContain('[Thread context');
+
+    // Adapter paging: backward walk for the window and count; no forward fetch needed (root reached).
+    const directions = h.adapter.fetchMessages.mock.calls.map((c: [string, FetchOptions?]) => c[1]?.direction);
+    expect(directions).toContain('backward');
+    expect(directions).not.toContain('forward');
+
+    // The model saw the history turns, in order, before the trigger.
+    expect(h.prompts).toHaveLength(1);
+    const userTurns = h.prompts[0]!.filter(m => m.role === 'user');
+    const turnText = (m: (typeof userTurns)[number]) => m.content.map(p => (p.type === 'text' ? p.text : '')).join('');
+    const texts = userTurns.map(turnText);
+    expect(texts[0]).toContain('source="thread-history"');
+    expect(texts[0]).toContain('message 0');
+    expect(texts[1]).toContain('[… 5 earlier Slack messages omitted]');
+    expect(texts[texts.length - 1]).toContain('what was the first message?');
+    expect(texts[texts.length - 1]).not.toContain('[Thread context');
+    expect(texts.join('\n').indexOf('message 0')).toBeLessThan(texts.join('\n').indexOf('what was the first message?'));
+    const fileParts = userTurns.flatMap(m => m.content.filter(p => p.type === 'file'));
+    expect(fileParts).toHaveLength(1);
+    expect(fileParts[0].mediaType).toBe('image/png');
+  });
+
+  it('does not duplicate history rows when two deliveries race before the subscription lands', async () => {
+    const prior = Array.from({ length: 15 }, (_, i) => fixtureMessage(i));
+    // Subscription state that never reports subscribed, so both deliveries take the first-mention path.
+    const kv = new Map<string, unknown>();
+    const state = {
+      isSubscribed: vi.fn().mockResolvedValue(false),
+      subscribe: vi.fn().mockResolvedValue(undefined),
+      unsubscribe: vi.fn().mockResolvedValue(undefined),
+      get: vi.fn(async (key: string) => kv.get(key) ?? null),
+      set: vi.fn(async (key: string, value: unknown) => void kv.set(key, value)),
+      setIfNotExists: vi.fn(async (key: string, value: unknown) => {
+        if (kv.has(key)) return false;
+        kv.set(key, value);
+        return true;
+      }),
+      delete: vi.fn(async (key: string) => void kv.delete(key)),
+      acquireLock: vi.fn().mockResolvedValue({ release: async () => {} }),
+      releaseLock: vi.fn().mockResolvedValue(undefined),
+      initialize: vi.fn().mockResolvedValue(undefined),
+      connect: vi.fn().mockResolvedValue(undefined),
+      disconnect: vi.fn().mockResolvedValue(undefined),
+    };
+    const h = await createHarness({ prior, state });
+    await Promise.all([h.deliver(h.mention('trigger-a')), h.deliver(h.mention('trigger-b'))]);
+
+    const { messages } = await h.storedRows();
+    const historyRows = messages.filter(m => m.id.startsWith('thread-history:'));
+    expect(historyRows).toHaveLength(11);
+    expect(state.isSubscribed).toHaveBeenCalled();
+  });
+});
+
+describe('per-sender handler runs end to end', () => {
+  const BASE_TIME = Date.UTC(2026, 9, 2, 12, 0, 0);
+  const THREAD_ID = 'C9:1700000000.000900';
+  const userA: Author = { userId: 'user-a', userName: 'ann', fullName: 'Ann', isBot: false, isMe: false };
+  const userB: Author = { userId: 'user-b', userName: 'ben', fullName: 'Ben', isBot: false, isMe: false };
+
+  function deferred() {
+    let resolve!: () => void;
+    const promise = new Promise<void>(r => (resolve = r));
+    return { promise, resolve };
+  }
+
+  async function createHarness() {
+    const { MockLanguageModelV2, convertArrayToReadableStream } = await import('@internal/ai-sdk-v5/test');
+    const { Mastra } = await import('../../mastra');
+    const { InMemoryStore } = await import('../../storage/mock');
+    const { MockMemory } = await import('../../memory/mock');
+
+    const prompts: LanguageModelV2Prompt[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: 't-1' },
+            { type: 'text-delta', id: 't-1', delta: 'Hello' },
+            { type: 'text-end', id: 't-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        };
+      },
+    });
+    const storage = new InMemoryStore();
+    const adapter = createMockAdapter('slack');
+    adapter.isDM = () => false;
+    adapter.fetchMessages = vi.fn().mockResolvedValue({ messages: [], nextCursor: undefined });
+
+    const invocations: [wrapper: 'mention' | 'subscribed', id: string][] = [];
+    const held = deferred();
+    const entered = deferred();
+    const handle =
+      (wrapper: 'mention' | 'subscribed'): ChannelHandler =>
+      async (thread, message, defaultHandler, ctx) => {
+        invocations.push([wrapper, message.id]);
+        // Host refusal: sender B gets nothing dispatched, nothing thrown.
+        if (message.author.userId === 'user-b') return;
+        ctx.requestContext.set('tenant', message.author.userId);
+        if (wrapper === 'mention') {
+          entered.resolve();
+          await held.promise; // keep the SDK lock held so later messages queue
+        }
+        await defaultHandler(thread, message);
+        // The default handler subscribes fire-and-forget; await it so the
+        // queue drain routes the batch to onSubscribedMessage deterministically.
+        if (wrapper === 'mention') await thread.subscribe();
+      };
+
+    const channels = new AgentChannels({
+      adapters: { slack: adapter },
+      chatOptions: { concurrency: { strategy: 'queue' } },
+      handlers: { onMention: handle('mention'), onSubscribedMessage: handle('subscribed') },
+    });
+    const agent = new Agent({
+      id: 'runs-agent',
+      name: 'runs-agent',
+      instructions: ({ requestContext }) => `tenant=${requestContext.get('tenant') ?? 'none'}`,
+      model,
+      memory: new MockMemory({ storage, options: { lastMessages: 50 } }),
+      channels,
+    });
+    const mastra = new Mastra({ storage, agents: { agent } });
+    await channels.initialize(mastra);
+
+    const msg = (id: string, text: string, author: Author, offset: number) =>
+      makeMessage({
+        id,
+        threadId: THREAD_ID,
+        text,
+        author,
+        metadata: { dateSent: new Date(BASE_TIME + offset), edited: false },
+      });
+    return {
+      prompts,
+      invocations,
+      held,
+      entered,
+      msg,
+      deliver: (m: Message) => (channels.sdk as any).processMessage(adapter, THREAD_ID, m) as Promise<void>,
+    };
+  }
+
+  it("calls the custom handler once per sender turn with that turn's context", async () => {
+    const h = await createHarness();
+    try {
+      const first = h.deliver(h.msg('A1', '@TestBot start', userA, 0));
+      await h.entered.promise;
+      await h.deliver(h.msg('B1', 'b text', userB, 1000));
+      await h.deliver(h.msg('A2', 'a follow-up', userA, 2000));
+      expect(h.invocations).toEqual([['mention', 'A1']]);
+      h.held.resolve();
+      await first;
+    } finally {
+      h.held.resolve();
+    }
+
+    expect(h.invocations).toEqual([
+      ['mention', 'A1'],
+      ['subscribed', 'B1'],
+      ['subscribed', 'A2'],
+    ]);
+    const lastUserText = (p: LanguageModelV2Prompt) => {
+      const user = p.filter(m => m.role === 'user').at(-1);
+      return user?.content.map(part => (part.type === 'text' ? part.text : '')).join('') ?? '';
+    };
+    const systemText = (p: LanguageModelV2Prompt) =>
+      p
+        .filter(m => m.role === 'system')
+        .map(m => m.content)
+        .join('\n');
+    expect(h.prompts.some(p => lastUserText(p).includes('b text'))).toBe(false);
+    const followUp = h.prompts.find(p => lastUserText(p).includes('a follow-up'));
+    expect(followUp).toBeDefined();
+    expect(systemText(followUp!)).toContain('tenant=user-a');
+  }, 20_000);
 });

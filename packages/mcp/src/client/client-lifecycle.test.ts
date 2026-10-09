@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import type { MCPServerIcon } from '@mastra/core/mcp';
 import { createTool } from '@mastra/core/tools';
 import type { Client } from '@modelcontextprotocol/client';
 import { CLIENT_CAPABILITIES_META_KEY } from '@modelcontextprotocol/server';
@@ -84,7 +85,14 @@ async function legacyServer() {
         return reply({
           protocolVersion: '2025-11-25',
           capabilities: { tools: {} },
-          serverInfo: { name: 'legacy', version: '1' },
+          serverInfo: {
+            name: 'legacy',
+            title: 'Legacy Server',
+            version: '1',
+            description: 'A server that only speaks 2025-11-25',
+            websiteUrl: 'https://legacy.example.com',
+            icons: [{ src: 'https://legacy.example.com/icon.png', mimeType: 'image/png', sizes: ['48x48'] }],
+          },
         });
       case 'notifications/initialized':
         return res.writeHead(202).end();
@@ -464,6 +472,17 @@ describe('InternalMastraMCPClient - revision negotiation with servers that have 
     expect(await tools.legacyEcho!.execute!({ text: 'hi' })).toMatchObject({ content: [{ type: 'text', text: 'legacy: hi' }] });
   });
 
+  it('keeps the announced serverInfo only while connected', async () => {
+    client = new InternalMastraMCPClient({ name: 'identity', server: { url: legacy.url } });
+    expect(client.serverInfo).toBeUndefined();
+
+    await client.connect();
+    expect(client.serverInfo).toMatchObject({ name: 'legacy', title: 'Legacy Server', version: '1' });
+
+    await client.disconnect();
+    expect(client.serverInfo).toBeUndefined();
+  });
+
   it('refuses the facilities the legacy revision lacks instead of emulating them', async () => {
     client = new InternalMastraMCPClient({ name: 'auto-listen', server: { url: legacy.url } });
     await client.connect();
@@ -502,6 +521,59 @@ describe('InternalMastraMCPClient - revision negotiation with servers that have 
       expect(mcpClient.getServerProtocolVersions()).toEqual({ current: undefined, older: undefined });
       await mcpClient.listTools();
       expect(mcpClient.getServerProtocolVersions()).toEqual({ current: '2026-07-28', older: '2025-11-25' });
+    } finally {
+      await mcpClient.disconnect();
+      await served.close();
+    }
+  });
+
+  it('reports the identity each server announced on MCPClient, and forgets it on disconnect', async () => {
+    const served = await serveHTTP(makeServer({ writes: 0, rounds: [] }));
+    const mcpClient = new MCPClient({
+      id: 'server-info',
+      servers: { current: { url: served.url }, older: { url: legacy.url } },
+    });
+    try {
+      expect(mcpClient.getServerInfo()).toEqual({ current: undefined, older: undefined });
+      await mcpClient.listTools();
+      expect(mcpClient.getServerInfo()).toEqual({
+        current: expect.objectContaining({ name: 'Lifecycle Server', version: '1.0.0' }),
+        older: {
+          name: 'legacy',
+          title: 'Legacy Server',
+          version: '1',
+          description: 'A server that only speaks 2025-11-25',
+          websiteUrl: 'https://legacy.example.com',
+          icons: [{ src: 'https://legacy.example.com/icon.png', mimeType: 'image/png', sizes: ['48x48'] }],
+        },
+      });
+      await mcpClient.disconnect();
+      expect(mcpClient.getServerInfo()).toEqual({ current: undefined, older: undefined });
+    } finally {
+      await mcpClient.disconnect();
+      await served.close();
+    }
+  });
+
+  it('receives the full identity an MCPServer is configured with', async () => {
+    const icons: MCPServerIcon[] = [
+      { src: 'https://identity.example.com/icon.png', mimeType: 'image/png', sizes: ['48x48'], theme: 'light' },
+      { src: 'https://identity.example.com/icon.svg', mimeType: 'image/svg+xml', sizes: ['any'], theme: 'dark' },
+    ];
+    const identity = {
+      name: 'identity-server',
+      version: '3.1.0',
+      title: 'Identity Server',
+      description: 'Announces every Implementation field',
+      websiteUrl: 'https://identity.example.com',
+      icons,
+    };
+    const served = await serveHTTP(new MCPServer({ ...identity, tools: {} }));
+    const mcpClient = new MCPClient({ id: 'full-identity', servers: { identity: { url: served.url } } });
+    try {
+      await mcpClient.listTools();
+      expect(mcpClient.getServerProtocolVersions()).toEqual({ identity: '2026-07-28' });
+      expect(mcpClient.getServerInfo()).toEqual({ identity });
     } finally {
       await mcpClient.disconnect();
       await served.close();

@@ -1,8 +1,8 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import { Label } from '@mastra/playground-ui/components/Label';
-import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { useAgents } from '@mastra/react/hooks/agents';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
-import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 export type TargetType = 'agent' | 'workflow' | 'scorer';
 
@@ -22,7 +22,7 @@ const targetTypeOptions = [
 
 export function TargetSelector({ targetType, setTargetType, targetId, setTargetId, container }: TargetSelectorProps) {
   const { data: agents, isLoading: agentsLoading } = useAgents();
-  const { data: workflows, isLoading: workflowsLoading } = useWorkflows();
+  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({});
   const { data: scorers, isLoading: scorersLoading } = useScorers();
 
   // Get list of targets based on selected type
@@ -59,8 +59,8 @@ export function TargetSelector({ targetType, setTargetType, targetId, setTargetI
 
   return (
     <div className="grid grid-cols-2 gap-3">
-      <div className="grid gap-2">
-        <Label>Target Type</Label>
+      <Field>
+        <FieldLabel>Target Type</FieldLabel>
         <Combobox
           options={targetTypeOptions}
           value={targetType}
@@ -70,11 +70,11 @@ export function TargetSelector({ targetType, setTargetType, targetId, setTargetI
           emptyText="No types available"
           container={container}
         />
-      </div>
+      </Field>
 
       {targetType && (
-        <div className="grid gap-2">
-          <Label>{targetLabel}</Label>
+        <Field>
+          <FieldLabel>{targetLabel}</FieldLabel>
           <Combobox
             options={targetOptions}
             value={targetId}
@@ -85,7 +85,7 @@ export function TargetSelector({ targetType, setTargetType, targetId, setTargetI
             disabled={isTargetsLoading}
             container={container}
           />
-        </div>
+        </Field>
       )}
     </div>
   );

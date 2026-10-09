@@ -103,6 +103,8 @@ export async function summarizeConversation(opts: SummarizeConversationOptions):
   const extractors = opts.extract ?? [];
   const observationConfig: ResolvedObservationConfig = {
     model: opts.model,
+    maxRetries: 8,
+    failurePolicy: 'abort',
     messageTokens: OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens,
     shareTokenBudget: false,
     modelSettings: { ...OBSERVATIONAL_MEMORY_DEFAULTS.observation.modelSettings },
@@ -118,7 +120,7 @@ export async function summarizeConversation(opts: SummarizeConversationOptions):
   const runner = new ObserverRunner({
     observationConfig,
     observedMessageIds: new Set(),
-    resolveModel: () => ({ model: opts.model }),
+    resolveModel: async () => ({ model: opts.model }),
     tokenCounter: new TokenCounter({ model: typeof opts.model === 'string' ? opts.model : undefined }),
     mastra: opts.mastra,
     memory: opts.memory,

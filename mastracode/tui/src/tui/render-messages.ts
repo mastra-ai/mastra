@@ -28,6 +28,7 @@ import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
 import { PlanResultComponent } from './components/plan-approval-inline.js';
 import { ReactiveSignalComponent } from './components/reactive-signal.js';
+import { ScheduleFireComponent } from './components/schedule-fire.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { StateSignalComponent } from './components/state-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
@@ -41,6 +42,7 @@ import { TemporalGapComponent } from './components/temporal-gap.js';
 import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { PendingUserMessageComponent, UserMessageComponent } from './components/user-message.js';
 import {
+  collectCommandExits,
   getAssistantRenderParts,
   getBackgroundCompletionView,
   getBackgroundWorkLifecycleView,
@@ -73,10 +75,12 @@ function shouldRenderReactiveSignal(tagName: string): boolean {
   return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
 }
 
+function getSignalAttributes(message: MastraDBMessage): Record<string, unknown> | undefined {
+  return (message.content?.metadata?.signal as { attributes?: Record<string, unknown> } | undefined)?.attributes;
+}
+
 function getUserMessageLabel(message: MastraDBMessage, fallbackLabel?: string): string | undefined {
-  const signalAttributes = (message.content?.metadata?.signal as { attributes?: Record<string, unknown> } | undefined)
-    ?.attributes;
-  if (signalAttributes?.delivery === 'while-active') return WHILE_ACTIVE_USER_MESSAGE_LABEL;
+  if (getSignalAttributes(message)?.delivery === 'while-active') return WHILE_ACTIVE_USER_MESSAGE_LABEL;
   return fallbackLabel;
 }
 
@@ -359,11 +363,12 @@ export function removeUserMessage(state: TUIState, messageId: string): void {
   state.ui.requestRender();
 }
 
-export function clearPendingUserMessages(state: TUIState): void {
-  for (const pending of state.pendingSignalMessageComponentsById.values()) {
+export function clearPendingUserMessages(state: TUIState, keepIds: readonly string[] = []): void {
+  for (const [id, pending] of state.pendingSignalMessageComponentsById) {
+    if (keepIds.includes(id)) continue;
     state.chatContainer.removeChild(pending.component as never);
+    state.pendingSignalMessageComponentsById.delete(id);
   }
-  state.pendingSignalMessageComponentsById.clear();
   state.ui.requestRender();
 }
 
@@ -670,6 +675,29 @@ export function addUserMessage(state: TUIState, message: MastraDBMessage, option
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
   const exactDisplayText = displayText.trim();
 
+  const signalAttributes = getSignalAttributes(message);
+  if (signalAttributes?.source === 'schedule') {
+    const component = new ScheduleFireComponent({
+      prompt: exactDisplayText,
+      attributes: signalAttributes,
+      quietDisplayMode: state.quietMode ? 'quiet' : 'normal',
+      quietPreviewLineLimit: state.quietModeMaxToolPreviewLines,
+    });
+    component.setExpanded(state.toolOutputExpanded);
+    // Registered with the tool components so ctrl+e and quiet-mode changes reach it.
+    state.allToolComponents.push(component as any);
+    state.messageComponentsById.set(message.id, component);
+    if (state.streamingComponent && state.session.displayState.get().isRunning) {
+      state.chatContainer.addChild(component);
+      state.followUpComponents.push(component);
+      reconcileChatBoundarySpacers(state.chatContainer);
+    } else {
+      addChildBeforeFollowUps(state, component);
+    }
+    state.ui.requestRender();
+    return;
+  }
+
   const slashCommandMatch = exactDisplayText.match(/^<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>$/);
   if (slashCommandMatch) {
     const commandName = slashCommandMatch[1]!;
@@ -735,18 +763,6 @@ export function addUserMessage(state: TUIState, message: MastraDBMessage, option
   }
 
   if (confirmMatchingPendingUserMessage(state, message.id, displayText, attachments)) {
-    return;
-  }
-
-  // Suppress subscription echo of locally-rendered queued messages (Ctrl+F queue).
-  // drainQueuedAction already rendered the message with a local ID; the subscription
-  // echoes it back with a different signal ID which would otherwise create a duplicate.
-  const dedupKey = displayText.trim();
-  const pendingEchoCounts = state.firedQueuedMessageTexts;
-  const dedupCount = pendingEchoCounts?.get(dedupKey) ?? 0;
-  if (dedupCount > 0) {
-    if (dedupCount === 1) pendingEchoCounts!.delete(dedupKey);
-    else pendingEchoCounts!.set(dedupKey, dedupCount - 1);
     return;
   }
 
@@ -946,6 +962,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
   state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
 
+  const commandExits = collectCommandExits(messages);
   const backgroundTasksByToolCallId = new Map<string, string>();
   const cancelledBackgroundToolCalls = new Set<string>();
   for (const message of messages) {
@@ -977,6 +994,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
         if (accumulatedParts.length === 0 && !(isFinal && hasTerminalMetadata(message))) return;
         const textMessage = buildAssistantSlice(message, accumulatedParts, { includeTerminalMetadata: isFinal });
         const textComponent = new AssistantMessageComponent(textMessage, state.hideThinkingBlock, getMarkdownTheme());
+        textComponent.setQuietModeDisplay(state.quietMode ? 'quiet' : 'normal');
         state.chatContainer.addChild(textComponent);
         accumulatedParts = [];
       };
@@ -1106,6 +1124,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             {
               showImages: false,
               collapsedByDefault: !state.toolOutputExpanded,
+              projectRoot: state.projectInfo?.rootPath,
             },
             state.ui,
           );
@@ -1130,6 +1149,21 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
               },
               isBackgroundPlaceholder,
             );
+            if (!isBackgroundPlaceholder) {
+              const exit = commandExits.get(part.toolCallId);
+              if (exit) toolComponent.setCommandExit(exit);
+              const runMs = exit?.executionTimeMs;
+              if (runMs !== undefined) {
+                const endedAt = part.endedAt ?? (part.startedAt ?? 0) + runMs;
+                toolComponent.setRecordedTiming(endedAt - runMs, endedAt);
+              } else {
+                toolComponent.setRecordedTiming(part.startedAt, part.endedAt);
+              }
+            }
+          } else {
+            // Nothing will deliver this call's result to a reloaded row, so show it stopped rather
+            // than running forever.
+            toolComponent.stopLiveUpdates();
           }
 
           if (cancelledBackgroundToolCalls.has(part.toolCallId)) {

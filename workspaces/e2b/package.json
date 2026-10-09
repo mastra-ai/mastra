@@ -1,6 +1,6 @@
 {
   "name": "@mastra/e2b",
-  "version": "0.12.1",
+  "version": "0.13.0-alpha.1",
   "description": "E2B cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",

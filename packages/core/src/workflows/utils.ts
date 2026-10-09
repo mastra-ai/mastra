@@ -595,24 +595,24 @@ export const createRestartExecutionParams = ({
     }
   }
 
-  let nestedWorkflowActiveStepsPath: Record<string, number[]> = {};
+  let firstEntryActiveStepsPath: Record<string, number[]> = {};
 
   const firstEntry = graph.steps[0]!;
 
   if (isSingleStepEntry(firstEntry)) {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [getSingleStepEntryId(firstEntry)]: [0],
     };
   } else if (firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [getSingleStepEntryId(firstEntry.step)]: [0],
     };
   } else if (firstEntry.type === 'sleep' || firstEntry.type === 'sleepUntil') {
-    nestedWorkflowActiveStepsPath = {
+    firstEntryActiveStepsPath = {
       [firstEntry.id]: [0],
     };
   } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
-    nestedWorkflowActiveStepsPath = firstEntry.steps.reduce(
+    firstEntryActiveStepsPath = firstEntry.steps.reduce(
       (acc, step) => {
         acc[getSingleStepEntryId(step)] = [0];
         return acc;
@@ -620,16 +620,62 @@ export const createRestartExecutionParams = ({
       {} as Record<string, number[]>,
     );
   }
+
+  const hasFirstEntryResult = getStepIds(firstEntry).some(stepId =>
+    Object.prototype.hasOwnProperty.call(snapshot.context, stepId),
+  );
+  const isPreFirstStepRestart = nestedWorkflowPending || (snapshot.activePaths.length === 0 && !hasFirstEntryResult);
   const restartData: RestartExecutionParams = {
-    activePaths: nestedWorkflowPending ? [0] : snapshot.activePaths,
-    activeStepsPath: nestedWorkflowPending ? nestedWorkflowActiveStepsPath : snapshot.activeStepsPath,
+    activePaths: isPreFirstStepRestart ? [0] : snapshot.activePaths,
+    activeStepsPath: isPreFirstStepRestart ? firstEntryActiveStepsPath : snapshot.activeStepsPath,
     stepResults: snapshot.context,
-    state: snapshot.value,
+    // The evented engine records mid-run state as `context.__state` alongside step results;
+    // `value` only holds the state from the run's start or last suspension.
+    state: (snapshot.context as Record<string, any>)?.__state ?? snapshot.value,
     stepExecutionPath: snapshot?.stepExecutionPath,
+    isPreFirstStepRestart,
   };
 
   return restartData;
 };
+
+/**
+ * Top-level index the default engine should restart from.
+ *
+ * The engine checkpoints an entry when it finishes but only moves the pointer
+ * when the next entry starts. A checkpoint with nothing running whose
+ * pointed-at entry saved only successful results was written in that gap, so
+ * restart resumes at the next entry instead of replaying a finished one (#24615).
+ * Any other checkpoint resumes at the entry it points to.
+ *
+ * Skips at most one entry, so a step id reused later in the graph is never
+ * mistaken for finished.
+ */
+export function getRestartStartIndex(steps: StepFlowEntry[], restart: RestartExecutionParams): number {
+  const startIdx = restart.activePaths[0]!;
+  const entry = steps[startIdx];
+  if (!entry || restart.activePaths.length !== 1 || Object.keys(restart.activeStepsPath ?? {}).length > 0) {
+    return startIdx;
+  }
+
+  const results = getStepIds(entry).map(id => restart.stepResults[id]);
+  return isEntryFinished(entry.type, results) ? startIdx + 1 : startIdx;
+}
+
+/**
+ * Whether a top-level entry saved only successful results, given its results
+ * in `getStepIds` order. Agent-loop snapshot pruning makes the same decision to
+ * keep the output a restart that skips the entry reads.
+ */
+export function isEntryFinished(
+  entryType: string,
+  results: ReadonlyArray<{ status: string } | null | undefined>,
+): boolean {
+  return entryType === 'conditional'
+    ? // Arms that were not selected have no result.
+      results.every(result => !result || result.status === 'success')
+    : results.length > 0 && results.every(result => result?.status === 'success');
+}
 
 /**
  * Re-hydrates serialized errors in step results back into proper Error instances.

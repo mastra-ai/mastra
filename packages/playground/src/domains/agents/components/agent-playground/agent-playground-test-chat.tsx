@@ -1,23 +1,23 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
+import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
+import { DatasetSaveProvider } from '@mastra/playground-ui/domains/chat';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useAgent } from '@mastra/react/hooks/agents';
 import { Save } from 'lucide-react';
 import { useMemo } from 'react';
 import { useFormState } from 'react-hook-form';
 
-import { ActivatedSkillsProvider } from '../../context/activated-skills-context';
 import { AgentSettingsProvider } from '../../context/agent-context';
 import { useOptionalAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { BrowserSessionProvider } from '../../context/browser-session-provider';
-import { BrowserToolCallsProvider } from '../../context/browser-tool-calls-context';
-import { useAgent } from '../../hooks/use-agent';
 import { buildAgentDefaultSettings } from '../../utils/agent-default-settings';
 import { AgentChat } from '../agent-chat';
 import { BrowserViewPanel } from '../browser-view/browser-view-panel';
-import { ComposerRunOptions } from '../composer-run-options';
 import { ThreadInputProvider } from '@/domains/conversation';
-import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
-import { DatasetSaveProvider } from '@/lib/ai-ui/context/dataset-save-context';
+import { AgentRunActions } from '@/domains/run-options/components/agent-run-actions';
 
 interface AgentPlaygroundTestChatProps {
   agentId: string;
@@ -75,11 +75,15 @@ export function AgentPlaygroundTestChat({
   // Generate a stable ephemeral thread ID for test chat sessions
   // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: regenerate thread ID when agent changes
   const testThreadId = useMemo(() => uuid(), [agentId]);
-  const mergedRequestContext = useMergedRequestContext();
+  const mergedRequestContext = useEntityRequestContext('agent', agentId)[0];
   const hasRequestContext = Object.keys(mergedRequestContext).length > 0;
 
   const editFormCtx = useOptionalAgentEditFormContext();
-  const { data: agent } = useAgent(agentId);
+  const { data: agent } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
   return (
@@ -113,7 +117,7 @@ export function AgentPlaygroundTestChat({
                       memory={hasMemory}
                       modelList={agent?.modelList}
                       isNewThread
-                      runOptionsSlot={<ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />}
+                      runOptionsSlot={<AgentRunActions agentId={agentId} />}
                     />
                   </div>
                 </div>

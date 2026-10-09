@@ -1,11 +1,11 @@
 import { DisabledFeatureButton } from '@mastra/playground-ui/components/DisabledFeatureButton';
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { TRACE_PROPERTY_FILTER_PARAM_BY_FIELD } from '@mastra/playground-ui/domains/traces/trace-filters';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { GitBranch, MessageSquare } from 'lucide-react';
-
-import { useLinkComponent } from '@/lib/framework';
 
 /** Tabs that render a pill in the bar. Routes without a pill pass `'none'`. */
 export type AgentPageTab = 'chat' | 'versions' | 'traces';
@@ -14,6 +14,8 @@ interface AgentPageTabsProps {
   agentId: string;
   /** `'none'` (or any non-tab value) leaves the bar unhighlighted. */
   activeTab: AgentPageTab | 'none';
+  /** The open conversation. Chat returns to it and Traces opens filtered to it. */
+  threadId?: string;
   showPlayground?: boolean;
   showObservability?: boolean;
 }
@@ -32,15 +34,18 @@ function AgentTab({ value, icon, label }: { value: AgentPageTab; icon: React.Rea
 export function AgentPageTabs({
   agentId,
   activeTab,
+  threadId,
   showPlayground = false,
   showObservability = false,
 }: AgentPageTabsProps) {
   const { navigate } = useLinkComponent();
 
   const hrefMap: Record<AgentPageTab, string> = {
-    chat: `/agents/${agentId}/threads/new`,
+    chat: `/agents/${agentId}/threads/${threadId ?? 'new'}`,
     versions: `/agents/${agentId}/editor`,
-    traces: `/agents/${agentId}/traces`,
+    traces: threadId
+      ? `/agents/${agentId}/traces?${new URLSearchParams({ [TRACE_PROPERTY_FILTER_PARAM_BY_FIELD.threadId]: threadId })}`
+      : `/agents/${agentId}/traces`,
   };
 
   const handleTabChange = (value: AgentPageTab | 'none') => {

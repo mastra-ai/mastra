@@ -18,9 +18,15 @@ import type { LucideIcon } from 'lucide-react';
 
 export interface ToolPresentation {
   icon: LucideIcon;
+  /** Stable name of the kind of tool, e.g. "Run"; also groups calls by kind. */
   label: string;
   /** Salient argument shown next to the label: command, path, pattern… */
   detail?: string;
+  /**
+   * What a command does, in the agent's words. `ActivityHeadline` shows it alone in place of
+   * label and detail; both stay set for consumers that render them directly.
+   */
+  description?: string;
   /** Shell command, when the tool is terminal-style. Drives the expanded body. */
   command?: string;
 }
@@ -106,7 +112,10 @@ export function presentTool(toolName: string, args: unknown): ToolPresentation {
   const detail = style.detailKeys ? firstStringArg(args, style.detailKeys) : undefined;
   if (!detail) return { icon: style.icon, label: style.label };
   if (!style.isCommand) return { icon: style.icon, label: style.label, detail };
-  return { icon: style.icon, label: style.label, detail: withoutCdPrefix(detail), command: detail };
+  // Workspaces with `requireDescription` have the agent say what a command does; that reads better
+  // on a one-line row than "Run" and the command, which stays in the expanded body.
+  const description = stringArg(args, 'description')?.replace(/\s+/g, ' ').trim() || undefined;
+  return { icon: style.icon, label: style.label, detail: withoutCdPrefix(detail), description, command: detail };
 }
 
 export type ToolEdit = { path?: string } & ({ oldText: string; newText: string } | { content: string });
@@ -125,6 +134,26 @@ export function toolEdit(toolName: string, args: unknown): ToolEdit | undefined 
   const content = stringField(args, 'content');
   if (/write_file|create_file/i.test(toolName) && content !== undefined) return { path, content };
   return undefined;
+}
+
+export interface ToolArgumentsInput {
+  toolName: string;
+  args?: unknown;
+  argsText?: string;
+  hideArguments?: boolean;
+}
+
+function isEmptyObject(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && Object.keys(value).length === 0;
+}
+
+export function visibleToolArgumentsText({ args, argsText, hideArguments }: ToolArgumentsInput): string | undefined {
+  if (hideArguments || isEmptyObject(args)) return undefined;
+  return args === undefined ? argsText : stringifyToolValue(args);
+}
+
+export function hasToolArguments(input: ToolArgumentsInput): boolean {
+  return Boolean(toolEdit(input.toolName, input.args) || visibleToolArgumentsText(input));
 }
 
 /** Task tools draw in the docked task list, never as a transcript row. */

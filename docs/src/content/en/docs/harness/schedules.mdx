@@ -10,12 +10,6 @@ packages:
 
 **Added in:** `@mastra/core@1.50.0`
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
-
 A schedule runs an agent on a cron cadence. On each fire, Mastra sends a prompt either as a [signal](/docs/harness/signals) into a thread or as a threadless [`agent.generate()`](/reference/agents/generate) run. Use schedules for recurring work such as daily summaries and periodic checks, including scheduled nudges into a conversation.
 
 Schedules are persisted, so they survive restarts and redeploys. Manage them at runtime through [`mastra.schedules`](/reference/schedules/overview), the canonical create, read, update, and delete (CRUD) surface. The same surface also manages [workflow schedules](/docs/workflows/scheduled-workflows) (pass `workflowId` instead of `agentId` to schedule a workflow).
@@ -85,7 +79,7 @@ Without a `threadId`, each fire is an isolated `agent.generate()` run. Nothing i
 
 ### Threaded
 
-With a `threadId`, the schedule sends a [signal](/docs/harness/signals) into that thread, so the prompt joins the agent's conversation. Threaded schedules require a `resourceId` alongside the `threadId`.
+With a `threadId`, the schedule sends a [signal](/docs/harness/signals) into that thread. The prompt joins the agent's conversation. Threaded schedules require a `resourceId` alongside the `threadId`.
 
 ```typescript title="src/mastra/schedules.ts"
 await mastra.schedules.create({
@@ -207,6 +201,33 @@ The hooks are:
 Every hook context includes `agentId` (the agent the schedule fired for) alongside `schedule` and `trigger`.
 
 Hook exceptions are caught and logged. They never re-route the worker or trigger another hook.
+
+## Recurring prompts in Mastra Code
+
+Mastra Code offers the `/schedules` command, which attaches a recurring prompt to the current conversation thread. Unlike `mastra.schedules`, these schedules live only in the Mastra Code process that created them: nothing is written to storage, and each fire is sent to the thread with `agent.sendSignal()` directly.
+
+Run `/schedules` to open a menu with **Create schedule** and one row per schedule on the current thread. Creating a schedule walks through these steps:
+
+1. Choose what each fire sends: a **Prompt**, a **Prompt file** that's re-read on every fire, or a **Script** that runs on every fire.
+1. Enter the prompt text or the file path. Paths resolve from the project root. For a script, you can add a prompt that's sent after the script output.
+1. Pick a cadence from `1m` to `1d`, or type one such as `20m` or `3h`. Minute steps must divide an hour and hour steps must divide a day.
+1. Confirm.
+
+Scripts run from the project root with a 60-second timeout, and their stdout, stderr, and exit code become the prompt. The extra prompt is never passed to the script.
+
+Selecting an existing schedule offers **Run now**, **Pause** or **Resume**, and **Delete**. **Run now** fires the schedule once without changing its cadence, works on paused schedules, and is skipped while a fire of the same schedule is still running.
+
+Each fire arrives on the thread as a `user`-type signal and shows in the transcript as a `schedule` entry with the schedule's id, cadence, source, and script exit status. If the thread is busy, the running agent receives the prompt as its next input, the same way a message you type mid-run does. If the thread is idle, it wakes and runs. Schedules fire on any thread in the process, not only the one focused in the terminal. After `/new`, a new schedule binds to the new thread.
+
+Things to know:
+
+- **Session scoped.** Schedules exist only in the Mastra Code process that created them and stop when it exits. Other Mastra Code processes sharing the same database never see or fire them.
+- **Clock boundaries.** `5m` fires at :00, :05, :10 and so on, not five minutes after creation, and `1d` fires at local midnight. Hour and day cadences follow wall-clock time across daylight saving changes, like cron. A fire missed while the machine slept, or one whose timer runs more than a minute late, is skipped, and the schedule resumes at the next boundary.
+- **Overlapping fires are skipped.** If a script is still running when the next boundary arrives, that fire doesn't run.
+
+### Agent schedule tools
+
+Turning on **Experimental schedule tools** in `/settings` (restart required) gives the agent tools that manage the same schedules: `schedule_create`, `schedule_list`, `schedule_update` (pause or delete), `schedule_resume`, and `schedule_run`. The tools only see and change schedules on the thread of the run that calls them. Because a schedule can run a script on every fire, `schedule_create`, `schedule_resume`, and `schedule_run` need the same approval as running a shell command unless YOLO mode is on. Schedules the agent creates are marked `created by agent` in the transcript.
 
 ## Related
 

@@ -20,6 +20,38 @@ export const Default: Story = {
   },
 };
 
+export const Labeled: Story = {
+  args: {
+    value: minutesAgo(60 * 12 + 4),
+    label: 'Deployed',
+  },
+};
+
+export const InText: Story = {
+  render: () => (
+    <div className="grid gap-2 text-caption text-muted-foreground">
+      {(
+        [
+          ['Deployed', 0.02],
+          ['Deployed', 0.5],
+          ['Updated', 3],
+          ['Deployed', 60],
+          ['Last run', 60 * 11],
+          ['Created', 60 * 26],
+          ['Deployed', 60 * 24 * 6],
+          ['Deployed', 60 * 24 * 9],
+          ['Created', 60 * 24 * 400],
+          ['Expires', -5],
+        ] as const
+      ).map(([label, minutes]) => (
+        <span key={minutes}>
+          {label} <RelativeTimestamp value={minutesAgo(minutes)} />
+        </span>
+      ))}
+    </div>
+  ),
+};
+
 export const Scale: Story = {
   render: () => (
     <div className="flex gap-6 text-body-sm">

@@ -267,6 +267,9 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           this.opts.observabilityContext,
           undefined,
           { resourceId: this.opts.resourceId, trigger: this.opts.trigger },
+          this.opts.record.observedTimezone,
+          this.opts.agent,
+          this.opts.currentModel,
         );
       }),
     );
@@ -314,7 +317,10 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         failures: result.extractionFailures,
         previousValues,
         rawObservations: result.observations,
-        recentMessages: formatMessagesForObserver(threadMessages, { maxPartLength: 500 }),
+        recentMessages: formatMessagesForObserver(threadMessages, {
+          maxPartLength: 500,
+          timeZone: this.opts.record.observedTimezone,
+        }),
         threadId,
         resourceId: this.resourceId,
         mainAgent: this.opts.agent,
@@ -335,6 +341,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
         writer: this.opts.writer,
         abortSignal: this.opts.abortSignal,
         requestContext: this.opts.requestContext,
+        observationCommitted: this.observationCommitted,
       });
       this.observationResults.push({
         threadId,
@@ -411,7 +418,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     };
   }
 
-  async persist(processed: ProcessedObservation) {
+  async persist(processed: ProcessedObservation): Promise<boolean> {
     const { record, resourceId } = this.opts;
     const threadUpdateMarkers: Array<ReturnType<typeof createThreadUpdateMarker>> = [];
 
@@ -478,10 +485,12 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
             threadId,
             resourceId,
             this.getMaxMessageTimestamp(threadMessages),
+            record.id,
           ),
         ),
       );
     }
+    return true;
   }
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {
@@ -521,6 +530,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           startedAt: this.startedAt,
           tokensAttempted,
           error,
+          failurePolicy: this.observationConfig.failurePolicy,
           recordId: this.opts.record.id,
           threadId,
         });

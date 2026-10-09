@@ -34,7 +34,8 @@ function setup(stored: () => MastraDBMessage[]) {
       getThreadById: async ({ threadId }: { threadId: string }) => ({ id: threadId }),
       recall: async (args: unknown) => {
         recalls.push(args);
-        return { messages: [...stored()].reverse(), hasMore: false };
+        // Like Memory.recall(): newest page, returned oldest first.
+        return { messages: stored(), hasMore: false };
       },
     }),
   } as unknown as Agent<any, any, any, any>;
@@ -74,7 +75,8 @@ describe('subscribeToThread withInitialHistory', () => {
       await run.part({ type: 'finish', payload: {} });
       await run.completed();
     }
-    stored = [assistantMessage('m1', new Date()), assistantMessage('m2', new Date())];
+    const now = Date.now();
+    stored = [assistantMessage('m1', new Date(now)), assistantMessage('m2', new Date(now + 1))];
 
     const { subscription, collected, consumed } = await subscribe();
     await nextTicks(10);
@@ -104,6 +106,31 @@ describe('subscribeToThread withInitialHistory', () => {
     await nextTicks(10);
 
     expect(collected.map(p => p.type)).toEqual(['thread-history', 'tool-call-approval']);
+    subscription.unsubscribe();
+    await consumed;
+  });
+
+  it('drops a suspension left on an older message once a newer assistant message exists', async () => {
+    let stored: MastraDBMessage[] = [];
+    const { emitRun, subscribe } = setup(() => stored);
+    const run = emitRun(runId, streamId);
+    await run.registered();
+    await run.part({ type: 'start', payload: { messageId: 'm1' } });
+    await run.part({ type: 'tool-call-suspended', payload: { toolCallId: 'tc-1', toolName: 't', suspendPayload: {} } });
+    await run.part({ type: 'finish', payload: {} });
+    await run.completed();
+    const now = Date.now();
+    stored = [
+      assistantMessage('m1', new Date(now), {
+        suspendedTools: { t: { toolCallId: 'tc-1', toolName: 't', args: {} } },
+      }),
+      assistantMessage('m2', new Date(now + 1)),
+    ];
+
+    const { subscription, collected, consumed } = await subscribe();
+    await nextTicks(10);
+
+    expect(collected.map(p => p.type)).toEqual(['thread-history']);
     subscription.unsubscribe();
     await consumed;
   });

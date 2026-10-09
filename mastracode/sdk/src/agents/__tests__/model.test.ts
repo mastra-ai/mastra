@@ -40,7 +40,7 @@ const mockAnthropicOAuthFetch = vi.hoisted(() => vi.fn());
 vi.mock('../../providers/claude-max.js', () => ({
   opencodeClaudeMaxProvider: vi.fn(() => ({ __provider: 'claude-max-oauth' })),
   claudeCodeMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
-  promptCacheMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
+  createPromptCacheMiddleware: vi.fn(() => ({ specificationVersion: 'v3', transformParams: vi.fn() })),
   buildAnthropicOAuthFetch: vi.fn(() => mockAnthropicOAuthFetch),
   createAnthropicThinkingMiddleware: vi.fn(() => undefined),
 }));
@@ -211,7 +211,11 @@ import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models.js';
 import { ProviderAuthRequiredError } from '../../auth/provider-auth-error.js';
-import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
+import {
+  opencodeClaudeMaxProvider,
+  buildAnthropicOAuthFetch,
+  createPromptCacheMiddleware,
+} from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import { setCredentialStoreProvider } from '../credential-resolver.js';
 import {
@@ -411,6 +415,7 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', {
         headers: undefined,
         authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
       });
     });
 
@@ -432,6 +437,7 @@ describe('resolveModel', () => {
           'x-resource-id': 'resource-456',
         },
         authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
       });
     });
 
@@ -448,6 +454,71 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-opus-4-6', {
         headers: undefined,
         authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
+      });
+    });
+
+    describe('anthropicPromptCacheScope: system (observational memory calls)', () => {
+      const oauthCred = () => ({
+        type: 'oauth',
+        access: 'oauth-access-token',
+        refresh: 'oauth-refresh-token',
+        expires: Date.now() + 60_000,
+      });
+
+      it('reaches the Claude Max provider on the direct OAuth route', () => {
+        mockAuthStorageInstance.get.mockReturnValue(oauthCred());
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        const [, args] = opencodeClaudeMaxProvider.mock.calls.at(-1)!;
+        expect(args).toMatchObject({ promptCacheScope: 'system' });
+      });
+
+      it('reaches the Claude Max provider when no credential is stored', () => {
+        mockAuthStorageInstance.get.mockReturnValue(undefined);
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        const [, args] = opencodeClaudeMaxProvider.mock.calls.at(-1)!;
+        expect(args).toMatchObject({ promptCacheScope: 'system' });
+      });
+
+      it('reaches the prompt-cache middleware on the stored API-key route', () => {
+        mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key-456' });
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        expect(createPromptCacheMiddleware).toHaveBeenCalledTimes(1);
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('system');
+      });
+
+      it('reaches the prompt-cache middleware on the env API-key route', () => {
+        process.env.ANTHROPIC_API_KEY = 'sk-test-key-123';
+
+        resolveModel('anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        expect(createPromptCacheMiddleware).toHaveBeenCalledTimes(1);
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('system');
+      });
+
+      it('reaches the prompt-cache middleware on the OAuth route through the Mastra gateway', () => {
+        mockAuthStorageInstance.get.mockReturnValue(oauthCred());
+        process.env['MASTRA_GATEWAY_API_KEY'] = 'msk_env_key';
+
+        resolveModel('mastra/anthropic/claude-haiku-4-5', { anthropicPromptCacheScope: 'system' });
+
+        expect(opencodeClaudeMaxProvider).not.toHaveBeenCalled();
+        expect(createPromptCacheMiddleware).toHaveBeenCalledTimes(1);
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('system');
+      });
+
+      it('defaults to the conversation scope when the option is omitted', () => {
+        mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-stored-key-456' });
+
+        resolveModel('anthropic/claude-sonnet-4-5');
+
+        expect(createPromptCacheMiddleware).toHaveBeenCalledWith('conversation');
       });
     });
 
@@ -775,6 +846,44 @@ describe('resolveModel', () => {
         'x-resource-id': 'resource-456',
       });
     });
+
+    function tenantRequest(allowsDeploymentCredentials?: (provider: string) => boolean) {
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        allowsDeploymentCredentials,
+        reload() {},
+        get: () => undefined,
+        getStoredApiKey: () => undefined,
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      return requestContext;
+    }
+
+    it('refuses Bedrock for a signed-in Factory tenant unless the deployment opted in', () => {
+      const requestContext = tenantRequest();
+
+      expect(() => resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, { requestContext })).toThrow(
+        ProviderAuthRequiredError,
+      );
+      expect(() => resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, { requestContext })).toThrow(
+        'Amazon Bedrock is not enabled for this Factory deployment.',
+      );
+      expect(createAmazonBedrock).not.toHaveBeenCalled();
+    });
+
+    it('resolves Bedrock for a signed-in Factory tenant when the deployment opted in', () => {
+      const requestContext = tenantRequest(provider => provider === 'amazon-bedrock');
+
+      const result = resolveModel(MODEL_TOKENS.__GATEWAY_BEDROCK_MODEL_OPUS__, { requestContext }) as Record<
+        string,
+        unknown
+      >;
+
+      expect(result.__provider).toBe('amazon-bedrock');
+      expect(result.credentialProvider).toBe(mockCredentialProvider);
+    });
   });
 
   describe('mastra gateway enabled (gateway API key stored)', () => {
@@ -1025,6 +1134,7 @@ describe('resolveModel', () => {
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4', {
         headers: undefined,
         authStorage: scopedAuthStorage(),
+        promptCacheScope: 'conversation',
       });
       delete process.env['MASTRA_GATEWAY_API_KEY'];
     });

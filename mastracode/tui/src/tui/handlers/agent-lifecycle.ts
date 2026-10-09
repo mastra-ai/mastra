@@ -56,8 +56,16 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   // JudgeDisplayComponent *after* the new streaming text. Without this the
   // reused component stays at the position of the previous turn's evaluation,
   // causing the new turn's text to visually overwrite the old text + judge.
-  state.activeGoalJudge = undefined;
+  // A final goal chunk already clears this reference, so a judge still active
+  // here never got a verdict (e.g. the objective changed mid-evaluation) and
+  // would otherwise stay stuck on "evaluating…".
+  if (state.activeGoalJudge) {
+    removeJudgeComponent(state, state.activeGoalJudge.component);
+    state.activeGoalJudge = undefined;
+  }
   state.followUpComponents = [];
+  for (const tool of state.pendingTools.values()) tool.stopLiveUpdates?.();
+  state.idleCounter?.setThinking(false);
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
@@ -67,62 +75,26 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
   drainQueuedAction(ctx);
 }
 
-function drainQueuedAction(ctx: EventHandlerContext): boolean {
+function drainQueuedAction(ctx: EventHandlerContext): void {
   const { state } = ctx;
 
   // Drain queued follow-up actions once all controller-level follow-ups are done.
   // Each queued action that starts a new agent operation will eventually trigger
   // handleAgentEnd again, which drains the next FIFO item.
-  if (state.session.displayState.get().queuedFollowUps > 0) {
-    return true;
+  if (state.session.displayState.get().queuedFollowUps > 0 || state.pendingQueueSubmissions > 0) {
+    return;
   }
 
   // User-queued actions preempt the goal loop — if the user typed something
   // while the agent was running, process that first.
-  const nextAction = state.pendingQueuedActions.shift();
-  ctx.updateStatusLine();
-  if (!nextAction) {
-    return false;
-  }
-
-  if (nextAction === 'message') {
-    const nextMessage = state.pendingFollowUpMessages.shift();
-    if (!nextMessage) {
-      return true;
-    }
-
-    ctx.addUserMessage({
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: {
-        format: 2,
-        parts: [
-          { type: 'text', text: nextMessage.content },
-          ...(nextMessage.images?.map(img => ({
-            type: 'file' as const,
-            data: img.data,
-            mimeType: img.mimeType,
-          })) ?? []),
-        ],
-      },
-      createdAt: new Date(),
-    });
-    // Track the text so the subscription echo is suppressed in addUserMessage.
-    const key = nextMessage.content.trim();
-    const counts = (state.firedQueuedMessageTexts ??= new Map<string, number>());
-    counts.set(key, (counts.get(key) ?? 0) + 1);
-    flushRender(state);
-    ctx.fireMessage(nextMessage.content, nextMessage.images);
-    return true;
-  }
-
   const nextCommand = state.pendingSlashCommands.shift();
   const pendingMessageId = state.pendingSlashCommandMessageIds.shift();
+  ctx.updateStatusLine();
   if (!nextCommand) {
     if (pendingMessageId) {
       removePendingUserMessage(state, pendingMessageId);
     }
-    return true;
+    return;
   }
 
   if (pendingMessageId) {
@@ -131,7 +103,14 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
   ctx.handleSlashCommand(nextCommand).catch(error => {
     ctx.showError(error instanceof Error ? error.message : 'Queued slash command failed');
   });
-  return true;
+}
+
+// Aborted and failed runs keep queued slash commands. If no follow-up run is
+// coming (no pending sent or queued messages), drain them now; otherwise the
+// follow-up run's agent_end drains them.
+export function drainQueuedActionIfIdle(ctx: EventHandlerContext): void {
+  if (ctx.state.session.stream.isActive()) return;
+  drainQueuedAction(ctx);
 }
 
 export function handleAgentAborted(ctx: EventHandlerContext): void {
@@ -170,16 +149,16 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   }
 
   state.followUpComponents = [];
-  state.pendingFollowUpMessages = [];
-  state.pendingQueuedActions = [];
-  state.pendingSlashCommands = [];
-  state.pendingSlashCommandMessageIds = [];
-  clearPendingUserMessages(state);
+  clearPendingUserMessages(state, state.pendingSlashCommandMessageIds);
+  for (const tool of state.pendingTools.values()) tool.stopLiveUpdates?.();
+  state.idleCounter?.setThinking(false);
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
   ctx.updateStatusLine();
   flushRender(state);
+
+  drainQueuedActionIfIdle(ctx);
 }
 
 export function handleAgentError(ctx: EventHandlerContext): void {
@@ -197,16 +176,16 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   }
 
   state.followUpComponents = [];
-  state.pendingFollowUpMessages = [];
-  state.pendingQueuedActions = [];
-  state.pendingSlashCommands = [];
-  state.pendingSlashCommandMessageIds = [];
-  clearPendingUserMessages(state);
+  clearPendingUserMessages(state, state.pendingSlashCommandMessageIds);
+  for (const tool of state.pendingTools.values()) tool.stopLiveUpdates?.();
+  state.idleCounter?.setThinking(false);
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
   pruneChatContainer(state);
   ctx.updateStatusLine();
   flushRender(state);
+
+  drainQueuedActionIfIdle(ctx);
 }
 
 // =============================================================================
@@ -277,7 +256,11 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
 
   // Mirror the loop's progress into the synchronous adapter view so the status
   // line and modal reflect the latest run count and lifecycle status.
-  state.goalManager.applyEvaluation({ runsUsed: payload.iteration, status: payload.status });
+  state.goalManager.applyEvaluation({
+    runsUsed: payload.iteration,
+    status: payload.status,
+    ...(payload.pausedReason ? { pausedReason: payload.pausedReason } : {}),
+  });
 
   ctx.updateStatusLine();
   flushRender(state);
@@ -287,16 +270,4 @@ export function handleGoalEvaluation(ctx: EventHandlerContext, payload: GoalEval
   // continuation creates a fresh display after the next assistant output instead
   // of updating the previous turn's component in place.
   state.activeGoalJudge = undefined;
-
-  if (payload.status === 'done') {
-    const goal = state.goalManager.getGoal();
-    if (goal && goal.id === state.planStartedGoalId) {
-      const goalId = state.planStartedGoalId;
-      state.planStartedGoalId = undefined;
-      state.session.mode.switch({ modeId: 'plan' }).catch(error => {
-        ctx.showError(`Failed to switch to Plan mode: ${error instanceof Error ? error.message : String(error)}`);
-        state.planStartedGoalId = goalId;
-      });
-    }
-  }
 }

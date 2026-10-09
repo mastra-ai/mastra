@@ -17,7 +17,9 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
-  createSandbox: vi.fn((ctx: { sessionId: string }) => {
+  /** When false, the stub models a provider with no separate physical id (undefined `sandboxId`). */
+  physicalId: true,
+  createSandbox: vi.fn((ctx: { sessionId: string; sandboxId?: string }) => {
     // Models a well-behaved provider: lazy start via ensureRunning() on the
     // first command/info call (coalesced, failures never latch), the hook
     // installed through setOnStart invoked inside start() with outcome
@@ -26,6 +28,10 @@ const mocks = vi.hoisted(() => ({
     let onStart: ((hook: { sandbox: unknown; outcome?: 'created' | 'connected' }) => Promise<void>) | undefined;
     const sandbox: any = {
       id: `sbx-${ctx.sessionId}`,
+      // Physical, reattachable VM id — distinct from the logical `id` — as a
+      // real provider (e.g. Railway) exposes. Reflects the reattach id when the
+      // callback is given one, else the freshly provisioned VM id.
+      sandboxId: mocks.physicalId ? (ctx.sandboxId ?? `vm-${ctx.sessionId}`) : undefined,
       provider: mocks.localRoot ? 'local' : 'stub',
       status: 'pending',
       ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
@@ -88,8 +94,17 @@ const mocks = vi.hoisted(() => ({
   /** Run-binding role resolved for the session; null = no binding found. */
   runBindingRole: null as string | null,
   runBindingStatus: 'active' as 'active' | 'revoked',
-  findRunBindingBySession: vi.fn(async () =>
-    mocks.runBindingRole ? { role: mocks.runBindingRole, status: mocks.runBindingStatus, orgId: 'org-1' } : null,
+  runBindingThreadId: null as string | null,
+  findActiveRunBindingForSession: vi.fn(async ({ sessionId }: { sessionId: string }) =>
+    mocks.runBindingRole
+      ? {
+          role: mocks.runBindingRole,
+          status: mocks.runBindingStatus,
+          orgId: 'org-1',
+          threadId: mocks.runBindingThreadId ?? sessionId,
+          resourceId: sessionId,
+        }
+      : null,
   ),
 }));
 
@@ -106,7 +121,8 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
 }));
 
 import { MaterializeError, SetupCommandError } from './integrations/github/sandbox.js';
-import { injectGithubToken } from './integrations/github/token-refresh.js';
+import { createGithubSubscriptionTools } from './integrations/github/session-subscriptions.js';
+import { requireGithubTokenInjector } from './integrations/github/token-refresh.js';
 import {
   __clearSessionSandboxesForTests,
   evictSessionSandbox,
@@ -116,7 +132,9 @@ import {
 import {
   createWorkspaceFactory,
   FactorySkillSource,
+  REVIEW_ONLY_FACTORY_SKILLS,
   FactoryWorkspaceRegistry,
+  rescanFactorySkills,
   resolveLocalFactorySkillsPath,
 } from './workspace.js';
 
@@ -162,7 +180,8 @@ afterEach(async () => {
   mocks.githubReviewerPat = null;
   mocks.runBindingRole = null;
   mocks.runBindingStatus = 'active';
-  mocks.findRunBindingBySession.mockClear();
+  mocks.runBindingThreadId = null;
+  mocks.findActiveRunBindingForSession.mockClear();
 });
 
 function createRequestContext(projectPath: string) {
@@ -245,6 +264,7 @@ function addSession(overrides: Record<string, unknown> = {}) {
     orgId: 'org-1',
     userId: 'user-1',
     projectRepositoryId: 'project-1',
+    visibility: 'private',
     branch: 'feature-a',
     baseBranch: 'main',
     sandboxId: null,
@@ -305,7 +325,13 @@ function fakeGithubIntegration() {
             : null;
         }),
       },
-      connections: { get: vi.fn(async () => ({ id: 'connection-1', installationId: 'installation-1' })) },
+      connections: {
+        get: vi.fn(async () => ({
+          id: 'connection-1',
+          installationId: 'installation-1',
+          factoryProjectId: 'project-1',
+        })),
+      },
       repositories: {
         get: vi.fn(async () => {
           const project = mocks.projects[0];
@@ -346,7 +372,7 @@ describe('bundled Factory skill assets', () => {
       expect(instructions).toContain('source_control_get_change_request');
       expect(instructions).toContain('source_control_list_change_request_reviews');
       expect(instructions).toContain('source_control_review_change_request');
-      expect(instructions).toContain('factory_transition_work_item');
+      expect(instructions).toContain('factory_record_review_verdict');
       expect(instructions).not.toMatch(/`gh pr |`glab mr /);
     }
   });
@@ -361,10 +387,10 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('.artifacts/factory-triage/issue-<number>.md');
     expect(plan).toContain('Write it to `.artifacts/plans/issue-<number>.md`');
     expect(plan).toContain('include the same plan in the conversation');
-    expect(review).toContain('.artifacts/factory-review/pr-<number>.md');
+    expect(review).toContain('.artifacts/factory-review/pr-<number>-<headSha>.md');
     expect(review).toContain('.artifacts/factory-review/follow-up-pr-<number>.md');
     expect(review).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
-    expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>.md');
+    expect(rereview).toContain('.artifacts/factory-rereview/pr-<number>-<headSha>.md');
     expect(rereview).toContain('.artifacts/factory-rereview/follow-up-pr-<number>.md');
     expect(rereview).toContain('Review runtime: <model>, reasoning setting: <reasoning>.');
     for (const instructions of [review, rereview]) {
@@ -392,8 +418,11 @@ describe('bundled Factory skill assets', () => {
 
     for (const skillName of ['factory-triage', 'factory-plan', 'factory-review', 'factory-rereview']) {
       const prose = await read(skillName);
-      // Terminal batched handoff + governed transition, never a mid-run human gate.
-      expect(prose).toContain('factory_transition_work_item');
+      // Terminal batched handoff + governed terminal call, never a mid-run human gate.
+      // Review passes end by recording the verdict; the card stays in Reviewing.
+      expect(prose).toContain(
+        skillName.includes('review') ? 'factory_record_review_verdict' : 'factory_transition_work_item',
+      );
       expect(prose).toContain('as an assumption');
       expect(prose).toContain('Never wait for or solicit human input mid-run');
       expect(prose).not.toContain('ask_user');
@@ -482,6 +511,11 @@ describe('bundled Factory skill assets', () => {
     expect(review).toContain('gh pr review <number> --approve --body-file');
     expect(review).toContain('gh pr review <number> --request-changes --body-file');
     expect(review).toContain('gh pr comment <number> --body-file');
+    // A push can land mid-review; publishing must re-check the head first.
+    for (const skill of [review, await read('factory-rereview')]) {
+      expect(skill).toContain('**The head must not have moved.**');
+      expect(skill).toContain('If the head moved, do not publish');
+    }
     // Existing review signal (bot and human) must be collected from every
     // source — submitted reviews, unresolved inline threads with their
     // metadata, and top-level comments — and dispositioned, and a confirmed
@@ -511,7 +545,8 @@ describe('bundled Factory skill assets', () => {
     expect(review).toContain('Never resolve the conflicts yourself');
     // Terminal ordering: publish the verdict and transition before the final
     // conversation message, so the pass can't stop early with an unpublished review.
-    expect(review).toContain('post the handoff as your final conversation message');
+    expect(review).toContain('post the **session handoff**');
+    expect(review).toContain('as your final conversation message');
     // Rigor: approval requires every gate affirmatively demonstrated, and the
     // reviewer waits for pending bot reviews before forming a verdict.
     expect(review).toContain('Approval gates');
@@ -569,11 +604,12 @@ describe('bundled Factory skill assets', () => {
     // publish the verdict on the PR, request the transition, and only then send
     // the final conversation message.
     inOrder(
-      "don't send it to the conversation yet",
+      "Don't send either to the conversation yet",
       'gh pr review <number> --approve --body-file',
       'gh pr review <number> --request-changes --body-file',
-      'Then make your terminal `factory_transition_work_item` call',
-      'post the handoff as your final conversation message',
+      'Then make your terminal `factory_record_review_verdict` call',
+      'post the **session handoff**',
+      'as your final conversation message',
     );
 
     // Every approval gate lives inside the gates block, while issue context and
@@ -623,7 +659,7 @@ describe('bundled Factory skill assets', () => {
     // qualify as follow-up work — both rules inside the follow-up procedure.
     const followUps = section(
       'Non-blocking follow-ups become a PR, not homework',
-      'Then make your terminal `factory_transition_work_item` call',
+      'Then make your terminal `factory_record_review_verdict` call',
     );
     expect(followUps).toContain('Never mix blocking findings into a follow-up PR');
     expect(followUps).toContain(
@@ -722,7 +758,7 @@ describe('bundled Factory skill assets', () => {
     expect(verdict).toContain('The verdict and the requests must tell the same story');
 
     // The handoff carries the approach judgment and unhedged requests.
-    const handoff = section('## Phase 6: Handoff & Transition', '## Behavior Rules');
+    const handoff = section('## Phase 6: Handoff & Verdict', '## Behavior Rules');
     expect(handoff).toContain('- **Approach**');
     expect(handoff).toContain('imperative and present tense');
     expect(handoff).toContain('No softened requests');
@@ -894,7 +930,7 @@ describe('bundled Factory skill assets', () => {
     expect(gates).toContain('neither is an approval gate');
     expect(gates).toContain('If any gate fails, the verdict is request changes');
 
-    const handoff = section('## Phase 7: Handoff & Transition', '## Behavior Rules');
+    const handoff = section('## Phase 7: Handoff & Verdict', '## Behavior Rules');
     expect(handoff).toContain('- **Issue and intent**');
     expect(handoff).toContain('including base-versus-current-head evidence for affected behavior-changing claims');
     expect(handoff).toContain('prior-head-versus-current-head evidence for push regressions');
@@ -953,15 +989,17 @@ describe('GitHub session workspace preparation', () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), rootPrefix));
     tempDirs.push(root);
     mocks.localRoot = root;
+    const github = fakeGithubIntegration();
     const resolver = createWorkspaceFactory({
       sandbox: mocks.createSandbox as any,
-      github: fakeGithubIntegration() as any,
-      workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+      github: github as any,
+      workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
       ...(workspaceRegistry ? { workspaceRegistry } : {}),
     });
     return {
       root,
       resolver,
+      github,
       workspace: eager(resolver),
     };
   }
@@ -1064,6 +1102,30 @@ describe('GitHub session workspace preparation', () => {
     expect(mocks.setEnv).not.toHaveBeenCalled();
   });
 
+  it("persists the provider's physical sandboxId, not the logical session id", async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    // The bug persisted `target.id` (logical) as sandboxId; it must now persist
+    // the provider's physical VM id so resume can reattach to the same VM.
+    expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxId).toBe('vm-session-a');
+  });
+
+  it('forwards a persisted physical sandboxId back into the sandbox callback on resume', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', sandboxId: 'vm-original' });
+
+    await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    // The persisted physical id must reach the host callback so a physical-id
+    // reattach provider (e.g. Railway) resumes the original VM.
+    expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-original' }));
+  });
+
   it('skips the setup command on a VM that already carries the marker, but still materializes and checks out', async () => {
     const { workspace } = await createLocalFactory();
     addProject({ setupCommand: 'pnpm i' });
@@ -1100,10 +1162,325 @@ describe('GitHub session workspace preparation', () => {
     expect(exec2.mock.calls.filter(([command]) => String(command).includes("printf '%s' 'sha256:")).length).toBe(1);
   });
 
+  it('keeps GitHub refresh available after a setup command failure', async () => {
+    mocks.githubPat = 'ghp_original';
+    const { workspace, github } = await createLocalFactory();
+    addProject({ setupCommand: 'gh auth status' });
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+    mocks.runSetupCommand.mockRejectedValueOnce(new SetupCommandError('Setup command failed (exit 1)', 'setup-failed'));
+
+    await expect(workspace({ requestContext })).rejects.toThrow(/setup-failed|Setup command failed/);
+
+    mocks.githubPat = 'ghp_replaced';
+    const tool = createGithubSubscriptionTools(requestContext, integration).github_refresh_token!;
+    expect(await tool.execute!({}, {} as never)).toEqual({ refreshed: true });
+    expect(lastGhToken()).toBe('ghp_replaced');
+  });
+
+  it('persists the physical sandbox before surfacing a setup command failure', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm i' });
+    const session = addSession({ id: 'session-a' });
+    mocks.runSetupCommand.mockRejectedValueOnce(new SetupCommandError('Setup command failed (exit 1)', 'setup-failed'));
+
+    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
+      /setup-failed|Setup command failed/,
+    );
+    expect(session.sandboxId).toBe('vm-session-a');
+
+    __clearSessionSandboxesForTests();
+    mocks.createSandbox.mockClear();
+    const restarted = await createLocalFactory();
+    await restarted.workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-session-a' }));
+  });
+
+  it('persists no sandbox id for a provider without a physical one, so resume provisions by logical id', async () => {
+    mocks.physicalId = false;
+    try {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      const session = addSession({ id: 'session-a' });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      // The logical id must not be stored as a reattach hint: handed back as
+      // `sandboxId`, the provider would ask about a resource it never issued.
+      expect(session.sandboxId).toBeNull();
+
+      __clearSessionSandboxesForTests();
+      mocks.createSandbox.mockClear();
+      const restarted = await createLocalFactory();
+      await restarted.workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: undefined }));
+    } finally {
+      mocks.physicalId = true;
+    }
+  });
+
+  it('does not register GitHub refresh after an infrastructure setup failure', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const infrastructureError = new Error('sandbox transport failed');
+    mocks.materializeRepo.mockRejectedValueOnce(infrastructureError);
+
+    await expect(workspace({ requestContext })).rejects.toBe(infrastructureError);
+    expect(() => requireGithubTokenInjector(requestContext)).toThrow('active Factory sandbox workspace');
+  });
+
+  it('does not expose review skills to a work-role session workspace', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'work';
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+    expect(await workspace.skills?.get('factory-rereview')).toBeFalsy();
+    expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
+  it('exposes review skills to a review session before it has a live thread', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    // The controller builds a session's workspace from its creation-time
+    // context, which has no thread yet — the case a dispatcher kickoff hits.
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const controller = requestContext.get('controller') as Record<string, unknown>;
+    controller.threadId = null;
+    controller.getState = () => ({});
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect((await workspace.skills?.get('factory-review'))?.instructions).toBeTruthy();
+    expect(mocks.findActiveRunBindingForSession).toHaveBeenCalledWith(
+      expect.objectContaining({ orgId: 'org-1', sessionId: 'session-a' }),
+    );
+  });
+
+  it('hides review skills from a thread that does not own the session binding', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    // The session was handed to another item's run; this request still carries the old thread.
+    mocks.runBindingThreadId = 'other-thread';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+    expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
+  it('hides review skills when a thread that does not own the binding reuses a kickoff-built workspace', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    // A dispatcher kickoff builds the workspace before the session has a thread.
+    const kickoffContext = createGithubRequestContext('project-1', 'session-a');
+    const controller = kickoffContext.get('controller') as Record<string, unknown>;
+    controller.threadId = null;
+    controller.getState = () => ({});
+    const workspace = (await resolver({ requestContext: kickoffContext }))!;
+    await workspace.skills?.maybeRefresh();
+    expect((await workspace.skills?.get('factory-review'))?.instructions).toBeTruthy();
+
+    // A request on a thread the binding does not belong to reuses it.
+    mocks.runBindingThreadId = 'other-thread';
+    const reused = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(reused).toBe(workspace);
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+    expect((await workspace.skills?.list())?.map(skill => skill.name)).not.toContain('factory-review');
+  });
+
+  it('drops cached review skills when a reused workspace leaves the review role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const reviewWorkspace = (await resolver({ requestContext }))!;
+    await reviewWorkspace.skills?.maybeRefresh();
+    expect((await reviewWorkspace.skills?.get('factory-review'))?.instructions).toContain('# Factory Review');
+
+    mocks.runBindingRole = 'work';
+    const workWorkspace = (await resolver({ requestContext }))!;
+
+    expect(workWorkspace).toBe(reviewWorkspace);
+    expect(await workWorkspace.skills?.get('factory-review')).toBeFalsy();
+    expect(await workWorkspace.skills?.get('factory-rereview')).toBeFalsy();
+    expect((await workWorkspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
+  it('drops review skills a kickoff rescan loaded once the session leaves the review role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'work';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+    await resolver({ requestContext });
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+
+    // The review binding lands after the cache was built; kickoff rescans outside the resolver.
+    mocks.runBindingRole = 'review';
+    await rescanFactorySkills(workspace.skills!);
+    expect(await workspace.skills?.get('factory-review')).toBeTruthy();
+
+    mocks.runBindingRole = 'work';
+    const reused = (await resolver({ requestContext }))!;
+    expect(reused).toBe(workspace);
+    expect(await reused.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('does not let a reused workspace join a kickoff rescan started for the previous role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'work';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+
+    // The kickoff rescan scans for the review role. It pauses on its first role
+    // lookup; while it is paused the session leaves the review role and the
+    // workspace is reused.
+    let scanning = true;
+    let paused = false;
+    let released = false;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const lookup = mocks.findActiveRunBindingForSession.getMockImplementation()!;
+    mocks.findActiveRunBindingForSession.mockImplementation(async input => {
+      mocks.runBindingRole = scanning && !paused ? 'review' : 'work';
+      const binding = await lookup(input);
+      if (scanning && !paused && !released) {
+        paused = true;
+        await gate;
+        paused = false;
+      }
+      return binding;
+    });
+    const rescan = rescanFactorySkills(workspace.skills!);
+    void rescan.then(() => (scanning = false));
+    await vi.waitFor(() => expect(paused).toBe(true));
+
+    const reused = resolver({ requestContext });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    released = true;
+    release();
+    await rescan;
+    const result = await reused;
+    mocks.findActiveRunBindingForSession.mockImplementation(lookup);
+    mocks.runBindingRole = 'work';
+
+    expect(result).toBe(workspace);
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('does not return a reused workspace to concurrent callers before its skill rescan finishes', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+    expect(await workspace.skills?.get('factory-review')).toBeTruthy();
+    await resolver({ requestContext });
+
+    mocks.runBindingRole = 'work';
+    const readReview = async () => (await resolver({ requestContext }))!.skills?.get('factory-review');
+    const [first, second] = await Promise.all([readReview(), readReview()]);
+
+    expect(first).toBeFalsy();
+    expect(second).toBeFalsy();
+  });
+
+  it('does not hand a work-role caller the cache from an in-flight review rescan', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+    mocks.runBindingRole = 'work';
+    await resolver({ requestContext });
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+
+    const skills = workspace.skills!;
+    const originalRefresh = skills.refresh.bind(skills);
+    let scanned!: () => void;
+    const scanDone = new Promise<void>(resolve => (scanned = resolve));
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    vi.spyOn(skills, 'refresh').mockImplementationOnce(async () => {
+      await originalRefresh();
+      scanned();
+      await gate;
+    });
+
+    mocks.runBindingRole = 'review';
+    const reviewCaller = resolver({ requestContext });
+    await scanDone;
+    mocks.runBindingRole = 'work';
+    let workSettled = false;
+    const workCaller = resolver({ requestContext }).then(ws => {
+      workSettled = true;
+      return ws;
+    });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(workSettled).toBe(false);
+    release();
+
+    await reviewCaller;
+    expect(await (await workCaller)!.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('retries the skill rescan on the next reuse when a role-change refresh fails', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    const workspace = (await resolver({ requestContext }))!;
+    await workspace.skills?.maybeRefresh();
+    expect(await workspace.skills?.get('factory-review')).toBeTruthy();
+    await resolver({ requestContext });
+
+    mocks.runBindingRole = 'work';
+    vi.spyOn(workspace.skills!, 'refresh').mockRejectedValueOnce(new Error('rescan failed'));
+    await expect(resolver({ requestContext })).rejects.toThrow('rescan failed');
+
+    const retried = (await resolver({ requestContext }))!;
+    expect(await retried.skills?.get('factory-review')).toBeFalsy();
+  });
+
   it('resolves bundled Factory skills without waiting on sandbox materialization (kickoff path stays lazy)', async () => {
     const { resolver } = await createLocalFactory();
     addProject();
     addSession({ id: 'session-a' });
+    mocks.runBindingRole = 'review';
     // Resolution is fully lazy (no warm-up), and kickoff skill resolution
     // must never force materialization: provisioning never starts at all.
 
@@ -1568,7 +1945,7 @@ describe('GitHub session workspace preparation', () => {
       createWorkspaceFactory({
         sandbox: mocks.createSandbox as any,
         github: fakeGithubIntegration() as any,
-        workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+        workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
       }),
     );
   }
@@ -1732,7 +2109,7 @@ describe('GitHub session workspace preparation', () => {
     });
 
     expect(lastGhToken()).toBe('ghp_worker');
-    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
+    expect(() => requireGithubTokenInjector(reviewerContext)('stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
   it('keeps refresh authority with the current context across a sandbox reconnect', async () => {
@@ -1764,8 +2141,8 @@ describe('GitHub session workspace preparation', () => {
     const sandbox = mocks.createSandbox.mock.results[0]!.value;
     await sandbox.start();
 
-    expect(() => injectGithubToken(reviewerContext, 'fresh-reviewer-token')).not.toThrow();
-    expect(() => injectGithubToken(workerContext, 'stale-worker-token')).toThrow(/no longer matches/);
+    expect(() => requireGithubTokenInjector(reviewerContext)('fresh-reviewer-token')).not.toThrow();
+    expect(() => requireGithubTokenInjector(workerContext)('stale-worker-token')).toThrow(/no longer matches/);
   });
 
   it('keeps a same-role context usable across a sandbox reconnect', async () => {
@@ -1781,7 +2158,7 @@ describe('GitHub session workspace preparation', () => {
     const sandbox = mocks.createSandbox.mock.results[0]!.value;
     await sandbox.start();
 
-    expect(() => injectGithubToken(workerContext, 'rotated-worker-token')).not.toThrow();
+    expect(() => requireGithubTokenInjector(workerContext)('rotated-worker-token')).not.toThrow();
   });
 
   it('replaces reviewer credentials with repository access when no worker PAT is configured', async () => {
@@ -1832,7 +2209,7 @@ describe('GitHub session workspace preparation', () => {
 
     expect(removeWorkspace).toHaveBeenCalledWith('mfw-project-1-session-a-web-factory');
     expect(destroy).toHaveBeenCalled();
-    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
+    expect(() => requireGithubTokenInjector(reviewerContext)('stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
   it('keeps an unsafe reviewer workspace quarantined when eviction fails', async () => {
@@ -1866,7 +2243,7 @@ describe('GitHub session workspace preparation', () => {
     await expect(
       workspace({ requestContext: createGithubRequestContext('project-1', 'session-a'), mastra: mastra as any }),
     ).rejects.toThrow('runtime injection failed');
-    expect(() => injectGithubToken(reviewerContext, 'stale-reviewer-token')).toThrow(/no longer matches/);
+    expect(() => requireGithubTokenInjector(reviewerContext)('stale-reviewer-token')).toThrow(/no longer matches/);
 
     mocks.setEnv.mockClear();
     await expect(
@@ -1987,6 +2364,134 @@ describe('GitHub session workspace preparation', () => {
     expect(lastGhToken()).toBe('ghp_worker');
   });
 
+  it('offers refresh to a Slack-shaped GitHub session before its sandbox starts', async () => {
+    mocks.githubPat = 'ghp_original';
+    const { resolver, github } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+
+    const workspace = await resolver({ requestContext });
+    const tools = createGithubSubscriptionTools(requestContext, integration);
+
+    expect(Object.keys(tools)).toEqual(['github_refresh_token']);
+    await expect(tools.github_refresh_token!.execute!({}, {} as never)).rejects.toThrow(
+      'active Factory sandbox workspace',
+    );
+    expect(workspace.sandbox.status).toBe('pending');
+    expect(mocks.setEnv).not.toHaveBeenCalled();
+  });
+
+  it('registers refresh access for the request that starts a reused pending workspace', async () => {
+    mocks.githubPat = 'ghp_original';
+    const { resolver, github } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const firstContext = createGithubRequestContext('project-1', 'session-a');
+    const startingContext = createGithubRequestContext('project-1', 'session-a');
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+
+    const pendingWorkspace = await resolver({ requestContext: firstContext });
+    const reusedWorkspace = await resolver({ requestContext: startingContext });
+    expect(reusedWorkspace).toBe(pendingWorkspace);
+
+    await reusedWorkspace.sandbox.getInfo();
+    mocks.githubPat = 'ghp_replaced';
+    const tool = createGithubSubscriptionTools(startingContext, integration).github_refresh_token!;
+    expect(await tool.execute!({}, {} as never)).toEqual({ refreshed: true });
+    expect(lastGhToken()).toBe('ghp_replaced');
+
+    mocks.runBindingRole = 'review';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await expect(tool.execute!({}, {} as never)).rejects.toThrow(/no longer matches/);
+  });
+
+  it('rejects deferred refresh access after the session workspace is retired and recreated', async () => {
+    mocks.githubPat = 'ghp_original';
+    const registry = new FactoryWorkspaceRegistry();
+    const { resolver, github } = await createLocalFactory('mastracode-web-local-retired-refresh-', registry);
+    addProject();
+    addSession({ id: 'session-a' });
+    const retiredContext = createGithubRequestContext('project-1', 'session-a');
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+
+    await resolver({ requestContext: retiredContext });
+    const retiredTool = createGithubSubscriptionTools(retiredContext, integration).github_refresh_token!;
+    await registry.invalidateSession('session-a');
+
+    const replacementContext = createGithubRequestContext('project-1', 'session-a');
+    const replacementWorkspace = await resolver({ requestContext: replacementContext });
+    await replacementWorkspace.sandbox.getInfo();
+    mocks.githubPat = 'ghp_replaced';
+    const replacementTool = createGithubSubscriptionTools(replacementContext, integration).github_refresh_token!;
+
+    await expect(retiredTool.execute!({}, {} as never)).rejects.toThrow(/no longer matches/);
+    expect(await replacementTool.execute!({}, {} as never)).toEqual({ refreshed: true });
+    expect(lastGhToken()).toBe('ghp_replaced');
+  });
+
+  it('does not offer refresh to a chat-only session', async () => {
+    const { resolver, github } = await createLocalFactory();
+    const requestContext = createGithubRequestContext('project-1', 'chat-only');
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+
+    expect(await resolver({ requestContext })).toBeUndefined();
+    expect(createGithubSubscriptionTools(requestContext, integration)).toEqual({});
+  });
+
+  it('refreshes a Slack-shaped GitHub session after lazy startup and on later reuse', async () => {
+    mocks.githubPat = 'ghp_original';
+    const { workspace, github } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+    const firstContext = createGithubRequestContext('project-1', 'session-a');
+
+    await workspace({ requestContext: firstContext });
+    expect(lastGhToken()).toBe('ghp_original');
+    mocks.githubPat = 'ghp_replaced';
+    const firstTool = createGithubSubscriptionTools(firstContext, integration).github_refresh_token!;
+    expect(await firstTool.execute!({}, {} as never)).toEqual({ refreshed: true });
+    expect(lastGhToken()).toBe('ghp_replaced');
+
+    const laterContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({
+      requestContext: laterContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+    mocks.githubPat = 'ghp_rotated';
+    const laterTool = createGithubSubscriptionTools(laterContext, integration).github_refresh_token!;
+    expect(await laterTool.execute!({}, {} as never)).toEqual({ refreshed: true });
+    expect(lastGhToken()).toBe('ghp_rotated');
+  });
+
+  it('rejects a Slack-shaped refresh tool left over from before a role change', async () => {
+    mocks.githubPat = 'ghp_worker';
+    mocks.githubReviewerPat = 'ghp_reviewer';
+    const { workspace, github } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+    const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+    const workerContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({ requestContext: workerContext });
+    const workerTool = createGithubSubscriptionTools(workerContext, integration).github_refresh_token!;
+
+    mocks.runBindingRole = 'review';
+    const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+    await workspace({
+      requestContext: reviewerContext,
+      mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+    });
+    const reviewerTool = createGithubSubscriptionTools(reviewerContext, integration).github_refresh_token!;
+
+    expect(await reviewerTool.execute!({}, {} as never)).toEqual({ refreshed: true });
+    expect(lastGhToken()).toBe('ghp_reviewer');
+    await expect(workerTool.execute!({}, {} as never)).rejects.toThrow(/no longer matches/);
+    expect(lastGhToken()).toBe('ghp_reviewer');
+  });
+
   it('registers a runtime injector for refreshing GH_TOKEN in the active sandbox', async () => {
     const { workspace } = await createLocalFactory();
     addProject();
@@ -1994,7 +2499,7 @@ describe('GitHub session workspace preparation', () => {
     const requestContext = createGithubRequestContext('project-1', 'session-a');
 
     await workspace({ requestContext });
-    injectGithubToken(requestContext, 'fresh-token');
+    requireGithubTokenInjector(requestContext)('fresh-token');
 
     expect(lastGhToken()).toBe('fresh-token');
   });
@@ -2010,7 +2515,7 @@ describe('GitHub session workspace preparation', () => {
       requestContext,
       mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
     });
-    injectGithubToken(requestContext, 'later-token');
+    requireGithubTokenInjector(requestContext)('later-token');
 
     expect(lastGhToken()).toBe('later-token');
   });
@@ -2184,7 +2689,7 @@ describe('GitHub session workspace preparation', () => {
   it('serves no host workspace even on deploys with no sandbox config', async () => {
     const resolver = createWorkspaceFactory({
       github: fakeGithubIntegration() as any,
-      workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+      workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
     });
     const projectPath = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-web-no-sandbox-'));
     tempDirs.push(projectPath);
@@ -2202,7 +2707,7 @@ describe('GitHub session workspace preparation', () => {
       return createWorkspaceFactory({
         sandbox: mocks.createSandbox as any,
         github: fakeGithubIntegration() as any,
-        workItems: { findRunBindingBySession: mocks.findRunBindingBySession } as any,
+        workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
         ...(sandboxStart !== undefined ? { sandboxStart } : {}),
       });
     }
@@ -2544,6 +3049,34 @@ describe('FactorySkillSource layering', () => {
     ]);
     expect(await source.exists(path.join(mount, 'my-custom-skill', 'SKILL.md'))).toBe(false);
     await expect(source.readdir(path.join(mount, 'missing-skill'))).rejects.toThrow('ENOENT');
+  });
+
+  it('hides review-only skills from sessions without an active review binding', async () => {
+    let isReview = false;
+    const source = new FactorySkillSource(fallbackStub, [], undefined, async () => isReview);
+    const reviewSkill = path.join(mount, 'factory-review', 'SKILL.md');
+
+    const hiddenNames = (await source.readdir(mount)).map(entry => entry.name).sort();
+    expect(hiddenNames).toEqual([
+      'configure-factory-rules',
+      'factory-complete-issue',
+      'factory-plan',
+      'factory-triage',
+    ]);
+    for (const name of REVIEW_ONLY_FACTORY_SKILLS) {
+      expect(await source.exists(path.join(mount, name, 'SKILL.md'))).toBe(false);
+      await expect(source.readdir(path.join(mount, name))).rejects.toThrow('ENOENT');
+    }
+    await expect(source.readFile(reviewSkill)).rejects.toThrow('ENOENT');
+    await expect(source.stat(reviewSkill)).rejects.toThrow('ENOENT');
+    expect(String(await source.readFile(path.join(mount, 'factory-plan', 'SKILL.md')))).toContain('# Factory Plan');
+
+    // The role is re-evaluated per call, so the same source follows a role change.
+    isReview = true;
+    const visibleNames = (await source.readdir(mount)).map(entry => entry.name);
+    expect(visibleNames).toEqual(expect.arrayContaining([...REVIEW_ONLY_FACTORY_SKILLS]));
+    expect(await source.exists(reviewSkill)).toBe(true);
+    expect((await source.stat(reviewSkill)).type).toBe('file');
   });
 
   it('resolveLocalFactorySkillsPath handles the dev-server cwd variants', async () => {

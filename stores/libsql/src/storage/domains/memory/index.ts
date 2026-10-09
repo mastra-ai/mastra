@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -115,6 +114,7 @@ function addSqliteMetadataValuePredicate(
 export class MemoryLibSQL extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
+  readonly supportsObservationalMemoryHistorySearch = true;
 
   /**
    * Retention-eligible tables. `threads`, `messages`, and `resources` all anchor
@@ -135,6 +135,15 @@ export class MemoryLibSQL extends MemoryStorage {
     const client = resolveClient(config);
     this.#client = client;
     this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+  }
+
+  /**
+   * Runs a write behind the per-client write lock and retries it on transient SQLite lock
+   * errors (`SQLITE_BUSY`), like the shared `LibSQLDB` writes. Each retry re-queues on the lock.
+   * `fn` must be safe to rerun: a single statement, a batch, or a transaction that rolls back.
+   */
+  #write<T>(operation: string, fn: () => Promise<T>): Promise<T> {
+    return this.#db.executeWriteOperationWithRetry(() => withClientWriteLock(this.#client, fn), operation);
   }
 
   async init(): Promise<void> {
@@ -801,13 +810,13 @@ export class MemoryLibSQL extends MemoryStorage {
       for (let i = 0; i < messageStatements.length; i += BATCH_SIZE) {
         const batch = messageStatements.slice(i, i + BATCH_SIZE);
         if (batch.length > 0) {
-          await this.#client.batch(batch, 'write');
+          await this.#write('saveMessages', () => this.#client.batch(batch, 'write'));
         }
       }
 
       // Execute thread update separately
       if (threadUpdateStatement) {
-        await this.#client.execute(threadUpdateStatement);
+        await this.#write('saveMessages', () => this.#client.execute(threadUpdateStatement));
       }
 
       const list = new MessageList().add(messages as any, 'memory');
@@ -847,7 +856,7 @@ export class MemoryLibSQL extends MemoryStorage {
       return [];
     }
 
-    const batchStatements = [];
+    const batchStatements: { sql: string; args: InValue[] }[] = [];
     const threadIdsToUpdate = new Set<string>();
     const columnMapping: Record<string, string> = {
       threadId: 'thread_id',
@@ -924,7 +933,7 @@ export class MemoryLibSQL extends MemoryStorage {
       }
     }
 
-    await this.#client.batch(batchStatements, 'write');
+    await this.#write('updateMessages', () => this.#client.batch(batchStatements, 'write'));
 
     const updatedResult = await this.#client.execute({ sql: selectSql, args: messageIds });
     return updatedResult.rows.map(row => this.parseRow(row));
@@ -938,51 +947,54 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       // Process in batches to avoid SQL parameter limits
       const BATCH_SIZE = 100;
-      const threadIds = new Set<string>();
 
       // Use a transaction to ensure consistency
-      const tx = await this.#client.transaction('write');
+      await this.#write('deleteMessages', async () => {
+        // Per attempt, so a retry doesn't touch threads collected by a rolled-back attempt.
+        const threadIds = new Set<string>();
+        const tx = await this.#client.transaction('write');
 
-      try {
-        for (let i = 0; i < messageIds.length; i += BATCH_SIZE) {
-          const batch = messageIds.slice(i, i + BATCH_SIZE);
-          const placeholders = batch.map(() => '?').join(',');
+        try {
+          for (let i = 0; i < messageIds.length; i += BATCH_SIZE) {
+            const batch = messageIds.slice(i, i + BATCH_SIZE);
+            const placeholders = batch.map(() => '?').join(',');
 
-          // Get thread IDs for this batch
-          const result = await tx.execute({
-            sql: `SELECT DISTINCT thread_id FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
-            args: batch,
-          });
+            // Get thread IDs for this batch
+            const result = await tx.execute({
+              sql: `SELECT DISTINCT thread_id FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
+              args: batch,
+            });
 
-          result.rows?.forEach(row => {
-            if (row.thread_id) threadIds.add(row.thread_id as string);
-          });
+            result.rows?.forEach(row => {
+              if (row.thread_id) threadIds.add(row.thread_id as string);
+            });
 
-          // Delete messages in this batch
-          await tx.execute({
-            sql: `DELETE FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
-            args: batch,
-          });
-        }
-
-        // Update thread timestamps within the transaction
-        if (threadIds.size > 0) {
-          const now = new Date().toISOString();
-          for (const threadId of threadIds) {
+            // Delete messages in this batch
             await tx.execute({
-              sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ? WHERE id = ?`,
-              args: [now, threadId],
+              sql: `DELETE FROM "${TABLE_MESSAGES}" WHERE id IN (${placeholders})`,
+              args: batch,
             });
           }
-        }
 
-        // Commit the transaction
-        await tx.commit();
-      } catch (error) {
-        // Rollback on error
-        await tx.rollback();
-        throw error;
-      }
+          // Update thread timestamps within the transaction
+          if (threadIds.size > 0) {
+            const now = new Date().toISOString();
+            for (const threadId of threadIds) {
+              await tx.execute({
+                sql: `UPDATE "${TABLE_THREADS}" SET "updatedAt" = ? WHERE id = ?`,
+                args: [now, threadId],
+              });
+            }
+          }
+
+          // Commit the transaction
+          await tx.commit();
+        } catch (error) {
+          // Rollback on error
+          await tx.rollback();
+          throw error;
+        }
+      });
 
       // TODO: Delete from vector store if semantic recall is enabled
     } catch (error) {
@@ -1084,10 +1096,12 @@ export class MemoryLibSQL extends MemoryStorage {
 
     values.push(resourceId);
 
-    await this.#client.execute({
-      sql: `UPDATE ${TABLE_RESOURCES} SET ${updates.join(', ')} WHERE id = ?`,
-      args: values,
-    });
+    await this.#write('updateResource', () =>
+      this.#client.execute({
+        sql: `UPDATE ${TABLE_RESOURCES} SET ${updates.join(', ')} WHERE id = ?`,
+        args: values,
+      }),
+    );
 
     return updatedResource;
   }
@@ -1151,51 +1165,53 @@ export class MemoryLibSQL extends MemoryStorage {
     resourceId: string;
   }): Promise<StorageThreadType> {
     try {
-      const tx = await this.#client.transaction('write');
-      try {
-        const result = await tx.execute({
-          sql: `SELECT * FROM "${TABLE_THREADS}" WHERE id = ?`,
-          args: [threadId],
-        });
-        const row = result.rows?.[0] as
-          | (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string })
-          | undefined;
+      return await this.#write('updateThreadResourceId', async () => {
+        const tx = await this.#client.transaction('write');
+        try {
+          const result = await tx.execute({
+            sql: `SELECT * FROM "${TABLE_THREADS}" WHERE id = ?`,
+            args: [threadId],
+          });
+          const row = result.rows?.[0] as
+            | (Omit<StorageThreadType, 'createdAt' | 'updatedAt'> & { createdAt: string; updatedAt: string })
+            | undefined;
 
-        if (!row) {
-          throw new Error(`Thread "${threadId}" not found`);
-        }
+          if (!row) {
+            throw new Error(`Thread "${threadId}" not found`);
+          }
 
-        const currentResourceId = row.resourceId as string;
-        const normalized: StorageThreadType = {
-          id: row.id as string,
-          resourceId: currentResourceId,
-          title: row.title as string,
-          metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata as any),
-          createdAt: new Date(row.createdAt),
-          updatedAt: new Date(row.updatedAt),
-        };
+          const currentResourceId = row.resourceId as string;
+          const normalized: StorageThreadType = {
+            id: row.id as string,
+            resourceId: currentResourceId,
+            title: row.title as string,
+            metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : (row.metadata as any),
+            createdAt: new Date(row.createdAt),
+            updatedAt: new Date(row.updatedAt),
+          };
 
-        if (currentResourceId === resourceId) {
+          if (currentResourceId === resourceId) {
+            await tx.commit();
+            return normalized;
+          }
+
+          const now = new Date();
+          await tx.execute({
+            sql: `UPDATE "${TABLE_THREADS}" SET "resourceId" = ?, "updatedAt" = ? WHERE id = ?`,
+            args: [resourceId, now.toISOString(), threadId],
+          });
+          await tx.execute({
+            sql: `UPDATE "${TABLE_MESSAGES}" SET "resourceId" = ? WHERE thread_id = ?`,
+            args: [resourceId, threadId],
+          });
+
           await tx.commit();
-          return normalized;
+          return { ...normalized, resourceId, updatedAt: now };
+        } catch (error) {
+          await tx.rollback();
+          throw error;
         }
-
-        const now = new Date();
-        await tx.execute({
-          sql: `UPDATE "${TABLE_THREADS}" SET "resourceId" = ?, "updatedAt" = ? WHERE id = ?`,
-          args: [resourceId, now.toISOString(), threadId],
-        });
-        await tx.execute({
-          sql: `UPDATE "${TABLE_MESSAGES}" SET "resourceId" = ? WHERE thread_id = ?`,
-          args: [resourceId, threadId],
-        });
-
-        await tx.commit();
-        return { ...normalized, resourceId, updatedAt: now };
-      } catch (error) {
-        await tx.rollback();
-        throw error;
-      }
+      });
     } catch (error) {
       throw new MastraError(
         {
@@ -1419,11 +1435,13 @@ export class MemoryLibSQL extends MemoryStorage {
     };
 
     try {
-      await this.#client.execute({
-        // COALESCE so an omitted title leaves the stored one alone.
-        sql: `UPDATE ${TABLE_THREADS} SET title = COALESCE(?, title), metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
-        args: [title ?? null, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
-      });
+      await this.#write('updateThread', () =>
+        this.#client.execute({
+          // COALESCE so an omitted title leaves the stored one alone.
+          sql: `UPDATE ${TABLE_THREADS} SET title = COALESCE(?, title), metadata = jsonb(?), updatedAt = ? WHERE id = ?`,
+          args: [title ?? null, JSON.stringify(updatedThread.metadata), now.toISOString(), id],
+        }),
+      );
 
       return updatedThread;
     } catch (error) {
@@ -1446,14 +1464,18 @@ export class MemoryLibSQL extends MemoryStorage {
       // Note: Not using a transaction to avoid SQLITE_BUSY errors when multiple
       // deleteThread calls run concurrently. The two deletes are independent and
       // orphaned messages (if thread delete fails) would be cleaned up on next delete attempt.
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
-        args: [threadId],
-      });
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
-        args: [threadId],
-      });
+      await this.#write('deleteThread', () =>
+        this.#client.execute({
+          sql: `DELETE FROM ${TABLE_MESSAGES} WHERE thread_id = ?`,
+          args: [threadId],
+        }),
+      );
+      await this.#write('deleteThread', () =>
+        this.#client.execute({
+          sql: `DELETE FROM ${TABLE_THREADS} WHERE id = ?`,
+          args: [threadId],
+        }),
+      );
     } catch (error) {
       throw new MastraError(
         {
@@ -1569,53 +1591,55 @@ export class MemoryLibSQL extends MemoryStorage {
       };
 
       // Use transaction for consistency
-      const tx = await this.#client.transaction('write');
+      return await this.#write('copyThread', async () => {
+        const tx = await this.#client.transaction('write');
 
-      try {
-        // Insert the new thread
-        await tx.execute({
-          sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
-                VALUES (?, ?, ?, jsonb(?), ?, ?)`,
-          args: [
-            newThread.id,
-            newThread.resourceId,
-            newThread.title ?? '',
-            JSON.stringify(newThread.metadata),
-            nowStr,
-            nowStr,
-          ],
-        });
-
-        // Copy messages under new IDs. content/role/type are read from the source row
-        // within SQL and never materialized in the JS heap.
-        const messageIdMap: Record<string, string> = {};
-        const targetResourceId = resourceId || sourceThread.resourceId;
-
-        for (const sourceMsg of sourceMessages) {
-          const newMessageId = crypto.randomUUID();
-          const sourceMsgId = sourceMsg.id as string;
-          messageIdMap[sourceMsgId] = newMessageId;
-
-          const insertResult = await tx.execute({
-            sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId")
-                  SELECT ?, ?, content, role, type, "createdAt", ?
-                  FROM "${TABLE_MESSAGES}" WHERE id = ?`,
-            args: [newMessageId, newThreadId, targetResourceId, sourceMsgId],
+        try {
+          // Insert the new thread
+          await tx.execute({
+            sql: `INSERT INTO "${TABLE_THREADS}" (id, "resourceId", title, metadata, "createdAt", "updatedAt")
+                  VALUES (?, ?, ?, jsonb(?), ?, ?)`,
+            args: [
+              newThread.id,
+              newThread.resourceId,
+              newThread.title ?? '',
+              JSON.stringify(newThread.metadata),
+              nowStr,
+              nowStr,
+            ],
           });
-          if (insertResult.rowsAffected !== 1) {
-            throw new Error(
-              `Failed to copy message ${sourceMsgId}: expected 1 row copied but got ${insertResult.rowsAffected}`,
-            );
+
+          // Copy messages under new IDs. content/role/type are read from the source row
+          // within SQL and never materialized in the JS heap.
+          const messageIdMap: Record<string, string> = {};
+          const targetResourceId = resourceId || sourceThread.resourceId;
+
+          for (const sourceMsg of sourceMessages) {
+            const newMessageId = crypto.randomUUID();
+            const sourceMsgId = sourceMsg.id as string;
+            messageIdMap[sourceMsgId] = newMessageId;
+
+            const insertResult = await tx.execute({
+              sql: `INSERT INTO "${TABLE_MESSAGES}" (id, thread_id, content, role, type, "createdAt", "resourceId")
+                    SELECT ?, ?, content, role, type, "createdAt", ?
+                    FROM "${TABLE_MESSAGES}" WHERE id = ?`,
+              args: [newMessageId, newThreadId, targetResourceId, sourceMsgId],
+            });
+            if (insertResult.rowsAffected !== 1) {
+              throw new Error(
+                `Failed to copy message ${sourceMsgId}: expected 1 row copied but got ${insertResult.rowsAffected}`,
+              );
+            }
           }
+
+          await tx.commit();
+
+          return { thread: newThread, messageIdMap };
+        } catch (error) {
+          await tx.rollback();
+          throw error;
         }
-
-        await tx.commit();
-
-        return { thread: newThread, messageIdMap };
-      } catch (error) {
-        await tx.rollback();
-        throw error;
-      }
+      });
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -1728,6 +1752,10 @@ export class MemoryLibSQL extends MemoryStorage {
       const conditions = [`"lookupKey" = ?`];
       const args: InValue[] = [lookupKey];
 
+      if (options?.recordId !== undefined) {
+        conditions.push(`id = ?`);
+        args.push(options.recordId);
+      }
       if (options?.from) {
         conditions.push(`"createdAt" >= ?`);
         args.push(options.from.toISOString());
@@ -1737,8 +1765,25 @@ export class MemoryLibSQL extends MemoryStorage {
         args.push(options.to.toISOString());
       }
 
+      if (options?.groupId !== undefined) {
+        conditions.push(`(instr("activeObservations", ?) > 0 OR EXISTS (
+          SELECT 1 FROM json_each("bufferedObservationChunks") AS chunk
+          WHERE instr(json_extract(chunk.value, '$.observations'), ?) > 0
+        ))`);
+        const prefix = `<observation-group id="${options.groupId}"`;
+        args.push(prefix, prefix);
+      }
+      if (options?.beforeGeneration !== undefined) {
+        conditions.push(`"generationCount" < ?`);
+        args.push(options.beforeGeneration);
+      }
+      if (options?.afterGeneration !== undefined) {
+        conditions.push(`"generationCount" > ?`);
+        args.push(options.afterGeneration);
+      }
+      const direction = options?.sortDirection === 'ASC' ? 'ASC' : 'DESC';
       args.push(limit);
-      let sql = `SELECT * FROM "${OM_TABLE}" WHERE ${conditions.join(' AND ')} ORDER BY "generationCount" DESC LIMIT ?`;
+      let sql = `SELECT * FROM "${OM_TABLE}" WHERE ${conditions.join(' AND ')} ORDER BY "generationCount" ${direction}, "createdAt" ASC, id ASC LIMIT ?`;
 
       if (options?.offset != null) {
         args.push(options.offset);
@@ -1791,7 +1836,7 @@ export class MemoryLibSQL extends MemoryStorage {
         observedTimezone: input.observedTimezone,
       };
 
-      await withClientWriteLock(this.#client, () =>
+      await this.#write('initializeObservationalMemory', () =>
         this.#client.execute({
           sql: `INSERT INTO "${OM_TABLE}" (
             id, "lookupKey", scope, "resourceId", "threadId",
@@ -1847,7 +1892,7 @@ export class MemoryLibSQL extends MemoryStorage {
   async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
     try {
       const lookupKey = this.getOMKey(record.threadId, record.resourceId);
-      await withClientWriteLock(this.#client, () =>
+      await this.#write('insertObservationalMemoryRecord', () =>
         this.#client.execute({
           sql: `INSERT INTO "${OM_TABLE}" (
             id, "lookupKey", scope, "resourceId", "threadId",
@@ -1914,7 +1959,7 @@ export class MemoryLibSQL extends MemoryStorage {
       const now = new Date();
 
       const observedMessageIdsJson = input.observedMessageIds ? JSON.stringify(input.observedMessageIds) : null;
-      const result = await withClientWriteLock(this.#client, () =>
+      const result = await this.#write('updateActiveObservations', () =>
         this.#client.execute({
           sql: `UPDATE "${OM_TABLE}" SET
             "activeObservations" = ?,
@@ -1964,7 +2009,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
-      return await withClientWriteLock(this.#client, async () => {
+      return await this.#write('createReflectionGeneration', async () => {
         const tx = await this.#client.transaction('write');
         try {
           const record = await this.#insertReflectionGeneration(tx, input);
@@ -2073,7 +2118,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
     try {
-      const result = await withClientWriteLock(this.#client, () =>
+      const result = await this.#write('setReflectingFlag', () =>
         this.#client.execute({
           sql: `UPDATE "${OM_TABLE}" SET "isReflecting" = ?, "updatedAt" = ? WHERE id = ?`,
           args: [isReflecting, new Date().toISOString(), id],
@@ -2107,7 +2152,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
     try {
-      const result = await withClientWriteLock(this.#client, () =>
+      const result = await this.#write('setObservingFlag', () =>
         this.#client.execute({
           sql: `UPDATE "${OM_TABLE}" SET "isObserving" = ?, "updatedAt" = ? WHERE id = ?`,
           args: [isObserving, new Date().toISOString(), id],
@@ -2154,7 +2199,7 @@ export class MemoryLibSQL extends MemoryStorage {
         args = [isBuffering, nowStr, id];
       }
 
-      const result = await withClientWriteLock(this.#client, () => this.#client.execute({ sql, args }));
+      const result = await this.#write('setBufferingObservationFlag', () => this.#client.execute({ sql, args }));
 
       if (result.rowsAffected === 0) {
         throw new MastraError({
@@ -2183,7 +2228,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
     try {
-      const result = await withClientWriteLock(this.#client, () =>
+      const result = await this.#write('setBufferingReflectionFlag', () =>
         this.#client.execute({
           sql: `UPDATE "${OM_TABLE}" SET "isBufferingReflection" = ?, "updatedAt" = ? WHERE id = ?`,
           args: [isBuffering, new Date().toISOString(), id],
@@ -2218,7 +2263,7 @@ export class MemoryLibSQL extends MemoryStorage {
   async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
     try {
       const lookupKey = this.getOMKey(threadId, resourceId);
-      await withClientWriteLock(this.#client, () =>
+      await this.#write('clearObservationalMemory', () =>
         this.#client.execute({
           sql: `DELETE FROM "${OM_TABLE}" WHERE "lookupKey" = ?`,
           args: [lookupKey],
@@ -2239,7 +2284,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
     try {
-      const result = await withClientWriteLock(this.#client, () =>
+      const result = await this.#write('setPendingMessageTokens', () =>
         this.#client.execute({
           sql: `UPDATE "${OM_TABLE}" SET 
             "pendingMessageTokens" = ?, 
@@ -2276,7 +2321,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
     try {
-      await withClientWriteLock(this.#client, async () => {
+      await this.#write('updateObservationalMemoryConfig', async () => {
         const tx = await this.#client.transaction('write');
         try {
           // Read current config
@@ -2334,7 +2379,7 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const nowStr = new Date().toISOString();
 
-      await withClientWriteLock(this.#client, async () => {
+      await this.#write('updateBufferedObservations', async () => {
         const tx = await this.#client.transaction('write');
         try {
           // First get current record to get existing chunks
@@ -2374,7 +2419,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
           // Create new chunk with ID and timestamp
           const newChunk: BufferedObservationChunk = {
-            id: `ombuf-${randomUUID()}`,
+            id: `ombuf-${globalThis.crypto.randomUUID()}`,
             cycleId: input.chunk.cycleId,
             observations: input.chunk.observations,
             tokenCount: input.chunk.tokenCount,
@@ -2437,7 +2482,7 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const nowStr = new Date().toISOString();
 
-      return await withClientWriteLock(this.#client, async () => {
+      return await this.#write('swapBufferedToActive', async () => {
         const tx = await this.#client.transaction('write');
         try {
           // Get current record
@@ -2664,7 +2709,7 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const nowStr = new Date().toISOString();
 
-      const result = await withClientWriteLock(this.#client, () =>
+      const result = await this.#write('updateBufferedReflection', () =>
         this.#client.execute({
           sql: `UPDATE "${OM_TABLE}" SET
             "bufferedReflection" = CASE
@@ -2716,7 +2761,7 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
     try {
-      return await withClientWriteLock(this.#client, async () => {
+      return await this.#write('swapBufferedReflectionToActive', async () => {
         const tx = await this.#client.transaction('write');
         try {
           // Get current record

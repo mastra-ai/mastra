@@ -86,7 +86,7 @@ export const agent = new Agent({
   The `resource` identifies the user or entity, while the `thread` identifies the conversation. Reuse both values to continue the same conversation. Observational Memory processes the stored history as it grows and replaces older messages with observations when its activation conditions are met.
 </Inject>
 
-The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses `__GATEWAY_GOOGLE_MODEL_FLASH__` by default. To use a different model, pass it in the config object:
+The agent now has humanlike long-term memory that persists across conversations. Setting `observationalMemory: true` uses automatic model selection. To use a specific model, pass it in the config object:
 
 ```typescript
 const memory = new Memory({
@@ -113,9 +113,19 @@ For an AI SDK example, see [Using Mastra Memory](/integrations/agentic-ui/ai-sdk
 :::note
 
 OM currently only supports `@mastra/pg`, `@mastra/libsql`, `@mastra/mysql`, `@mastra/mongodb`, `@mastra/convex`, and `@mastra/oracledb` storage adapters.
-It uses background agents for managing memory. When no model is set, the default model is `google/gemini-2.5-flash`.
+It uses background agents for managing memory. When no model is set, the default is `model: 'auto'`.
 
 :::
+
+### Automatic models in Mastra Code and Factory
+
+Mastra Code and Factory surface the same automatic selection as a per-role **Auto** option in their settings.
+
+An automatic Observer or Reflector follows the active main model provider. Mastra Code uses that provider's built-in low-cost Observational Memory model when one is configured. For custom providers and providers without a built-in choice, it uses the active main model. The effective model is resolved when the role runs, so changing the main model doesn't rewrite the saved automatic selection.
+
+Select an explicit model to pin one role independently. Reset that role to **Auto** to resume following the main model provider. Existing saved concrete model IDs remain explicit until you reset them.
+
+Factory stores automatic intent separately from the effective model shown in settings. A missing provider credential can mark that effective model unavailable, but it doesn't replace the saved selection or prevent Factory from starting.
 
 ## Temporal gap markers
 
@@ -145,7 +155,7 @@ export const agent = new Agent({
 
 Mastra inserts a temporal gap marker when the gap is at least 10 minutes. The marker is stored in memory and also emitted as a transient reminder event, so clients can render it as a lightweight timeline hint.
 
-The observer also sees these markers when it processes the thread, so the observations it writes can anchor memories to when they happened (for example, "User asked about deployment after a 2-day gap").
+The observer also sees these markers when it processes the thread. The observations it writes can anchor memories to when they happened (for example, "User asked about deployment after a 2-day gap").
 
 See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
 
@@ -208,13 +218,50 @@ const memory = new Memory({
 
 `bufferOnIdle` is off by default. It's separate from `bufferTokens`: `bufferTokens` controls step-time async buffering, while `bufferOnIdle` controls end-of-turn buffering for idle turns.
 
+### Retries and failure policy
+
+Observer and Reflector model calls are retried on transient provider errors, and a turn aborts if they still fail. Each stage is controlled independently by:
+
+- `maxRetries`: retries after the initial model call (default `8`).
+- `failurePolicy`: what happens once retries are exhausted, either `'abort'` (default) or `'continue'`.
+
+```typescript title="src/mastra/agents/agent.ts"
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        maxRetries: 8,
+        failurePolicy: 'continue',
+      },
+      reflection: {
+        maxRetries: 8,
+        failurePolicy: 'continue',
+      },
+    },
+  },
+})
+```
+
+`maxRetries` governs OM's own retry ladder; the underlying model call is configured with no provider-level retries, so the option is the single retry knob for the stage.
+
+With `failurePolicy: 'continue'`, Mastra retries as configured, reports the failure through the existing OM diagnostics, keeps the failed input pending for a later cycle, and lets the main agent turn continue. It doesn't advance observation boundaries or discard unobserved messages. A Reflector failure under `'continue'` leaves any already-persisted observations committed and defers reflection to the next threshold crossing.
+
+A provider outage usually takes out both stages, so set the policy on both if you want the turn to survive one.
+
+This policy applies only to Observer and Reflector model and provider failures in synchronous, resource-scoped, and buffered observation. Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. It doesn't prevent the underlying provider or network error, change `blockAfter`, or change attachment handling.
+
+<Callout type="warning">
+  `'continue'` has no backstop for a sustained outage. Unobserved messages stay pending and keep accruing in the main
+  agent's context. A long outage moves the failure from the memory layer to the model's context limit.
+</Callout>
+
 See [the API reference](/reference/memory/observational-memory#configuration) for the full configuration shape.
 
 ## Benefits
 
 - **Prompt caching**: OM's context is stable and observations append over time rather than being retrieved at runtime each turn. This keeps the prompt prefix cacheable, which reduces costs.
 - **Compression**: Raw message history and tool results get compressed into a dense observation log. Smaller context means faster responses and longer coherent conversations.
-- **Zero context rot**: The agent sees relevant information instead of noisy tool calls and irrelevant tokens, so the agent stays on task over long sessions.
+- **Zero context rot**: The agent sees relevant information instead of noisy tool calls and irrelevant tokens, which keeps the agent on task over long sessions.
 
 ## How it works
 
@@ -401,6 +448,8 @@ new Agent({
 
 You can also pass an allowlist of mimeType globs (for example `['image/*']`) to forward only the kinds the Observer can handle. Alternatively, set `observeAttachments: 'auto'` so Mastra consults the provider capabilities registry. It forwards attachments when the Observer model supports multimodal input and drops them otherwise. If capability data is unavailable for the model, the setting falls back to `true`.
 
+Attachments that the agent recorded as unavailable, because they could no longer be downloaded, are never sent to the Observer. The Observer still sees their `[Image #1: ...]` or `[File #1: ...]` line. See [attachment download failures](/docs/agents/processors#recover-from-attachment-download-failures) for how Mastra records them.
+
 ```md
 Date: 2026-01-15
 
@@ -548,11 +597,30 @@ The progress bars update live while the agent is observing or reflecting, showin
 
 ## Models
 
-The Observer and Reflector run in the background. Any model that works with Mastra's [model routing](/models) (`provider/model`) can be used. When no model is set, the default model is `google/gemini-2.5-flash`.
+The Observer and Reflector run in the background. Any model that works with Mastra's [model routing](/models) (`provider/model`) can be used. When no model is set, the default is `model: 'auto'`.
+
+Automatic selection uses `google/gemini-2.5-flash` when `GOOGLE_GENERATIVE_AI_API_KEY` is configured. Otherwise, it selects a low-cost model for the active main model's provider, then falls back to the active main model. Observer and Reflector resolve independently before each invocation.
+
+Automatic selection reads the main model's `provider/model` ID. Models created from a plain model string carry that ID, and a dynamic model function can label a custom model by returning `{ model, id }`. When the ID is unknown, such as a model with a custom URL, API key, headers, or gateway, automatic selection reuses the main model itself because a sibling model isn't known to share that route. Pass a concrete model ID to the role to override either behavior.
+
+Use `autoModels` to change the model picked for a provider, and `resolveModel` to create the picked model with your own credentials or routing:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      autoModels: { openai: '__GATEWAY_OPENAI_MODEL_NANO__' },
+      resolveModel: (modelId, { requestContext }) => createRoutedModel(modelId, requestContext),
+    },
+  },
+})
+```
+
+`resolveAutoModelId(mainModelId, { autoModels })` from `@mastra/memory` returns the model automatic selection would pick, which is useful for showing the effective model in a settings UI.
 
 Mastra recommends using a model that has a large context window (128K+ tokens) and is fast enough to run in the background without slowing down your actions.
 
-If you're unsure which model to use, start with the default `google/gemini-2.5-flash`. We've also successfully tested `__GATEWAY_OPENAI_MODEL_MINI__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`, `deepseek/deepseek-reasoner`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash`, `xai/grok-4-1-fast`, `qwen3`, and `glm-4.7`.
+To pin a model instead, set a concrete model ID. We've also successfully tested `__GATEWAY_OPENAI_MODEL_MINI__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`, `deepseek/deepseek-reasoner`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash`, `xai/grok-4-1-fast`, `qwen3`, and `glm-4.7`.
 
 ```typescript
 const memory = new Memory({
@@ -753,7 +821,7 @@ When message tokens reach the `messageTokens` threshold, buffered chunks activat
 
 Async buffered Observer calls don't generate continuation hints because delayed hints can be stale by activation time. When buffered chunks activate, any previously stored suggested response and current task are cleared. The main agent receives the compressed observations without those hints.
 
-When message production outpaces the Observer, the `blockAfter` safety threshold allows activation to overshoot the retention target instead of using fewer chunks. Activation still uses no more chunks than needed to reach the target, and the default settings remain unaffected. A synchronous observation runs when the `messageTokens` threshold is reached and buffered activation didn't happen. Buffered activation usually preserves a minimum remaining context (the smaller of \~1k tokens or the configured retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less.
+When message production outpaces the Observer, the `blockAfter` safety threshold allows activation to overshoot the retention target instead of using fewer chunks. Activation still uses no more chunks than needed to reach the target, and the default settings remain unaffected. A synchronous observation runs when the `messageTokens` threshold is reached and activating buffered chunks doesn't bring pending tokens back under it. For example, this happens when a large tool result arrives after buffering has stopped. Buffered activation usually preserves a minimum remaining context (the smaller of \~1k tokens or the configured retention floor), but a single buffered chunk that covers the whole pending window still activates and can leave less.
 
 Reflection works similarly: the Reflector runs in the background when observations reach a fraction of the reflection threshold.
 
@@ -764,7 +832,7 @@ Reflection works similarly: the Reflector runs in the background when observatio
 | `observation.bufferTokens` | `0.2` | How often to buffer. `0.2` means every 20% of `messageTokens`. With the default 30k threshold, that's roughly every 6k tokens. Can also be an absolute token count (e.g. `5000`). |
 | `observation.bufferActivation` | `0.8` | How aggressively to clear the message window on activation. `0.8` means remove enough messages to keep only 20% of `messageTokens` remaining. Lower values keep more message history. |
 | `observation.blockAfter` | `1.2` | Safety net if buffering can't keep up. Values from 1 up to (but not including) 100 multiply `messageTokens`. For example, `1.2` creates a threshold of 36k tokens (1.2 × 30k), above which activation may overshoot the retention target rather than use fewer chunks. Values of 100 or more are absolute token counts (e.g. `50_000`) and must be greater than `messageTokens`. |
-| `activateAfterIdle` | none | Forces buffered observations to activate after a period of inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, or `"auto"` for a provider-aware prompt cache TTL. |
+| `activateAfterIdle` | none | Forces buffered observations to activate after a period of inactivity, even before `observation.messageTokens` is reached. Accepts a numeric millisecond value such as `300_000`, duration strings like `"5m"` or `"1hr"`, `"auto"` for a provider-aware prompt cache TTL, or an object of per-provider TTLs such as `{ default: 'auto', anthropic: '1h' }`. |
 | `activateOnProviderChange` | `false` | Forces buffered observations to activate when the next step uses a different `provider/model` than the one that produced the latest assistant step. Use this when switching providers or models would invalidate prompt cache reuse. |
 | `reflection.bufferActivation` | `0.5` | When to start background reflection. `0.5` means reflection begins when observations reach 50% of the `observationTokens` threshold. |
 | `reflection.activateAfterIdle` | none | Opts buffered reflections into idle activation. Reflections don't inherit top-level `activateAfterIdle`. |
@@ -801,6 +869,30 @@ const memory = new Memory({
 With `"auto"`, this activates buffered observations based on the active provider's prompt cache behavior so the next uncached prompt uses compressed observations instead of a larger raw message window. If you prefer a fixed 5-minute TTL, use `"5m"` or `300_000`.
 
 Changing models or providers mid-thread will invalidate the prompt cache. If your agent can switch between providers or models mid-thread, `activateOnProviderChange: true` forces buffered observations to activate before the new provider runs. That avoids sending a large raw window to a provider that can't reuse the previous prompt cache.
+
+#### Per-provider idle TTLs
+
+`"auto"` can't see a cache TTL that you set on individual messages, such as Anthropic's `cacheControl: { type: 'ephemeral', ttl: '1h' }`. It keeps using the provider's 5-minute default, so buffered observations activate while the 1-hour cache is still warm. Pass an object to set the TTL per provider instead:
+
+```typescript
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      model: 'google/gemini-2.5-flash',
+      activateAfterIdle: { default: 'auto', anthropic: '1h' },
+    },
+  },
+})
+```
+
+Set the `anthropic` entry to the same TTL as your `cacheControl.ttl`. Mastra doesn't read the per-message cache setting, so the two must be kept in sync by hand.
+
+How the object resolves:
+
+- Keys are provider names. Mastra compares them case-insensitively with the part of the model's provider before the first `.`, so `anthropic` matches both `anthropic` and `anthropic.messages`. Claude served through another provider uses that provider's key instead, for example `amazon-bedrock`. Keys must not contain `.` or `/`.
+- Each value accepts the same forms as a single TTL: milliseconds, a duration string, `"auto"`, or `false` to turn off idle activation for that provider.
+- `default` applies to every provider without its own key. Without `default`, those providers don't idle-activate.
+- `observation.activateAfterIdle` and `reflection.activateAfterIdle` accept the same object. An `observation.activateAfterIdle` object replaces the top-level value and isn't merged with it.
 
 ### Disabling
 

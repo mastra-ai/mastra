@@ -11,7 +11,6 @@
  * so the SPA can cleanly hide all GitHub UI.
  */
 
-import { randomUUID } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import { resolveModel } from '@mastra/code-sdk/agents/model';
 import { RequestContext } from '@mastra/core/request-context';
@@ -44,6 +43,8 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
+import { polledPullRequestEvent } from './rules.js';
+import type { PolledPullRequestState, ReconcileRepository } from './rules.js';
 
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
@@ -313,42 +314,52 @@ function polledIssueEvent(
   };
 }
 
-function polledPullRequestEvent(
+interface ListedPullRequest {
+  number: number;
+  title: string;
+  url: string;
+  author: string | null;
+  assignees: string[];
+  requestedReviewers: string[];
+  labels: string[];
+  headBranch: string;
+  baseBranch: string;
+  createdAt: string;
+}
+
+function listedPullRequestEvent(
   project: ResolvedProjectRepository,
-  pullRequest: {
-    number: number;
-    title: string;
-    url: string;
-    author: string | null;
-    assignees: string[];
-    requestedReviewers: string[];
-    headBranch: string;
-    baseBranch: string;
-    createdAt: string;
-  },
+  pullRequest: ListedPullRequest,
 ): ParsedGithubWebhook {
-  const repositoryId = Number(project.repository.externalId);
+  return polledPullRequestEvent(
+    reconcileRepositoryOf(project),
+    pullRequest.number,
+    listedOpenPullRequestState(pullRequest),
+  );
+}
+
+function reconcileRepositoryOf(project: ResolvedProjectRepository): ReconcileRepository {
   return {
-    event: 'pull_request',
-    deliveryId: `poll:${repositoryId}:pull-request:${pullRequest.number}:${pullRequest.createdAt}`,
-    payload: {
-      action: 'opened',
-      installation: { id: Number(project.installation.externalId) },
-      repository: { id: repositoryId, full_name: project.repository.slug },
-      sender: { login: pullRequest.author ?? '__unknown__' },
-      pull_request: {
-        number: pullRequest.number,
-        title: pullRequest.title,
-        html_url: pullRequest.url,
-        created_at: pullRequest.createdAt,
-        state: 'open',
-        merged: false,
-        assignees: pullRequest.assignees.map(login => ({ login })),
-        requested_reviewers: pullRequest.requestedReviewers.map(login => ({ login })),
-        head: { ref: pullRequest.headBranch },
-        base: { ref: pullRequest.baseBranch },
-      },
-    },
+    id: Number(project.repository.externalId),
+    fullName: project.repository.slug,
+    installationId: Number(project.installation.externalId),
+  };
+}
+
+function listedOpenPullRequestState(pullRequest: ListedPullRequest): PolledPullRequestState {
+  return {
+    title: pullRequest.title,
+    url: pullRequest.url,
+    state: 'open',
+    draft: false,
+    merged: false,
+    assignees: pullRequest.assignees,
+    requestedReviewers: pullRequest.requestedReviewers,
+    labels: pullRequest.labels,
+    headBranch: pullRequest.headBranch,
+    baseBranch: pullRequest.baseBranch,
+    author: pullRequest.author ?? undefined,
+    createdAt: pullRequest.createdAt,
   };
 }
 
@@ -359,7 +370,10 @@ async function ingestPolledEvents(
   if (!ingestFactoryEvent) return;
   const results = await Promise.allSettled(events.map(event => ingestFactoryEvent(event)));
   const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-  if (rejected) throw rejected.reason;
+  // Best-effort: a rule-ingress failure must not fail the GitHub list response it piggybacks on.
+  if (rejected) {
+    console.warn('[Mastra Factory] Failed to ingest polled GitHub events', { error: rejected.reason });
+  }
 }
 
 /**
@@ -698,6 +712,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             cursor: String(page),
           });
           const responseIssues = issues.map(issue => ({
+            repositoryId: Number(loaded.project.repository.externalId),
             number: Number(issue.id),
             title: issue.title,
             url: issue.url,
@@ -789,19 +804,21 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             cursor: String(page),
           });
           const responsePullRequests = pullRequests.map(pr => ({
+            repositoryId: Number(loaded.project.repository.externalId),
             number: Number(pr.id),
             title: pr.title,
             url: pr.url,
             author: pr.author,
             assignees: pr.assignees ?? [],
             requestedReviewers: pr.requestedReviewers ?? [],
+            labels: pr.labels ?? [],
             baseBranch: pr.baseBranch,
             headBranch: pr.headBranch,
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
           }));
           await ingestPolledEvents(
-            responsePullRequests.map(pullRequest => polledPullRequestEvent(loaded.project, pullRequest)),
+            responsePullRequests.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
             options.ingestFactoryEvent,
           );
           return c.json({
@@ -1281,7 +1298,7 @@ function buildProjectGitRoutes({
         ) {
           return c.json({ error: 'Invalid sessionId' }, 400);
         }
-        const sessionId = requestedSessionId ?? randomUUID();
+        const sessionId = requestedSessionId ?? globalThis.crypto.randomUUID();
 
         const requestedTitle = body.title;
         if (requestedTitle !== undefined && typeof requestedTitle !== 'string') {
@@ -1435,6 +1452,7 @@ function buildProjectGitRoutes({
         const stored = await memorySettings.get({ orgId: row.orgId, userId: row.userId });
         const requestContext = new RequestContext();
         requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
+        requestContext.set('mastra__factoryMemorySettings', stored);
 
         try {
           const title = await nameSession(sessionId, async () => {

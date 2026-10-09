@@ -4,6 +4,7 @@ import { getOrCreateSpan, SpanType } from '@mastra/core/observability';
 import type { Span, TracingContext } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { LiveKitSessionMetadata } from './metadata';
+import type { VoiceTurnMetrics } from './turn-metrics';
 
 export interface VoiceCallObservabilityOptions {
   /** The Mastra instance whose observability config receives the spans. */
@@ -25,6 +26,8 @@ export interface VoiceCallObservability {
   readonly tracingContext: TracingContext;
   /** Subscribe to the session's `metrics_collected` events. Call once, before `session.start()`. */
   attach(session: voice.AgentSession): void;
+  /** Record a generation or playback measurement with its correlation IDs. */
+  recordTurn(metric: VoiceTurnMetrics): void;
   /** Close the call span with the usage roll-up. Idempotent; safe to call from a shutdown hook. */
   finalize(options?: { error?: unknown }): void;
 }
@@ -68,8 +71,8 @@ function describeMetric(metric: metrics.AgentMetrics): { name: string; data: Rec
         },
       };
     case 'llm_metrics':
-      // LiveKit's view of the reply latency (includes transport), distinct from the Mastra
-      // agent-run model span: time-to-first-token is what the caller actually waits for.
+      // LiveKit's generation latency includes transport. First audio and completed
+      // playback are measured separately; a text token is not yet audible speech.
       return {
         name: `llm ttft ${ms(metric.ttftMs)}`,
         data: {
@@ -175,6 +178,9 @@ export function startVoiceCallObservability(
   return {
     span,
     tracingContext: { currentSpan: span },
+    recordTurn(metric) {
+      span.createEventSpan({ type: SpanType.GENERIC, name: `voice ${metric.phase} ${metric.outcome}`, output: metric });
+    },
     attach(session: voice.AgentSession) {
       session.on(voice.AgentSessionEventTypes.MetricsCollected, (event: { metrics: metrics.AgentMetrics }) => {
         usage.collect(event.metrics);
@@ -182,7 +188,11 @@ export function startVoiceCallObservability(
         if (!described) return;
         // Event span: a point-in-time measurement, not a duration. The value is in the name
         // (for the timeline) and the full fields are on output.
-        span.createEventSpan({ type: SpanType.GENERIC, name: described.name, output: described.data });
+        span.createEventSpan({
+          type: SpanType.GENERIC,
+          name: described.name,
+          output: { ...described.data, ...('speechId' in event.metrics ? { speechId: event.metrics.speechId } : {}) },
+        });
       });
       // The call ends when the session closes — finalize then so the root span and its usage
       // roll-up land promptly. The worker's ctx.addShutdownCallback is a backstop for abnormal

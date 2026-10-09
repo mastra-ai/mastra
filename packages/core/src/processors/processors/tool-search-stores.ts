@@ -11,6 +11,11 @@ export interface LoadedToolStoreContext {
    * May be undefined on resume paths that resolve loaded state without a live step.
    */
   args?: ProcessInputStepArgs;
+  /**
+   * Thread messages loaded from memory, for resume paths that have no live step.
+   * Ignored when `args` is present.
+   */
+  messages?: ProcessInputStepArgs['messages'];
 }
 
 /**
@@ -35,7 +40,8 @@ export interface LoadedToolStore {
  * Reads the structured `result` of a `search_tools` / `load_tool` tool-invocation
  * part and returns the tool names it activated.
  *
- * - `search_tools` (autoLoad) results carry `results: [{ name }]`.
+ * - `search_tools` (autoLoad) results carry `loaded: string[]`. Plain search hits in
+ *   `results` are never treated as loaded — only autoLoad or `load_tool` activates tools.
  * - `load_tool` (toolNames array form) results carry `loaded: string[]`.
  * - `load_tool` (single toolName form) results carry `{ success: true, toolName }`.
  *   Failure shapes also carry `toolName`, so it only counts when `success` is true.
@@ -47,14 +53,6 @@ function extractActivatedNames(result: unknown): string[] {
   const maybeToolName = (result as { toolName?: unknown; success?: unknown }).toolName;
   if (typeof maybeToolName === 'string' && (result as { success?: unknown }).success === true) {
     names.push(maybeToolName);
-  }
-
-  const maybeResults = (result as { results?: unknown }).results;
-  if (Array.isArray(maybeResults)) {
-    for (const entry of maybeResults) {
-      const name = (entry as { name?: unknown })?.name;
-      if (typeof name === 'string') names.push(name);
-    }
   }
 
   const maybeLoaded = (result as { loaded?: unknown }).loaded;
@@ -71,7 +69,7 @@ function extractActivatedNames(result: unknown): string[] {
  * Scans conversation messages for completed `search_tools` / `load_tool` invocations
  * and unions the tool names they activated.
  */
-export function deriveLoadedNamesFromMessages(args: ProcessInputStepArgs): Set<string> {
+export function deriveLoadedNamesFromMessages(args: Pick<ProcessInputStepArgs, 'messages'>): Set<string> {
   const loaded = new Set<string>();
 
   if (!Array.isArray(args.messages)) return loaded;
@@ -119,7 +117,8 @@ export class ContextLoadedToolStore implements LoadedToolStore {
   private supplemental = new Map<string, Set<string>>();
 
   getLoadedNames(ctx: LoadedToolStoreContext): Set<string> {
-    const fromMessages = ctx.args ? deriveLoadedNamesFromMessages(ctx.args) : new Set<string>();
+    const messageSource = ctx.args ?? (ctx.messages ? { messages: ctx.messages } : undefined);
+    const fromMessages = messageSource ? deriveLoadedNamesFromMessages(messageSource) : new Set<string>();
 
     if (!ctx.threadId) return fromMessages;
 
@@ -135,7 +134,7 @@ export class ContextLoadedToolStore implements LoadedToolStore {
     // parity): an evicted block disappears from the messages and is no longer
     // shadowed by the supplemental set. Names not yet visible (just activated) stay
     // in the supplemental set until the messages catch up.
-    if (ctx.args) {
+    if (messageSource) {
       for (const name of [...supplemental]) {
         if (fromMessages.has(name)) supplemental.delete(name);
       }

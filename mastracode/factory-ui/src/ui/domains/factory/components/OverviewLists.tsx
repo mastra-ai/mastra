@@ -1,3 +1,4 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
@@ -13,8 +14,9 @@ import { boardItemPath } from '../overview';
 import type { MovedItem, StageItem } from '../overview';
 import { attentionAuthorName, factoryAttentionTargetPath } from '../services/attention';
 import type { FactoryAttentionItem } from '../services/attention';
-import { PANEL, PANEL_ROW_LINK, TIMESTAMP } from './panel';
+import { PANEL, PANEL_ROW_LINK } from './panel';
 import { StageBadge } from './StageBadge';
+import { OverviewListEmptyState } from './OverviewListEmptyState';
 
 /** Rows before the fold, and the ceiling once it is opened. */
 const PREVIEW_ROWS = 5;
@@ -38,7 +40,7 @@ function ActorIcon({ by }: { by: string | undefined }) {
 function Empty({ children }: { children: ReactNode }) {
   return (
     <div className={`${PANEL} px-3 py-6`}>
-      <Txt as="p" variant="caption" className="text-muted-foreground m-0 text-center">
+      <Txt tone="muted" as="p" variant="caption" className="m-0 text-center">
         {children}
       </Txt>
     </div>
@@ -68,25 +70,25 @@ function ItemRow({
     <>
       {leading}
       <span className="flex min-w-0 flex-1 flex-col">
-        <Txt as="span" variant="column" className="text-foreground truncate">
+        <Txt tone="ink" as="span" variant="column" className="truncate">
           {title}
         </Txt>
         {subtitle ? (
-          <Txt as="span" variant="meta" className="text-muted-foreground truncate">
+          <Txt tone="muted" as="span" variant="meta" className="truncate">
             {subtitle}
           </Txt>
         ) : null}
       </span>
       {badge}
-      <span className={`${TIMESTAMP} relative shrink-0 text-right`}>
+      <Txt as="span" variant="meta" tone="muted" className={`relative shrink-0 text-right`}>
         {unread ? (
           <span
-            className="bg-warning1 absolute top-1/2 -left-3 size-1.5 -translate-y-1/2 rounded-full"
+            className="bg-warning-indicator absolute top-1/2 -left-3 size-1.5 -translate-y-1/2 rounded-full"
             aria-label="Unread"
           />
         ) : null}
         {time}
-      </span>
+      </Txt>
     </>
   );
 
@@ -127,15 +129,15 @@ function ShowMore({ total, expanded, onToggle }: { total: number; expanded: bool
       <button
         type="button"
         onClick={onToggle}
-        className={`${PANEL_ROW_LINK} text-meta text-muted-foreground hover:text-foreground w-full cursor-pointer`}
+        className={cn('text-muted-foreground', `${PANEL_ROW_LINK} hover:text-foreground w-full cursor-pointer`)}
       >
-        <span className="flex-1 text-left">
+        <Txt as="span" variant="meta" className="flex-1 text-left">
           {expanded ? 'Show less' : `Show ${Math.min(total, EXPANDED_ROWS) - PREVIEW_ROWS} more`}
-        </span>
+        </Txt>
         {expanded && total > EXPANDED_ROWS ? (
-          <span className={TIMESTAMP}>
+          <Txt as="span" variant="meta" tone="muted">
             {EXPANDED_ROWS} of {total}
-          </span>
+          </Txt>
         ) : null}
       </button>
     </li>
@@ -150,7 +152,7 @@ export function RunningList({
   running: StageItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (running.length === 0) return <Empty>Nothing running</Empty>;
+  if (running.length === 0) return <OverviewListEmptyState kind="running" />;
 
   return (
     <Rows
@@ -176,7 +178,7 @@ export function StalledList({
   waiting: StageItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (waiting.length === 0) return <Empty>Nothing stalled</Empty>;
+  if (waiting.length === 0) return <OverviewListEmptyState kind="stalled" />;
 
   return (
     <Rows
@@ -202,7 +204,7 @@ export function ActivityFeed({
   moved: MovedItem[];
   factoryProjectId: string | undefined;
 }) {
-  if (moved.length === 0) return <Empty>Nothing moved</Empty>;
+  if (moved.length === 0) return <OverviewListEmptyState kind="activity" />;
 
   return (
     <Rows
@@ -222,12 +224,12 @@ export function ActivityFeed({
 }
 
 const ATTENTION_GLYPHS: Record<FactoryAttentionItem['kind'], { Glyph: LucideIcon; tone: string; label: string }> = {
-  mention: { Glyph: MessageSquare, tone: 'text-badge-blue-fg', label: 'Mention' },
-  'automation-failed': { Glyph: CircleAlert, tone: 'text-badge-red-fg', label: 'Failed run' },
-  'automation-proposed': { Glyph: Sparkles, tone: 'text-warning1', label: 'Suggested run' },
-  'supervisor-finding': { Glyph: Brain, tone: 'text-accent1', label: 'Supervisor finding' },
+  mention: { Glyph: MessageSquare, tone: 'text-badge-blue-indicator', label: 'Mention' },
+  'automation-failed': { Glyph: CircleAlert, tone: 'text-destructive-foreground', label: 'Failed run' },
+  'automation-proposed': { Glyph: Sparkles, tone: 'text-warning-foreground', label: 'Suggested run' },
+  'supervisor-finding': { Glyph: Brain, tone: 'text-badge-green-indicator', label: 'Supervisor finding' },
   activity: { Glyph: MessageSquare, tone: 'text-muted-foreground', label: 'Comment' },
-  'agent-waiting': { Glyph: Hourglass, tone: 'text-warning1', label: 'Agent waiting' },
+  'agent-waiting': { Glyph: Hourglass, tone: 'text-warning-foreground', label: 'Agent waiting' },
 };
 
 /** What landed. Unread lives at the row's edge instead, so the titles stay aligned. */
@@ -250,7 +252,7 @@ export function AttentionPreview({ factoryProjectId }: { factoryProjectId: strin
 
   if (attention.isPending) return <Skeleton className="h-24 w-full rounded-xl" />;
   if (attention.isError) return <Empty>Could not read what needs you.</Empty>;
-  if (items.length === 0) return <Empty>All clear</Empty>;
+  if (items.length === 0) return <OverviewListEmptyState kind="attention" />;
 
   return (
     <Rows

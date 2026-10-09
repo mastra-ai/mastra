@@ -102,7 +102,7 @@ async function drive(
   chatThread: any,
   approvalContext?: { toolCallId: string; messageId: string },
 ) {
-  const render = (channels as any)._buildRenderContext(chatThread, 'test', approvalContext);
+  const render = (channels as any)._buildRenderContext(chatThread, 'test', { approvalContext });
   const processor = new ChatChannelOutputProcessor();
   const requestContext = new Map<string, unknown>();
   requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);

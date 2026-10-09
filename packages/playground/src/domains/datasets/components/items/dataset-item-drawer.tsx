@@ -1,9 +1,9 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { useDatasetItem } from '@mastra/react/hooks/datasets';
 import { useMemo } from 'react';
 
 import { DatasetItemPanel } from '@/domains/datasets/components/items/dataset-item-panel';
 import { useDatasetItemPanel } from '@/domains/datasets/context/dataset-item-panel-context';
-import { useDatasetItem } from '@/domains/datasets/hooks/use-dataset-items';
 
 /**
  * Item drawer for the `items/:itemId` child route. Always mounted by the
@@ -16,10 +16,11 @@ export function DatasetItemDrawer() {
 
   // Deep links can target items beyond the pages loaded by the infinite list,
   // so fall back to fetching the item by id when it is absent from the list.
-  const { data: fetchedItem, isLoading: isFetchingItem } = useDatasetItem(
-    !listItem ? datasetId : '',
-    !listItem && itemId ? itemId : '',
-  );
+  const { data: fetchedItem, isLoading: isFetchingItem } = useDatasetItem({
+    datasetId: !listItem ? datasetId : '',
+    itemId: !listItem && itemId ? itemId : '',
+    queryOptions: { enabled: Boolean(!listItem ? datasetId : '') && Boolean(!listItem && itemId ? itemId : '') },
+  });
   const item = listItem ?? fetchedItem ?? undefined;
 
   return (

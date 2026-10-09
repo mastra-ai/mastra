@@ -1,10 +1,10 @@
 ---
-title: "Human-in-the-loop | Agents"
-description: "Add human-in-the-loop controls to Mastra agents with tool approval and suspended execution, so people can provide input before a run resumes or stops."
+title: 'Human-in-the-loop | Agents'
+description: 'Add human-in-the-loop controls to Mastra agents with tool approval and suspended execution, so people can provide input before a run resumes or stops.'
 packages:
-  - "@mastra/core"
-  - "@mastra/libsql"
-  - "@mastra/memory"
+  - '@mastra/core'
+  - '@mastra/libsql'
+  - '@mastra/memory'
 ---
 
 # Human-in-the-loop
@@ -129,12 +129,12 @@ The function can be asynchronous. For decisions that depend on the tool name and
 
 ```typescript title="src/mastra/agents/run-with-approval.ts"
 import { Classifier } from '@mastra/core/classifier'
-import { model } from '../models/evaluation-model'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 import { agent } from './agent'
 
 const approvalClassifier = new Classifier({
   id: 'tool-approval-classifier',
-  model,
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   questions: {
     requiresApproval: {
       type: 'boolean',
@@ -146,7 +146,7 @@ const approvalClassifier = new Classifier({
 
 const stream = await agent.stream('Clean up old records', {
   requireToolApproval: async ({ toolName, args }) => {
-    const result = await approvalClassifier.evaluate({
+    const result = await approvalClassifier.decide({
       state: {
         toolName,
         argumentNames: Object.keys(args),
@@ -158,7 +158,7 @@ const stream = await agent.stream('Clean up old records', {
 })
 ```
 
-The example sends argument names rather than values because the classifier forwards its state to the configured evaluation model. If the decision requires argument values, redact sensitive data first or use an evaluation model and provider that meet the protected tool's data-handling requirements.
+The example sends argument names rather than values because the classifier forwards its state to the configured decision model. If the decision requires argument values, redact sensitive data first or use a decision model and provider that meet the protected tool's data-handling requirements.
 
 Returning `true` pauses the tool call for human approval. It doesn't approve or decline the call automatically. Choose a threshold that matches the risk of the tools available to the agent. If this `requireToolApproval` function throws, it defaults to requiring approval.
 
@@ -276,6 +276,8 @@ const weatherTool = createTool({
 `suspend()` doesn't throw, return immediately after calling it (e.g. `return await suspend({ ... })`). Code after `await suspend(...)` still runs before the tool pauses.
 
 :::
+
+Use `suspend()` instead of a tool without `execute` when the tool needs a structured answer from the user and also runs inside a subagent: subagents can't run client tools, but suspension propagates through the supervisor. To resume from AI SDK `useChat()`, see [resuming a suspended tool from `useChat()`](/integrations/agentic-ui/ai-sdk-ui#resuming-a-suspended-tool-from-usechat).
 
 ## Tool approval with `generate()`
 
@@ -425,6 +427,10 @@ const handleResume = async () => {
   process.stdout.write('\n')
 }
 ```
+
+When a suspended or approval-gated tool call resumes, the stream emits a `tool-call-resumed` chunk with the same `toolCallId` before the call's `tool-result`. Its `payload.kind` is `'suspension'` or `'approval'`, and the payload repeats the original `args`, `suspendPayload`, and `resumeSchema`. The chunk is only emitted when a real suspension or approval request is cleared.
+
+With `@mastra/ai-sdk`, it arrives as a `data-tool-call-suspended` part (or `data-tool-call-approval` part for approvals) with `resumed: true`, which replaces the original part and keeps its payload. Use this signal to mark a question as answered. Don't infer it from the shape of the tool output: when the suspension came from a sub-agent, the output of the delegation call is the sub-agent's result, not your answer.
 
 ## Automatic tool resumption
 

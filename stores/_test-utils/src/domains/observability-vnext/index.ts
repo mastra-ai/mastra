@@ -1,3 +1,4 @@
+export * from './trace-aggregate';
 export * from './trace-query';
 export * from './trace-query-discovery';
 
@@ -16,6 +17,7 @@ import {
 import type {
   TraceQueryTenantScope,
   CreateFeedbackRecord,
+  CreateMetricRecord,
   CreateScoreRecord,
   CreateSpanRecord,
   ObservabilityStorage,
@@ -39,6 +41,7 @@ import {
   TRACE_QUERY_SCORE_REPLACEMENT_CASES,
   TRACE_QUERY_SCORE_REPLACEMENT_FIXTURE_DATA,
 } from './trace-query';
+import type { TraceAggregateFixtureData } from './trace-aggregate';
 import type { TraceQueryFixtureData } from './trace-query';
 
 export interface ObservabilityVNextCapabilities {
@@ -142,7 +145,7 @@ function traceQueryFixtureForWriteModel(
   };
 }
 
-async function writeTraceQueryFixture(
+export async function writeTraceQueryFixture(
   storage: ObservabilityStorage,
   data: TraceQueryFixtureData,
   writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
@@ -169,6 +172,12 @@ async function writeTraceQueryFixture(
       rootEntityVersionId: span.rootEntityVersionId,
       environment: span.environment,
       organizationId: span.organizationId,
+      serviceName: span.serviceName ?? null,
+      executionSource: span.executionSource ?? null,
+      runId: span.runId ?? null,
+      userId: span.userId ?? null,
+      sessionId: span.sessionId ?? null,
+      experimentId: span.experimentId ?? null,
       tags: span.tags,
       attributes: span.attributes,
       metadata: span.metadata,
@@ -223,6 +232,44 @@ async function writeTraceQueryFixture(
       },
     });
   }
+}
+
+/**
+ * Writes a trace-aggregate fixture: the trace-query fixture plus its token metric rows.
+ * The n-th copy of each `metricId` goes in batch n, so duplicates always arrive in
+ * separate inserts (ClickHouse writes each insert as its own part, which is what an
+ * exporter retry produces).
+ */
+export async function writeTraceAggregateFixture(
+  storage: ObservabilityStorage,
+  data: TraceAggregateFixtureData,
+  writeModel: ObservabilityVNextCapabilities['traceQuerySpanWriteModel'],
+) {
+  await writeTraceQueryFixture(storage, data, writeModel);
+
+  const batches: CreateMetricRecord[][] = [];
+  const copies = new Map<string, number>();
+  for (const metric of data.metrics ?? []) {
+    const copy = copies.get(metric.metricId) ?? 0;
+    copies.set(metric.metricId, copy + 1);
+    (batches[copy] ??= []).push({
+      metricId: metric.metricId,
+      timestamp: new Date(metric.timestamp),
+      name: metric.name,
+      value: metric.value,
+      traceId: metric.traceId,
+      spanId: metric.spanId,
+      provider: metric.provider,
+      model: metric.model,
+      estimatedCost: metric.estimatedCost,
+      costUnit: metric.costUnit,
+      costMetadata: metric.costMetadata,
+      organizationId: metric.organizationId,
+      resourceId: metric.resourceId,
+      labels: {},
+    });
+  }
+  for (const metrics of batches) await storage.batchCreateMetrics({ metrics });
 }
 
 async function waitFor<T>(

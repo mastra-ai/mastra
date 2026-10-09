@@ -1,12 +1,10 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import { z } from 'zod/v4';
 import { stopGoalActivity } from '../../../agent/goal';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
 import { executeAdoptedBackgroundOperation } from '../../../background-tasks/adoption';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../processors/background-work-signals';
-import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
@@ -44,6 +42,7 @@ import {
   TOOL_APPROVAL_VERDICTS_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
+import { approvalResumeSchema } from '../../shared/approval-schema';
 import { dispatchBackgroundTool } from '../../shared/steps/background-dispatch-core';
 import { applyBackgroundToolResult } from '../../shared/steps/background-task-result-core';
 import { executeToolCall } from '../../shared/steps/execute-tool-core';
@@ -282,9 +281,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       const removeToolMetadata = async (
         target: { toolCallId?: string; toolName: string; runId?: string },
         type: 'suspension' | 'approval',
-      ) => {
+      ): Promise<Record<string, any> | undefined> => {
         const { saveQueueManager, memoryConfig, threadId } = _internal || {};
-        if (!saveQueueManager || !threadId) return;
 
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         const expectedPartType = type === 'suspension' ? 'data-tool-call-suspended' : 'data-tool-call-approval';
@@ -297,6 +295,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         };
 
         const changedMessages: MastraDBMessage[] = [];
+        let matchedEntry: Record<string, any> | undefined;
         for (const message of messageList.get.all.db()) {
           if (message.role !== 'assistant') continue;
 
@@ -309,6 +308,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (entries) {
             for (const [key, entry] of Object.entries(entries)) {
               if (entryMatches(entry, key)) {
+                matchedEntry ??= { ...entry, toolCallId: entry?.toolCallId ?? key };
                 delete entries[key];
                 messageChanged = true;
               }
@@ -318,6 +318,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
           message.content.parts = message.content.parts?.map(part => {
             if (part.type !== expectedPartType || !entryMatches(part.data)) return part;
+            matchedEntry ??= { ...(part.data as Record<string, any>) };
             if ((part.data as { resumed?: boolean }).resumed) return part;
             messageChanged = true;
             return { ...part, data: { ...(part.data as any), resumed: true } };
@@ -326,13 +327,36 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (messageChanged) changedMessages.push(message);
         }
 
-        if (changedMessages.length === 0) return;
+        if (changedMessages.length === 0 || !saveQueueManager || !threadId) return matchedEntry;
         messageList.add(changedMessages, 'response');
         try {
           await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
         } catch (error) {
           logger?.error('Error removing tool suspension metadata:', error);
         }
+        return matchedEntry;
+      };
+
+      // Live counterpart of the persisted `resumed: true` marker. The eventual `tool-result` reuses
+      // this toolCallId, so clients need an explicit signal that the suspension/approval was answered.
+      // The payload mirrors the cleared entry so the replacement client part keeps the question.
+      const emitToolCallResumed = async (entry: Record<string, any>, kind: 'suspension' | 'approval') => {
+        const resumedChunk = await transformChunk({
+          type: 'tool-call-resumed',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            // Auto-resume re-calls the tool under a new id; ack the id the client saw suspended.
+            toolCallId: entry.toolCallId ?? inputData.toolCallId,
+            toolName: entry.toolName ?? inputData.toolName,
+            kind,
+            args: entry.args,
+            ...(kind === 'suspension' ? { suspendPayload: entry.suspendPayload } : {}),
+            resumeSchema: entry.resumeSchema,
+          },
+          ...(entry.metadata ? { metadata: entry.metadata } : {}),
+        });
+        safeEnqueue(controller, resumedChunk);
       };
 
       // Helper function to flush messages before suspension
@@ -496,21 +520,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const approvalGated =
           !isDelegatedApproval && (suspendedForApproval || (toolRequiresApproval && suspendData === undefined));
 
-        // Schema for tool call approval - used for both streaming and metadata
-        const approvalSchema = toStandardSchema(
-          z.object({
-            approved: z
-              .boolean()
-              .describe(
-                'Controls if the tool call is approved or not, should be true when approved and false when declined',
-              ),
-            reason: z
-              .string()
-              .optional()
-              .describe('Optional explanation for the decision, surfaced to the model when the tool call is declined'),
-          }),
-        );
-
         // The real suspension sequence, extracted so it has exactly one implementation with
         // two entry points: the tool's own `suspend()` closure below, and the hand-back of an
         // eager attempt that suspended at runtime. Defined here because it closes over
@@ -541,7 +550,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolCallId: inputData.toolCallId,
                 toolName: approvalToolName,
                 args: approvalArgs,
-                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+                resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
               },
             });
@@ -561,19 +570,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 : {}),
               type: 'approval',
               suspendedToolRunId: options.runId,
-              resumeSchema: JSON.stringify(
-                standardSchemaToJSONSchema(
-                  toStandardSchema(
-                    z.object({
-                      approved: z
-                        .boolean()
-                        .describe(
-                          'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                        ),
-                    }),
-                  ),
-                ),
-              ),
+              resumeSchema: approvalResumeSchema,
               metadata: approvalChunk.metadata,
             });
 
@@ -676,7 +673,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 args: inputData.args,
-                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+                resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
               },
             });
@@ -692,7 +689,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               toolName: inputData.toolName,
               args: inputData.args,
               type: 'approval',
-              resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+              resumeSchema: approvalResumeSchema,
               metadata: approvalChunk.metadata,
             });
 
@@ -716,7 +713,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             );
           } else {
             // Remove approval metadata since we're resuming (either approved or declined)
-            await removeToolMetadata({ toolCallId: inputData.toolCallId, toolName: inputData.toolName }, 'approval');
+            const clearedApproval = await removeToolMetadata(
+              { toolCallId: inputData.toolCallId, toolName: inputData.toolName },
+              'approval',
+            );
+            if (clearedApproval) await emitToolCallResumed(clearedApproval, 'approval');
 
             if (!approvalDecision.approved) {
               // Return the approval decision (not a `result` string) so it persists as
@@ -765,6 +766,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           messages: isAgentTool
             ? (readScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages') ?? messageList.get.all.aiV5.model())
             : messageList.get.input.aiV5.model(),
+          getMessages: () => messageList.get.all.db(),
           outputWriter,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
@@ -879,8 +881,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           const cleanupTarget = needsRunIdLookup
             ? resolvedSuspensionIdentity
             : { toolCallId: inputData.toolCallId, toolName: inputData.toolName };
-          if (cleanupTarget) {
-            await removeToolMetadata(cleanupTarget, resolvedSuspensionIdentity?.type ?? 'suspension');
+          const clearedEntry = cleanupTarget
+            ? await removeToolMetadata(cleanupTarget, resolvedSuspensionIdentity?.type ?? 'suspension')
+            : undefined;
+          // Model-supplied `resumeData` alone is not proof of a suspension; only ack a cleared entry.
+          if (clearedEntry) {
+            await emitToolCallResumed(clearedEntry, resolvedSuspensionIdentity?.type ?? 'suspension');
           }
         }
 
@@ -1113,6 +1119,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       );
                       emittedReplayedToolCalls.add(replayKey);
                     }
+
+                    // Awaited calls return their authoritative outcome through the
+                    // normal mapping step, which emits the terminal tool chunk.
+                    // Synthetic terminal chunks are only needed for deferred calls.
+                    if (info.disposition === 'awaited') return;
 
                     if (chunk.type === 'background-task-completed') {
                       safeEnqueue(

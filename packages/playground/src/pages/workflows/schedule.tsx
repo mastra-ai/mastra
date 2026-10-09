@@ -7,26 +7,29 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { useSchedule, useScheduleTriggers, useToggleSchedule } from '@mastra/react/hooks/schedules';
 import { ArrowLeftIcon, CalendarClockIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { decodeRouteParam, navCrumb } from '@/domains/navigation/crumbs';
 import { ScheduleStatusText } from '@/domains/schedules/components/schedule-status-badge';
 import { ScheduleTriggersList } from '@/domains/schedules/components/schedule-triggers-list';
-import { useSchedule } from '@/domains/schedules/hooks/use-schedule';
-import { useScheduleTriggers } from '@/domains/schedules/hooks/use-schedule-triggers';
-import { useToggleSchedule } from '@/domains/schedules/hooks/use-toggle-schedule';
 import { schedulesCrumb } from '@/domains/workflows/schedules-crumb';
-import { useLinkComponent } from '@/lib/framework';
 
 function MetaItem({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1">
-      <Txt variant="meta" tone="muted" className="tracking-wide uppercase">
+      <Txt variant="meta" tone="muted" className="uppercase">
         {label}
       </Txt>
-      <div className="text-body">{children}</div>
+      <div>
+        <Txt as="span" variant="body" className="block">
+          {children}
+        </Txt>
+      </div>
     </div>
   );
 }
@@ -39,7 +42,7 @@ export default function SchedulePage() {
     { id: 'schedule', label: decodeRouteParam(scheduleId), icon: CalendarClockIcon },
   ];
   const { paths } = useLinkComponent();
-  const { data: schedule, error } = useSchedule(scheduleId);
+  const { data: schedule, error } = useSchedule({ scheduleId: scheduleId, queryOptions: { enabled: !!scheduleId } });
   const {
     data: triggers,
     isLoading: triggersLoading,
@@ -47,8 +50,8 @@ export default function SchedulePage() {
     hasNextPage: triggersHasNextPage,
     isFetchingNextPage: triggersIsFetchingNextPage,
     setEndOfListElement: triggersSetEndOfListElement,
-  } = useScheduleTriggers(scheduleId);
-  const toggle = useToggleSchedule(scheduleId);
+  } = useScheduleTriggers({ scheduleId: scheduleId, queryOptions: { enabled: !!scheduleId } });
+  const toggle = useToggleSchedule({ scheduleId: scheduleId });
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -96,7 +99,13 @@ export default function SchedulePage() {
             ) : null}
             {schedule ? (
               <Button
-                onClick={() => toggle.mutate(schedule.status === 'active' ? 'pause' : 'resume')}
+                onClick={() => {
+                  const action = schedule.status === 'active' ? 'pause' : 'resume';
+                  toggle.mutate(action, {
+                    onSuccess: () => toast.success(action === 'pause' ? 'Schedule paused' : 'Schedule resumed'),
+                    onError: error => toast.error(error.message),
+                  });
+                }}
                 disabled={toggle.isPending}
                 data-testid="schedule-toggle-button"
               >
@@ -123,11 +132,11 @@ export default function SchedulePage() {
           <div className="flex h-fit flex-col gap-4 rounded-md border border-border p-4">
             <MetaItem label={agentId ? 'Agent' : 'Workflow'}>
               {workflowId ? (
-                <Link to={paths.workflowLink(workflowId)} className="text-accent1 hover:underline">
+                <Link to={paths.workflowLink(workflowId)} className="text-foreground hover:underline">
                   {workflowId}
                 </Link>
               ) : agentId ? (
-                <Link to={paths.agentLink(agentId)} className="text-accent1 hover:underline">
+                <Link to={paths.agentLink(agentId)} className="text-foreground hover:underline">
                   {agentId}
                 </Link>
               ) : (
@@ -139,7 +148,9 @@ export default function SchedulePage() {
                 {schedule.cron}
               </Txt>
               {schedule.timezone ? (
-                <span className="ml-2 text-caption text-muted-foreground">{schedule.timezone}</span>
+                <Txt as="span" variant="caption" tone="muted" className="ml-2">
+                  {schedule.timezone}
+                </Txt>
               ) : null}
             </MetaItem>
             <MetaItem label="Status">

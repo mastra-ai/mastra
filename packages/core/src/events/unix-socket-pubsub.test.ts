@@ -927,6 +927,270 @@ describe('UnixSocketPubSub', () => {
     expect(cb).not.toHaveBeenCalled();
   });
 
+  describe('broker loss', () => {
+    async function startAckingBroker(path: string) {
+      const sockets = new Set<net.Socket>();
+      const server = net.createServer((socket: net.Socket) => {
+        sockets.add(socket);
+        socket.on('close', () => sockets.delete(socket));
+        socket.on('error', () => {});
+        socket.setEncoding('utf8');
+        let pending = '';
+        socket.on('data', (chunk: string) => {
+          pending += chunk;
+          const lines = pending.split('\n');
+          pending = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const frame = JSON.parse(line);
+            if (frame.type === 'subscribe' || frame.type === 'unsubscribe') {
+              const type = frame.type === 'subscribe' ? 'subscribed' : 'unsubscribed';
+              socket.write(`${JSON.stringify({ type, topic: frame.topic, group: frame.group })}\n`);
+            }
+          }
+        });
+      });
+      await new Promise<void>((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(path, () => resolve());
+      });
+      return {
+        dropClients: () => {
+          for (const socket of sockets) socket.destroy();
+        },
+        stop: async () => {
+          for (const socket of sockets) socket.destroy();
+          await new Promise<void>(resolve => server.close(() => resolve()));
+        },
+      };
+    }
+
+    async function collectUnhandledRejections<T>(run: () => Promise<T>): Promise<{ result: T; unhandled: unknown[] }> {
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        const result = await run();
+        // Give socket error events and orphaned promise rejections time to surface.
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return { result, unhandled };
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+      }
+    }
+
+    it('resolves unsubscribe when the broker exits mid-write', async () => {
+      const path = await socketPath();
+      const broker = await startAckingBroker(path);
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+      const cb = vi.fn();
+      await pubsub.subscribe('topic-a', cb);
+
+      const { result, unhandled } = await collectUnhandledRejections(async () => {
+        await broker.stop();
+        return pubsub.unsubscribe('topic-a', cb).then(
+          () => 'resolved',
+          error => error,
+        );
+      });
+
+      expect(result).toBe('resolved');
+      expect(unhandled).toEqual([]);
+    });
+
+    it('resolves unsubscribe and close when close races an unsubscribe after the broker exits', async () => {
+      const path = await socketPath();
+      const broker = await startAckingBroker(path);
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+      const cb = vi.fn();
+      await pubsub.subscribe('topic-a', cb);
+
+      const { result, unhandled } = await collectUnhandledRejections(async () => {
+        await broker.stop();
+        const unsubscribe = pubsub.unsubscribe('topic-a', cb).then(
+          () => 'resolved',
+          error => error,
+        );
+        await new Promise(resolve => setImmediate(resolve));
+        const close = pubsub.close().then(
+          () => 'resolved',
+          error => error,
+        );
+        return Promise.all([unsubscribe, close]);
+      });
+
+      expect(result).toEqual(['resolved', 'resolved']);
+      expect(unhandled).toEqual([]);
+    });
+
+    it('does not reject a membership change with a stale write error once the retry is acknowledged', async () => {
+      const path = await socketPath();
+      const broker = await startAckingBroker(path);
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+      await pubsub.subscribe('topic-a', vi.fn());
+
+      try {
+        const { result, unhandled } = await collectUnhandledRejections(async () => {
+          // The broker keeps listening, so the retry reconnects to it after the
+          // first write fails against the dropped connection.
+          broker.dropClients();
+          return pubsub.subscribe('topic-b', vi.fn()).then(
+            () => 'resolved',
+            error => error,
+          );
+        });
+
+        expect(result).toBe('resolved');
+        expect(unhandled).toEqual([]);
+      } finally {
+        await pubsub.close();
+        await broker.stop();
+      }
+    });
+
+    it('does not restore broker membership for a group callback that is unsubscribing during reconnect', async () => {
+      const path = await socketPath();
+      const members = new Map<net.Socket, Set<string>>();
+      const deferredAcks: Array<() => void> = [];
+      let deferAcks = false;
+      const server = net.createServer((socket: net.Socket) => {
+        members.set(socket, new Set());
+        socket.on('close', () => members.delete(socket));
+        socket.on('error', () => {});
+        socket.setEncoding('utf8');
+        let pending = '';
+        socket.on('data', (chunk: string) => {
+          pending += chunk;
+          const lines = pending.split('\n');
+          pending = lines.pop() ?? '';
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const frame = JSON.parse(line);
+            if (frame.type !== 'subscribe' && frame.type !== 'unsubscribe') continue;
+            const key = `${frame.topic}:${frame.group}`;
+            if (frame.type === 'subscribe') members.get(socket)?.add(key);
+            else members.get(socket)?.delete(key);
+            const type = frame.type === 'subscribe' ? 'subscribed' : 'unsubscribed';
+            const ack = () => socket.write(`${JSON.stringify({ type, topic: frame.topic, group: frame.group })}\n`);
+            if (deferAcks) deferredAcks.push(ack);
+            else ack();
+          }
+        });
+      });
+      await new Promise<void>(resolve => server.listen(path, () => resolve()));
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+      const leaving = vi.fn();
+      await pubsub.subscribe('topic-a', vi.fn(), { group: 'workers' });
+      await pubsub.subscribe('topic-b', leaving, { group: 'workers' });
+
+      try {
+        // Drop the client and hold acks so the reconnect's resubscribe pauses on
+        // topic-a while topic-b is being unsubscribed.
+        deferAcks = true;
+        for (const socket of members.keys()) socket.destroy();
+        await waitFor(() => expect(deferredAcks).toHaveLength(1));
+
+        const unsubscribe = pubsub.unsubscribe('topic-b', leaving);
+        await waitFor(() => expect(deferredAcks).toHaveLength(2));
+
+        deferAcks = false;
+        deferredAcks[0]!();
+        // Let the resubscribe loop move on to topic-b before the unsubscribe is acknowledged.
+        await new Promise(resolve => setTimeout(resolve, 50));
+        deferredAcks[1]!();
+        await unsubscribe;
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        const liveMembership = [...members.values()].some(keys => keys.has('topic-b:workers'));
+        expect(liveMembership).toBe(false);
+      } finally {
+        await pubsub.close();
+        for (const socket of members.keys()) socket.destroy();
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+    });
+
+    it('rejects publish with a closed-transport error when close races broker loss', async () => {
+      const path = await socketPath();
+      const broker = await startAckingBroker(path);
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+      await pubsub.subscribe('topic-a', vi.fn());
+
+      const { result, unhandled } = await collectUnhandledRejections(async () => {
+        await broker.stop();
+        const publish = pubsub.publish('topic-a', makeEvent()).then(
+          () => 'resolved',
+          error => error,
+        );
+        await Promise.resolve();
+        await pubsub.close();
+        return publish;
+      });
+
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe('UnixSocketPubSub is closed');
+      expect(unhandled).toEqual([]);
+    });
+  });
+
+  it('reconnects when the broker drops the connection while it is resubscribing', async () => {
+    const path = await socketPath();
+    const sockets = new Set<net.Socket>();
+    // The next connection is dropped as soon as it is accepted, like a broker
+    // that accepted it while closing, so the client's resubscribe write fails.
+    let dropNextConnection = false;
+    let ackedConnections = 0;
+    const server = net.createServer((socket: net.Socket) => {
+      if (dropNextConnection) {
+        dropNextConnection = false;
+        socket.destroy();
+        return;
+      }
+      sockets.add(socket);
+      socket.on('close', () => sockets.delete(socket));
+      socket.on('error', () => {});
+      socket.setEncoding('utf8');
+      let counted = false;
+      socket.on('data', (chunk: string) => {
+        for (const line of chunk.split('\n')) {
+          if (!line.trim()) continue;
+          const frame = JSON.parse(line);
+          if (frame.type !== 'subscribe') continue;
+          if (!counted) ackedConnections += 1;
+          counted = true;
+          socket.write(`${JSON.stringify({ type: 'subscribed', topic: frame.topic })}\n`);
+        }
+      });
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(path, () => resolve());
+    });
+    const pubsub = new UnixSocketPubSub(path);
+    pubsubs.push(pubsub);
+
+    try {
+      await pubsub.subscribe('topic-a', vi.fn());
+      expect(ackedConnections).toBe(1);
+
+      dropNextConnection = true;
+      for (const socket of sockets) socket.destroy();
+
+      // Before the fix the reconnect waited on itself forever after the drop.
+      await waitFor(() => expect(ackedConnections).toBe(2), 2000);
+      await pubsub.subscribe('topic-b', vi.fn());
+    } finally {
+      await pubsub.close();
+      for (const socket of sockets) socket.destroy();
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
   it('does not re-send duplicate callback subscriptions to the broker', async () => {
     const path = await socketPath();
     let subscribeCount = 0;
@@ -1014,6 +1278,40 @@ describe('UnixSocketPubSub', () => {
       expect(follower.isBroker).toBe(true);
       expect(worker).toHaveBeenCalledTimes(1);
     });
+  });
+
+  const maxSocketPathBytes = ({ darwin: 104, linux: 108 } as Record<string, number>)[process.platform];
+  it.skipIf(!maxSocketPathBytes)('becomes the broker at a socket path of the maximum platform length', async () => {
+    const base = await socketPath('');
+    const basenameBytes = Buffer.byteLength('.leases.sock');
+    // base + '/' + padding + '/' + basename
+    const padding = maxSocketPathBytes! - Buffer.byteLength(base) - 2 - basenameBytes;
+    expect(padding).toBeGreaterThan(0);
+    const dir = join(base, 'd'.repeat(padding));
+    await mkdir(dir);
+    const path = join(dir, '.leases.sock');
+    expect(Buffer.byteLength(path)).toBe(maxSocketPathBytes);
+
+    const first = new UnixSocketPubSub(path);
+    const second = new UnixSocketPubSub(path);
+    pubsubs.push(first, second);
+    const received = vi.fn();
+    await first.subscribe('limit', received);
+    await second.publish('limit', makeEvent({ type: 'limit' }));
+
+    await waitFor(() => expect(received).toHaveBeenCalledTimes(1));
+  });
+
+  it.each(['s', 'ab'])('elects a broker at the short socket name %s', async name => {
+    const path = await socketPath(name);
+    const first = new UnixSocketPubSub(path);
+    const second = new UnixSocketPubSub(path);
+    pubsubs.push(first, second);
+    const received = vi.fn();
+    await first.subscribe('short', received);
+    await second.publish('short', makeEvent({ type: 'short' }));
+
+    await waitFor(() => expect(received).toHaveBeenCalledTimes(1));
   });
 
   it('reclaims a stale socket file', async () => {
@@ -1176,6 +1474,51 @@ describe('UnixSocketPubSub', () => {
         status: 'rejected',
         reason: new Error('UnixSocketPubSub is closed'),
       });
+    });
+
+    it('finishes a release that started before close', async () => {
+      const pubsub = new UnixSocketPubSub(await socketPath('first.sock'));
+      pubsubs.push(pubsub);
+      const key = 'released-at-shutdown';
+      const leasePath = join(tempDir!, 'leases', `${createHash('sha256').update(key).digest('hex')}.json`);
+      await pubsub.acquireLease(key, 'owner', 10_000);
+      await expect(readFile(leasePath, 'utf8')).resolves.toContain('owner');
+
+      // A fast shutdown: a claim's release is fired, then the pubsub closes before it settles.
+      const release = pubsub.releaseLease(key, 'owner');
+      await pubsub.close();
+
+      await expect(release).resolves.toBeUndefined();
+      await expect(readFile(leasePath, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(pubsub.releaseLease(key, 'owner')).rejects.toThrow('UnixSocketPubSub is closed');
+    });
+
+    it('stops waiting for a release blocked on a held mutation lock once close gives up', async () => {
+      const first = new UnixSocketPubSub(await socketPath('first.sock'));
+      const second = new UnixSocketPubSub(await socketPath('second.sock'));
+      pubsubs.push(first, second);
+      await first.acquireLease('setup-key', 'setup-owner', 10_000);
+      await first.releaseLease('setup-key', 'setup-owner');
+
+      const key = 'held-release-key';
+      const fileName = createHash('sha256').update(key).digest('hex');
+      const lockPath = join(tempDir!, 'leases', 'mutations', `${fileName}.lock`);
+      const processMarker = JSON.parse(
+        await readFile(join(tempDir!, 'leases', 'processes', `${process.pid}.json`), 'utf8'),
+      );
+      await writeFile(lockPath, JSON.stringify({ ...processMarker, token: 'held-token' }));
+
+      const releaseResult = Promise.allSettled([second.releaseLease(key, 'second-owner')]);
+      await new Promise(resolve => setTimeout(resolve, 30));
+      const closeResult = await Promise.race([
+        second.close().then(() => 'closed'),
+        new Promise<'timed-out'>(resolve => setTimeout(() => resolve('timed-out'), 3_000)),
+      ]);
+
+      await rm(lockPath);
+      const [release] = await releaseResult;
+      expect(closeResult).toBe('closed');
+      expect(release).toMatchObject({ status: 'rejected', reason: new Error('UnixSocketPubSub is closed') });
     });
 
     it('renews, transfers, and owner-guards release without an unowned gap', async () => {

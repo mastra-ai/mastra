@@ -139,7 +139,7 @@ function getSurface(): MastraSurface {
 let detectedTerminalBg: string | undefined;
 
 /** The effective background color used for contrast calculations. */
-function getContrastBg(): string {
+export function getContrastBg(): string {
   return detectedTerminalBg ?? getSurface().bg;
 }
 
@@ -161,6 +161,7 @@ const textThemeKeys: (keyof ThemeColors)[] = [
   'muted',
   'dim',
   'text',
+  'secondary',
   'thinkingText',
   'userMessageText',
   'toolTitle',
@@ -174,10 +175,10 @@ const textThemeKeys: (keyof ThemeColors)[] = [
 // Comfortable minimum contrast for TUI body text — above WCAG AA (4.5:1) for better readability
 export const TUI_MIN_CONTRAST = 5.5;
 
-/** Terminal width buffer applied at the framework level to prevent wrapping in nested terminals */
-export const TERM_WIDTH_BUFFER = 3;
-/** Get the effective terminal width (matching the framework's reduced width) */
-export const getTermWidth = () => (process.stdout.columns || 80) - TERM_WIDTH_BUFFER;
+/** Smallest width the full TUI layout renders safely at; narrower reports (e.g. while a display sleeps) are floored to this */
+export const MIN_TERM_WIDTH = 40;
+/** Get the terminal width used for rendering */
+export const getTermWidth = () => Math.max(MIN_TERM_WIDTH, process.stdout.columns || 80);
 
 /** Left indent (in spaces) applied to assistant text (Markdown body) */
 export const CHAT_INDENT = 2;
@@ -233,6 +234,50 @@ export const mastra: MastraPalette = new Proxy({} as MastraPalette, {
   },
 });
 
+/**
+ * A surface shade derived from the terminal's own background (detected via OSC 11), so panels match the
+ * user's theme instead of a fixed grey. Same idea as opencode's "system" theme: each step moves the
+ * background's luminance 1/30 of the way toward white (dark) or black (light) while keeping its hue.
+ * Step 1 = tool output panels, step 2 = the prompt and sent messages.
+ */
+export function surfaceShade(step: number): string {
+  const bg = getContrastBg();
+  const [r, g, b] = [1, 3, 5].map(i => parseInt(bg.slice(i, i + 2), 16));
+  const lum = 0.299 * r! + 0.587 * g! + 0.114 * b!;
+  const f = (step / 12) * 0.4;
+  let out: number[];
+  if (currentThemeMode === 'light') {
+    out = [r!, g!, b!].map(c => c * (1 - f));
+  } else if (lum < 10) {
+    // A fixed lift per step: proportional lifts (#080808, #111111) barely separate from pure black.
+    const lift = Math.min(255, step * 18);
+    out = [lift, lift, lift];
+  } else {
+    const ratio = (lum + (255 - lum) * f) / lum;
+    out = [r!, g!, b!].map(c => Math.min(255, c * ratio));
+  }
+  return `#${out.map(c => Math.floor(c).toString(16).padStart(2, '0')).join('')}`;
+}
+
+/**
+ * Mode colors (build / plan / fast) as displayed. On dark backgrounds the deep brand colors are lifted
+ * toward white the same way the accent is (brand green maps exactly to the accent), so mode-colored text
+ * never reads darker than the accent. On light backgrounds brand green maps to the light accent and the
+ * others are darkened just enough to read.
+ */
+export function displayModeColor(hex: string): string {
+  const isBrandGreen = hex.toLowerCase() === mastraBrand.green.toLowerCase();
+  if (currentThemeMode === 'light') return isBrandGreen ? lightTheme.accent : ensureContrast(hex, getContrastBg());
+  if (isBrandGreen) return darkTheme.accent;
+  const mix = (i: number) => {
+    const c = parseInt(hex.slice(i, i + 2), 16);
+    return Math.round(c + (255 - c) * 0.35)
+      .toString(16)
+      .padStart(2, '0');
+  };
+  return `#${mix(1)}${mix(3)}${mix(5)}`;
+}
+
 /** Tint a hex color by a brightness factor (0–1). e.g. tintHex("#ff8800", 0.15) → near-black orange */
 export function tintHex(hex: string, factor: number): string {
   const r = Math.floor(parseInt(hex.slice(1, 3), 16) * factor);
@@ -256,6 +301,7 @@ export type ThemeColor =
   | 'muted'
   | 'dim'
   | 'text'
+  | 'secondary'
   | 'thinkingText'
   | 'userMessageText'
   | 'toolTitle'
@@ -291,6 +337,8 @@ export interface ThemeColors {
   muted: string;
   dim: string;
   text: string;
+  /** A step softer than `text`: tool calls, tool output, status line, answered prompts. */
+  secondary: string;
   thinkingText: string;
   // User messages
   userMessageBg: string;
@@ -325,16 +373,18 @@ export interface ThemeColors {
 
 export const darkTheme: ThemeColors = {
   // Core UI
-  accent: '#16c858', // Brand green
+  accent: '#62f69d', // Mint: brand green lifted for dark backgrounds
   border: '#3f3f46',
-  borderAccent: '#16c858',
+  borderAccent: '#62f69d',
   borderMuted: '#27272a',
-  success: '#22c55e',
+  success: '#62f69d', // Same as accent so checkmarks never read darker than the accent
+
   error: '#ef4444',
   warning: '#f59e0b',
   muted: '#8c8c94',
   dim: '#84848c',
   text: '#fafafa',
+  secondary: '#d9d9dc',
   thinkingText: '#a1a1aa',
   // User messages
   userMessageBg: '#0f172a', // Slate blue
@@ -348,8 +398,8 @@ export const darkTheme: ThemeColors = {
   toolBorderPending: '#52525b', // Zinc-600 dim grey for pending
   toolBorderSuccess: '#52525b', // Zinc-600 dim grey for success
   toolBorderError: '#ef4444', // Red for error
-  toolTitle: '#fb923c', // Amber for tool names
-  toolArgs: '#ffe4c4', // Bisque (warm cream) for tool arguments
+  toolTitle: '#d9d9dc', // Same as secondary: tool calls sit a step behind message text
+  toolArgs: '#d9d9dc',
   toolOutput: '#d4d4d8',
   textHighlight: '#c084fc', // Lavender for inline code, headings, links
   // Error display
@@ -373,12 +423,13 @@ export const lightTheme: ThemeColors = {
   border: '#d4d4d8',
   borderAccent: '#0d8020',
   borderMuted: '#e4e4e7',
-  success: '#15803d',
+  success: '#0d8020', // Same as the accent, like the dark theme
   error: '#dc2626',
   warning: '#d97706',
   muted: '#595961',
   dim: '#67676f',
   text: '#18181b',
+  secondary: '#38383e',
   thinkingText: '#595961',
   // User messages
   userMessageBg: '#f0fdf4', // Light green tint
@@ -392,8 +443,8 @@ export const lightTheme: ThemeColors = {
   toolBorderPending: '#a1a1aa', // Zinc-400 dim grey for pending
   toolBorderSuccess: '#a1a1aa', // Zinc-400 dim grey for success
   toolBorderError: '#dc2626', // Red for error
-  toolTitle: '#c2410c', // Deep amber for light backgrounds
-  toolArgs: '#92400e', // Deep amber-brown for light backgrounds
+  toolTitle: '#38383e', // Same as secondary, like the dark theme
+  toolArgs: '#38383e',
   toolOutput: '#3f3f46',
   textHighlight: '#7c3aed', // Deep violet for light backgrounds
   // Error display

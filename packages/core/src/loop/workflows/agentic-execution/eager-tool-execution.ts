@@ -129,7 +129,7 @@ type QueuedExecution = {
  * late keeps one source of truth for the limit.
  */
 export class EagerToolExecutionCoordinator {
-  readonly #executions = new Map<string, Promise<EagerToolResult>>();
+  readonly #executions = new Map<string, { promise: Promise<EagerToolResult>; token: object }>();
   readonly #queued: QueuedExecution[] = [];
   readonly #controllers = new Map<string, RunningExecution>();
   /**
@@ -164,7 +164,7 @@ export class EagerToolExecutionCoordinator {
     this.#executions.delete(toolCallId);
     this.#completed.delete(toolCallId);
     this.#suspended.delete(toolCallId);
-    return execution;
+    return execution?.promise;
   }
 
   /**
@@ -186,6 +186,7 @@ export class EagerToolExecutionCoordinator {
     // Its own controller, so work started for an attempt the pipeline later discards can
     // be cancelled without touching the run's signal.
     const controller = new AbortController();
+    const ownershipToken = {};
 
     // Held once, released once — by whichever comes first, the execution settling or the
     // execution being cancelled. A tool that ignores its abort signal must not keep a
@@ -228,7 +229,12 @@ export class EagerToolExecutionCoordinator {
                       ? { result: envelope.result }
                       : undefined;
 
-              if (call && outcome && !controller.signal.aborted) {
+              if (
+                call &&
+                outcome &&
+                !controller.signal.aborted &&
+                this.#executions.get(toolCallId)?.token === ownershipToken
+              ) {
                 this.#completed.set(toolCallId, {
                   toolCallId,
                   toolName: call.toolName,
@@ -240,7 +246,11 @@ export class EagerToolExecutionCoordinator {
               resolve(result);
             },
             error => {
-              if (eagerToolCallSuspensionIntent(error) && !controller.signal.aborted) {
+              if (
+                eagerToolCallSuspensionIntent(error) &&
+                !controller.signal.aborted &&
+                this.#executions.get(toolCallId)?.token === ownershipToken
+              ) {
                 this.#suspended.add(toolCallId);
               }
               reject(error);
@@ -273,7 +283,7 @@ export class EagerToolExecutionCoordinator {
     // The foreach adopts this promise later (or never, if the run is cancelled).
     // Keep a handler attached so a rejection is never unhandled.
     promise.catch(() => {});
-    this.#executions.set(toolCallId, promise);
+    this.#executions.set(toolCallId, { promise, token: ownershipToken });
     return true;
   }
 

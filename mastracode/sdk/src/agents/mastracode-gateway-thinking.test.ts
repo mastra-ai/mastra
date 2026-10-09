@@ -1,9 +1,3 @@
-/**
- * Resolver-level tests: the session thinking level must reach the wire body for
- * Google, custom OpenAI-compatible, and OpenAI API-key models, and must leave
- * requests untouched when thinking is off or unset.
- */
-
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -32,10 +26,10 @@ function createGateway(thinkingLevel: ThinkingLevelSetting | undefined) {
 
 let bodies: Array<Record<string, any>>;
 
-async function requestBody(model: any): Promise<Record<string, any>> {
+async function requestBody(model: any, providerOptions?: Record<string, Record<string, unknown>>) {
   bodies = [];
   await model
-    .doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }] })
+    .doGenerate({ prompt: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }], providerOptions })
     .catch(() => undefined);
   expect(bodies).toHaveLength(1);
   return bodies[0]!;
@@ -84,15 +78,41 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect(g25.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 1024 });
   });
 
+  it('sends DeepSeek the reasoning effort the model runs', async () => {
+    expect((await requestBody(resolve('max', 'deepseek', 'deepseek-v4-pro'))).reasoning_effort).toBe('max');
+    expect((await requestBody(resolve('xhigh', 'deepseek', 'deepseek-v4-pro'))).reasoning_effort).toBe('high');
+  });
+
+  it("keeps the caller's own DeepSeek effort over the level", async () => {
+    const body = await requestBody(resolve('low', 'deepseek', 'deepseek-v4-pro'), {
+      deepseek: { reasoningEffort: 'max' },
+    });
+    expect(body.reasoning_effort).toBe('max');
+  });
+
   it.each([undefined, 'off'] as const)('leaves every path untouched when thinking is %s', async level => {
     expect(await requestBody(resolve(level, 'my-local', 'local-model'))).not.toHaveProperty('reasoning_effort');
     expect(await requestBody(resolve(level, 'openai', 'gpt-5.5'))).not.toHaveProperty('reasoning');
     const google = await requestBody(resolve(level, 'google', 'gemini-3-flash-preview'));
     expect(google.generationConfig?.thinkingConfig).toBeUndefined();
+    const deepseek = await requestBody(resolve(level, 'deepseek', 'deepseek-v4-pro'));
+    expect(deepseek).not.toHaveProperty('thinking');
+    expect(deepseek).not.toHaveProperty('reasoning_effort');
   });
 
   it('leaves Gemini models without thinking support untouched', async () => {
     const body = await requestBody(resolve('high', 'google', 'gemini-2.0-flash'));
     expect(body.generationConfig?.thinkingConfig).toBeUndefined();
+  });
+
+  it('fits the Codex OAuth effort to the model the user picked, not its codex variant', async () => {
+    writeFileSync(
+      join(appDataDir, 'auth.json'),
+      JSON.stringify({ 'openai-codex': { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() + 1_000_000 } }),
+      'utf8',
+    );
+    reloadAuthStorage();
+
+    expect((await requestBody(resolve('xhigh', 'openai', 'gpt-5'))).reasoning).toMatchObject({ effort: 'high' });
   });
 });

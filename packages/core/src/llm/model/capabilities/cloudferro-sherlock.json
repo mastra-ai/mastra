@@ -11,5 +11,13 @@
     "openai/gpt-oss-120b",
     "speakleash/Bielik-11B-v2.6-Instruct",
     "speakleash/Bielik-11B-v3.0-Instruct"
-  ]
+  ],
+  "reasoning": {
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ]
+  }
 }

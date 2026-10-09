@@ -1,11 +1,20 @@
 {
-  "attachment": ["moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code", "stepfun/step-3.7-flash", "xiaomi/mimo-v2.5"],
+  "attachment": [
+    "moonshotai/kimi-k2.6",
+    "moonshotai/kimi-k2.7-code",
+    "qwen/qwen3.6-27b",
+    "qwen/qwen3.8-27b",
+    "stepfun/step-3.7-flash",
+    "xiaomi/mimo-v2.5"
+  ],
   "temperature": [
     "ambient/large",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-0731",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
+    "qwen/qwen3.6-27b",
+    "qwen/qwen3.8-27b",
     "stepfun/step-3.7-flash",
     "xiaomi/mimo-v2.5",
     "z-ai/glm-5.2",
@@ -18,10 +27,75 @@
     "deepseek/deepseek-v4-flash-0731",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
+    "qwen/qwen3.6-27b",
+    "qwen/qwen3.8-27b",
     "stepfun/step-3.7-flash",
     "xiaomi/mimo-v2.5",
     "z-ai/glm-5.2",
     "zai-org/GLM-5.1-FP8",
     "zai-org/GLM-5.2-FP8"
-  ]
+  ],
+  "reasoning": {
+    "deepseek/deepseek-v4-flash-0731": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "z-ai/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "ambient/large": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.2-FP8": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "xiaomi/mimo-v2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "stepfun/step-3.7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen/qwen3.8-27b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.6-27b": [
+      {
+        "type": "toggle"
+      }
+    ]
+  }
 }

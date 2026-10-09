@@ -56,10 +56,14 @@ export function workflowSnapshotStatusIndexName(schemaName?: string): string {
 /**
  * Expression index on `(workflow_name, snapshot->>'status', "createdAt" DESC)` so
  * listWorkflowRuns() status filters can use an index instead of scanning every snapshot.
+ *
+ * `concurrently` is set by init, which may build the index on a large existing table while
+ * other processes keep writing to it. The exported DDL stays plain because migration
+ * tooling often wraps statements in a transaction, where CONCURRENTLY is rejected.
  */
-function workflowSnapshotStatusIndexSQL(indexName: string, schemaName?: string): string {
+function workflowSnapshotStatusIndexSQL(indexName: string, schemaName?: string, concurrently = false): string {
   const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(schemaName) });
-  return `CREATE INDEX IF NOT EXISTS "${indexName}" ON ${tableName} (workflow_name, (snapshot ->> 'status'), "createdAt" DESC)`;
+  return `CREATE INDEX ${concurrently ? 'CONCURRENTLY ' : ''}IF NOT EXISTS "${indexName}" ON ${tableName} (workflow_name, (snapshot ->> 'status'), "createdAt" DESC)`;
 }
 
 /** Base name (before any schema prefix) of the expression index backing the threadId filter. */
@@ -100,10 +104,11 @@ export const WORKFLOW_SNAPSHOT_THREAD_ID_EXPR = `COALESCE(jsonb_path_query_first
 /**
  * Expression index on the snapshot-embedded thread id so listWorkflowRuns() threadId filters
  * (Agent.listSuspendedRuns) can use an index instead of detoasting every snapshot.
+ * See {@link workflowSnapshotStatusIndexSQL} for `concurrently`.
  */
-function workflowSnapshotThreadIdIndexSQL(indexName: string, schemaName?: string): string {
+function workflowSnapshotThreadIdIndexSQL(indexName: string, schemaName?: string, concurrently = false): string {
   const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(schemaName) });
-  return `CREATE INDEX IF NOT EXISTS "${indexName}" ON ${tableName} ((${WORKFLOW_SNAPSHOT_THREAD_ID_EXPR}))`;
+  return `CREATE INDEX ${concurrently ? 'CONCURRENTLY ' : ''}IF NOT EXISTS "${indexName}" ON ${tableName} ((${WORKFLOW_SNAPSHOT_THREAD_ID_EXPR}))`;
 }
 
 export class WorkflowsPG extends WorkflowsStorage {
@@ -227,7 +232,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
     const indexName = workflowSnapshotStatusIndexName(this.#schema);
     try {
-      await this.#db.createIndexFromStatement(indexName, workflowSnapshotStatusIndexSQL(indexName, this.#schema));
+      await this.#db.createIndexFromStatement(indexName, workflowSnapshotStatusIndexSQL(indexName, this.#schema, true));
     } catch (error) {
       this.logger?.warn?.(`Failed to create index ${indexName}:`, error);
     }
@@ -238,7 +243,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       await this.#db.createIndexFromStatement(
         threadIdIndexName,
-        workflowSnapshotThreadIdIndexSQL(threadIdIndexName, this.#schema),
+        workflowSnapshotThreadIdIndexSQL(threadIdIndexName, this.#schema, true),
       );
     } catch (error) {
       this.logger?.warn?.(`Failed to create index ${threadIdIndexName}:`, error);
@@ -320,12 +325,14 @@ export class WorkflowsPG extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     try {
       // Use a transaction with row-level locking to ensure atomicity
@@ -364,7 +371,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
         // Merge the new step result using element-wise array merging
         // (critical for concurrent foreach iteration results)
-        mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+        mergeWorkflowStepResult({ snapshot, stepId, result, requestContext, state });
 
         // Upsert the snapshot within the same transaction
         const now = new Date();
@@ -631,6 +638,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     resourceId,
     threadId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -714,8 +722,20 @@ export class WorkflowsPG extends WorkflowsStorage {
       const normalizedPerPage = usePagination ? normalizePerPage(perPage, Number.MAX_SAFE_INTEGER) : 0;
       const offset = usePagination ? page! * normalizedPerPage : undefined;
 
+      // In summary mode only read status/timestamp out of the snapshot so large snapshots aren't transferred.
+      // Legacy json/text columns get the same sanitizing path as the status filter so bad escapes can't fail the list.
+      let selectList = '*';
+      if (summary) {
+        const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
+        const snapshotJson =
+          snapshotType === 'jsonb'
+            ? 'snapshot'
+            : `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb`;
+        selectList = `workflow_name, run_id, "resourceId", "createdAt", "createdAtZ", "updatedAt", "updatedAtZ", jsonb_build_object('status', ${snapshotJson} -> 'status', 'timestamp', ${snapshotJson} -> 'timestamp') AS snapshot`;
+      }
+
       const query = `
-          SELECT * FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
+          SELECT ${selectList} FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
           ${whereClause}
           ORDER BY "createdAt" DESC
           ${usePagination ? ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}` : ''}

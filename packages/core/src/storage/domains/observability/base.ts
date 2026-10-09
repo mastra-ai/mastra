@@ -65,6 +65,9 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
 } from './scores';
+import type { SpanQueryResponse, TrustedSpanQueryPlan } from './span-query';
+import type { TraceAggregateResponse } from './trace-aggregate';
+import type { TrustedTraceAggregatePlan } from './trace-aggregate-planner';
 import type {
   GetTraceQueryValuesResponse,
   QueryThreadsResult,
@@ -111,8 +114,11 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `entity-type-discovery`, `entity-name-discovery`, `service-name-discovery`,
  *   `environment-discovery`, `tag-discovery`: the matching `get*` filter discovery method
  * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
+ * - `span-query`: `querySpans` over completed spans
  * - `trace-query`: `queryTraces`
+ * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
+ * - `trace-query-context-ids`: `runId`, `sessionId`, `userId` and `organizationId` predicates in trace/thread queries
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
@@ -128,12 +134,15 @@ export type ObservabilityStorageFeature =
   | 'environment-discovery'
   | 'tag-discovery'
   | 'metric-discovery'
+  | 'span-query'
   | 'trace-query'
+  | 'trace-aggregate'
   | 'trace-query-root-duration'
   | 'trace-query-discovery'
   | 'thread-query'
   | 'trace-query-tenant-scope'
-  | 'feedback';
+  | 'feedback'
+  | 'trace-query-context-ids';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
@@ -386,6 +395,16 @@ export class ObservabilityStorage extends StorageDomain {
     return { ...rest, spans: spans.map(toLightSpanRecord) };
   }
 
+  /** Executes a validated span-row query; unsupported stores fail explicitly. */
+  async querySpans(_plan: TrustedSpanQueryPlan): Promise<SpanQueryResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_QUERY_SPANS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support span queries',
+    });
+  }
+
   /**
    * Executes a validated advanced trace-query plan.
    */
@@ -395,6 +414,18 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support advanced trace queries',
+    });
+  }
+
+  /**
+   * Executes a validated trace-aggregate plan.
+   */
+  async aggregateTraces(_plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_AGGREGATE_TRACES_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support trace aggregation',
     });
   }
 

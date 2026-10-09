@@ -1,8 +1,6 @@
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalType } from '../agent/signals';
-import { MastraFGAPermissions } from '../auth/ee';
-import type { MastraFGAPermissionInput, ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
@@ -37,6 +35,8 @@ import {
   getMemoryTokenBoundary,
   normalizeMessageHistoryConfig,
 } from './message-history-config';
+import { checkThreadFGA } from './thread-fga';
+import type { CheckThreadFGAOptions } from './thread-fga';
 
 import type {
   SharedMemoryConfig,
@@ -186,9 +186,10 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
       }
       this.vector = config.vector;
 
-      if (!config.embedder) {
+      // An embedder is required only when the application supplies the vectors.
+      if (!config.embedder && !config.vector.isSelfEmbedding) {
         throw new Error(
-          `Semantic recall requires an embedder to be configured.
+          `Semantic recall requires an embedder, or a vector store that generates embeddings itself.
 
 https://mastra.ai/en/docs/memory/semantic-recall`,
         );
@@ -340,11 +341,24 @@ https://mastra.ai/en/docs/memory/overview`,
    * Get the index name for semantic recall embeddings.
    * This is used to ensure consistency between the Memory class and SemanticRecall processor.
    */
+  /**
+   * True when the attached vector store produces the embeddings itself, so this Memory sends it
+   * text. False whenever an embedder is configured, which keeps the client-side path intact.
+   */
+  protected get isSelfEmbedding(): boolean {
+    return !this.embedder && this.vector?.isSelfEmbedding === true;
+  }
+
   protected getEmbeddingIndexName(dimensions?: number): string {
+    const separator = this.vector?.indexSeparator ?? '_';
+    // A self-embedding store picks its own dimension, so this name is keyed on the mode.
+    // The names below belong to indexes of client-supplied vectors.
+    if (this.isSelfEmbedding) {
+      return `memory${separator}messages${separator}selfembed`;
+    }
     const defaultDimensions = 1536;
     const usedDimensions = dimensions ?? defaultDimensions;
     const isDefault = usedDimensions === defaultDimensions;
-    const separator = this.vector?.indexSeparator ?? '_';
     return isDefault ? `memory${separator}messages` : `memory${separator}messages${separator}${usedDimensions}`;
   }
 
@@ -364,12 +378,15 @@ https://mastra.ai/en/docs/memory/overview`,
     const semanticConfig = typeof config?.semanticRecall === 'object' ? config.semanticRecall : undefined;
     const indexConfig = semanticConfig?.indexConfig;
 
-    // Base parameters that all vector stores support
-    const createParams: any = {
-      indexName,
-      dimension: usedDimensions,
-      ...(indexConfig?.metric && { metric: indexConfig.metric }),
-    };
+    // Base parameters that all vector stores support. A self-embedding store derives the
+    // dimension and the metric from its own model configuration.
+    const createParams: any = this.isSelfEmbedding
+      ? { indexName }
+      : {
+          indexName,
+          dimension: usedDimensions,
+          ...(indexConfig?.metric && { metric: indexConfig.metric }),
+        };
 
     // Add PG-specific configuration if provided
     // Only PG vector store will use these parameters
@@ -380,9 +397,11 @@ https://mastra.ai/en/docs/memory/overview`,
       if (indexConfig.hnsw) createParams.indexConfig.hnsw = indexConfig.hnsw;
     }
 
-    // Request btree indexes on metadata fields used for filtering
-    // This avoids sequential scans on large tables when querying by thread_id or resource_id
-    createParams.metadataIndexes = ['thread_id', 'resource_id'];
+    if (!this.isSelfEmbedding) {
+      // Request btree indexes on metadata fields used for filtering
+      // This avoids sequential scans on large tables when querying by thread_id or resource_id
+      createParams.metadataIndexes = ['thread_id', 'resource_id'];
+    }
 
     await this.vector.createIndex(createParams);
     return { indexName };
@@ -640,46 +659,8 @@ https://mastra.ai/en/docs/memory/overview`,
    * Static helper to check FGA authorization for thread access.
    * Can be called from HTTP handlers and agent execution paths.
    */
-  static async checkThreadFGA(options: {
-    mastra?: Mastra;
-    user?: Record<string, unknown>;
-    threadId: string;
-    resourceId?: string;
-    requestContext?: RequestContext;
-    permission?: MastraFGAPermissionInput;
-    actor?: ActorSignal;
-  }): Promise<void> {
-    const {
-      mastra,
-      user,
-      threadId,
-      resourceId,
-      requestContext,
-      permission = MastraFGAPermissions.MEMORY_READ,
-      actor,
-    } = options;
-    const fgaProvider = mastra?.getServer()?.fga;
-    if (!fgaProvider) return;
-
-    const { requireFGA } = await import('../auth/ee/fga-check');
-    await requireFGA({
-      fgaProvider,
-      user,
-      resource: { type: 'thread', id: threadId },
-      permission,
-      requestContext,
-      actor,
-      context:
-        resourceId || requestContext
-          ? {
-              resourceId,
-            }
-          : undefined,
-      metadata: {
-        threadId,
-        resourceId,
-      },
-    });
+  static async checkThreadFGA(options: CheckThreadFGAOptions): Promise<void> {
+    return checkThreadFGA(options);
   }
 
   /**
@@ -724,6 +705,27 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig?: MemoryConfigInternal;
     observabilityContext?: Partial<ObservabilityContext>;
   }): Promise<void>;
+
+  /**
+   * Whether `mergeWorkingMemory` is available (atomic merge supported by storage).
+   */
+  async supportsAtomicWorkingMemoryMerge(): Promise<boolean> {
+    return false;
+  }
+
+  /**
+   * Atomically deep-merges a partial JSON object into resource-scoped working memory.
+   * Implementations without atomic merge support throw.
+   */
+  async mergeWorkingMemory(_: {
+    threadId: string;
+    resourceId?: string;
+    workingMemory: string | Record<string, unknown>;
+    memoryConfig?: MemoryConfigInternal;
+    observabilityContext?: Partial<ObservabilityContext>;
+  }): Promise<void> {
+    throw new Error(`Atomic working memory merge is not supported by ${this.constructor.name}`);
+  }
 
   /**
    * @warning experimental! can be removed or changed at any time
@@ -836,6 +838,10 @@ https://mastra.ai/en/docs/memory/overview`,
               'version' in effectiveConfig.workingMemory &&
               effectiveConfig.workingMemory.version === 'vnext',
             templateProvider: this,
+            readOnly:
+              effectiveConfig.readOnly ||
+              (typeof effectiveConfig.workingMemory === 'object' &&
+                effectiveConfig.workingMemory.agentManaged === false),
           }),
         );
       }
@@ -891,12 +897,14 @@ https://mastra.ai/en/docs/memory/overview`,
           text: 'Using Mastra Memory semantic recall requires a vector adapter but no attached adapter was detected.',
         });
 
-      if (!this.embedder)
+      // A self-embedding store needs no embedder: it takes the text and produces the
+      // vectors itself.
+      if (!this.embedder && !this.vector.isSelfEmbedding)
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.MASTRA_VECTOR,
           id: 'SEMANTIC_RECALL_MISSING_EMBEDDER',
-          text: 'Using Mastra Memory semantic recall requires an embedder but no attached embedder was detected.',
+          text: 'Using Mastra Memory semantic recall requires an embedder, or a vector store that generates embeddings itself. Neither was detected.',
         });
 
       // Check if user already manually added SemanticRecall
@@ -1015,12 +1023,14 @@ https://mastra.ai/en/docs/memory/overview`,
           text: 'Using Mastra Memory semantic recall requires a vector adapter but no attached adapter was detected.',
         });
 
-      if (!this.embedder)
+      // A self-embedding store needs no embedder: it takes the text and produces the
+      // vectors itself.
+      if (!this.embedder && !this.vector.isSelfEmbedding)
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.MASTRA_VECTOR,
           id: 'SEMANTIC_RECALL_MISSING_EMBEDDER',
-          text: 'Using Mastra Memory semantic recall requires an embedder but no attached embedder was detected.',
+          text: 'Using Mastra Memory semantic recall requires an embedder, or a vector store that generates embeddings itself. Neither was detected.',
         });
 
       // Check if user already manually added SemanticRecall
@@ -1230,6 +1240,8 @@ https://mastra.ai/en/docs/memory/overview`,
         blockAfter: obs.blockAfter,
         previousObserverTokens: obs.previousObserverTokens,
         observeAttachments: obs.observeAttachments,
+        maxRetries: obs.maxRetries,
+        failurePolicy: obs.failurePolicy,
       };
       const obsModelId = extractModelIdString(obs.model);
       if (obsModelId) {
@@ -1246,6 +1258,8 @@ https://mastra.ai/en/docs/memory/overview`,
         providerOptions: ref.providerOptions,
         blockAfter: ref.blockAfter,
         bufferActivation: ref.bufferActivation,
+        maxRetries: ref.maxRetries,
+        failurePolicy: ref.failurePolicy,
       };
       const refModelId = extractModelIdString(ref.model);
       if (refModelId) {

@@ -140,6 +140,8 @@ export type StorageRequest =
       stepId: string;
       result: string;
       requestContext: string;
+      /** JSON-encoded workflow state recorded as `context.__state` in the same write. */
+      state?: string;
     }
   | {
       op: 'mergeWorkflowState';
@@ -172,6 +174,7 @@ export type StorageRequest =
       newNextFireAt: number;
       lastFireAt: number;
       lastRunId: string;
+      newStatus?: string;
     }
   | {
       op: 'updateSchedule';
@@ -207,6 +210,11 @@ export type StorageRequest =
       /** ISO timestamp; records with createdAt <= to */
       to?: string;
       offset?: number;
+      groupId?: string;
+      recordId?: string;
+      beforeGeneration?: number;
+      afterGeneration?: number;
+      sortDirection?: 'ASC' | 'DESC';
     }
   | {
       op: 'omUpdateActive';

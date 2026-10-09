@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AssistantRenderRegistry } from '../../assistant-render-registry.js';
 import { AssistantMessageComponent } from '../../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../../components/chat-boundary-spacer.js';
+import { IdleCounterComponent } from '../../components/idle-counter.js';
 import { JudgeDisplayComponent } from '../../components/judge-display.js';
 import { NotificationSummaryComponent } from '../../components/notification-summary.js';
 import { NotificationComponent } from '../../components/notification.js';
@@ -248,14 +249,16 @@ describe('handleMessageStart signals', () => {
             updates: [
               {
                 id: 'activity-1',
-                action: 'node-created',
-                type: 'node',
-                recordId: 'node-1',
+                action: 'record-created',
+                type: 'record',
+                recordId: 'record-1',
                 name: 'Atlas launch',
+                targetId: 'atlas',
+                targetType: 'node',
                 createdAt: '2026-07-15T00:00:00.000Z',
               },
             ],
-            hot: [{ type: 'node', name: 'Atlas launch', updates: 1 }],
+            hot: [{ type: 'node', id: 'atlas', name: 'Atlas launch', updates: 1 }],
           },
         },
       } as Parameters<typeof createSignal>[0]),
@@ -326,12 +329,13 @@ describe('handleMessageStart signals', () => {
     expect(visibleChildren(state)).toHaveLength(1);
     const component = visibleChildren(state)[0];
     expect(component).toBeInstanceOf(NotificationComponent);
-    const rendered = stripAnsi((component as NotificationComponent).render(100).join('\n'));
-    expect(rendered).toContain('notification from github');
-    expect(rendered).toContain('╭');
-    expect(rendered).toContain('╰');
-    expect(rendered).toContain('high · ci-status · delivered');
-    expect(rendered).toContain('CI failed on main');
+    const lines = stripAnsi((component as NotificationComponent).render(100).join('\n')).split('\n');
+    // Left-bar card: title, details, message, every row on the bar.
+    expect(lines).toEqual([
+      expect.stringMatching(/^▎ notification from github/),
+      expect.stringMatching(/^▎ high · ci-status · delivered/),
+      expect.stringMatching(/^▎ CI failed on main/),
+    ]);
   });
 
   it('wraps long streamed full notifications within the terminal width', () => {
@@ -641,6 +645,38 @@ describe('handleMessageUpdate assistant streaming', () => {
         state.chatContainer.addChild(child);
       },
     } as EventHandlerContext;
+  });
+
+  it('flags quiet-mode thinking for the Working row while reasoning streams, and shows nothing in the chat', () => {
+    const idleCounter = new IdleCounterComponent();
+    Object.assign(state, { quietMode: true, hideThinkingBlock: true, idleCounter });
+    const updateStatusLine = vi.fn();
+    Object.assign(ctx, { updateStatusLine });
+    const chat = () => stripAnsi(state.chatContainer.render(80).join('\n'));
+
+    handleMessageStart(ctx, assistantMessage([{ type: 'reasoning', reasoning: 'planning' } as Part]));
+    expect(idleCounter.isThinking()).toBe(true);
+    expect(updateStatusLine).toHaveBeenCalledTimes(1);
+
+    handleMessageUpdate(
+      ctx,
+      assistantMessage([{ type: 'reasoning', reasoning: 'planning' } as Part, { type: 'text', text: 'Answer' }]),
+    );
+    expect(idleCounter.isThinking()).toBe(false);
+
+    handleMessageUpdate(
+      ctx,
+      assistantMessage([
+        { type: 'reasoning', reasoning: 'planning' } as Part,
+        { type: 'text', text: 'Answer' },
+        { type: 'reasoning', reasoning: 'more' } as Part,
+      ]),
+    );
+    expect(idleCounter.isThinking()).toBe(true);
+
+    handleMessageEnd(ctx, assistantMessage([{ type: 'text', text: 'Answer' }]));
+    expect(idleCounter.isThinking()).toBe(false);
+    expect(chat()).not.toMatch(/thinking/i);
   });
 
   it('adds spacing as soon as assistant text starts after a user message', () => {

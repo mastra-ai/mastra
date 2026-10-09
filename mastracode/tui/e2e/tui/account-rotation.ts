@@ -14,6 +14,7 @@ const PROMPT = 'Rotate to the next account when this one is rate limited.';
 const RESPONSE_TEXT = 'Completed on the second account after rotation.';
 const FOLLOWUP_PROMPT = 'Confirm the next turn starts on the account we rotated to.';
 const FOLLOWUP_RESPONSE_TEXT = 'Second turn completed on the current account.';
+const PEER_CHANGE_RESPONSE_TEXT = 'Completed on the surviving account after the peer removed the old account.';
 const ACCOUNT_A_ACCESS = 'mc-rotation-a-access';
 const ACCOUNT_B_ACCESS = 'mc-rotation-b-access';
 const ACCOUNT_A_DEVICE = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -22,6 +23,7 @@ const ACCOUNT_B_DEVICE = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 // Test-only handles wired by prepare/inProcessApp so run() can reach them.
 let scenarioAppDataDir = '';
 let outbound: Array<{ bearer: string; deviceId: string }> = [];
+let accountARecovered = false;
 let restartApp: (() => Promise<void>) | undefined;
 
 type AuthSnapshot = Record<
@@ -185,6 +187,7 @@ export const accountRotationScenario: McE2eScenario = {
   async inProcessApp({ startMastraCodeApp }) {
     const patches = createGlobalPatchScope();
     outbound = [];
+    accountARecovered = false;
     let completions = 0;
     const originalFetch = globalThis.fetch.bind(globalThis);
     patches.setProperty(globalThis, 'fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -193,6 +196,7 @@ export const accountRotationScenario: McE2eScenario = {
         const bearer = (headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
         const deviceId = headers.get('x-msh-device-id') ?? '';
         outbound.push({ bearer, deviceId });
+        if (accountARecovered && bearer === ACCOUNT_A_ACCESS) return completionResponse(PEER_CHANGE_RESPONSE_TEXT);
         if (bearer !== ACCOUNT_B_ACCESS) return rateLimitResponse();
         completions += 1;
         return completionResponse(completions > 1 ? FOLLOWUP_RESPONSE_TEXT : RESPONSE_TEXT);
@@ -279,12 +283,12 @@ export const accountRotationScenario: McE2eScenario = {
 
     // A14: a second turn in the same thread starts on the account the pool is
     // currently on (B) instead of re-trying the account that just rate limited.
-    // The `Starting on …` notice is the transcript proof; the outbound list is
-    // the wire proof that account A was never contacted again.
+    // The outbound list is the proof that account A was never contacted again;
+    // starting on an account is not announced in the transcript.
     const requestsBeforeFollowup = outbound.length;
     terminal.submit(FOLLOWUP_PROMPT);
     await runtime.waitForScreenText(new RegExp(FOLLOWUP_RESPONSE_TEXT), terminal, 30_000);
-    await runtime.waitForScreenText(/Starting on Kimi account: Kimi Account B/i, terminal, 10_000);
+    await runtime.waitForScreenTextAbsent(/Starting on Kimi account/i, terminal, 2_000);
     runtime.printScreen('after second turn', terminal);
     const followupRequests = outbound.slice(requestsBeforeFollowup);
     if (followupRequests.length === 0 || followupRequests[0]!.bearer !== ACCOUNT_B_ACCESS) {
@@ -306,6 +310,26 @@ export const accountRotationScenario: McE2eScenario = {
         `Expected the registry to hold both accounts with B active: ${JSON.stringify(authSummary(auth))}`,
       );
     }
+
+    // A peer switches to the now-healthy A and removes B without restarting
+    // this TUI. Its next turn must use A's token AND provider metadata.
+    accountARecovered = true;
+    const peer = new AuthStorage(join(scenarioAppDataDir, 'auth.json'));
+    const [accountA, accountB] = peer.listAccounts(PROVIDER);
+    peer.activateAccount(PROVIDER, accountA!.id);
+    peer.removeAccount(PROVIDER, accountB!.id);
+    const requestsBeforePeerChange = outbound.length;
+    terminal.submit('Continue after another instance switched and removed the previous account.');
+    await runtime.waitForScreenText(new RegExp(PEER_CHANGE_RESPONSE_TEXT), terminal, 30_000);
+    const peerChangeRequests = outbound.slice(requestsBeforePeerChange);
+    if (
+      peerChangeRequests.length === 0 ||
+      peerChangeRequests.some(request => request.bearer !== ACCOUNT_A_ACCESS || request.deviceId !== ACCOUNT_A_DEVICE)
+    ) {
+      throw new Error(`Expected only the surviving account after peer removal: ${JSON.stringify(outboundSummary())}`);
+    }
+    await runtime.waitForScreenTextAbsent(/\(auth failed\)/i, terminal, 8_000);
+    runtime.printScreen('after peer switch and removal', terminal);
 
     // Restart the app on the same app data and reload the thread: the persisted
     // notice must render from history.

@@ -7,9 +7,12 @@ import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatCompactNumber, formatCost } from '@mastra/playground-ui/utils/cost';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { useTraceFeedback } from '@mastra/react/hooks/traces';
 import { CheckCircle, ClipboardCheck, FlaskConical, FileCodeIcon, FileOutputIcon, TargetIcon, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
@@ -17,9 +20,6 @@ import { useExperimentResultUsage } from '../hooks/use-experiment-result-usage';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ToolMockReportSection } from './tool-mock-report-section';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
-import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
-import { useTraceFeedback } from '@/domains/traces/hooks/use-trace-feedback';
-import { useLinkComponent } from '@/lib/framework';
 
 /**
  * Structural subset of `DatasetExperimentResult` the panel renders. Review-queue
@@ -127,7 +127,10 @@ function ExperimentResultPanelBody({
   const { Link } = useLinkComponent();
   const feedbackTraceId = feedbackTabSlot && result.traceId ? result.traceId : undefined;
   // Fetched as soon as the panel opens so the tab can flag feedback still needing review.
-  const { data: traceFeedback } = useTraceFeedback({ traceId: feedbackTraceId });
+  const { data: traceFeedback } = useTraceFeedback({
+    traceId: feedbackTraceId,
+    queryOptions: { enabled: !!feedbackTraceId },
+  });
   const usage = useExperimentResultUsage(result.traceId);
 
   const details = (

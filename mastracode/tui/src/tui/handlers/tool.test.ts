@@ -2,15 +2,19 @@ import { Container } from '@earendil-works/pi-tui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
-import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
 
+import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
 import type { TUIState } from '../state.js';
 import {
   clearToolInputParsers,
+  handleCommandExit,
   handleToolEnd,
   handleToolInputDelta,
+  handleToolInputEnd,
   handleToolInputStart,
+  handleShellOutput,
   handleToolStart,
+  handleToolApprovalRequired,
 } from './tool.js';
 import type { EventHandlerContext } from './types.js';
 
@@ -137,6 +141,7 @@ describe('background placeholder opt-in', () => {
 describe('task tool rendering', () => {
   afterEach(() => {
     clearToolInputParsers();
+    vi.useRealTimers();
   });
 
   it('keeps successful task tools out of the chat tool list', () => {
@@ -193,21 +198,31 @@ describe('task tool rendering', () => {
     expect((second as any).render(100).join('\n')).not.toContain('╭──');
   });
 
-  it('marks quiet tool result objects with isError true as failed even when the event flag is false', async () => {
-    const ctx = createToolHandlerContext();
-    ctx.state.quietMode = true;
-    const buffers = new Map([['call-1', { toolName: 'string_replace_lsp', text: '' }]]);
-    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
+  it.each([false, true])(
+    'preserves quiet error paths before the render timer (parser advanced: %s)',
+    async advanceParser => {
+      const ctx = createToolHandlerContext();
+      ctx.state.quietMode = true;
+      const buffers = new Map([['call-1', { toolName: 'string_replace_lsp', text: '' }]]);
+      vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
 
-    handleToolInputStart(ctx, 'call-1', 'string_replace_lsp');
-    handleToolInputDelta(ctx, 'call-1', '{"path":"src/example.ts","old_string":"missing","new_string":"replacement"}');
-    await flushParser();
-    handleToolEnd(ctx, 'call-1', { content: 'The specified text was not found.', isError: true }, false);
+      handleToolInputStart(ctx, 'call-1', 'string_replace_lsp');
+      vi.useFakeTimers();
+      handleToolInputDelta(
+        ctx,
+        'call-1',
+        '{"path":"src/example.ts","old_string":"missing","new_string":"replacement"}',
+      );
+      if (advanceParser) await vi.advanceTimersByTimeAsync(0);
+      handleToolEnd(ctx, 'call-1', { content: 'The specified text was not found.', isError: true }, false);
 
-    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
-    expect(output).toContain('The specified text was not found.');
-    expect(output).toContain('▐edit▌src/example.ts▌ ✗');
-  });
+      const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+      expect(output).toContain('The specified text was not found.');
+      expect(output).toContain('▐edit▌src/example.ts▌ ✗');
+      expect(output).not.toContain('replacement');
+      expect(output).not.toContain('missing');
+    },
+  );
 
   it('regroups quiet tools as streamed args arrive', async () => {
     const ctx = createToolHandlerContext();
@@ -247,5 +262,237 @@ describe('task tool rendering', () => {
     const output = stripAnsi(ctx.state.chatContainer.render(80).join('\n'));
     expect(output).toContain('.mastracode/plans/ship-it.md');
     expect(output).toContain('Submitting plan…');
+  });
+});
+
+describe('quiet shell description streaming', () => {
+  it('never shows the streamed command before the description arrives', async () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    const buffers = new Map([['call-1', { toolName: 'execute_command', text: '' }]]);
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
+    const render = () => stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+
+    handleToolInputStart(ctx, 'call-1', 'execute_command');
+    // Models may stream `command` before `description` regardless of schema order.
+    handleToolInputDelta(ctx, 'call-1', '{"command":"gh run view 123 --log-failed | grep FAIL"');
+    await flushParser();
+    expect(render()).not.toContain('gh run view');
+    expect(render()).toMatch(/│ \S writing command \(40 chars\) /);
+
+    handleToolInputDelta(ctx, 'call-1', ',"description":"Drilling into the failed CI job"}');
+    await flushParser();
+    expect(render()).toMatch(/│ \S Drilling into the failed CI job /);
+    expect(render()).not.toContain('gh run view');
+
+    handleToolInputEnd(ctx, 'call-1');
+    handleToolStart(ctx, 'call-1', 'execute_command', {
+      command: 'gh run view 123 --log-failed | grep FAIL',
+      description: 'Drilling into the failed CI job',
+    });
+    expect(render()).toMatch(/│ \S Drilling into the failed CI job /);
+    expect(render()).not.toContain('gh run view');
+    ctx.state.pendingTools.get('call-1')?.stopLiveUpdates?.();
+  });
+
+  it('streams the description into a grouped row as it arrives', async () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    const buffers = new Map([['call-1', { toolName: 'execute_command', text: '' }]]);
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
+    const row = () =>
+      stripAnsi(ctx.state.chatContainer.render(100).join('\n'))
+        .split('\n')
+        .map(line => line.trimEnd())
+        .find(line => /^│ \S /.test(line) && !line.startsWith('│ $'));
+
+    handleToolInputStart(ctx, 'call-1', 'execute_command');
+    handleToolInputDelta(ctx, 'call-1', '{"description":"Drilling in');
+    await flushParser();
+    expect(row()).toMatch(/^│ \S Drilling in +\d+s │$/);
+
+    handleToolInputDelta(ctx, 'call-1', 'to the failed CI job","command":"gh run');
+    await flushParser();
+    expect(row()).toMatch(/^│ \S Drilling into the failed CI job +\d+s │$/);
+    handleToolInputEnd(ctx, 'call-1');
+    ctx.state.pendingTools.get('call-1')?.stopLiveUpdates?.();
+  });
+
+  it('falls back to the command once args finish without a description', async () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    const buffers = new Map([['call-1', { toolName: 'execute_command', text: '' }]]);
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
+
+    handleToolInputStart(ctx, 'call-1', 'execute_command');
+    handleToolInputDelta(ctx, 'call-1', '{"command":"git status"}');
+    await flushParser();
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).not.toContain('git status');
+
+    handleToolInputEnd(ctx, 'call-1');
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toMatch(/│ \S git status /);
+    ctx.state.pendingTools.get('call-1')?.stopLiveUpdates?.();
+  });
+
+  it('only ever adds lines as quiet shell calls stream in, run, and finish', async () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    ctx.state.quietModeMaxToolPreviewLines = 2;
+    const buffers = new Map<string, { toolName: string; text: string }>();
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
+    const frames: string[][] = [];
+    const snap = () => frames.push(ctx.state.chatContainer.render(100));
+    const call = async (id: string, argChunks: string[], output: string[]) => {
+      const args = JSON.parse(argChunks.join(''));
+      buffers.set(id, { toolName: 'execute_command', text: '' });
+      handleToolInputStart(ctx, id, 'execute_command');
+      snap();
+      for (const chunk of argChunks) {
+        handleToolInputDelta(ctx, id, chunk);
+        await flushParser();
+        snap();
+      }
+      handleToolInputEnd(ctx, id);
+      handleToolStart(ctx, id, 'execute_command', args);
+      snap();
+      for (const chunk of output) {
+        handleShellOutput(ctx, id, chunk, 'stdout');
+        await flushParser();
+        snap();
+      }
+      handleToolEnd(ctx, id, { content: [{ type: 'text', text: output.join('') }], isError: false }, false);
+      snap();
+      ctx.state.pendingTools.get(id)?.stopLiveUpdates?.();
+    };
+
+    // Command-first and description-first calls, joining a box, switching directory, and back
+    await call('c1', ['{"command":"cd /tmp && ls', '","description":"Listing tmp"}'], ['a\n', 'b\nc\n']);
+    await call('c2', ['{"command":"cd /tmp && cat x', '","description":"Reading x"}'], ['one\n']);
+    await call('c3', ['{"description":"Reading y","command":"cd /tmp', ' && cat y"}'], ['1\n', '2\n']);
+    await call('c4', ['{"command":"sed -n 1,5p', ' f.ts","description":"Reading f"}'], ['x\n']);
+    await call('c5', ['{"description":"Listing opt","com', 'mand":"cd /opt && ls"}'], ['y\n', 'z\n']);
+    // Strict-schema models send every nullable argument; a `cwd: null` after the command is not a directory.
+    await call('c6', ['{"description":"Listing root","command":"ls"', ',"cwd":null}'], ['r\n']);
+
+    for (let i = 1; i < frames.length; i++) {
+      expect(frames[i]!.length, `frame ${i}`).toBeGreaterThanOrEqual(frames[i - 1]!.length);
+    }
+    const final = stripAnsi(frames.at(-1)!.join('\n'));
+    expect(final.match(/╭/g)).toHaveLength(4);
+  }, 20_000);
+
+  it('marks a shell call failed from its live exit record when the result text does not say', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    handleToolStart(ctx, 'call-1', 'execute_command', { command: 'ls', description: 'Listing files' });
+    // The sandbox threw: its exit event arrives before the result, which only carries `Error: …`.
+    handleCommandExit(ctx, 'call-1', -1, false);
+    handleToolEnd(ctx, 'call-1', 'Error: Sandbox failed to start', false);
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toMatch(/✗ Listing files/);
+    expect(output).toContain('└▸ Error: Sandbox failed to start');
+  });
+
+  it('labels quiet shell boxes with the project root commands run in', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    ctx.state.projectInfo = { rootPath: '/work/repo' } as typeof ctx.state.projectInfo;
+    handleToolStart(ctx, 'call-1', 'execute_command', {
+      command: 'cd /work/repo/packages/core && ls',
+      description: 'Listing',
+    });
+    handleToolEnd(ctx, 'call-1', 'a.ts', false);
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toContain('$ ./packages/core');
+  });
+
+  it('marks a call rejected by input validation as failed', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    handleToolStart(ctx, 'call-1', 'execute_command', { command: 'git status' });
+    // Validation failures come back as an ordinary result object, not an error result.
+    handleToolEnd(ctx, 'call-1', { error: true, message: 'Tool input validation failed for execute_command.' }, false);
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toContain('✗');
+    expect(output).not.toContain('✓');
+  });
+});
+
+describe('inline tool approval', () => {
+  it('shows the prompt inline in the chat and removes it once answered', () => {
+    const ctx = createToolHandlerContext();
+    const respondToToolApproval = vi.fn();
+    (ctx.state.session as any).respondToToolApproval = respondToToolApproval;
+    (ctx.state as any).pendingApprovalDismiss = null;
+
+    handleToolStart(ctx, 'call-1', 'execute_command', { command: 'pnpm test' });
+    handleToolApprovalRequired(ctx, 'call-1', 'execute_command', { command: 'pnpm test' });
+
+    const approval = ctx.state.activeInlineApproval;
+    expect(approval).toBeDefined();
+    expect(visibleChildren(ctx)).toContain(approval);
+    // The tool row above already shows the call, so the prompt is just the question and the keys.
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toContain('Allow?');
+
+    approval!.handleInput('y');
+
+    expect(respondToToolApproval).toHaveBeenCalledWith({ decision: 'approve', toolCallId: 'call-1' });
+    expect(ctx.state.activeInlineApproval).toBeUndefined();
+    expect(visibleChildren(ctx)).not.toContain(approval);
+    expect(ctx.state.pendingApprovalDismiss).toBeNull();
+  });
+
+  it('declines and removes the prompt when dismissed', () => {
+    const ctx = createToolHandlerContext();
+    const respondToToolApproval = vi.fn();
+    (ctx.state.session as any).respondToToolApproval = respondToToolApproval;
+
+    handleToolApprovalRequired(ctx, 'call-2', 'execute_command', { command: 'rm -rf build' });
+    ctx.state.pendingApprovalDismiss?.();
+
+    expect(respondToToolApproval).toHaveBeenCalledWith({
+      decision: 'decline',
+      toolCallId: 'call-2',
+      declineContext: undefined,
+    });
+    expect(ctx.state.activeInlineApproval).toBeUndefined();
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).not.toContain('Allow');
+  });
+
+  it('names the tool and its arguments when the approval targets a different call than the visible row', () => {
+    const ctx = createToolHandlerContext();
+    (ctx.state.session as any).respondToToolApproval = vi.fn();
+
+    // A wrapper tool asks approval for an inner tool under its own call id.
+    handleToolStart(ctx, 'call-3', 'execute_command', { command: 'run-wrapper' });
+    handleToolApprovalRequired(ctx, 'call-3', 'write_file', { path: 'src/auth.ts' });
+
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toContain('Allow write_file?');
+    expect(output).toContain('path: src/auth.ts');
+  });
+
+  it('names the command in quiet mode, where the row shows a description instead', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.quietMode = true;
+    (ctx.state.session as any).respondToToolApproval = vi.fn();
+    const args = { command: 'rm -rf build', description: 'Cleaning the build output' };
+
+    handleToolStart(ctx, 'call-5', 'execute_command', args);
+    handleToolApprovalRequired(ctx, 'call-5', 'execute_command', args);
+
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toContain('Allow execute_command?');
+    expect(output).toContain('command: rm -rf build');
+  });
+
+  it('names the tool when no row shows the call', () => {
+    const ctx = createToolHandlerContext();
+    (ctx.state.session as any).respondToToolApproval = vi.fn();
+
+    handleToolApprovalRequired(ctx, 'call-4', 'mcp_search', { query: 'release notes' });
+
+    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(output).toContain('Allow mcp_search?');
+    expect(output).toContain('query: release notes');
   });
 });

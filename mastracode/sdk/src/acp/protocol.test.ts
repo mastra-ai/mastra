@@ -1,0 +1,395 @@
+import {
+  AgentSideConnection,
+  ClientSideConnection,
+  PROTOCOL_VERSION,
+  RequestError,
+  ndJsonStream,
+} from '@agentclientprotocol/sdk';
+import type { RequestPermissionResponse, SessionNotification } from '@agentclientprotocol/sdk';
+import type { AgentController, AgentControllerEvent, Session } from '@mastra/core/agent-controller';
+import { createSignal } from '@mastra/core/signals';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { AuthStorage } from '../auth/storage.js';
+import { seedProviderOMDefault } from '../onboarding/om-settings.js';
+import { openUrlInBrowser } from '../utils/open-url.js';
+import { MastraCodeAcpAgent } from './agent.js';
+import type { AcpSessionRuntime } from './agent.js';
+
+vi.mock('../utils/open-url.js', () => ({ openUrlInBrowser: vi.fn() }));
+vi.mock('../onboarding/om-settings.js', () => ({ seedProviderOMDefault: vi.fn() }));
+
+const cleanups: Array<() => Promise<void>> = [];
+afterEach(async () => {
+  await Promise.all(cleanups.splice(0).map(cleanup => cleanup()));
+  vi.restoreAllMocks();
+  vi.mocked(openUrlInBrowser).mockClear();
+  vi.mocked(seedProviderOMDefault).mockClear();
+});
+
+async function connect(getSkills?: AcpSessionRuntime['getSkills']) {
+  let toAgent!: ReadableStreamDefaultController<Uint8Array>;
+  let toClient!: ReadableStreamDefaultController<Uint8Array>;
+  const agentInput = new ReadableStream<Uint8Array>({
+    start: controller => {
+      toAgent = controller;
+    },
+  });
+  const clientInput = new ReadableStream<Uint8Array>({
+    start: controller => {
+      toClient = controller;
+    },
+  });
+  const agentOutput = new WritableStream<Uint8Array>({ write: chunk => toClient.enqueue(chunk) });
+  const clientOutput = new WritableStream<Uint8Array>({ write: chunk => toAgent.enqueue(chunk) });
+  let emit: (event: AgentControllerEvent) => void = () => {};
+  const sendMessage = vi.fn().mockResolvedValue(undefined);
+  const createThread = vi.fn(async () => ({ id: 'thread-1' }));
+  const cleanup = vi.fn().mockResolvedValue(undefined);
+  const resume = vi.fn().mockResolvedValue(undefined);
+  const abort = vi.fn(() => emit({ type: 'agent_end', reason: 'aborted' }));
+  const deny = vi.fn(async () => {
+    emit({ type: 'agent_start' });
+  });
+  const session = {
+    subscribe: (listener: typeof emit) => {
+      emit = listener;
+      return () => {};
+    },
+    thread: { create: createThread, switch: async () => {} },
+    mode: { get: () => 'build' },
+    model: { get: () => 'test-model' },
+    sendMessage,
+    respondToToolSuspension: resume,
+    resumeToolCall: deny,
+    abort,
+  } as unknown as Session;
+  let agent!: MastraCodeAcpAgent;
+  const server = new AgentSideConnection(
+    connection => {
+      agent = new MastraCodeAcpAgent(connection, async () => ({
+        controller: { listAvailableModels: async () => [] } as unknown as AgentController,
+        session,
+        modes: [],
+        getSkills,
+        cleanup,
+      }));
+      return agent;
+    },
+    ndJsonStream(agentOutput, agentInput),
+  );
+  const updates: SessionNotification[] = [];
+  const dropped: SessionNotification[] = [];
+  let knownSessionId: string | undefined;
+  const permission = vi
+    .fn<() => Promise<RequestPermissionResponse>>()
+    .mockResolvedValue({ outcome: { outcome: 'selected', optionId: 'approve' } });
+  const client = new ClientSideConnection(
+    () => ({
+      sessionUpdate: async notification => {
+        (notification.sessionId === knownSessionId ? updates : dropped).push(notification);
+      },
+      requestPermission: permission,
+    }),
+    ndJsonStream(clientOutput, clientInput),
+  );
+  cleanups.push(async () => {
+    await agent.dispose();
+    toAgent.close();
+    toClient.close();
+    await Promise.all([client.closed, server.closed]);
+  });
+  await client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} });
+  const { sessionId } = await client.newSession({ cwd: '/tmp', mcpServers: [] });
+  knownSessionId = sessionId;
+  return {
+    client,
+    sessionId,
+    emit: (event: AgentControllerEvent) => emit(event),
+    sendMessage,
+    resume,
+    deny,
+    abort,
+    permission,
+    updates,
+    dropped,
+    createThread,
+    cleanup,
+  };
+}
+
+function assistant(text: string): AgentControllerEvent[] {
+  return [
+    {
+      type: 'message_start',
+      message: {
+        id: 'answer',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: { format: 2, parts: [] },
+      },
+    },
+    { type: 'message_update', id: 'answer', event: { type: 'text-delta', delta: text } },
+  ];
+}
+
+describe('ACP JSON-RPC conversation', () => {
+  it.each([
+    ['without terminal support', {}, []],
+    ['when terminal auth is turned off', { auth: { terminal: false } }, []],
+    ['with terminal auth', { auth: { terminal: true } }, ['anthropic', 'github-copilot', 'mastracode-login']],
+    [
+      'with the legacy terminal-auth flag',
+      { _meta: { 'terminal-auth': true } },
+      ['anthropic', 'github-copilot', 'mastracode-login'],
+    ],
+  ])(
+    'offers browser sign-in, and terminal login only to clients that can run it, %s',
+    async (_case, clientCapabilities, terminal) => {
+      const { client } = await connect();
+      const { authMethods } = await client.initialize({ protocolVersion: PROTOCOL_VERSION, clientCapabilities });
+      expect(authMethods?.map(method => method.id)).toEqual(['openai-codex', 'kimi-for-coding', 'xai', ...terminal]);
+      expect(authMethods?.filter(method => !('type' in method)).length).toBe(3);
+    },
+  );
+
+  it.each([
+    ['anthropic', ['login', '--provider', 'anthropic']],
+    ['github-copilot', ['login', '--provider', 'github-copilot']],
+    ['mastracode-login', ['login']],
+  ])('launches the login command for the %s terminal method', async (methodId, args) => {
+    const { client } = await connect();
+    const { authMethods } = await client.initialize({
+      protocolVersion: PROTOCOL_VERSION,
+      clientCapabilities: { auth: { terminal: true } },
+    });
+    expect(authMethods?.find(method => method.id === methodId)).toMatchObject({
+      type: 'terminal',
+      args,
+      _meta: { 'terminal-auth': { command: process.execPath, args: [...process.argv.slice(1, 2), ...args] } },
+    });
+  });
+
+  it('signs in by opening the provider login page in the browser', async () => {
+    const login = vi.spyOn(AuthStorage.prototype, 'login').mockImplementation(async (_providerId, callbacks) => {
+      callbacks.onAuth({ url: 'https://auth.openai.com/oauth/authorize?state=abc' });
+      return {
+        type: 'oauth-account',
+        id: 'openai-codex:1',
+        label: 'ChatGPT',
+        addedAt: '2026-10-03T00:00:00.000Z',
+        active: true,
+        access: 'access-token',
+        refresh: 'refresh-token',
+        expires: 0,
+      };
+    });
+    vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const { client } = await connect();
+    await client.authenticate({ methodId: 'openai-codex' });
+    expect(login).toHaveBeenCalledWith('openai-codex', expect.objectContaining({ authMode: 'browser' }));
+    expect(openUrlInBrowser).toHaveBeenCalledWith('https://auth.openai.com/oauth/authorize?state=abc');
+    // Signing in changes reachability, not memory selection: Auto roles stay Auto.
+    expect(seedProviderOMDefault).not.toHaveBeenCalled();
+  });
+
+  it('fails sign-in that needs typed input and points to terminal login', async () => {
+    vi.spyOn(AuthStorage.prototype, 'login').mockImplementation(async (_providerId, callbacks) => {
+      await callbacks.onPrompt({ message: 'Paste the authorization code:' });
+      throw new Error('unreachable');
+    });
+    const { client } = await connect();
+    await expect(client.authenticate({ methodId: 'openai-codex' })).rejects.toMatchObject({
+      message: expect.stringContaining('mastracode login'),
+    });
+  });
+
+  it('fails device sign-in whose page would ask for a code it cannot show', async () => {
+    vi.spyOn(AuthStorage.prototype, 'login').mockImplementation(async (_providerId, callbacks) => {
+      callbacks.onAuth({ url: 'https://auth.x.ai/activate', userCode: 'ABCD-1234' });
+      throw new Error('unreachable');
+    });
+    const { client } = await connect();
+    await expect(client.authenticate({ methodId: 'xai' })).rejects.toMatchObject({
+      message: expect.stringContaining('mastracode login'),
+    });
+    expect(openUrlInBrowser).not.toHaveBeenCalled();
+    expect(seedProviderOMDefault).not.toHaveBeenCalled();
+  });
+
+  it('accepts terminal logins without running a flow and rejects unknown methods', async () => {
+    const login = vi.spyOn(AuthStorage.prototype, 'login');
+    const { client } = await connect();
+    await client.authenticate({ methodId: 'mastracode-login' });
+    await client.authenticate({ methodId: 'anthropic' });
+    await client.authenticate({ methodId: 'github-copilot' });
+    expect(login).not.toHaveBeenCalled();
+    await expect(client.authenticate({ methodId: 'nope' })).rejects.toMatchObject({
+      message: expect.stringContaining('Unknown authentication method'),
+    });
+  });
+
+  it('keeps the original creation error on the wire when cleanup also fails', async () => {
+    const { client, createThread, cleanup } = await connect();
+    const error = RequestError.invalidParams({ thread: 'broken' }, 'thread creation failed');
+    createThread.mockRejectedValueOnce(error);
+    cleanup.mockRejectedValueOnce(new Error('storage close failed'));
+    await expect(client.newSession({ cwd: '/tmp', mcpServers: [] })).rejects.toMatchObject({
+      code: error.code,
+      message: error.message,
+      data: error.data,
+    });
+  });
+
+  it('advertises skills after the client registers the new session, before any prompt', async () => {
+    const getSkills = async () =>
+      ({
+        maybeRefresh: async () => {},
+        list: async () => [{ name: 'review', description: 'Review changes', path: '/skills/review' }],
+        get: async () => null,
+      }) as unknown as Awaited<ReturnType<NonNullable<AcpSessionRuntime['getSkills']>>>;
+    const { client, sessionId, updates, dropped, sendMessage, emit } = await connect(getSkills);
+    expect(dropped).toEqual([]);
+    await vi.waitFor(() =>
+      expect(updates).toContainEqual({
+        sessionId,
+        update: {
+          sessionUpdate: 'available_commands_update',
+          availableCommands: [
+            { name: 'skill/review', description: 'Review changes', input: { hint: 'Additional instructions' } },
+          ],
+        },
+      }),
+    );
+    sendMessage.mockImplementationOnce(async () => emit({ type: 'agent_end', reason: 'complete' }));
+    await client.prompt({ sessionId, prompt: [] });
+    expect(updates.filter(item => item.update.sessionUpdate === 'available_commands_update')).toHaveLength(1);
+  });
+
+  it('delivers only assistant text to the client', async () => {
+    const { client, sessionId, emit, sendMessage, updates } = await connect();
+    sendMessage.mockImplementationOnce(async () => {
+      emit({
+        type: 'message_start',
+        message: createSignal({ type: 'user', tagName: 'user', contents: 'Input, not output' }).toDBMessage(),
+      });
+      emit({
+        type: 'message_start',
+        message: createSignal({
+          type: 'system-reminder',
+          tagName: 'system-reminder',
+          contents: 'Internal instructions',
+        }).toDBMessage(),
+      });
+      assistant('Hello').forEach(emit);
+      emit({ type: 'message_update', id: 'answer', event: { type: 'text-delta', delta: ' there' } });
+      emit({ type: 'agent_end', reason: 'complete' });
+    });
+    await expect(
+      client.prompt({ sessionId, prompt: [{ type: 'text', text: 'Input, not output' }] }),
+    ).resolves.toMatchObject({ stopReason: 'end_turn' });
+    expect(updates.map(notification => notification.update)).toEqual([
+      { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello' } },
+      { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: ' there' } },
+    ]);
+  });
+
+  it('returns a JSON-RPC error with the failed turn details', async () => {
+    const { client, sessionId, emit, sendMessage } = await connect();
+    sendMessage.mockImplementationOnce(async () => {
+      emit({ type: 'error', error: new Error('Provider rejected the request') });
+      emit({ type: 'agent_end', reason: 'error' });
+    });
+    await expect(client.prompt({ sessionId, prompt: [] })).rejects.toMatchObject({
+      code: -32603,
+      message: expect.stringContaining('Provider rejected the request'),
+    });
+  });
+
+  it('keeps the prompt open through plan approval and delivers the resumed answer', async () => {
+    const { client, sessionId, emit, sendMessage, resume, permission, updates } = await connect();
+    const decision = Promise.withResolvers<RequestPermissionResponse>();
+    permission.mockReturnValueOnce(decision.promise);
+    sendMessage.mockImplementationOnce(async () => {
+      emit({ type: 'tool_suspended', toolCallId: 'plan-1', toolName: 'submit_plan', args: {}, suspendPayload: {} });
+      emit({ type: 'agent_end', reason: 'suspended' });
+    });
+    resume.mockImplementationOnce(async () => {
+      assistant('Plan approved; continuing.').forEach(emit);
+      emit({ type: 'agent_end', reason: 'complete' });
+    });
+    let finished = false;
+    const prompt = client.prompt({ sessionId, prompt: [] }).then(result => {
+      finished = true;
+      return result;
+    });
+    await vi.waitFor(() => expect(permission).toHaveBeenCalledTimes(1));
+    expect(finished).toBe(false);
+    decision.resolve({ outcome: { outcome: 'selected', optionId: 'approve' } });
+    await expect(prompt).resolves.toMatchObject({ stopReason: 'end_turn' });
+    expect(updates.at(-1)?.update).toEqual({
+      sessionUpdate: 'agent_message_chunk',
+      content: { type: 'text', text: 'Plan approved; continuing.' },
+    });
+  });
+
+  it('cancels a suspended turn without resuming it on a late approval', async () => {
+    const { client, sessionId, emit, sendMessage, resume, permission, deny, abort } = await connect();
+    const decision = Promise.withResolvers<RequestPermissionResponse>();
+    permission.mockReturnValueOnce(decision.promise);
+    sendMessage.mockImplementationOnce(async () => {
+      emit({
+        type: 'tool_suspended',
+        toolCallId: 'access-1',
+        toolName: 'request_access',
+        args: {},
+        suspendPayload: {},
+      });
+      emit({ type: 'agent_end', reason: 'suspended' });
+    });
+    const denial = Promise.withResolvers<void>();
+    deny.mockImplementationOnce(async () => {
+      emit({ type: 'agent_start' });
+      await denial.promise;
+    });
+    const prompt = client.prompt({ sessionId, prompt: [] });
+    await vi.waitFor(() => expect(permission).toHaveBeenCalledTimes(1));
+    await client.cancel({ sessionId });
+    await vi.waitFor(() => expect(deny).toHaveBeenCalledTimes(1));
+    await client.cancel({ sessionId });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(deny).toHaveBeenCalledTimes(1);
+    expect(abort).not.toHaveBeenCalled();
+    denial.resolve();
+    await expect(prompt).resolves.toMatchObject({ stopReason: 'cancelled' });
+    decision.resolve({ outcome: { outcome: 'selected', optionId: 'approve' } });
+    await decision.promise;
+    await Promise.resolve();
+    expect(deny).toHaveBeenCalledExactlyOnceWith({
+      toolCallId: 'access-1',
+      resumeData: 'No',
+      resolveOnToolEnd: true,
+    });
+    expect(resume).not.toHaveBeenCalled();
+    sendMessage.mockImplementationOnce(async () => {
+      assistant('Next turn works.').forEach(emit);
+      emit({ type: 'agent_end', reason: 'complete' });
+    });
+    await expect(client.prompt({ sessionId, prompt: [] })).resolves.toMatchObject({ stopReason: 'end_turn' });
+  });
+});
+
+describe('ACP non-success model completion', () => {
+  it.each([
+    ['length', 'max_tokens'],
+    ['content-filter', 'refusal'],
+  ] as const)('maps %s to %s while preserving partial output', async (finishReason, stopReason) => {
+    const { client, sessionId, emit, sendMessage, updates } = await connect();
+    sendMessage.mockImplementationOnce(async () => {
+      assistant('Partial response').forEach(emit);
+      emit({ type: 'error', error: new Error('Provider ended the response'), finishReason });
+      emit({ type: 'agent_end', reason: 'error' });
+    });
+    await expect(client.prompt({ sessionId, prompt: [] })).resolves.toMatchObject({ stopReason });
+    expect(updates[0]?.update).toMatchObject({ content: { text: 'Partial response' } });
+  });
+});

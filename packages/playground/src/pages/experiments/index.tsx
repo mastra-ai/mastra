@@ -4,20 +4,20 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useDatasets } from '@mastra/react/hooks/datasets';
+import { useInfiniteExperiments } from '@mastra/react/hooks/experiments';
+import { useReviewSummary } from '@mastra/react/hooks/review';
 import { useCallback, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
-import { useDatasets } from '@/domains/datasets/hooks/use-datasets';
 import {
   ExperimentsList,
   ExperimentsToolbar,
   getExperimentDatasetOptions,
   NoExperimentsInfo,
 } from '@/domains/experiments';
-import { useInfiniteExperiments } from '@/domains/experiments/hooks/use-infinite-experiments';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import { useReviewSummary } from '@/domains/review';
 import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
 import {
   TARGET_ID_PARAM,
@@ -74,7 +74,11 @@ export default function Experiments() {
     isFetchingNextPage,
     hasNextPage,
     setEndOfListElement,
-  } = useInfiniteExperiments(datasetFilter === 'all' ? undefined : datasetFilter, { targetType, targetId }, orderBy);
+  } = useInfiniteExperiments({
+    datasetId: datasetFilter === 'all' ? undefined : datasetFilter,
+    target: { targetType, targetId },
+    orderBy: orderBy,
+  });
   const { data: reviewSummary } = useReviewSummary();
 
   const datasets = useMemo(() => datasetsData?.datasets ?? [], [datasetsData?.datasets]);
@@ -87,7 +91,10 @@ export default function Experiments() {
 
   // Max 2 selected: keep the oldest pick, replace the most recent one.
   const toggleExperimentSelection = (experimentId: string) => {
-    setSelectedExperimentIds(prev => {
+    const knownIds = new Set(experiments.map(exp => exp.id));
+    setSelectedExperimentIds(current => {
+      // Drop ids whose experiment disappeared so they don't occupy a compare slot.
+      const prev = current.filter(id => knownIds.has(id));
       if (prev.includes(experimentId)) return prev.filter(id => id !== experimentId);
       if (prev.length >= 2) return [prev[0], experimentId];
       return [...prev, experimentId];

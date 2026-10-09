@@ -1,4 +1,6 @@
 import { APICallError } from '@internal/ai-sdk-v5';
+import { MastraFGAPermissions } from '../../../auth/ee';
+import type { MastraFGAPermissionInput } from '../../../auth/ee';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
@@ -41,6 +43,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   agentVersionId?: string;
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
+  authorizeMemory: (permission: MastraFGAPermissionInput, threadId: string) => Promise<void>;
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
@@ -58,6 +61,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   agentVersionId,
   methodType,
   saveQueueManager,
+  authorizeMemory,
   runScope,
 }: MapResultsStepOptions<OUTPUT>): Step<
   string,
@@ -95,6 +99,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
         // When OM is enabled saving per step corrupts things because OM handles its own saving
         const shouldSavePerStep = options.savePerStep && !memoryConfig?.observationalMemory;
         if (shouldSavePerStep && !memoryConfig?.readOnly) {
+          if (memoryData.thread?.id) {
+            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
+          }
           if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
             await memory.createThread({
               threadId: memoryData.thread?.id,
@@ -251,24 +258,36 @@ export function createMapResultsStep<OUTPUT = undefined>({
         : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
 
-    const effectiveLLMRequestInputProcessors = capabilities.llmRequestInputProcessors
-      ? typeof capabilities.llmRequestInputProcessors === 'function'
-        ? await capabilities.llmRequestInputProcessors({
-            requestContext: result.requestContext!,
-            overrides: options.inputProcessors,
-          })
-        : options.inputProcessors || capabilities.llmRequestInputProcessors
-      : effectiveInputProcessors;
-
-    // Resolve error processors
-    const effectiveErrorProcessors = capabilities.errorProcessors
+    // Resolve error processors once per run. The request lane below reuses this list, so a
+    // dynamic resolver runs a single time and both lanes share the same instances.
+    // `hasConfiguredErrorProcessors` reports whether the caller configured error processors
+    // themselves (constructor or call-time), excluding the framework's default stability
+    // processors. It gates the implicit retry-cap warning in resolveMaxProcessorRetries — the
+    // defaults self-limit, so warning about them is noise on every bare agent.
+    const { errorProcessors: effectiveErrorProcessors, hasConfiguredErrorProcessors } = capabilities.errorProcessors
       ? typeof capabilities.errorProcessors === 'function'
         ? await capabilities.errorProcessors({
             requestContext: result.requestContext!,
             overrides: options.errorProcessors,
           })
-        : options.errorProcessors || capabilities.errorProcessors
-      : options.errorProcessors || [];
+        : {
+            errorProcessors: options.errorProcessors || capabilities.errorProcessors,
+            hasConfiguredErrorProcessors: (options.errorProcessors || capabilities.errorProcessors).length > 0,
+          }
+      : {
+          errorProcessors: options.errorProcessors || [],
+          hasConfiguredErrorProcessors: !!options.errorProcessors?.length,
+        };
+
+    const effectiveLLMRequestInputProcessors = capabilities.llmRequestInputProcessors
+      ? typeof capabilities.llmRequestInputProcessors === 'function'
+        ? await capabilities.llmRequestInputProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.inputProcessors,
+            errorOverrides: effectiveErrorProcessors,
+          })
+        : options.inputProcessors || capabilities.llmRequestInputProcessors
+      : effectiveInputProcessors;
 
     const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
@@ -372,6 +391,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
                   ? JSON.stringify(payload.object)
                   : payload.text || '';
 
+              if (!memoryConfig?.readOnly && result.threadId) {
+                await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, result.threadId);
+              }
               await capabilities.executeOnFinish({
                 result: payload,
                 outputText,
@@ -436,6 +458,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       llmRequestInputProcessors: effectiveLLMRequestInputProcessors,
       outputProcessors: effectiveOutputProcessors,
       errorProcessors: effectiveErrorProcessors,
+      hasConfiguredErrorProcessors,
       modelSettings: {
         ...(options.modelSettings || {}),
       },

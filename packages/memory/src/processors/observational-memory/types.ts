@@ -1,5 +1,5 @@
 import type { AgentConfig, MastraDBMessage } from '@mastra/core/agent';
-import type { WidenModelId } from '@mastra/core/llm';
+import type { MastraModelConfig, WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { ObservationalMemoryModelSettings } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -57,13 +57,34 @@ export interface ProviderOptions {
   [key: string]: Record<string, any> | undefined;
 }
 
-export type ActivationTTL = number | string | 'auto' | false;
+export type ActivationTTLValue = number | string | 'auto' | false;
+
+/**
+ * Per-provider idle activation TTLs, e.g. `{ default: 'auto', anthropic: '1h' }`.
+ * Keys match the actor model's provider before the first `.`, case-insensitively.
+ */
+export type ActivationTTLByProvider = {
+  default?: ActivationTTLValue;
+  [provider: string]: ActivationTTLValue | undefined;
+};
+
+export type ActivationTTL = ActivationTTLValue | ActivationTTLByProvider;
 export type ResolvedActivationTTL = number | 'auto';
+
+/**
+ * Parsed form of {@link ActivationTTLByProvider}. Provider keys are lowercased.
+ * A provider value of `false` disables idle activation for that provider.
+ * @internal
+ */
+export interface ParsedActivationTTLMap {
+  default?: ResolvedActivationTTL;
+  providers: Record<string, ResolvedActivationTTL | false>;
+}
 
 /**
  * Configuration for the observation step (Observer agent).
  */
-export type ObservationalMemoryModel = Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
+export type ObservationalMemoryModel = 'auto' | Exclude<AgentConfig['model'], undefined> | ModelByInputTokens;
 
 /**
  * `ObservationalMemoryModel` with model-id literals widened to `string`. Read config model
@@ -92,16 +113,27 @@ export type ContinuationHintsConfig =
 export interface ObservationConfig {
   /**
    * Model for the Observer agent.
-   * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
-   * a function that returns either (for dynamic model selection),
-   * a `ModelByInputTokens` selector (for token-tiered routing),
-   * or an array of ModelWithRetries for fallback support.
+   * `'auto'` prefers Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is configured,
+   * then a low-cost model for the main model's provider when the main model's ID
+   * is known (a model ID string, or a dynamic model labeled `{ model, id }`),
+   * then the main model itself, and finally this package's default model.
+   * A dynamic model function may also return `'auto'`.
+   * Can also be a model ID string
+   * (e.g., 'openai/gpt-4o'), a LanguageModel instance, a function that returns
+   * either (for dynamic model selection), a `ModelByInputTokens` selector
+   * (for token-tiered routing), or an array of ModelWithRetries for fallback support.
    *
    * Cannot be set if a top-level `model` is also provided on ObservationalMemoryConfig.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto'
    */
   model?: ObservationalMemoryModel;
+
+  /** Number of retries after the initial Observer model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Observer model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
 
   /**
    * Token count of unobserved messages that triggers observation.
@@ -199,8 +231,8 @@ export interface ObservationConfig {
   /**
    * Token threshold above which buffered activation is allowed to overshoot the
    * retention target. Crossing `blockAfter` does not trigger a blocking observation;
-   * a synchronous observation runs when `messageTokens` is reached and buffered
-   * activation did not happen.
+   * a synchronous observation runs when `messageTokens` is reached and activating
+   * buffered chunks does not bring pending tokens back under it.
    *
    * Accepts either:
    * - A multiplier (1 ≤ value < 100): multiplied by `messageTokens`.
@@ -294,16 +326,27 @@ export interface ObservationConfig {
 export interface ReflectionConfig {
   /**
    * Model for the Reflector agent.
-   * Can be a model ID string (e.g., 'openai/gpt-4o'), a LanguageModel instance,
-   * a function that returns either (for dynamic model selection),
-   * a `ModelByInputTokens` selector (for token-tiered routing),
-   * or an array of ModelWithRetries for fallback support.
+   * `'auto'` prefers Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is configured,
+   * then a low-cost model for the main model's provider when the main model's ID
+   * is known (a model ID string, or a dynamic model labeled `{ model, id }`),
+   * then the main model itself, and finally this package's default model.
+   * A dynamic model function may also return `'auto'`.
+   * Can also be a model ID string
+   * (e.g., 'openai/gpt-4o'), a LanguageModel instance, a function that returns
+   * either (for dynamic model selection), a `ModelByInputTokens` selector
+   * (for token-tiered routing), or an array of ModelWithRetries for fallback support.
    *
    * Cannot be set if a top-level `model` is also provided on ObservationalMemoryConfig.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto'
    */
   model?: ObservationalMemoryModel;
+
+  /** Number of retries after the initial Reflector model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Reflector model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
 
   /**
    * Token count of observations that triggers reflection.
@@ -441,6 +484,8 @@ export interface ObservationModelContext {
   provider?: string;
   modelId?: string;
   providerOptions?: ProviderOptions;
+  /** Exact effective actor model captured when the observation work was scheduled. */
+  model?: Exclude<AgentConfig['model'], undefined>;
 }
 
 /**
@@ -554,6 +599,15 @@ export interface DataOmObservationFailedPart {
 
     /** Error message */
     error: string;
+
+    /** Resolved failure policy for this cycle. Treat a missing value as `'abort'` (markers written before this field existed). */
+    failurePolicy?: 'abort' | 'continue';
+
+    /** Machine-readable failure classification when the observer/provider call failed. */
+    failureKind?: 'observer-model' | 'reflector-model';
+
+    /** Set when this attempt failed but the runner is retrying the same cycle, so the failure is not final. */
+    retrying?: true;
 
     /** The OM record ID */
     recordId: string;
@@ -737,6 +791,12 @@ export interface DataOmBufferingFailedPart {
     /** Error message */
     error: string;
 
+    /** Resolved failure policy for this cycle. Treat a missing value as `'abort'` (markers written before this field existed). */
+    failurePolicy?: 'abort' | 'continue';
+
+    /** Machine-readable failure classification when the observer/provider call failed. */
+    failureKind?: 'observer-model' | 'reflector-model';
+
     /** The OM record ID */
     recordId: string;
 
@@ -893,6 +953,7 @@ export interface ObservationDebugEvent {
     | 'observation_complete'
     | 'reflection_triggered'
     | 'reflection_complete'
+    | 'reflection_failed'
     | 'tokens_accumulated'
     | 'step_progress';
   timestamp: Date;
@@ -915,6 +976,10 @@ export interface ObservationDebugEvent {
   observations?: string;
   /** Previous observations (before this event) */
   previousObservations?: string;
+  /** Failure metadata for failed observation or reflection events */
+  failurePolicy?: 'abort' | 'continue';
+  failureKind?: 'observer-model' | 'reflector-model';
+  error?: string;
   /** Observer's raw output */
   rawObserverOutput?: string;
   /** LLM usage from Observer/Reflector calls */
@@ -984,16 +1049,41 @@ export interface ObservationalMemoryConfig {
     threadId: string;
     resourceId: string;
     observedAt?: Date;
+    recordId?: string;
   }) => Promise<void>;
 
   /**
    * Model for both Observer and Reflector agents.
    * Sets the model for both agents at once. Cannot be used together with
    * `observation.model` or `reflection.model` — an error will be thrown.
+   * `'auto'` prefers Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is configured,
+   * then a low-cost model for the main model's provider when the main model's ID
+   * is known (a model ID string, or a dynamic model labeled `{ model, id }`),
+   * then the main model itself, and finally this package's default model.
+   * A dynamic model function may also return `'auto'`.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto'
    */
   model?: ObservationalMemoryModel;
+
+  /**
+   * Per-provider low-cost models for `'auto'`, replacing the built-in picks.
+   * Keys are provider IDs, values are model IDs.
+   *
+   * @example { google: 'google/gemini-3.5-flash' }
+   */
+  autoModels?: Record<string, string>;
+
+  /**
+   * Resolves the model ID `'auto'` picks into a model. Use this when the main agent's models
+   * come from your own resolver (custom credentials, gateways, or providers) so observer and
+   * reflector calls use the same routing. Receives a concrete ID, never `'auto'`.
+   * Defaults to the standard model router.
+   */
+  resolveModel?: (
+    modelId: string,
+    context: { requestContext?: RequestContext },
+  ) => MastraModelConfig | Promise<MastraModelConfig>;
 
   /**
    * Observation step configuration.
@@ -1086,7 +1176,8 @@ export interface ObservationalMemoryConfig {
 
   /**
    * Time before buffered observations are force-activated after inactivity.
-   * Accepts milliseconds as a number or a duration string like `"5m"` or `"1hr"`.
+   * Accepts milliseconds as a number, a duration string like `"5m"` or `"1hr"`, `"auto"`,
+   * or an object of per-provider TTLs like `{ default: 'auto', anthropic: '1h' }`.
    * When the gap between the current time and the last assistant message part's `createdAt`
    * exceeds this value, buffered observations activate regardless of whether the
    * token threshold has been reached.
@@ -1119,6 +1210,8 @@ export interface ObservationalMemoryConfig {
  */
 export interface ResolvedObservationConfig {
   model: ObservationalMemoryModel;
+  maxRetries: number;
+  failurePolicy: 'abort' | 'continue';
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   messageTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -1134,7 +1227,7 @@ export interface ResolvedObservationConfig {
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
   /** Time in milliseconds, or auto provider-aware TTL, before buffered observations are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: ResolvedActivationTTL;
+  activateAfterIdle?: ResolvedActivationTTL | ParsedActivationTTLMap;
   /** Force-activate buffered observations when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous observation is forced */
@@ -1153,6 +1246,8 @@ export interface ResolvedObservationConfig {
 
 export interface ResolvedReflectionConfig {
   model: ObservationalMemoryModel;
+  maxRetries: number;
+  failurePolicy: 'abort' | 'continue';
   /** Internal threshold - always stored as ThresholdRange for dynamic calculation */
   observationTokens: number | ThresholdRange;
   /** Whether shared token budget is enabled */
@@ -1163,7 +1258,7 @@ export interface ResolvedReflectionConfig {
   /** Ratio (0-1) controlling when async reflection buffering starts */
   bufferActivation?: number;
   /** Time in milliseconds, or auto provider-aware TTL, before buffered reflections are force-activated based on the last assistant message part timestamp */
-  activateAfterIdle?: ResolvedActivationTTL;
+  activateAfterIdle?: ResolvedActivationTTL | ParsedActivationTTLMap;
   /** Force-activate buffered reflections when the actor model/provider changes */
   activateOnProviderChange?: boolean;
   /** Token threshold above which synchronous reflection is forced */

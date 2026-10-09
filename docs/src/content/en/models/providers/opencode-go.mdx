@@ -7,7 +7,7 @@ description: "Browse OpenCode Go model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/opencode-go.svg" alt="OpenCode Go logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode Go
 
-Access 41 OpenCode Go models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 36 OpenCode Go models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode Go documentation](https://opencode.ai/docs/go).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "opencode-go/deepseek-v4-flash"
+  model: "opencode-go/claude-haiku-5-5"
 });
 
 // Generate a response
@@ -45,6 +45,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "opencode-go/claude-haiku-5-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.5
+  },
   {
     "model": "opencode-go/deepseek-v4-flash",
     "imageInput": false,
@@ -92,18 +104,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 0.15,
     "outputCost": 0.6
-  },
-  {
-    "model": "opencode-go/glm-5.1",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 202752,
-    "maxOutput": 32768,
-    "inputCost": 1.4,
-    "outputCost": 4.4
   },
   {
     "model": "opencode-go/glm-5.2",
@@ -214,18 +214,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.501
   },
   {
-    "model": "opencode-go/kimi-k2.6",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.95,
-    "outputCost": 4
-  },
-  {
     "model": "opencode-go/kimi-k2.7-code",
     "imageInput": true,
     "audioInput": false,
@@ -260,6 +248,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "opencode-go/longcat-2.5-preview-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "opencode-go/mimo-v2.5",
@@ -358,30 +358,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.2
   },
   {
-    "model": "opencode-go/qwen3.6-plus",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 65536,
-    "inputCost": 0.5,
-    "outputCost": 3
-  },
-  {
-    "model": "opencode-go/qwen3.7-max",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 65536,
-    "inputCost": 2.5,
-    "outputCost": 7.5
-  },
-  {
     "model": "opencode-go/qwen3.7-plus",
     "imageInput": true,
     "audioInput": false,
@@ -418,7 +394,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 6
   },
   {
-    "model": "opencode-go/space-bunny-free",
+    "model": "opencode-go/space-bunny",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,
@@ -426,6 +402,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 524288,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
+    "model": "opencode-go/step-5-preview-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 65536,
     "inputCost": null,
     "outputCost": null
   }
@@ -444,7 +432,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://opencode.ai/zen/go/v1",
-    id: "opencode-go/deepseek-v4-flash",
+    id: "opencode-go/claude-haiku-5-5",
     apiKey: process.env.OPENCODE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -462,8 +450,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "opencode-go/space-bunny-free"
-      : "opencode-go/deepseek-v4-flash";
+      ? "opencode-go/step-5-preview-free"
+      : "opencode-go/claude-haiku-5-5";
   }
 });
 ```

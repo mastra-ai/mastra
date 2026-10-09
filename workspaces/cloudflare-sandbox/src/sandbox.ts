@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { posix } from 'node:path';
 import type {
   CommandResult,
@@ -183,11 +182,13 @@ export class CloudflareSandbox extends MastraSandbox {
   private lastUsedAt?: Date;
   /** Shared across concurrent callers so a wake triggers a single re-mount pass. */
   private ensureMountsPromise?: Promise<void>;
+  /** In-flight `mount()` calls, awaited before filesystem operations. */
+  private pendingMounts = new Map<string, Promise<unknown>>();
 
   constructor(options: CloudflareSandboxOptions) {
     const name = options.name ?? 'Cloudflare Sandbox';
     super({ ...options, name });
-    this.id = options.id ?? `cloudflare-sandbox-${randomUUID()}`;
+    this.id = options.id ?? `cloudflare-sandbox-${globalThis.crypto.randomUUID()}`;
     this.name = name;
     this.sandboxId = options.sandboxId;
     this.commandTimeout = options.commandTimeout ?? DEFAULT_COMMAND_TIMEOUT_MS;
@@ -397,12 +398,16 @@ export class CloudflareSandbox extends MastraSandbox {
     }
 
     this.mounts.set(mountPath, { filesystem, state: 'mounting', config });
+    const pending = this.client.mountBucket(sandboxId, translated.request);
+    this.pendingMounts.set(mountPath, pending);
     try {
-      await this.client.mountBucket(sandboxId, translated.request);
+      await pending;
     } catch (cause) {
       const error = cause instanceof Error ? cause.message : String(cause);
       this.mounts.set(mountPath, { filesystem, state: 'error', config, error });
       return { success: false, mountPath, error };
+    } finally {
+      if (this.pendingMounts.get(mountPath) === pending) this.pendingMounts.delete(mountPath);
     }
     this.mounts.set(mountPath, { filesystem, state: 'mounted', config });
     this.lastUsedAt = new Date();
@@ -437,52 +442,109 @@ export class CloudflareSandbox extends MastraSandbox {
    * mounted paths with `mountpoint` and re-mount the ones that are gone. The pass
    * is shared across concurrent callers, and there is no probe when nothing is
    * mounted.
+   *
+   * Mounts are durable storage, so this fails closed: an operation is rejected
+   * while any mount is pending, failed, or cannot be verified, rather than
+   * silently running against the container's ephemeral disk. Failed mounts that
+   * have a config are retried, so a later successful re-mount recovers.
    */
-  private ensureMountsActive(sandboxId: string): Promise<void> {
-    const mountedPaths = [...this.mounts.entries]
-      .filter(([, entry]) => entry.state === 'mounted')
-      .map(([mountPath]) => mountPath);
-    if (mountedPaths.length === 0) return Promise.resolve();
+  private async ensureMountsActive(sandboxId: string): Promise<void> {
+    if (this.pendingMounts.size > 0) {
+      await Promise.allSettled([...this.pendingMounts.values()]);
+    }
+
+    const checkPaths: string[] = [];
+    for (const [mountPath, entry] of this.mounts.entries) {
+      if (entry.state === 'mounted' || (entry.state === 'error' && entry.config)) {
+        checkPaths.push(mountPath);
+      } else if (entry.state === 'error') {
+        throw new Error(`Mount ${mountPath} is unavailable: ${entry.error ?? 'mount failed'}`);
+      } else if (entry.state === 'mounting') {
+        // Mounted outside this provider's mount() (e.g. an onMount hook) and not finished.
+        throw new Error(`Mount ${mountPath} is not ready yet`);
+      }
+      // 'pending' entries have not been attempted yet (e.g. during an onStart hook,
+      // before MountManager processes them), so there is nothing to verify.
+    }
+    if (checkPaths.length === 0) return;
+
     if (!this.ensureMountsPromise) {
-      this.ensureMountsPromise = this.remountStalePaths(sandboxId, mountedPaths).finally(() => {
+      this.ensureMountsPromise = this.remountStalePaths(sandboxId, checkPaths).finally(() => {
         this.ensureMountsPromise = undefined;
       });
     }
     return this.ensureMountsPromise;
   }
 
-  private async remountStalePaths(sandboxId: string, mountedPaths: string[]): Promise<void> {
+  private async remountStalePaths(sandboxId: string, checkPaths: string[]): Promise<void> {
     // Mount paths are validated against SAFE_MOUNT_PATH, so they are safe to embed
     // directly. `mountpoint -q` exits non-zero for a path that is no longer a mount,
     // and that path is echoed so a single exec reports every stale mount at once.
-    const script = `for p in ${mountedPaths.join(' ')}; do mountpoint -q "$p" || echo "$p"; done`;
+    const script = `for p in ${checkPaths.join(' ')}; do mountpoint -q "$p" || echo "$p"; done; exit 0`;
     const decoder = new TextDecoder();
+    const stderrDecoder = new TextDecoder();
     let stdout = '';
+    let stderr = '';
+    let exitCode: number | undefined;
+    let probeError: string | undefined;
     await this.client.exec(
       sandboxId,
       { argv: [SHELL_PATH, '-c', script], timeoutMs: this.commandTimeout },
       {
         onEvent: event => {
           if (event.type === 'stdout') stdout += decoder.decode(event.data, { stream: true });
+          else if (event.type === 'stderr') stderr += stderrDecoder.decode(event.data, { stream: true });
+          else if (event.type === 'exit') exitCode = event.exitCode;
+          else if (event.type === 'error') probeError = event.message;
         },
       },
     );
     stdout += decoder.decode();
+    stderr += stderrDecoder.decode();
 
-    const stalePaths = stdout
-      .split('\n')
-      .map(line => line.trim())
-      .filter(Boolean);
+    if (probeError !== undefined || exitCode !== 0) {
+      const reason = probeError ?? (exitCode === undefined ? 'no exit status' : `exit code ${exitCode}`);
+      const detail = stderr.trim() ? `: ${stderr.trim()}` : '';
+      throw new Error(`Could not verify mounts ${checkPaths.join(', ')} (${reason})${detail}`);
+    }
+
+    const stalePaths = new Set(
+      stdout
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean),
+    );
+    // A failed mount is retried even when its path happens to be a mountpoint,
+    // since this provider never confirmed it.
+    for (const mountPath of checkPaths) {
+      if (this.mounts.get(mountPath)?.state === 'error') stalePaths.add(mountPath);
+    }
+
+    const failures: string[] = [];
     for (const mountPath of stalePaths) {
       const entry = this.mounts.get(mountPath);
       if (!entry?.config) continue;
       const translated = toMountRequest(entry.config, mountPath);
-      if ('error' in translated) continue;
-      try {
-        await this.client.mountBucket(sandboxId, translated.request);
-      } catch (cause) {
-        this.logger?.warn(`Failed to re-mount ${mountPath} after container wake`, { error: cause });
+      let error: string | undefined;
+      if ('error' in translated) {
+        error = translated.error;
+      } else {
+        try {
+          await this.client.mountBucket(sandboxId, translated.request);
+        } catch (cause) {
+          error = cause instanceof Error ? cause.message : String(cause);
+        }
       }
+      if (error === undefined) {
+        this.mounts.set(mountPath, { state: 'mounted', error: undefined });
+      } else {
+        this.logger?.warn(`Failed to re-mount ${mountPath} after container wake`, { error });
+        this.mounts.set(mountPath, { state: 'error', error });
+        failures.push(`${mountPath}: ${error}`);
+      }
+    }
+    if (failures.length > 0) {
+      throw new Error(`Mount unavailable, refusing to use ephemeral storage (${failures.join('; ')})`);
     }
   }
 

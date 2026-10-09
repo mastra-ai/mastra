@@ -20,7 +20,7 @@ export const shellPassthroughNonpersistentScenario: McE2eScenario = {
 
     terminal.submit(`!printf '%s\\n' "$SHELL_NONPERSIST_SENTINEL"`);
     await runtime.waitForScreenText(/SHELL_LOCAL_ONLY_HISTORY_SENTINEL_1765600000/i, terminal, 8_000);
-    await runtime.waitForScreenText(/\$ printf .*✓/i, terminal, 8_000);
+    await runtime.waitForScreenText(/• \$ printf [^\n]* \d+(?:ms|\.\ds|m\d+s)\b/i, terminal, 8_000);
 
     terminal.submit(
       `!sqlite3 "$SHELL_NONPERSIST_DB_PATH" "select 'SHELL_NONPERSIST_DB_COUNT=' || count(*) from mastra_messages where content like '%' || '$SHELL_NONPERSIST_SENTINEL' || '%';"`,

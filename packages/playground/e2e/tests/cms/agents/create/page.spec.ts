@@ -43,12 +43,12 @@ async function fillIdentityFields(
   page: Page,
   options: { name: string; description?: string; provider?: string; model?: string },
 ) {
-  const nameInput = page.locator('#agent-name');
+  const nameInput = page.getByRole('textbox', { name: /^Name/ });
   await nameInput.clear();
   await nameInput.fill(options.name);
 
   if (options.description) {
-    const descInput = page.locator('#agent-description');
+    const descInput = page.getByRole('textbox', { name: 'Description' });
     await descInput.clear();
     await descInput.fill(options.description);
   }
@@ -93,7 +93,7 @@ async function createAgentAndGetId(page: Page): Promise<string> {
 // On edit page, combobox nth(0) = version, nth(1) = provider, nth(2) = model.
 async function goToEditSubPage(page: Page, agentId: string, subPage = '') {
   await page.goto(`/cms/agents/${agentId}/edit${subPage}`);
-  await page.locator('#agent-name').waitFor({ state: 'visible', timeout: 15000 });
+  await page.getByRole('textbox', { name: /^Name/ }).waitFor({ state: 'visible', timeout: 15000 });
 }
 
 // Navigate to an edit sub-page via sidebar link (client-side navigation).
@@ -102,7 +102,7 @@ async function goToEditSubPage(page: Page, agentId: string, subPage = '') {
 async function goToEditSubPageViaSidebar(page: Page, agentId: string, linkName: string) {
   await goToEditSubPage(page, agentId);
   // Wait for agent name to be populated (data loaded and form.reset happened)
-  await expect(page.locator('#agent-name')).not.toHaveValue('', { timeout: 15000 });
+  await expect(page.getByRole('textbox', { name: /^Name/ })).not.toHaveValue('', { timeout: 15000 });
   // Click sidebar link for client-side navigation
   const pathSuffix = SIDEBAR_PATHS[linkName];
   if (pathSuffix === undefined) throw new Error(`Unknown sidebar link: ${linkName}`);
@@ -152,7 +152,7 @@ test.describe('CMS create agent page', () => {
       const createButton = page.getByRole('button', { name: 'Create agent' });
 
       // Fill only name — missing provider, model, and instructions
-      const nameInput = page.locator('#agent-name');
+      const nameInput = page.getByRole('textbox', { name: /^Name/ });
       await nameInput.fill('Test Agent');
 
       await expect(createButton).toBeDisabled();
@@ -165,7 +165,7 @@ test.describe('CMS create agent page', () => {
 
       const createButton = page.getByRole('button', { name: 'Create agent' });
 
-      const nameInput = page.locator('#agent-name');
+      const nameInput = page.getByRole('textbox', { name: /^Name/ });
       await nameInput.fill('Test Agent');
 
       const providerCombobox = page.getByRole('combobox').nth(0);
@@ -219,7 +219,7 @@ test.describe('CMS create agent page', () => {
 
       // Go back to identity and clear the name
       await clickSidebarLink(page, 'Identity');
-      const nameInput = page.locator('#agent-name');
+      const nameInput = page.getByRole('textbox', { name: /^Name/ });
       await nameInput.clear();
 
       // Button should be disabled again
@@ -239,7 +239,7 @@ test.describe('CMS create agent page', () => {
       // On edit page, the version selector precedes provider and model.
       await goToEditSubPage(page, agentId);
 
-      await expect(page.locator('#agent-name')).toHaveValue(agentName);
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(agentName);
       await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
       await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
     });
@@ -262,8 +262,8 @@ test.describe('CMS create agent page', () => {
 
       await goToEditSubPage(page, agentId);
 
-      await expect(page.locator('#agent-name')).toHaveValue(agentName);
-      await expect(page.locator('#agent-description')).toHaveValue(description);
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(agentName);
+      await expect(page.getByRole('textbox', { name: 'Description' })).toHaveValue(description);
       await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
       await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
     });
@@ -381,11 +381,14 @@ test.describe('CMS create agent page', () => {
       await expect(page.getByRole('dialog')).toBeVisible({ timeout: 5000 });
 
       // Fill MCP client name
-      await page.locator('#mcp-client-name').fill('Test MCP Client');
+      await page.getByRole('dialog').getByRole('textbox', { name: /^Name/ }).fill('Test MCP Client');
 
       // The kitchen-sink exposes the simple-mcp-server at /api/mcp/simple-mcp-server/mcp
       // Fill URL field (HTTP is default)
-      await page.locator('#mcp-url').fill('http://localhost:4111/api/mcp/simple-mcp-server/mcp');
+      await page
+        .getByRole('dialog')
+        .getByRole('textbox', { name: /^URL/ })
+        .fill('http://localhost:4111/api/mcp/simple-mcp-server/mcp');
 
       // Click "Try to connect" button
       await page.getByRole('button', { name: /try to connect/i }).click();
@@ -620,15 +623,15 @@ test.describe('CMS create agent page', () => {
       await omSwitch.click();
 
       // Wait for OM fields to appear
-      await expect(page.locator('#memory-om-scope')).toBeVisible({ timeout: 5000 });
+      await expect(page.getByRole('combobox', { name: 'Scope' })).toBeVisible({ timeout: 5000 });
 
       // Set scope to resource
-      const scopeSelect = page.locator('#memory-om-scope');
+      const scopeSelect = page.getByRole('combobox', { name: 'Scope' });
       await scopeSelect.click();
       await page.getByRole('option', { name: 'Resource' }).click();
 
       // Enable share token budget
-      const shareBudgetSwitch = page.locator('#memory-om-share-budget');
+      const shareBudgetSwitch = page.getByRole('switch', { name: 'Share Token Budget' });
       await shareBudgetSwitch.click();
 
       const agentId = await createAgentAndGetId(page);
@@ -644,10 +647,10 @@ test.describe('CMS create agent page', () => {
       await expect(page.getByRole('switch').nth(1)).toBeChecked();
 
       // Scope should be resource
-      await expect(page.locator('#memory-om-scope')).toContainText('Resource');
+      await expect(page.getByRole('combobox', { name: 'Scope' })).toContainText('Resource');
 
       // Share budget should be on
-      await expect(page.locator('#memory-om-share-budget')).toBeChecked();
+      await expect(page.getByRole('switch', { name: 'Share Token Budget' })).toBeChecked();
     });
   });
 
@@ -757,8 +760,8 @@ test.describe('CMS create agent page', () => {
 
       // === Verify Identity ===
       await goToEditSubPage(page, agentId);
-      await expect(page.locator('#agent-name')).toHaveValue(agentName);
-      await expect(page.locator('#agent-description')).toHaveValue(description);
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue(agentName);
+      await expect(page.getByRole('textbox', { name: 'Description' })).toHaveValue(description);
       // On edit page, the version selector precedes provider and model.
       await expect(page.getByRole('combobox').nth(1)).toContainText('OpenAI');
       await expect(page.getByRole('combobox').nth(2)).toContainText('gpt-4o-mini');
@@ -835,8 +838,8 @@ test.describe('CMS create agent page', () => {
       await page.goto('/cms/agents/create');
 
       // Form should be empty
-      await expect(page.locator('#agent-name')).toHaveValue('');
-      await expect(page.locator('#agent-description')).toHaveValue('');
+      await expect(page.getByRole('textbox', { name: /^Name/ })).toHaveValue('');
+      await expect(page.getByRole('textbox', { name: 'Description' })).toHaveValue('');
     });
   });
 });

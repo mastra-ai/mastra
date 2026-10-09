@@ -64,9 +64,41 @@ export const TABLE_THREAD_STATE = 'mastra_thread_state';
 export const TABLE_KNOWLEDGE_NODES = 'mastra_knowledge_nodes';
 export const TABLE_KNOWLEDGE_RECORDS = 'mastra_knowledge_records';
 export const TABLE_KNOWLEDGE_MENTIONS = 'mastra_knowledge_mentions';
+/**
+ * @deprecated Curation cursors were removed and Knowledge no longer creates this table. Kept so adapters built
+ * against earlier Core versions still resolve the export.
+ */
 export const TABLE_KNOWLEDGE_CURSORS = 'mastra_knowledge_cursors';
 export const TABLE_KNOWLEDGE_ACTIVITY = 'mastra_knowledge_activity';
 export const TABLE_KNOWLEDGE_SEMANTIC_OUTBOX = 'mastra_knowledge_semantic_outbox';
+export const TABLE_KNOWLEDGE_NODE_SCOPES = 'mastra_knowledge_node_scopes';
+export const TABLE_KNOWLEDGE_RECORD_SCOPES = 'mastra_knowledge_record_scopes';
+export const TABLE_KNOWLEDGE_SCOPE_GRANTS = 'mastra_knowledge_scope_grants';
+export const TABLE_KNOWLEDGE_ACCESS_STATE = 'mastra_knowledge_access_state';
+export const TABLE_KNOWLEDGE_SCOPE_ADDRESSES = 'mastra_knowledge_scope_addresses';
+export const TABLE_KNOWLEDGE_NODE_ADDRESSES = 'mastra_knowledge_node_addresses';
+export const TABLE_KNOWLEDGE_IMPORT_STATE = 'mastra_knowledge_import_state';
+export const TABLE_KNOWLEDGE_IMPORT_RUNS = 'mastra_knowledge_import_runs';
+export const TABLE_KNOWLEDGE_PROPOSALS = 'mastra_knowledge_proposals';
+
+/** Physical tables owned by one Knowledge domain. Explicit reset may target only this list. */
+export const KNOWLEDGE_TABLE_NAMES = [
+  TABLE_KNOWLEDGE_NODES,
+  TABLE_KNOWLEDGE_RECORDS,
+  TABLE_KNOWLEDGE_MENTIONS,
+  TABLE_KNOWLEDGE_ACTIVITY,
+  TABLE_KNOWLEDGE_SEMANTIC_OUTBOX,
+  TABLE_KNOWLEDGE_NODE_SCOPES,
+  TABLE_KNOWLEDGE_RECORD_SCOPES,
+  TABLE_KNOWLEDGE_SCOPE_GRANTS,
+  TABLE_KNOWLEDGE_ACCESS_STATE,
+  TABLE_KNOWLEDGE_SCOPE_ADDRESSES,
+  TABLE_KNOWLEDGE_NODE_ADDRESSES,
+  TABLE_KNOWLEDGE_IMPORT_STATE,
+  TABLE_KNOWLEDGE_IMPORT_RUNS,
+  TABLE_KNOWLEDGE_PROPOSALS,
+] as const;
+export type KNOWLEDGE_TABLE_NAME = (typeof KNOWLEDGE_TABLE_NAMES)[number];
 
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
@@ -111,7 +143,6 @@ export type TABLE_NAMES =
   | typeof TABLE_KNOWLEDGE_NODES
   | typeof TABLE_KNOWLEDGE_RECORDS
   | typeof TABLE_KNOWLEDGE_MENTIONS
-  | typeof TABLE_KNOWLEDGE_CURSORS
   | typeof TABLE_KNOWLEDGE_ACTIVITY
   | typeof TABLE_KNOWLEDGE_SEMANTIC_OUTBOX;
 
@@ -700,6 +731,10 @@ export const KNOWLEDGE_MENTIONS_SCHEMA: Record<string, StorageColumn> = {
   recordId: { type: 'text', nullable: false },
 };
 
+/**
+ * @deprecated Curation cursors were removed and Knowledge no longer creates this table. Kept so adapters built
+ * against earlier Core versions still resolve the export.
+ */
 export const KNOWLEDGE_CURSORS_SCHEMA: Record<string, StorageColumn> = {
   sourceThreadId: { type: 'text', nullable: false },
   agent: { type: 'text', nullable: false },
@@ -733,6 +768,140 @@ export const KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA: Record<string, StorageColumn> = {
   claimedBy: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   completedAt: { type: 'timestamp', nullable: true },
+};
+
+/** Normalized Knowledge v2 node schema plus nullable v1 facade columns. */
+export const KNOWLEDGE_V2_NODES_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  name: { type: 'text', nullable: false },
+  kind: { type: 'text', nullable: true },
+  isScope: { type: 'boolean', nullable: false },
+  metadata: { type: 'jsonb', nullable: true },
+  version: { type: 'integer', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+  deletedAt: { type: 'timestamp', nullable: true },
+  deletedBy: { type: 'text', nullable: true },
+  type: { type: 'text', nullable: true },
+  canonicalName: { type: 'text', nullable: true },
+  content: { type: 'text', nullable: true },
+  description: { type: 'text', nullable: true },
+  scope: { type: 'jsonb', nullable: true },
+  scopeKey: { type: 'text', nullable: true },
+  mergedInto: { type: 'text', nullable: true },
+};
+
+/** Knowledge v2 record schema. Scope rules live in `mastra_knowledge_record_scopes`. */
+export const KNOWLEDGE_V2_RECORDS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  node: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  text: { type: 'text', nullable: false },
+  metadata: { type: 'jsonb', nullable: true },
+  version: { type: 'integer', nullable: false },
+  capturedAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+  deletedAt: { type: 'timestamp', nullable: true },
+  deletedBy: { type: 'text', nullable: true },
+  scope: { type: 'jsonb', nullable: true },
+  scopeKey: { type: 'text', nullable: true },
+  sourceThreadId: { type: 'text', nullable: true },
+  when: { type: 'timestamp', nullable: true },
+};
+
+export const KNOWLEDGE_V2_MENTIONS_SCHEMA: Record<string, StorageColumn> = {
+  recordId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_RECORDS, column: 'id' } },
+  targetNodeId: { type: 'text', nullable: true, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  sourceType: { type: 'text', nullable: true },
+  sourceId: { type: 'text', nullable: true },
+};
+
+export const KNOWLEDGE_NODE_SCOPES_SCHEMA: Record<string, StorageColumn> = {
+  nodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  scopeNodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  addedAt: { type: 'timestamp', nullable: false },
+};
+
+export const KNOWLEDGE_RECORD_SCOPES_SCHEMA: Record<string, StorageColumn> = {
+  recordId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_RECORDS, column: 'id' } },
+  scopeNodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  addedAt: { type: 'timestamp', nullable: false },
+};
+
+export const KNOWLEDGE_SCOPE_GRANTS_SCHEMA: Record<string, StorageColumn> = {
+  scopeNodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  scopeRefId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  role: { type: 'text', nullable: false },
+  canSuggest: { type: 'boolean', nullable: true },
+};
+
+export const KNOWLEDGE_ACCESS_STATE_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  epoch: { type: 'integer', nullable: false },
+  schemaVersion: { type: 'integer', nullable: false },
+};
+
+export const KNOWLEDGE_SCOPE_ADDRESSES_SCHEMA: Record<string, StorageColumn> = {
+  address: { type: 'text', nullable: false, primaryKey: true },
+  scopeNodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+};
+
+export const KNOWLEDGE_NODE_ADDRESSES_SCHEMA: Record<string, StorageColumn> = {
+  source: { type: 'text', nullable: false },
+  address: { type: 'text', nullable: false },
+  nodeId: { type: 'text', nullable: false, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+};
+
+export const KNOWLEDGE_IMPORT_STATE_SCHEMA: Record<string, StorageColumn> = {
+  importerId: { type: 'text', nullable: false },
+  binding: { type: 'text', nullable: false },
+  key: { type: 'text', nullable: false },
+  value: { type: 'text', nullable: false },
+};
+
+export const KNOWLEDGE_IMPORT_RUNS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  importerId: { type: 'text', nullable: false },
+  binding: { type: 'text', nullable: false },
+  importKind: { type: 'text', nullable: false },
+  triggerKind: { type: 'text', nullable: false },
+  status: { type: 'text', nullable: false },
+  error: { type: 'text', nullable: true },
+  transcriptThreadId: { type: 'text', nullable: true },
+  traceId: { type: 'text', nullable: true },
+  queuedAt: { type: 'timestamp', nullable: false },
+  startedAt: { type: 'timestamp', nullable: true },
+  completedAt: { type: 'timestamp', nullable: true },
+};
+
+export const KNOWLEDGE_V2_ACTIVITY_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  action: { type: 'text', nullable: false },
+  targetType: { type: 'text', nullable: true },
+  targetId: { type: 'text', nullable: true },
+  contextScopeId: { type: 'text', nullable: true, references: { table: TABLE_KNOWLEDGE_NODES, column: 'id' } },
+  importRunId: { type: 'text', nullable: true, references: { table: TABLE_KNOWLEDGE_IMPORT_RUNS, column: 'id' } },
+  details: { type: 'jsonb', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  recordType: { type: 'text', nullable: true },
+  recordId: { type: 'text', nullable: true },
+  scope: { type: 'jsonb', nullable: true },
+  scopeKey: { type: 'text', nullable: true },
+  sourceThreadId: { type: 'text', nullable: true },
+};
+
+export const KNOWLEDGE_PROPOSALS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  targetType: { type: 'text', nullable: false },
+  targetId: { type: 'text', nullable: false },
+  action: { type: 'text', nullable: false },
+  changes: { type: 'jsonb', nullable: false },
+  reason: { type: 'text', nullable: true },
+  proposerContextScopeId: { type: 'text', nullable: false },
+  expectedVersion: { type: 'integer', nullable: false },
+  status: { type: 'text', nullable: false },
+  reviewerContextScopeId: { type: 'text', nullable: true },
+  reviewedAt: { type: 'timestamp', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
 };
 
 /**
@@ -840,6 +1009,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     startedAt: { type: 'timestamp', nullable: true },
     suspendedAt: { type: 'timestamp', nullable: true },
     completedAt: { type: 'timestamp', nullable: true },
+    ownerId: { type: 'text', nullable: true },
+    leaseExpiresAt: { type: 'timestamp', nullable: true },
   },
   [TABLE_SCHEDULES]: {
     id: { type: 'text', nullable: false, primaryKey: true },
@@ -893,7 +1064,6 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_KNOWLEDGE_NODES]: KNOWLEDGE_NODES_SCHEMA,
   [TABLE_KNOWLEDGE_RECORDS]: KNOWLEDGE_RECORDS_SCHEMA,
   [TABLE_KNOWLEDGE_MENTIONS]: KNOWLEDGE_MENTIONS_SCHEMA,
-  [TABLE_KNOWLEDGE_CURSORS]: KNOWLEDGE_CURSORS_SCHEMA,
   [TABLE_KNOWLEDGE_ACTIVITY]: KNOWLEDGE_ACTIVITY_SCHEMA,
   [TABLE_KNOWLEDGE_SEMANTIC_OUTBOX]: KNOWLEDGE_SEMANTIC_OUTBOX_SCHEMA,
 };
@@ -914,10 +1084,6 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
   [TABLE_KNOWLEDGE_MENTIONS]: {
     columns: KNOWLEDGE_MENTIONS_SCHEMA,
     compositePrimaryKey: ['sourceType', 'sourceId', 'recordId'],
-  },
-  [TABLE_KNOWLEDGE_CURSORS]: {
-    columns: KNOWLEDGE_CURSORS_SCHEMA,
-    compositePrimaryKey: ['sourceThreadId', 'agent'],
   },
 };
 

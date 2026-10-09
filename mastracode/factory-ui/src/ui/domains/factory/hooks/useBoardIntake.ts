@@ -1,5 +1,5 @@
 import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
 import {
@@ -26,7 +26,10 @@ import {
   pullRequestCandidate,
 } from '../boardCandidates';
 import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidates';
-import { hasLabel } from '../boardItems';
+import type { BoardFilterState } from '../boardFilters';
+import { hasBoardSourceFilters } from '../boardSourceFilters';
+import { hasLabel, isPersistedCandidate } from '../boardItems';
+import type { IntakeSourceBinding } from '../services/intake';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { BoardStageId } from '../stages';
 
@@ -42,12 +45,69 @@ import type { BoardStageId } from '../stages';
  */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
 
+const INTAKE_CARD_SOURCES: Record<IntakeSource, BoardCandidate['source']> = {
+  github: 'github-issue',
+  'github-prs': 'github-pr',
+  'gitlab-prs': 'gitlab-pr',
+  gitlab: 'gitlab-issue',
+  linear: 'linear-issue',
+  jira: 'jira-issue',
+  incidentio: 'incidentio-follow-up',
+};
+
+/** Keep only issues whose configured source routes to this board. */
+function issuesBoundToBoard<T extends { sourceId?: unknown }>(
+  issues: readonly T[],
+  bindings: readonly IntakeSourceBinding[],
+  board: string,
+): T[] {
+  return issues.filter(issue => {
+    const sourceId = issue.sourceId;
+    if (typeof sourceId !== 'string' || !sourceId) return false;
+    return bindings.find(binding => binding.sourceId === sourceId)?.board === board;
+  });
+}
+
+/** Routing failures retry discovery rather than the provider's issue list. */
+function feedWithRoutingFailure(
+  feed: IntakeFeed & { isPending: boolean },
+  routing: Pick<IntakeFeed, 'error' | 'refetch'>,
+  failed: boolean,
+) {
+  if (!failed) return feed;
+  return {
+    ...feed,
+    isPending: false,
+    error: routing.error,
+    isFetchNextPageError: false,
+    refetch: () => routing.refetch(),
+  };
+}
+
+/** A single feed keeps its query state; multiple feeds page and retry together. */
+function combineIntakeFeeds(feeds: readonly (IntakeFeed & { isPending: boolean })[]) {
+  if (feeds.length === 0) return undefined;
+  if (feeds.length === 1) return feeds[0];
+
+  const failedFeed = feeds.find(feed => feed.error);
+  return {
+    error: failedFeed?.error ?? null,
+    isPending: feeds.some(feed => feed.isPending),
+    isFetchNextPageError: failedFeed?.isFetchNextPageError ?? false,
+    hasNextPage: feeds.some(feed => feed.hasNextPage),
+    isFetchingNextPage: feeds.some(feed => feed.isFetchingNextPage),
+    fetchNextPage: () => Promise.all(feeds.filter(feed => feed.hasNextPage).map(feed => feed.fetchNextPage())),
+    refetch: () => Promise.all(feeds.map(feed => feed.refetch())),
+  };
+}
+
 export function useBoardIntake({
   factoryProjectId,
   repository,
   definition,
   knownSourceKeys,
   elsewhereSourceKeys = EMPTY_KEYS,
+  sourceFilters,
 }: {
   factoryProjectId: string;
   repository: LinkedRepositoryPayload;
@@ -55,6 +115,7 @@ export function useBoardIntake({
   knownSourceKeys: ReadonlySet<string>;
   /** Subset of `knownSourceKeys` whose card lives on another board. */
   elsewhereSourceKeys?: ReadonlySet<string>;
+  sourceFilters?: Pick<BoardFilterState, 'sources' | 'linearProjectIds'>;
 }) {
   const kind = definition.id;
   const review = kind === 'review';
@@ -67,7 +128,7 @@ export function useBoardIntake({
   const incidentioStatusQuery = useIncidentioStatusQuery();
 
   const config = configQuery.data;
-  const gitlabStatusQuery = useGitLabStatusQuery(config?.gitlab.enabled ?? false);
+  const gitlabStatusQuery = useGitLabStatusQuery(!review);
   const githubEnabled = config?.github.enabled ?? true;
   const githubSelected = config ? (config.github.sourceIds?.includes(repository.slug) ?? false) : true;
   const gitlabConnected = Boolean(gitlabStatusQuery.data?.enabled && gitlabStatusQuery.data.configured);
@@ -117,10 +178,7 @@ export function useBoardIntake({
   // there, and Work keeps every unrouted issue. A custom board only offers the
   // GitHub feed when at least one label is routed to it.
   const labelRoutesQuery = useIntakeLabelRoutesQuery(review || gitlabRepository ? undefined : factoryProjectId);
-  const labelRoutes = useMemo(
-    () => (labelRoutesQuery.data ?? []).filter(route => route.integrationId === 'github'),
-    [labelRoutesQuery.data],
-  );
+  const labelRoutes = (labelRoutesQuery.data ?? []).filter(route => route.integrationId === 'github');
   const routedHere = labelRoutes.some(route => route.board === kind);
   // Until routes load, no board can tell which issues it owns: Work would
   // flash cards routed elsewhere and a custom board would look empty. A failed
@@ -149,25 +207,31 @@ export function useBoardIntake({
   );
   const active: IntakeSource | undefined = available.includes(selected) ? selected : available[0];
 
+  const sourceFiltered = sourceFilters !== undefined && hasBoardSourceFilters(sourceFilters);
+  const browsedSources = available.filter(source => {
+    if (!sourceFiltered) return source === active;
+    const provider = source.split('-')[0];
+    if (sourceFilters && sourceFilters.sources.size > 0 && !sourceFilters.sources.has(provider)) return false;
+    return !sourceFilters?.linearProjectIds.size || source === 'linear';
+  });
+  const browsesGithub = browsedSources.includes('github');
+
   // Fetch every configured source so teammate filters can include provider identities
-  // even when a different intake feed is visible. Only the active feed affects loading.
+  // even when a different intake feed is visible. Only the browsed feeds affect loading.
   const issues = useProjectIssuesQuery(!review && githubIntakeActive ? projectRepositoryId : undefined);
   // Auto-triage is a Work-only lane, so only Work browses the triaged feed.
   const triageIssues = useProjectIssuesQuery(
-    kind === 'work' && active === 'github' ? projectRepositoryId : undefined,
+    kind === 'work' && browsesGithub ? projectRepositoryId : undefined,
     AUTO_TRIAGED_LABEL,
   );
   // Mirrors the server's resolution: the first route (in listing order) whose
   // label the issue carries wins; unrouted issues belong to Work.
-  const boardIssues = useMemo(
-    () =>
-      routesSettled
-        ? (issues.data ?? []).filter(
-            issue => (labelRoutes.find(route => hasLabel(issue.labels, route.label))?.board ?? 'work') === kind,
-          )
-        : [],
-    [issues.data, labelRoutes, kind, routesSettled],
-  );
+  const boardIssues = (issues.data ?? []).filter(issue => {
+    if (!routesSettled) return false;
+    const routedBoard = labelRoutes.find(route => hasLabel(issue.labels, route.label))?.board ?? 'work';
+    return routedBoard === kind;
+  });
+  const projectBindings = (bindingsQuery.data ?? []).filter(binding => binding.factoryProjectId === factoryProjectId);
   const pulls = useProjectPullRequestsQuery(review && !gitlabRepository ? projectRepositoryId : undefined);
   const mergeRequests = useGitLabMergeRequestsQuery(
     review && gitlabRepository ? factoryProjectId : undefined,
@@ -177,157 +241,64 @@ export function useBoardIntake({
     !review && gitlabReady ? factoryProjectId : undefined,
     !review && gitlabReady ? kind : undefined,
   );
-  const boardGitLabIssues = useMemo(() => {
-    const bindings = (bindingsQuery.data ?? []).filter(
-      binding => binding.integrationId === 'gitlab' && binding.factoryProjectId === factoryProjectId,
-    );
-    return (gitlabIssues.data ?? []).filter(issue => {
-      const binding = issue.sourceId ? bindings.find(candidate => candidate.sourceId === issue.sourceId) : undefined;
-      return binding?.board === kind;
-    });
-  }, [gitlabIssues.data, bindingsQuery.data, factoryProjectId, kind]);
+  const boardGitLabIssues = issuesBoundToBoard(
+    gitlabIssues.data ?? [],
+    projectBindings.filter(binding => binding.integrationId === 'gitlab'),
+    kind,
+  );
   const linearIssues = useLinearIssuesQuery(!review && linearReady ? factoryProjectId : undefined);
-  const boardLinearIssues = useMemo(() => {
-    const bindings = (bindingsQuery.data ?? []).filter(
-      binding => binding.integrationId === 'linear' && binding.factoryProjectId === factoryProjectId,
-    );
-    return (linearIssues.data ?? []).filter(issue => {
-      const binding = issue.sourceId ? bindings.find(candidate => candidate.sourceId === issue.sourceId) : undefined;
-      return binding?.board === kind;
-    });
-  }, [linearIssues.data, bindingsQuery.data, factoryProjectId, kind]);
+  const boardLinearIssues = issuesBoundToBoard(
+    linearIssues.data ?? [],
+    projectBindings.filter(binding => binding.integrationId === 'linear'),
+    kind,
+  );
   const jiraIssues = useJiraIssuesQuery(!review && jiraReady ? factoryProjectId : undefined);
-  const boardJiraIssues = useMemo(() => {
-    const bindings = (bindingsQuery.data ?? []).filter(
-      binding => binding.integrationId === 'jira' && binding.factoryProjectId === factoryProjectId,
-    );
-    return (jiraIssues.data ?? []).filter(issue => {
-      const binding = issue.sourceId ? bindings.find(candidate => candidate.sourceId === issue.sourceId) : undefined;
-      return binding?.board === kind;
-    });
-  }, [jiraIssues.data, bindingsQuery.data, factoryProjectId, kind]);
+  const boardJiraIssues = issuesBoundToBoard(
+    jiraIssues.data ?? [],
+    projectBindings.filter(binding => binding.integrationId === 'jira'),
+    kind,
+  );
   const incidentioIssues = useIncidentioIssuesQuery(!review && incidentioReady ? factoryProjectId : undefined);
-  const boardIncidentioIssues = useMemo(() => {
-    const bindings = (bindingsQuery.data ?? []).filter(
-      binding => binding.integrationId === 'incidentio' && binding.factoryProjectId === factoryProjectId,
-    );
-    return (incidentioIssues.data ?? []).filter(issue => {
-      const binding = issue.sourceId ? bindings.find(candidate => candidate.sourceId === issue.sourceId) : undefined;
-      return binding?.board === kind;
-    });
-  }, [incidentioIssues.data, bindingsQuery.data, factoryProjectId, kind]);
-
-  const intakeIssues = useMemo(
-    () => boardIssues.filter(issue => !hasLabel(issue.labels, AUTO_TRIAGED_LABEL)),
-    [boardIssues],
+  const boardIncidentioIssues = issuesBoundToBoard(
+    incidentioIssues.data ?? [],
+    projectBindings.filter(binding => binding.integrationId === 'incidentio'),
+    kind,
   );
-  const participantCandidates = useMemo(
-    () =>
-      review
-        ? gitlabRepository
-          ? (mergeRequests.data ?? []).map(gitlabMergeRequestCandidate)
-          : (pulls.data ?? []).map(pullRequestCandidate)
-        : [
-            ...boardIssues.map(issueCandidate),
-            ...boardGitLabIssues.map(gitlabCandidate),
-            ...boardLinearIssues.map(linearCandidate),
-            ...boardJiraIssues.map(jiraCandidate),
-            ...boardIncidentioIssues.map(incidentioCandidate),
-          ],
-    [
-      boardIssues,
-      pulls.data,
-      mergeRequests.data,
-      boardGitLabIssues,
-      boardLinearIssues,
-      boardJiraIssues,
-      boardIncidentioIssues,
-      review,
-      gitlabRepository,
-    ],
-  );
-  const { candidates, alreadyMaterialized } = useMemo(() => {
-    const all: BoardCandidate[] = review
-      ? participantCandidates
-      : active === 'gitlab'
-        ? boardGitLabIssues.map(issue => ({ ...gitlabCandidate(issue), column: initialPhase }))
-        : active === 'linear'
-          ? boardLinearIssues.map(issue => ({ ...linearCandidate(issue), column: initialPhase }))
-          : active === 'jira'
-            ? boardJiraIssues.map(issue => ({ ...jiraCandidate(issue), column: initialPhase }))
-            : active === 'incidentio'
-              ? boardIncidentioIssues.map(issue => ({ ...incidentioCandidate(issue), column: initialPhase }))
-              : active === 'github'
-                ? [
-                    ...intakeIssues.map(issue => ({ ...issueCandidate(issue), column: initialPhase })),
-                    ...(triageIssues.data ?? []).map(issueCandidate),
-                  ]
-                : [];
-    // A source materializes once per Factory, so items that already have a card
-    // are held back. Only those carded on another board get counted: a card on
-    // this board is visible in a column, so it needs no explanation.
-    const fresh = all.filter(candidate => !knownSourceKeys.has(candidate.sourceKey));
-    const elsewhere = all.filter(candidate => elsewhereSourceKeys.has(candidate.sourceKey)).length;
-    return { candidates: fresh, alreadyMaterialized: elsewhere };
-  }, [
-    knownSourceKeys,
-    elsewhereSourceKeys,
-    participantCandidates,
-    intakeIssues,
-    triageIssues.data,
-    boardGitLabIssues,
-    boardLinearIssues,
-    boardJiraIssues,
-    active,
-    review,
-    initialPhase,
-  ]);
 
-  const githubFeed = routesFailed
-    ? {
-        ...issues,
-        isPending: false,
-        error: labelRoutesQuery.error,
-        isFetchNextPageError: false,
-        refetch: () => labelRoutesQuery.refetch(),
-      }
-    : issues;
-  const gitlabFeed = bindingsFailed
-    ? {
-        ...gitlabIssues,
-        isPending: false,
-        error: bindingsQuery.error,
-        isFetchNextPageError: false,
-        refetch: () => bindingsQuery.refetch(),
-      }
-    : gitlabIssues;
-  const linearFeed = bindingsFailed
-    ? {
-        ...linearIssues,
-        isPending: false,
-        error: bindingsQuery.error,
-        isFetchNextPageError: false,
-        refetch: () => bindingsQuery.refetch(),
-      }
-    : linearIssues;
-  const jiraFeed = bindingsFailed
-    ? {
-        ...jiraIssues,
-        isPending: false,
-        error: bindingsQuery.error,
-        isFetchNextPageError: false,
-        refetch: () => bindingsQuery.refetch(),
-      }
-    : jiraIssues;
-  const incidentioFeed = bindingsFailed
-    ? {
-        ...incidentioIssues,
-        isPending: false,
-        error: bindingsQuery.error,
-        isFetchNextPageError: false,
-        refetch: () => bindingsQuery.refetch(),
-      }
-    : incidentioIssues;
+  const githubReviewCandidates = (pulls.data ?? []).map(pullRequestCandidate);
+  const gitlabReviewCandidates = (mergeRequests.data ?? []).map(gitlabMergeRequestCandidate);
+  const reviewCandidates = gitlabRepository ? gitlabReviewCandidates : githubReviewCandidates;
+  const workCandidates = [
+    ...boardIssues.map(issueCandidate),
+    ...boardGitLabIssues.map(gitlabCandidate),
+    ...boardLinearIssues.map(linearCandidate),
+    ...boardJiraIssues.map(jiraCandidate),
+    ...boardIncidentioIssues.map(incidentioCandidate),
+  ];
+  const participantCandidates = review ? reviewCandidates : workCandidates;
+  const browsedCandidates = browsedSources.flatMap(source => {
+    const initialCandidates = participantCandidates
+      .filter(candidate => {
+        if (candidate.source !== INTAKE_CARD_SOURCES[source]) return false;
+        return source !== 'github' || candidate.column !== 'triage';
+      })
+      .map(candidate => ({ ...candidate, column: initialPhase }));
+    if (source !== 'github') return initialCandidates;
+    return [...initialCandidates, ...(triageIssues.data ?? []).map(issueCandidate)];
+  });
+  // A source materializes once per Factory, so items that already have a card
+  // are held back. Only those carded on another board get counted: a card on
+  // this board is visible in a column, so it needs no explanation.
+  const candidates = browsedCandidates.filter(candidate => !isPersistedCandidate(knownSourceKeys, candidate));
+  const alreadyMaterialized = browsedCandidates.filter(candidate =>
+    isPersistedCandidate(elsewhereSourceKeys, candidate),
+  ).length;
+
+  const githubFeed = feedWithRoutingFailure(issues, labelRoutesQuery, routesFailed);
+  const gitlabFeed = feedWithRoutingFailure(gitlabIssues, bindingsQuery, bindingsFailed);
+  const linearFeed = feedWithRoutingFailure(linearIssues, bindingsQuery, bindingsFailed);
+  const jiraFeed = feedWithRoutingFailure(jiraIssues, bindingsQuery, bindingsFailed);
+  const incidentioFeed = feedWithRoutingFailure(incidentioIssues, bindingsQuery, bindingsFailed);
   const browsed = {
     github: githubFeed,
     'github-prs': pulls,
@@ -337,32 +308,38 @@ export function useBoardIntake({
     jira: jiraFeed,
     incidentio: incidentioFeed,
   };
-  const feed = active ? browsed[active] : undefined;
+  const failedSource = browsedSources.find(source => browsed[source].error);
+  const feed = combineIntakeFeeds(browsedSources.map(source => browsed[source]));
   // Triage is fed by its own labelled query, so it fails (and retries) on its own.
   const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {
     [initialPhase]: feed,
-    ...(kind === 'work' && active === 'github' ? { triage: triageIssues } : {}),
+    ...(kind === 'work' && browsesGithub ? { triage: triageIssues } : {}),
   };
+
+  // Discovery can add more source tabs without holding the selected feed's
+  // loading state. Keep an unresolved board pending until a source is known.
+  const discoveringSources =
+    ((config?.gitlab.enabled ?? false) && gitlabStatusQuery.isPending) ||
+    ((config?.linear.enabled ?? false) && linearStatusQuery.isPending) ||
+    ((config?.jira.enabled ?? false) && jiraStatusQuery.isPending) ||
+    ((config?.incidentio?.enabled ?? false) && incidentioStatusQuery.isPending) ||
+    bindingsPending ||
+    routesPending;
+  const isConfigurationPending = !review && configQuery.isPending;
+  const isSourcePending = (sourceFiltered || !active) && discoveringSources;
+  const isRoutingPending = browsesGithub && routesPending;
+  const isPending = isConfigurationPending || isSourcePending || isRoutingPending || Boolean(feed?.isPending);
 
   return {
     available,
-    active,
+    active: failedSource ?? browsedSources[0] ?? active,
     showSwitch: available.length > 1,
     select: setSelected,
     candidates,
     alreadyMaterialized,
     participantCandidates,
     feedByColumn,
-    isPending:
-      (!review &&
-        (configQuery.isPending ||
-          ((config?.gitlab.enabled ?? false) && gitlabStatusQuery.isPending) ||
-          ((config?.linear.enabled ?? false) && linearStatusQuery.isPending) ||
-          ((config?.jira.enabled ?? false) && jiraStatusQuery.isPending) ||
-          ((config?.incidentio?.enabled ?? false) && incidentioStatusQuery.isPending))) ||
-      routesPending ||
-      bindingsPending ||
-      Boolean(feed?.isPending),
-    isTriagePending: kind === 'work' && active === 'github' && triageIssues.isPending,
+    isPending,
+    isTriagePending: kind === 'work' && browsesGithub && triageIssues.isPending,
   };
 }
