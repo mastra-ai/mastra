@@ -7,7 +7,7 @@ description: "Browse Nvidia model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/nvidia.svg" alt="Nvidia logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Nvidia
 
-Access 105 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
+Access 106 Nvidia models through Mastra's model router. Authentication is handled automatically using the `NVIDIA_API_KEY` environment variable.
 
 Learn more in the [Nvidia documentation](https://docs.api.nvidia.com/nim/).
 
@@ -102,6 +102,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 4096,
     "maxOutput": null,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/deepseek-ai/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 384000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "nvidia/google/diffusiongemma-26b-a4b-it",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 250000,
+    "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
   },
@@ -258,42 +282,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 131072,
     "maxOutput": 32768,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "nvidia/mistralai/mistral-nemotron",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "nvidia/mistralai/mixtral-8x22b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 65536,
-    "maxOutput": 13108,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "nvidia/mistralai/mixtral-8x7b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 32768,
-    "maxOutput": 16384,
     "inputCost": null,
     "outputCost": null
   },
@@ -500,6 +488,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.5,
     "outputCost": 2.5
+  },
+  {
+    "model": "nvidia/nvidia/nemotron-3.5-content-safety",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 8192,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "nvidia/nvidia/nemotron-3.5-lightning-30b-a3b",

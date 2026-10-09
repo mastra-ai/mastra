@@ -298,6 +298,8 @@ describe('ObservabilityStorage base class', () => {
       output: { text: 'x'.repeat(10_000) },
       attributes: { model: 'claude-sonnet-4-6' },
       metadata: { environment: 'production' },
+      threadId: 'thread-1',
+      resourceId: 'user-1',
     };
 
     // Mirrors what a backend without a dedicated lightweight query returns.
@@ -326,6 +328,9 @@ describe('ObservabilityStorage base class', () => {
       // Status and metadata survive projection so configurable list columns render.
       expect(row.status).toBe('success');
       expect(row.metadata).toEqual({ environment: 'production' });
+      // Memory context survives too, so the Thread ID / Resource ID columns render.
+      expect(row.threadId).toBe('thread-1');
+      expect(row.resourceId).toBe('user-1');
     });
 
     it('computes status on projected rows from error and endedAt', async () => {

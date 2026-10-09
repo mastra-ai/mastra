@@ -155,7 +155,7 @@ describe('Plan', () => {
         <PlanHeader>
           <PlanLabel />
           <PlanHeaderActions>
-            <PlanStatus variant="green">Approved</PlanStatus>
+            <PlanStatus variant="success">Approved</PlanStatus>
           </PlanHeaderActions>
         </PlanHeader>
         <PlanBody>
@@ -198,15 +198,14 @@ describe('Plan', () => {
     expect(clipped).toBeTruthy();
     // A bare marker attribute, so `[data-clipped]` styling matches on it.
     expect(clipped?.getAttribute('data-clipped')).toBe('');
-    expect(clipped?.classList.contains('mask-b-from-60%')).toBe(true);
-    expect(clipped?.classList.contains('mask-b-to-100%')).toBe(true);
+    const masked = clipped?.querySelector<HTMLElement>('.mask-b-from-60\\%.mask-b-to-100\\%');
+    expect(masked?.style.maxHeight).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: /expand plan/i }));
 
     const expanded = document.querySelector<HTMLElement>('[data-slot="plan-content"]');
     expect(expanded?.getAttribute('data-clipped')).toBeNull();
-    expect(expanded?.classList.contains('mask-b-from-60%')).toBe(false);
-    expect(expanded?.classList.contains('mask-b-to-100%')).toBe(false);
+    expect(expanded?.querySelector('.mask-b-from-60\\%')).toBeNull();
   });
 
   it('shows no clip hint or expand control when the plan fits the collapsed card', () => {
@@ -314,7 +313,9 @@ describe('Plan', () => {
       </Plan>,
     );
 
-    const measuredContent = document.querySelector('[data-slot="plan-content"] > div');
+    const measuredContent = document.querySelector(
+      '[data-slot="plan-content"] [data-slot="collapsible-box-clip"] > div',
+    );
     expect(observe).toHaveBeenCalledWith(measuredContent);
     expect(screen.queryByRole('button', { name: 'Expand plan' })).toBeNull();
 
@@ -344,8 +345,10 @@ describe('Plan', () => {
     const content = document.querySelector<HTMLElement>('[data-slot="plan-content"]');
     if (!content) throw new Error('Expected plan content to render.');
 
-    expect(content.style.maxHeight).toBe('220px');
-    expect(content.classList.contains('overflow-hidden')).toBe(true);
+    expect(content.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('220px');
+    expect(content.querySelector('[data-slot="collapsible-box-clip"]')?.classList.contains('overflow-hidden')).toBe(
+      true,
+    );
 
     const expandButton = screen.getByRole('button', { name: 'Expand plan' });
     expect(expandButton.getAttribute('aria-label')).toBe('Expand plan');
@@ -355,8 +358,10 @@ describe('Plan', () => {
     const collapseButton = screen.getByRole('button', { name: 'Collapse plan' });
     expect(collapseButton.getAttribute('aria-label')).toBe('Collapse plan');
     expect(collapseButton.textContent).toContain('Collapse plan');
-    expect(content.style.maxHeight).toBe('');
-    expect(content.classList.contains('overflow-hidden')).toBe(false);
+    expect(content.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('');
+    expect(content.querySelector('[data-slot="collapsible-box-clip"]')?.classList.contains('overflow-hidden')).toBe(
+      false,
+    );
   });
 
   it('keeps the expand and collapse action on one line without shrinking', () => {
@@ -401,7 +406,7 @@ describe('Plan', () => {
     fireEvent.click(expandButton);
 
     expect(screen.getByRole('button', { name: /collapse plan/i })).toBeTruthy();
-    expect(content.style.maxHeight).toBe('');
+    expect(content.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('');
     expect(overrideClick).not.toHaveBeenCalled();
   });
 });

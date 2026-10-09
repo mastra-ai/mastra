@@ -41,7 +41,6 @@ describe('Subconscious configuration', () => {
       observation: [{ name: 'curate', model, instructions: 'Prefer canonical project names.', maxSteps: 3 }],
       model: 'openai/gpt-5-mini',
       defaultScope: 'thread',
-      maxScope: 'resource',
       tools: false,
       activity: false,
       maxSteps: 7,
@@ -56,10 +55,10 @@ describe('Subconscious configuration', () => {
     });
     expect(subconscious.resolved).toMatchObject({
       defaultScope: 'thread',
-      maxScope: 'resource',
       tools: false,
       activity: false,
     });
+    expect(subconscious.resolved).not.toHaveProperty('maxScope');
   });
 
   it('lets a global maxSteps override the per-agent curation default', () => {
@@ -73,7 +72,9 @@ describe('Subconscious configuration', () => {
 
   it('validates custom agents, duplicate names, and bounds', () => {
     expect(() => new Subconscious({ observation: ['remind', 'remind'] })).toThrow(/Duplicate/);
-    expect(() => new Subconscious({ observation: ['unknown' as 'remind'] })).toThrow(/Unknown/);
+    expect(() => new Subconscious({ observation: ['unknown' as 'remind'] })).toThrow(
+      'Unknown Subconscious observation agent: unknown. Use "curate" for observation-time ingestion or "remind" for retrieval.',
+    );
     expect(() => new Subconscious({ observation: [{ name: 'ticket', schema: z.string() } as any] })).toThrow(
       /requires schema and onExtracted/,
     );

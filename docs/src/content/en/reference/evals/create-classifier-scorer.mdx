@@ -11,13 +11,13 @@ packages:
 
 The adapter evaluates exactly one question and always returns a score between 0 and 1. It doesn't aggregate questions, apply boolean thresholds, infer choice ordering, or call a second judge model.
 
-Agent scorer runs contain message objects that `Classifier.evaluate()` can't accept directly, so `state` is required. Use it to extract JSON-compatible text, for example with the helpers from `@mastra/evals/scorers/utils`.
+Agent scorer runs contain message objects that `Classifier.decide()` can't accept directly, so `state` is required. Use it to extract JSON-compatible text, for example with the helpers from `@mastra/evals/scorers/utils`.
 
 ## Example
 
 ```typescript title="src/mastra/scorers/response-quality.ts"
 import { Classifier } from '@mastra/core/classifier'
-import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
+import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 import { createClassifierScorer } from '@mastra/core/evals'
 import {
   getAssistantMessageFromRunOutput,
@@ -26,9 +26,7 @@ import {
 
 const responseJudge = new Classifier({
   id: 'response-judge',
-  model: createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
-    '__AI_SDK_TYPESAFE_EVALUATION_MODEL__',
-  ),
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   questions: {
     quality: {
       type: 'score',
@@ -205,7 +203,7 @@ Running an ID-backed scorer before registering it with Mastra rejects with an er
   {
     name: 'providerOptions',
     type: 'SharedV4ProviderOptions',
-    description: 'Provider-specific options passed to Classifier.evaluate().',
+    description: 'Provider-specific options passed to Classifier.decide().',
     isOptional: true,
   },
   {
@@ -241,9 +239,9 @@ Failures while the scorer runs reject `scorer.run()` with a `ScorerRunError` who
 - `question`: The selected question key.
 - `answer`: The exact typed choice, score, or boolean answer, including optional probabilities.
 - `usage`: Normalized classifier token usage.
-- `warnings`, `rounding`, and `providerMetadata`: Evidence returned by the evaluation model.
+- `warnings`, `rounding`, and `providerMetadata`: Evidence returned by the decision model.
 - `response`: Safe response identity with `id`, `timestamp`, and `modelId`.
 
-Raw provider response bodies and headers aren't copied into scorer results. Call `Classifier.evaluate()` directly when you need the full raw response.
+Raw provider response bodies and headers aren't copied into scorer results. Call `Classifier.decide()` directly when you need the full raw response.
 
 Classifier evaluation runs inside the scorer's active trace context.

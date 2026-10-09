@@ -1,37 +1,39 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { Card } from '@mastra/playground-ui/components/Card';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useScoresByExperimentId } from '@mastra/react/hooks/datasets';
+import type { useExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { ExperimentFlowChain } from './experiment-flow-chain';
 import { ExperimentRunMeta } from './experiment-run-meta';
 import { ExperimentScorerSummary } from './experiment-scorer-summary';
-import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-experiments';
-import type { useExperimentMetrics } from '@/domains/experiments/hooks/use-experiment-metrics';
 
 export interface ExperimentSideRailProps {
   experiment: DatasetExperiment;
-  /** Experiment-scoped metrics resolved by the page; omitted where metrics are not surfaced. */
   metrics?: ReturnType<typeof useExperimentMetrics>;
   className?: string;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="grid gap-3">
-      <h2 className="text-body tracking-widest text-placeholder uppercase">{title}</h2>
+    <section className="grid grid-cols-1 gap-3">
+      <Txt as="h2" variant="subheading" tone="ink">
+        {title}
+      </Txt>
       {children}
     </section>
   );
 }
 
-/**
- * Rail beside the results table: the pipeline read top-to-bottom, the run's
- * measurements as a key/value list, and one card per scorer.
- */
 export function ExperimentSideRail({ experiment, metrics, className }: ExperimentSideRailProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
-  const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experiment.status);
+  const { data: scoresByItemId } = useScoresByExperimentId({
+    experimentId: experiment.id,
+    experimentStatus: experiment.status,
+    queryOptions: { enabled: Boolean(experiment.id) },
+  });
 
   const versionLinkHref =
     experiment.agentVersion && experiment.targetType === 'agent' && experiment.targetId
@@ -39,7 +41,11 @@ export function ExperimentSideRail({ experiment, metrics, className }: Experimen
       : null;
 
   return (
-    <Card as="aside" aria-label="Experiment details" className={cn('grid content-start gap-5 p-5', className)}>
+    <Card
+      as="aside"
+      aria-label="Experiment details"
+      className={cn('grid grid-cols-1 content-start gap-5 p-5', className)}
+    >
       <Section title="Pipeline">
         <ExperimentFlowChain experiment={experiment} />
         {experiment.agentVersion && (

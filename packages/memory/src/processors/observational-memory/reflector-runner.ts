@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import type { MessageList } from '@mastra/core/agent';
+import type { AgentMemoryOption, MessageList } from '@mastra/core/agent';
 import type { WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
@@ -11,7 +11,7 @@ import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/stor
 import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Memory } from '../..';
-import { resolveActivationTTL } from './activation-ttl';
+import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { omDebug, omError } from './debug';
 import { isOmModelExecutionError, isOmModelExecutionFailure, OmModelExecutionError } from './error';
@@ -49,7 +49,7 @@ import {
   validateCompression,
 } from './reflector-agent';
 import type { CompressionLevel } from './reflector-agent';
-import { withRetry } from './retry';
+import { assertCompleteModelResponse, withRetry } from './retry';
 import { createTemporaryOmMemoryContext } from './temporary-memory';
 import { getMaxThreshold } from './thresholds';
 import type { TokenCounter } from './token-counter';
@@ -150,14 +150,21 @@ function getLastModelFromMessageList(messageList?: MessageList): string | undefi
   return undefined;
 }
 
-type ConcreteReflectionModel = Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens>;
+type ConcreteReflectionModel = Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens | 'auto'>;
 
-type ReflectionModelResolver = (inputTokens: number) => {
+type ReflectionModelResolver = (
+  inputTokens: number,
+  options?: {
+    requestContext?: RequestContext;
+    mainAgent?: ProcessorContext['agent'];
+    currentModel?: ObservationModelContext;
+  },
+) => Promise<{
   model: ConcreteReflectionModel;
   selectedThreshold?: number;
   routingStrategy?: 'model-by-input-tokens';
   routingThresholds?: string;
-};
+}>;
 
 async function withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T> {
   if (abortSignal?.aborted) throw new Error('The operation was aborted.');
@@ -304,6 +311,9 @@ export class ReflectorRunner {
       instructions: buildReflectorSystemPrompt(this.reflectionConfig.instruction, extractors),
       model: agentModel,
       maxRetries: 0,
+      // withRetry owns retries and restarts each attempt from a clean prompt.
+      // Processor retries would continue from the failed attempt instead.
+      errorProcessorDefaults: false,
       ...(memory ? { memory } : {}),
       ...(this.mastra ? { mastra: this.mastra } : {}),
     });
@@ -317,7 +327,7 @@ export class ReflectorRunner {
         record ? this.getEffectiveReflectionTokens(record) : this.reflectionConfig.observationTokens,
       ),
       scope: this.scope,
-      activateAfterIdle: this.reflectionConfig.activateAfterIdle,
+      activateAfterIdle: getMarkerActivationTTL(this.reflectionConfig.activateAfterIdle),
     };
   }
 
@@ -362,6 +372,7 @@ export class ReflectorRunner {
     model?: ConcreteReflectionModel,
     mainAgent?: ProcessorContext['agent'],
     sendSignal?: ProcessorContext['sendSignal'],
+    currentModel?: ObservationModelContext,
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
@@ -371,7 +382,9 @@ export class ReflectorRunner {
     providerMetadata?: ProviderMetadata;
   }> {
     const originalTokens = this.tokenCounter.countObservations(observations);
-    const resolvedModel = model ? { model } : this.resolveModel(originalTokens);
+    const resolvedModel = model
+      ? { model }
+      : await this.resolveModel(originalTokens, { requestContext, mainAgent, currentModel });
     const activeExtractors = await resolveExtractors(
       (skipContinuationHints
         ? this.reflectionConfig.extractors?.filter(
@@ -394,6 +407,7 @@ export class ReflectorRunner {
       ? this.createAgent(resolvedModel.model, temporaryMemory.memory, activeExtractors)
       : this.createAgent(resolvedModel.model, undefined, activeExtractors);
     const internalRequestContext = withOmInternalThreadId(requestContext, agent.id);
+    let attemptMemory: AgentMemoryOption | undefined;
     const targetThreshold = observationTokensThreshold ?? getMaxThreshold(this.reflectionConfig.observationTokens);
 
     let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
@@ -450,12 +464,17 @@ export class ReflectorRunner {
                 // doesn't get tagged with the previous attempt's chunk count.
                 chunkCount = 0;
                 try {
+                  attemptMemory = temporaryMemory?.newThread();
                   const streamResult = await agent.stream(prompt, {
+                    // One prompt, one reply. Without this cap, a reply cut off with finishReason
+                    // "other" or "unknown" makes the loop continue from the partial text, and
+                    // assertCompleteModelResponse would only see the final step's "stop".
+                    maxSteps: 1,
                     modelSettings: {
                       ...this.reflectionConfig.modelSettings,
                     },
                     providerOptions: this.reflectionConfig.providerOptions as any,
-                    ...(temporaryMemory ? { memory: temporaryMemory.options } : {}),
+                    ...(attemptMemory ? { memory: attemptMemory } : {}),
                     ...(abortSignal ? { abortSignal } : {}),
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
@@ -490,7 +509,7 @@ export class ReflectorRunner {
                       : {}),
                   });
 
-                  return await streamResult.getFullOutput();
+                  return assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM reflector');
                 } catch (error) {
                   if (abortSignal?.aborted || !isOmModelExecutionFailure(error)) throw error;
                   throw new OmModelExecutionError('reflector-model', error);
@@ -562,6 +581,7 @@ export class ReflectorRunner {
           startedAt: streamContext.startedAt,
           tokensAttempted: originalTokens,
           error: `Did not compress below threshold (${originalTokens} → ${reflectedTokens}, target: ${targetThreshold}), retrying at level ${currentLevel + 1}`,
+          retrying: true,
           recordId: streamContext.recordId,
           threadId: streamContext.threadId,
         });
@@ -606,7 +626,7 @@ export class ReflectorRunner {
       agent,
       source: 'reflector',
       extractors: activeExtractors,
-      memory: temporaryMemory?.options,
+      memory: attemptMemory,
       priorExtractedValues,
       requestContext: internalRequestContext,
       observabilityContext,
@@ -658,6 +678,7 @@ export class ReflectorRunner {
     mainAgent?: ProcessorContext['agent'],
     sendSignal?: ProcessorContext['sendSignal'],
     trigger?: ObserveTrigger,
+    currentModel?: ObservationModelContext,
   ): void {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -692,6 +713,7 @@ export class ReflectorRunner {
           mainAgent,
           sendSignal,
           trigger,
+          currentModel,
         );
       } catch (error) {
         reflectionError = error instanceof Error ? error : new Error(String(error));
@@ -757,6 +779,7 @@ export class ReflectorRunner {
     mainAgent?: ProcessorContext['agent'],
     sendSignal?: ProcessorContext['sendSignal'],
     trigger?: ObserveTrigger,
+    currentModel?: ObservationModelContext,
   ): Promise<
     | {
         usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -842,6 +865,7 @@ export class ReflectorRunner {
       undefined,
       mainAgent,
       sendSignal,
+      currentModel,
     );
     reflectResult.observations = await applyTextTransform(
       this.hooks,
@@ -1053,7 +1077,8 @@ export class ReflectorRunner {
         currentModel: activationMetadata?.currentModel,
         config: {
           ...this.getObservationMarkerConfig(freshRecord),
-          activateAfterIdle: activationMetadata?.activateAfterIdle ?? this.reflectionConfig.activateAfterIdle,
+          activateAfterIdle:
+            activationMetadata?.activateAfterIdle ?? getMarkerActivationTTL(this.reflectionConfig.activateAfterIdle),
         },
       });
       // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
@@ -1159,6 +1184,7 @@ export class ReflectorRunner {
           mainAgent,
           sendSignal,
           trigger,
+          currentModel,
         );
       }
     }
@@ -1266,6 +1292,7 @@ export class ReflectorRunner {
           mainAgent,
           sendSignal,
           trigger,
+          currentModel,
         );
         return;
       }
@@ -1367,6 +1394,7 @@ export class ReflectorRunner {
         undefined,
         mainAgent,
         sendSignal,
+        currentModel,
       );
       reflectResult.observations = await applyTextTransform(
         this.hooks,

@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI vague attribution: '%s'. Name the specific source or delete the claim."
+message: "AI vague attribution: '%s'. Give the specific source or delete the claim."
 level: error
 ignorecase: true
 tokens:

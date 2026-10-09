@@ -23,7 +23,7 @@ Create a managed Mastra project and enable Mastra Platform Observability when pr
 npm create mastra@latest
 ```
 
-The create command authenticates with Mastra Platform and creates an observability project. It then mints an access token and writes `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to `.env`.
+The create command authenticates with Mastra Platform and creates an observability project. It then creates an access token and writes `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to `.env`.
 
 ### Existing project
 
@@ -162,7 +162,7 @@ Specify the destination with `--project`, or set `MASTRA_PROJECT_ID`. You can us
 npx mastra traces import langfuse --project my-project --dry-run
 ```
 
-If `MASTRA_PROJECT_ID` is set, it takes precedence over `--project`. Without either value, the CLI uses the project linked in `.mastra-project.json`.
+The `--project` flag takes precedence over `MASTRA_PROJECT_ID`. Without either value, the CLI uses the project linked in `.mastra-project.json`.
 
 For a headless environment, set the API token and organization ID. The command uses `MASTRA_API_TOKEN` for project discovery, upload, and read-back. Set the project ID or pass `--project`:
 

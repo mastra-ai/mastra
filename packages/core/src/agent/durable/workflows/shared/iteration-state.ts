@@ -1,3 +1,4 @@
+import type { LanguageModelUsage, StepTripwireData } from '../../../../stream/types';
 import type { DurableAgenticExecutionOutput } from '../../types';
 import type { AccumulatedUsage, BaseIterationState } from './schemas';
 
@@ -26,8 +27,9 @@ export interface StepRecord {
   text?: string;
   toolCalls?: unknown[];
   toolResults?: unknown[];
-  usage?: unknown;
+  usage?: LanguageModelUsage;
   finishReason?: string;
+  tripwire?: StepTripwireData;
 }
 
 /**
@@ -35,13 +37,32 @@ export interface StepRecord {
  */
 export function calculateAccumulatedUsage(
   currentUsage: AccumulatedUsage,
-  executionUsage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number },
+  executionUsage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+    cachedInputTokens?: number;
+    cacheCreationInputTokens?: number;
+    reasoningTokens?: number;
+  },
 ): AccumulatedUsage {
-  return {
-    inputTokens: currentUsage.inputTokens + (executionUsage?.inputTokens || 0),
-    outputTokens: currentUsage.outputTokens + (executionUsage?.outputTokens || 0),
-    totalTokens: currentUsage.totalTokens + (executionUsage?.totalTokens || 0),
+  const accumulate = (current: number | undefined, next: number | undefined) =>
+    current !== undefined && next !== undefined ? current + next : undefined;
+
+  const usage: AccumulatedUsage = {
+    inputTokens: accumulate(currentUsage.inputTokens, executionUsage?.inputTokens),
+    outputTokens: accumulate(currentUsage.outputTokens, executionUsage?.outputTokens),
+    totalTokens: accumulate(currentUsage.totalTokens, executionUsage?.totalTokens),
   };
+  // Only emit detail fields once some step reported them, so providers without caching don't show a misleading 0
+  for (const key of ['cachedInputTokens', 'cacheCreationInputTokens', 'reasoningTokens'] as const) {
+    const current = currentUsage[key];
+    const step = executionUsage?.[key];
+    if (current !== undefined || step !== undefined) {
+      usage[key] = (current ?? 0) + (step ?? 0);
+    }
+  }
+  return usage;
 }
 
 /**
@@ -54,6 +75,7 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
     toolResults: executionOutput.toolResults,
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
+    tripwire: executionOutput.stepResult.tripwire,
   };
 }
 
@@ -85,7 +107,19 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
 export function createBaseIterationStateUpdate(input: IterationStateUpdateInput): BaseIterationState {
   const { currentState, executionOutput } = input;
 
-  const newUsage = calculateAccumulatedUsage(currentState.accumulatedUsage, executionOutput.output.usage);
+  // Legacy states with completed steps cannot prove whether their numeric totals
+  // include every provider measurement. Preserve the zero identity only for a
+  // pre-first-step state; otherwise migrate the accumulator to unknown.
+  const currentUsage =
+    currentState.usageAggregationVersion === 1 || currentState.accumulatedSteps.length === 0
+      ? currentState.accumulatedUsage
+      : {
+          ...currentState.accumulatedUsage,
+          inputTokens: undefined,
+          outputTokens: undefined,
+          totalTokens: undefined,
+        };
+  const newUsage = calculateAccumulatedUsage(currentUsage, executionOutput.output.usage);
   const stepRecord = buildStepRecord(executionOutput);
   const lastStepResult = { ...executionOutput.stepResult };
   delete lastStepResult.request;
@@ -95,6 +129,7 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     agentId: currentState.agentId,
     agentName: currentState.agentName,
     messageListState: executionOutput.messageListState,
+    initialUntaggedSystemMessages: currentState.initialUntaggedSystemMessages,
     toolsMetadata: currentState.toolsMetadata,
     modelConfig: currentState.modelConfig,
     options: currentState.options,
@@ -106,6 +141,7 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     iterationCount: currentState.iterationCount + 1,
     accumulatedSteps: [...currentState.accumulatedSteps, stepRecord],
     accumulatedUsage: newUsage,
+    usageAggregationVersion: 1,
     lastStepResult,
     backgroundTaskPending: executionOutput.backgroundTaskPending,
     delegationBailed: executionOutput.delegationBailed,

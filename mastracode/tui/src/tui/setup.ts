@@ -3,22 +3,20 @@
  */
 import { execFileSync } from 'node:child_process';
 
-import { CombinedAutocompleteProvider, Spacer, Text } from '@earendil-works/pi-tui';
+import { CombinedAutocompleteProvider, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
 import type { SlashCommand } from '@earendil-works/pi-tui';
 import { THINK_COMMAND_DESCRIPTOR } from '@mastra/code-sdk/thinking';
 import { loadCustomCommands } from '@mastra/code-sdk/utils/slash-command-loader';
-import { ThreadLockError } from '@mastra/code-sdk/utils/thread-lock';
 import type { AgentControllerEventListener } from '@mastra/core/agent-controller';
 import { reconcileChatBoundarySpacers } from './chat-boundary-reconciliation.js';
 import { isUserInvocable } from './commands/skill-filters.js';
-import { renderBanner } from './components/banner.js';
+import { HeaderComponent } from './components/banner.js';
 import { IdleCounterComponent } from './components/idle-counter.js';
-import { SimpleProgressComponent } from './components/simple-progress.js';
+import { keyHint } from './components/surface.js';
 import { TaskProgressComponent } from './components/task-progress.js';
 import { notifyForInputRequest, runPermissionHooksForEvent, showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
-import { askModalQuestion } from './modal-question.js';
-import { showModalOverlay } from './overlay.js';
+import { switchModeWithPack } from './model-packs/apply.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
@@ -176,7 +174,7 @@ export function setupKeyboardShortcuts(
     const currentIndex = modes.findIndex(m => m.id === currentId);
     const nextIndex = (currentIndex + 1) % modes.length;
     const nextMode = modes[nextIndex]!;
-    await state.session.mode.switch({ modeId: nextMode.id });
+    await switchModeWithPack({ state }, nextMode.id);
   });
 
   // Ctrl+Y - toggle YOLO mode
@@ -228,6 +226,20 @@ export function setupKeyboardShortcuts(
   });
 }
 
+async function pauseStoredGoal(state: TUIState, pausedReason: string): Promise<void> {
+  const threadId = state.session.thread.getId();
+  if (!threadId) return;
+  try {
+    const agent = state.controller.getCurrentAgent(state.session);
+    // Only an active goal is being judged; never overwrite a finished or already-paused goal.
+    const record = await agent.getObjective({ threadId });
+    if (record?.status !== 'active') return;
+    await agent.updateObjectiveOptions({ threadId, status: 'paused', pausedReason });
+  } catch {
+    // Persistence is best-effort, like saveToThread.
+  }
+}
+
 function abortActiveGoalJudge(state: TUIState): boolean {
   const activeGoalJudge = state.activeGoalJudge;
   if (!activeGoalJudge) return false;
@@ -245,8 +257,16 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   // next save does not reload the old active objective and effectively undo the
   // pause. `saveToThread` is best-effort, so run it fire-and-forget to keep this
   // abort handler synchronous.
-  state.goalManager.pause('Judge evaluation was interrupted.');
-  void state.goalManager.saveToThread(state);
+  const pausedReason = 'Judge evaluation was interrupted.';
+  if (state.goalManager.getGoal()) {
+    state.goalManager.pause(pausedReason);
+    void state.goalManager.saveToThread(state);
+  } else {
+    // Nothing is loaded in memory (e.g. another client wrote the goal), so an
+    // empty save would not persist the pause. Pause the stored record directly;
+    // core no-ops when no record exists.
+    void pauseStoredGoal(state, pausedReason);
+  }
   state.activeGoalJudge = undefined;
   state.ui.requestRender();
   return true;
@@ -261,33 +281,38 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   const appName = state.options.appName || 'Mastra Code';
   const version = state.options.version || '0.1.0';
 
-  const banner = renderBanner(version, appName);
-
-  // Project frontmatter
-  const frontmatter = [
+  // Project info shown beside the logo
+  const info = [
     `Project: ${state.projectInfo.name}`,
     `Resource ID: ${state.projectInfo.resourceId}`,
     state.projectInfo.gitBranch ? `Branch: ${state.projectInfo.gitBranch}` : null,
     state.projectInfo.isWorktree ? `Worktree of: ${state.projectInfo.mainRepoPath}` : null,
-  ]
-    .filter(Boolean)
-    .map(line => theme.fg('muted', line as string))
-    .join('\n');
+  ].filter((line): line is string => Boolean(line));
 
   const sep = theme.fg('dim', ' · ');
   const hintParts: string[] = [];
   if (state.controller.listModes().length > 1) {
-    hintParts.push(`${theme.fg('accent', '⇧+Tab')} ${theme.fg('muted', 'cycle modes')}`);
+    hintParts.push(keyHint('shift+tab', 'cycle modes'));
   }
-  hintParts.push(`${theme.fg('accent', '/help')} ${theme.fg('muted', 'info & shortcuts')}`);
-  const instructions = `  ${hintParts.join(sep)}`;
+  hintParts.push(keyHint('/help', 'info & shortcuts'));
+  // As many hints as fit on one row; narrow terminals drop the later ones instead of wrapping.
+  const renderHints = (width: number): string[] => {
+    for (let count = hintParts.length; count > 0; count--) {
+      const row = `  ${hintParts.slice(0, count).join(sep)}`;
+      if (visibleWidth(row) <= width) return [row];
+    }
+    return [];
+  };
 
   state.ui.addChild(new Spacer(1));
-  state.ui.addChild(new Text(banner, 1, 0));
-  state.ui.addChild(new Text(frontmatter, 1, 0));
+  state.ui.addChild(new HeaderComponent({ version, appName, info }));
   state.ui.addChild(new Spacer(1));
-  state.ui.addChild(new Text(instructions, 0, 0));
-  state.ui.addChild(new Spacer(1));
+  state.ui.addChild({ render: renderHints, invalidate: () => {} });
+  // A gap under the hints once the chat has content; before that, the idle row above the prompt is the gap.
+  state.ui.addChild({
+    render: () => (state.chatContainer.children.length > 0 ? [''] : []),
+    invalidate: () => {},
+  });
 
   // Add main containers
   state.ui.addChild(state.chatContainer);
@@ -310,6 +335,16 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   state.footer.addChild(state.memoryStatusLine);
   state.ui.addChild(state.footer);
   updateStatusLine(state);
+  // The status rows are laid out for one width; lay them out again when the terminal is resized.
+  let statusWidth = 0;
+  const renderFooter = state.footer.render.bind(state.footer);
+  state.footer.render = (width: number) => {
+    if (width !== statusWidth) {
+      statusWidth = width;
+      updateStatusLine(state);
+    }
+    return renderFooter(width);
+  };
   refreshModelAuthStatus();
 
   // Set focus to editor
@@ -379,6 +414,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'clone', description: 'Clone the current thread' },
     { name: 'thread', description: 'Show current thread info' },
     { name: 'threads', description: 'Switch between threads' },
+    { name: 'resume', description: 'Alias for /threads' },
     { name: 'models', description: 'Switch model pack' },
     { name: 'packs', description: 'Alias for /models' },
     { name: 'model', description: 'Change the current mode model' },
@@ -397,6 +433,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'ctx', description: 'Alias for /context' },
     { name: 'diff', description: 'Show modified files or git diff' },
     { name: 'name', description: 'Rename current thread' },
+    { name: 'rename', description: 'Alias for /name' },
     {
       name: 'resource',
       description: 'Show/switch resource ID (tag for sharing)',
@@ -481,6 +518,10 @@ export function setupAutocomplete(state: TUIState): void {
           { value: 'clear', label: 'clear', description: 'Clear the current goal' },
           { value: 'judge', label: 'judge', description: 'Set the goal judge model and max attempts' },
         ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
+    {
+      name: 'schedules',
+      description: 'Create and manage recurring prompts for this thread',
     },
     {
       name: 'profile',
@@ -711,110 +752,6 @@ export function subscribeToAgentController(state: TUIState, handleEvent: (event:
   };
   state.waitForAgentControllerEvents = state.options.backgroundToolsEnabled ? () => eventQueue : undefined;
   state.unsubscribe = state.session.subscribe(listener);
-}
-
-// =============================================================================
-// Thread Selection
-// =============================================================================
-
-export async function promptForThreadSelection(state: TUIState): Promise<void> {
-  const currentPath = state.projectInfo.rootPath;
-  const currentResourceId = state.session.identity.getResourceId();
-
-  const allThreads = await state.session.thread.list();
-  const activeThreadId = state.session.thread.getId();
-
-  // Filter to threads explicitly tagged for the current working directory.
-  const taggedThreads = allThreads.filter(t => {
-    const threadPath = t.metadata?.projectPath as string | undefined;
-    return !!threadPath && threadPath === currentPath;
-  });
-  const threads: typeof taggedThreads = [];
-  for (const thread of taggedThreads) {
-    const isActiveBlankThread = thread.id === activeThreadId && !thread.title;
-    if (isActiveBlankThread) {
-      const messages = await state.session.thread.listMessages({ threadId: thread.id, limit: 1 });
-      if (messages.length === 0) continue;
-    }
-    threads.push(thread);
-  }
-
-  if (threads.length === 0) {
-    const driftCandidates = (
-      await state.session.thread.list({
-        allResources: true,
-        metadata: { projectPath: currentPath },
-      })
-    ).filter(t => t.resourceId !== currentResourceId);
-    const [thread] = [...driftCandidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-
-    if (thread) {
-      const answer = await askModalQuestion(state.ui, {
-        question: [
-          'This directory is tagged on a different resource.',
-          '',
-          `Project: ${currentPath}`,
-          `Thread: ${thread.title || thread.id}`,
-          `Old resource: ${thread.resourceId}`,
-          `Current resource: ${currentResourceId}`,
-          '',
-          'Clone this thread into the current resource and resume the clone?',
-        ].join('\n'),
-        options: [{ label: 'Clone and resume' }, { label: 'Start fresh' }],
-        selectedOptionLabel: 'Clone and resume',
-        allowCustomResponse: false,
-        overlay: { widthPercent: 80, maxHeight: '70%' },
-      });
-
-      if (answer === 'Clone and resume') {
-        const progress = new SimpleProgressComponent({ showElapsed: false, showPercentage: false });
-        progress.start('Cloning thread into the current resource...');
-        showModalOverlay(state.ui, progress, { widthPercent: 70, maxHeight: '40%', minHeightPercent: 0.35 });
-        state.ui.requestRender();
-
-        try {
-          await new Promise(resolve => setTimeout(resolve, 50));
-          progress.updateStatus('Loading cloned thread...');
-          state.ui.requestRender();
-          await state.session.thread.cloneToCurrentResource({
-            threadId: thread.id,
-            expectedResourceId: thread.resourceId,
-            expectedProjectPath: currentPath,
-          });
-        } finally {
-          state.ui.hideOverlay();
-          state.ui.requestRender();
-        }
-        return;
-      }
-    }
-
-    // No existing threads for this path - defer creation until first message
-    state.pendingNewThread = true;
-    return;
-  }
-
-  // Sort by most recent
-  const sortedThreads = [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-
-  // Try each in order until one is unlocked
-  for (const thread of sortedThreads) {
-    try {
-      await state.session.thread.switch({ threadId: thread.id });
-      if (!thread.metadata?.projectPath) {
-        await state.session.thread.setSetting({ key: 'projectPath', value: currentPath });
-      }
-      return;
-    } catch (error) {
-      if (error instanceof ThreadLockError) {
-        continue; // Try the next one
-      }
-      throw error;
-    }
-  }
-
-  // All directory threads are locked — silently start a new thread
-  state.pendingNewThread = true;
 }
 
 // =============================================================================

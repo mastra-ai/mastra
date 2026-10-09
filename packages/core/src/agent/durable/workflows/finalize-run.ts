@@ -1,3 +1,4 @@
+import { MastraFGAPermissions } from '../../../auth/ee';
 import type { IMastraLogger } from '../../../logger';
 import { noopLogger } from '../../../logger/noop-logger';
 import type { Mastra } from '../../../mastra';
@@ -7,9 +8,12 @@ import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
+import { createOutputHandler } from '../../../stream/base/output-format-handlers';
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
+import { TripWire } from '../../trip-wire';
+import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
 import { globalRunRegistry } from '../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
@@ -32,6 +36,13 @@ export interface DurableFinishSideEffectsResult {
   messageListState: SerializedMessageListState;
   outputText: string;
   titleGeneration?: Promise<void>;
+  /** Set when an output processor aborted in processOutputResult; nothing was persisted. */
+  tripwire?: {
+    reason: string;
+    processorId?: string;
+    retry?: boolean;
+    metadata?: unknown;
+  };
 }
 
 function restoreRequestContext(
@@ -130,6 +141,39 @@ export async function runDurableFinishSideEffects({
     registryEntry.messageList = messageList;
   }
 
+  // The caller-side MastraModelOutput only sees the finish event after this step has
+  // persisted messages, and remote/recovered runs have no caller at all. Attach the
+  // validated object here so the saved assistant message matches plain Agent output.
+  // Like Agent, this runs before output processors so processors that persist the turn
+  // themselves (observational memory) save the object too.
+  // This mirrors createObjectStreamTransformer's finalize: truncated finishes never validate,
+  // and failures follow errorStrategy. Prefer the live config (keeps Zod refinements/transforms
+  // and non-JSON fallback values). Remote and recovered runs only have the persisted config,
+  // which is what cross-process observers use too.
+  const structuredOutput = initData.options?.structuredOutput;
+  const structuredOutputText = resolveOutputText(messageList);
+  const liveStructuredOutput = registryEntry?.structuredOutput;
+  const structuredOutputSchema = liveStructuredOutput?.schema ?? structuredOutput?.schema;
+  if (structuredOutputSchema && !structuredOutput?.hasStructuringModel && structuredOutputText.trim()) {
+    const finishReason = outputResult?.finishReason;
+    const truncated = finishReason === 'length' || finishReason === 'content-filter';
+    const result = truncated
+      ? undefined
+      : await createOutputHandler({ schema: structuredOutputSchema }).validateAndTransformFinal(structuredOutputText);
+    const errorStrategy = liveStructuredOutput ? liveStructuredOutput.errorStrategy : structuredOutput?.errorStrategy;
+    const fallbackValue = liveStructuredOutput ? liveStructuredOutput.fallbackValue : structuredOutput?.fallbackValue;
+    const value = result?.success ? result.value : errorStrategy === 'fallback' ? fallbackValue : undefined;
+    const lastAssistantMessage = messageList.get.response
+      .db()
+      .findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult);
+    if (value !== undefined && lastAssistantMessage) {
+      lastAssistantMessage.content.metadata = {
+        ...lastAssistantMessage.content.metadata,
+        structuredOutput: value,
+      };
+    }
+  }
+
   // Keep this MessageList for every later phase. ProcessorRunner applies
   // returned message arrays back onto it, including removals and replacements.
   if (registryEntry?.outputProcessors?.length) {
@@ -161,6 +205,19 @@ export async function runDurableFinishSideEffects({
         outputResult,
       );
     } catch (error) {
+      if (error instanceof TripWire) {
+        // Match Agent: a tripwire rejects the answer, so skip persistence and title generation.
+        return {
+          messageListState: messageList.serialize(),
+          outputText: resolveOutputText(messageList),
+          tripwire: {
+            reason: error.message,
+            processorId: error.processorId,
+            retry: error.options?.retry,
+            metadata: error.options?.metadata,
+          },
+        };
+      }
       effectiveLogger.warn('[DurableAgent] Error running output processors', { runId, error });
     }
   }
@@ -171,6 +228,20 @@ export async function runDurableFinishSideEffects({
 
   const saveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
   const memory = registryEntry?.memory ?? rebuiltMemory;
+  const authorizeMemory =
+    durableState?.threadId && durableState.resourceId
+      ? (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
+          authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
+            mastra,
+            user: effectiveRequestContext.get('user'),
+            threadId: durableState.threadId!,
+            resourceId: durableState.resourceId!,
+            agentId: initData.agentId,
+            requestContext: effectiveRequestContext,
+            permission,
+            actor: initData.options?.actor,
+          })
+      : undefined;
 
   if (
     saveQueueManager &&
@@ -180,6 +251,8 @@ export async function runDurableFinishSideEffects({
     !durableState.observationalMemory &&
     !durableState.memoryConfig?.readOnly
   ) {
+    await authorizeMemory!(MastraFGAPermissions.MEMORY_WRITE);
+    if (!durableState.threadExists) await authorizeMemory!(MastraFGAPermissions.MEMORY_READ);
     try {
       if (!durableState.threadExists) {
         await memory.createThread?.({
@@ -219,6 +292,8 @@ export async function runDurableFinishSideEffects({
     };
 
     const generateThreadTitle = registryEntry?.generateThreadTitle;
+    await authorizeMemory!(MastraFGAPermissions.MEMORY_READ);
+    await authorizeMemory!(MastraFGAPermissions.MEMORY_WRITE);
     titleGeneration = (async () => {
       if (generateThreadTitle) {
         await generateThreadTitle(titleArgs);

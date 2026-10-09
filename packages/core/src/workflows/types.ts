@@ -54,6 +54,7 @@ export type RestartExecutionParams = {
   stepResults: Record<string, StepResult<any, any, any, any>>;
   state?: Record<string, any>;
   stepExecutionPath?: string[];
+  isPreFirstStepRestart?: boolean;
   isParallelOrConditionalRestarted?: boolean;
 };
 
@@ -394,6 +395,13 @@ export type WorkflowStateField =
   | 'requestContext'
   | 'tracingContext';
 
+export interface NestedWorkflowParent {
+  workflowId: string;
+  runId: string;
+  stepId: string;
+  foreachIndex?: number;
+}
+
 export interface WorkflowRunState {
   // Core state info
   runId: string;
@@ -419,6 +427,7 @@ export interface WorkflowRunState {
    * as children of the original suspended span.
    */
   tracingContext?: WorkflowStateTracingContext;
+  parentWorkflow?: NestedWorkflowParent;
 }
 
 /**
@@ -1204,9 +1213,10 @@ export type WorkflowConfig<
   /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
   type?: WorkflowType;
   /**
-   * Optional cron schedule configuration. When set, the Mastra scheduler will
-   * publish a `workflow.start` event on the cron schedule.
-   * Only supported on the evented engine.
+   * Optional cron schedule configuration. When set, the Mastra scheduler
+   * starts a run on the cron schedule. Supported on the default and evented
+   * engines; other engines (Inngest, Temporal) ignore it and use their own
+   * scheduling.
    *
    * Accepts either a single schedule object or an array of schedule objects.
    * Array entries must each specify a unique stable `id`. The `inputData`,
@@ -1298,6 +1308,7 @@ export type SubsetOf<TStepState, TState> =
 export type ExecutionContext = {
   workflowId: string;
   runId: string;
+  parentWorkflow?: NestedWorkflowParent;
   executionPath: number[];
   stepExecutionPath?: string[];
   activeStepsPath: Record<string, number[]>;

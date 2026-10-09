@@ -3,6 +3,8 @@ import { PROTOCOL_VERSION, RequestError } from '@agentclientprotocol/sdk';
 import type {
   Agent,
   AgentSideConnection,
+  AuthenticateRequest,
+  AuthMethod,
   InitializeRequest,
   InitializeResponse,
   NewSessionRequest,
@@ -17,8 +19,11 @@ import type {
   AvailableCommand,
 } from '@agentclientprotocol/sdk';
 import type { AgentController, AgentControllerMode, Session } from '@mastra/core/agent-controller';
-import { getAvailableThinkingLevelsForModel, isThinkingLevelSetting } from '../thinking.js';
+import { AuthStorage, getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../auth/storage.js';
+import { getCatalogThinkingLevels, runCatalogThinkingLevel } from '../thinking-catalog.js';
+import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
+import { openUrlInBrowser } from '../utils/open-url.js';
 import { getCurrentVersion } from '../utils/update-check.js';
 import { withCleanupFailure } from './errors.js';
 import { handleAgentControllerEvent } from './event-mapper.js';
@@ -44,6 +49,72 @@ interface SessionEntry extends AcpSessionRuntime {
   turns: Set<{ cancelled: boolean }>;
   unsubscribe: () => void;
   commands?: AvailableCommand[];
+}
+
+const TERMINAL_LOGIN_METHOD_ID = 'mastracode-login';
+const BROWSER_LOGIN_PROVIDER_IDS = ['openai-codex', 'kimi-for-coding', 'xai'];
+const TERMINAL_LOGIN_PROVIDER_IDS = ['anthropic', 'github-copilot'];
+
+function terminalLogin(id: string, name: string, description: string, loginArgs: string[]): AuthMethod {
+  return {
+    id,
+    name,
+    description,
+    type: 'terminal',
+    args: loginArgs,
+    _meta: {
+      'terminal-auth': {
+        command: process.execPath,
+        args: [...process.argv.slice(1, 2), ...loginArgs],
+        label: name,
+      },
+    },
+  };
+}
+
+function listAuthMethods({ auth, _meta }: InitializeRequest['clientCapabilities'] = {}): AuthMethod[] {
+  const providers = getOAuthProviders();
+  const methods: AuthMethod[] = providers
+    .filter(provider => BROWSER_LOGIN_PROVIDER_IDS.includes(provider.id))
+    .map(provider => ({
+      id: provider.id,
+      name: `Log in with ${provider.name}`,
+      description: 'Opens your browser to sign in',
+    }));
+  if (!auth?.terminal && _meta?.['terminal-auth'] !== true) return methods;
+  return [
+    ...methods,
+    ...providers
+      .filter(provider => TERMINAL_LOGIN_PROVIDER_IDS.includes(provider.id))
+      .map(provider =>
+        terminalLogin(provider.id, `Log in with ${provider.name}`, 'Sign in from a terminal', [
+          'login',
+          '--provider',
+          provider.id,
+        ]),
+      ),
+    terminalLogin(
+      TERMINAL_LOGIN_METHOD_ID,
+      'Log in with Mastra Code',
+      'Sign in to another provider or add an API key from a terminal',
+      ['login'],
+    ),
+  ];
+}
+
+function hasUsableModel(available: { id: string; hasApiKey: boolean }[], currentModelId: string): boolean {
+  if (available.some(model => model.hasApiKey)) return true;
+  return currentModelId !== '' && !available.some(model => model.id === currentModelId);
+}
+
+function credentialedDefaultModel(
+  available: { id: string; hasApiKey: boolean }[],
+  currentModelId: string,
+): string | undefined {
+  const current = available.find(model => model.id === currentModelId);
+  if (!current || current.hasApiKey) return undefined;
+  const credentialed = new Set(available.filter(model => model.hasApiKey).map(model => model.id));
+  return Object.values(PROVIDER_DEFAULT_MODELS).find(modelId => credentialed.has(modelId));
 }
 
 /** One ACP connection, with an independent Mastra Code runtime for each conversation. */
@@ -106,16 +177,36 @@ export class MastraCodeAcpAgent implements Agent {
     return this.disposal;
   }
 
-  async initialize(_request: InitializeRequest): Promise<InitializeResponse> {
+  async initialize({ clientCapabilities }: InitializeRequest): Promise<InitializeResponse> {
     return {
       protocolVersion: PROTOCOL_VERSION,
       agentInfo: { name: 'mastracode', title: 'Mastra Code', version: getCurrentVersion() },
       agentCapabilities: { loadSession: false, mcpCapabilities: { http: true, sse: false } },
+      authMethods: listAuthMethods(clientCapabilities),
     };
   }
 
-  async authenticate(): Promise<void> {
-    throw RequestError.invalidParams(undefined, 'Configure authentication through Mastra Code before starting ACP');
+  async authenticate({ methodId }: AuthenticateRequest): Promise<void> {
+    if (methodId === TERMINAL_LOGIN_METHOD_ID || TERMINAL_LOGIN_PROVIDER_IDS.includes(methodId)) return;
+    if (!BROWSER_LOGIN_PROVIDER_IDS.includes(methodId)) {
+      throw RequestError.invalidParams(undefined, `Unknown authentication method: ${methodId}`);
+    }
+    const needsTerminal = () =>
+      RequestError.internalError(
+        undefined,
+        "Browser sign-in can't finish on its own. Run `mastracode login` in a terminal to sign in.",
+      );
+    await new AuthStorage().login(methodId, {
+      authMode: 'browser',
+      onAuth: ({ url, userCode }) => {
+        if (userCode && !url.includes(userCode)) throw needsTerminal();
+        process.stderr.write(`Open ${url} to sign in\n`);
+        openUrlInBrowser(url);
+      },
+      onPrompt: async () => {
+        throw needsTerminal();
+      },
+    });
   }
 
   newSession(request: NewSessionRequest): Promise<NewSessionResponse> {
@@ -134,40 +225,40 @@ export class MastraCodeAcpAgent implements Agent {
     const runtime = await this.createSession(request);
     try {
       if (this.disposed) throw RequestError.internalError(undefined, 'ACP connection is closed');
+      const available = await runtime.controller.listAvailableModels();
+      if (!hasUsableModel(available, runtime.session.model.get() ?? '')) {
+        throw RequestError.authRequired(undefined, 'Sign in to a model provider or add an API key to use Mastra Code');
+      }
       const thread = await runtime.session.thread.create();
       await runtime.session.thread.switch({ threadId: thread.id });
-      let models: NewSessionResponse['models'];
-      try {
-        const available = await runtime.controller.listAvailableModels();
-        models = {
-          currentModelId: runtime.session.model.get() ?? '',
-          availableModels: includeCurrentModel(
-            [
-              ...new Map(
-                available
-                  .filter(model => model.hasApiKey || model.id === runtime.session.model.get())
-                  .map(
-                    model =>
-                      [
-                        model.id,
-                        {
-                          modelId: model.id,
-                          name: model.hasApiKey ? model.id : `${model.id} (provider not configured)`,
-                        },
-                      ] as const,
-                  ),
-              ).values(),
-            ],
-            runtime.session.model.get() ?? '',
-          ),
-        };
-      } catch {
-        // Discovery may be unavailable before provider authentication.
-      }
+      const defaultModelId = credentialedDefaultModel(available, runtime.session.model.get() ?? '');
+      if (defaultModelId) await runtime.session.model.switch(defaultModelId);
+      const models: NewSessionResponse['models'] = {
+        currentModelId: runtime.session.model.get() ?? '',
+        availableModels: includeCurrentModel(
+          [
+            ...new Map(
+              available
+                .filter(model => model.hasApiKey || model.id === runtime.session.model.get())
+                .map(
+                  model =>
+                    [
+                      model.id,
+                      {
+                        modelId: model.id,
+                        name: model.hasApiKey ? model.id : `${model.id} (provider not configured)`,
+                      },
+                    ] as const,
+                ),
+            ).values(),
+          ],
+          runtime.session.model.get() ?? '',
+        ),
+      };
       if (this.disposed) throw RequestError.internalError(undefined, 'ACP connection is closed');
       const entry: SessionEntry = {
         ...runtime,
-        models: models?.availableModels ?? [],
+        models: models.availableModels,
         state: null,
         queue: Promise.resolve(),
         turns: new Set(),
@@ -268,7 +359,7 @@ export class MastraCodeAcpAgent implements Agent {
         type: 'select',
         description: 'Requested reasoning level. The provider may adjust it for the selected model.',
         currentValue: this.thinkingLevel(entry),
-        options: getAvailableThinkingLevelsForModel(modelId).map(value => ({
+        options: getCatalogThinkingLevels(modelId).map(value => ({
           value,
           name: value[0]!.toUpperCase() + value.slice(1),
         })),
@@ -276,10 +367,9 @@ export class MastraCodeAcpAgent implements Agent {
     return options;
   }
 
-  private thinkingLevel(entry: SessionEntry): ThinkingLevelSetting {
+  private thinkingLevel(entry: SessionEntry, modelId = entry.session.model.get() ?? ''): ThinkingLevelSetting {
     const level = entry.getThinkingLevel?.() ?? 'off';
-    const levels = getAvailableThinkingLevelsForModel(entry.session.model.get() ?? '');
-    return levels.includes(level) ? level : 'xhigh';
+    return runCatalogThinkingLevel(modelId, level);
   }
 
   async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
@@ -295,14 +385,11 @@ export class MastraCodeAcpAgent implements Agent {
         throw RequestError.invalidParams(undefined, 'Unknown session configuration selection');
       }
       if (params.configId === 'model') {
-        await entry.session.model.switch({ modelId: String(params.value) });
+        await entry.session.model.switch(String(params.value));
       } else if (params.configId === 'mode') {
         await entry.session.mode.switch({ modeId: String(params.value) });
       } else if (isThinkingLevelSetting(params.value)) {
         await entry.session.state.set({ thinkingLevel: params.value });
-      }
-      if (entry.getThinkingLevel && entry.getThinkingLevel() !== this.thinkingLevel(entry)) {
-        await entry.session.state.set({ thinkingLevel: this.thinkingLevel(entry) });
       }
       return { configOptions: this.configOptions(entry) };
     });
@@ -417,7 +504,7 @@ export class MastraCodeAcpAgent implements Agent {
           'Model is unavailable or its provider is not configured. Refresh the model list.',
         );
       }
-      await entry.session.model.switch({ modelId: params.modelId });
+      await entry.session.model.switch(params.modelId);
     });
   }
 }

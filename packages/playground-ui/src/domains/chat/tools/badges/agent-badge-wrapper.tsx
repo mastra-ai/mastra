@@ -1,12 +1,12 @@
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
+import { useAgentMessages } from '@mastra/react/hooks/agents';
 import type { AgentMessage } from './agent-badge';
 import { AgentBadge } from './agent-badge';
 import { resolveToChildMessages } from './resolve-child-messages';
-import { useAgentMessages } from '@/domains/agents/hooks/use-agent-messages';
 import type { MessageMetadata } from '@/domains/chat';
 import { LoadingBadge } from '@/domains/chat/components/loading-badge';
-import type { ToolApprovalButtonsProps } from '@/domains/chat/tools/badges/tool-approval-buttons';
-import type { ToolCallStatus } from '@/ds/components/ai/tool-call';
+import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
+import type { ActivityStatus } from '@/ds/components/ai/activity';
 
 interface SubAgentToolResult {
   toolName: string;
@@ -15,7 +15,7 @@ interface SubAgentToolResult {
   args: any;
 }
 
-interface AgentBadgeWrapperProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
+interface AgentBadgeWrapperProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   agentId: string;
   result?: {
     childMessages?: AgentMessage[];
@@ -28,7 +28,7 @@ interface AgentBadgeWrapperProps extends Omit<ToolApprovalButtonsProps, 'toolCal
   suspendPayload?: any;
   toolCalled?: boolean;
   isComplete?: boolean;
-  status?: ToolCallStatus;
+  status?: ActivityStatus;
   errorText?: string;
 }
 
@@ -61,10 +61,6 @@ export const AgentBadgeWrapper = ({
 
   const convertedMessages = data?.messages ? toAISdkV5Messages(data.messages) : [];
 
-  // Build child messages from available sources:
-  // 1. childMessages (built during live streaming by toUIMessageFromAgent)
-  // 2. subAgentToolResults (from backend tool-result, available after approval or on refresh)
-  // 3. resolveToChildMessages (fetched from subagent thread via API)
   let childMessages = result?.childMessages?.length ? result.childMessages : undefined;
 
   if (!childMessages && result?.subAgentToolResults?.length) {

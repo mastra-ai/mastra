@@ -7,7 +7,7 @@ description: "Browse Blue Claw model IDs, capabilities, and context windows. Lea
 
 # <img src="https://models.dev/logos/blueclaw.svg" alt="Blue Claw logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Blue Claw
 
-Access 2 Blue Claw models through Mastra's model router. Authentication is handled automatically using the `BLUECLAW_API_KEY` environment variable.
+Access 1 Blue Claw model through Mastra's model router. Authentication is handled automatically using the `BLUECLAW_API_KEY` environment variable.
 
 Learn more in the [Blue Claw documentation](https://blueclaw.network).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "blueclaw/Qwen/Qwen3.6-35B-A3B-FP8"
+  model: "blueclaw/Qwen3.8-27B"
 });
 
 // Generate a response
@@ -46,26 +46,14 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "blueclaw/Qwen/Qwen3.6-35B-A3B-FP8",
+    "model": "blueclaw/Qwen3.8-27B",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 131072,
-    "maxOutput": 65536,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "blueclaw/Qwen3.6-27B",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 196608,
-    "maxOutput": 65536,
+    "maxOutput": 32768,
     "inputCost": null,
     "outputCost": null
   }
@@ -84,7 +72,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://openai.blueclaw.network/v1",
-    id: "blueclaw/Qwen/Qwen3.6-35B-A3B-FP8",
+    id: "blueclaw/Qwen3.8-27B",
     apiKey: process.env.BLUECLAW_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -102,8 +90,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "blueclaw/Qwen3.6-27B"
-      : "blueclaw/Qwen/Qwen3.6-35B-A3B-FP8";
+      ? "blueclaw/Qwen3.8-27B"
+      : "blueclaw/Qwen3.8-27B";
   }
 });
 ```

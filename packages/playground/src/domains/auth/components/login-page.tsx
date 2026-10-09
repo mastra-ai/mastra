@@ -1,13 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useSSOLogin, useAuthCapabilities, useCredentialsLogin, useCredentialsSignUp } from '@mastra/react/hooks/auth';
+import type { SSOConfig } from '@mastra/react/hooks/auth';
 import { Lock, LogIn } from 'lucide-react';
 import { useState } from 'react';
-import { useSSOLogin } from '../hooks/use-auth-actions';
-import { useAuthCapabilities } from '../hooks/use-auth-capabilities';
-import { useCredentialsLogin } from '../hooks/use-credentials-login';
-import { useCredentialsSignUp } from '../hooks/use-credentials-signup';
-import type { SSOConfig } from '../types';
 import { LoginLayout } from './login-layout';
 import { withStudioBasePath } from '@/lib/studio-base-path';
 
@@ -111,7 +111,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   const description = login.description ? (
     <div className="flex items-start gap-2.5 rounded-md border border-border bg-sidebar p-3">
       <Lock className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-      <p className="text-body text-muted-foreground">{login.description}</p>
+      <Txt tone="muted">{login.description}</Txt>
     </div>
   ) : null;
 
@@ -128,43 +128,54 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
       errorBanner={errorBanner}
     >
       {hasCredentials && (
-        <form onSubmit={handleCredentialsSubmit} className="space-y-4">
+        <Form onSubmit={handleCredentialsSubmit}>
           {!isSignIn && (
-            <TextFieldBlock
-              name="name"
-              label="Name"
-              type="text"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Your name"
+            <Field>
+              <FieldLabel>Name</FieldLabel>
+              <Input
+                name="name"
+                type="text"
+                autoComplete="name"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                placeholder="Your name"
+                variant="default"
+                size="lg"
+              />
+            </Field>
+          )}
+
+          <Field>
+            <FieldLabel required>Email</FieldLabel>
+            <Input
+              name="email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              required
               variant="default"
               size="lg"
             />
-          )}
+            <FieldError />
+          </Field>
 
-          <TextFieldBlock
-            name="email"
-            label="Email"
-            type="email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            required
-            variant="default"
-            size="lg"
-          />
-
-          <TextFieldBlock
-            name="password"
-            label="Password"
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-            placeholder={isSignIn ? 'Enter your password' : 'Create a password'}
-            required
-            variant="default"
-            size="lg"
-          />
+          <Field>
+            <FieldLabel required>Password</FieldLabel>
+            <Input
+              name="password"
+              type="password"
+              autoComplete={isSignIn ? 'current-password' : 'new-password'}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder={isSignIn ? 'Enter your password' : 'Create a password'}
+              required
+              variant="default"
+              size="lg"
+            />
+            <FieldError />
+          </Field>
 
           {error ? (
             <div role="alert">
@@ -177,16 +188,18 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           </Button>
 
           {signUpEnabled && (
-            <div className="text-center text-body">
-              <span className="text-muted-foreground">
+            <div className="text-center">
+              <Txt as="span" variant="body" tone="muted">
                 {isSignIn ? "Don't have an account? " : 'Already have an account? '}
-              </span>
+              </Txt>
               <button type="button" onClick={toggleMode} className="text-foreground hover:underline">
-                {isSignIn ? 'Sign up' : 'Sign in'}
+                <Txt as="span" variant="body" className="block">
+                  {isSignIn ? 'Sign up' : 'Sign in'}
+                </Txt>
               </button>
             </div>
           )}
-        </form>
+        </Form>
       )}
 
       {hasSSO && hasCredentials && (
@@ -194,8 +207,10 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
           <div className="absolute inset-0 flex items-center">
             <div className="w-full border-t border-border" />
           </div>
-          <div className="relative flex justify-center text-body">
-            <span className="bg-sidebar px-2 text-muted-foreground">or continue with</span>
+          <div className="relative flex justify-center">
+            <Txt as="span" variant="body" tone="muted" className="bg-sidebar px-2">
+              or continue with
+            </Txt>
           </div>
         </div>
       )}

@@ -1,9 +1,10 @@
 /**
- * Agent ↔ DurableAgent Parity Tests
+ * Agent ↔ DurableAgent ↔ EventedAgent Parity Tests
  *
- * For each scenario, we run the same input through a plain `Agent` and a
- * `DurableAgent` (wrapping the same Agent config), then assert that the
- * observable stream output matches.
+ * For each scenario, we run the same input through a plain `Agent`, a
+ * `createDurableAgent` wrapper and a `createEventedAgent` wrapper (each
+ * around the same Agent config), then assert that the observable stream
+ * output and the model requests match.
  *
  * See `parity-harness.ts` for the comparison shape and what we deliberately
  * exclude from the check (runId, timestamps, span ids, response.id, etc.).
@@ -13,48 +14,64 @@
  *   (a) make a previously-failing scenario here pass, or
  *   (b) add a new scenario that fails until the fix lands.
  */
-import { describe, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import { createMockModelFactory, expectAgentParity, textOnlyTape } from './parity-harness';
+import { expectEngineParity, PARITY_ENGINES, textOnlyTape, toolCallTape } from './parity-harness';
 
-describe('Agent ↔ DurableAgent parity', () => {
+describe('Agent ↔ DurableAgent ↔ EventedAgent parity', () => {
   describe('basic text streaming', () => {
     it('produces identical text, usage, and finishReason', async () => {
-      const modelFactory = createMockModelFactory({
-        tapes: [textOnlyTape('Hello from the parity harness.')],
-      });
-
-      await expectAgentParity({
-        buildAgent: () =>
+      await expectEngineParity({
+        model: { tapes: [textOnlyTape('Hello from the parity harness.')] },
+        buildAgent: ({ model }) =>
           new Agent({
             id: 'parity-basic-text',
             name: 'Parity Basic Text',
             instructions: 'Respond with a single sentence.',
-            model: modelFactory(),
+            model,
           }),
-        streamAgent: a => a.stream('Say hello'),
-        streamDurable: a => a.stream('Say hello'),
+        input: 'Say hello',
       });
     });
 
-    // TODO(parity): DurableAgent stops after the tool-call step with
-    // `finishReason: 'tool-calls'` and `stepCount: 1`, while Agent continues
-    // to a second LLM step and produces `text: 'Echoed: hi'`. The tool-call
-    // chunk fields (`toolCallId`, `toolName`, `args`) also round-trip as
-    // `undefined` through the durable serialization layer. Tracked under the
-    // broader serialization/loop-continuation gap — flip this back on once
-    // tool-call round-tripping is verified.
-    it.todo('preserves multi-step accumulated usage across tool→text');
+    it('preserves multi-step accumulated usage across tool→text', async () => {
+      const echo = createTool({
+        id: 'echo',
+        description: 'Echo the input',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async ({ value }) => `echo:${value}`,
+      });
+
+      const results = await expectEngineParity({
+        model: { tapes: [toolCallTape('echo', { value: 'hi' }), textOnlyTape('Echoed: hi')] },
+        buildAgent: ({ model }) =>
+          new Agent({ id: 'parity-tool-text', name: 'Tool Text', instructions: 'Use echo', model, tools: { echo } }),
+        input: 'echo hi',
+        options: { maxSteps: 2 },
+      });
+
+      for (const engine of PARITY_ENGINES) {
+        const turn = results[engine]!.turns.at(-1)!;
+        expect(turn.stepCount).toBe(2);
+        expect(turn.finishReason).toBe('stop');
+        expect(turn.text).toBe('Echoed: hi');
+        // Tool step (15/10/25) plus text step (10/20/30). `raw` mirrors the last
+        // step's provider usage rather than being summed; it is identical on
+        // every engine and would differ here if the workflow dropped it.
+        expect(turn.usage).toEqual({
+          inputTokens: 25,
+          outputTokens: 30,
+          totalTokens: 55,
+          raw: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        });
+      }
+    });
   });
 
   describe('activeTools filtering', () => {
-    it('forwards activeTools identically to the LLM request on both sides', async () => {
-      const modelFactory = createMockModelFactory({
-        tapes: [textOnlyTape('Done')],
-      });
-
+    it('forwards activeTools identically to the LLM request on every engine', async () => {
       const allowedTool = createTool({
         id: 'allowedTool',
         description: 'Allowed',
@@ -68,18 +85,96 @@ describe('Agent ↔ DurableAgent parity', () => {
         execute: async () => 'hidden',
       });
 
-      await expectAgentParity({
-        buildAgent: () =>
+      const results = await expectEngineParity({
+        model: { tapes: [textOnlyTape('Done')] },
+        buildAgent: ({ model }) =>
           new Agent({
             id: 'parity-active-tools',
             name: 'Parity Active Tools',
             instructions: 'Use only enabled tools',
-            model: modelFactory(),
+            model,
             tools: { allowedTool, hiddenTool },
           }),
-        streamAgent: a => a.stream('use the allowed tool', { activeTools: ['allowedTool'] }),
-        streamDurable: a => a.stream('use the allowed tool', { activeTools: ['allowedTool'] }),
+        input: 'use the allowed tool',
+        options: { activeTools: ['allowedTool'] },
       });
+
+      // Requests already match plain; pin plain to the filtered tool list.
+      expect(results.plain!.requests[0]!.tools?.map(t => t.name)).toEqual(['allowedTool']);
+    });
+  });
+
+  describe('prepareStep system messages', () => {
+    const echo = createTool({
+      id: 'echo',
+      description: 'Echo the input',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async ({ value }) => value,
+    });
+    const tapes = [
+      toolCallTape('echo', { value: 'one' }, 'call-1'),
+      toolCallTape('echo', { value: 'two' }, 'call-2'),
+      textOnlyTape('done'),
+    ];
+
+    it('restores the original system messages after a one-step override', async () => {
+      const results = await expectEngineParity({
+        model: { tapes },
+        buildAgent: ({ model }) =>
+          new Agent({
+            id: 'parity-prepare-step-system-once',
+            name: 'Prepare Step System Once',
+            instructions: 'original system message',
+            model,
+            tools: { echo },
+          }),
+        input: 'run three model calls',
+        options: {
+          maxSteps: 3,
+          prepareStep: ({ stepNumber }) =>
+            stepNumber === 1
+              ? { systemMessages: [{ role: 'system' as const, content: 'step-two-only override' }] }
+              : undefined,
+        },
+      });
+
+      for (const engine of PARITY_ENGINES) {
+        const requests = results[engine]!.requests;
+        expect(requests).toHaveLength(3);
+        expect(requests[0]!.prompt).toContainEqual({ role: 'system', content: 'original system message' });
+        expect(requests[1]!.prompt).toContainEqual({ role: 'system', content: 'step-two-only override' });
+        expect(requests[2]!.prompt).toContainEqual({ role: 'system', content: 'original system message' });
+        expect(requests[2]!.prompt).not.toContainEqual({ role: 'system', content: 'step-two-only override' });
+      }
+    });
+
+    it('applies an override returned on every step', async () => {
+      const results = await expectEngineParity({
+        model: { tapes },
+        buildAgent: ({ model }) =>
+          new Agent({
+            id: 'parity-prepare-step-system-every-step',
+            name: 'Prepare Step System Every Step',
+            instructions: 'original system message',
+            model,
+            tools: { echo },
+          }),
+        input: 'run three model calls',
+        options: {
+          maxSteps: 3,
+          prepareStep: () => ({
+            systemMessages: [{ role: 'system' as const, content: 'every-step override' }],
+          }),
+        },
+      });
+
+      for (const engine of PARITY_ENGINES) {
+        expect(results[engine]!.requests).toHaveLength(3);
+        for (const request of results[engine]!.requests) {
+          expect(request.prompt).toContainEqual({ role: 'system', content: 'every-step override' });
+          expect(request.prompt).not.toContainEqual({ role: 'system', content: 'original system message' });
+        }
+      }
     });
   });
 
@@ -112,6 +207,8 @@ describe('Agent ↔ DurableAgent parity', () => {
     // 'per-call tool injection survives in-process resume' describe block.
     // A true cross-process resume falls back to the agent's static tools
     // because per-call tools carry closures and cannot be JSON-serialized.
+    // Cross-process toolsets cannot be rebuilt; the worker now fails loudly
+    // instead (see utils/toolsets-xproc.test.ts).
     it.todo('preserves toolsets across resume (cross-process; gated on a future serialization story)');
     it.todo('preserves clientTools across resume (cross-process; gated on a future serialization story)');
   });

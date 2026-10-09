@@ -1,22 +1,135 @@
 {
-  "attachment": ["Qwen/Qwen3.5-397B-A17B", "Qwen/Qwen3.6-27B", "moonshotai/Kimi-K2.6"],
+  "attachment": [
+    "deepseek-v4.1-flash",
+    "glm-5.3-flash",
+    "mimo-v2.6-flash-rl",
+    "mimo-v2.6-pro-rl",
+    "minimax-m3",
+    "muse-glimmer-30b",
+    "nemotron-3-nano-omni-30b-a3b-reasoning",
+    "nemotron-3.5-content-safety",
+    "qwen3.8-27b",
+    "qwen3.8-flash-next"
+  ],
   "temperature": [
-    "MiniMaxAI/MiniMax-M2.7",
-    "Qwen/Qwen3.5-397B-A17B",
-    "Qwen/Qwen3.6-27B",
-    "XiaomiMiMo/MiMo-V2.5-Pro",
-    "deepseek-ai/DeepSeek-V4-Flash",
-    "moonshotai/Kimi-K2.6",
-    "nvidia/DeepSeek-V3.2-NVFP4",
-    "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16",
-    "nvidia/Nemotron-Cascade-2-30B-A3B",
-    "zai-org/GLM-5.2-FP8"
+    "deepseek-v4-flash-0731",
+    "deepseek-v4.1-flash",
+    "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "glm-5.x-menthol",
+    "laguna-s-2.1",
+    "mimo-v2.6-flash-rl",
+    "mimo-v2.6-pro-rl",
+    "minimax-m3",
+    "muse-glimmer-30b",
+    "nemotron-3-nano-omni-30b-a3b-reasoning",
+    "nemotron-3.5-content-safety",
+    "qwen3.8-27b",
+    "qwen3.8-flash-next"
   ],
   "structuredOutput": [
-    "Qwen/Qwen3.5-397B-A17B",
-    "Qwen/Qwen3.6-27B",
-    "deepseek-ai/DeepSeek-V4-Flash",
-    "moonshotai/Kimi-K2.6",
-    "zai-org/GLM-5.2-FP8"
-  ]
+    "deepseek-v4-flash-0731",
+    "deepseek-v4.1-flash",
+    "glm-5.2",
+    "glm-5.3",
+    "glm-5.3-flash",
+    "muse-glimmer-30b",
+    "qwen3.8-27b",
+    "qwen3.8-flash-next"
+  ],
+  "reasoning": {
+    "mimo-v2.6-pro-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4-flash-0731": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "laguna-s-2.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.x-menthol": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.6-flash-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.8-flash-next": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "nemotron-3.5-content-safety": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ]
+  }
 }

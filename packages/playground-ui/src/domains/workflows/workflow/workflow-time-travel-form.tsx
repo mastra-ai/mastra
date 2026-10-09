@@ -1,12 +1,13 @@
-import { Braces, ChevronDown, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
-import { useContext, useId, useMemo, useState } from 'react';
+import { Braces, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-react';
+import { useContext, useMemo, useState } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowInputData } from './workflow-input-data';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { FieldBlock, fieldErrorId } from '@/ds/components/FormFieldBlocks';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Notice } from '@/ds/components/Notice';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
@@ -54,7 +55,6 @@ const JsonField = ({
   helperText?: string;
   exampleCode?: string;
 }) => {
-  const fieldName = useId();
   const { handleCopy } = useCopyToClipboard({ text: value });
   const { handleCopy: handleCopyExample } = useCopyToClipboard({ text: exampleCode ?? '{}' });
   const [fieldError, setFieldError] = useState<string | null>(null);
@@ -114,83 +114,74 @@ const JsonField = ({
           />
         </div>
       )}
-      <Collapsible className={cn(raisedSurfaceStyle, 'rounded-lg')} open={isOpen} onOpenChange={setIsOpen}>
-        <div className="flex w-full items-center justify-between px-3">
-          <div>
-            <FieldBlock.Label name={fieldName} size="bigger">
-              {label}
-            </FieldBlock.Label>
-            {helperText && (
-              <Txt variant="meta" tone="muted">
-                {helperText}
-              </Txt>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" onClick={handleFormat} className={buttonClass} aria-label="Format JSON">
-                  <Icon>
-                    <Braces />
-                  </Icon>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Format JSON</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy JSON">
-                  <Icon>
-                    <CopyIcon />
-                  </Icon>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Copy JSON</TooltipContent>
-            </Tooltip>
-            {exampleCode && (
+      <Field invalid={Boolean(fieldError)}>
+        <Collapsible className={cn(raisedSurfaceStyle, 'rounded-lg')} open={isOpen} onOpenChange={setIsOpen}>
+          <div className="flex w-full items-center justify-between px-3">
+            <div>
+              <FieldLabel size="bigger">{label}</FieldLabel>
+              {helperText && (
+                <Txt variant="meta" tone="muted">
+                  {helperText}
+                </Txt>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => setIsExampleOpen(!isExampleOpen)}
-                    className={buttonClass}
-                    aria-label={isExampleOpen ? `Hide example JSON` : `View example JSON`}
-                  >
-                    <Icon>{isExampleOpen ? <EyeOffIcon /> : <EyeIcon />}</Icon>
+                  <button type="button" onClick={handleFormat} className={buttonClass} aria-label="Format JSON">
+                    <Icon>
+                      <Braces />
+                    </Icon>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>View example JSON</TooltipContent>
+                <TooltipContent>Format JSON</TooltipContent>
               </Tooltip>
-            )}
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className={buttonClass}
-                aria-label={isOpen ? `Collapse ${label}` : `Expand ${label}`}
-              >
-                <Icon className={cn('transition-transform', isOpen ? 'rotate-0' : '-rotate-90')}>
-                  <ChevronDown />
-                </Icon>
-              </button>
-            </CollapsibleTrigger>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy JSON">
+                    <Icon>
+                      <CopyIcon />
+                    </Icon>
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Copy JSON</TooltipContent>
+              </Tooltip>
+              {exampleCode && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setIsExampleOpen(!isExampleOpen)}
+                      className={buttonClass}
+                      aria-label={isExampleOpen ? `Hide example JSON` : `View example JSON`}
+                    >
+                      <Icon>{isExampleOpen ? <EyeOffIcon /> : <EyeIcon />}</Icon>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>View example JSON</TooltipContent>
+                </Tooltip>
+              )}
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className={buttonClass}
+                  aria-label={isOpen ? `Collapse ${label}` : `Expand ${label}`}
+                >
+                  <Icon>
+                    <DisclosureChevron direction="right" />
+                  </Icon>
+                </button>
+              </CollapsibleTrigger>
+            </div>
           </div>
-        </div>
 
-        <CollapsibleContent className="space-y-2">
-          <CodeEditor
-            id={`input-${fieldName}`}
-            value={value}
-            onChange={onChange}
-            language="json"
-            showCopyButton={false}
-            aria-invalid={fieldError ? true : undefined}
-            aria-describedby={fieldError ? fieldErrorId(fieldName) : undefined}
-            className="h-65"
-          />
+          <CollapsibleContent className="space-y-2">
+            <CodeEditor value={value} onChange={onChange} language="json" showCopyButton={false} className="h-65" />
 
-          {fieldError && <FieldBlock.ErrorMsg name={fieldName}>{fieldError}</FieldBlock.ErrorMsg>}
-        </CollapsibleContent>
-      </Collapsible>
+            <FieldError>{fieldError}</FieldError>
+          </CollapsibleContent>
+        </Collapsible>
+      </Field>
     </>
   );
 };

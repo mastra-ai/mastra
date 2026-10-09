@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '@/test/inert-resize-observer';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
+import type { ComponentProps } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { TraceSpanPanel, type TraceSpanPanelProps } from '../trace-span-panel';
@@ -57,6 +58,7 @@ const installHandlers = ({ threadTraceCount = 2 }: { threadTraceCount?: number }
       HttpResponse.json({ feedback: [], pagination: { page: 0, perPage: 10, total: 0, hasMore: false } }),
     ),
     http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
   );
 };
 
@@ -88,9 +90,12 @@ function Harness({
   );
 }
 
-const renderPanel = (props: Partial<TraceSpanPanelProps> & { initialSpanId?: string | null } = {}) =>
+const renderPanel = (
+  props: Partial<TraceSpanPanelProps> & { initialSpanId?: string | null } = {},
+  paths?: ComponentProps<typeof TestLinkProvider>['paths'],
+) =>
   renderWithProviders(
-    <TestLinkProvider>
+    <TestLinkProvider paths={paths}>
       <Harness {...props} />
     </TestLinkProvider>,
   );
@@ -134,7 +139,12 @@ describe('TraceSpanPanel', () => {
       const onFullThreadOpenChange = vi.fn();
       const { queryClient } = renderPanel({ showPartialThread: true, onFullThreadOpenChange });
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
+      const button = await screen.findByRole('button', { name: 'Open full thread' });
+      // The action sits in the side column's tab row, not inside the conversation.
+      expect(screen.getByTestId('messages-panel').contains(button)).toBe(false);
+      expect(button.closest('[data-trace-side-column]')).not.toBeNull();
+
+      fireEvent.click(button);
       expect(onFullThreadOpenChange).toHaveBeenCalledWith(true);
       expect(screen.queryByRole('link', { name: 'Open full thread' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -162,28 +172,63 @@ describe('TraceSpanPanel', () => {
       expect(screen.queryByRole('button', { name: 'Open full thread' })).toBeNull();
     });
 
-    describe('when the full thread is open', () => {
-      it('replaces the trace timeline with the thread view and can go back or close', async () => {
-        installHandlers({ threadTraceCount: 2 });
-        const onFullThreadOpenChange = vi.fn();
-        const onClose = vi.fn();
-        const { queryClient } = renderPanel({
-          showPartialThread: true,
-          isFullThreadOpen: true,
-          onFullThreadOpenChange,
-          onClose,
-        });
+    describe('when the full thread is opened', () => {
+      // Mirrors the traces page: the thread drawer opens on top of an already-open trace drawer.
+      function FullThreadHarness({ onClose }: { onClose: () => void }) {
+        const [isFullThreadOpen, setIsFullThreadOpen] = useState(false);
+        return (
+          <Harness
+            showPartialThread
+            isFullThreadOpen={isFullThreadOpen}
+            onFullThreadOpenChange={setIsFullThreadOpen}
+            onClose={onClose}
+          />
+        );
+      }
 
-        expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
-        expect(screen.queryByText(`Trace ${TRACE_ID}`)).toBeNull();
-        expect(screen.queryByTestId('messages-panel')).toBeNull();
+      const openFullThread = async () => {
+        const onClose = vi.fn();
+        const utils = renderWithProviders(
+          <TestLinkProvider>
+            <FullThreadHarness onClose={onClose} />
+          </TestLinkProvider>,
+        );
+        fireEvent.click(await screen.findByRole('button', { name: 'Open full thread' }));
+        const threadDialog = await screen.findByRole('dialog', { name: /^Thread / });
+        return { ...utils, onClose, threadDialog };
+      };
+
+      it('then the thread opens in its own drawer stacked above the trace drawer', async () => {
+        installHandlers({ threadTraceCount: 2 });
+        const { queryClient, threadDialog } = await openFullThread();
+
+        expect(threadDialog.getAttribute('data-depth')).toBe('2');
+        expect(await within(threadDialog).findByTestId('thread-view-by-trace')).not.toBeNull();
+        // The trace drawer stays mounted beneath, made inert by the thread drawer.
+        expect(screen.getByRole('dialog', { name: `Trace ${TRACE_ID}`, hidden: true })).not.toBeNull();
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      });
+
+      it('then "Back to trace" closes only the thread drawer', async () => {
+        installHandlers({ threadTraceCount: 2 });
+        const { queryClient, onClose } = await openFullThread();
 
         fireEvent.click(screen.getByRole('button', { name: 'Back to trace' }));
-        expect(onFullThreadOpenChange).toHaveBeenCalledWith(false);
 
-        // The thread view has no dedicated close arrow (the leading arrow goes back to the trace); the drawer closes via Escape.
-        fireEvent.keyDown(screen.getByRole('dialog', { name: /^Thread / }), { key: 'Escape' });
-        await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: /^Thread / })).toBeNull());
+        expect(screen.getByRole('dialog', { name: `Trace ${TRACE_ID}` })).not.toBeNull();
+        expect(onClose).not.toHaveBeenCalled();
+        await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      });
+
+      it('then Escape closes only the thread drawer', async () => {
+        installHandlers({ threadTraceCount: 2 });
+        const { queryClient, onClose, threadDialog } = await openFullThread();
+
+        fireEvent.keyDown(threadDialog, { key: 'Escape' });
+
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: /^Thread / })).toBeNull());
+        expect(onClose).not.toHaveBeenCalled();
         await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       });
     });
@@ -295,7 +340,7 @@ describe('TraceSpanPanel', () => {
     const { queryClient } = renderPanel({ onClose });
 
     expect(await screen.findByRole('heading', { name: `Trace ${TRACE_ID}` })).not.toBeNull();
-    fireEvent.click(screen.getByLabelText('Close Panel'));
+    fireEvent.click(screen.getByLabelText('Close trace'));
     expect(onClose).toHaveBeenCalledOnce();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });
@@ -311,7 +356,7 @@ describe('TraceSpanPanel', () => {
     // appears as the span-type badge in the tree, so allow multiple matches.)
     expect(screen.getAllByText('Agent').length).toBeGreaterThan(0);
     const entityLink = screen.getByRole('link', { name: /Weather Agent/ });
-    expect(entityLink.getAttribute('href')).toBe('/agents/weather-agent/chat/new');
+    expect(entityLink.getAttribute('href')).toBe('/agents/weather-agent');
 
     // Start time + duration are shown; the old key-value rows are gone.
     expect(screen.getByLabelText(/^Started at /)).not.toBeNull();
@@ -333,7 +378,28 @@ describe('TraceSpanPanel', () => {
     });
 
     const entityLink = await screen.findByRole('link', { name: /Daily report/ });
-    expect(entityLink.getAttribute('href')).toBe('/workflows/daily-report/graph');
+    expect(entityLink.getAttribute('href')).toBe('/workflows/daily-report');
+  });
+
+  const withRootEntity = (entityType: string, entityId: string, entityName: string) =>
+    panelTraceSpans.spans.map(span =>
+      span.parentSpanId == null ? { ...span, entityType, entityId, entityName } : span,
+    );
+
+  it('given the app has no agent route, then the agent entity is shown without a link', async () => {
+    installHandlers();
+    renderPanel({ spans: withRootEntity('agent_run', 'chef', 'Chef agent') }, { agentLink: () => '' });
+
+    expect(await screen.findByText(/Chef agent/)).not.toBeNull();
+    expect(screen.queryByRole('link', { name: /Chef agent/ })).toBeNull();
+  });
+
+  it('given the app has no workflow route, then the workflow entity is shown without a link', async () => {
+    installHandlers();
+    renderPanel({ spans: withRootEntity('workflow_run', 'daily-report', 'Daily report') }, { workflowLink: () => '' });
+
+    expect(await screen.findByText(/Daily report/)).not.toBeNull();
+    expect(screen.queryByRole('link', { name: /Daily report/ })).toBeNull();
   });
 
   it('given anchorSpanId (branches mode), then the selected anchor span shows trace-level metadata', async () => {
@@ -345,5 +411,37 @@ describe('TraceSpanPanel', () => {
     // Anchor spans render the trace-context fields (session/request/user…) even though they have a parent.
     expect(screen.getByText('Session Id')).not.toBeNull();
     expect(screen.getByText('session-42')).not.toBeNull();
+  });
+
+  describe('resizable columns', () => {
+    // Resize handles are direct children of the column group; nested decorative separators are excluded.
+    const resizeHandles = () => {
+      const group = document.querySelector('[data-trace-columns]')?.firstElementChild;
+      return Array.from(group?.children ?? []).filter(el => el.getAttribute('role') === 'separator');
+    };
+    const columns = () => Array.from(document.querySelectorAll('[data-trace-columns] [data-panel]'));
+
+    it('when the trace has a thread, then one resize handle splits Messages and trace', async () => {
+      installHandlers();
+      const { queryClient } = renderPanel({ showPartialThread: true });
+
+      await screen.findByTestId('messages-panel');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(screen.getAllByRole('separator')).toHaveLength(1);
+      expect(resizeHandles()).toHaveLength(1);
+      expect(columns()).toHaveLength(2);
+    });
+
+    it('when a span is selected, then a third column appears behind a second resize handle', async () => {
+      installHandlers();
+      const { queryClient } = renderPanel({ showPartialThread: true, initialSpanId: 'span-root' });
+
+      await screen.findByTestId('messages-panel');
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      await waitFor(() => expect(screen.getAllByRole('separator')).toHaveLength(2));
+      expect(resizeHandles()).toHaveLength(2);
+      expect(columns()).toHaveLength(3);
+      expect(document.querySelector('[data-panel][id="trace-span"]')).not.toBeNull();
+    });
   });
 });

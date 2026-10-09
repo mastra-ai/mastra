@@ -1,3 +1,4 @@
+import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useCallback, useContext } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
@@ -21,7 +22,6 @@ import {
   toolInteraction,
 } from '@/domains/chat/tools/tool-card-kind';
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
-import { useMcpAppTools } from '@/domains/mcps/hooks/use-mcp-app-tools';
 import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/context/playground-workflow-run-provider';
 
 /** A `data`-typed part the agent wrote via `writer.custom`, scoped to a call by `data.toolCallId`. */
@@ -78,7 +78,7 @@ export const ToolCardInner = ({
   const { isRunning } = useChatRunning();
   const handleMcpAppSendMessage = useCallback(
     (content: string) => {
-      send({ message: content });
+      void send({ message: content });
     },
     [send],
   );
@@ -99,36 +99,25 @@ export const ToolCardInner = ({
   switch (kind) {
     case 'hidden':
       return null;
-    case 'observation': {
-      const omData = output?.omData ?? input;
-      return (
-        <ObservationMarkerBadge
-          toolName={toolName}
-          args={omData}
-          metadata={metadata ? { ...metadata, omData } : undefined}
-        />
-      );
-    }
+    case 'observation':
+      return <ObservationMarkerBadge toolName={toolName} omData={output?.omData ?? input} />;
     case 'ask_user':
       if (!readOnly) {
         return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
       }
       break;
     case 'submit_plan':
-      if (chatAgent) {
-        return (
-          <SubmitPlanTool
-            agentId={chatAgent.agentId}
-            agentVersionId={chatAgent.agentVersionId}
-            requestContext={chatAgent.requestContext}
-            toolName={toolName}
-            toolCallId={toolCallId}
-            output={output}
-            metadata={metadata}
-          />
-        );
-      }
-      break;
+      return (
+        <SubmitPlanTool
+          agentId={chatAgent?.agentId}
+          agentVersionId={chatAgent?.agentVersionId}
+          requestContext={chatAgent?.requestContext}
+          toolName={toolName}
+          toolCallId={toolCallId}
+          output={output}
+          metadata={metadata}
+        />
+      );
     case 'background': {
       const isAgent = isAgentCall(metadata, toolName);
       const isWorkflow = isWorkflowCall(metadata, toolName);
@@ -193,6 +182,7 @@ export const ToolCardInner = ({
           isNetwork={isNetwork}
           toolCalled={toolCalled}
           dataParts={dataParts}
+          status={status}
         />
       );
     case 'sandbox':
@@ -207,6 +197,7 @@ export const ToolCardInner = ({
           isNetwork={isNetwork}
           toolCalled={toolCalled}
           dataParts={dataParts}
+          status={status}
         />
       );
     case 'code_mode': {

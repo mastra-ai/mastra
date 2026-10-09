@@ -190,6 +190,21 @@ describe('Factory rule validation', () => {
     expect(JSON.parse(JSON.stringify(validated))).toEqual(validated);
   });
 
+  it('validates dismiss stale reviews decisions', () => {
+    const decision = {
+      type: 'dismissStaleReviews',
+      idempotencyKey: 'dismiss-1',
+      installationId: 7,
+      repository: 'acme/repo',
+      pullRequestNumber: 42,
+      approvingReviewId: '101',
+      approvingAuthor: 'factory-reviewer',
+    };
+    expect(validateFactoryRuleDecision(decision)).toEqual(decision);
+    expect(() => validateFactoryRuleDecision({ ...decision, pullRequestNumber: 0 })).toThrow(/positive integer/);
+    expect(() => validateFactoryRuleDecision({ ...decision, extra: true })).toThrow();
+  });
+
   it('validates the optional session message on transition decisions', () => {
     expect(
       validateFactoryRuleDecision({

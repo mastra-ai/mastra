@@ -1,15 +1,19 @@
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import {
+  useAgent,
+  useReorderModelList,
+  useUpdateModelInModelList,
+  useChannelPlatforms,
+} from '@mastra/react/hooks/agents';
 import { Boxes, Brain, Cpu, Folder, Gauge, Globe, Radio, Sparkles, Workflow, Wrench } from 'lucide-react';
-import { useAgent } from '../../hooks/use-agent';
-import { useReorderModelList, useUpdateModelInModelList } from '../../hooks/use-agents';
-import { useChannelPlatforms } from '../../hooks/use-channels';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { AgentChannels } from '../agent-channels/agent-channels';
 import {
@@ -51,18 +55,24 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
         </Txt>
       </div>
 
-      <ScrollArea className="min-h-0" viewPortClassName="h-full" mask={{ top: false }}>
-        {/* Skip the sections (and their data fetching) while the panel is collapsed. */}
-        {!isCollapsed && <AgentOverviewSections agentId={agentId} />}
+      <ScrollArea className="min-h-0" mask={{ top: false }}>
+        <ScrollAreaViewport className="h-full">
+          {/* Skip the sections (and their data fetching) while the panel is collapsed. */}
+          {!isCollapsed && <AgentOverviewSections agentId={agentId} />}
+        </ScrollAreaViewport>
       </ScrollArea>
     </div>
   );
 }
 
 function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
-  const { data: agent, isLoading } = useAgent(agentId, useEntityRequestContext('agent', agentId)[0]);
-  const { mutate: reorderModelList } = useReorderModelList(agentId);
-  const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList(agentId);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { mutate: reorderModelList } = useReorderModelList({ agentId: agentId });
+  const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList({ agentId: agentId });
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const { data: channelPlatforms } = useChannelPlatforms();
 
@@ -132,7 +142,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
           title: 'Using Tools and MCP documentation',
         }}
       >
-        <AgentMetadataToolList tools={tools} agentId={agentId} />
+        <AgentMetadataToolList agentId={agentId} tools={tools} />
       </AgentMetadataSection>
 
       <AgentMetadataSection
@@ -213,8 +223,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         {!isCmsLoading && !isCmsAvailable && (
           <Notice variant="warning" title="Read-only">
             <Notice.Message>
-              To edit the system prompt in Studio, add <code className="font-medium">@mastra/editor</code> to your
-              project. See the{' '}
+              To edit the system prompt in Studio, add <InlineCode>@mastra/editor</InlineCode> to your project. See the{' '}
               <a
                 href="https://mastra.ai/docs/editor/overview"
                 target="_blank"

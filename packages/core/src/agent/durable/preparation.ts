@@ -1,4 +1,6 @@
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
+import { MastraFGAPermissions } from '../../auth/ee';
+import type { MastraFGAPermissionInput } from '../../auth/ee';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
@@ -8,7 +10,12 @@ import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } from '../../memory/types';
 import { EntityType, SpanType, createObservabilityContext, getOrCreateSpan } from '../../observability';
-import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
+import type {
+  InputProcessorOrWorkflow,
+  LLMRequestProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+  ErrorProcessorOrWorkflow,
+} from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import {
   RequestContext,
@@ -47,9 +54,11 @@ import {
   applyClientToolModelOutput,
   fireClientToolOutputHooks,
 } from '../workflows/prepare-stream/client-tool-output-hooks';
+import { authorizeDurableMemory } from './memory-fga';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
-import { createWorkflowInput } from './utils/serialize-state';
+import { createWorkflowInput, serializeClientTools, serializeToolsetToolNames } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
+import { isJsonSafe } from './workflows/shared/schemas';
 
 /**
  * JSON-safe snapshot of `requestContext.entries()` so durable steps (e.g.
@@ -165,13 +174,20 @@ interface DurablePreparationAgent {
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
-  listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]>;
+  __resolveRunErrorProcessors(
+    requestContext: RequestContext,
+    overrides?: ErrorProcessorOrWorkflow[],
+  ): Promise<{ errorProcessors: ErrorProcessorOrWorkflow[]; hasConfiguredErrorProcessors: boolean }>;
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   __getGoalConfig(): GoalConfig | undefined;
   __getMaxRetriesConfigured?(): boolean;
-  __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
+  __getMaxProcessorRetries?(): number | undefined;
+  __listLLMRequestProcessors(
+    requestContext?: RequestContext,
+    errorProcessorOverrides?: ErrorProcessorOrWorkflow[],
+  ): Promise<LLMRequestProcessorOrWorkflow[]>;
 }
 
 /**
@@ -425,10 +441,25 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Setting the context first keeps read (inject) and write (tool) in sync.
   const memory = await typedAgent.getMemory({ requestContext });
   const memoryConfig = execOptions?.memory?.options;
+  const memoryAuthorizationChecks = new Map<MastraFGAPermissionInput, Promise<void>>();
+  const authorizeMemory = (permission: MastraFGAPermissionInput) =>
+    authorizeDurableMemory(memoryAuthorizationChecks, {
+      mastra,
+      user: requestContext.get('user'),
+      threadId: threadId!,
+      resourceId,
+      agentId: publicAgentId,
+      requestContext,
+      permission,
+      actor: execOptions?.actor,
+    });
   if (memory && threadId && resourceId) {
+    await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
     const existingThread = await memory.getThreadById({ threadId });
     if (existingThread) {
       assertThreadOwnedByResource({ thread: existingThread, resourceId, agentName: publicAgentName });
+    } else {
+      await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
     }
     threadObject =
       existingThread ??
@@ -455,24 +486,29 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Resolve input processors now that the memory context is in place.
   const processorStates = new Map<string, ProcessorState>();
   let inputProcessors: InputProcessorOrWorkflow[] = [];
-  let llmRequestInputProcessors: InputProcessorOrWorkflow[] = [];
+  let llmRequestInputProcessors: LLMRequestProcessorOrWorkflow[] = [];
   let outputProcessors: OutputProcessorOrWorkflow[] = [];
   let errorProcessors: ErrorProcessorOrWorkflow[] = [];
+  let hasConfiguredErrorProcessors = false;
 
-  try {
-    inputProcessors = await typedAgent.listInputProcessors(requestContext);
-    // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
-    // processors are skipped by ProcessorRunner.runProcessLLMRequest.
-    llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext);
-    // Call-time outputProcessors replace constructor-level ones (parity with
-    // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
-    outputProcessors = execOptions?.outputProcessors
-      ? execOptions.outputProcessors
-      : await typedAgent.listOutputProcessors(requestContext);
-    errorProcessors = await typedAgent.listErrorProcessors(requestContext);
-  } catch (error) {
-    logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
-  }
+  inputProcessors = await typedAgent.listInputProcessors(requestContext);
+  // Call-time outputProcessors replace constructor-level ones (parity with
+  // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
+  outputProcessors = execOptions?.outputProcessors
+    ? execOptions.outputProcessors
+    : await typedAgent.listOutputProcessors(requestContext);
+  // Error processors resolve after output processors. They resolve once:
+  // call-time errorProcessors replace the resolved list, including the defaults,
+  // and the request lane below reuses the result. `hasConfiguredErrorProcessors`
+  // excludes framework defaults and gates the implicit retry-cap warning, since
+  // the defaults self-limit.
+  ({ errorProcessors, hasConfiguredErrorProcessors } = await typedAgent.__resolveRunErrorProcessors(
+    requestContext,
+    execOptions?.errorProcessors,
+  ));
+  // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
+  // processors are skipped by ProcessorRunner.runProcessLLMRequest.
+  llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext, errorProcessors);
 
   // Open AGENT_RUN here so processor_run spans (and their MEMORY_OPERATION
   // children) parent to it. MODEL_GENERATION is opened later under it.
@@ -549,7 +585,17 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           retry: error.options?.retry,
         });
       } else {
-        logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);
+        const inputProcessorError = new MastraError(
+          {
+            id: 'AGENT_INPUT_PROCESSOR_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `[Agent:${publicAgentName}] - Input processor error`,
+          },
+          error,
+        );
+        agentSpan?.error({ error: inputProcessorError, endTree: true });
+        throw inputProcessorError;
       }
     }
   }
@@ -665,6 +711,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         // only output guidance. Withhold it there and let the generated schema instruction stand.
         instructions: so.model ? undefined : so.instructions,
         useAgent: so.useAgent,
+        hasStructuringModel: so.model ? true : undefined,
+        errorStrategy: so.errorStrategy,
+        // A non-JSON-safe fallback would fail options validation; in-process runs still
+        // have it through the run registry's live config.
+        fallbackValue: isJsonSafe(so.fallbackValue) ? so.fallbackValue : undefined,
         // Always convert to plain JSON Schema: this crosses step boundaries as JSON, and a
         // live Zod/standard-schema instance does not survive that round trip.
         schema: asJsonSchema(structuredOutputSchema),
@@ -720,6 +771,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     modelList: modelList ?? undefined,
     scorers,
     options: {
+      clientTools: serializeClientTools(execOptions?.clientTools, tools),
+      toolsetToolNames: serializeToolsetToolNames(execOptions?.toolsets),
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
       activeTools: execOptions?.activeTools,
@@ -741,10 +794,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         typeof execOptions?.requireToolApproval === 'function' ? true : execOptions?.requireToolApproval,
       toolCallConcurrency: execOptions?.toolCallConcurrency,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
-      maxProcessorRetries: execOptions?.maxProcessorRetries,
+      maxProcessorRetries: execOptions?.maxProcessorRetries ?? typedAgent.__getMaxProcessorRetries?.(),
       includeRawChunks: execOptions?.includeRawChunks,
       returnScorerData: execOptions?.returnScorerData,
-      hasErrorProcessors: errorProcessors.length > 0,
+      // "Configured" excludes framework default processors — the durable step
+      // uses this to gate the implicit retry-cap warning (the cap itself is
+      // driven by the resolved list from the run registry).
+      hasErrorProcessors: hasConfiguredErrorProcessors,
+      emptyErrorProcessorOverride: execOptions?.errorProcessors?.length === 0 ? true : undefined,
       providerOptions: execOptions?.providerOptions,
       structuredOutput: serializedStructuredOutput,
       skipBgTaskWait: (execOptions as any)?._skipBgTaskWait,
@@ -785,6 +842,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     tools,
     saveQueueManager,
     memory,
+    memoryAuthorizationChecks,
     model,
     modelList: modelList
       ? modelList.map((entry: AgentModelManagerConfig) => ({

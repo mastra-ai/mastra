@@ -13,7 +13,7 @@ test.describe('Agent detail page', () => {
       await expect(page).toHaveTitle(/Mastra Studio/);
 
       // Thread sidebar
-      const newChatButton = page.locator('a:has-text("New Chat")');
+      const newChatButton = page.locator('a:has-text("New Thread")');
       await expect(newChatButton).toBeVisible();
       await expect(newChatButton).toHaveAttribute('href', /agents\/weather-agent\/threads\/.*/);
       // Thread history: either stored threads or the empty state on a fresh database
@@ -28,7 +28,8 @@ test.describe('Agent detail page', () => {
       await expect(page.getByRole('heading', { name: /^Tools/ })).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole('link', { name: 'weatherInfo' })).toHaveAttribute(
         'href',
-        /\/agents\/weather-agent\/tools\/weatherInfo$/,
+        // The chip opens the tool drawer over the agent page you're on.
+        /\/agents\/weather-agent\/threads\/[^/?]+\?tool=weatherInfo$/,
       );
     });
   });

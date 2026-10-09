@@ -2,6 +2,7 @@ import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
 import { MetricsKpiCard } from '@mastra/playground-ui/components/MetricsKpiCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { GaugeIcon } from 'lucide-react';
@@ -59,10 +60,16 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
     }
 
     return (
-      <div className="flex items-center gap-2 text-caption text-muted-foreground">
+      <div className="flex items-start gap-2 text-muted-foreground">
         <GaugeIcon className="size-4 shrink-0 text-muted-foreground" />
-        <span className="text-muted-foreground">{title}</span>
-        <span className="truncate">{description}</span>
+        <div className="grid min-w-0 gap-0.5">
+          <Txt as="span" variant="caption" tone="muted">
+            {title}
+          </Txt>
+          <Txt as="span" variant="caption">
+            {description}
+          </Txt>
+        </div>
       </div>
     );
   }
@@ -76,18 +83,22 @@ export function ExperimentScorerSummary({ scoresByItemId, experimentStatus }: Ex
           <MetricsKpiCard key={scorerId} className="min-w-0 p-3">
             <LinkComponent
               href={paths.scorerLink(scorerId)}
-              className="flex min-w-0 items-center gap-1.5 text-caption text-muted-foreground hover:underline [&>svg]:size-3 [&>svg]:shrink-0 [&>svg]:text-muted-foreground"
+              className="flex min-w-0 items-center gap-1.5 text-muted-foreground hover:underline [&>svg]:size-3 [&>svg]:shrink-0 [&>svg]:text-muted-foreground"
             >
               <Tooltip>
                 <TooltipTrigger render={<ScorersIcon role="img" aria-label="Scorer" />} />
                 <TooltipContent>Scorer</TooltipContent>
               </Tooltip>
-              <span className="truncate">{scorerName}</span>
+              <Txt as="span" variant="caption" className="truncate">
+                {scorerName}
+              </Txt>
             </LinkComponent>
-            <strong className="text-subheading text-muted-foreground">
+            <Txt as="strong" variant="subheading" tone="muted">
               {avg.toFixed(3)}
-              <span className="ml-1.5 text-caption text-muted-foreground">avg score</span>
-            </strong>
+              <Txt as="span" variant="caption" tone="muted" className="ml-1.5">
+                avg score
+              </Txt>
+            </Txt>
           </MetricsKpiCard>
         );
       })}

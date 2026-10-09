@@ -25,68 +25,68 @@ export const spanTypePrefixes = [
 const spanTypeToUiElements: Record<string, UISpanStyle> = {
   agent: {
     icon: <AgentIcon />,
-    color: 'var(--span-type-agent)',
+    color: 'var(--span-agent)',
     label: 'Agent',
     typePrefix: 'agent',
   },
   workflow: {
     icon: <WorkflowIcon />,
-    color: 'var(--span-type-workflow)',
+    color: 'var(--span-workflow)',
     label: 'Workflow',
     typePrefix: 'workflow',
   },
   model: {
     icon: <BrainIcon />,
-    color: 'var(--span-type-model)',
+    color: 'var(--span-model)',
     label: 'Model',
     typePrefix: 'model',
   },
   mcp: {
     icon: <McpServerIcon />,
-    color: 'var(--span-type-mcp)',
+    color: 'var(--span-mcp)',
     label: 'MCP',
     typePrefix: 'mcp',
   },
   tool: {
     icon: <ToolsIcon />,
-    color: 'var(--span-type-tool)',
+    color: 'var(--span-tool)',
     label: 'Tool',
     typePrefix: 'tool',
   },
   provider: {
     icon: <ToolsIcon />,
-    color: 'var(--span-type-provider)',
+    color: 'var(--span-provider)',
     label: 'Provider Tool',
     typePrefix: 'provider',
   },
   memory: {
     icon: <MemoryIcon />,
-    color: 'var(--span-type-memory)',
+    color: 'var(--span-memory)',
     label: 'Memory',
     typePrefix: 'memory',
   },
   workspace: {
     icon: <FolderIcon />,
-    color: 'var(--span-type-workspace)',
+    color: 'var(--span-workspace)',
     label: 'Workspace',
     typePrefix: 'workspace',
   },
   skill: {
     icon: <SkillIcon />,
-    color: 'var(--span-type-skill)',
+    color: 'var(--span-skill)',
     label: 'Skill',
     typePrefix: 'skill',
   },
   scorer: {
     icon: <GaugeIcon />,
-    color: 'var(--span-type-scorer)',
+    color: 'var(--span-scorer)',
     label: 'Scorer',
     typePrefix: 'scorer',
   },
 };
 
 const otherSpanType: UISpanStyle = {
-  color: 'var(--span-type-other)',
+  color: 'var(--span-other)',
   label: 'Other',
   typePrefix: 'other',
 };

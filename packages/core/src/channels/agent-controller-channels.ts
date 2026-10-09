@@ -2,16 +2,18 @@ import type { Message, Thread } from 'chat';
 
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
-import type { AgentSignalContents } from '../agent/signals';
+import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type { AgentController } from '../agent-controller/agent-controller';
 import type { Session } from '../agent-controller/session';
 import type { AgentControllerRequestContext } from '../agent-controller/types';
+import { MastraFGAPermissions } from '../auth/ee';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
 import type { RequestContext } from '../request-context';
 
 import { AgentChannels } from './agent-channels';
 import { ChannelSessionRejectedError } from './errors';
+import type { ThreadHistoryLogContext } from './thread-history';
 import type { ChannelConfig } from './types';
 
 /** Context passed to {@link AgentControllerChannelsConfig.onSessionStart}. */
@@ -319,6 +321,37 @@ export class AgentControllerChannels extends AgentChannels {
   }
 
   /**
+   * Persist first-mention thread history into the controller session's own
+   * thread. The session is resolved once, before the rows are built, and is
+   * not guarded: a `resolveSession` refusal or resource mismatch propagates
+   * out of the hook to the handler's error boundary exactly as it would from
+   * the trigger dispatch a moment later. `onSessionStart` therefore runs
+   * before the history rows rather than at trigger dispatch.
+   *
+   * Rows are written straight to the session agent's memory (see the base
+   * class for why `session.sendSignal` cannot be used). Like the base class,
+   * a session agent without memory or a failed write returns `false` so the
+   * history still reaches the agent as the legacy text block.
+   */
+  protected override async persistThreadHistorySignals(args: {
+    buildSignals: () => Promise<AgentSignalInput[]>;
+    requestContext: RequestContext;
+    thread: StorageThreadType;
+    memory: { thread: string; resource: string };
+    logContext: ThreadHistoryLogContext;
+  }): Promise<boolean> {
+    const session = await this.getSessionForThread(args.thread, args.requestContext);
+    const memory = await session.machinery.getAgent().getMemory({ requestContext: args.requestContext });
+    if (!memory) return false;
+    return this.saveThreadHistorySignals({
+      buildSignals: args.buildSignals,
+      memory,
+      target: { thread: session.thread.getId() ?? args.memory.thread, resource: session.identity.getResourceId() },
+      logContext: args.logContext,
+    });
+  }
+
+  /**
    * Resolve an approval-card "approve" action against the controller session's
    * parked tool-approval gate. The run engine — awaiting the gate inside its
    * stream-consumer loop — performs the actual resume itself and keeps
@@ -375,7 +408,11 @@ export class AgentControllerChannels extends AgentChannels {
     if (!session.approval.isArmed({ toolCallId })) {
       this.log(
         'info',
-        `Ignoring stale tool ${decision === 'approve' ? 'approval' : 'denial'} action (no matching parked approval for toolCallId=${toolCallId})`,
+        `Ignoring stale tool ${decision === 'approve' ? 'approval' : 'denial'} action (no matching parked approval)`,
+        {
+          threadId: memory.thread,
+          toolCallId,
+        },
       );
       // Core still refuses to execute the action. The hook only lets a durable
       // host settle the attempt the click referred to, which is otherwise
@@ -411,6 +448,13 @@ export class AgentControllerChannels extends AgentChannels {
   ): Promise<Session<any>> {
     const controller = this.requireController();
     const channelResourceId = thread.resourceId;
+    if (this.resolveSession) {
+      await controller.requireAgentControllerFGA({
+        permission: MastraFGAPermissions.AGENT_CONTROLLER_EXECUTE,
+        requestContext,
+        resourceId: channelResourceId,
+      });
+    }
     // `createSession` is get-or-create keyed by resourceId, so follow-up messages
     // on the same thread reuse the cached session bound to this thread. The
     // dispatch requestContext must flow in: a dynamic workspace factory is
@@ -464,7 +508,7 @@ export class AgentControllerChannels extends AgentChannels {
   ): Promise<boolean> {
     const ctx = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
     if (!this.controller || !ctx?.resourceId || !ctx.session?.id) return true;
-    const session = await this.controller.getSessionByResource(ctx.resourceId, ctx.scope);
+    const session = await this.controller.getSessionByResource(ctx.resourceId, ctx.scope, requestContext);
     if (!session || session.identity.getId() !== ctx.session.id) return true;
     return session.resolveToolApproval(toolName) === 'ask';
   }
@@ -507,7 +551,7 @@ export class AgentControllerChannels extends AgentChannels {
           // Best-effort by contract: a session that couldn't be configured
           // still answers the message, on whatever defaults it was created
           // with.
-          this.log('error', `Channel session-start hook failed for resourceId=${thread.resourceId}: ${error}`);
+          this.log('error', 'Channel session-start hook failed', { resourceId: thread.resourceId, error });
         }
       })();
       this.sessionStartRuns.set(session, run);

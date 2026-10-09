@@ -8,14 +8,15 @@ import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../..';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
-import { resolveActivationTTL } from './activation-ttl';
+import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
+import { resolveAutoModelId } from './auto-model';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
 import {
@@ -89,6 +90,15 @@ export function buildMessageRange(messages: MastraDBMessage[]): string {
   const first = messages.find(messageHasVisibleContent) ?? messages[0]!;
   const last = [...messages].reverse().find(messageHasVisibleContent) ?? messages[messages.length - 1]!;
   return `${first.id}:${last.id}`;
+}
+
+/** The full model ID a main model was configured or labeled with, when known. */
+function getModelId(model: unknown): string | undefined {
+  if (typeof model === 'string') return model;
+  if (model && typeof model === 'object' && 'specificationVersion' in model && 'id' in model) {
+    return typeof model.id === 'string' ? model.id : undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -217,6 +227,71 @@ function parseActivationTTL(
   return amount * multiplier;
 }
 
+/**
+ * Parse an `activateAfterIdle` config value: a scalar TTL, or a per-provider map
+ * like `{ default: 'auto', anthropic: '1h' }`.
+ */
+function parseActivationTTLConfig(
+  value: ActivationTTL | undefined,
+  fieldPath: string,
+): ResolvedActivationTTL | ParsedActivationTTLMap | undefined {
+  if (typeof value !== 'object') {
+    return parseActivationTTL(value, fieldPath);
+  }
+
+  if (value === null || Array.isArray(value)) {
+    throw new Error(
+      `${fieldPath} must be a TTL value or an object of per-provider TTLs, e.g. { default: 'auto', anthropic: '1h' }.`,
+    );
+  }
+
+  const entries = Object.entries(value).filter(([, entryValue]) => entryValue !== undefined);
+  if (entries.length === 0) {
+    throw new Error(
+      `${fieldPath} must set at least one provider or "default" when using per-provider TTLs, e.g. { default: 'auto', anthropic: '1h' }.`,
+    );
+  }
+
+  // Null prototype so a JSON-sourced "__proto__" key is stored as a provider, not swallowed by the prototype setter.
+  const parsed: ParsedActivationTTLMap = { providers: Object.create(null) };
+  const seenKeys = new Set<string>();
+
+  for (const [rawKey, entryValue] of entries) {
+    const key = rawKey.trim().toLowerCase();
+    const entryPath = `${fieldPath}.${rawKey}`;
+
+    if (!key) {
+      throw new Error(`${fieldPath} contains an empty provider key.`);
+    }
+    if (key.includes('.') || key.includes('/')) {
+      throw new Error(
+        `${entryPath} is not a valid provider key. Use the provider name before the first ".", e.g. "anthropic" instead of "anthropic.messages".`,
+      );
+    }
+    if (seenKeys.has(key)) {
+      throw new Error(`${entryPath} duplicates another key in ${fieldPath}. Provider keys are case-insensitive.`);
+    }
+    seenKeys.add(key);
+
+    if (entryValue !== false && typeof entryValue !== 'number' && typeof entryValue !== 'string') {
+      throw new Error(
+        `${entryPath} must be a non-negative number of milliseconds, a duration string like "5m" or "1hr", "auto", or false.`,
+      );
+    }
+
+    const ttl = entryValue === false ? false : parseActivationTTL(entryValue, entryPath)!;
+    if (key === 'default') {
+      if (ttl !== false) {
+        parsed.default = ttl;
+      }
+    } else {
+      parsed.providers[key] = ttl;
+    }
+  }
+
+  return parsed;
+}
+
 import { addRelativeTimeToObservations } from './date-utils';
 import { omDebug, omError } from './debug';
 import {
@@ -274,9 +349,21 @@ import type {
   ThresholdRange,
   ObservationMarkerConfig,
   ObservationModelContext,
+  ActivationTTL,
+  ParsedActivationTTLMap,
+  ResolvedActivationTTL,
 } from './types';
 
 let hasWarnedResourceScopeDeprecation = false;
+
+type ResolvedInvocationModel = Exclude<ObservationalMemoryModel, ModelByInputTokens | 'auto'>;
+
+type InvocationModelResolution<TModel> = {
+  model: TModel;
+  selectedThreshold?: number;
+  routingStrategy?: 'model-by-input-tokens';
+  routingThresholds?: string;
+};
 
 /**
  * ObservationalMemory - A three-agent memory system for long conversations.
@@ -338,6 +425,7 @@ export class ObservationalMemory {
     threadId: string;
     resourceId: string;
     observedAt?: Date;
+    recordId?: string;
   }) => Promise<void>;
   /** Config-level lifecycle hooks fired for every observation/reflection cycle. */
   readonly hooks?: ObserveHooks;
@@ -357,6 +445,8 @@ export class ObservationalMemory {
   private shouldObscureThreadIds = false;
   private hasher = xxhash();
   private mastra?: Mastra;
+  private readonly autoModels?: ObservationalMemoryConfig['autoModels'];
+  private readonly resolveAutoModelHook?: ObservationalMemoryConfig['resolveModel'];
   private memory?: Memory;
 
   /**
@@ -492,6 +582,8 @@ export class ObservationalMemory {
     this.retrievalSearch = typeof config.retrieval === 'object' && Boolean(config.retrieval.vector);
     this.onIndexObservations = config.onIndexObservations;
     this.hooks = config.hooks;
+    this.autoModels = config.autoModels;
+    this.resolveAutoModelHook = config.resolveModel;
     this.hookExecution = config.hookExecution ?? 'non-blocking';
     this.mastra = config.mastra;
     this.memory = config.memory;
@@ -507,17 +599,17 @@ export class ObservationalMemory {
     const resolveModel = (model: WidenedObservationalMemoryModel | undefined, defaultModel: string) =>
       model === 'default' ? defaultModel : model;
 
-    // Resolution order: top-level model → sub-config model → the other sub-config model → default.
+    // Resolution order: top-level model → sub-config model → the other sub-config model → auto.
     const observationModel =
       resolveModel(topLevelModel, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
       resolveModel(observationConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
       resolveModel(reflectionConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.observation.model) ??
-      OBSERVATIONAL_MEMORY_DEFAULTS.observation.model;
+      'auto';
     const reflectionModel =
       resolveModel(topLevelModel, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
       resolveModel(reflectionConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
       resolveModel(observationConfigModel, OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model) ??
-      OBSERVATIONAL_MEMORY_DEFAULTS.reflection.model;
+      'auto';
 
     // Get base thresholds first (needed for shared budget calculation)
     const messageTokens = config.observation?.messageTokens ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.messageTokens;
@@ -546,7 +638,7 @@ export class ObservationalMemory {
       return false;
     };
     const usesDefaultOutputTokenBudget = (model: WidenedObservationalMemoryModel | undefined) =>
-      model === undefined || model === 'default' || model instanceof ModelByInputTokens;
+      model === undefined || model === 'default' || model === 'auto' || model instanceof ModelByInputTokens;
 
     const observationSelectedModel = topLevelModel ?? observationConfigModel ?? reflectionConfigModel;
     const reflectionSelectedModel = topLevelModel ?? reflectionConfigModel ?? observationConfigModel;
@@ -640,7 +732,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config.observation?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.bufferActivation),
-      activateAfterIdle: parseActivationTTL(observationActivateAfterIdle, observationActivateAfterIdlePath),
+      activateAfterIdle: parseActivationTTLConfig(observationActivateAfterIdle, observationActivateAfterIdlePath),
       activateOnProviderChange:
         config.observation?.activateOnProviderChange ?? config.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
@@ -682,7 +774,7 @@ export class ObservationalMemory {
       bufferActivation: asyncBufferingDisabled
         ? undefined
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
-      activateAfterIdle: parseActivationTTL(config.reflection?.activateAfterIdle, 'reflection.activateAfterIdle'),
+      activateAfterIdle: parseActivationTTLConfig(config.reflection?.activateAfterIdle, 'reflection.activateAfterIdle'),
       activateOnProviderChange: config.reflection?.activateOnProviderChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
@@ -713,7 +805,7 @@ export class ObservationalMemory {
     this.observer = new ObserverRunner({
       observationConfig: this.observationConfig,
       observedMessageIds: this.observedMessageIds,
-      resolveModel: inputTokens => this.resolveObservationModel(inputTokens),
+      resolveModel: (inputTokens, options) => this.resolveObservationModel(inputTokens, options),
       tokenCounter: this.tokenCounter,
       mastra: config.mastra,
       memory: this.memory,
@@ -737,7 +829,7 @@ export class ObservationalMemory {
       persistMarkerToStorage: (m, t, r) => this.persistMarkerToStorage(m, t, r),
       persistMarkerToMessage: (m, ml, t, r) => this.persistMarkerToMessage(m, ml, t, r),
       getCompressionStartLevel: rc => this.getCompressionStartLevel(rc),
-      resolveModel: inputTokens => this.resolveReflectionModel(inputTokens),
+      resolveModel: (inputTokens, options) => this.resolveReflectionModel(inputTokens, options),
       mastra: config.mastra,
       memory: this.memory,
       onReflectionCommitted: config.onReflectionCommitted,
@@ -860,44 +952,118 @@ export class ObservationalMemory {
     return model.provider ? `${model.provider}/${model.modelId}` : model.modelId;
   }
 
-  private resolveObservationModel(inputTokens: number): {
-    model: Exclude<ResolvedObservationConfig['model'], ModelByInputTokens>;
-    selectedThreshold?: number;
-    routingStrategy?: 'model-by-input-tokens';
-    routingThresholds?: string;
-  } {
-    return this.resolveTieredModel(this.observationConfig.model, inputTokens);
-  }
-
-  private resolveReflectionModel(inputTokens: number): {
-    model: Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens>;
-    selectedThreshold?: number;
-    routingStrategy?: 'model-by-input-tokens';
-    routingThresholds?: string;
-  } {
-    return this.resolveTieredModel(this.reflectionConfig.model, inputTokens);
-  }
-
-  private resolveTieredModel<TModel extends ObservationalMemoryModel>(
-    model: TModel,
+  private async resolveObservationModel(
     inputTokens: number,
-  ): {
-    model: Exclude<TModel, ModelByInputTokens>;
+    options?: {
+      requestContext?: RequestContext;
+      mainAgent?: ProcessorContext['agent'];
+      currentModel?: ObservationModelContext;
+    },
+  ): Promise<{
+    model: Exclude<ResolvedObservationConfig['model'], ModelByInputTokens | 'auto'>;
     selectedThreshold?: number;
     routingStrategy?: 'model-by-input-tokens';
     routingThresholds?: string;
-  } {
+  }> {
+    return this.resolveInvocationModel(this.observationConfig.model, inputTokens, options);
+  }
+
+  private async resolveReflectionModel(
+    inputTokens: number,
+    options?: {
+      requestContext?: RequestContext;
+      mainAgent?: ProcessorContext['agent'];
+      currentModel?: ObservationModelContext;
+    },
+  ): Promise<{
+    model: Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens | 'auto'>;
+    selectedThreshold?: number;
+    routingStrategy?: 'model-by-input-tokens';
+    routingThresholds?: string;
+  }> {
+    return this.resolveInvocationModel(this.reflectionConfig.model, inputTokens, options);
+  }
+
+  private async resolveInvocationModel(
+    model: ObservationalMemoryModel,
+    inputTokens: number,
+    options?: {
+      requestContext?: RequestContext;
+      mainAgent?: ProcessorContext['agent'];
+      currentModel?: ObservationModelContext;
+    },
+  ): Promise<InvocationModelResolution<ResolvedInvocationModel>> {
+    const tiered = this.resolveTieredModel(model, inputTokens);
+    const resolved = {
+      ...tiered,
+      model: (await this.resolveModelFunction(tiered.model, options?.requestContext)) as
+        | ResolvedInvocationModel
+        | 'auto',
+    };
+    if (resolved.model !== 'auto') {
+      return resolved as InvocationModelResolution<ResolvedInvocationModel>;
+    }
+
+    return {
+      ...resolved,
+      model: await this.resolveAutoModel(options),
+    };
+  }
+
+  private async resolveAutoModel(options?: {
+    requestContext?: RequestContext;
+    mainAgent?: ProcessorContext['agent'];
+    currentModel?: ObservationModelContext;
+  }): Promise<ResolvedInvocationModel> {
+    let mainModel: ResolvedInvocationModel | undefined = options?.currentModel?.model;
+    if (!mainModel && options?.mainAgent) {
+      mainModel = (await options.mainAgent.getModel({
+        requestContext: options.requestContext,
+      })) as ResolvedInvocationModel;
+    }
+    const mainModelId = getModelId(mainModel);
+    const pick =
+      resolveAutoModelId(mainModelId, { autoModels: this.autoModels }) ??
+      (mainModel ? undefined : OBSERVATIONAL_MEMORY_DEFAULTS.observation.model);
+
+    // No cheaper sibling is known: reuse the main model exactly as configured.
+    if (mainModel && (!pick || pick === mainModelId)) {
+      return mainModel;
+    }
+    const modelId = pick!;
+    return this.resolveAutoModelHook
+      ? ((await this.resolveAutoModelHook(modelId, {
+          requestContext: options?.requestContext,
+        })) as ResolvedInvocationModel)
+      : modelId;
+  }
+
+  private async resolveModelFunction(
+    model: WidenedObservationalMemoryModel,
+    requestContext?: RequestContext,
+  ): Promise<WidenedObservationalMemoryModel> {
+    if (typeof model !== 'function') {
+      return model;
+    }
+    return (await model({
+      requestContext: requestContext ?? new RequestContext(),
+      mastra: this.mastra,
+    })) as WidenedObservationalMemoryModel;
+  }
+
+  private resolveTieredModel(
+    model: ObservationalMemoryModel,
+    inputTokens: number,
+  ): InvocationModelResolution<ResolvedInvocationModel | 'auto'> {
     if (!(model instanceof ModelByInputTokens)) {
-      return {
-        model: model as Exclude<TModel, ModelByInputTokens>,
-      };
+      return { model };
     }
 
     const thresholds = model.getThresholds();
     const selectedThreshold = thresholds.find(upTo => inputTokens <= upTo) ?? thresholds.at(-1);
 
     return {
-      model: model.resolve(inputTokens) as Exclude<TModel, ModelByInputTokens>,
+      model: model.resolve(inputTokens) as ResolvedInvocationModel,
       selectedThreshold,
       routingStrategy: 'model-by-input-tokens',
       routingThresholds: thresholds.join(','),
@@ -909,10 +1075,14 @@ export class ObservationalMemory {
     requestContext?: RequestContext,
   ): Promise<{ model: string; routing?: Array<{ upTo: number; model: string }> }> {
     try {
-      if (modelConfig instanceof ModelByInputTokens) {
+      const model = (await this.resolveModelFunction(modelConfig, requestContext)) as ObservationalMemoryModel;
+      if (model === 'auto') {
+        return { model: 'auto' };
+      }
+      if (model instanceof ModelByInputTokens) {
         const routing = await Promise.all(
-          modelConfig.getThresholds().map(async upTo => {
-            const resolvedModel = modelConfig.resolve(upTo) as Exclude<ObservationalMemoryModel, ModelByInputTokens>;
+          model.getThresholds().map(async upTo => {
+            const resolvedModel = model.resolve(upTo) as Exclude<ObservationalMemoryModel, ModelByInputTokens>;
             const resolved = await this.resolveModelContext(resolvedModel, requestContext);
 
             return {
@@ -928,7 +1098,7 @@ export class ObservationalMemory {
         };
       }
 
-      const resolved = await this.resolveModelContext(modelConfig, requestContext);
+      const resolved = await this.resolveModelContext(model, requestContext);
       return {
         model: resolved?.modelId ? this.formatModelName(resolved) : '(unknown)',
       };
@@ -943,7 +1113,17 @@ export class ObservationalMemory {
     requestContext?: RequestContext,
     inputTokens?: number,
   ): Promise<TokenCounterModelContext | undefined> {
-    const modelToResolve = this.getModelToResolve(modelConfig, inputTokens);
+    if (modelConfig === 'auto') {
+      return undefined;
+    }
+    const concreteModel = await this.resolveModelFunction(
+      this.getConcreteModel(modelConfig, inputTokens),
+      requestContext,
+    );
+    if (concreteModel === 'auto') {
+      return undefined;
+    }
+    const modelToResolve = this.getModelToResolve(concreteModel as ObservationalMemoryModel, inputTokens);
     if (!modelToResolve) {
       return undefined;
     }
@@ -961,8 +1141,12 @@ export class ObservationalMemory {
    */
   async getCompressionStartLevel(requestContext?: RequestContext): Promise<CompressionLevel> {
     try {
-      const resolved = await this.resolveModelContext(this.reflectionConfig.model, requestContext);
-      const modelId = resolved?.modelId ?? '';
+      const reflectionModel = await this.resolveModelFunction(this.reflectionConfig.model, requestContext);
+      const modelId =
+        reflectionModel === 'auto'
+          ? (resolveAutoModelId(undefined, { autoModels: this.autoModels }) ?? '')
+          : ((await this.resolveModelContext(reflectionModel as ObservationalMemoryModel, requestContext))?.modelId ??
+            '');
 
       // gemini-2.5-flash is conservative about compression - start at level 2
       if (modelId.includes('gemini-2.5-flash')) {
@@ -1305,7 +1489,7 @@ export class ObservationalMemory {
       messageTokens: getMaxThreshold(this.observationConfig.messageTokens),
       observationTokens: getMaxThreshold(this.reflectionConfig.observationTokens),
       scope: this.scope,
-      activateAfterIdle: this.observationConfig.activateAfterIdle,
+      activateAfterIdle: getMarkerActivationTTL(this.observationConfig.activateAfterIdle),
     };
   }
 
@@ -1803,7 +1987,8 @@ export class ObservationalMemory {
   ): string[] {
     // Optimize observations to save tokens unless retrieval mode needs durable group metadata preserved.
     let optimized = retrieval
-      ? (renderObservationGroupsForReflection(observations) ?? optimizeObservationsForContext(observations))
+      ? (renderObservationGroupsForReflection(observations, { includeReflectionKind: true }) ??
+        optimizeObservationsForContext(observations))
       : optimizeObservationsForContext(observations);
 
     // Add relative time annotations to date headers if currentDate is provided
@@ -1812,7 +1997,7 @@ export class ObservationalMemory {
     }
 
     const messages = [
-      `${getObservationContextPrompt(this.scope)}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)}` : ''}`,
+      `${getObservationContextPrompt(this.scope)}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}${retrieval ? `\n\n${getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch, this.storage.supportsObservationalMemoryHistorySearch === true)}` : ''}`,
     ];
 
     // Add unobserved context from other threads (resource scope only)
@@ -2715,7 +2900,8 @@ ${formattedMessages}
    *
    * Loads thread metadata (currentTask, suggestedResponse), formats observations
    * with context prompts and instructions, and returns the fully-formed string.
-   * Returns undefined if no observations exist.
+   * Returns recall guidance even without observations when retrieval is enabled;
+   * otherwise returns undefined when no observations exist.
    *
    * This is the public entry point for context formatting — used by both
    * Memory.getContext() (standalone) and the processor (via injectObservationsIntoMessages).
@@ -2731,7 +2917,7 @@ ${formattedMessages}
   async buildContextSystemMessage(opts: {
     threadId: string;
     resourceId?: string;
-    record?: ObservationalMemoryRecord;
+    record?: ObservationalMemoryRecord | null;
     unobservedContextBlocks?: string;
     currentDate?: Date;
   }): Promise<string | undefined> {
@@ -2748,18 +2934,25 @@ ${formattedMessages}
   async buildContextSystemMessages(opts: {
     threadId: string;
     resourceId?: string;
-    record?: ObservationalMemoryRecord;
+    record?: ObservationalMemoryRecord | null;
     unobservedContextBlocks?: string;
     currentDate?: Date;
   }): Promise<string[] | undefined> {
     const { threadId, resourceId, unobservedContextBlocks } = opts;
-    const record = opts.record ?? (await this.getOrCreateRecord(threadId, resourceId));
+    // null means the read-only caller already checked storage; do not create a record.
+    const record = opts.record === undefined ? await this.getOrCreateRecord(threadId, resourceId) : opts.record;
 
-    if (!record.activeObservations) {
-      // Resource-scoped recall can browse and search other threads even before any
-      // observation group exists, so the actor still needs to know how to use it.
-      if (this.retrieval && this.retrievalScope === 'resource') {
-        return [getRetrievalInstructions(this.retrievalScope, this.retrievalInstructions, this.retrievalSearch)];
+    if (!record?.activeObservations) {
+      // Recall can browse raw history even before the first observation exists.
+      if (this.retrieval) {
+        return [
+          getRetrievalInstructions(
+            this.retrievalScope,
+            this.retrievalInstructions,
+            this.retrievalSearch,
+            this.storage.supportsObservationalMemoryHistorySearch === true,
+          ),
+        ];
       }
       return undefined;
     }
@@ -3459,6 +3652,12 @@ ${formattedMessages}
     checkThreshold?: boolean;
     /** Messages to use for threshold check (in-memory). If omitted, loads from storage. */
     messages?: MastraDBMessage[];
+    /**
+     * Live pending message token count (e.g. from `getStatus()`), used to size the
+     * activation. Falls back to the persisted pending count, which can lag behind
+     * messages added since it was last written.
+     */
+    pendingTokens?: number;
     /** Pre-loaded record to skip the initial storage read. */
     record?: ObservationalMemoryRecord;
     /** Current actor model for provider-change activation checks. */
@@ -3508,6 +3707,7 @@ ${formattedMessages}
     let activateAfterIdleExpiredMs: number | undefined;
     let previousModel: string | undefined;
     let currentModel: string | undefined;
+    let livePendingTokens = opts.pendingTokens;
 
     // Optional threshold guard — skip activation if pending tokens are below threshold
     if (opts.checkThreshold) {
@@ -3544,6 +3744,7 @@ ${formattedMessages}
         if (status.pendingTokens < status.threshold) {
           return { activated: false, record };
         }
+        livePendingTokens ??= status.pendingTokens;
       }
     }
 
@@ -3582,13 +3783,21 @@ ${formattedMessages}
     const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
     const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
 
-    // Estimate current pending tokens from chunks
+    // Prefer the live pending count; the persisted one is written at the end of the
+    // previous step and misses anything added since (e.g. a large tool-result batch).
     const totalChunkMessageTokens = freshChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-    const currentPendingTokens = freshRecord.pendingMessageTokens || totalChunkMessageTokens;
+    const currentPendingTokens = livePendingTokens ?? (freshRecord.pendingMessageTokens || totalChunkMessageTokens);
 
     const forceMaxActivation = !!(
       this.observationConfig.blockAfter && currentPendingTokens >= this.observationConfig.blockAfter
     );
+
+    // Storage adapters decrement the persisted pending count during the swap. Keep
+    // that base aligned with the live count used to select chunks so the returned
+    // record reflects the unactivated tail rather than the previous step's count.
+    if (freshRecord.pendingMessageTokens !== currentPendingTokens) {
+      await this.storage.setPendingMessageTokens(freshRecord.id, currentPendingTokens);
+    }
 
     // Perform the swap
     const activationResult = await this.storage.swapBufferedToActive({
@@ -3630,7 +3839,8 @@ ${formattedMessages}
           currentModel,
           config: {
             ...this.getObservationMarkerConfig(),
-            activateAfterIdle: activationActivateAfterIdle ?? this.observationConfig.activateAfterIdle,
+            activateAfterIdle:
+              activationActivateAfterIdle ?? getMarkerActivationTTL(this.observationConfig.activateAfterIdle),
           },
         });
         // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.

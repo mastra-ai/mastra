@@ -1,26 +1,25 @@
+import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
-import { DEFAULT_OM_MODEL_ID } from '@mastra/code-sdk/constants';
-import { getAvailableModePacks, resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
-import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
+import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
+import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import {
   getCustomProviderId,
   isThinkingLevelSetting,
   loadSettings,
+  MASTRA_GATEWAY_PROVIDER,
   saveSettings,
   THINKING_LEVEL_VALUES,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
+import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
+import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
+import { getModelReasoningOptions } from '@mastra/core/llm';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
-import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
-import {
-  applyStoredMemorySettings,
-  DEFAULT_OBSERVATION_THRESHOLD,
-  DEFAULT_REFLECTION_THRESHOLD,
-} from '../session/memory-settings-hydration.js';
-import { applyActiveModelPack } from '../session/model-pack-hydration.js';
+import { z } from 'zod';
+import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {
   CredentialRecord,
   LoginSessionKind,
@@ -29,15 +28,13 @@ import type {
 import type { CustomProviderRecord, CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import type {
-  MemorySettingsFillIfUnset,
   MemorySettingsPatch,
   MemorySettingsRecord,
   MemorySettingsStorage,
 } from '../storage/domains/memory-settings/base.js';
-import type { ModelPackRecord, ModelPacksStorage } from '../storage/domains/model-packs/base.js';
+import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import { seedPersonalOmDefaults } from './om-seed.js';
 import {
   getAuthProviderId,
   listTenantCredentialsForRequest,
@@ -68,8 +65,11 @@ function loose(c: unknown): Context {
  * Where a provider's active credential comes from, as seen by the caller.
  * Local mode reports `oauth`/`stored` (server-global `auth.json`); tenant mode
  * reports the scoped variants (`oauth-user`/`stored-user`/`stored-org`).
+ * `deployment` (tenant mode) marks a provider the operator opted in to run on
+ * the server process's own credentials (e.g. Amazon Bedrock's AWS chain).
  */
 export type ProviderCredentialSource =
+  | 'deployment'
   | 'oauth'
   | 'stored'
   | 'env'
@@ -104,45 +104,10 @@ export interface ProviderInfo {
   oauth?: { supported: true; modes: LoginSessionKind[] };
 }
 
-/** Minimal session surface a pack activation touches. */
-interface PackSession {
-  mode: { get: () => string };
-  model: { switch: (args: { modelId: string }) => Promise<void> };
-  subagents: { model: { set: (args: { modelId: string; agentType: string }) => Promise<void> } };
-  thread: {
-    getId: () => string | null;
-    getSetting: (args: { key: string }) => Promise<unknown>;
-    setSetting: (args: { key: string; value: unknown }) => Promise<void>;
-  };
-}
-
-/** One observational-memory role's read/switch surface. */
-interface OMRole {
-  modelId: () => string | undefined;
-  threshold: () => number | undefined;
-  switchModel: (args: { modelId: string }) => Promise<void>;
-}
-
-/**
- * Session-state fields the OM config routes write. The index signatures mirror
- * `MastraCodeState` so the concrete `Session.state.set(Partial<MastraCodeState>)`
- * stays assignable to this minimal surface (contravariant parameter check).
- */
-interface OMStateWrites {
-  [key: string]: unknown;
-  [key: `subagentModelId_${string}`]: string | undefined;
-  observationThreshold?: number;
-  reflectionThreshold?: number;
-  observeAttachments?: 'auto' | boolean;
-}
-
-/** Minimal session surface the OM config routes touch. */
-export interface OMSession extends PackSession {
-  state: {
-    get: () => Record<string, unknown> | undefined;
-    set: (updates: OMStateWrites) => Promise<void> | void;
-  };
-  om: { observer: OMRole; reflector: OMRole };
+/** Minimal session surface the config routes touch. */
+export interface OMSession {
+  /** `get()` returns '' when no model is selected, so callers fall back on falsy. */
+  model: { get: () => string };
 }
 
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
@@ -167,16 +132,28 @@ export async function listProviders({
   controller,
   authStorage,
   tenantCredentials,
+  deploymentProviders,
 }: {
   controller: ModelCatalog;
   authStorage?: AuthStorage;
   tenantCredentials?: CredentialRecord[];
+  deploymentProviders?: ReadonlySet<string>;
 }): Promise<ProviderInfo[]> {
   const models = await controller.listAvailableModels();
   const seen = new Map<string, ProviderInfo>();
 
   for (const model of models) {
     if (seen.has(model.provider)) continue;
+
+    if (tenantCredentials && isDeploymentModelProvider(model.provider)) {
+      // Credentials for these providers live on the server process, never in
+      // tenant rows, so no account can connect them. List them only when the
+      // operator opted the deployment in and the server has credentials.
+      const usable =
+        deploymentProviders?.has(model.provider) && models.some(m => m.provider === model.provider && m.hasApiKey);
+      if (usable) seen.set(model.provider, { provider: model.provider, source: 'deployment' });
+      continue;
+    }
 
     const authProviderId = getAuthProviderId(model.provider);
     let source: ProviderInfo['source'] = 'none';
@@ -312,12 +289,38 @@ function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error
   return { name, url, apiKey, models };
 }
 
-// ── Model packs ──────────────────────────────────────────────────────────
+// ── Available models ───────────────────────────────────────────────────────
 
-/** A model pack as surfaced to the web client, with an `active` flag. */
-export interface ModelPackInfo extends ModePack {
-  custom: boolean;
-  active: boolean;
+/**
+ * Providers whose credentials can only come from the server process (Amazon
+ * Bedrock authenticates through the AWS credential chain). In tenant mode they
+ * are usable only when the operator lists them in
+ * `MastraFactoryConfig.deploymentModelProviders`.
+ */
+export const DEPLOYMENT_MODEL_PROVIDERS: readonly string[] = [AMAZON_BEDROCK_GATEWAY_ID];
+
+export function isDeploymentModelProvider(provider: string): boolean {
+  return DEPLOYMENT_MODEL_PROVIDERS.includes(provider);
+}
+
+/**
+ * Normalize the operator's `deploymentModelProviders` list. Unsupported ids are
+ * ignored with a warning rather than failing boot.
+ */
+export function resolveDeploymentModelProviders(providers: readonly string[] | undefined): ReadonlySet<string> {
+  const resolved = new Set<string>();
+  for (const raw of providers ?? []) {
+    const provider = raw.trim();
+    if (!provider) continue;
+    if (isDeploymentModelProvider(provider)) {
+      resolved.add(provider);
+    } else {
+      console.warn(
+        `[factory] Ignoring deployment model provider "${provider}". Supported: ${DEPLOYMENT_MODEL_PROVIDERS.join(', ')}.`,
+      );
+    }
+  }
+  return resolved;
 }
 
 /**
@@ -329,16 +332,23 @@ export async function buildProviderAccess({
   controller,
   authStorage,
   tenantCredentials,
+  deploymentProviders,
 }: {
   controller: ModelCatalog;
   authStorage?: AuthStorage;
   tenantCredentials?: CredentialRecord[];
+  deploymentProviders?: ReadonlySet<string>;
 }): Promise<ProviderAccess> {
   const models = await controller.listAvailableModels();
   const hasModelKey = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
   const accessLevel = (provider: string): ProviderAccessLevel => {
     const authProviderId = getAuthProviderId(provider);
     if (tenantCredentials) {
+      // Tenant rows never authenticate these providers; only an operator
+      // opt-in plus credentials on the server process does.
+      if (isDeploymentModelProvider(provider)) {
+        return deploymentProviders?.has(provider) && hasModelKey(provider) ? 'apikey' : false;
+      }
       const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
       const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
       const credential = userRec?.credential ?? orgRec?.credential;
@@ -376,37 +386,34 @@ function canUseModelProvider(access: ProviderAccess, provider: string): boolean 
   return Boolean(access[provider]);
 }
 
-/**
- * Where a request's custom model packs live. Same posture as memory settings
- * and custom providers: the `model-packs` factory storage domain, scoped per
- * org in deployed mode and to a sentinel `local` org in no-auth mode — never
- * settings.json.
- */
-export interface PackContext {
-  storage: ModelPacksStorage;
+// ── Default model ──────────────────────────────────────────────────────────
+
+/** Per-user default model context for the current request. */
+export interface ModelDefaultsContext {
+  storage: ModelDefaultsStorage;
   orgId: string;
   userId: string;
 }
 
-/** Resolve the pack context for a request, or a ready-to-return error response. */
-async function resolvePackContext({
+/** Resolve the default-model context for a request, or a ready-to-return error response. */
+async function resolveModelDefaultsContext({
   c,
   auth,
-  modelPacks,
+  modelDefaults,
 }: {
   c: Context;
   auth: RouteAuth;
-  modelPacks?: ModelPacksStorage;
-}): Promise<PackContext | { response: Response }> {
+  modelDefaults?: ModelDefaultsStorage;
+}): Promise<ModelDefaultsContext | { response: Response }> {
   await auth.ensureUser(c);
   const tenant = auth.tenant(c);
   if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
-  if (modelPacks) {
+  if (modelDefaults) {
     try {
-      await modelPacks.ensureReady();
+      await modelDefaults.ensureReady();
       return tenant
-        ? { storage: modelPacks, orgId: tenantOrgId(tenant), userId: tenant.userId }
-        : { storage: modelPacks, orgId: 'local', userId: 'local' };
+        ? { storage: modelDefaults, orgId: tenantOrgId(tenant), userId: tenant.userId }
+        : { storage: modelDefaults, orgId: 'local', userId: 'local' };
     } catch {
       // fall through to the unavailable response
     }
@@ -414,101 +421,33 @@ async function resolvePackContext({
   return {
     response: c.json(
       {
-        error: 'model_packs_unavailable',
-        message: 'Model pack storage is unavailable — the app database is not configured or failed to start.',
+        error: 'model_defaults_unavailable',
+        message: 'Default model storage is unavailable — the app database is not configured or failed to start.',
       },
       503,
     ),
   };
 }
 
-async function authorizePackSession({
-  c,
-  auth,
-  sessions,
-  packContext,
-  resourceId,
-  scope,
-}: {
-  c: Context;
-  auth: RouteAuth;
-  sessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
-  packContext: PackContext;
-  resourceId: string;
-  scope: string | undefined;
-}): Promise<Response | null> {
-  if (!auth.enabled()) return null;
-  if (!sessions) return c.json({ error: 'session_authorization_unavailable' }, 503);
-
-  const sourceSession = await sessions.getBySessionId(resourceId);
-  // Scope matches against the live memoized workdir ONLY (the deterministic
-  // truth). The persisted column is observability, never an authorization
-  // input — a row written under a previous provider could authorize a stale
-  // scope. No live memo entry means no scoped grant (fail closed).
-  const liveWorkdir = peekSessionSandbox(sourceSession?.id ?? '')?.workdir;
-  if (
-    !sourceSession ||
-    sourceSession.orgId !== packContext.orgId ||
-    sourceSession.userId !== packContext.userId ||
-    (scope !== undefined && scope !== liveWorkdir)
-  ) {
-    return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-  }
-  return null;
-}
-
-/** DB row → the `ModePack` shape the packs list and activation flow consume. */
-function recordToModePack(record: ModelPackRecord): ModePack {
-  return { id: `custom:${record.id}`, name: record.name, description: 'Saved custom pack', models: record.models };
-}
-
-/**
- * List available model packs (built-in, gated by provider access, plus saved
- * custom packs from the request's pack context). Drops the synthetic
- * "New Custom" placeholder because the web client has its own create flow.
- * `active` marks the user's default pack for new interactive chats.
- */
-export async function listModelPacks({
-  controller,
-  authStorage,
-  tenantCredentials,
-  packContext,
-  activePackId,
-}: {
-  controller: ModelCatalog;
-  authStorage?: AuthStorage;
-  tenantCredentials?: CredentialRecord[];
-  packContext: PackContext;
-  activePackId?: string | null;
-}): Promise<ModelPackInfo[]> {
-  const access = await buildProviderAccess({ controller, authStorage, tenantCredentials });
-  const packs = [
-    ...getAvailableModePacks(access),
-    ...(await packContext.storage.list({ orgId: packContext.orgId })).map(recordToModePack),
-  ];
-  return packs
-    .filter(p => p.id !== 'custom') // synthetic "choose each model" placeholder
-    .map(p => ({
-      ...p,
-      custom: p.id.startsWith('custom:'),
-      active: activePackId != null && p.id === activePackId,
-    }));
-}
-
-async function resolveSessionModelPackId(session: PackSession | undefined): Promise<string | null> {
-  if (!session?.thread.getId()) return null;
-  const value = await session.thread.getSetting({ key: 'activeModelPackId' });
-  return typeof value === 'string' ? value : null;
-}
-
 // ── Observational memory ────────────────────────────────────────────────────
 // Mirrors the TUI `/om` command. Settings are persisted per organization and
-// user in the Factory app database. Requests with an active session also apply
-// changes immediately to that session's state and thread settings.
+// user in the Factory app database, then loaded into request context for each
+// invocation without copying them into mutable session state.
 
-/** Read the current OM config from a session. */
+export interface OMRoleConfigInfo {
+  model: 'auto' | string;
+  effectiveModelId: string;
+  effectiveModelSource: 'explicit' | 'live-session' | 'configured-default';
+  providerStatus: 'available' | 'unavailable';
+}
+
+/** Persisted intent plus the concrete models the current Factory configuration resolves. */
 export interface OMConfigInfo {
+  observer: OMRoleConfigInfo;
+  reflector: OMRoleConfigInfo;
+  /** @deprecated Use `observer.effectiveModelId`. */
   observerModelId: string;
+  /** @deprecated Use `reflector.effectiveModelId`. */
   reflectorModelId: string;
   observationThreshold: number;
   reflectionThreshold: number;
@@ -541,23 +480,45 @@ export interface UpdateThinkingConfigResponse {
   modeDefaults: Record<string, ThinkingLevelSetting>;
 }
 
-export function readOMConfig(session: OMSession): OMConfigInfo {
-  const state = session.state.get() ?? {};
-  const observeAttachments = state.observeAttachments;
+function modelProvider(modelId: string): string {
+  // Effective IDs keep their `mastra/` route; the provider segment after it is what
+  // the SDK resolver falls back to when the gateway is not configured.
+  const normalized = modelId.replace(/^mastracode\//, '').replace(/^mastra\//, '');
+  return normalized.split('/', 1)[0] ?? '';
+}
+
+function roleConfig(
+  model: OMRoleConfigInfo['model'],
+  effectiveModelId: string,
+  autoModelSource: 'live-session' | 'configured-default',
+  availableProviders: ReadonlySet<string>,
+): OMRoleConfigInfo {
   return {
-    observerModelId: session.om.observer.modelId() ?? '',
-    reflectorModelId: session.om.reflector.modelId() ?? '',
-    observationThreshold: session.om.observer.threshold() ?? DEFAULT_OBSERVATION_THRESHOLD,
-    reflectionThreshold: session.om.reflector.threshold() ?? DEFAULT_REFLECTION_THRESHOLD,
-    observeAttachments: observeAttachments === true || observeAttachments === false ? observeAttachments : 'auto',
+    model,
+    effectiveModelId,
+    effectiveModelSource: model === 'auto' ? autoModelSource : 'explicit',
+    providerStatus:
+      availableProviders.has(modelProvider(effectiveModelId)) ||
+      (effectiveModelId.startsWith(MASTRA_GATEWAY_PREFIX) && availableProviders.has(MASTRA_GATEWAY_PROVIDER))
+        ? 'available'
+        : 'unavailable',
   };
 }
 
-function readStoredOMConfig(record: MemorySettingsRecord | null, fallbackOmModelId?: string): OMConfigInfo {
-  const fallback = fallbackOmModelId ?? DEFAULT_OM_MODEL_ID;
+function readStoredOMConfig(
+  record: MemorySettingsRecord | null,
+  currentModelId: string | undefined,
+  autoModelSource: 'live-session' | 'configured-default',
+  availableProviders: ReadonlySet<string>,
+): OMConfigInfo {
+  const autoModelId = resolveAutoOMModelId(currentModelId);
+  const observerModelId = record?.observerModelId ?? autoModelId;
+  const reflectorModelId = record?.reflectorModelId ?? autoModelId;
   return {
-    observerModelId: record?.observerModelId ?? fallback,
-    reflectorModelId: record?.reflectorModelId ?? fallback,
+    observer: roleConfig(record?.observerModelId ?? 'auto', observerModelId, autoModelSource, availableProviders),
+    reflector: roleConfig(record?.reflectorModelId ?? 'auto', reflectorModelId, autoModelSource, availableProviders),
+    observerModelId,
+    reflectorModelId,
     observationThreshold: record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD,
     reflectionThreshold: record?.reflectionThreshold ?? DEFAULT_REFLECTION_THRESHOLD,
     observeAttachments: record?.observeAttachments ?? 'auto',
@@ -634,12 +595,8 @@ async function resolveMemorySettingsContext({
 }
 
 /** Persist an OM knob change to the caller's memory-settings row. */
-async function persistMemorySettings(
-  context: MemorySettingsContext,
-  patch: MemorySettingsPatch,
-  fillIfUnset?: MemorySettingsFillIfUnset,
-): Promise<void> {
-  await context.storage.patch({ orgId: context.orgId, userId: context.userId, patch, fillIfUnset });
+async function persistMemorySettings(context: MemorySettingsContext, patch: MemorySettingsPatch): Promise<void> {
+  await context.storage.patch({ orgId: context.orgId, userId: context.userId, patch });
 }
 
 /** Dependencies injected into {@link ConfigRoutes}. */
@@ -649,9 +606,9 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
-  /** Tenant model-packs domain handle; absent in local (no-DB) mode. */
-  modelPacks?: ModelPacksStorage;
-  /** Source-control sessions used to authorize session-scoped model-pack access. */
+  /** Tenant model-defaults domain handle; absent in local (no-DB) mode. */
+  modelDefaults?: ModelDefaultsStorage;
+  /** Source-control sessions available to config route integrations. */
   sourceControlSessions?: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
   /** Tenant memory-settings domain handle; absent in local (no-DB) mode. */
   memorySettings?: MemorySettingsStorage;
@@ -663,6 +620,11 @@ export interface ConfigRoutesDeps extends RouteDependencies {
   onCredentialsChanged?: (tenant: { orgId: string; userId?: string }) => void;
   /** Notifies the host after custom providers change so model-router caches can be dropped. */
   onCustomProvidersChanged?: (tenant: { orgId: string }) => void;
+  /**
+   * Tenant mode: providers the operator opted in to run on the server process's
+   * own credentials (see `DEPLOYMENT_MODEL_PROVIDERS`).
+   */
+  deploymentProviders?: ReadonlySet<string>;
   /**
    * Path of the server's settings.json backing the deployment-scoped thinking
    * defaults. Defaults to the standard app-data location; injectable for tests.
@@ -696,20 +658,53 @@ export interface ConfigRoutesDeps extends RouteDependencies {
 export class ConfigRoutes extends Route<ConfigRoutesDeps> {
   routes(): ApiRoute[] {
     const options = this.deps;
-    const { controller, authStorage, auth } = options;
+    const { controller, authStorage, auth, deploymentProviders } = options;
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
+
+    const resolveOMResponseContext = async (c: Context) => {
+      const tenantCredentials = await listTenantCredentialsForRequest({
+        c: loose(c),
+        auth,
+        credentials: options.modelCredentials,
+      });
+      const access = await buildProviderAccess({
+        controller,
+        authStorage: tenantCredentials ? undefined : authStorage,
+        tenantCredentials,
+        deploymentProviders,
+      });
+      const availableProviders = new Set(
+        Object.entries(access).flatMap(([providerId, configured]) => (configured ? [providerId] : [])),
+      );
+      // `mastra/` routes run through the Mastra gateway whenever its key is configured.
+      if (MastraCodeGateway.getMastraGatewayApiKey()) availableProviders.add(MASTRA_GATEWAY_PROVIDER);
+      if (options.customProviders) {
+        const context = await resolveCustomProvidersContext({
+          c: loose(c),
+          auth,
+          customProviders: options.customProviders,
+        });
+        if (!('response' in context)) {
+          for (const provider of await context.storage.list({ orgId: context.orgId })) {
+            availableProviders.add(provider.providerId);
+          }
+        }
+      }
+      return availableProviders;
+    };
 
     // Factory-scoped OM reads without a stored row fall back to the low-cost
     // OM model of the factory default model's provider — not the global
     // built-in default, whose provider may have no credential here.
     const factoryOmFallback = async (factoryProjectId: string | undefined): Promise<string | undefined> => {
-      if (!factoryProjectId || !options.factoryProjects) return undefined;
       try {
-        const project = await options.factoryProjects.getById({ id: factoryProjectId });
-        const defaultModelId = project?.defaultModelId ?? undefined;
-        const provider = defaultModelId?.split('/')[0];
-        return provider ? resolveProviderOMDefault(provider, defaultModelId).modelId : undefined;
+        const defaultModelId = factoryProjectId
+          ? await options.factoryProjects
+              ?.getById({ id: factoryProjectId })
+              .then(project => project?.defaultModelId ?? undefined)
+          : controller.listModes?.().find(mode => mode.defaultModelId)?.defaultModelId;
+        return defaultModelId ? resolveAutoOMModelId(defaultModelId) : undefined;
       } catch {
         return undefined;
       }
@@ -771,6 +766,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 controller,
                 authStorage: tenantCredentials ? undefined : authStorage,
                 tenantCredentials,
+                deploymentProviders,
               }),
               ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
             });
@@ -800,6 +796,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const scope = body.scope === 'org' ? 'org' : 'user';
           try {
             if (ctx.mode === 'tenant') {
+              // A stored key would never be read: these providers authenticate
+              // with the server process's credentials only.
+              if (isDeploymentModelProvider(provider)) {
+                return c.json(
+                  {
+                    error: 'provider_configured_by_deployment',
+                    message: `${provider} is configured by the Factory deployment (credentials on the server), not per account.`,
+                  },
+                  400,
+                );
+              }
               if (scope === 'org' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
                 return c.json({ error: 'organization_admin_required' }, 403);
               }
@@ -808,9 +815,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               // per-request, never written into process.env.
               await ctx.storage.setCredential(tenant, getAuthProviderId(provider), { type: 'api_key', key });
               onCredentialsChanged(tenant);
-              await seedPersonalOmDefaults({ memorySettings: options.memorySettings, tenant, provider });
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
-              const providers = await listProviders({ controller, tenantCredentials: records });
+              const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
             }
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
@@ -842,7 +848,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               await ctx.storage.removeCredential(tenant, getAuthProviderId(provider));
               onCredentialsChanged(tenant);
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
-              const providers = await listProviders({ controller, tenantCredentials: records });
+              const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
             }
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
@@ -965,11 +971,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 controller,
                 authStorage: tenantCredentials ? undefined : authStorage,
                 tenantCredentials,
+                deploymentProviders,
               }),
             ]);
-            const catalog = models
-              .filter(m => canUseModelProvider(access, m.provider) && typeof m.id === 'string')
-              .map(m => ({ id: m.id!, provider: m.provider, modelName: m.modelName, hasApiKey: true }));
+            const catalog = models.flatMap(({ id, provider, modelName }) =>
+              typeof id === 'string' && canUseModelProvider(access, provider)
+                ? [{ id, provider, modelName, hasApiKey: true, reasoningOptions: getModelReasoningOptions(id) }]
+                : [],
+            );
             // Append the caller's custom provider models (DB-backed, org rows in
             // tenant mode / sentinel `local` org in no-auth mode). The boot-time
             // gateway catalog only carries the local list, so tenant callers get
@@ -988,7 +997,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                       const id = `${record.providerId}/${model}`;
                       if (known.has(id)) continue;
                       known.add(id);
-                      catalog.push({ id, provider: record.providerId, modelName: model, hasApiKey: true });
+                      catalog.push({
+                        id,
+                        provider: record.providerId,
+                        modelName: model,
+                        hasApiKey: true,
+                        reasoningOptions: undefined,
+                      });
                     }
                   }
                 }
@@ -1007,193 +1022,68 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         },
       }),
 
-      // ── Model packs ─────────────────────────────────────────────────────────
-      // Custom pack definitions are organization-scoped. Each user can choose a
-      // default for new interactive chats, while a thread-specific activation
-      // takes precedence. Factory work sessions use the project default model.
+      // ── Default model ───────────────────────────────────────────────────────
 
-      registerApiRoute('/web/config/model-packs', {
+      registerApiRoute('/web/config/default-model', {
         method: 'GET',
         requiresAuth: false,
         handler: async c => {
-          const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
-          if ('response' in packContext) return packContext.response;
-          const resourceId = c.req.query('resourceId');
-          const scope = c.req.query('scope') || undefined;
+          const context = await resolveModelDefaultsContext({
+            c: loose(c),
+            auth,
+            modelDefaults: options.modelDefaults,
+          });
+          if ('response' in context) return context.response;
           try {
-            const activePack = await packContext.storage.getActive({
-              orgId: packContext.orgId,
-              userId: packContext.userId,
-            });
-            const activePackId = activePack?.packId ?? null;
-            if (resourceId) {
-              const unauthorized = await authorizePackSession({
-                c: loose(c),
-                auth,
-                sessions: options.sourceControlSessions,
-                packContext,
-                resourceId,
-                scope,
-              });
-              if (unauthorized) return unauthorized;
-            }
-            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
-            const sessionPackId = await resolveSessionModelPackId(session);
-            const tenantCredentials = await listTenantCredentialsForRequest({
-              c: loose(c),
-              auth,
-              credentials: options.modelCredentials,
-            });
-            return c.json({
-              packs: await listModelPacks({
-                controller,
-                authStorage: tenantCredentials ? undefined : authStorage,
-                tenantCredentials,
-                packContext,
-                activePackId,
-              }),
-              activePackId,
-              sessionPackId,
-            });
+            const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
+            return c.json({ modelId: record?.modelId ?? null });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
         },
       }),
 
-      registerApiRoute('/web/config/model-packs', {
-        method: 'POST',
+      registerApiRoute('/web/config/default-model', {
+        method: 'PUT',
         requiresAuth: false,
         handler: async c => {
-          const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
-          if ('response' in packContext) return packContext.response;
-          let body: { name?: unknown; models?: unknown };
+          const context = await resolveModelDefaultsContext({
+            c: loose(c),
+            auth,
+            modelDefaults: options.modelDefaults,
+          });
+          if ('response' in context) return context.response;
+          let body: unknown;
           try {
             body = await c.req.json();
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          const name = typeof body.name === 'string' ? body.name.trim() : '';
-          if (!name) return c.json({ error: 'Missing required field: name' }, 400);
-          const m = (body.models ?? {}) as Record<string, unknown>;
-          const build = typeof m.build === 'string' ? m.build.trim() : '';
-          const plan = typeof m.plan === 'string' ? m.plan.trim() : '';
-          const fast = typeof m.fast === 'string' ? m.fast.trim() : '';
-          if (!build || !plan || !fast) {
-            return c.json({ error: 'models.build, models.plan and models.fast are required' }, 400);
-          }
+          const parsed = z.object({ modelId: z.string().trim().min(1).max(256) }).safeParse(body);
+          if (!parsed.success) return c.json({ error: 'Missing required field: modelId' }, 400);
+          const { modelId } = parsed.data;
           try {
-            const record = await packContext.storage.upsert({
-              orgId: packContext.orgId,
-              userId: packContext.userId,
-              input: { name, models: { build, plan, fast } },
-            });
-            return c.json({ ok: true, pack: recordToModePack(record) });
+            await context.storage.set({ orgId: context.orgId, userId: context.userId, modelId });
+            return c.json({ ok: true, modelId });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
         },
       }),
 
-      registerApiRoute('/web/config/model-packs/active', {
+      registerApiRoute('/web/config/default-model', {
         method: 'DELETE',
         requiresAuth: false,
         handler: async c => {
-          const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
-          if ('response' in packContext) return packContext.response;
+          const context = await resolveModelDefaultsContext({
+            c: loose(c),
+            auth,
+            modelDefaults: options.modelDefaults,
+          });
+          if ('response' in context) return context.response;
           try {
-            await packContext.storage.clearActive({ orgId: packContext.orgId, userId: packContext.userId });
-            return c.json({ ok: true, activePackId: null });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/model-packs/:id', {
-        method: 'DELETE',
-        requiresAuth: false,
-        handler: async c => {
-          const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
-          if ('response' in packContext) return packContext.response;
-          const id = decodeURIComponent(c.req.param('id'));
-          try {
-            const recordId = id.startsWith('custom:') ? id.slice('custom:'.length) : id;
-            const deleted = await packContext.storage.delete({ orgId: packContext.orgId, id: recordId });
-            return deleted ? c.json({ ok: true }) : c.json({ error: `Unknown pack "${id}"` }, 404);
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/model-packs/:id/activate', {
-        method: 'POST',
-        requiresAuth: false,
-        handler: async c => {
-          const packContext = await resolvePackContext({ c: loose(c), auth, modelPacks: options.modelPacks });
-          if ('response' in packContext) return packContext.response;
-          const id = decodeURIComponent(c.req.param('id'));
-          let body: { resourceId?: unknown; scope?: unknown; target?: unknown };
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const target = body.target ?? 'default';
-          if (target !== 'default' && target !== 'session') {
-            return c.json({ error: 'target must be "default" or "session"' }, 400);
-          }
-          const resourceId = typeof body.resourceId === 'string' && body.resourceId ? body.resourceId : undefined;
-          const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
-          if (target === 'session' && !resourceId) {
-            return c.json({ error: 'Missing required field for session activation: resourceId' }, 400);
-          }
-          try {
-            if (target === 'session' && resourceId) {
-              const unauthorized = await authorizePackSession({
-                c: loose(c),
-                auth,
-                sessions: options.sourceControlSessions,
-                packContext,
-                resourceId,
-                scope,
-              });
-              if (unauthorized) return unauthorized;
-            }
-            const session =
-              target === 'session' && resourceId
-                ? await controller.getSessionByResource?.(resourceId, scope)
-                : undefined;
-            if (target === 'session' && !session) {
-              return c.json({ error: `No session for resourceId "${resourceId}"` }, 404);
-            }
-            const tenantCredentials = await listTenantCredentialsForRequest({
-              c: loose(c),
-              auth,
-              credentials: options.modelCredentials,
-            });
-            const packs = await listModelPacks({
-              controller,
-              authStorage: tenantCredentials ? undefined : authStorage,
-              tenantCredentials,
-              packContext,
-            });
-            const pack = packs.find(p => p.id === id);
-            if (!pack) return c.json({ error: `Unknown pack "${id}"` }, 404);
-            if (target === 'default') {
-              await packContext.storage.setActive({
-                orgId: packContext.orgId,
-                userId: packContext.userId,
-                packId: pack.id,
-                models: pack.models,
-              });
-              return c.json({ ok: true, target, activePackId: pack.id });
-            }
-            if (session) {
-              await applyActiveModelPack(session, { packId: pack.id, models: pack.models });
-            }
-            return c.json({ ok: true, target, sessionPackId: pack.id });
+            await context.storage.clear({ orgId: context.orgId, userId: context.userId });
+            return c.json({ ok: true, modelId: null });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1305,61 +1195,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         },
       }),
 
-      registerApiRoute('/web/config/om/provider-defaults', {
-        method: 'POST',
-        requiresAuth: false,
-        handler: async c => {
-          let body: { providerId?: unknown; factoryModelId?: unknown; factoryId?: unknown };
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const providerId = typeof body.providerId === 'string' ? body.providerId.trim() : '';
-          const factoryModelId = typeof body.factoryModelId === 'string' ? body.factoryModelId.trim() : '';
-          const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
-          if (!providerId) return c.json({ error: 'Missing required field: providerId' }, 400);
-
-          const context = await resolveMemorySettingsContext({
-            c: loose(c),
-            auth,
-            memorySettings: options.memorySettings,
-            factoryProjectId,
-            factoryProjects: options.factoryProjects,
-          });
-          if ('response' in context) return context.response;
-
-          try {
-            const tenantCredentials = await listTenantCredentialsForRequest({
-              c: loose(c),
-              auth,
-              credentials: options.modelCredentials,
-            });
-            const access = await buildProviderAccess({
-              controller,
-              authStorage: tenantCredentials ? undefined : authStorage,
-              tenantCredentials,
-            });
-            if (!access[providerId]) return c.json({ error: `Provider "${providerId}" is not configured` }, 400);
-
-            const modelId = resolveProviderOMDefault(providerId, factoryModelId).modelId;
-            const record = await context.storage.patch({
-              orgId: context.orgId,
-              userId: context.userId,
-              patch: {},
-              fillIfUnset: { observerModelId: modelId, reflectorModelId: modelId },
-            });
-            return c.json({ ok: true, config: readStoredOMConfig(record) });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
       // ── Observational memory ──────────────────────────────────────────────────
       // Mirrors the TUI's /om command. All five knobs are durably stored in the
-      // per-(org, user) `memory-settings` app table — never settings.json. When a
-      // session is supplied, changes are also applied to its state and thread.
+      // per-(org, user) `memory-settings` app table — never settings.json or
+      // mutable session state.
 
       registerApiRoute('/web/config/om', {
         method: 'GET',
@@ -1379,16 +1218,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           try {
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             const fallback = await factoryOmFallback(factoryProjectId);
-            if (!resourceId) return c.json({ config: readStoredOMConfig(record, fallback) });
-
-            // Session sync is best-effort: the stored row is authoritative and
-            // new sessions hydrate from it, so a resourceId without a live
-            // session (e.g. settings page after a restart) still reads the
-            // stored config instead of failing.
-            const session = await controller.getSessionByResource?.(resourceId, scope);
-            if (!session) return c.json({ config: readStoredOMConfig(record, fallback) });
-            await applyStoredMemorySettings(session, record, fallback);
-            return c.json({ config: readOMConfig(session) });
+            const availableProviders = await resolveOMResponseContext(loose(c));
+            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const sessionModelId = session?.model.get();
+            return c.json({
+              config: readStoredOMConfig(
+                record,
+                sessionModelId || fallback,
+                sessionModelId ? 'live-session' : 'configured-default',
+                availableProviders,
+              ),
+            });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1412,8 +1252,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           const resourceId = typeof body.resourceId === 'string' ? body.resourceId : '';
           const scope = typeof body.scope === 'string' && body.scope ? body.scope : undefined;
           const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
-          const modelId = typeof body.modelId === 'string' ? body.modelId.trim() : '';
-          if (!modelId) return c.json({ error: 'Missing required field: modelId' }, 400);
+          const model = typeof body.modelId === 'string' ? body.modelId.trim() : '';
+          if (!model) {
+            return c.json({ error: 'Missing required field: modelId' }, 400);
+          }
+          // `'auto'` is selection intent, not a model ID: store null so the role
+          // follows the active main model instead of pinning a model named "auto".
+          const wantsAuto = model === 'auto';
           const context = await resolveMemorySettingsContext({
             c: loose(c),
             auth,
@@ -1422,30 +1267,22 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             factoryProjects: options.factoryProjects,
           });
           if ('response' in context) return context.response;
+          // Resolve the response context before persisting: a provider-enumeration
+          // failure must not report 500 for a write that already succeeded.
+          const availableProviders = await resolveOMResponseContext(loose(c));
           try {
-            // Best-effort session sync: persist regardless, apply to the live
-            // session only when one exists for the resourceId.
+            await persistMemorySettings(context, {
+              [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: wantsAuto ? null : model,
+            });
+            const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
-            const otherRole = session ? (role === 'observer' ? session.om.reflector : session.om.observer) : undefined;
-            const otherRoleCurrentModelId = otherRole?.modelId() ?? null;
-            await session?.om[role].switchModel({ modelId });
-            // Pin the other role's current model too, so a later restart
-            // doesn't drift it once this role is explicitly overridden. The
-            // "only if still unset" check runs inside the storage layer's
-            // atomic update, so a concurrent explicit switch of the other
-            // role is never clobbered by this fill.
-            const otherKey = role === 'observer' ? 'reflectorModelId' : 'observerModelId';
-            await persistMemorySettings(
-              context,
-              { [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: modelId },
-              otherRoleCurrentModelId ? { [otherKey]: otherRoleCurrentModelId } : undefined,
+            const sessionModelId = session?.model.get();
+            const config = readStoredOMConfig(
+              record,
+              sessionModelId || (await factoryOmFallback(factoryProjectId)),
+              sessionModelId ? 'live-session' : 'configured-default',
+              availableProviders,
             );
-            const config = session
-              ? readOMConfig(session)
-              : readStoredOMConfig(
-                  await context.storage.get({ orgId: context.orgId, userId: context.userId }),
-                  await factoryOmFallback(factoryProjectId),
-                );
             return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1491,28 +1328,21 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             factoryProjects: options.factoryProjects,
           });
           if ('response' in context) return context.response;
+          const availableProviders = await resolveOMResponseContext(loose(c));
           try {
-            // Best-effort session sync: persist regardless, apply to the live
-            // session only when one exists for the resourceId.
-            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
-            if (observation !== undefined && session) {
-              await session.state.set({ observationThreshold: observation });
-              await session.thread.setSetting({ key: 'observationThreshold', value: observation });
-            }
-            if (reflection !== undefined && session) {
-              await session.state.set({ reflectionThreshold: reflection });
-              await session.thread.setSetting({ key: 'reflectionThreshold', value: reflection });
-            }
             await persistMemorySettings(context, {
               ...(observation !== undefined ? { observationThreshold: observation } : {}),
               ...(reflection !== undefined ? { reflectionThreshold: reflection } : {}),
             });
-            const config = session
-              ? readOMConfig(session)
-              : readStoredOMConfig(
-                  await context.storage.get({ orgId: context.orgId, userId: context.userId }),
-                  await factoryOmFallback(factoryProjectId),
-                );
+            const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
+            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const sessionModelId = session?.model.get();
+            const config = readStoredOMConfig(
+              record,
+              sessionModelId || (await factoryOmFallback(factoryProjectId)),
+              sessionModelId ? 'live-session' : 'configured-default',
+              availableProviders,
+            );
             return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
@@ -1546,21 +1376,18 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             factoryProjects: options.factoryProjects,
           });
           if ('response' in context) return context.response;
+          const availableProviders = await resolveOMResponseContext(loose(c));
           try {
-            // Best-effort session sync: persist regardless, apply to the live
-            // session only when one exists for the resourceId.
-            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
-            if (session) {
-              await session.state.set({ observeAttachments: value });
-              await session.thread.setSetting({ key: 'observeAttachments', value });
-            }
             await persistMemorySettings(context, { observeAttachments: value });
-            const config = session
-              ? readOMConfig(session)
-              : readStoredOMConfig(
-                  await context.storage.get({ orgId: context.orgId, userId: context.userId }),
-                  await factoryOmFallback(factoryProjectId),
-                );
+            const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
+            const session = resourceId ? await controller.getSessionByResource?.(resourceId, scope) : undefined;
+            const sessionModelId = session?.model.get();
+            const config = readStoredOMConfig(
+              record,
+              sessionModelId || (await factoryOmFallback(factoryProjectId)),
+              sessionModelId ? 'live-session' : 'configured-default',
+              availableProviders,
+            );
             return c.json({ ok: true, config });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);

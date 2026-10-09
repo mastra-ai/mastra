@@ -29,7 +29,9 @@ import { isEntryFinished } from '../../workflows/utils';
  *    from it; resume rebuilds messages from `__streamState.messageList`.
  *  - foreach aggregation entries (`__workflow_meta.foreachOutput`) get the
  *    same per-entry treatment so still-suspended parallel tool calls keep
- *    their resume state (see foreach-suspend-payload.test.ts).
+ *    their resume state (see foreach-suspend-payload.test.ts). The foreach
+ *    step's own `__streamState`, a mirror of its first suspended entry's, is
+ *    dropped (see `isForeachStreamStateMirror`).
  *  - `context.input` is the loop's initial iteration data (another full
  *    conversation copy): heavy fields are stripped.
  *  - on a **`running`** snapshot only, completed steps additionally give up
@@ -195,6 +197,24 @@ function stripTerminalPayloadState<T>(value: T): T {
   return pruned as T;
 }
 
+/**
+ * Drops `agentSpanData.attributes.instructions`: the agent's full system
+ * prompt, recorded on the exported AGENT_RUN span. The durable loop carries
+ * `agentSpanData` forward on every iteration, so each step result holds another
+ * copy of the prompt on its payload/output side, rewritten at every snapshot
+ * boundary. Every `rebuildSpan` site reads
+ * `reg?.resumeAgentSpanData ?? initData.agentSpanData` (i.e.
+ * `snapshot.context.input`, which is never touched here), and the live span was
+ * already exported during streaming. Span ids and other attributes stay.
+ */
+function stripAgentSpanInstructions<T>(value: T): T {
+  if (!isPlainObject(value)) return value;
+  const span = value.agentSpanData;
+  if (!isPlainObject(span) || !isPlainObject(span.attributes) || !('instructions' in span.attributes)) return value;
+  const { instructions: _instructions, ...attributes } = span.attributes;
+  return { ...value, agentSpanData: { ...span, attributes } } as T;
+}
+
 /** Applies the pruning rules to a single serialized step result. */
 function pruneStepResult(
   result: Record<string, any>,
@@ -207,6 +227,9 @@ function pruneStepResult(
   if ('output' in pruned) pruned.output = stripStepResultRequest(pruned.output);
   pruned.payload = stripHeavyIterationFields(pruned.payload);
   if ('prevOutput' in pruned) pruned.prevOutput = stripHeavyIterationFields(pruned.prevOutput);
+  pruned.payload = stripAgentSpanInstructions(pruned.payload);
+  if ('output' in pruned) pruned.output = stripAgentSpanInstructions(pruned.output);
+  if ('prevOutput' in pruned) pruned.prevOutput = stripAgentSpanInstructions(pruned.prevOutput);
 
   if (TERMINAL_STEP_STATUSES.has(result.status)) {
     // Completed steps are never resumed again — their old suspension state is
@@ -240,11 +263,32 @@ function pruneStepResult(
           ...pruned.suspendPayload,
           __workflow_meta: { ...meta, foreachOutput },
         };
+        if (isForeachStreamStateMirror(pruned.suspendPayload.__streamState, meta)) {
+          delete pruned.suspendPayload.__streamState;
+        }
       }
     }
   }
 
   return pruned;
+}
+
+/**
+ * A suspended default-engine foreach step spreads its first suspended
+ * iteration's `suspendPayload` into the step-level one, so the step-level
+ * `__streamState` is the very same object as
+ * `foreachOutput[foreachIndex].suspendPayload.__streamState`. Resume reads the
+ * per-iteration copy (handlers/step.ts, and control-flow when rebuilding a
+ * partially resumed foreach), never the step-level one, so persisting both
+ * writes the conversation twice. The identity check confines this to that
+ * exact mirror: the parent agentic-loop row, whose step-level copy is what
+ * `loop.ts` and thread filtering read, propagates foreach entries without
+ * `__streamState` and so never matches.
+ */
+function isForeachStreamStateMirror(streamState: unknown, meta: Record<string, any>): boolean {
+  if (streamState === undefined || typeof meta.foreachIndex !== 'number') return false;
+  const entry = (meta.foreachOutput as Record<number, unknown> | undefined)?.[meta.foreachIndex];
+  return isPlainObject(entry) && entry.status === 'suspended' && entry.suspendPayload?.__streamState === streamState;
 }
 
 /** Drops the heavy `__streamState` from a suspend payload, keeping routing

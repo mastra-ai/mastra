@@ -1,7 +1,7 @@
 // AUTO-GENERATED from NangoHQ/integration-templates @ c3091db1e8a6 — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 import { batchCreateCompaniesTool } from './tools/batch-create-companies.js';
 import { batchUpdateCompaniesTool } from './tools/batch-update-companies.js';
 import { changeUserRoleTool } from './tools/change-user-role.js';
@@ -41,6 +41,7 @@ import { listFormsTool } from './tools/list-forms.js';
 import { listMarketingEmailsTool } from './tools/list-marketing-emails.js';
 import { listTicketsTool } from './tools/list-tickets.js';
 import { searchCompaniesTool } from './tools/search-companies.js';
+import { searchContactsTool } from './tools/search-contacts.js';
 import { searchDealsTool } from './tools/search-deals.js';
 import { searchTicketsTool } from './tools/search-tickets.js';
 import { submitFormTool } from './tools/submit-form.js';
@@ -94,6 +95,7 @@ export function createHubspotTools(options?: ProviderToolsOptions) {
     hubspot_list_marketing_emails: listMarketingEmailsTool(platformProxy),
     hubspot_list_tickets: listTicketsTool(platformProxy),
     hubspot_search_companies: searchCompaniesTool(platformProxy),
+    hubspot_search_contacts: searchContactsTool(platformProxy),
     hubspot_search_deals: searchDealsTool(platformProxy),
     hubspot_search_tickets: searchTicketsTool(platformProxy),
     hubspot_submit_form: submitFormTool(platformProxy),
@@ -105,5 +107,5 @@ export function createHubspotTools(options?: ProviderToolsOptions) {
     hubspot_update_ticket: updateTicketTool(platformProxy),
     hubspot_whoami: whoamiTool(platformProxy),
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }

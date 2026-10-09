@@ -1,6 +1,6 @@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 export interface ComparisonSectionProps {
@@ -30,11 +30,12 @@ export function ComparisonSection({
       <div className="flex min-h-6 items-center justify-between gap-2">
         <CollapsibleTrigger
           className={cn(
-            'flex items-center gap-1.5 text-subheading [&>svg]:size-4',
-            tone === 'negative' ? 'text-negative1' : 'text-foreground',
+            'flex items-center gap-1.5',
+            tone === 'negative' ? 'text-destructive-foreground' : 'text-foreground',
+            'text-subheading',
           )}
         >
-          <ChevronRightIcon />
+          <DisclosureChevron direction="right" className="size-4" />
           {title}
         </CollapsibleTrigger>
         {actions}

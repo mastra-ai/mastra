@@ -27,7 +27,7 @@ export function IntakeFeedNotice({ source, feed }: { source?: IntakeSource; feed
 function LinearReauthNotice({ onConnect }: { onConnect: () => void }) {
   return (
     <div className="flex flex-col items-start gap-2 p-1">
-      <Txt as="span" variant="meta" className="text-muted-foreground">
+      <Txt tone="muted" as="span" variant="meta">
         Linear authorization expired. Reconnect to keep syncing issues.
       </Txt>
       <Button size="sm" onClick={onConnect}>
@@ -40,7 +40,7 @@ function LinearReauthNotice({ onConnect }: { onConnect: () => void }) {
 function FeedFailureNotice({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="flex flex-col items-start gap-2 p-1">
-      <Txt as="p" role="alert" variant="meta" className="text-notice-destructive-fg m-0">
+      <Txt as="p" role="alert" variant="meta" className="text-destructive-foreground m-0">
         {message}
       </Txt>
       <Button size="sm" onClick={onRetry}>
