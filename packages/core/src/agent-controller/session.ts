@@ -421,6 +421,8 @@ export interface SessionMachinery {
   buildToolsets(requestContext: RequestContext): Promise<ToolsetsInput>;
   /** Resolve the effective request context for a run, layering controller defaults. */
   buildRequestContext(requestContext?: RequestContext): Promise<RequestContext>;
+  /** Authorize an actor-driven operation before it changes session state. */
+  authorizeExecute?(requestContext?: RequestContext): Promise<void>;
   /** Persist the session's running token usage to thread metadata. */
   persistTokenUsage(): Promise<void>;
   /** Generate a new id (thread ids, message ids) using the host's id strategy. */
@@ -4173,9 +4175,11 @@ export class Session<TState = unknown> {
   sendSignalToThread(
     input: AgentSignalInput,
     target: { resourceId: string; threadId: string },
+    options?: { requestContext?: RequestContext },
   ): { id: string; type: AgentSignalInput['type']; accepted: Promise<{ accepted: true }> } {
     const signal = createSignal(input);
     const accepted = Promise.resolve().then(async () => {
+      await this.machinery.authorizeExecute?.(options?.requestContext);
       const resourceId = this.identity.getResourceId();
       const thread = target.resourceId === resourceId ? await this.thread.getById({ threadId: target.threadId }) : null;
       if (!thread || thread.resourceId !== resourceId) {
@@ -4306,6 +4310,7 @@ export class Session<TState = unknown> {
     );
     const signal = submittedWhileWorking ? asInterjection(submitted) : submitted;
     const accepted = Promise.resolve().then(async () => {
+      await this.machinery.authorizeExecute?.(requestContextInput);
       const threadId = await this.thread.ensureId({ requestContext: requestContextInput });
 
       const agent = this.machinery.getAgent();
@@ -4465,6 +4470,7 @@ export class Session<TState = unknown> {
     options: SessionSendNotificationSignalOptions = {},
   ): Promise<SendAgentNotificationSignalResult> {
     const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
+    await this.machinery.authorizeExecute?.(requestContextInput);
     const threadId = await this.thread.ensureId({ requestContext: requestContextInput });
 
     const agent = this.machinery.getAgent();
@@ -4585,6 +4591,7 @@ export class Session<TState = unknown> {
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
   }): Promise<void> {
+    await this.machinery.authorizeExecute?.(requestContextInput);
     const wasActive = this.stream.isActive();
     const target = await this.prepareMessageTarget({
       requestContext: requestContextInput,
@@ -4651,6 +4658,7 @@ export class Session<TState = unknown> {
   /** Queue a follow-up through the Agent runtime, or send it immediately while idle. */
   async followUp({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
     if (!this.run.isRunning()) return this.sendMessage({ content, requestContext });
+    await this.machinery.authorizeExecute?.(requestContext);
     const threadId = this.thread.getId();
     if (!threadId) return;
     const resourceId = this.identity.getResourceId();
