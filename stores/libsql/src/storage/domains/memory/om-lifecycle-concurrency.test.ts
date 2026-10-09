@@ -290,3 +290,101 @@ describe('LibSQL observational memory guarded writes', () => {
     },
   );
 });
+
+describe('LibSQL observational memory on an embedded replica that has not synced yet', () => {
+  /** Reads see nothing until `sync()`, like a replica missing another instance's writes; writes reach the primary. */
+  function staleReplicaClient(raw: ReturnType<typeof createClient>) {
+    const state = { stale: true, syncs: 0 };
+    const client = {
+      execute: async (statement: Parameters<typeof raw.execute>[0]) => {
+        const sql = typeof statement === 'string' ? statement : statement.sql;
+        const result = await raw.execute(statement);
+        if (state.stale && sql.trimStart().startsWith('SELECT') && sql.includes(`"${OM_TABLE}"`)) {
+          return { ...result, rows: [] };
+        }
+        return result;
+      },
+      batch: raw.batch.bind(raw),
+      transaction: raw.transaction.bind(raw),
+      close: () => raw.close(),
+      sync: async () => {
+        state.syncs++;
+        state.stale = false;
+      },
+      get closed() {
+        return raw.closed;
+      },
+      get protocol() {
+        return raw.protocol;
+      },
+    };
+    return { client, state };
+  }
+
+  async function withWinner(
+    run: (args: {
+      replica: MemoryLibSQL;
+      state: { stale: boolean; syncs: number };
+      winner: ObservationalMemoryRecord;
+    }) => Promise<void>,
+  ) {
+    const db = tempDbUrl();
+    const raw = createClient({ url: db.url });
+    try {
+      // Another instance initializes the record on the primary.
+      const primary = new MemoryLibSQL({ client: raw as never });
+      await primary.init();
+      const winner = await primary.initializeObservationalMemory({
+        threadId: 'replica-thread',
+        resourceId: 'replica-resource',
+        scope: 'thread',
+        config: {},
+      });
+      const { client, state } = staleReplicaClient(raw);
+      const replica = new MemoryLibSQL({ client: client as never, embeddedReplica: true });
+      await run({ replica, state, winner });
+    } finally {
+      raw.close();
+      db.cleanup();
+    }
+  }
+
+  it('returns the stored record after losing an initialize race, not one that was never stored', async () => {
+    await withWinner(async ({ replica, state, winner }) => {
+      const record = await replica.initializeObservationalMemory({
+        threadId: 'replica-thread',
+        resourceId: 'replica-resource',
+        scope: 'thread',
+        config: {},
+      });
+
+      expect(record.id).toBe(winner.id);
+      expect(state.syncs).toBe(1);
+    });
+  });
+
+  it('syncs and reads again before treating a record as missing', async () => {
+    await withWinner(async ({ replica, state, winner }) => {
+      await replica.setPendingMessageTokens(winner.id, 42);
+
+      expect(state.syncs).toBe(1);
+      expect((await replica.getObservationalMemory('replica-thread', 'replica-resource'))!.pendingMessageTokens).toBe(
+        42,
+      );
+    });
+  });
+
+  it('syncs before skipping a reflection whose source record looks missing', async () => {
+    await withWinner(async ({ replica, state, winner }) => {
+      const next = await replica.createReflectionGeneration({
+        currentRecord: winner,
+        reflection: '- reflected',
+        tokenCount: 1,
+      });
+
+      expect(state.syncs).toBe(1);
+      expect(next.id).not.toBe(winner.id);
+      expect((await replica.getObservationalMemory('replica-thread', 'replica-resource'))!.id).toBe(next.id);
+    });
+  });
+});
