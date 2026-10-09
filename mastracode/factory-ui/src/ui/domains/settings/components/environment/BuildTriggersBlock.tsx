@@ -29,13 +29,6 @@ export function BuildTriggersBlock({
 
   return (
     <div className="flex flex-col gap-2">
-      <Txt as="h3" variant="label">
-        Build triggers
-      </Txt>
-      <Txt as="p" variant="meta" tone="muted">
-        Changing a setting, the working directory or the workspace setup command always starts a build. These triggers
-        rebuild on top of that, and skip when nothing moved since the last good build.
-      </Txt>
       {!schedule.scheduleAvailable && (
         <Notice variant="info">
           Scheduled builds need a storage adapter with schedules. Build now and push builds still work.

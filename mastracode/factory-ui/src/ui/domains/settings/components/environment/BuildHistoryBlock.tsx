@@ -22,9 +22,6 @@ export function BuildHistoryBlock({
 
   return (
     <div className="flex flex-col gap-2">
-      <Txt as="h3" variant="label">
-        Build history
-      </Txt>
       {error ? (
         <Notice variant="destructive">{error}</Notice>
       ) : !builds ? (

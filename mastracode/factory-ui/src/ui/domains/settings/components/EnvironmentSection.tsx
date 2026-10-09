@@ -22,10 +22,9 @@ import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
- * The Factory's environment: what every session's sandbox boots from. The
- * Template subsection holds the ordered repositories and the workspace setup,
- * Builds the image built ahead of sessions, Advanced the build triggers and
- * the sandbox provider's own settings.
+ * The Factory's environment: what every session's sandbox boots from.
+ * Template holds the repositories, the workspace setup and the provider's
+ * settings; Builds the history and triggers, only when the provider lists builds.
  */
 export function EnvironmentSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -97,52 +96,46 @@ function EnvironmentBlocks({
       <SettingsSubsection
         scope="factory"
         title="Template"
-        description={`The template every session's sandbox starts from. ${providerLine(environment.sandbox.provider)}`}
+        description={`Repositories cloned into each new sandbox, in this order. ${providerLine(environment.sandbox.provider)}`}
+        action={canBuild ? <BuildNow factoryId={factoryId} environment={environment} /> : undefined}
       >
-        <RepositoriesBlock
-          repositories={environment.repositories}
-          providers={providers}
-          disabled={disabled}
-          onSave={save}
-        />
-        <WorkspaceSetupBlock
-          workdir={environment.sandboxWorkdir}
-          command={environment.workspaceSetupCommand}
-          disabled={disabled}
-          onSave={save}
-        />
+        <div className="flex flex-col gap-4">
+          <RepositoriesBlock
+            repositories={environment.repositories}
+            providers={providers}
+            disabled={disabled}
+            onSave={save}
+          />
+          <WorkspaceSetupBlock
+            workdir={environment.sandboxWorkdir}
+            command={environment.workspaceSetupCommand}
+            disabled={disabled}
+            onSave={save}
+          >
+            <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
+          </WorkspaceSetupBlock>
+        </div>
       </SettingsSubsection>
-      {canBuild && (
+      {canBuild && environment.sandbox.capabilities.builds.history && (
         <SettingsSubsection
           scope="factory"
           title="Builds"
-          description="The template image built ahead of sessions from the repositories above."
+          description="Images built ahead of sessions from the repositories above, and when to rebuild them."
         >
-          <BuildBlocks factoryId={factoryId} environment={environment} />
+          <div className="flex flex-col gap-4">
+            <BuildHistory factoryId={factoryId} />
+            <BuildTriggersBlock triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />
+          </div>
         </SettingsSubsection>
       )}
-      <SettingsSubsection
-        scope="factory"
-        title="Advanced"
-        description={
-          canBuild
-            ? "When the template rebuilds, and the sandbox provider's own settings."
-            : "The sandbox provider's own settings."
-        }
-      >
-        {canBuild && <BuildTriggersBlock triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />}
-        <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
-      </SettingsSubsection>
     </div>
   );
 }
 
-/** Build status, Build now and history; mounted only when the sandbox can build. */
-function BuildBlocks({ factoryId, environment }: { factoryId: string; environment: FactoryEnvironmentPayload }) {
+/** Build now with the last build's live status beside it; in the Template header. */
+function BuildNow({ factoryId, environment }: { factoryId: string; environment: FactoryEnvironmentPayload }) {
   const requestBuild = useRequestEnvironmentBuildMutation();
   const buildQuery = useEnvironmentBuildQuery(factoryId, environment.build?.buildId);
-  const history = environment.sandbox.capabilities.builds.history;
-  const buildsQuery = useEnvironmentBuildsQuery(factoryId, history);
 
   const buildNow = () =>
     requestBuild.mutate(
@@ -157,26 +150,28 @@ function BuildBlocks({ factoryId, environment }: { factoryId: string; environmen
     );
 
   return (
-    <>
-      <BuildStatusBlock
-        lastBuild={environment.build}
-        build={buildQuery.data}
-        activeTemplateId={environment.activeTemplateId}
-        requesting={requestBuild.isPending}
-        onBuildNow={buildNow}
-      />
-      {history && (
-        <BuildHistoryBlock
-          builds={buildsQuery.data}
-          error={
-            buildsQuery.isError
-              ? buildsQuery.error instanceof Error
-                ? buildsQuery.error.message
-                : 'Failed to load builds'
-              : undefined
-          }
-        />
-      )}
-    </>
+    <BuildStatusBlock
+      lastBuild={environment.build}
+      build={buildQuery.data}
+      requesting={requestBuild.isPending}
+      onBuildNow={buildNow}
+    />
+  );
+}
+
+/** The provider's build history; mounted only when the sandbox lists builds. */
+function BuildHistory({ factoryId }: { factoryId: string }) {
+  const buildsQuery = useEnvironmentBuildsQuery(factoryId, true);
+  return (
+    <BuildHistoryBlock
+      builds={buildsQuery.data}
+      error={
+        buildsQuery.isError
+          ? buildsQuery.error instanceof Error
+            ? buildsQuery.error.message
+            : 'Failed to load builds'
+          : undefined
+      }
+    />
   );
 }

@@ -34,7 +34,14 @@ function useFactory() {
 
 /** Serves the environment from a mutable holder so a handler can change what the next GET returns. */
 function useEnvironment(holder: { environment: FactoryEnvironmentPayload }) {
-  server.use(http.get(ENVIRONMENT_URL, () => HttpResponse.json({ environment: holder.environment })));
+  const reads = { count: 0 };
+  server.use(
+    http.get(ENVIRONMENT_URL, () => {
+      reads.count += 1;
+      return HttpResponse.json({ environment: holder.environment });
+    }),
+  );
+  return reads;
 }
 
 function recordPatches(holder: { environment: FactoryEnvironmentPayload }, buildRequested = false) {
@@ -46,6 +53,11 @@ function recordPatches(holder: { environment: FactoryEnvironmentPayload }, build
     }),
   );
   return patches;
+}
+
+/** Serves an empty history so the Builds subsection, which holds the triggers, renders. */
+function useHistory() {
+  server.use(http.get(`${ENVIRONMENT_URL}/builds`, () => HttpResponse.json({ builds: [] })));
 }
 
 function renderEnvironmentSettings() {
@@ -66,17 +78,16 @@ describe('Environment builds', () => {
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByRole('heading', { name: 'Sandbox' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Template' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /build now/i })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Builds' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Build triggers' })).toBeNull();
-    expect(screen.queryByRole('heading', { name: 'Build history' })).toBeNull();
+    expect(screen.queryByRole('switch', { name: 'Rebuild on push' })).toBeNull();
   });
 
-  it('builds now, polls the live status until it is ready and never asks for history on platform', async () => {
+  it('builds now from the Template header, polls until ready, and shows no Builds section without history', async () => {
     const holder = { environment: environmentPayload() };
     useFactory();
-    useEnvironment(holder);
+    const reads = useEnvironment(holder);
     let posts = 0;
     let historyReads = 0;
     const statuses: FactoryEnvironmentBuild['status'][] = ['building', 'ready'];
@@ -102,9 +113,7 @@ describe('Environment builds', () => {
     renderEnvironmentSettings();
     const user = userEvent.setup();
 
-    expect(await screen.findByText('Never built')).toBeInTheDocument();
-    expect(screen.getByText('none yet')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Build now' }));
+    await user.click(await screen.findByRole('button', { name: 'Build now' }));
 
     expect(await screen.findByText('Build started')).toBeInTheDocument();
     expect(posts).toBe(1);
@@ -115,21 +124,25 @@ describe('Environment builds', () => {
     expect(await screen.findByText('Ready', {}, { timeout: 5_000 })).toBeInTheDocument();
     // The workflow pins the template on its own poll after the provider reports
     // ready, so the environment keeps refetching every 5 s until the pin shows.
-    expect(screen.getByText('none yet')).toBeInTheDocument();
+    const readsAtReady = reads.count;
     holder.environment = { ...holder.environment, activeTemplateId: 'tpl-1' };
-    expect(await screen.findByText('tpl-1', {}, { timeout: 8_000 })).toBeInTheDocument();
+    await waitFor(() => expect(reads.count).toBeGreaterThan(readsAtReady), { timeout: 8_000 });
+    const readsAtPin = reads.count;
+    await new Promise(resolve => setTimeout(resolve, 6_000));
+    expect(reads.count).toBe(readsAtPin);
     expect(historyReads).toBe(0);
-    expect(screen.queryByRole('heading', { name: 'Build history' })).toBeNull();
-  }, 20_000);
+    expect(screen.queryByRole('heading', { name: 'Builds' })).toBeNull();
+  }, 25_000);
 
   it('patches the push trigger and its debounce, and the cron schedule', async () => {
     const holder = {
-      environment: environmentPayload({
+      environment: e2bEnvironment({
         buildTriggers: buildTriggers({ push: { enabled: true, debounceMinutes: 10 } }),
       }),
     };
     useFactory();
     useEnvironment(holder);
+    useHistory();
     const patches = recordPatches(holder);
 
     renderEnvironmentSettings();
@@ -158,7 +171,7 @@ describe('Environment builds', () => {
 
   it('shows the schedule notice and disables the switch when the host has no schedules', async () => {
     const holder = {
-      environment: environmentPayload({
+      environment: e2bEnvironment({
         buildTriggers: buildTriggers({
           schedule: { enabled: false, cron: null, timezone: null, scheduleAvailable: false },
         }),
@@ -166,6 +179,7 @@ describe('Environment builds', () => {
     };
     useFactory();
     useEnvironment(holder);
+    useHistory();
 
     renderEnvironmentSettings();
 
@@ -176,7 +190,7 @@ describe('Environment builds', () => {
 
   it('edits the cron of an enabled schedule', async () => {
     const holder = {
-      environment: environmentPayload({
+      environment: e2bEnvironment({
         buildTriggers: buildTriggers({
           schedule: { enabled: true, cron: '0 3 * * *', timezone: 'UTC', scheduleAvailable: true },
         }),
@@ -184,6 +198,7 @@ describe('Environment builds', () => {
     };
     useFactory();
     useEnvironment(holder);
+    useHistory();
     const patches = recordPatches(holder);
 
     renderEnvironmentSettings();
@@ -207,7 +222,7 @@ describe('Environment builds', () => {
     renderEnvironmentSettings();
     const user = userEvent.setup();
 
-    expect(await screen.findByRole('heading', { name: 'Build history' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Builds' })).toBeInTheDocument();
     const failed = await screen.findByRole('button', { name: 'Build tpl-1:bld-2' });
     const ready = screen.getByRole('button', { name: 'Build tpl-1:bld-1' });
     expect(within(failed).getByText('Failed')).toBeInTheDocument();

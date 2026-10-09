@@ -1,7 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import type {
   FactoryEnvironmentBuild,
@@ -26,81 +25,52 @@ export function formatBuildTime(iso: string): string {
 }
 
 /**
- * The last build: its live status from the provider, when it was asked for,
- * the template sessions boot from, what went wrong, and Build now.
+ * Build now beside the last build's live status; sits in the Template
+ * subsection header. The error, when there is one, shows under the badge.
  */
 export function BuildStatusBlock({
   lastBuild,
   build,
-  activeTemplateId,
   requesting,
   onBuildNow,
 }: {
   lastBuild: FactoryEnvironmentLastBuild | null | undefined;
   /** Live status of `lastBuild`; undefined while it loads or when there is no last build. */
   build: FactoryEnvironmentBuild | undefined;
-  activeTemplateId: string | null;
   requesting: boolean;
   onBuildNow: () => void;
 }) {
   const active = build?.status === 'pending' || build?.status === 'building';
-  const status = build
-    ? BUILD_STATUS[build.status]
-    : lastBuild
-      ? undefined
-      : { label: 'Never built', variant: 'neutral' as const };
+  const status = build ? BUILD_STATUS[build.status] : lastBuild ? undefined : null;
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-4">
-        <Txt as="h3" variant="label">
-          Build
-        </Txt>
-        <Button size="sm" variant="primary" disabled={requesting || active} onClick={onBuildNow}>
-          {active ? 'Building...' : 'Build now'}
-        </Button>
-      </div>
-      <SettingsContainer>
-        <SettingsRow label="Last build">
-          <div className="flex items-center gap-2">
-            {status ? (
-              <Badge size="sm" variant={status.variant}>
-                {status.label}
-              </Badge>
-            ) : (
-              <Txt as="span" variant="meta" tone="muted">
-                Loading
-              </Txt>
-            )}
+    <div className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-3">
+        {status === undefined ? (
+          <Txt as="span" variant="meta" tone="muted">
+            Loading
+          </Txt>
+        ) : status ? (
+          <span className="flex items-center gap-2">
+            <Badge size="sm" variant={status.variant}>
+              {status.label}
+            </Badge>
             {lastBuild?.attemptedAt && (
               <Txt as="span" variant="meta" tone="muted">
                 {formatBuildTime(lastBuild.attemptedAt)}
               </Txt>
             )}
-          </div>
-        </SettingsRow>
-        <SettingsRow
-          label="Template"
-          description="The last image built ahead of sessions. Sessions reuse it while the default branches still match the built heads."
-        >
-          {activeTemplateId ? (
-            <Txt as="span" font="mono" variant="body-sm" className="block max-w-72 truncate" title={activeTemplateId}>
-              {activeTemplateId}
-            </Txt>
-          ) : (
-            <Txt as="span" variant="body-sm" tone="muted">
-              none yet
-            </Txt>
-          )}
-        </SettingsRow>
-        {build?.error && (
-          <SettingsRow label="Last error">
-            <Txt as="span" font="mono" variant="meta" className="text-destructive whitespace-pre-wrap">
-              {build.error}
-            </Txt>
-          </SettingsRow>
-        )}
-      </SettingsContainer>
+          </span>
+        ) : null}
+        <Button size="sm" variant="primary" disabled={requesting || active} onClick={onBuildNow}>
+          {active ? 'Building...' : 'Build now'}
+        </Button>
+      </div>
+      {build?.error && (
+        <Txt as="span" font="mono" variant="meta" className="text-destructive max-w-96 truncate" title={build.error}>
+          {build.error}
+        </Txt>
+      )}
     </div>
   );
 }
