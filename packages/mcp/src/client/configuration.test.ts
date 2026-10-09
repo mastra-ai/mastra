@@ -721,6 +721,17 @@ describe('MCPClient clientInfo identity', () => {
     expect(again).toBe(b);
     await b.disconnect();
   });
+
+  it('detects a clientInfo change when the caller mutates a shared object', async () => {
+    const servers = { weather: { url: new URL('http://localhost:4322/mcp') } };
+    const id = `client-info-identity-${++clientId}`;
+    const clientInfo = { name: 'app-a' };
+    const a = new MCPClient({ id, servers, clientInfo });
+    clientInfo.name = 'app-b';
+    const b = new MCPClient({ id, servers, clientInfo });
+    expect(b).not.toBe(a);
+    await Promise.all([a.disconnect(), b.disconnect()]);
+  });
 });
 
 /** A pre-2026 server that records the `clientInfo` from each `initialize`, keyed by the `server` query param. */

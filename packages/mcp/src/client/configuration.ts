@@ -145,7 +145,7 @@ export class MCPClient extends MastraBase {
   constructor(args: MCPClientOptions) {
     super({ name: 'MCPClient' });
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
-    this.defaultClientInfo = args.clientInfo;
+    this.defaultClientInfo = args.clientInfo && { ...args.clientInfo };
     this.serverConfigs = args.servers;
     this.id = args.id ?? this.makeId();
 
