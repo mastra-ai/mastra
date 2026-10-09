@@ -61,12 +61,8 @@ describe('DataList reorderable', () => {
     expect(container.querySelector('style')).toBeNull();
   });
 
-  it('warns once and disables reordering without an id', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const { container, rerender } = render(<List reorderable />);
-    rerender(<List reorderable />);
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0]?.[0]).toContain('requires an `id`');
+  it('disables reordering without an id', () => {
+    const { container } = render(<List reorderable />);
     expect(container.querySelector('[draggable]')).toBeNull();
   });
 

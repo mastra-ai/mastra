@@ -1,5 +1,5 @@
 import type { CSSProperties, ReactNode, RefObject } from 'react';
-import { useEffect, useId, useMemo } from 'react';
+import { useId, useMemo } from 'react';
 import {
   columnOrderSchema,
   getColumnOrderStorageKey,
@@ -143,13 +143,6 @@ const dataListFitClasses: Record<DataListFit, string> = {
 const disabledReorder: DataListReorderContextValue = { reorderable: false, order: [], move: () => {} };
 
 export function DataListRoot({ reorderable, id, columns, columnKeys, ...props }: DataListRootProps) {
-  const missingId = reorderable && !id;
-  useEffect(() => {
-    if (missingId) {
-      console.warn('[DataList] `reorderable` requires an `id` to persist column order; reordering is disabled.');
-    }
-  }, [missingId]);
-
   const tracks = reorderable && id ? splitGridTracks(columns) : null;
   if (id && tracks && columnKeys && columnKeys.length === tracks.length) {
     return (
