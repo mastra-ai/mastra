@@ -163,7 +163,7 @@ export function materializeKnowledgeScopePlan(
 
   const childParameters = { ...parameters, self: input.address };
   const children = (config.children ?? []).map<KnowledgeStructureScope>(child => ({
-    address: assertNotIdentityAddress(substituteParameters(child.address, childParameters)),
+    address: assertChildAddress(substituteParameters(child.address, childParameters), types),
     name: child.name.trim(),
     description: child.description,
     parentAddresses: [input.address],
@@ -194,11 +194,21 @@ export function materializeKnowledgeScopePlan(
 
 const IDENTITY_SCOPE_PATTERNS = ['org:$orgId', 'resource:$resourceId', 'thread:$threadId'];
 
-/** Child templates must not mint identity scopes; those are host-vouched. */
-function assertNotIdentityAddress(address: string): string {
+/**
+ * Child templates must not mint identity scopes (those are host-vouched) or addresses owned by
+ * another configured scope type: the child would get the template's grants instead of that type's
+ * access and children, and a later materialization of it would find it existing and never repair it.
+ */
+function assertChildAddress(address: string, types: KnowledgeScopeTypesConfig): string {
   assertAddress(address);
   if (IDENTITY_SCOPE_PATTERNS.some(pattern => matchPattern(pattern, address))) {
     throw new Error(`Knowledge child scope template cannot create identity scope ${address}`);
+  }
+  const owner = Object.keys(types).find(pattern => pattern !== 'custom' && matchPattern(pattern, address));
+  if (owner) {
+    throw new Error(
+      `Knowledge child scope template cannot create ${address}: it matches configured scope type ${owner}, so materialize it through that type`,
+    );
   }
   return address;
 }

@@ -129,6 +129,17 @@ describe('Knowledge structure reconciliation', () => {
     ).toThrow('Knowledge child scope template cannot create identity scope thread:a');
     expect(() =>
       materializeKnowledgeScopePlan(
+        {
+          'org:$orgId': { children: [{ address: 'team:$orgId', name: 'Team' }] },
+          'team:$teamId': { access: [{ principal: 'org:x', role: 'reader' }] },
+        },
+        { address: 'org:a', contextualScopeAddress: 'org:a' },
+      ),
+    ).toThrow(
+      'Knowledge child scope template cannot create team:a: it matches configured scope type team:$teamId, so materialize it through that type',
+    );
+    expect(() =>
+      materializeKnowledgeScopePlan(
         { 'org:$orgId': { children: [{ address: '$self::bad', name: 'Bad' }] } },
         { address: 'org:a', contextualScopeAddress: 'org:a' },
       ),
