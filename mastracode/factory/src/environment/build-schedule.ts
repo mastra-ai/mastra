@@ -5,7 +5,6 @@
  * only creates, pauses, resumes and reads the row.
  */
 
-import type { Mastra } from '@mastra/core/mastra';
 import type { AnySchedule, Schedules, WorkflowSchedule } from '@mastra/core/schedules';
 import { validateCron } from '@mastra/core/workflows';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './build-workflow.js';
@@ -110,9 +109,4 @@ export async function ensureSchedule(
   if (input.enabled && next.status === 'paused') next = await schedules.resume(current.id);
   if (!input.enabled && next.status === 'active') next = await schedules.pause(current.id);
   return toView(isWorkflowSchedule(next) ? next : null);
-}
-
-/** The service behind a booted `Mastra`, or `undefined` before the host finished booting. */
-export function scheduleServiceOf(mastra: Mastra | undefined): ScheduleService | undefined {
-  return mastra?.schedules;
 }

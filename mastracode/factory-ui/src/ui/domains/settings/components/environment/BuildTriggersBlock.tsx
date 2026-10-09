@@ -13,7 +13,7 @@ const DEFAULT_CRON = '0 3 * * *';
 
 /**
  * When the template is rebuilt on its own: on a cron schedule and after a
- * push to a repository's base branch (debounced). Changing a setting always
+ * push to a repository's default branch (debounced). Changing a setting always
  * starts a build regardless.
  */
 export function BuildTriggersBlock({
@@ -84,7 +84,7 @@ export function BuildTriggersBlock({
           label="On push"
           description={
             <span className="flex flex-col gap-2">
-              <span>Rebuild after a push to a repository's base branch.</span>
+              <span>Rebuild after a push to a repository's default branch.</span>
               {push.enabled && (
                 <Knob text="Wait" unit="minutes after the last build attempt (0 to 1440)">
                   <CommittedInput

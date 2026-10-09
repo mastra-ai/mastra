@@ -199,7 +199,6 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   environmentBuilds?: EnvironmentBuildRunner;
 }
 
-/** What the environment reports when the factory has no sandbox configured. */
 /** Provider output is shown to the user; strip any clone credential from it first. */
 function redactBuild<T extends { error?: string; logs?: string[] }>(build: T): T {
   return {
@@ -209,6 +208,7 @@ function redactBuild<T extends { error?: string; logs?: string[] }>(build: T): T
   };
 }
 
+/** What the environment reports when the factory has no sandbox configured. */
 const NO_SANDBOX: FactorySandboxDescription = {
   provider: 'none',
   settingsSchema: { type: 'object', properties: {}, additionalProperties: false },
