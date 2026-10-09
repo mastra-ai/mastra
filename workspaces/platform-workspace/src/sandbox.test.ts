@@ -3055,9 +3055,18 @@ describe('PlatformSandbox', () => {
 
       expect(loggerInfoSpy).toHaveBeenCalledWith(
         'platform-workspace start complete',
-        expect.objectContaining({ sandboxId: 'sbx_hash', mode: 'provision', templateHash: expected }),
+        expect.objectContaining({
+          sandboxId: 'sbx_hash',
+          mode: 'provision',
+          templateHash: expected,
+          templateBoot: 'exact',
+        }),
       );
       expect(expected).toMatch(/^[0-9a-f]{16}$/);
+      const [, exactFields] = loggerInfoSpy.mock.calls.find(
+        ([message]) => message === 'platform-workspace start complete',
+      )!;
+      expect(exactFields).not.toHaveProperty('pendingTemplateId');
 
       // The same definition hashes the same on a second provision.
       const again = new PlatformSandbox({
@@ -3072,6 +3081,37 @@ describe('PlatformSandbox', () => {
       expect(againSpy).toHaveBeenCalledWith(
         'platform-workspace start complete',
         expect.objectContaining({ templateHash: expected }),
+      );
+    });
+
+    it('logs a pending template boot with the id the platform is still building', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(
+        json({
+          id: 'sbx_pending',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          templatePending: { templateId: 'tpl_pending', retryAfterMs: 5_000 },
+        }),
+      );
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        template: Template().runCmd('pnpm build'),
+        fetch: fetchMock,
+      });
+      const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+
+      await sandbox._start();
+
+      expect(loggerInfoSpy).toHaveBeenCalledWith(
+        'platform-workspace start complete',
+        expect.objectContaining({
+          sandboxId: 'sbx_pending',
+          mode: 'provision',
+          templateBoot: 'pending',
+          pendingTemplateId: 'tpl_pending',
+        }),
       );
     });
 
