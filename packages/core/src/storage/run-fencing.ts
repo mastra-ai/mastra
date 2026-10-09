@@ -124,16 +124,6 @@ export interface RunFenceScope {
   fenceFor(store: object, runId?: string): RunFence | undefined;
   /** Storage rejected a write carrying `fence`. */
   onConflict?(fence: RunFence): void;
-  /**
-   * The engine started `nestedRunId` under `parentRunId`. A scope covering
-   * the parent covers the nested run too.
-   */
-  coverNestedRun?(parentRunId: string, nestedRunId: string): void;
-  /**
-   * The claim generation of the execution this scope belongs to when it
-   * covers `runId`. Tags the events the execution publishes for the run.
-   */
-  generationFor?(runId: string): number | undefined;
 }
 
 /** The async context that carries the current {@link RunFenceScope}. */
@@ -160,28 +150,6 @@ function getRunFenceContext(): RunFenceContext | undefined {
  */
 export function setRunFenceContext(context: RunFenceContext): RunFenceContext {
   return ((globalThis as RunFenceGlobal)[RUN_FENCE_CONTEXT] ??= context);
-}
-
-/**
- * Run `fn` outside any run's fence scope. Long-lived work started from inside
- * a run that does not belong to it (workers, subscriptions, in-process pubsub
- * delivery) uses this so its writes do not carry the run's fence.
- */
-export function runOutsideRunFenceScope<T>(fn: () => T): T {
-  const context = getRunFenceContext();
-  return context?.current() ? context.run(undefined, fn) : fn();
-}
-
-/**
- * Tell the current run fence scope that `nestedRunId` runs under
- * `parentRunId`. Engines that store a nested workflow run under its own runId
- * call this before the nested run's first write, so those writes carry the
- * parent run's fence.
- *
- * @internal
- */
-export function coverNestedRun(parentRunId: string, nestedRunId: string): void {
-  getRunFenceContext()?.current()?.coverNestedRun?.(parentRunId, nestedRunId);
 }
 
 /**
