@@ -593,4 +593,63 @@ describe('KnowledgeLibSQL interim canonical-model layout', () => {
       client.close();
     }
   });
+
+  it.each(['snapshot-w1-20261006001735.sql', 'snapshot-w1-20261007232522.sql'])(
+    'replaces the layout published snapshot %s created, discarding its rows',
+    async fixture => {
+      const client = createClient({ url: ':memory:' });
+      try {
+        await seedPublishedKnowledgeV1(client, fixture);
+        await client.execute(
+          "INSERT INTO mastra_knowledge_semantic_outbox (id,idempotencyKey,documentId,documentType,operation,scope,scopeKey,status,attempts,availableAt,createdAt) VALUES ('legacy','legacy','legacy','node','upsert','[]','legacy','completed',1,'2026-10-01','2026-10-01')",
+        );
+
+        await new KnowledgeLibSQL({ client }).init();
+
+        expect((await client.execute('SELECT id FROM mastra_knowledge_semantic_outbox')).rows).toEqual([]);
+        const tables = await client.execute(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'mastra_knowledge_cursors'",
+        );
+        expect(tables.rows).toEqual([]);
+        await new KnowledgeLibSQL({ client }).init();
+      } finally {
+        client.close();
+      }
+    },
+  );
+
+  it('replaces an early-snapshot layout that later interim builds re-initialized', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seedPublishedKnowledgeV1(client, 'snapshot-w1-20261006001735.sql');
+      // Later builds added these indexes with IF NOT EXISTS but never dropped the early columns or table.
+      await client.execute('CREATE INDEX idx_knowledge_nodes_name ON mastra_knowledge_nodes (type, canonicalName)');
+      await client.execute('CREATE INDEX idx_knowledge_records_scope ON mastra_knowledge_records (scopeKey, id)');
+      await client.execute(
+        'CREATE INDEX idx_knowledge_activity_scope ON mastra_knowledge_activity (scopeKey, id DESC)',
+      );
+
+      await new KnowledgeLibSQL({ client }).init();
+
+      const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
+      expect(marker.rows[0]?.version).toBe(1);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('leaves a layout mixing snapshot shapes untouched', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await seedPublishedKnowledgeV1(client, 'snapshot-w1-20261007232522.sql');
+      await client.execute('ALTER TABLE mastra_knowledge_records ADD COLUMN nodeId TEXT');
+      const before = await knowledgeObjects(client);
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+      expect(await knowledgeObjects(client)).toEqual(before);
+    } finally {
+      client.close();
+    }
+  });
 });

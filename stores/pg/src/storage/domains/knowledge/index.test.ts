@@ -649,4 +649,62 @@ describe('KnowledgePG interim canonical-model layout', () => {
 
     expect(await knowledgeObjects(schemaName)).toEqual(before);
   });
+
+  it.each(['snapshot-w1-20261006001735.sql', 'snapshot-w1-20261007232522.sql'])(
+    'replaces the layout published snapshot %s created, discarding its rows',
+    async fixture => {
+      const schemaName = await createSchemaWithPublishedKnowledgeV1('knowledge_snapshot_rows', fixture);
+      await pool.query(
+        `INSERT INTO "${schemaName}".mastra_knowledge_semantic_outbox (id,"idempotencyKey","documentId","documentType",operation,scope,"scopeKey",status,attempts,"availableAt","createdAt") VALUES ('legacy','legacy','legacy','node','upsert','[]','legacy','completed',1,now(),now())`,
+      );
+
+      await new KnowledgePG({ pool, schemaName }).init();
+
+      const outbox = await pool.query(`SELECT id FROM "${schemaName}".mastra_knowledge_semantic_outbox`);
+      expect(outbox.rows).toEqual([]);
+      const cursors = await pool.query(
+        `SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = 'mastra_knowledge_cursors'`,
+        [schemaName],
+      );
+      expect(cursors.rows).toEqual([]);
+      await new KnowledgePG({ pool, schemaName }).init();
+    },
+  );
+
+  it('replaces an early-snapshot layout that later interim builds re-initialized', async () => {
+    const schemaName = await createSchemaWithPublishedKnowledgeV1(
+      'knowledge_snapshot_upgraded',
+      'snapshot-w1-20261006001735.sql',
+    );
+    // Later builds added these indexes with IF NOT EXISTS but never dropped the early columns or table.
+    await pool.query(
+      `CREATE INDEX idx_knowledge_nodes_name ON "${schemaName}".mastra_knowledge_nodes (type, "canonicalName")`,
+    );
+    await pool.query(
+      `CREATE INDEX idx_knowledge_records_scope ON "${schemaName}".mastra_knowledge_records ("scopeKey", id)`,
+    );
+    await pool.query(
+      `CREATE INDEX idx_knowledge_activity_scope ON "${schemaName}".mastra_knowledge_activity ("scopeKey", id DESC)`,
+    );
+
+    await new KnowledgePG({ pool, schemaName }).init();
+
+    const marker = await pool.query(
+      `SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}" WHERE id = 'canonical'`,
+    );
+    expect(marker.rows[0]?.version).toBe(1);
+  });
+
+  it('leaves a layout mixing snapshot shapes untouched', async () => {
+    const schemaName = await createSchemaWithPublishedKnowledgeV1(
+      'knowledge_snapshot_mixed',
+      'snapshot-w1-20261007232522.sql',
+    );
+    await pool.query(`ALTER TABLE "${schemaName}".mastra_knowledge_records ADD COLUMN "nodeId" text`);
+    const before = await knowledgeObjects(schemaName);
+
+    await expect(new KnowledgePG({ pool, schemaName }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+    expect(await knowledgeObjects(schemaName)).toEqual(before);
+  });
 });
