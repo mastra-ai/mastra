@@ -184,12 +184,19 @@ function RepositoryRow({
           <Txt as="span" variant="caption" tone="muted">
             {repository.inEnvironment ? 'Cloned' : 'Not cloned'}
           </Txt>
-          <Switch
-            aria-label={`Clone ${label} into every session`}
-            checked={repository.inEnvironment}
-            disabled={disabled}
-            onCheckedChange={value => onToggle(value)}
-          />
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Switch
+                  aria-label={`Clone ${label} into every session`}
+                  checked={repository.inEnvironment}
+                  disabled={disabled}
+                  onCheckedChange={value => onToggle(value)}
+                />
+              }
+            />
+            <TooltipContent className="pointer-events-none">Include in the environment</TooltipContent>
+          </Tooltip>
         </span>
         <ChevronDown
           aria-hidden
