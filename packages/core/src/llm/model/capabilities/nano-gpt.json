@@ -110,6 +110,7 @@
     "gemma-4-12b-it-semancer",
     "gemma-4-12b-it-station-keeper",
     "gemma-4-26b-a4b-it-chimerax",
+    "gemma-4-26b-a4b-it-chimeraxheretic",
     "gemma-4-26b-a4b-it-darksoul",
     "gemma-4-26b-a4b-it-luminous",
     "gemma-4-26b-a4b-it-moonlight",
@@ -123,6 +124,7 @@
     "gemma-4-31b-it-gemsicle",
     "gemma-4-31b-it-isometry",
     "gemma-4-31b-it-novelist",
+    "gemma-4-31b-it-scarlet",
     "glm-4.1v-thinking-flash",
     "glm-4.1v-thinking-flashx",
     "google/gemini-3-flash-preview",
@@ -1098,12 +1100,8 @@
     ],
     "anthropic/claude-haiku-latest": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-opus-4.8": [

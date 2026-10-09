@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { LogLevel } from '@mastra/core/logger';
-import { describe, it, expect, beforeEach, vi, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterAll, onTestFinished } from 'vitest';
 import { PinoLogger } from '../pino.js';
 
 import { FileTransport } from './index.js';
@@ -128,7 +128,14 @@ describe('FileTransport', () => {
   });
 
   it('should surface real filesystem errors on the transport instead of crashing', async () => {
-    const transport = new FileTransport({ path: testDir });
+    const swappedPath = path.join(testDir, 'swapped.log');
+    fs.rmSync(swappedPath, { recursive: true, force: true });
+    fs.writeFileSync(swappedPath, '');
+    const transport = new FileTransport({ path: swappedPath });
+    // The file stream opens asynchronously, so replacing the file with a directory makes the real open fail.
+    fs.rmSync(swappedPath);
+    fs.mkdirSync(swappedPath);
+    onTestFinished(() => fs.rmSync(swappedPath, { recursive: true, force: true }));
     const writeError = new Promise<Error | null | undefined>(resolve => transport.write('line\n', resolve));
     const transportError = new Promise<Error>(resolve => transport.once('error', resolve));
 

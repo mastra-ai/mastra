@@ -63,7 +63,8 @@ new MastraEditor({
 ## Implementing a provider
 
 ```typescript title="src/providers/my-browser.ts"
-import type { BrowserProvider, MastraBrowser } from '@mastra/core/editor'
+import type { BrowserProvider } from '@mastra/core/editor'
+import type { MastraBrowser } from '@mastra/core/browser'
 
 export const myBrowserProvider: BrowserProvider<{ apiKey: string }> = {
   id: 'my-browser',

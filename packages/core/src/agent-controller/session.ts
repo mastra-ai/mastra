@@ -4825,6 +4825,9 @@ export class Session<TState = unknown> {
       abortSignal: inputAbortSignal ?? this.run.ensureAbortController().signal,
       requestContext,
       toolsets: await this.machinery.buildToolsets(requestContext),
+      // Without the shared budget the resumed run falls back to the agent's
+      // default maxSteps (~5) and ends mid-task as "complete".
+      streamOptions: this.machinery.buildSharedRunOptions(),
     });
   }
 
@@ -4881,6 +4884,9 @@ export class Session<TState = unknown> {
       abortSignal: inputAbortSignal ?? this.run.ensureAbortController().signal,
       requestContext,
       toolsets: await this.machinery.buildToolsets(requestContext),
+      // Without the shared budget the resumed run falls back to the agent's
+      // default maxSteps (~5) and ends mid-task as "complete".
+      streamOptions: this.machinery.buildSharedRunOptions(),
     });
   }
 
