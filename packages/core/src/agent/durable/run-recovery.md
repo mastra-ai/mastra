@@ -8,7 +8,7 @@ Recovery only takes runs that are orphaned. Whether a run is orphaned is decided
 
 - The agent is registered on a `Mastra` instance with storage (`DURABLE_AGENT_RECOVER_NO_MASTRA`, `DURABLE_AGENT_RECOVER_NO_STORAGE` otherwise).
 - The run has a persisted `running` snapshot. `listActiveRuns()` and `recover()` read nothing else. A plain `DurableAgent` writes `running` snapshots only when `recovery.durableAgents` is `'auto'`, or when a user `shouldPersistSnapshot` includes `running`. `EventedAgent` always writes them.
-- The workflows store supports run fencing. Without it recovery still works, but liveness comes from the pubsub lease and a superseded execution's writes are not rejected. `recoverActiveRuns()` warns once per store when that applies.
+- The workflows store supports run fencing. Without it recovery still works, but liveness comes from the pubsub lease and a superseded execution's writes are not rejected. `recoverActiveRuns()` and `recover()` warn once per store when that applies.
 
 ## Entry points
 
