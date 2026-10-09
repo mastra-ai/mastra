@@ -132,4 +132,27 @@ describe('FactoryProjectsStorage builds', () => {
     ]);
     expect(results.filter(Boolean)).toHaveLength(1);
   });
+
+  it('pinActiveTemplate writes only while the build is still the last one', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { lastBuildId: 'build-2' } });
+
+    expect(
+      await seed.projects.pinActiveTemplate({ id: project.id, buildId: 'build-1', templateId: 'tpl-1', heads: {} }),
+    ).toBe(false);
+    expect((await seed.projects.getById({ id: project.id }))?.activeTemplateId).toBeNull();
+
+    expect(
+      await seed.projects.pinActiveTemplate({
+        id: project.id,
+        buildId: 'build-2',
+        templateId: 'tpl-2',
+        heads: { 'acme/api': 'abc' },
+      }),
+    ).toBe(true);
+    const stored = await seed.projects.getById({ id: project.id });
+    expect(stored?.activeTemplateId).toBe('tpl-2');
+    expect(stored?.activeTemplateHeads).toEqual({ 'acme/api': 'abc' });
+  });
 });

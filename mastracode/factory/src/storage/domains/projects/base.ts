@@ -269,6 +269,35 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     return claimed;
   }
 
+  /**
+   * Pins the active template to a finished build, but only while that build is
+   * still the project's last one. Overlapping runs (two settings edits in a
+   * row, Build now during a push build) can finish out of order; the write and
+   * the `last_build_id` check run under one `updateAtomic` so a stale run never
+   * overwrites a newer build's pin. Resolves false when the pin was skipped.
+   */
+  async pinActiveTemplate({
+    id,
+    buildId,
+    templateId,
+    heads,
+    now = new Date(),
+  }: {
+    id: string;
+    buildId: string;
+    templateId: string;
+    heads: Record<string, string>;
+    now?: Date;
+  }): Promise<boolean> {
+    let pinned = false;
+    await this.#db.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
+      if (current.last_build_id !== buildId) return null;
+      pinned = true;
+      return { active_template_id: templateId, active_template_heads: heads, updated_at: now };
+    });
+    return pinned;
+  }
+
   async delete({ orgId, id }: { orgId: string; id: string }): Promise<FactoryProject | null> {
     const project = await this.get({ orgId, id });
     if (!project) return null;

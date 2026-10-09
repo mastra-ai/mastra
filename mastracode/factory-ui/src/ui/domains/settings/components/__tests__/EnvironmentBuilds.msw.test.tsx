@@ -94,7 +94,6 @@ describe('Environment builds', () => {
       }),
       http.get(`${ENVIRONMENT_URL}/builds/:buildId`, ({ params }) => {
         const status = statuses.length > 1 ? statuses.shift()! : statuses[0]!;
-        if (status === 'ready') holder.environment = { ...holder.environment, activeTemplateId: 'tpl-1' };
         return HttpResponse.json({ build: { buildId: params.buildId, status, templateId: 'tpl-1' } });
       }),
     );
@@ -113,10 +112,14 @@ describe('Environment builds', () => {
     // does when the tab becomes visible again.
     window.dispatchEvent(new Event('visibilitychange'));
     expect(await screen.findByText('Ready', {}, { timeout: 5_000 })).toBeInTheDocument();
-    expect(await screen.findByText('tpl-1')).toBeInTheDocument();
+    // The workflow pins the template on its own poll after the provider reports
+    // ready, so the environment keeps refetching every 5 s until the pin shows.
+    expect(screen.getByText('none yet')).toBeInTheDocument();
+    holder.environment = { ...holder.environment, activeTemplateId: 'tpl-1' };
+    expect(await screen.findByText('tpl-1', {}, { timeout: 8_000 })).toBeInTheDocument();
     expect(historyReads).toBe(0);
     expect(screen.queryByRole('heading', { name: 'Build history' })).toBeNull();
-  });
+  }, 20_000);
 
   it('patches the push trigger and its debounce, and the cron schedule', async () => {
     const holder = {

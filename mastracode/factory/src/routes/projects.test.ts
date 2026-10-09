@@ -1014,6 +1014,7 @@ describe('ProjectRoutes', () => {
                     error: 'clone https://x-access-token:ghs_secret@github.com/acme/api.git failed',
                     logs: ['git clone https://x-access-token:ghs_secret@github.com/acme/api.git', 'fatal: 403'],
                   },
+                  { buildId: 'tpl%201:b', status: 'ready' as const, templateId: 'tpl-1' },
                 ]
               : [],
         };
@@ -1145,6 +1146,7 @@ describe('ProjectRoutes', () => {
               error: 'clone https://***@github.com/acme/api.git failed',
               logs: ['git clone https://***@github.com/acme/api.git', 'fatal: 403'],
             },
+            { buildId: 'tpl%201:b', status: 'ready', templateId: 'tpl-1' },
           ],
         });
 
@@ -1154,6 +1156,16 @@ describe('ProjectRoutes', () => {
         );
         expect(odd.status).toBe(200);
         expect(sandbox.reads.at(-1)?.buildId).toBe('tpl%201:b');
+
+        // An id the project does not own is never forwarded to the provider,
+        // which would otherwise answer for any build on the host's account.
+        const readsBefore = sandbox.reads.length;
+        const foreign = await app.request(
+          `/web/factory/projects/${project.id}/environment/builds/${encodeURIComponent('tpl-9:build-9')}`,
+        );
+        expect(foreign.status).toBe(404);
+        expect(await foreign.json()).toEqual({ error: 'Build not found' });
+        expect(sandbox.reads).toHaveLength(readsBefore);
       });
 
       it('builds after a repository link, edit or unlink, and after a repository patch on the environment', async () => {

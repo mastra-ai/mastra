@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRef } from 'react';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -9,7 +10,11 @@ import {
   patchFactoryEnvironment,
   requestEnvironmentBuild,
 } from '../ui/domains/workspaces/services/environment';
-import type { FactoryEnvironmentBuild, FactoryEnvironmentPatch } from '../ui/domains/workspaces/services/environment';
+import type {
+  FactoryEnvironmentBuild,
+  FactoryEnvironmentPatch,
+  FactoryEnvironmentPayload,
+} from '../ui/domains/workspaces/services/environment';
 
 /**
  * A Factory's environment (resources, ordered repositories and setup) through
@@ -58,6 +63,9 @@ export function useRequestEnvironmentBuildMutation() {
 }
 
 const ACTIVE_BUILD_POLL_MS = 10_000;
+/** The workflow pins the template on its own 15 s poll after the provider reports ready. */
+const PIN_WAIT_POLL_MS = 5_000;
+const PIN_WAIT_MAX_POLLS = 12;
 
 function isActive(build: FactoryEnvironmentBuild | undefined) {
   return build?.status === 'pending' || build?.status === 'building';
@@ -66,11 +74,19 @@ function isActive(build: FactoryEnvironmentBuild | undefined) {
 /**
  * Live status of one build, polled every 10 s only while it is pending or
  * building. The environment query itself never polls; when the build settles
- * the environment refetches once so a freshly pinned template shows.
+ * the environment refetches, and keeps refetching every 5 s (for up to a
+ * minute) while a ready build's template is not yet the pinned one, because
+ * the workflow writes the pin on its own poll after the provider says ready.
  */
 export function useEnvironmentBuildQuery(factoryId: string | undefined, buildId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
+  const pinPolls = useRef(0);
+  const awaitingPin = (build: FactoryEnvironmentBuild | undefined) => {
+    if (build?.status !== 'ready' || !build.templateId) return false;
+    const environment = queryClient.getQueryData<FactoryEnvironmentPayload>(queryKeys.factoryEnvironment(factoryId));
+    return environment !== undefined && environment.activeTemplateId !== build.templateId;
+  };
   return useQuery({
     queryKey: queryKeys.factoryEnvironmentBuild(factoryId, buildId),
     queryFn: async () => {
@@ -79,13 +95,21 @@ export function useEnvironmentBuildQuery(factoryId: string | undefined, buildId:
       );
       const build = await getEnvironmentBuild(baseUrl, factoryId!, buildId!);
       if (isActive(previous) && !isActive(build)) {
+        pinPolls.current = 0;
         void queryClient.invalidateQueries({ queryKey: queryKeys.factoryEnvironment(factoryId) });
         void queryClient.invalidateQueries({ queryKey: queryKeys.factoryEnvironmentBuilds(factoryId) });
+      } else if (awaitingPin(build)) {
+        pinPolls.current += 1;
+        void queryClient.invalidateQueries({ queryKey: queryKeys.factoryEnvironment(factoryId) });
       }
       return build;
     },
     enabled: Boolean(factoryId && buildId),
-    refetchInterval: query => (isActive(query.state.data) ? ACTIVE_BUILD_POLL_MS : false),
+    refetchInterval: query => {
+      if (isActive(query.state.data)) return ACTIVE_BUILD_POLL_MS;
+      if (awaitingPin(query.state.data) && pinPolls.current < PIN_WAIT_MAX_POLLS) return PIN_WAIT_POLL_MS;
+      return false;
+    },
   });
 }
 

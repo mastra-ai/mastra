@@ -129,6 +129,34 @@ describe('factory-environment-build workflow', () => {
     expect(sandbox.gets).toEqual(['build-1', 'build-1']);
   });
 
+  it('does not let an older run that finishes late overwrite a newer build', async () => {
+    const project = await seedProject(seed);
+    const sandbox = new BuildingSandbox();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    let mastra: Mastra | undefined;
+    const runner = new EnvironmentBuildRunner(depsFor(seed, sandbox), {
+      getMastra: () => mastra,
+      sleep: () => gate,
+    });
+    mastra = bootMastra(runner);
+
+    await runner.start(project.id, 'manual');
+    // A newer run took over the project while the first one was still polling.
+    await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { lastBuildId: 'build-2', activeTemplateId: 'tpl-2', activeTemplateHeads: { 'acme/api': 'b'.repeat(40) } },
+    });
+
+    release();
+    await vi.waitFor(() => expect(sandbox.gets).toEqual(['build-1', 'build-1']));
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const stored = await seed.projects.getById({ id: project.id });
+    expect(stored?.activeTemplateId).toBe('tpl-2');
+    expect(stored?.activeTemplateHeads).toEqual({ 'acme/api': 'b'.repeat(40) });
+  });
+
   it('runs to a failed status without touching the active template', async () => {
     const project = await seedProject(seed);
     const sandbox = new BuildingSandbox();

@@ -79,7 +79,10 @@ export function BuildStatusBlock({
             )}
           </div>
         </SettingsRow>
-        <SettingsRow label="Template" description="Sessions boot from this image until the next successful build.">
+        <SettingsRow
+          label="Template"
+          description="The last image built ahead of sessions. Sessions reuse it while the default branches still match the built heads."
+        >
           {activeTemplateId ? (
             <Txt as="span" font="mono" variant="body-sm" className="block max-w-72 truncate" title={activeTemplateId}>
               {activeTemplateId}

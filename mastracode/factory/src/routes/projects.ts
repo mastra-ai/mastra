@@ -435,6 +435,15 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!buildId) return context.json({ error: 'Build not found' }, 404);
           const read = await capability.runner.readContext(project.id);
           if (!read) return context.json({ error: 'no_environment' }, 404);
+          // Providers answer for any id on the host's account, so the route
+          // only forwards ids that belong to this project: its last build, or
+          // one the provider lists under the project's template.
+          if (buildId !== project.lastBuildId) {
+            const listed = capability.builds.list ? await capability.builds.list(read.ctx, read.settings) : [];
+            if (!listed.some(build => build.buildId === buildId)) {
+              return context.json({ error: 'Build not found' }, 404);
+            }
+          }
           return context.json({ build: redactBuild(await capability.builds.get(read.ctx, read.settings, buildId)) });
         },
       }),

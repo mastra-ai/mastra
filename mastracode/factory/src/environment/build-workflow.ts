@@ -93,12 +93,18 @@ export function createEnvironmentBuildWorkflow(
           const build = await builds.get(ctx, environment.settings, result.buildId);
           if (build.status === 'ready') {
             const templateId = build.templateId ?? result.templateId ?? result.buildId;
-            await deps.projects.update({
-              orgId: project.orgId,
+            // A newer run may have replaced `last_build_id` while this one
+            // polled; the pin is skipped then so the stale image never wins.
+            const pinned = await deps.projects.pinActiveTemplate({
               id: project.id,
-              input: { activeTemplateId: templateId, activeTemplateHeads: heads },
+              buildId: result.buildId,
+              templateId,
+              heads,
             });
-            deps.logger?.info('environment build ready', { factoryProjectId: project.id, templateId });
+            deps.logger?.info(pinned ? 'environment build ready' : 'environment build ready but superseded', {
+              factoryProjectId: project.id,
+              templateId,
+            });
             return { ...result, templateId, status: 'ready' };
           }
           if (build.status === 'failed' || build.status === 'unknown') {

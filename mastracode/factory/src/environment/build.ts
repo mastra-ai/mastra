@@ -27,7 +27,7 @@ export interface EnvironmentBuildSourceControl {
 export interface EnvironmentBuildDeps {
   /** The factory's normalized sandbox; builds are unavailable without its `builds`. */
   sandbox: FactorySandbox | undefined;
-  projects: Pick<FactoryProjectsStorage, 'getById' | 'update' | 'claimBuildAttempt'>;
+  projects: Pick<FactoryProjectsStorage, 'getById' | 'update' | 'claimBuildAttempt' | 'pinActiveTemplate'>;
   /** Absent when the factory has no source-control integration to resolve heads with. */
   sourceControl: EnvironmentBuildSourceControl | undefined;
   logger?: { info: (msg: string, meta?: Record<string, unknown>) => void };
