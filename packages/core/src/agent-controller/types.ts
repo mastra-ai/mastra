@@ -842,6 +842,7 @@ export type AgentControllerEvent =
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: AgentControllerThread }
   | { type: 'thread_deleted'; threadId: string }
+  | { type: 'thread_owner_changed'; threadId: string; fromOwnerId: string | undefined; toOwnerId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
@@ -1103,7 +1104,7 @@ export interface AgentControllerRequestState<TState = unknown> {
 export interface AgentControllerRequestSession<TState = unknown> {
   /** Stable session identifier (mirrors SessionRecord.id in storage). */
   id: string;
-  /** Stable session owner (mirrors SessionRecord.ownerId in storage). */
+  /** Stable identity of the process-local session host. Use `threadOwnerId` for thread ownership and billing. */
   ownerId: string;
   /** Currently-selected mode ID */
   modeId: string;
@@ -1153,6 +1154,9 @@ export interface AgentControllerRequestContext<TState = unknown> {
 
   /** Thread ID captured for this request. */
   threadId: string | null;
+
+  /** Thread owner captured once when this run starts. */
+  threadOwnerId?: string;
 
   /** Current resource ID */
   resourceId: string;

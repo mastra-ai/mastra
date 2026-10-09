@@ -62,6 +62,7 @@ import type {
 
 export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controller.suspendedRunAgent');
 export const SOURCE_APPROVAL_CALLS_KEY = createRunScopeKey<Set<string>>('agent-controller.sourceApprovalCalls');
+export const THREAD_OWNER_ID_CONTEXT_KEY = 'mastra__agentControllerThreadOwnerId';
 
 /**
  * Bucket key for grants that apply to every thread. Grant calls that name no
@@ -264,6 +265,8 @@ const RESERVED_THREAD_METADATA_KEYS = [
   'observationThreshold',
   'reflectionThreshold',
   'tokenUsage',
+  'ownerId',
+  'createdBy',
   ...PERSISTED_STATE_KEYS,
 ] as const;
 
@@ -322,7 +325,10 @@ export class SessionIdentity {
     return this.#id;
   }
 
-  /** The stable owner identifier for this session. */
+  /**
+   * The stable identity of this process-local session host.
+   * Use `AgentControllerRequestContext.threadOwnerId` for thread ownership and billing attribution.
+   */
   getOwnerId(): string {
     return this.#ownerId;
   }
@@ -447,6 +453,7 @@ export interface SessionMachinery {
       abortSignal?: AbortSignal;
       resourceId?: string;
       threadId?: string;
+      threadOwnerId?: string;
       modeId?: string;
       runId?: string;
       execution?: boolean;
@@ -491,6 +498,28 @@ export interface SessionMachinery {
  * Lifecycle *transitions* (create/switch/clone/delete) remain host machinery
  * because they drive the shared event bus and rebind the shared agent stream.
  */
+const threadOwnershipMutexes = new Map<string, Promise<void>>();
+
+async function withThreadOwnershipMutex<T>(threadId: string, operation: () => Promise<T>): Promise<T> {
+  const previous = threadOwnershipMutexes.get(threadId) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  const tail = previous.then(() => current);
+  threadOwnershipMutexes.set(threadId, tail);
+
+  await previous;
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (threadOwnershipMutexes.get(threadId) === tail) {
+      threadOwnershipMutexes.delete(threadId);
+    }
+  }
+}
+
 export class SessionThread {
   /** The active thread id, or null when the session is not bound to a thread. */
   #threadId: string | null = null;
@@ -842,6 +871,72 @@ export class SessionThread {
     await this.#store.deleteMetadata({ threadId: this.#threadId, key });
   }
 
+  /**
+   * Read a thread's durable owner. Owner-less legacy threads lazily inherit this
+   * session host's identity without writing a backfill.
+   */
+  async getOwner({ threadId = this.#threadId }: { threadId?: string | null } = {}): Promise<string | undefined> {
+    if (!threadId) return undefined;
+    const thread = await this.#store?.getById({ threadId });
+    if (!thread) {
+      if (threadId === this.#threadId) return this.#owner.identity.getOwnerId();
+      throw new Error(`Thread not found: ${threadId}`);
+    }
+    if (thread.resourceId !== this.#getResourceId()) {
+      throw new Error(`Thread not found: ${threadId}`);
+    }
+    const ownerId = thread.metadata?.ownerId;
+    return typeof ownerId === 'string' ? ownerId : this.#owner.identity.getOwnerId();
+  }
+
+  /**
+   * Compare and set a thread's owner.
+   *
+   * Transfers are atomic within this process. They are atomic across processes
+   * only when the host configures `threadLock`; hosts needing strict durable CAS
+   * should commit that CAS in their own store before mirroring it here.
+   */
+  async transferOwnership({
+    threadId = this.#threadId,
+    toOwnerId,
+    expectedOwnerId,
+  }: {
+    threadId?: string | null;
+    toOwnerId: string;
+    expectedOwnerId: string;
+  }): Promise<{ ok: true } | { ok: false; currentOwnerId: string | undefined }> {
+    if (!threadId) return { ok: false, currentOwnerId: undefined };
+
+    return withThreadOwnershipMutex(threadId, async () => {
+      const store = this.#store;
+      if (!store) throw new Error('Memory is not configured on this AgentController');
+
+      const needsTemporaryHostLock = threadId !== this.#threadId;
+      if (needsTemporaryHostLock) await store.acquireLock(threadId);
+
+      try {
+        const thread = await this.#requireOwnedThread({ threadId });
+        const storedOwnerId = thread.metadata?.ownerId;
+        const currentOwnerId = typeof storedOwnerId === 'string' ? storedOwnerId : this.#owner.identity.getOwnerId();
+        if (currentOwnerId !== expectedOwnerId) {
+          return { ok: false, currentOwnerId };
+        }
+
+        if (currentOwnerId !== toOwnerId) {
+          await store.setMetadata({ threadId, key: 'ownerId', value: toOwnerId });
+          const persistedThread = await this.#requireOwnedThread({ threadId });
+          if (persistedThread.metadata?.ownerId !== toOwnerId) {
+            throw new Error(`Failed to persist owner for thread: ${threadId}`);
+          }
+          this.#owner.emit({ type: 'thread_owner_changed', threadId, fromOwnerId: currentOwnerId, toOwnerId });
+        }
+        return { ok: true };
+      } finally {
+        if (needsTemporaryHostLock) await store.releaseLock(threadId);
+      }
+    });
+  }
+
   // ---------------------------------------------------------------------------
   // Lifecycle: transitions that bind/rebind this session to a thread. These
   // orchestrate sibling subsystems (model/mode/om/state/usage/event bus) and the
@@ -966,6 +1061,9 @@ export class SessionThread {
     // Stamp the session's scope so thread selection can filter listings back to
     // it (e.g. a `projectPath` per git worktree).
     Object.assign(metadata, session.getThreadScope());
+    const ownerId = session.identity.getOwnerId();
+    metadata.ownerId ??= ownerId;
+    metadata.createdBy ??= ownerId;
 
     // Acquire lock on new thread before releasing old one.
     // If acquire fails, attempt to re-acquire the old lock before rethrowing.
@@ -1119,7 +1217,14 @@ export class SessionThread {
       throw new Error('Memory is not configured on this AgentController');
     }
 
-    const clonedThread = await store.cloneThread({ sourceThreadId, resourceId, title, metadata, requestContext });
+    const ownerId = session.identity.getOwnerId();
+    const clonedThread = await store.cloneThread({
+      sourceThreadId,
+      resourceId,
+      title,
+      metadata: { ...metadata, ownerId, createdBy: ownerId },
+      requestContext,
+    });
 
     // Acquire lock on new thread before releasing old one
     const oldThreadId = this.#threadId;
@@ -4042,7 +4147,9 @@ export class Session<TState = unknown> {
     workspace?: Workspace;
     browser?: MastraBrowser;
   }) {
-    this.#tags = tags && Object.keys(tags).length > 0 ? { ...tags } : {};
+    this.#tags = tags
+      ? Object.fromEntries(Object.entries(tags).filter(([key]) => !isReservedThreadMetadataKey(key)))
+      : {};
     this.identity = new SessionIdentity({ resourceId, id, ownerId });
     this.thread = new SessionThread(() => this.identity.getResourceId());
     this.suspensions = new SessionSuspensions(() => ({
@@ -5326,6 +5433,19 @@ export class Session<TState = unknown> {
   #claimedToolResponses = new Set<string>();
   #suspensionAgents = new WeakMap<PendingSuspension, Agent>();
 
+  private async resolveSuspendedThreadOwnerId(
+    agent: Agent,
+    runId: string,
+    requestContext?: RequestContext,
+  ): Promise<string | undefined> {
+    const persisted = await agent.__getSuspendedRunRequestContextValue({ runId, key: THREAD_OWNER_ID_CONTEXT_KEY });
+    if (typeof persisted === 'string') return persisted;
+    const controllerContext = requestContext?.get('controller') as AgentControllerRequestContext<TState> | undefined;
+    if (typeof controllerContext?.threadOwnerId === 'string') return controllerContext.threadOwnerId;
+    const inherited = requestContext?.getRaw(THREAD_OWNER_ID_CONTEXT_KEY);
+    return typeof inherited === 'string' ? inherited : undefined;
+  }
+
   private async resolveSuspensionAgent(address: SuspensionAddress): Promise<Agent> {
     let suspension = this.suspensions.get(address);
     const scope = this.machinery.getRunScope(address.runId);
@@ -5475,9 +5595,11 @@ export class Session<TState = unknown> {
       return;
     }
 
-    await this.resolveSuspensionAgent(address);
+    const agent = await this.resolveSuspensionAgent(address);
+    const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, address.runId, requestContext);
     let sourceRequestContext = await this.machinery.buildRequestContext(requestContext, {
       ...address,
+      threadOwnerId,
       execution: true,
     });
     const context = sourceRequestContext.get('controller') as AgentControllerRequestContext<TState>;
@@ -5559,6 +5681,7 @@ export class Session<TState = unknown> {
 
     const agent =
       this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? inputAgent ?? this.machinery.getAgent();
+    const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, runId, requestContextInput);
     if (!threadId) {
       throw new Error('Cannot approve a tool call without a current thread');
     }
@@ -5571,6 +5694,7 @@ export class Session<TState = unknown> {
       threadId,
       resourceId,
       runId,
+      threadOwnerId,
       abortSignal,
       execution: true,
     });
@@ -5640,6 +5764,7 @@ export class Session<TState = unknown> {
 
     const agent =
       this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? inputAgent ?? this.machinery.getAgent();
+    const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, runId, requestContextInput);
     if (!threadId) {
       throw new Error('Cannot decline a tool call without a current thread');
     }
@@ -5652,6 +5777,7 @@ export class Session<TState = unknown> {
       threadId,
       resourceId,
       runId,
+      threadOwnerId,
       abortSignal,
       execution: true,
     });
@@ -5933,12 +6059,14 @@ export class Session<TState = unknown> {
     const { toolCallId, threadId, resourceId } = address;
 
     const agent = await this.resolveSuspensionAgent(address);
+    const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, address.runId, requestContextInput);
     const sourceIsActive = () => threadId === this.thread.getId() && resourceId === this.identity.getResourceId();
     const abortSignal = sourceIsActive() ? this.run.ensureAbortController().signal : new AbortController().signal;
     const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
       threadId,
       resourceId,
       runId: address.runId,
+      threadOwnerId,
       abortSignal,
       execution: true,
     });

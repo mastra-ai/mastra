@@ -351,7 +351,9 @@ To change the resource ID, use [`controller.setResourceId()`](/reference/agent-c
 
 ## Thread
 
-`session.thread` owns the active thread binding and resource-scoped thread operations. Stored threads and messages can survive controller recreation when storage is configured. Conversation settings such as mode, model, thinking level, token usage, and pending runs are restored from the active thread when the session creates or switches threads. The live session and its event bus don't persist.
+`session.thread` owns the active thread binding and resource-scoped thread operations. Stored threads and messages can survive controller recreation when storage is configured. Conversation settings such as mode, model, thinking level, token usage, pending runs, and ownership are restored from the active thread when the session creates or switches threads. The live session and its event bus don't persist.
+
+New threads store the Session host's `ownerId` in the reserved `metadata.ownerId` and `metadata.createdBy` fields. Clones use the cloning Session host for both fields. Existing threads without `metadata.ownerId` read as owned by the current Session host without writing a backfill.
 
 ### `session.thread.create({ title?, id?, requestContext? })`
 
@@ -424,6 +426,44 @@ Return the active thread ID, creating and binding a new thread when none is boun
 ```typescript
 const threadId = await session.thread.ensureId()
 ```
+
+### `session.thread.getOwner({ threadId? })`
+
+Return a thread's durable owner. Omit `threadId` to read the active thread. The method returns `undefined` when no thread is selected. An owner-less legacy thread returns the Session host's `ownerId` without writing a backfill.
+
+```typescript
+const ownerId = await session.thread.getOwner()
+```
+
+Returns: `Promise<string | undefined>`
+
+### `session.thread.transferOwnership({ threadId?, toOwnerId, expectedOwnerId })`
+
+Compare the current thread owner to `expectedOwnerId`. When they match, store `toOwnerId` in `metadata.ownerId` and emit `thread_owner_changed`. The original `metadata.createdBy` value doesn't change. Omit `threadId` to transfer the active thread.
+
+```typescript
+const result = await session.thread.transferOwnership({
+  toOwnerId: 'user-456',
+  expectedOwnerId: 'user-123',
+})
+```
+
+Returns: `Promise<{ ok: true } | { ok: false; currentOwnerId: string | undefined }>`
+
+Transfers are atomic within one process. Configure the controller's `threadLock` for coordination across processes. Storage-backed applications that require a durable cross-process compare-and-set should perform it in their own store first, then call this method to mirror the result.
+
+A successful change emits:
+
+```typescript
+const event = {
+  type: 'thread_owner_changed',
+  threadId: 'thread-7',
+  fromOwnerId: 'user-123',
+  toOwnerId: 'user-456',
+}
+```
+
+Runs snapshot ownership when they start. Within agent tools and dynamic runtime functions, `AgentControllerRequestContext.threadOwnerId` remains unchanged for the run's lifetime. A transfer becomes visible on the next run. `AgentControllerRequestContext.session.ownerId` continues to identify the process-local Session host.
 
 ### `session.thread.list(options?)`
 

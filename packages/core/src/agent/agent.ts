@@ -1228,6 +1228,20 @@ export class Agent<
     return (runId, scope) => agentThreadStreamRuntime.drainPendingSignals(runId, pubsub, scope);
   }
 
+  /** @internal Read one JSON-safe request-context value captured in a suspended run snapshot. */
+  async __getSuspendedRunRequestContextValue({ runId, key }: { runId: string; key: string }): Promise<unknown> {
+    try {
+      const snapshot = await this.#loadAgenticLoopSnapshotOrThrow({
+        runId,
+        method: '__getSuspendedRunRequestContextValue',
+      });
+      return snapshot.requestContext?.[key];
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'AGENT_RESUME_NO_SNAPSHOT_FOUND') return undefined;
+      throw error;
+    }
+  }
+
   /**
    * Registers the agent the shared `AgentThreadStreamRuntime` calls back into
    * for this agent's signal, message, and subscription APIs. The runtime starts

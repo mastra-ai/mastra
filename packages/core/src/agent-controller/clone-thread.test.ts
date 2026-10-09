@@ -83,6 +83,7 @@ describe('AgentController cloneThread', () => {
       sourceThreadId: 'source-thread-id',
       resourceId: 'target-resource',
       title: 'New title',
+      metadata: { ownerId: 'test-owner', createdBy: 'test-owner' },
     });
     expect(storageCloneThread).not.toHaveBeenCalled();
     expect(cloned.id).toBe('cloned-thread-id');
@@ -271,6 +272,7 @@ describe('AgentController cloneThread', () => {
       sourceThreadId: 'source-thread-id',
       resourceId: 'target-resource',
       title: 'Storage clone',
+      metadata: { ownerId: 'test-owner', createdBy: 'test-owner' },
     });
     expect(cloned.id).not.toBe('source-thread-id');
     expect(cloned.resourceId).toBe('target-resource');
