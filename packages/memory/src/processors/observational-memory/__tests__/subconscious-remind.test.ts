@@ -177,6 +177,41 @@ describe('Subconscious remind', () => {
     );
   });
 
+  it('attaches openable source nodes to the remembered signal', async () => {
+    const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
+    const context = createContext('Project Atlas launches January 15.');
+    const store = await context.memory.storage.getStore('knowledge');
+    const node = await store.createNode({
+      name: 'Project Atlas',
+      kind: 'project',
+      scope: ['org:acme', 'resource:user-42'],
+    });
+    const record = await store.appendKnowledge({
+      node,
+      text: 'Project Atlas launches January 15.',
+      scope: ['org:acme', 'resource:user-42'],
+      sourceThreadId: 'beta',
+      resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
+      defaultScope: ['org:acme', 'resource:user-42'],
+    });
+    context.mainAgent.getModel = vi.fn(async () =>
+      createModel(`Project Atlas launches January 15. Source: ${record.id}`, undefined, true),
+    );
+
+    await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling Project Atlas.',
+      ...context,
+    });
+
+    const signal = vi.mocked(context.sendSignal).mock.calls[0]![0] as { attributes: Record<string, string> };
+    expect(signal.attributes.sourceIds).toBe(record.id);
+    expect(JSON.parse(signal.attributes.sourceNodes!)).toEqual([
+      { nodeId: node.id, name: 'Project Atlas', recordId: record.id },
+    ]);
+  });
+
   it.each(['Project Atlas launches January 15.', 'Project Atlas launches January 15. Source: invented-record-id'])(
     'suppresses an ungrounded reminder: %s',
     async response => {
