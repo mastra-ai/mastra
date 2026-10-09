@@ -62,7 +62,11 @@ function createController(storage = new InMemoryStore()) {
       workspace: createMockWorkspace(),
       id: 'thread-owner-controller',
       storage,
-      modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      initialState: { thinkingLevel: 'low' },
+      modes: [
+        { id: 'default', name: 'Default', default: true, defaultModelId: 'openai/gpt-5.5', agent },
+        { id: 'plan', name: 'Plan', defaultModelId: 'openai/gpt-5.2-codex', agent },
+      ],
     }),
   };
 }
@@ -175,16 +179,27 @@ describe('AgentController thread ownership', () => {
     await expect(session.thread.getOwner()).resolves.toBe('owner-a');
   });
 
-  it('does not expose owner metadata as session tags', async () => {
+  it('preserves owner metadata through startup thread creation without exposing it as tags', async () => {
     const { controller } = createController();
     await controller.init();
     const session = await controller.createSession({
       id: 'session-a',
       ownerId: 'owner-a',
       tags: { projectPath: '/repo', ownerId: 'spoofed', createdBy: 'spoofed' },
+      createInitialThread: false,
     });
+    await session.mode.switch({ modeId: 'plan' });
+    await session.model.switch('kimi-for-coding/kimi-for-coding', { thinkingLevel: 'high' });
+    const threadId = await session.thread.ensureId();
 
     expect(session.getTags()).toEqual({ projectPath: '/repo' });
+    expect((await session.thread.getById({ threadId }))?.metadata).toMatchObject({
+      ownerId: 'owner-a',
+      createdBy: 'owner-a',
+      currentModeId: 'plan',
+      currentModelId: 'kimi-for-coding/kimi-for-coding',
+      thinkingLevel: 'high',
+    });
   });
 
   it('snapshots threadOwnerId at run start and exposes a transfer on the next run', async () => {

@@ -142,7 +142,13 @@ describe('AgentController: ask_user native suspension', () => {
     const heldStream = Promise.withResolvers<ReadableStreamDefaultController>();
     const writeEntered = Promise.withResolvers<void>();
     const releaseWrite = Promise.withResolvers<void>();
-    const observations: { level: unknown; mode: string; model: string; thread: string | null }[] = [];
+    const observations: {
+      level: unknown;
+      mode: string;
+      model: string;
+      thread: string | null;
+      owner: string | undefined;
+    }[] = [];
     type State = { yolo: boolean; thinkingLevel: string; hostCount: number };
     const create = async () => {
       const tool = createTool({
@@ -167,6 +173,7 @@ describe('AgentController: ask_user native suspension', () => {
             mode: controller.session.modeId,
             model: controller.session.modelId,
             thread: controller.threadId,
+            owner: controller.threadOwnerId,
           });
           await controller.setState({ thinkingLevel: 'medium' });
           expect(controller.state.thinkingLevel).toBe('high');
@@ -281,6 +288,10 @@ describe('AgentController: ask_user native suspension', () => {
     await fixture.session.sendMessage({ content: 'Ask' });
     const address = fixture.session.suspensions.resolveAddress({ toolCallId: 'owned-1' })!;
     expect(address, JSON.stringify(sourceEvents)).toBeDefined();
+    if (recovery === 'cold-storage-only') {
+      await fixture.session.thread.transferOwnership({ toOwnerId: 'transferred-owner', expectedOwnerId: 'owner' });
+      await expect(fixture.session.thread.getOwner()).resolves.toBe('transferred-owner');
+    }
     if (!recovery.startsWith('warm')) {
       await vi.waitFor(async () =>
         expect(
@@ -599,6 +610,7 @@ describe('AgentController: ask_user native suspension', () => {
           mode: 'source',
           model: 'kimi-for-coding/kimi-for-coding',
           thread: address.threadId,
+          owner: 'owner',
         })),
       );
       expect(session.thread.getId()).toBe(threadB.id);
