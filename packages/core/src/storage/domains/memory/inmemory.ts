@@ -256,9 +256,11 @@ export class InMemoryMemory extends MemoryStorage {
     } else if (metadataFilter) {
       hasMore = offset + paginatedThreadMessages.length < totalThreadMessages;
     } else if (include && include.length > 0) {
-      // When using include, check if we've returned all messages from the thread
+      // When using include, check if we've returned all messages from the queried threads
       // because include might bring in messages beyond the pagination window
-      const returnedThreadMessageIds = new Set(messages.filter(m => m.threadId === threadId).map(m => m.id));
+      const returnedThreadMessageIds = new Set(
+        messages.filter(m => m.threadId && threadIdSet.has(m.threadId)).map(m => m.id),
+      );
       hasMore = returnedThreadMessageIds.size < totalThreadMessages;
     } else {
       // Standard pagination: check if there are more pages
