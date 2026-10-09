@@ -67,6 +67,7 @@ patchedDependencies:
   '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
   '@joshwooding/vite-plugin-react-docgen-typescript@0.7.0': patches/@joshwooding__vite-plugin-react-docgen-typescript@0.7.0.patch
   '@manypkg/tools@2.1.1': patches/@manypkg__tools@2.1.1.patch
+  fetch-to-node@2.1.0: patches/fetch-to-node@2.1.0.patch
   gray-matter@4.0.3: patches/gray-matter@4.0.3.patch
   react-docgen-typescript@2.4.0: patches/react-docgen-typescript@2.4.0.patch
   read-yaml-file@1.1.0: patches/read-yaml-file@1.1.0.patch
