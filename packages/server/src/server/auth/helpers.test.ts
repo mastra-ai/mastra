@@ -235,6 +235,15 @@ describe('auth helpers', () => {
   });
 
   describe('isCustomRoutePublic', () => {
+    it('should let an overlapping protected pattern win over an earlier public pattern', () => {
+      const config = new Map<string, boolean>([
+        ['GET:/custom/*', false],
+        ['GET:/custom/private/:id', true],
+      ]);
+      expect(isCustomRoutePublic('/custom/private/123', 'GET', config)).toBe(false);
+      expect(isCustomRoutePublic('/custom/other', 'GET', config)).toBe(true);
+    });
+
     it('should return false when customRouteAuthConfig is undefined', () => {
       expect(isCustomRoutePublic('/api/test', 'GET', undefined)).toBe(false);
     });
@@ -551,6 +560,44 @@ describe('auth helpers', () => {
       } finally {
         process.env.MASTRA_DEV = originalEnv;
       }
+    });
+  });
+
+  describe('coreAuthMiddleware - public custom routes', () => {
+    const customRouteAuthConfig = new Map<string, boolean>([
+      ['GET:/custom/health', false],
+      ['POST:/webhooks/:id', false],
+      ['GET:/custom/private', true],
+    ]);
+
+    const run = (path: string, method: string, requiresAuth?: boolean) =>
+      coreAuthMiddleware({
+        path,
+        method,
+        getHeader: () => undefined,
+        mastra: { getServer: () => ({}), getLogger: () => null } as any,
+        authConfig: { protected: ['/*'], authenticateToken: async () => null },
+        customRouteAuthConfig,
+        requestContext: { get: () => undefined, set: () => {} } as any,
+        rawRequest: {},
+        token: undefined,
+        requiresAuth,
+        buildAuthorizeContext: () => null,
+      } as any);
+
+    it('passes static and parameterized custom routes with requiresAuth false', async () => {
+      expect((await run('/custom/health', 'GET')).action).toBe('next');
+      expect((await run('/webhooks/abc', 'POST')).action).toBe('next');
+    });
+
+    it('still authenticates other methods, private routes, and unregistered routes', async () => {
+      expect((await run('/custom/health', 'POST')).action).toBe('error');
+      expect((await run('/custom/private', 'GET')).action).toBe('error');
+      expect((await run('/custom/unknown', 'GET')).action).toBe('error');
+    });
+
+    it('still authenticates when the middleware explicitly requires auth', async () => {
+      expect((await run('/custom/health', 'GET', true)).action).toBe('error');
     });
   });
 

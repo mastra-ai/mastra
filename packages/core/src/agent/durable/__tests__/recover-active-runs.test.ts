@@ -19,6 +19,7 @@ import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
+import { globalRunRegistry } from '../run-registry';
 
 function makeSnapshot(
   runId: string,
@@ -96,7 +97,10 @@ async function seed(store: InMemoryStore, snapshot: WorkflowRunState, resourceId
  * without exercising the real agentic loop. Returns the recorded runIds and
  * a controller that lets tests make specific restarts fail.
  */
-function stubWorkflow(agent: DurableAgent, behavior: { failFor?: Set<string> } = {}): { restartedRunIds: string[] } {
+function stubWorkflow(
+  agent: DurableAgent,
+  behavior: { failFor?: Set<string>; status?: WorkflowRunStatus } = {},
+): { restartedRunIds: string[] } {
   const restartedRunIds: string[] = [];
   const failFor = behavior.failFor ?? new Set<string>();
   const fakeWorkflow = {
@@ -106,7 +110,7 @@ function stubWorkflow(agent: DurableAgent, behavior: { failFor?: Set<string> } =
         if (failFor.has(runId)) {
           throw new Error(`boom-${runId}`);
         }
-        return { status: 'success' };
+        return { status: behavior.status ?? 'success' };
       }),
     })),
   };
@@ -172,6 +176,47 @@ describe('DurableAgent.recoverActiveRuns', () => {
     expect(failed).toBe(0);
     expect(restartedRunIds).toEqual(['run-mine']);
     expect(recovered).toEqual([{ runId: 'run-mine', status: 'success' }]);
+  });
+
+  it('keeps a run that suspends during recovery registered so it can be resumed (#25891)', async () => {
+    await seed(
+      store,
+      makeSnapshot('run-suspends', 'running', { agentId: 'agent-A', threadId: 't', resourceId: 'r' }),
+      'r',
+    );
+    stubWorkflow(agent, { status: 'suspended' });
+
+    const { succeeded } = await agent.recoverActiveRuns();
+    expect(succeeded).toBe(1);
+    expect(globalRunRegistry.get('run-suspends')).toBeDefined();
+    globalRunRegistry.delete('run-suspends');
+  });
+
+  it('cleans up a finished recovered run when cleanupTimeoutMs is 0 (#25891)', async () => {
+    const baseAgent = new Agent({ id: 'agent-Z', name: 'agent-Z', instructions: 'x', model: makeMockModel() });
+    const zeroStore = new InMemoryStore();
+    const zeroAgent = createDurableAgent({ agent: baseAgent, cleanupTimeoutMs: 0 });
+    void new Mastra({ agents: { 'agent-Z': zeroAgent as any }, storage: zeroStore });
+    await seed(
+      zeroStore,
+      makeSnapshot('run-done', 'running', { agentId: 'agent-Z', threadId: 't', resourceId: 'r' }),
+      'r',
+    );
+    stubWorkflow(zeroAgent);
+    const recover = zeroAgent.recover.bind(zeroAgent);
+    let onFinish: (() => void) | undefined;
+    vi.spyOn(zeroAgent, 'recover').mockImplementation(async (runId, options) => {
+      onFinish = options?.onFinish as () => void;
+      return recover(runId, options);
+    });
+
+    const { succeeded } = await zeroAgent.recoverActiveRuns();
+    expect(succeeded).toBe(1);
+    // Stays registered until the terminal event is delivered.
+    expect(globalRunRegistry.get('run-done')).toBeDefined();
+    onFinish?.();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(globalRunRegistry.get('run-done')).toBeUndefined();
   });
 
   it('honors discovery filters (threadId)', async () => {

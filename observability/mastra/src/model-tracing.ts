@@ -609,6 +609,17 @@ export class ModelSpanTracker {
   }
 
   /**
+   * End the open MODEL_INFERENCE span as interrupted while keeping MODEL_STEP open,
+   * so a replacement request for the same step gets its own inference span.
+   */
+  interruptInference(): void {
+    this.#endChunkSpan();
+    if (!this.#currentInferenceSpan) return;
+    this.#currentInferenceSpan.end({ attributes: { finishReason: 'interrupted' } });
+    this.#currentInferenceSpan = undefined;
+  }
+
+  /**
    * Update the current step span with additional payload data.
    * Called when step-start chunk arrives with request/warnings info.
    */
