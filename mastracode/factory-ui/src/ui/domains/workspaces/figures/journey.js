@@ -44,8 +44,8 @@ function geometry() {
     const ring=fillet(points.map(([x,y])=>{const u=(right?-42-x:x)+21,v=y-103;return [-21+(u+v)*Math.SQRT1_2,107+(-u+v)*Math.SQRT1_2];}),points.map(()=>1));
     code.push(repository(surface(ring.map(([x,y])=>P(x,y,14)),[])));
   }
-  const a=repository(P(14,100,11)),b=P(-60,40,10).map((n,i)=>miniature(n,i));
-  const codeLink=[...a,a[0]+24,a[1],b[0]-24,b[1],...b];
+  const a=repository(P(14,100,11)),b=P(-31,40,17).map((n,i)=>miniature(n,i)),c=P(-31,14,17).map((n,i)=>miniature(n,i));
+  const codeLink=[...a,a[0]+24,a[1],...b,...c];
   return {P,front,factory,code,codeLink,workshop:factory.slice(0,3).map(q=>q.map((n,i)=>miniature(n,i%2,[80,197])))};
 }
 function poses(scene,mode,objects) {
@@ -55,7 +55,7 @@ function poses(scene,mode,objects) {
 function corePoses(scene,mode,objects) {
   if(scene==='factory')return objects.factory;
   if(scene==='codebase')return objects.code;
-  if(scene==='intake')return [panel(28,48,148,64),panel(28,186,104,72),panel(148,186,104,44,true),panel(268,186,104,44,true),panel(28,271,104,20,true),folded];
+  if(scene==='intake')return [panel(28,48,148,64),panel(28,186,104,58),panel(148,186,104,36,true),panel(268,186,104,36,true),folded,folded];
   return [panel(28,156,104,94,true),panel(148,156,104,94,true),panel(268,156,104,94,true),panel(148,48,104,42),
     mode==='individual'?panel(28,48,104,42):folded,mode==='shared'?folded:panel(268,48,104,42)];
 }
@@ -71,10 +71,20 @@ const at=(q,t)=>[0,1].map(k=>(1-t)**3*q[k]+3*(1-t)**2*t*q[k+2]+3*(1-t)*t*t*q[k+4
 const ease=t=>{const x=Math.max(0,Math.min(1,t));return x*x*(3-2*x);};
 const blend=(a,b,t)=>a.map((v,i)=>v+(b[i]-v)*t);
 const envelope=p=>ease(p/.1)*(1-ease((p-.88)/.1));
-const panelShape=(x,y,i)=>panel(x,y,104,i===1?72:44,i!==1);
-function boardFrame(p) {
-  const first=ease((p-.24)/.12),second=ease((p-.55)/.12);
-  return [28+120*(first+second),186+8*(1-ease(p/.1))-4*Math.sin(Math.PI*first)-4*Math.sin(Math.PI*second)-6*ease((p-.88)/.1),envelope(p)];
+const panelShape=(x,y,i)=>panel(x,y,104,i===1?58:36,i!==1);
+// Independent jobs use two slots in Build/Review; no card pushes its neighbour.
+// A move completes at 1.4s, then the next starts at 2.4s. Resets stay invisible.
+const boardTracks=[
+  [[0,28,186,1],[.6,28,186,1],[1.4,148,234,1],[4.3,148,234,1],[5.1,268,234,1],[9.8,268,234,1],[10.4,268,234,0],[12.1,28,186,0],[12.7,28,186,1],[14,28,186,1]],
+  [[0,148,186,1],[2.4,148,186,1],[3.2,268,186,1],[7.2,268,186,1],[7.8,268,186,0],[9.8,28,186,0],[10.4,28,186,1],[11.1,28,186,1],[11.9,148,186,1],[14,148,186,1]],
+  [[0,268,186,1],[.2,268,186,1],[.8,268,186,0],[1.7,28,186,0],[2.3,28,186,1],[6.1,28,186,1],[6.9,148,186,1],[8.3,148,186,1],[9.1,268,186,1],[14,268,186,1]],
+];
+function boardFrame(t,i) {
+  const track=boardTracks[i-1],end=track.findIndex(q=>q[0]>t),a=track[Math.max(0,end-1)],b=track[end<0?track.length-1:end],v=ease((t-a[0])/(b[0]-a[0]||1));
+  const q=blend(a.slice(1),b.slice(1),v);
+  if(i===1&&t>=.6&&t<=1.4)return [...at([28,186,28,260,148,260,148,234],v),1];
+  if(a[1]!==b[1]&&q[2]>0)q[1]-=4*Math.sin(Math.PI*v);
+  return q;
 }
 function mount({stage,svg,read,onIntakeFrame},value) {
   const bag=disposer(),root=mk('g',{},svg),objects=geometry();
@@ -82,18 +92,20 @@ function mount({stage,svg,read,onIntakeFrame},value) {
   const links=routes(scene,mode,objects).map(q=>({el:mk('path',{class:'nf lo'},root),tw:q.map(v=>tween(v)),drawn:''}));
   const packets=Array.from({length:3},()=>({el:mk('path',{class:'sil'},root),drawn:''})),assembly=mk('g',{},root);
   const parts=[solid(assembly),solid(assembly),solid(assembly),solid(assembly),solid(assembly)];
-  const details=mk('path',{class:'nf lo'},assembly);
+  const interior=mk('path',{class:'nf lo'},assembly),details=mk('path',{class:'nf lo'},assembly);
+  parts[4].sil.setAttribute('fill-rule','evenodd');
   let bodyTween=tween(['factory','codebase','setup'].includes(scene)?1:0),baseTween=tween(scene==='factory'?0:1),bodyDrawn='';
   let placement=bodyPose(scene).map(n=>tween(n));
   const panels=poses(scene,mode,objects).map((q,i)=>{
     const g=mk('g',{},root),face=mk('path',{class:i===3?'sil hi':'sil'},g),marks=mk('path',{class:'nf lo'},g);
-    return {g,face,marks,tw:q.map(v=>tween(v)),lift:tween(0),reveal:1,drawn:''};
+    return {g,face,marks,tw:q.map(v=>tween(v)),drawn:''};
   });
   // The conveyor is behind the building: tickets disappear through the entrance,
   // and completed work emerges through the opposite wall, never over the roof.
   function order() {
     panels.forEach(panel=>root.append(panel.g));
-    if(scene==='factory')parts[1].g.after(panels[3].g,panels[4].g);
+    parts[1].g.after(interior);
+    if(scene==='factory')interior.after(panels[3].g,panels[4].g);
   }
   order();
   function drawBody(amount,base,position) {
@@ -103,26 +115,30 @@ function mount({stage,svg,read,onIntakeFrame},value) {
     const feet=[[-66,-41,130,86,-5,0],[-66,-41,130,86,-5,0]];
     [[-52,38,40,104,0,7],[54,-14,91,46,0,7],[30,-34,16,16,0,93],[28,-36,20,20,89,96],[-60,-35,117,75,0,39]].forEach((values,i)=>{
       const [x,y,w,h,z,top]=values.map((v,k)=>i<2?v+(feet[i][k]-v)*base:v);
-      const [ring,inner]=rings(x,y,x+w,y+h,2,1);put(parts[i],prism(P,objects.front,ring,inner,z,top));
+      const [ring,inner]=rings(x,y,x+w,y+h,2,1),shape=prism(P,objects.front,ring,inner,z,top);
+      if(i===4)shape.sil+=poly(rounded([P(-52,40,7),P(-52,40,28),P(-10,40,28),P(-10,40,7)],1.5))+poly(rounded([P(57,-10,7),P(57,-10,28),P(57,28,28),P(57,28,7)],1.5));
+      put(parts[i],shape);
     });
-    const wall=(x,z)=>P(x,40,z),side=(y,z)=>P(57,y,z);
-    details.setAttribute('d',[
-      open(rounded([wall(-49,8),wall(-49,31),wall(-13,31),wall(-13,8)])),
-      open(rounded([side(-9,8),side(-9,31),side(26,31),side(26,8)])),
-      ...[15,23].map(z=>seg(wall(3,z),wall(32,z))),
+    // Actual openings, with the belt at the same z=7 threshold; recessed
+    // jambs are behind the wall and become visible only through the openings.
+    interior.setAttribute('d',[
+      open([P(-52,40,28),P(-52,27,28),P(-10,27,28),P(-10,40,28)]),
+      open([P(-52,27,28),P(-52,27,7),P(-52,40,7)]),
+      open([P(57,-10,28),P(44,-10,28),P(44,28,28),P(57,28,28)]),
+      open([P(44,-10,28),P(44,-10,7),P(57,-10,7)]),
     ].join(''));
+    details.setAttribute('d',[15,23].map(z=>seg(P(3,40,z),P(32,40,z))).join(''));
   }
-  function drawPanel(panel,q,lift,reveal=1) {
-    panel.reveal=reveal;
-    const key=q.join(',')+lift+','+reveal;if(panel.drawn===key)return;panel.drawn=key;
+  function drawPanel(panel,q,reveal=1) {
+    const key=q.join(',')+','+reveal;if(panel.drawn===key)return;panel.drawn=key;
     const center=[0,1].map(k=>{const values=Array.from({length:48},(_,i)=>q[i*2+k]);return (Math.min(...values)+Math.max(...values))/2;});
     q=q.map((v,i)=>center[i%2]+(v-center[i%2])*reveal);
-    panel.rendered=q.map((v,k)=>k%2?v-lift:v);
-    const points=Array.from({length:48},(_,i)=>[q[i*2],q[i*2+1]-lift]);
+    panel.rendered=q;
+    const points=Array.from({length:48},(_,i)=>[q[i*2],q[i*2+1]]);
     const area=Math.abs(points.reduce((a,p,i)=>a+p[0]*points[(i+1)%48][1]-p[1]*points[(i+1)%48][0],0));
     panel.g.setAttribute('display',area<1?'none':'');if(area<1)return;
     panel.face.setAttribute('d',poly(points));
-    panel.marks.setAttribute('d',Array.from({length:8},(_,i)=>seg([q[96+i*4],q[97+i*4]-lift],[q[98+i*4],q[99+i*4]-lift])).join(''));
+    panel.marks.setAttribute('d',Array.from({length:8},(_,i)=>seg([q[96+i*4],q[97+i*4]],[q[98+i*4],q[99+i*4]])).join(''));
   }
   function tick(dt,now) {
     let moving=false;
@@ -135,15 +151,15 @@ function mount({stage,svg,read,onIntakeFrame},value) {
     panels.forEach((panel,i)=>{
       let q=panel.tw.map(tw=>tval(tw,now)),reveal=1;
       if(scene==='factory'&&(i===3||i===4)&&weight>0) {
-        const p=(phase+(i===4?.5:0))%1,origin=objects.P(0,0,0),end=objects.P(i===4?-92+92*ease(p):0,i===3?10-116*ease(p):0,0);
+        const p=(phase+(i===4?.35:0))%1,origin=objects.P(0,0,0),end=objects.P(i===4?-92+92*ease(p):0,i===3?10-116*ease(p):0,0);
         q=blend(q,objects.factory[i].map((v,k)=>v+end[k%2]-origin[k%2]),weight);reveal+= (envelope(p)-reveal)*weight;
       }
       if(scene==='intake'&&i>=1&&i<=3) {
-        const p=(clock/14+.17+(i-1)/3)%1,[x,y,alpha]=boardFrame(p);
+        const [x,y,alpha]=boardFrame(clock%14,i);
         q=blend(q,panelShape(x,y,i),weight);reveal+=(alpha-reveal)*weight;
         if(i===1){const xLabel=36+(x-28)*weight,yLabel=196+(y-186)*weight,key=[xLabel,yLabel,reveal].join();if(key!==labelDrawn){labelDrawn=key;onIntakeFrame?.(xLabel,yLabel,ease((reveal-.65)/.35));}}
       }
-      drawPanel(panel,q,tval(panel.lift,now),reveal);if(panel.tw.some(tw=>!tdone(tw,now))||!tdone(panel.lift,now))moving=true;
+      drawPanel(panel,q,reveal);if(panel.tw.some(tw=>!tdone(tw,now)))moving=true;
     });
     packets.forEach((packet,i)=>{
       const route=links[scene==='codebase'?0:i].tw.map(tw=>tval(tw,now)),p=(clock/4.8+i/3)%1,point=at(route,ease(p));
@@ -155,22 +171,19 @@ function mount({stage,svg,read,onIntakeFrame},value) {
   const loop=register(stage,tick);bag.add(loop.unregister);tick(0,performance.now());
   function retarget(immediate=false) {
     const now=performance.now();clock=0;ready=false;flow=tween(0);order();
-    panels.forEach(panel=>{if(!immediate&&panel.rendered)panel.tw=panel.rendered.map(v=>tween(v));panel.lift=tween(0);});
+    panels.forEach(panel=>{if(!immediate&&panel.rendered)panel.tw=panel.rendered.map(v=>tween(v));});
     poses(scene,mode,objects).forEach((q,i)=>q.forEach((v,k)=>{if(immediate)panels[i].tw[k]=tween(v);else tset(panels[i].tw[k],v,now,Math.abs(i-1)*stagger);}));
     routes(scene,mode,objects).forEach((q,i)=>q.forEach((v,k)=>{if(immediate)links[i].tw[k]=tween(v);else tset(links[i].tw[k],v,now,0);}));
     const body=['factory','codebase','setup'].includes(scene)?1:0,base=scene==='factory'?0:1;
     bodyPose(scene).forEach((v,i)=>{if(immediate)placement[i]=tween(v);else tset(placement[i],v,now,0);});
     if(immediate){bodyTween=tween(body);baseTween=tween(base);}else{tset(bodyTween,body,now,0);tset(baseTween,base,now,0);}
     active=-1;
-    panels.forEach((panel,i)=>{tset(panel.lift,0,now,0);panel.face.classList.toggle('hi',i===(scene==='factory'||scene==='codebase'||scene==='setup'?3:0));});read.textContent='rest';loop.wake();
+    panels.forEach((panel,i)=>{panel.face.classList.toggle('hi',i===(scene==='factory'||scene==='codebase'||scene==='setup'?3:0));});read.textContent='rest';loop.wake();
   }
   function select(next) {
-    if(active===next)return;active=next;const now=performance.now();
+    if(active===next)return;active=next;
     const chosen=scene==='factory'?(next<1?3:next===1?1:4):scene==='codebase'?(next<1?3:1):scene==='intake'?(next<=0?0:1):scene==='setup'?(next<0?3:next===0?1:next+5):Math.max(next,0);
-    panels.forEach((panel,i)=>{
-      const lift=0;
-      tset(panel.lift,lift,now,Math.abs(i-chosen)*stagger);panel.face.classList.toggle('hi',i===chosen);
-    });
+    panels.forEach((panel,i)=>panel.face.classList.toggle('hi',i===chosen));
     read.textContent=next<0?'rest':['source','in progress','ready'][next];loop.wake();
   }
   bag.add(pointer(stage,{move:([x,y])=>{if(x<5||x>395||y<25||y>285)return select(-1);select(scene==='intake'?(y<115?0:y<178?1:2):x<140?0:x<260?1:2);},leave:()=>select(-1)}));
