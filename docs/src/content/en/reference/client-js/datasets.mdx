@@ -317,6 +317,42 @@ await client.deleteDatasetExperiment('dataset-id', 'experiment-id', {
 
 Returns `Promise<{ success: boolean }>`. A missing experiment, an experiment associated with another dataset, or a dataset outside the supplied tenancy returns a `404` response.
 
+## getExperiment()
+
+Gets an experiment by ID without requiring a dataset reference. The response includes the experiment's `datasetId`, so use this method when you only know the experiment ID.
+
+```typescript
+const experiment = await client.getExperiment('experiment-id', {
+  organizationId: 'organization-id',
+  projectId: 'project-id',
+})
+console.log(experiment.datasetId)
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'experimentId',
+    type: 'string',
+    description: 'ID of the experiment to get.',
+  },
+  {
+    name: 'options.organizationId',
+    type: 'string',
+    isOptional: true,
+    description: 'Organization ID used to scope the lookup.',
+  },
+  {
+    name: 'options.projectId',
+    type: 'string',
+    isOptional: true,
+    description: 'Project ID used to scope the lookup.',
+  },
+]}
+/>
+
+Returns `Promise<DatasetExperiment>`. A missing experiment, or one outside the supplied tenancy, returns a `404` response.
+
 ## deleteExperiment()
 
 Deletes an experiment by ID without requiring a dataset reference. Use this method for experiments orphaned by dataset deletion. The server deletes the experiment's observability traces and then deletes the experiment and its result records. Unsupported storage leaves the traces in place, and the server logs a warning. If trace deletion fails for any other reason, the promise rejects and Mastra keeps the experiment and its result records, although some traces may already have been removed.
