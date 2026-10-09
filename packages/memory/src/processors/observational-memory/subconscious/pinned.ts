@@ -1,5 +1,5 @@
 import type { KnowledgeRecord, KnowledgeScope, KnowledgeScopeLevel, KnowledgeStorage } from '@mastra/core/storage';
-import { assertKnowledgeScopeWithinCeiling, expandKnowledgeScope, isKnowledgeScopeVisible } from '@mastra/core/storage';
+import { expandKnowledgeScope, isKnowledgeScopeVisible } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
@@ -36,17 +36,8 @@ export interface PinnedToolsOptions {
   scope: KnowledgeScope;
   sourceThreadId: string;
   defaultScope: KnowledgeScopeLevel;
-  maxScope?: KnowledgeScopeLevel;
   maxPins: number;
   maxCharacters: number;
-}
-
-// The node sits at the resource level unless a `maxScope` ceiling narrows it
-// to the thread; creating a resource-level record under a thread ceiling would
-// bypass the ceiling.
-function pinnedNodeScope(scope: KnowledgeScope, maxScope?: KnowledgeScopeLevel): KnowledgeScope {
-  const level = maxScope === 'thread' ? 'thread' : PINNED_NODE_SCOPE_LEVEL;
-  return expandKnowledgeScope(scope, level);
 }
 
 // Resolution walks every visible scope level (nearest first), so the node is
@@ -57,17 +48,13 @@ async function resolvePinnedNodeId(store: KnowledgeStorage, scope: KnowledgeScop
 }
 
 /** Reuse the node wherever it is visible; otherwise create it. `createNode` is an idempotent upsert on (name, scope). */
-async function ensurePinnedNodeId(
-  store: KnowledgeStorage,
-  scope: KnowledgeScope,
-  maxScope?: KnowledgeScopeLevel,
-): Promise<string> {
+async function ensurePinnedNodeId(store: KnowledgeStorage, scope: KnowledgeScope): Promise<string> {
   const existing = await resolvePinnedNodeId(store, scope);
   if (existing) return existing;
   const node = await store.createNode({
     name: PINNED_NODE_NAME,
     kind: PINNED_NODE_KIND,
-    scope: pinnedNodeScope(scope, maxScope),
+    scope: expandKnowledgeScope(scope, PINNED_NODE_SCOPE_LEVEL),
   });
   return node.id;
 }
@@ -127,14 +114,7 @@ function clampPinLevel(level: KnowledgeScopeLevel): KnowledgeScopeLevel {
 }
 
 function resolveWriteScope(options: PinnedToolsOptions, level?: KnowledgeScopeLevel): KnowledgeScope {
-  // An unscoped pin under a thread ceiling narrows to the ceiling instead of
-  // failing the assert on every call: pins are model-driven, so a config that
-  // makes the default request throw would be a tool error every turn.
-  let effective = clampPinLevel(level ?? options.defaultScope);
-  if (!level && options.maxScope === 'thread') effective = 'thread';
-  const scope = expandKnowledgeScope(options.scope, effective);
-  assertKnowledgeScopeWithinCeiling(scope, options.maxScope);
-  return scope;
+  return expandKnowledgeScope(options.scope, clampPinLevel(level ?? options.defaultScope));
 }
 
 const scopeLevelSchema: JSONSchema7 = { type: 'string', enum: ['resource', 'thread'] };
@@ -148,13 +128,12 @@ async function writePinnedKnowledge(
 ): Promise<KnowledgeRecord> {
   const { pins } = await listPinnedKnowledge({ store, scope: options.scope });
   assertBudget(options, pins, text);
-  const nodeId = await ensurePinnedNodeId(store, options.scope, options.maxScope);
+  const nodeId = await ensurePinnedNodeId(store, options.scope);
   return store.appendKnowledge({
     node: nodeId,
     text,
     scope: resolveWriteScope(options, level),
     sourceThreadId: options.sourceThreadId,
-    maxScope: options.maxScope,
     metadata,
     resolutionScope: options.scope,
     defaultScope: expandKnowledgeScope(options.scope, options.defaultScope),
@@ -264,7 +243,6 @@ export function createPinnedTools(
           text: value.text,
           scope: record.scope,
           sourceThreadId: options.sourceThreadId,
-          maxScope: record.maxScope,
           metadata: value.reason ? { ...record.metadata, reason: value.reason } : record.metadata,
           resolutionScope: options.scope,
           defaultScope: expandKnowledgeScope(options.scope, options.defaultScope),

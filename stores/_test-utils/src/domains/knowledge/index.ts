@@ -1,6 +1,38 @@
 import type { KnowledgeStorage } from '@mastra/core/storage';
-import { KnowledgeConflictError, MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
+import {
+  KnowledgeConflictError,
+  KnowledgeSchemaResetRequiredError,
+  MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
+} from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
+
+export interface KnowledgeSchemaResetFixture {
+  store: KnowledgeStorage;
+  snapshot: () => Promise<unknown>;
+  assertResetResult: () => Promise<void>;
+  cleanup: () => Promise<void>;
+}
+
+export function createKnowledgeSchemaResetTests(createFixture: () => Promise<KnowledgeSchemaResetFixture>): void {
+  describe('knowledge schema reset contract', () => {
+    it('rejects an incompatible schema without mutation until explicitly reset', async () => {
+      const fixture = await createFixture();
+      try {
+        const before = await fixture.snapshot();
+        expect(await fixture.store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+
+        await expect(fixture.store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+        expect(await fixture.snapshot()).toEqual(before);
+
+        await fixture.store.dangerouslyReset();
+        expect(await fixture.store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+        await fixture.assertResetResult();
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+  });
+}
 
 const resource = ['org:acme', 'resource:mastra'];
 const thread = [...resource, 'thread:t1'];
@@ -160,7 +192,6 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         sourceThreadId: 't1',
         resolutionScope: thread,
         defaultScope: resource,
-        maxScope: 'org',
       });
       const beforeMerge = (await store.listSemanticOutbox()).length;
       await store.mergeNodes({ sourceId: duplicate.id, targetId: target.id, sourceVersion: duplicate.version });
@@ -259,14 +290,27 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         text: 'private',
         scope: resource,
         sourceThreadId: 't1',
-        maxScope: 'resource',
         resolutionScope: thread,
         defaultScope: resource,
       });
-      await expect(store.rescopeKnowledge({ id: record.id, scope: ['org:acme'] })).rejects.toThrow('ceiling');
-      await store.raiseKnowledgeCeiling({ id: record.id, maxScope: 'org' });
-      await expect(store.raiseKnowledgeCeiling({ id: record.id, maxScope: 'resource' })).rejects.toThrow('lowered');
-      await store.rescopeKnowledge({ id: record.id, scope: ['org:acme'] });
+      // Knowledge v2 has no record ceilings: a record can be widened to any scope.
+      await expect(store.rescopeKnowledge({ id: record.id, scope: ['org:acme'] })).resolves.toMatchObject({
+        scope: ['org:acme'],
+      });
+      const widened = await store.getKnowledge({ id: record.id });
+      expect(widened?.scope).toEqual(['org:acme']);
+      expect(widened).not.toHaveProperty('maxScope');
+
+      const orgNode = await store.createNode({ name: 'Team practice', kind: 'task', scope: ['org:acme'] });
+      const orgRecord = await store.appendKnowledge({
+        node: orgNode.id,
+        text: 'Reviews happen on Tuesdays',
+        scope: ['org:acme'],
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+      expect((await store.getKnowledge({ id: orgRecord.id }))?.scope).toEqual(['org:acme']);
     });
 
     it('serializes semantic work for successive versions of the same document', async () => {

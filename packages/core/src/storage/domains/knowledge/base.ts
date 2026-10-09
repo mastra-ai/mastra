@@ -183,7 +183,6 @@ export interface KnowledgeRecord {
   sourceThreadId: string;
   capturedAt: Date;
   when?: Date;
-  maxScope?: KnowledgeScopeLevel;
   /** Free-form provenance, e.g. the capture agent's reasoning for keeping or pinning the item. */
   metadata?: Record<string, unknown>;
   deletedAt?: Date;
@@ -267,7 +266,6 @@ export interface AppendKnowledgeInput {
   scope: KnowledgeScope;
   sourceThreadId: string;
   when?: Date;
-  maxScope?: KnowledgeScopeLevel;
   metadata?: Record<string, unknown>;
   resolutionScope: KnowledgeScope;
   defaultScope: KnowledgeScope;
@@ -405,7 +403,9 @@ export class KnowledgeSchemaResetRequiredError extends Error {
   readonly inspection: Extract<KnowledgeSchemaInspection, { status: 'incompatible-reset-required' }>;
 
   constructor(inspection: Extract<KnowledgeSchemaInspection, { status: 'incompatible-reset-required' }>) {
-    super(`Knowledge schema reset required: ${inspection.reason}`);
+    super(
+      `Knowledge schema reset required: ${inspection.reason}. Existing Knowledge data is not migrated. To replace it, call \`await storage.stores?.knowledge?.dangerouslyReset()\`, which deletes every Knowledge row and nothing else.`,
+    );
     this.name = 'KnowledgeSchemaResetRequiredError';
     this.inspection = inspection;
   }
@@ -508,25 +508,25 @@ export function assertKnowledgeDescriptionWithinBound(description: string | unde
   }
 }
 
-export function assertKnowledgeScopeWithinCeiling(scope: KnowledgeScope, maxScope?: KnowledgeScopeLevel): void {
-  if (!maxScope) return;
-  const reservedLevels = scope
-    .map(entry => SCOPE_ORDER[entry.slice(0, entry.indexOf(':')) as KnowledgeScopeLevel])
-    .filter((value): value is number => value !== undefined);
-  const narrowestLevel = reservedLevels.length > 0 ? Math.max(...reservedLevels) : Number.MAX_SAFE_INTEGER;
-  if (narrowestLevel < SCOPE_ORDER[maxScope]) {
-    throw new Error(`Knowledge scope exceeds ${maxScope} ceiling`);
-  }
-}
+/**
+ * Knowledge v2 has no record scope ceilings: a write may target any scope level present in the
+ * conversation. Grant-based write enforcement is not implemented yet. Kept only so published
+ * `@mastra/memory` versions that import it still load; it never throws.
+ *
+ * @deprecated No longer enforced. Remove calls.
+ */
+export function assertKnowledgeScopeWithinCeiling(_scope: KnowledgeScope, _maxScope?: KnowledgeScopeLevel): void {}
 
+/**
+ * Knowledge v2 records have no scope ceiling to raise. Kept only so published store adapters
+ * that import it still load; it never throws.
+ *
+ * @deprecated No longer enforced. Remove calls.
+ */
 export function assertKnowledgeCeilingRaised(
-  currentMaxScope: KnowledgeScopeLevel | undefined,
-  maxScope: KnowledgeScopeLevel | undefined,
-): void {
-  if (currentMaxScope && maxScope && SCOPE_ORDER[maxScope] > SCOPE_ORDER[currentMaxScope]) {
-    throw new Error(`Knowledge ceiling cannot be lowered from ${currentMaxScope} to ${maxScope}`);
-  }
-}
+  _currentMaxScope: KnowledgeScopeLevel | undefined,
+  _maxScope: KnowledgeScopeLevel | undefined,
+): void {}
 
 export function parseKnowledgeWikilinks(text: string): string[] {
   const names: string[] = [];
@@ -637,7 +637,6 @@ export abstract class KnowledgeStorage extends StorageDomain {
   abstract removeKnowledge(input: { id: string; deletedBy: string }): Promise<KnowledgeRecord>;
   abstract restoreKnowledge(input: { id: string }): Promise<KnowledgeRecord>;
   abstract rescopeKnowledge(input: { id: string; scope: KnowledgeScope }): Promise<KnowledgeRecord>;
-  abstract raiseKnowledgeCeiling(input: { id: string; maxScope?: KnowledgeScopeLevel }): Promise<KnowledgeRecord>;
 
   abstract search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]>;
   abstract listActivity(input: {

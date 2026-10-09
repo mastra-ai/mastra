@@ -363,7 +363,15 @@ export class PostgresStore extends MastraCompositeStore {
       // asking the server ~350 times over this one serialized connection.
       // Cleared in the finally: the snapshot never outlives init().
       this.#db.setSchemaSnapshot(await loadSchemaSnapshot(pinned, this.schema));
-      await super.init();
+      // Knowledge activates lazily through getStore('knowledge'). Published Core
+      // releases without the knowledge-v2 feature still init every domain in
+      // super.init(), which would make ordinary storage fail on them, so the
+      // remaining domains are initialized here instead of delegating.
+      await Promise.all(
+        Object.entries(this.stores)
+          .filter(([name, store]) => name !== 'knowledge' && store)
+          .map(([, store]) => store.init()),
+      );
       // Only mark initialized after schema creation actually finishes so a
       // racing second init() caller can't return early and issue runtime
       // queries against tables that aren't yet created.

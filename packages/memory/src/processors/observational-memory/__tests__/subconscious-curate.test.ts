@@ -15,7 +15,7 @@ const semanticInfrastructure = {
 function fixture() {
   const memory = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
   const curatorMemory = new Memory({ storage: memory.storage, options: { observationalMemory: false } });
-  const subconscious = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' });
+  const subconscious = new Subconscious({ defaultScope: 'resource' });
   const config = subconscious.resolved.observation.find(agent => agent.name === 'curate')!;
   const extractor = new SubconsciousCurateExtractor(config, subconscious.resolved, () => curatorMemory, 'openai/test');
   const requestContext = new RequestContext();
