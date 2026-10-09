@@ -896,7 +896,7 @@ describe('SourceControlStorage', () => {
       await backend.ops.updateMany(
         'factory_projects',
         { id: projectId },
-        { sandbox_workdir: null, environment_backfilled_at: null },
+        { sandbox_working_directory: null, environment_backfilled_at: null },
       );
     }
 
@@ -953,7 +953,7 @@ describe('SourceControlStorage', () => {
       expect(await linkRow(third.id)).toMatchObject({ position: 3, in_environment: true });
       expect(await linkRow(fourth.id)).toMatchObject({ position: 4, in_environment: false });
       expect(await projects.getById({ id: project.id })).toMatchObject({
-        sandboxWorkdir: '/workspace/oldest',
+        sandboxWorkingDirectory: '/workspace/oldest',
         sandboxSettings: null,
       });
     });
@@ -981,7 +981,7 @@ describe('SourceControlStorage', () => {
       const withLink = await createProject({ name: 'with link' });
       const withoutLink = await createProject({ name: 'without link' });
       expect(await projects.getById({ id: withLink.id })).toMatchObject({
-        sandboxWorkdir: null,
+        sandboxWorkingDirectory: null,
         sandboxSettings: null,
         workspaceSetupCommand: null,
         activeTemplateId: null,
@@ -998,11 +998,11 @@ describe('SourceControlStorage', () => {
       await domain.init();
 
       expect(await projects.getById({ id: withLink.id })).toMatchObject({
-        sandboxWorkdir: '/workspace/linked',
+        sandboxWorkingDirectory: '/workspace/linked',
         sandboxSettings: null,
       });
       expect(await projects.getById({ id: withoutLink.id })).toMatchObject({
-        sandboxWorkdir: null,
+        sandboxWorkingDirectory: null,
         sandboxSettings: null,
       });
     });
@@ -1032,7 +1032,11 @@ describe('SourceControlStorage', () => {
     it('never overwrites values a user set between boots', async () => {
       const { project, second } = await seedDuplicateSlugProject();
       await domain.init();
-      await projects.update({ orgId: 'org-1', id: project.id, input: { sandboxWorkdir: '/workspace/custom' } });
+      await projects.update({
+        orgId: 'org-1',
+        id: project.id,
+        input: { sandboxWorkingDirectory: '/workspace/custom' },
+      });
       await gitlab.projectRepositories.update({ orgId: 'org-1', id: second.id, input: { inEnvironment: true } });
       await projects.update({ orgId: 'org-1', id: project.id, input: { sandboxSettings: { cpuCount: 2 } } });
       await backend.ops.updateMany('factory_projects', { id: project.id }, { environment_backfilled_at: null });
@@ -1040,7 +1044,7 @@ describe('SourceControlStorage', () => {
       await domain.init();
 
       expect(await projects.getById({ id: project.id })).toMatchObject({
-        sandboxWorkdir: '/workspace/custom',
+        sandboxWorkingDirectory: '/workspace/custom',
         sandboxSettings: { cpuCount: 2 },
       });
       expect(await gitlab.projectRepositories.get({ orgId: 'org-1', id: second.id })).toMatchObject({

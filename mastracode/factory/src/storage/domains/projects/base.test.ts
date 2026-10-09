@@ -52,7 +52,7 @@ describe('FactoryProjectsStorage', () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Env' } });
     expect(project).toMatchObject({
-      sandboxWorkdir: null,
+      sandboxWorkingDirectory: null,
       sandboxSettings: null,
       workspaceSetupCommand: null,
       activeTemplateId: null,
@@ -60,7 +60,7 @@ describe('FactoryProjectsStorage', () => {
     });
 
     const environment = {
-      sandboxWorkdir: '/home/user/workspace',
+      sandboxWorkingDirectory: '/home/user/workspace',
       sandboxSettings: { cpuCount: 8, memoryMb: 16384 },
       workspaceSetupCommand: 'touch .ready',
       activeTemplateId: 'tpl-1',
@@ -72,7 +72,7 @@ describe('FactoryProjectsStorage', () => {
     expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toMatchObject(environment);
 
     const cleared = {
-      sandboxWorkdir: null,
+      sandboxWorkingDirectory: null,
       sandboxSettings: null,
       workspaceSetupCommand: null,
       activeTemplateId: null,

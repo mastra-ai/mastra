@@ -334,7 +334,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
       environment: {
         sandbox: this.#describeSandbox(),
         settings: project.sandboxSettings ?? {},
-        sandboxWorkdir: project.sandboxWorkdir,
+        sandboxWorkingDirectory: project.sandboxWorkingDirectory,
         workspaceSetupCommand: project.workspaceSetupCommand,
         activeTemplateId: project.activeTemplateId,
         activeTemplateHeads: project.activeTemplateHeads,
