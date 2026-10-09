@@ -663,8 +663,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           id: session.id,
           // Persist the provider's PHYSICAL, reattachable VM id so resume can
           // reattach to the same VM. Providers with no separate physical id
-          // (e.g. local) fall back to the logical id, preserving prior behavior.
-          sandboxId: target.sandboxId ?? target.id,
+          // (e.g. local) persist nothing: a logical id handed back as a
+          // `sandboxId` hint is unknown to the provider and breaks resume.
+          sandboxId: target.sandboxId ?? null,
           // D2: a list session's working directory is the workspace root,
           // the repositories sit beneath it; a single-repository session
           // keeps its checkout as before.
