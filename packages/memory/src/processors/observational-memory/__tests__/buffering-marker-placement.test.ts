@@ -191,4 +191,66 @@ describe('buffering end marker placement', () => {
       expect(await carrying('data-om-buffering-end')).toEqual([buffered[1]!.id]);
     },
   );
+
+  it.each(['buffer()', 'threshold-triggered buffering'] as const)(
+    'keeps the start marker off a continuation of the buffered message that the agent is still streaming (%s)',
+    async entry => {
+      const storage = new InMemoryMemory({ db: new InMemoryDB() });
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+      const t0 = new Date(Date.now() - 60_000);
+      await storage.saveThread({ thread: { id: threadId, resourceId, title: 't', createdAt: t0, updatedAt: t0 } });
+      const om = new ObservationalMemory({
+        storage,
+        scope: 'thread',
+        observation: { model: 'openai/gpt-4o-mini', messageTokens: 100_000, bufferTokens: 200 },
+        reflection: { model: 'openai/gpt-4o-mini', observationTokens: 200_000 },
+      });
+      const record = await om.getOrCreateRecord(threadId, resourceId);
+      const buffered = [
+        msg(threadId, resourceId, 'user', new Date(t0.getTime() + 1000), [`question ${'words '.repeat(400)}`]),
+        msg(threadId, resourceId, 'assistant', new Date(t0.getTime() + 2000), [`answer ${'words '.repeat(400)}`]),
+      ];
+      await storage.saveMessages({ messages: buffered });
+      vi.spyOn(om.observer, 'call').mockResolvedValue({ observations: '* BUFFERED_FACT' } as any);
+
+      // Buffering seals the assistant message, so the agent's next parts go into a continuation
+      // message that MessageList stamps 1ms after it: older than the cycle start. The agent saves
+      // it before the start marker is written, then keeps re-saving it from its own copy.
+      const continuation = msg(threadId, resourceId, 'assistant', new Date(buffered[1]!.createdAt.getTime() + 1), [
+        'continued',
+      ]);
+      const listMessages = storage.listMessages.bind(storage);
+      let first = true;
+      vi.spyOn(storage, 'listMessages').mockImplementation(async (args: any) => {
+        if (first && args?.orderBy?.direction === 'DESC') {
+          first = false;
+          await storage.saveMessages({ messages: [structuredClone(continuation)] });
+        }
+        return listMessages(args);
+      });
+
+      const carrying = async (type: string) =>
+        (await listMessages({ threadId, perPage: false })).messages
+          .filter(m => (m.content.parts as any[]).some(p => p?.type === type))
+          .map(m => m.id);
+      if (entry === 'buffer()') {
+        await expect(om.buffer({ threadId, resourceId, record, messages: buffered })).resolves.toMatchObject({
+          buffered: true,
+        });
+      } else {
+        const internals = om as any;
+        const lockKey = internals.buffering.getLockKey(threadId, resourceId);
+        await internals.startAsyncBufferedObservation({ ...record }, threadId, buffered, lockKey, undefined, 1_000);
+        await vi.waitFor(async () => expect(await carrying('data-om-buffering-end')).toHaveLength(1));
+      }
+      vi.mocked(storage.listMessages).mockRestore();
+
+      continuation.content.parts.push({ type: 'text', text: 'more' });
+      await storage.saveMessages({ messages: [structuredClone(continuation)] });
+
+      expect(await carrying('data-om-buffering-start')).toEqual([buffered[1]!.id]);
+      expect(await carrying('data-om-buffering-end')).toEqual([buffered[1]!.id]);
+    },
+  );
 });
