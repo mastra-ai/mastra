@@ -383,7 +383,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
     return [
       registerApiRoute('/web/intake/config', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
@@ -394,7 +393,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
       }),
       registerApiRoute('/web/intake/config', {
         method: 'PUT',
-        requiresAuth: false,
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
@@ -441,7 +439,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
       }),
       registerApiRoute('/web/intake/bindings', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
@@ -451,7 +448,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
       }),
       registerApiRoute('/web/intake/bindings', {
         method: 'PUT',
-        requiresAuth: false,
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
@@ -559,7 +555,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
       }),
       registerApiRoute('/web/intake/label-routes', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
@@ -575,7 +570,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
       }),
       registerApiRoute('/web/intake/label-routes', {
         method: 'PUT',
-        requiresAuth: false,
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
@@ -648,7 +642,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
       }),
       registerApiRoute('/web/intake/sources', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;
@@ -666,7 +659,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
       }),
       registerApiRoute('/web/intake/items', {
         method: 'GET',
-        requiresAuth: false,
         handler: async c => {
           const tenant = await this.#resolveTenant(loose(c));
           if ('response' in tenant) return tenant.response;

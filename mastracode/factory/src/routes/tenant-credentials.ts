@@ -10,8 +10,8 @@
  * refreshes expired OAuth tokens under the domain's row lock, so a slightly
  * stale snapshot can never send an expired token upstream.
  *
- * Snapshots are primed per request by `createTenantCredentialPrimer` (mounted
- * after the web auth gate) so the first model call of a request already sees
+ * Snapshots are primed per request by `createTenantCredentialPrimer` (an `afterAuth`
+ * server middleware) so the first model call of a request already sees
  * the caller's credentials. This store explicitly disables the SDK's
  * environment fallback so server-shell credentials never leak into tenants.
  */
@@ -246,7 +246,7 @@ export function invalidateTenantCredentialSnapshots(tenant: { orgId: string; use
 }
 
 /**
- * Middleware mounted after the web auth gate: primes both credential precedence
+ * Middleware mounted after authentication (`afterAuth`): primes both credential precedence
  * modes so the request's first model call can resolve user → organization when
  * `orgFirst` is false or organization → user when `orgFirst` is true. Cheap when
  * fresh because each store has a TTL.

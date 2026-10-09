@@ -357,6 +357,8 @@ export async function createHonoServer(
     });
 
     for (const middleware of middlewares) {
+      // afterAuth middleware runs inside each route, after its auth check (see @mastra/hono).
+      if ('phase' in middleware && middleware.phase === 'afterAuth') continue;
       // Wrap with skipIfFrameworkPublic so user middleware cannot 401 routes
       // the framework declared public via `requiresAuth: false`
       // (e.g. Studio sign-in endpoints like /api/auth/capabilities).

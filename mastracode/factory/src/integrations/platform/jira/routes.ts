@@ -1,7 +1,7 @@
 /**
  * Mastra `apiRoutes` for the Jira intake feature.
  *
- * Registered alongside the other `/web/*` routes, behind the host auth gate.
+ * Registered alongside the other `/web/*` routes, behind core route auth.
  * Jira connections are owned by the caller's Mastra Platform organization;
  * provider requests stay server-side and flow through the integrations v2
  * proxy. Every route re-resolves the authenticated user and scopes intake
@@ -166,7 +166,6 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
   routes.push(
     registerApiRoute('/web/jira/status', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         if (!enabled || !jira || !intake) {
           return c.json({
@@ -227,7 +226,6 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
   routes.push(
     registerApiRoute('/web/jira/projects', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -256,7 +254,6 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
   routes.push(
     registerApiRoute('/web/jira/issues', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -332,7 +329,6 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
   routes.push(
     registerApiRoute('/web/jira/issues/:identifier', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;

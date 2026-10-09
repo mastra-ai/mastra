@@ -10,7 +10,7 @@ import {
   isSSOProvider,
 } from '@mastra/core/server';
 import type { ApiRoute, IMastraAuthProvider, ISessionProvider } from '@mastra/core/server';
-import type { Context, Hono } from 'hono';
+import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 
 import {
@@ -21,7 +21,6 @@ import {
 import type { RouteAuth } from './routes/route.js';
 import { actorFromAuthUser } from './storage/domains/comments/actor.js';
 import { isFactoryTelemetryEnabled } from './telemetry.js';
-import { timedAboveThreshold } from './timing.js';
 
 const ORGANIZATION_ID_HEADER = 'X-Mastra-Organization-Id';
 
@@ -111,21 +110,26 @@ export function isCrossSiteAuth(): boolean {
   return Boolean(process.env.MASTRACODE_ALLOWED_ORIGINS?.trim());
 }
 
-/** Hono context variables set by the auth gate. */
+/** Hono context variables set by {@link createFactoryAfterAuth}. */
 export interface FactoryAuthVariables {
   factoryAuthUser: FactoryAuthUser;
 }
 
-/** Context key under which the gate stashes the authenticated user. */
+/** Context key under which {@link createFactoryAfterAuth} stashes the authenticated user. */
 const FACTORY_AUTH_USER_KEY = 'factoryAuthUser';
 
 /**
- * Read the authenticated user the gate stashed on the context, or
- * `undefined` when unauthenticated / auth disabled. Used by downstream routes
- * (e.g. GitHub) to scope rows per user.
+ * Read the authenticated user for this request, or `undefined` when
+ * unauthenticated / auth disabled. Used by downstream routes (e.g. GitHub) to
+ * scope rows per user. Custom routes run on a sub-app with their own Hono
+ * context but share the request context, so fall back to the user
+ * {@link createFactoryAfterAuth} published there.
  */
 export function getFactoryAuthUser(c: Context): FactoryAuthUser | undefined {
-  return c.get(FACTORY_AUTH_USER_KEY) as FactoryAuthUser | undefined;
+  return (
+    (c.get(FACTORY_AUTH_USER_KEY) as FactoryAuthUser | undefined) ??
+    getFactoryAuthUserFromContext(c.get('requestContext') as { get: (key: string) => unknown } | undefined)
+  );
 }
 
 /**
@@ -192,27 +196,6 @@ function messageAuthor(user: FactoryAuthUser): MessageAuthor | undefined {
     ...(actor.displayName ? { name: actor.displayName } : {}),
     ...(actor.avatarUrl ? { avatarUrl: actor.avatarUrl } : {}),
   };
-}
-
-/** True when both WorkOS credential env vars are present (legacy env gate). */
-function envWorkosConfigured(): boolean {
-  return Boolean(process.env.WORKOS_API_KEY && process.env.WORKOS_CLIENT_ID);
-}
-
-/**
- * WorkOS provider implied by the `WORKOS_*` env vars — back-compat for test
- * suites exercised without booting the factory (route suites set `WORKOS_*`
- * directly and call {@link mountFactoryAuth} without an explicit provider).
- * `fetchMemberships: true` lets `authenticateToken` resolve `organizationId`
- * from a single membership when the JWT has no org claim — required so a
- * bootstrapped personal org resolves without re-auth.
- */
-function envFallbackAuthProvider(redirectUri: string | undefined): MastraAuthWorkos | undefined {
-  if (!envWorkosConfigured()) return undefined;
-  return new MastraAuthWorkos({
-    redirectUri: redirectUri ?? process.env.WORKOS_REDIRECT_URI,
-    fetchMemberships: true,
-  });
 }
 
 /**
@@ -393,18 +376,6 @@ export function getWorkOSProvider(provider: IMastraAuthProvider | undefined): Ma
   throw new Error('WorkOS provider requested but the active factory auth provider is not WorkOS');
 }
 
-/**
- * Resolve the authenticated user for a request, stashing it on the context.
- *
- * The gate only authenticates non-`/auth/*` requests via the `Authorization`
- * header, so cookie-based browser navigations to public `/auth/*` routes (the
- * GitHub connect/callback flow) arrive without a gate-stashed user. This reads
- * the session cookie from the raw request the same way `/auth/me` does,
- * caches the result on the context, and returns it so downstream helpers like
- * {@link factoryAuthTenant} work uniformly on both gated and public routes.
- *
- * Returns `undefined` when there is no valid session (or auth is disabled).
- */
 function forwardPendingResponseHeaders(provider: IMastraAuthProvider, c: Context): void {
   // Forward a renewed session cookie (e.g. rotated by the shared API during
   // verification) so the browser's cookie stays current. Best-effort.
@@ -418,6 +389,17 @@ function forwardPendingResponseHeaders(provider: IMastraAuthProvider, c: Context
   }
 }
 
+/**
+ * Resolve the authenticated user for a request.
+ *
+ * Protected routes already carry the user core route auth resolved and
+ * {@link createFactoryAfterAuth} normalized, so this returns it without a
+ * second provider call. Routes declared `requiresAuth: false` (the `/auth/*`
+ * connect/callback flows, `/connect/slack`) skip core auth, so this reads the
+ * session cookie / bearer token itself, applying the same org selection.
+ *
+ * Returns `undefined` when there is no valid session (or auth is disabled).
+ */
 export async function ensureFactoryAuthUser(
   provider: IMastraAuthProvider | undefined,
   c: Context,
@@ -428,8 +410,8 @@ export async function ensureFactoryAuthUser(
 
   const token = getBearerToken(c.req.header('Authorization'));
   const user = await authenticateRequest(provider, token, c.req.raw);
-  // Routes declared `requiresAuth: false` skip the gate, so this is their only
-  // authentication — forward a renewed session cookie from here too.
+  // Public routes skip core auth, so this is their only authentication —
+  // forward a renewed session cookie from here too.
   forwardPendingResponseHeaders(provider, c);
   if (!user) return undefined;
 
@@ -446,32 +428,6 @@ export async function ensureFactoryAuthUser(
   return user;
 }
 
-export interface MountFactoryAuthOptions {
-  /**
-   * Explicit auth provider to mount. When omitted, falls back to a WorkOS
-   * provider implied by the `WORKOS_*` env vars (back-compat for suites that
-   * never boot the factory).
-   */
-  provider?: IMastraAuthProvider;
-  /**
-   * Absolute URL the identity provider redirects back to after login (WorkOS
-   * env-fallback path only). Defaults to the `WORKOS_REDIRECT_URI` env var.
-   */
-  redirectUri?: string;
-  /** Browser-facing origin used to derive the SSO callback URL. */
-  publicUrl?: string;
-}
-
-/**
- * Decide whether a request is a top-level browser navigation (which should be
- * redirected to `/signin`) versus an API/XHR call (which should get a 401 JSON
- * response the SPA can react to).
- */
-function isNavigationRequest(path: string, accept: string | undefined): boolean {
-  if (path.startsWith('/api/')) return false;
-  return (accept ?? '').includes('text/html');
-}
-
 function isPlatformAuthCustomDomain(provider: IMastraAuthProvider, publicUrl?: string): boolean {
   return (
     provider.name === PLATFORM_AUTH_PROVIDER &&
@@ -482,8 +438,8 @@ function isPlatformAuthCustomDomain(provider: IMastraAuthProvider, publicUrl?: s
 /**
  * Handle the provider-neutral `/auth/me` route: validate the session with the
  * active provider and report the signed-in user (no tokens) to the SPA.
- * `/auth/me` is public (the gate skips `/auth/*`), so it validates the session
- * itself rather than reading a value the gate would have stashed.
+ * `/auth/me` is public (`requiresAuth: false`), so it validates the session
+ * itself rather than reading the user core route auth would have resolved.
  */
 async function handleAuthMe(provider: IMastraAuthProvider, c: Context, publicUrl?: string): Promise<Response> {
   const token = getBearerToken(c.req.header('Authorization'));
@@ -501,7 +457,7 @@ async function handleAuthMe(provider: IMastraAuthProvider, c: Context, publicUrl
   if (!user) {
     return c.json({ authenticated: false, user: null, ...meta });
   }
-  // Resolve the org the same way gated requests do (providers cache, so this
+  // Resolve the org the same way protected requests do (providers cache, so this
   // is a lookup — not a create — after first bootstrap).
   await ensureUserOrg(provider, user);
   return c.json({
@@ -761,32 +717,9 @@ function providerAuthRoutes(provider: IMastraAuthProvider, publicUrl?: string): 
 }
 
 /**
- * Register the public `/auth/*` routes on a Hono app: the capability-derived
- * provider routes (login/callback/logout/provider APIs) plus the
- * provider-neutral `/auth/me`. Split out from `mountFactoryAuth` so both the local
- * Hono server and the platform Mastra entry can reuse the exact same handlers.
- */
-export function registerAuthRoutes(
-  app: Hono<any>,
-  provider: IMastraAuthProvider,
-  options: { publicUrl?: string } = {},
-): void {
-  for (const route of providerAuthRoutes(provider, options.publicUrl)) {
-    const methods = route.method === 'ALL' ? ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] : [route.method];
-    app.on(methods, route.path, c => route.handler(c));
-  }
-  app.get('/auth/me', c => handleAuthMe(provider, c, options.publicUrl));
-}
-
-/**
  * Build the public `/auth/*` routes (provider routes + `/auth/me`) as Mastra
- * `server.apiRoutes`. Used by the platform Mastra entry (`src/mastra/index.ts`),
- * which can't register plain Hono routes on the deployer-generated app the way
- * the local server does via {@link registerAuthRoutes}.
- *
- * Handlers are identical to {@link registerAuthRoutes}. All are `requiresAuth: false`
- * (they must be reachable while unauthenticated), and the gate middleware skips
- * `/auth/*` so it never blocks them. `/auth/*` is not under `/api`, so it is a
+ * `server.apiRoutes`. All are `requiresAuth: false` (they must be reachable while
+ * unauthenticated). `/auth/*` is not under `/api`, so it is a
  * valid custom-route path.
  */
 export function buildAuthRoutes(provider: IMastraAuthProvider, options: { publicUrl?: string } = {}): ApiRoute[] {
@@ -811,129 +744,48 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
 }
 
 /**
- * Channel webhook paths whose adapter verifies the platform's request signature,
- * making the delivery self-authenticating. Add a platform here only once its
- * adapter rejects unsigned or mis-signed requests.
+ * The platform's deploy-auth flow lands IdP denials on `/login`
+ * (`error=access_denied&error_description=...`); the SPA serves sign-in at
+ * `/signin`, so forward the query there instead of burying it in returnTo.
  */
-const SIGNATURE_VERIFYING_CHANNEL_WEBHOOK = /^\/api\/agent-controllers\/[^/]+\/channels\/slack\/webhook$/;
-
-// Fetched by tabs that may already be signed out. Enumerated, not prefix-matched,
-// so a future route under the same prefix does not inherit the pass.
-const SESSION_FAVICON_PATHS = new Set([
-  '/favicon-session-initializing.svg',
-  '/favicon-session-working.svg',
-  '/favicon-session-awaiting.svg',
-  '/favicon-session-error.svg',
-]);
-
-/**
- * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
- * everything that is not a public `/auth/*` route: authenticated requests stash
- * the user on the context and continue; unauthenticated navigations redirect to
- * login and XHR/API calls get a 401 JSON. Shared by the local Hono server
- * (`mountFactoryAuth`) and the platform Mastra entry (`server.middleware`).
- */
-export function createFactoryAuthGate(provider: IMastraAuthProvider) {
+export function createFactoryLoginRedirect() {
   return async (c: Context, next: () => Promise<void>): Promise<Response | void> => {
-    const path = c.req.path;
-    if (path.startsWith('/auth/')) {
-      return next();
-    }
-    if (c.req.method === 'POST' && (path === '/web/github/webhook' || path === '/web/gitlab/webhook')) {
-      return next();
-    }
-    // Inbound chat-channel webhooks (Slack events) carry no user session: they
-    // authenticate by platform signature, the adapter verifying the request
-    // against its signing secret. The routes declare `requiresAuth: false`, but
-    // this gate is `use()` middleware — it runs before route matching, so that
-    // metadata is not readable here and the path needs an explicit pass.
-    //
-    // The platform is allowlisted rather than matched as a wildcard: a pass
-    // keyed on path shape alone would silently extend to any future adapter,
-    // including one that does not verify signatures. Controller id stays a
-    // wildcard because it is whatever the host registered.
-    if (c.req.method === 'POST' && SIGNATURE_VERIFYING_CHANNEL_WEBHOOK.test(path)) {
-      return next();
-    }
-    // The Slack account-linking deep link and the Sign-in-with-Slack OIDC
-    // start/callback do their own auth (friendly login-redirect for signed-out
-    // visitors; the OIDC callback authenticates via its signed `state`) — see
-    // connect-route.ts.
-    if (c.req.method === 'GET' && (path === '/connect/slack' || path.startsWith('/connect/slack/'))) {
-      return next();
-    }
-    // The platform's deploy-auth flow lands IdP denials on `/login`
-    // (`error=access_denied&error_description=...`); the SPA serves sign-in at
-    // `/signin`, so forward the query there instead of burying it in returnTo.
-    if (c.req.method === 'GET' && path === '/login') {
+    if (c.req.method === 'GET' && c.req.path === '/login') {
       return c.redirect(`/signin${new URL(c.req.url).search}`);
     }
-    // The SPA sign-in page, its static bundle, and browser-fetched metadata
-    // must be reachable while signed out; no user is stashed, so `/api/*`
-    // stays protected.
-    if (
-      path === '/signin' ||
-      path.startsWith('/assets/') ||
-      path === '/manifest.webmanifest' ||
-      path === '/mastra.svg' ||
-      path === '/pwa-192.png' ||
-      path === '/pwa-512.png' ||
-      path === '/apple-touch-icon.png' ||
-      (c.req.method === 'GET' && SESSION_FAVICON_PATHS.has(path))
-    ) {
-      return next();
-    }
-
-    const token = getBearerToken(c.req.header('Authorization'));
-    // A slow verification here delays EVERY protected request — surface
-    // outliers so auth-backend latency is attributable from server logs.
-    const user = await timedAboveThreshold('auth.gate.authenticate', 1_000, () =>
-      authenticateRequest(provider, token, c.req.raw),
-    );
-    forwardPendingResponseHeaders(provider, c);
-
-    if (user) {
-      const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
-      if (requestedOrganizationId) {
-        if (!selectRequestedOrganization(user, requestedOrganizationId)) {
-          return c.json({ error: 'organization_forbidden' }, 403);
-        }
-      } else {
-        // Bootstrap a personal org for no-org accounts so the org id resolves on
-        // this request (see ensureFactoryAuthUser for the rationale).
-        await ensureUserOrg(provider, user);
-      }
-      c.set(FACTORY_AUTH_USER_KEY, user);
-      const requestContext = c.get('requestContext');
-      requestContext?.set('user', user);
-      requestContext?.set(MASTRA_MESSAGE_AUTHOR_KEY, messageAuthor(user));
-      return next();
-    }
-
-    if (isNavigationRequest(path, c.req.header('Accept'))) {
-      const url = new URL(c.req.url);
-      const returnTo = sanitizeReturnTo(url.pathname + url.search);
-      return c.redirect(`/signin?returnTo=${encodeURIComponent(returnTo)}`);
-    }
-
-    return c.json({ error: 'unauthorized' }, 401);
+    return next();
   };
 }
 
 /**
- * Mount factory auth gating onto the host app. No-op when auth is disabled
- * (no provider active).
- *
- * Must be called before the Mastra adapter routes, the `/web/*` routes, and
- * the static UI handlers so the gate covers every request. Composes the shared
- * `registerAuthRoutes` + `createFactoryAuthGate` factories so the local Hono server
- * and the platform Mastra entry stay behavior-identical.
+ * Factory's post-authentication step, mounted as `phase: 'afterAuth'` server
+ * middleware so it runs after core route auth has put the provider's user on
+ * the request context:
+ * - a bearer caller may pick one of its organizations via
+ *   `X-Mastra-Organization-Id`; a non-member selection is a 403
+ *   `organization_forbidden`
+ * - otherwise a no-org account gets a personal org bootstrapped
+ * - the normalized user replaces the provider's on the request context, and the
+ *   message author is stamped for the agent controller
  */
-export function mountFactoryAuth(app: Hono<any>, options: MountFactoryAuthOptions = {}): boolean {
-  const provider = options.provider ?? envFallbackAuthProvider(options.redirectUri);
-  if (!provider) return false;
+export function createFactoryAfterAuth(provider: IMastraAuthProvider) {
+  return async (c: Context, next: () => Promise<void>): Promise<Response | void> => {
+    const requestContext = c.get('requestContext');
+    const user = getFactoryAuthUserFromContext(requestContext);
+    if (!user) return next();
 
-  registerAuthRoutes(app, provider, { publicUrl: options.publicUrl });
-  app.use('*', createFactoryAuthGate(provider));
-  return true;
+    const token = getBearerToken(c.req.header('Authorization'));
+    const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
+    if (requestedOrganizationId) {
+      if (!selectRequestedOrganization(user, requestedOrganizationId)) {
+        return c.json({ error: 'organization_forbidden' }, 403);
+      }
+    } else {
+      await ensureUserOrg(provider, user);
+    }
+    c.set(FACTORY_AUTH_USER_KEY, user);
+    requestContext.set('user', user);
+    requestContext.set(MASTRA_MESSAGE_AUTHOR_KEY, messageAuthor(user));
+    return next();
+  };
 }

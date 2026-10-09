@@ -101,7 +101,16 @@ type SchemaApiRoute = ApiRouteBase & {
 
 export type ApiRoute = HonoApiRoute | SchemaApiRoute;
 
-export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
+/**
+ * When server middleware runs relative to route authentication.
+ * - `beforeAuth` (default): global middleware, runs before route matching and auth.
+ * - `afterAuth`: runs after the route's auth check succeeds and before its handler,
+ *   with the authenticated user already on `requestContext`. Skipped on routes
+ *   declared public (`requiresAuth: false`), like `beforeAuth` middleware.
+ */
+export type MiddlewarePhase = 'beforeAuth' | 'afterAuth';
+
+export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler; phase?: MiddlewarePhase };
 
 export type CorsOptions = Parameters<typeof cors>[0];
 

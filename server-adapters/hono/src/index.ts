@@ -88,6 +88,29 @@ export const skipIfFrameworkPublic = (handler: MiddlewareHandler): MiddlewareHan
   };
 };
 
+const appendMissingHeaders = (response: Response, headers: Record<string, string>): void => {
+  for (const [key, value] of Object.entries(headers)) {
+    const present =
+      key.toLowerCase() === 'set-cookie' ? response.headers.getSetCookie().includes(value) : response.headers.has(key);
+    if (present) continue;
+    try {
+      response.headers.append(key, value);
+    } catch {
+      // Immutable headers (e.g. a fetched Response) — leave the response as is.
+    }
+  }
+};
+
+/** Matches the middleware path forms Mastra documents: `*`, `/prefix/*`, or an exact path. */
+const matchesMiddlewarePath = (pattern: string, path: string): boolean => {
+  if (pattern === '*' || pattern === '/*') return true;
+  if (pattern.endsWith('/*')) {
+    const base = pattern.slice(0, -2);
+    return path === base || path.startsWith(`${base}/`);
+  }
+  return path === pattern;
+};
+
 /**
  * Context key holding a pristine clone of the incoming request, captured by
  * the context middleware before user middleware runs. The custom-route bridge
@@ -496,32 +519,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     app[route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all'](
       `${prefix}${route.path}`,
       ...middlewares,
+      this.createRouteAuthMiddleware(route),
+      ...this.getAfterAuthMiddleware(),
       async (c: Context) => {
-        // Check route-level authentication/authorization
-        const authResult = await this.checkRouteAuth(route, {
-          path: c.req.path,
-          method: c.req.method,
-          getHeader: name => c.req.header(name),
-          getQuery: name => c.req.query(name),
-          requestContext: c.get('requestContext'),
-          request: c.req.raw,
-          buildAuthorizeContext: () => c,
-        });
-
-        if (authResult) {
-          // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
-          if (authResult.headers) {
-            for (const [key, value] of Object.entries(authResult.headers)) {
-              c.header(key, value as string);
-            }
-          }
-
-          // If this is an auth error (not just a success-with-headers), return error response
-          if (authResult.error) {
-            return c.json({ error: authResult.error }, authResult.status as any);
-          }
-        }
-
         const params = await this.getParams(route, c.req);
 
         // Return 400 Bad Request if body parsing failed (e.g., malformed JSON)
@@ -726,28 +726,6 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       };
 
       const routeHandler: MiddlewareHandler = async (c: Context) => {
-        // Per-route auth check (same pattern as registerRoute)
-        const authError = await this.checkRouteAuth(serverRoute, {
-          path: c.req.path,
-          method: c.req.method,
-          getHeader: name => c.req.header(name),
-          getQuery: name => c.req.query(name),
-          requestContext: c.get('requestContext'),
-          request: c.req.raw,
-          buildAuthorizeContext: () => c,
-        });
-
-        if (authError) {
-          if (authError.headers) {
-            for (const [key, value] of Object.entries(authError.headers)) {
-              c.header(key, value as string);
-            }
-          }
-          if (authError.error) {
-            return c.json({ error: authError.error }, authError.status as any);
-          }
-        }
-
         const requestContext = c.get('requestContext');
         // Check if any auth is configured (studio or server) for RBAC
         const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
@@ -838,8 +816,78 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       };
 
       const method = route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all';
-      this.app[method](route.path, routeHandler);
+      this.app[method](
+        route.path,
+        this.createRouteAuthMiddleware(serverRoute),
+        ...this.getAfterAuthMiddleware(),
+        routeHandler,
+      );
     }
+  }
+
+  /** Per-route auth check, run as route-level middleware so afterAuth middleware can follow it. */
+  private createRouteAuthMiddleware(route: ServerRoute): MiddlewareHandler {
+    return async (c, next) => {
+      const authResult = await this.checkRouteAuth(route, {
+        path: c.req.path,
+        method: c.req.method,
+        getHeader: name => c.req.header(name),
+        getQuery: name => c.req.query(name),
+        requestContext: c.get('requestContext'),
+        request: c.req.raw,
+        buildAuthorizeContext: () => c,
+      });
+
+      if (authResult) {
+        // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
+        if (authResult.headers) {
+          for (const [key, value] of Object.entries(authResult.headers)) {
+            c.header(key, value as string);
+          }
+        }
+
+        // If this is an auth error (not just a success-with-headers), return error response
+        if (authResult.error) {
+          return c.json({ error: authResult.error }, authResult.status as any);
+        }
+      }
+
+      await next();
+
+      // Headers set via `c.header()` before `next()` only reach responses the
+      // handler built through `c` (e.g. `c.json`). Custom routes return the
+      // sub-app's own Response, so copy any auth headers it is missing.
+      if (authResult?.headers) {
+        appendMissingHeaders(c.res, authResult.headers);
+      }
+    };
+  }
+
+  #afterAuthMiddleware?: MiddlewareHandler[];
+
+  /**
+   * `phase: 'afterAuth'` entries from `server.middleware` and `setServerMiddleware()`,
+   * mounted per route between the auth check and the handler.
+   */
+  private getAfterAuthMiddleware(): MiddlewareHandler[] {
+    if (this.#afterAuthMiddleware) return this.#afterAuthMiddleware;
+    const configMiddleware = this.mastra.getServer()?.middleware;
+    const entries = [
+      ...(this.mastra.getServerMiddleware?.() ?? []),
+      ...(configMiddleware ? (Array.isArray(configMiddleware) ? configMiddleware : [configMiddleware]) : []),
+    ];
+    this.#afterAuthMiddleware = entries.flatMap(entry => {
+      if (typeof entry === 'function' || !('phase' in entry) || entry.phase !== 'afterAuth') return [];
+      const handler = entry.handler as unknown as MiddlewareHandler;
+      const path = entry.path;
+      return [
+        skipIfFrameworkPublic(async (c, next) => {
+          if (!matchesMiddlewarePath(path, c.req.path)) return next();
+          return handler(c, next);
+        }),
+      ];
+    });
+    return this.#afterAuthMiddleware;
   }
 
   registerContextMiddleware(): void {
@@ -869,6 +917,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     // Middleware added at runtime via `mastra.setServerMiddleware()` — already
     // normalized to `{ path, handler }` entries by core.
     for (const m of this.mastra.getServerMiddleware?.() ?? []) {
+      if ('phase' in m && m.phase === 'afterAuth') continue;
       this.app.use(m.path, skipIfFrameworkPublic(m.handler));
     }
 
@@ -879,6 +928,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
     const normalizedMiddlewares = Array.isArray(configMiddleware) ? configMiddleware : [configMiddleware];
     for (const middleware of normalizedMiddlewares) {
+      if (typeof middleware !== 'function' && middleware.phase === 'afterAuth') continue;
       const { path, handler } = typeof middleware === 'function' ? { path: '*', handler: middleware } : middleware;
       // Wrap with skipIfFrameworkPublic so user middleware cannot 401 routes
       // the framework declared public via `requiresAuth: false`

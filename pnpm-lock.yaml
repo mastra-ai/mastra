@@ -2520,6 +2520,9 @@ importers:
       '@internal/workspace':
         specifier: workspace:*
         version: link:../../packages/_internals/workspace
+      '@mastra/hono':
+        specifier: workspace:*
+        version: link:../../server-adapters/hono
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql

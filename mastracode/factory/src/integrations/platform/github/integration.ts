@@ -646,7 +646,6 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   #statusRoute(ctx: IntegrationContext): ApiRoute {
     return registerApiRoute('/web/github/status', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         await ctx.auth.ensureUser(loose(c));
         const tenant = ctx.auth.tenant(loose(c));

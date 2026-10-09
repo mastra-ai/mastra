@@ -1,7 +1,7 @@
 /**
  * Mastra `apiRoutes` for the GitHub App project feature.
  *
- * Registered alongside the other `/web/*` routes, behind the host auth gate.
+ * Registered alongside the other `/web/*` routes, behind core route auth.
  * Every route additionally re-checks the authenticated user via the injected
  * `RouteAuth` seam and scopes all rows by that user's stable id, so a user can
  * only ever see and operate on their own installations and projects.
@@ -184,11 +184,8 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
  * non-null string) or a ready-to-return error response: 401 when unauthenticated,
  * 403 when the user has no organization (personal account).
  *
- * Resolves the session from the request cookie itself (via `auth.ensureUser`)
- * instead of relying on the auth gate's context stash: on platform deploys
- * custom `apiRoutes` run on an isolated sub-app context where the gate's
- * `c.set(...)` is invisible. When the gate stash IS visible (local Hono
- * server), `auth.ensureUser` returns the cached user and this is a no-op.
+ * Resolves the user via `auth.ensureUser`, which returns the user core route
+ * auth already resolved, or authenticates the request itself on public routes.
  */
 async function resolveOrgTenant(
   c: RouteContext,
@@ -402,7 +399,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/github/status', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         if (!isGithubFeatureEnabled({ github, auth }) || !github || !stateSigner) {
           return c.json({
@@ -413,8 +409,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             diagnostics: diagnostics(),
           });
         }
-        // Resolve the session from the request cookie: on platform deploys custom
-        // apiRoutes run on an isolated context where the gate's stash is invisible.
         await auth.ensureUser(loose(c));
         const tenant = auth.tenant(loose(c));
         if (!tenant) return c.json({ error: 'unauthorized', reason: 'auth_required' }, 401);
@@ -632,7 +626,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/github/repos', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -693,7 +686,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/github/projects/:id/issues', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
@@ -745,7 +737,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/github/projects/:id/issues/:number', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
@@ -787,7 +778,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/github/projects/:id/prs', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
@@ -838,7 +828,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/github/projects/:id/prs/:number', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
@@ -881,7 +870,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/github/projects/:id/settings', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
@@ -897,7 +885,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/github/projects/:id/settings', {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
@@ -965,7 +952,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/github/pat', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -974,7 +960,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
     registerApiRoute('/web/github/pat', {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -998,7 +983,6 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
     }),
     registerApiRoute('/web/github/pat', {
       method: 'DELETE',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -1242,7 +1226,6 @@ function buildProjectGitRoutes({
     // ── Create / list Factory sessions ──────────────────────────────────────
     registerApiRoute('/web/github/projects/:id/sessions', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -1267,7 +1250,6 @@ function buildProjectGitRoutes({
     }),
     registerApiRoute('/web/github/projects/:id/sessions', {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -1363,7 +1345,6 @@ function buildProjectGitRoutes({
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -1382,7 +1363,6 @@ function buildProjectGitRoutes({
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {
       method: 'DELETE',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -1432,7 +1412,6 @@ function buildProjectGitRoutes({
     // ── Re-name a session's thread with the title model ────────────────────
     registerApiRoute('/web/user-sessions/:sessionId/title', {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -1477,7 +1456,6 @@ function buildProjectGitRoutes({
     // ── Stage all + commit inside a Factory session workspace ──────────────
     registerApiRoute('/web/github/projects/:id/commit', {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const owned = await loadOwnedProject({ github, auth, sandbox, c: loose(c) });
         if ('response' in owned) return owned.response;
@@ -1529,7 +1507,6 @@ function buildProjectGitRoutes({
     // ── Recent commits on a repository branch ───────────────────────────────
     registerApiRoute('/web/github/projects/:id/commits', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const loaded = await loadOrgProject({ github, auth, c: loose(c) });
         if ('response' in loaded) return loaded.response;
@@ -1555,7 +1532,6 @@ function buildProjectGitRoutes({
     // ── Push a branch back to GitHub ────────────────────────────────────────
     registerApiRoute('/web/github/projects/:id/push', {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const owned = await loadOwnedProject({ github, auth, sandbox, c: loose(c) });
         if ('response' in owned) return owned.response;
@@ -1606,7 +1582,6 @@ function buildProjectGitRoutes({
     // ── Open a pull request through the version-control capability ─────────
     registerApiRoute('/web/github/projects/:id/pr', {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const owned = await loadOwnedProject({ github, auth, sandbox, c: loose(c) });
         if ('response' in owned) return owned.response;
