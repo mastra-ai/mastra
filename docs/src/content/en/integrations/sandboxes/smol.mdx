@@ -15,7 +15,7 @@ Run Mastra workspace commands inside isolated [Smol](https://github.com/smol-mac
 npm install @mastra/smol
 ```
 
-Local use requires the Smol runtime on a supported virtualization host. For Smol Cloud, set `SMOL_CLOUD_TOKEN` or pass `cloud: { apiKey: '...' }` to the sandbox.
+Local VMs need a supported virtualization host (macOS Apple Silicon or Linux with `/dev/kvm`); the Smol SDK bundles the runtime. For Smol Cloud, set `SMOL_CLOUD_TOKEN` or pass `cloud: { apiKey: '...' }` to the sandbox.
 
 ## Share a local project with an agent
 

@@ -8,7 +8,7 @@ Smol microVM sandbox provider for Mastra workspaces. Run workspace commands in a
 npm install @mastra/smol
 ```
 
-For local VMs, install the Smol runtime and use a supported virtualization host. Cloud VMs use `SMOL_CLOUD_TOKEN` or a cloud API key in the provider options.
+The bundled Smol SDK boots local VMs without a separate runtime install on a supported virtualization host (macOS Apple Silicon or Linux with `/dev/kvm`). Cloud VMs use `SMOL_CLOUD_TOKEN` or a cloud API key in the provider options.
 
 ## Local workspace shared with an agent
 
@@ -54,4 +54,4 @@ File tools require a filesystem backed by the same files as the VM. Host mounts 
 
 `checkpointPath` enables local portable snapshots on VMs without host mounts. Cloud snapshots save a checkpoint in Smol Cloud. Read `sandbox.checkpointInfo` after `sandbox.snapshot()` for the resulting artifact. Do not combine `checkpointPath` with host mounts, since Smol cannot capture a portable checkpoint of a host mount.
 
-Run the real VM test on a supported host with `MASTRA_SMOL_INTEGRATION=1 pnpm --filter @mastra/smol test:integration`.
+Run the local VM test on a supported host with `MASTRA_SMOL_INTEGRATION=1 pnpm --filter @mastra/smol test:integration`. Set `MASTRA_SMOL_TEST_BUILTIN=1` to run without pulling an image. Set `MASTRA_SMOL_CLOUD_BRIDGE=1` to test the cloud transport against a local VM and an HTTP bridge.

@@ -15,7 +15,7 @@ async function readBody(req: IncomingMessage): Promise<Buffer> {
 bridge('Smol Cloud transport through a real VM', () => {
   it('creates, streams, writes, reconnects, checkpoints and destroys', async () => {
     const guest = await Machine.create(
-      { image: 'node:24-alpine', network: false },
+      { image: process.env.MASTRA_SMOL_TEST_BUILTIN === '1' ? undefined : 'node:24-alpine', network: false },
       { target: 'local', handleSignals: false },
     );
     let vm: { id: string; name: string; state: string; ready: boolean } | undefined;
