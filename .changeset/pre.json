@@ -192,6 +192,7 @@
     "@mastra/vercel": "1.6.0"
   },
   "changesets": [
+    "abort-suspended-run-release",
     "ai-sdk-stream-trace-id",
     "all-comics-slide",
     "atomic-working-memory-merge",
@@ -256,6 +257,7 @@
     "fine-files-knock",
     "five-zebras-hope",
     "fix-serialization-defaults-jsdoc",
+    "fix-tool-call-empty-args-eager",
     "floppy-needles-judge",
     "forwarded-signal-replay",
     "fresh-wings-appear",
@@ -296,6 +298,7 @@
     "quick-snails-brake",
     "quiet-agents-stream",
     "quiet-apps-load",
+    "quiet-cards-stay-put",
     "quiet-carts-wait",
     "quiet-comments-match",
     "quiet-files-recover",
@@ -324,6 +327,7 @@
     "shaky-mice-hammer",
     "shaky-pumas-press",
     "shared-metrics-dashboard",
+    "silly-tables-float",
     "silver-bananas-grin",
     "silver-sheep-occur",
     "slick-tools-retire",
@@ -377,6 +381,7 @@
     "wise-vans-serve",
     "yellow-peaches-see",
     "young-bugs-open",
-    "young-pants-peel"
+    "young-pants-peel",
+    "yummy-facts-sink"
   ]
 }
