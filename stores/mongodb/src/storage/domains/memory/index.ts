@@ -82,11 +82,14 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   /**
    * Retention-eligible collections. The observational-memory collection is
    * excluded: it has no timestamp anchor to age on. All anchors are BSON dates.
+   * A run fence's `retiredAt` stays null until the execution holding it
+   * settles, and null is never pruned.
    */
   static override readonly retentionTables: RetentionTablesDescriptor = {
     messages: { table: TABLE_MESSAGES, column: 'createdAt', indexed: true },
     resources: { table: TABLE_RESOURCES, column: 'createdAt', indexed: true },
     threads: { table: TABLE_THREADS, column: 'createdAt', indexed: true },
+    runFences: { table: TABLE_MEMORY_RUN_FENCES, column: 'retiredAt', indexed: true },
   };
 
   constructor(config: MongoDBDomainConfig) {
@@ -119,14 +122,21 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   override async raiseRunFence(fence: RunFence): Promise<boolean> {
     try {
       const fences = await getRunClaims(this.#connector, TABLE_MEMORY_RUN_FENCES);
-      // The upsert raises an older fence or creates a missing one. A fence at
-      // least as new makes its insert fail on the duplicate _id; one raced in
-      // older than ours is raised on the next pass.
+      // The upsert raises an older fence, reaffirms our own, or creates a
+      // missing one. Any other fence makes its insert fail on the duplicate
+      // _id; one raced in older than ours is raised on the next pass. Every
+      // write un-retires the fence.
       for (;;) {
         try {
           await fences.updateOne(
-            { _id: fence.runId, generation: { $lt: fence.generation } },
-            { $set: { generation: fence.generation, ownerId: fence.ownerId } },
+            {
+              _id: fence.runId,
+              $or: [
+                { generation: { $lt: fence.generation } },
+                { generation: fence.generation, ownerId: fence.ownerId },
+              ],
+            },
+            { $set: { generation: fence.generation, ownerId: fence.ownerId, retiredAt: null } },
             { upsert: true },
           );
           return true;
@@ -151,6 +161,27 @@ export class MemoryStorageMongoDB extends MemoryStorage {
     }
   }
 
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      const fences = await getRunClaims(this.#connector, TABLE_MEMORY_RUN_FENCES);
+      const retired = await fences.updateOne(
+        { _id: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
+        [{ $set: { retiredAt: '$$NOW' } }],
+      );
+      return retired.matchedCount > 0;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MONGODB', 'RETIRE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
   /** The check a write must pass: its own fence, otherwise the one in scope. */
   #runFenceCheck(fence: RunFence | undefined, operation: string): RunFenceCheck | undefined {
     const resolved = resolveRunFence(this, fence);
@@ -160,15 +191,16 @@ export class MemoryStorageMongoDB extends MemoryStorage {
   /**
    * Delete memory rows older than each table's `maxAge`, batched. Order is
    * messages → resources → threads so child rows never outlive the delete of
-   * their thread. Like `deleteThread()`, this does not sweep vector-store
-   * embeddings — semantic-recall vectors live in a separate vector store the
-   * memory domain cannot reach; cleaning those up is the operator's concern.
+   * their thread; run fences are independent and go last. Like
+   * `deleteThread()`, this does not sweep vector-store embeddings —
+   * semantic-recall vectors live in a separate vector store the memory domain
+   * cannot reach; cleaning those up is the operator's concern.
    */
   async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
     const targets = resolveTargets({
       policies,
       descriptor: MemoryStorageMongoDB.retentionTables,
-      order: ['messages', 'resources', 'threads'],
+      order: ['messages', 'resources', 'threads', 'runFences'],
     });
     return runPrune({ connector: this.#connector, domain: 'memory', targets, options, logger: this.logger });
   }

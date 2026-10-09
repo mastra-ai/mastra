@@ -42,7 +42,7 @@ import type {
 import type { ConvexAdminClient } from '../../client';
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
-import { assertRunFence, raiseRunFence } from '../../run-fencing';
+import { assertRunFence, raiseRunFence, retireRunFence } from '../../run-fencing';
 import type { RunFenceCheck } from '../../run-fencing';
 import { TABLE_OBSERVATIONAL_MEMORY } from '../../types';
 import type { SerializedOMChunk, SerializedOMCurrentRecord } from '../../types';
@@ -219,6 +219,10 @@ export class MemoryConvex extends MemoryStorage {
 
   override async raiseRunFence(fence: RunFence): Promise<boolean> {
     return raiseRunFence(this.#client, fence);
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    return retireRunFence(this.#client, fence);
   }
 
   #runFenceCheck(fence: RunFence | undefined, operation: string): RunFenceCheck | undefined {

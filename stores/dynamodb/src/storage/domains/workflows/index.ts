@@ -59,6 +59,7 @@ interface RunOwnerItem {
   generation: number;
   ownerId: string;
   leaseExpiresAt?: number;
+  updatedAt?: number;
 }
 
 function toRunOwnershipRecord(item: RunOwnerItem): RunOwnershipRecord {
@@ -146,8 +147,16 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
       if (!expectedGeneration) {
         try {
-          // create() only succeeds when the item does not exist yet.
-          const item = { ...this.#runOwnerKey(runId), generation: 1, ownerId, leaseExpiresAt: now + leaseMs };
+          // create() only succeeds when the item does not exist yet. The first
+          // generation comes from the clock, so a claim after this item is
+          // pruned still outranks a surviving fence.
+          const item = {
+            ...this.#runOwnerKey(runId),
+            generation: Math.max(1, now),
+            ownerId,
+            leaseExpiresAt: now + leaseMs,
+            updatedAt: now,
+          };
           await retryOnTransactionConflict(() => owners.create(item).go());
           return { acquired: true, record: toRunOwnershipRecord(item) };
         } catch (error) {
@@ -160,7 +169,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
         const { data } = await retryOnTransactionConflict<{ data: RunOwnerItem }>(() =>
           owners
             .patch(this.#runOwnerKey(runId))
-            .set({ ownerId, leaseExpiresAt: now + leaseMs })
+            .set({ ownerId, leaseExpiresAt: now + leaseMs, updatedAt: now })
             .add({ generation: 1 })
             .where((attr: any, op: any) =>
               [
@@ -184,16 +193,17 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
   async renewRunOwnership({ leaseMs, ...fence }: RenewRunOwnershipInput): Promise<RenewRunOwnershipResult> {
     try {
-      const { data } = await retryOnTransactionConflict<{ data: RunOwnerItem }>(() =>
-        this.service.entities
+      const { data } = await retryOnTransactionConflict<{ data: RunOwnerItem }>(() => {
+        const now = Date.now();
+        return this.service.entities
           .workflow_run_owner!.patch(this.#runOwnerKey(fence.runId))
-          .set({ leaseExpiresAt: Date.now() + leaseMs })
+          .set({ leaseExpiresAt: now + leaseMs, updatedAt: now })
           .where(
             (attr: any, op: any) =>
               `${op.eq(attr.generation, fence.generation)} AND ${op.eq(attr.ownerId, fence.ownerId)} AND ${op.exists(attr.leaseExpiresAt)}`,
           )
-          .go({ response: 'all_new' }),
-      );
+          .go({ response: 'all_new' });
+      });
       return { renewed: true, record: toRunOwnershipRecord(data) };
     } catch (error) {
       if (!this.isConditionalCheckFailed(error)) throw this.#ownershipError('RENEW_RUN_OWNERSHIP', fence.runId, error);
@@ -210,6 +220,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
       await retryOnTransactionConflict(() =>
         this.service.entities
           .workflow_run_owner!.patch(this.#runOwnerKey(fence.runId))
+          .set({ updatedAt: Date.now() })
           .remove(['leaseExpiresAt'])
           .where(
             (attr: any, op: any) =>

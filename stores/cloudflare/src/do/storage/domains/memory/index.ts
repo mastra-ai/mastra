@@ -33,7 +33,7 @@ import type {
 
 import { DODB } from '../../db';
 import type { DODomainConfig } from '../../db';
-import { executeFenced, runFenceGuard } from '../../db/run-fencing';
+import { DB_NOW_MS, executeFenced, runFenceGuard } from '../../db/run-fencing';
 import type { RunFenceCheck } from '../../db/run-fencing';
 import { createSqlBuilder } from '../../sql-builder';
 import { deserializeValue, isArrayOfRecords } from '../utils';
@@ -132,9 +132,10 @@ export class MemoryStorageDO extends MemoryStorage {
     try {
       // One statement, so no other raise lands between judging the current fence and replacing it.
       // Re-raising the current fence writes the same row back and still counts as raised.
+      // Every write un-retires the fence, so a reused run's fence isn't pruned mid-run.
       const rows = (await this.#db.executeQuery({
         sql: `INSERT INTO ${table} (runId, generation, ownerId) VALUES (?, ?, ?)
-          ON CONFLICT(runId) DO UPDATE SET generation = excluded.generation, ownerId = excluded.ownerId
+          ON CONFLICT(runId) DO UPDATE SET generation = excluded.generation, ownerId = excluded.ownerId, retiredAt = NULL
           WHERE excluded.generation > ${table}.generation
             OR (excluded.generation = ${table}.generation AND excluded.ownerId = ${table}.ownerId)
           RETURNING runId`,
@@ -145,6 +146,28 @@ export class MemoryStorageDO extends MemoryStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLOUDFLARE_DO', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      const rows = (await this.#db.executeQuery({
+        sql: `UPDATE ${this.#fencesTable} SET retiredAt = ${DB_NOW_MS}
+          WHERE runId = ? AND generation = ? AND ownerId = ?
+          RETURNING runId`,
+        params: [fence.runId, fence.generation, fence.ownerId],
+      })) as Record<string, unknown>[];
+      return rows.length > 0;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLOUDFLARE_DO', 'RETIRE_RUN_FENCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: fence.runId },

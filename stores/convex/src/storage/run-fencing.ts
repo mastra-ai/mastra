@@ -181,3 +181,12 @@ export async function raiseRunFence(client: ConvexAdminClient, fence: RunFence):
   });
   return applied;
 }
+
+export async function retireRunFence(client: ConvexAdminClient, fence: RunFence): Promise<boolean> {
+  const { applied } = await ownerOperation(client, {
+    op: 'retireRunFence',
+    tableName: TABLE_MEMORY_RUN_FENCES,
+    fence: toFence(fence),
+  });
+  return applied;
+}

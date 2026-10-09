@@ -3,7 +3,8 @@ import { Entity } from 'electrodb';
 /**
  * The current claim on a durable workflow run. `leaseExpiresAt` holds the
  * lease's expiry in epoch milliseconds and is removed when the owner releases
- * the run; `generation` and `ownerId` are kept.
+ * the run; `generation` and `ownerId` are kept. `updatedAt` is the epoch
+ * milliseconds of the last claim, renewal or release.
  */
 export const workflowRunOwnerEntity = new Entity({
   model: {
@@ -29,6 +30,9 @@ export const workflowRunOwnerEntity = new Entity({
     leaseExpiresAt: {
       type: 'number',
     },
+    updatedAt: {
+      type: 'number',
+    },
   },
   indexes: {
     primary: {
@@ -38,7 +42,11 @@ export const workflowRunOwnerEntity = new Entity({
   },
 });
 
-/** The newest fence memory has seen for a run. Fenced memory writes check it. */
+/**
+ * The newest fence memory has seen for a run. Fenced memory writes check it.
+ * `retiredAt` is set, in epoch milliseconds, once the execution holding the
+ * fence settles, and removed when a fence is raised again.
+ */
 export const memoryRunFenceEntity = new Entity({
   model: {
     entity: 'memory_run_fence',
@@ -59,6 +67,9 @@ export const memoryRunFenceEntity = new Entity({
     },
     ownerId: {
       type: 'string',
+    },
+    retiredAt: {
+      type: 'number',
     },
   },
   indexes: {

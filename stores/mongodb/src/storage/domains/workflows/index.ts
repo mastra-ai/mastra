@@ -64,11 +64,14 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   static readonly MANAGED_COLLECTIONS = [TABLE_WORKFLOW_SNAPSHOT, TABLE_WORKFLOW_RUN_OWNERS] as const;
 
   /**
-   * Anchor is `updatedAt` (BSON date), so the policy reads as inactivity:
-   * a run is pruned only after its snapshot has not been touched for `maxAge`.
+   * Both anchors are `updatedAt` (BSON date), so the policies read as
+   * inactivity: a run is pruned only after its snapshot has not been touched
+   * for `maxAge`, and an ownership document only after no claim, renewal or
+   * release has touched it for `maxAge`.
    */
   static override readonly retentionTables: RetentionTablesDescriptor = {
     workflowSnapshot: { table: TABLE_WORKFLOW_SNAPSHOT, column: 'updatedAt', indexed: true },
+    runOwnership: { table: TABLE_WORKFLOW_RUN_OWNERS, column: 'updatedAt', indexed: true },
   };
 
   constructor(config: MongoDBDomainConfig) {
@@ -81,12 +84,12 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     );
   }
 
-  /** Delete workflow snapshots idle for longer than the policy's `maxAge`, batched. */
+  /** Delete workflow snapshots and ownership documents idle for longer than each policy's `maxAge`, batched. */
   async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
     const targets = resolveTargets({
       policies,
       descriptor: WorkflowsStorageMongoDB.retentionTables,
-      order: ['workflowSnapshot'],
+      order: ['workflowSnapshot', 'runOwnership'],
     });
     return runPrune({ connector: this.#connector, domain: 'workflows', targets, options, logger: this.logger });
   }
@@ -156,6 +159,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
             generation,
             ownerId: { $literal: ownerId },
             leaseExpiresAt: { $add: ['$$NOW', leaseMs] },
+            updatedAt: '$$NOW',
           },
         },
       ];
@@ -163,12 +167,14 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       if (!expectedGeneration) {
         try {
           // Matches only a document that doesn't exist; an existing one makes
-          // the upsert's insert fail on the duplicate _id.
-          const created = await owners.findOneAndUpdate({ _id: runId, generation: { $exists: false } }, claim(1), {
-            upsert: true,
-            returnDocument: 'after',
-            projection: RUN_OWNER_PROJECTION,
-          });
+          // the upsert's insert fail on the duplicate _id. The first
+          // generation comes from the database clock, so a claim after this
+          // document is pruned still outranks a surviving fence.
+          const created = await owners.findOneAndUpdate(
+            { _id: runId, generation: { $exists: false } },
+            claim({ $max: [1, { $toLong: '$$NOW' }] }),
+            { upsert: true, returnDocument: 'after', projection: RUN_OWNER_PROJECTION },
+          );
           if (created) return { acquired: true, record: toRunOwnershipRecord(created) };
         } catch (error) {
           if (!isDuplicateKeyError(error)) throw error;
@@ -202,7 +208,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
           ownerId: fence.ownerId,
           leaseExpiresAt: { $ne: null },
         },
-        [{ $set: { leaseExpiresAt: { $add: ['$$NOW', leaseMs] } } }],
+        [{ $set: { leaseExpiresAt: { $add: ['$$NOW', leaseMs] }, updatedAt: '$$NOW' } }],
         { returnDocument: 'after', projection: RUN_OWNER_PROJECTION },
       );
       if (renewed) return { renewed: true, record: toRunOwnershipRecord(renewed) };
@@ -217,7 +223,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
       const owners = await getRunClaims(this.#connector, TABLE_WORKFLOW_RUN_OWNERS);
       const released = await owners.updateOne(
         { _id: fence.runId, generation: fence.generation, ownerId: fence.ownerId },
-        { $set: { leaseExpiresAt: null } },
+        [{ $set: { leaseExpiresAt: null, updatedAt: '$$NOW' } }],
       );
       return released.matchedCount > 0;
     } catch (error) {

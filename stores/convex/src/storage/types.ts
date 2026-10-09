@@ -295,8 +295,18 @@ export type RunClaimTable = 'mastra_workflow_run_owners' | 'mastra_memory_run_fe
 
 export type RunClaimFence = { runId: string; generation: number; ownerId: string };
 
-/** A run's claim as stored. `leaseExpiresAt` is epoch ms on the Convex clock, null once released. */
-export type StoredRunClaim = RunClaimFence & { leaseExpiresAt: number | null };
+/**
+ * A run's claim as stored. Times are epoch ms on the Convex clock.
+ * `leaseExpiresAt` is null once released. Ownership claims carry `updatedAt`,
+ * the time of the last claim, renewal or release. Raised fences carry
+ * `retiredAt`, set once the execution holding the fence settles and cleared
+ * when a fence is raised again.
+ */
+export type StoredRunClaim = RunClaimFence & {
+  leaseExpiresAt: number | null;
+  updatedAt?: number;
+  retiredAt?: number | null;
+};
 
 /** Reply to the ownership operations. `now` is the Convex clock the operation ran at. */
 export type RunClaimResult = { applied: boolean; claim: StoredRunClaim | null; now: number };
@@ -320,6 +330,7 @@ export type RunClaimRequest =
   | { op: 'releaseRunOwnership'; tableName: RunClaimTable; fence: RunClaimFence }
   | { op: 'getRunOwnership'; tableName: RunClaimTable; runId: string }
   | { op: 'raiseRunFence'; tableName: RunClaimTable; fence: RunClaimFence }
+  | { op: 'retireRunFence'; tableName: RunClaimTable; fence: RunClaimFence }
   | {
       /**
        * Runs `request` only if `fence` is the run's current claim in

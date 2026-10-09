@@ -21,6 +21,7 @@ const RUN_CLAIM_OPS = new Set<string>([
   'releaseRunOwnership',
   'getRunOwnership',
   'raiseRunFence',
+  'retireRunFence',
   'fenced',
 ]);
 const RUN_CLAIM_TABLES = new Set<string>(['mastra_workflow_run_owners', 'mastra_memory_run_fences']);
@@ -89,11 +90,10 @@ export async function handleRunClaimOperation(
       const leaseExpiresAt = now + leaseMs;
       if (!current) {
         if (expectedGeneration !== undefined && expectedGeneration !== 0) return reply(false, null, now);
-        return reply(
-          true,
-          await writeClaim(ctx, tableName, doc, { runId, generation: 1, ownerId, leaseExpiresAt }),
-          now,
-        );
+        // The first generation comes from the clock, so a claim after this
+        // claim is pruned still outranks a surviving fence.
+        const claim = { runId, generation: Math.max(1, now), ownerId, leaseExpiresAt, updatedAt: now };
+        return reply(true, await writeClaim(ctx, tableName, doc, claim), now);
       }
       if (expectedGeneration !== undefined && current.generation !== expectedGeneration) {
         return reply(false, current, now);
@@ -101,7 +101,7 @@ export async function handleRunClaimOperation(
       if (!force && current.leaseExpiresAt !== null && current.leaseExpiresAt > now) {
         return reply(false, current, now);
       }
-      const claim = { runId, generation: current.generation + 1, ownerId, leaseExpiresAt };
+      const claim = { runId, generation: current.generation + 1, ownerId, leaseExpiresAt, updatedAt: now };
       return reply(true, await writeClaim(ctx, tableName, doc, claim), now);
     }
 
@@ -110,7 +110,8 @@ export async function handleRunClaimOperation(
       const doc = await findClaim(ctx, tableName, fence.runId);
       const current = doc?.record ?? null;
       if (!holds(current, fence) || current.leaseExpiresAt === null) return reply(false, current, now);
-      return reply(true, await writeClaim(ctx, tableName, doc, { ...current, leaseExpiresAt: now + leaseMs }), now);
+      const claim = { ...current, leaseExpiresAt: now + leaseMs, updatedAt: now };
+      return reply(true, await writeClaim(ctx, tableName, doc, claim), now);
     }
 
     case 'releaseRunOwnership': {
@@ -118,7 +119,11 @@ export async function handleRunClaimOperation(
       const doc = await findClaim(ctx, tableName, fence.runId);
       const current = doc?.record ?? null;
       if (!holds(current, fence)) return reply(false, current, now);
-      return reply(true, await writeClaim(ctx, tableName, doc, { ...current, leaseExpiresAt: null }), now);
+      return reply(
+        true,
+        await writeClaim(ctx, tableName, doc, { ...current, leaseExpiresAt: null, updatedAt: now }),
+        now,
+      );
     }
 
     case 'getRunOwnership': {
@@ -130,11 +135,21 @@ export async function handleRunClaimOperation(
       const { tableName, fence } = request;
       const doc = await findClaim(ctx, tableName, fence.runId);
       const current = doc?.record ?? null;
-      if (!current || current.generation < fence.generation) {
-        const claim = { ...fence, leaseExpiresAt: null };
+      // Raises an older fence, reaffirms our own, or creates a missing one.
+      // Every write un-retires the fence.
+      if (!current || current.generation < fence.generation || holds(current, fence)) {
+        const claim = { ...fence, leaseExpiresAt: null, retiredAt: null };
         return reply(true, await writeClaim(ctx, tableName, doc, claim), now);
       }
-      return reply(holds(current, fence), current, now);
+      return reply(false, current, now);
+    }
+
+    case 'retireRunFence': {
+      const { tableName, fence } = request;
+      const doc = await findClaim(ctx, tableName, fence.runId);
+      const current = doc?.record ?? null;
+      if (!holds(current, fence)) return reply(false, current, now);
+      return reply(true, await writeClaim(ctx, tableName, doc, { ...current, retiredAt: now }), now);
     }
 
     case 'fenced': {
