@@ -17,17 +17,22 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup-pnpm-node
-      - run: pnpm turbo --filter "./stores/libsql..." --filter "./stores/pg..." build
+      - run: pnpm turbo --filter "./stores/libsql..." --filter "./stores/pg..." --filter "./stores/mysql..." --filter "./stores/mongodb..." build
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
       - name: Start PostgreSQL
         working-directory: stores/pg
         run: docker compose up -d --wait
+      - name: Start MySQL and MongoDB
+        run: |
+          (cd stores/mysql && docker compose up -d --wait)
+          (cd stores/mongodb && docker compose up -d --wait mongodb-storage)
       - name: Dump
         run: |
           mkdir -p out
           git rev-parse HEAD > out/head
-          cd stores/pg && node ../../.github/knowledge-w1-dump/dump.mjs "$GITHUB_WORKSPACE/out"
+          (cd stores/pg && node ../../.github/knowledge-w1-dump/dump.mjs "$GITHUB_WORKSPACE/out")
+          node .github/knowledge-w1-dump/dump-nosql.mjs "$GITHUB_WORKSPACE/out"
       - name: pg_dump
         run: docker exec pg-test-db pg_dump -U postgres -d mastra --schema-only --no-owner --no-privileges -t 'public.mastra_knowledge_*' > out/pg.sql
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
