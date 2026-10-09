@@ -8,6 +8,7 @@ Added run fencing to the storage API, so storage adapters can reject writes from
 - Memory stores have a new `raiseRunFence()` method.
 - Methods that write run data, such as `saveMessages()`, `saveThread()`, `persistWorkflowSnapshot()`, and `updateWorkflowState()`, accept an optional `fence`. A write whose fence is no longer the run's current claim throws `RunFenceConflictError`.
 - `supportsRunFencing()` reports whether a store implements this. It can return a promise, for stores that must probe the backend first, and should reject when the store can't tell yet. It defaults to `false`, so custom storage adapters keep working without changes, and durable agents fall back to the PubSub lease for them.
+- A run is fully fenced only when both the workflows store and the memory store it writes to support fencing. If only the workflows store does, for example because a composite store takes memory from another adapter or the agent's `Memory` has its own storage, an execution that lost the run can't write workflow state anymore, but its messages, threads, and working memory still land. If only the memory store does, nothing is fenced.
 - Stores that support fencing keep a run's ownership record after the run finishes, plus one memory fence record per run with memory, and nothing prunes them yet. Keeping them makes a later run that reuses the `runId` claim a higher generation than its earlier executions, which stream filtering and the memory fence rely on.
 
 **Writing with a fence**

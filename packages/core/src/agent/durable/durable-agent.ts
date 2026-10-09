@@ -2069,9 +2069,10 @@ export class DurableAgent<
    * Raise the memory store the run writes to to the fence's claim before the
    * run touches memory. Settles the fence if a newer claim already covers
    * memory. Memory that cannot be resolved stays unfenced: the run's own
-   * memory writes fail the same way.
+   * memory writes fail the same way. Warns about a memory store that can't
+   * fence when the run is being recovered, or when recovery is automatic.
    */
-  async #coverMemory(fence: ExecutionFence, requestContext: RequestContext): Promise<void> {
+  async #coverMemory(fence: ExecutionFence, requestContext: RequestContext, recovering = false): Promise<void> {
     if (fence.generation === undefined) return;
     let store: MemoryStorage | undefined;
     try {
@@ -2083,7 +2084,9 @@ export class DurableAgent<
         error,
       });
     }
-    if (this.#mastra?.recoveryConfig?.durableAgents === 'auto') await this.#warnIfUnfenced(store, 'memory');
+    if (recovering || this.#mastra?.recoveryConfig?.durableAgents === 'auto') {
+      await this.#warnIfUnfenced(store, 'memory');
+    }
     try {
       await fence.coverMemory(store);
     } catch (error) {
@@ -3238,6 +3241,7 @@ export class DurableAgent<
         details: { agentName: this.name, runId },
       });
     }
+    await this.#warnIfUnfenced(workflowsStore, 'workflows');
 
     // 1. Validate the persisted durable-agent input before claiming ownership
     //    so obvious caller errors fail fast.
@@ -3349,7 +3353,7 @@ export class DurableAgent<
         originalSpansEnded: originalSpansEndedBeforeCrash(loaded.snapshot),
       });
       // Memory is resolved from the rehydrated context; rehydration does not write to it.
-      await this.#coverMemory(executionFence, recoveryState.requestContext);
+      await this.#coverMemory(executionFence, recoveryState.requestContext, true);
     } catch (error) {
       await executionFence?.settle(async () => {});
       releaseLocalRecovery();
