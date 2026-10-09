@@ -71,7 +71,8 @@ function createImporterTools(
       inputSchema: z.object({ address }),
       execute: async ({ address }) => {
         const removed = await operations.removeNode(address);
-        writes.nodesRemoved += 1;
+        // Only a node actually deleted counts; a released or missing address wrote nothing.
+        if (removed?.deleted) writes.nodesRemoved += 1;
         return removed;
       },
     }),
@@ -109,7 +110,7 @@ function createImporterTools(
         const node = await operations.getNode(address);
         if (!node) return null;
         const removed = await node.removeKnowledge(id);
-        writes.recordsRemoved += 1;
+        if (removed) writes.recordsRemoved += 1;
         return removed;
       },
     }),
