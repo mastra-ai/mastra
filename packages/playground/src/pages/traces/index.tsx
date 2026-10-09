@@ -1,4 +1,4 @@
-import type { EntityType } from '@mastra/core/observability';
+import { EntityType } from '@mastra/core/observability';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
@@ -617,6 +617,13 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         </>
       ) : (
         <TracesListView
+          listId={
+            scopedEntityType === EntityType.AGENT
+              ? 'agent-traces'
+              : scopedEntityType === EntityType.WORKFLOW_RUN
+                ? 'workflows-traces'
+                : 'all-traces'
+          }
           traces={traces}
           isLoading={isTracesLoading}
           isFetchingNextPage={isFetchingNextPage}

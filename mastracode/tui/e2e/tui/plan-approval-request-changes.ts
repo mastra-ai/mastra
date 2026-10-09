@@ -7,6 +7,8 @@ export const planApprovalRequestChangesScenario: McE2eScenario = {
     'Submit a plan, request changes (immediate abort), resubmit with a diff, then approve — exercising the full revision flow.',
   testName: 'requests changes on an AIMock-driven plan, shows diff on resubmission, then approves',
   useOpenAIModel: true,
+  enableObservationalMemory: true,
+  enableTitleGeneration: true,
   aimockFixture: 'plan-approval-request-changes.json',
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);

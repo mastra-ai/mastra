@@ -413,7 +413,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads before persisting. Engine-aware: evented
           // retains running history (see pruneSnapshotHook).
-          pruneSnapshot: this.pruneSnapshotHook({ [COLLECT_TOOL_RESULTS_STEP_ID]: [llmExecutionStep.id] }),
+          pruneSnapshot: this.pruneSnapshotHook({
+            [toolCallStep.id]: [llmExecutionStep.id],
+            [COLLECT_TOOL_RESULTS_STEP_ID]: [llmExecutionStep.id],
+          }),
           validateInputs: false,
           // Deliberate divergence from the main loop (#21529): the workflow
           // engine's own step events repeatedly serialized cumulative
@@ -450,6 +453,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               agentId: state.agentId,
               agentName: state.agentName,
               messageListState: state.messageListState,
+              initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
               toolsMetadata: state.toolsMetadata,
               modelConfig: state.modelConfig,
               modelList: state.modelList,
@@ -834,14 +838,18 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       })
         // Initialize iteration state from input
         .map(
-          async ({ inputData, state, setState }) => {
+          async ({ inputData, state, setState, mastra }) => {
             const { messageListState, ...input } = inputData as DurableAgenticWorkflowInput;
+            const initialMessageList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
+              messageListState,
+            );
             // The transcript rides in workflow state from here on: each
             // persisted snapshot then holds one copy (in `value`) rather than
             // one per step payload. Steps read and update it there.
             await setState({ ...(state as object), messageListState });
             const iterationState: IterationState = {
               ...input,
+              initialUntaggedSystemMessages: initialMessageList.getSystemMessages(),
               iterationCount: 0,
               accumulatedSteps: [],
               accumulatedUsage: {

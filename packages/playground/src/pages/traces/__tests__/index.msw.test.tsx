@@ -840,7 +840,7 @@ describe('Traces page filter bar', () => {
       });
 
       fireEvent.click(screen.getByRole('button', { name: 'Value: Last 7 days' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 24 hours' }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('datePreset=last-24h'));
       expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
@@ -1464,7 +1464,7 @@ describe('Agent traces page opened from a conversation', () => {
       await renderFromConversation();
 
       fireEvent.click(within([...getFilterChips()][0]!).getByRole('button', { name: 'Value: Last 7 days' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 24 hours' }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('datePreset=last-24h'));
       const saved = window.localStorage.getItem(SAVED_FILTERS_KEY) ?? '';
