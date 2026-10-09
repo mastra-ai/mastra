@@ -188,6 +188,7 @@ export function materializeKnowledgeScopePlan(
   }));
 
   return validateKnowledgeStructurePlan({
+    retrofit: false,
     scopes: [
       {
         address: input.address,

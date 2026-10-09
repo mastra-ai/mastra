@@ -159,6 +159,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         const scopeNodeId = scopes[scope.address]!;
         const node = this.#db.knowledgeNodes.get(scopeNodeId)!;
         if (node.deletedAt) continue;
+        if (plan.retrofit === false && !createdScopeIds.includes(scopeNodeId)) continue;
         const parentIds = (scope.parentAddresses ?? []).map(address => {
           const parentId = this.#db.knowledgeScopeAddresses.get(address);
           const parent = parentId ? this.#db.knowledgeNodes.get(parentId) : undefined;
