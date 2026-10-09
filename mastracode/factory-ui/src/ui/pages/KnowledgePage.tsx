@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -516,9 +517,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       }
     : null;
   const selected = trail.at(-1) ?? deepLinkedSelection;
+  // Selecting highlights; details open only on an explicit action (the Details button, a second
+  // tap on the selected node, a search result, or a deep link), so exploring never covers the canvas.
+  const [detailsOpen, setDetailsOpen] = useState(() => searchParams.has('node'));
   const visibleTrail = trail.length > 0 ? trail : deepLinkedSelection ? [deepLinkedSelection] : [];
   const detailScopeLevel = selected?.rung ?? scopeLevel;
-  const setSelected = (entry: TrailEntry | null) => {
+  const setSelected = (entry: TrailEntry | null, { open = false }: { open?: boolean } = {}) => {
+    setDetailsOpen(Boolean(entry) && open);
     setTrail(entry ? [entry] : []);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
@@ -527,6 +532,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     });
   };
   const pushSelected = (entry: TrailEntry) => {
+    setDetailsOpen(true);
     setTrail(current => [...current, entry]);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
@@ -587,7 +593,11 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     });
   };
   /** `fallback` describes a scope the tree has not loaded, such as a lens member clicked on the canvas. */
-  const selectScope = (next: KnowledgeSelection, fallback?: KnowledgeScopeNode) => {
+  const selectScope = (
+    next: KnowledgeSelection,
+    fallback?: KnowledgeScopeNode,
+    { open = false }: { open?: boolean } = {},
+  ) => {
     const loadedScope = next.scopeNodeId
       ? allScopeNodes.find(scopeNode => scopeNode.id === next.scopeNodeId)
       : undefined;
@@ -597,12 +607,13 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       next.scopeLevel ?? scopesQuery.data?.roots.find(root => root.scopeNodeId === next.scopeNodeId)?.level;
     const nextEntry = nextScope ? { nodeId: nextScope.id, name: nextScope.name, rung: nextRung } : null;
     setSearchedScope(fallbackScope);
+    setDetailsOpen(Boolean(nextEntry) && open);
     setTrail(nextEntry ? [nextEntry] : []);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
       writeNodeSelection(copy, nextEntry);
-      // A scope-node selection changes the lens and opens the same node's
-      // detail surface. The URL carries both states so the result is linkable.
+      // A scope-node selection changes the lens and selects the same node; its
+      // details open on request. The URL carries both states so the result is linkable.
       copy.set('scope', next.scopeNodeId ?? next.scopeLevel);
       return copy;
     });
@@ -625,6 +636,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     } else {
       setSearchedScope(undefined);
     }
+    setDetailsOpen(true);
     setTrail([entry]);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
@@ -648,6 +660,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
       ...(event.recordId ? { recordId: event.recordId } : {}),
     };
     setSearchedScope(undefined);
+    setDetailsOpen(true);
     setTrail([entry]);
     setSearchParams(params => {
       const copy = new URLSearchParams(params);
@@ -730,62 +743,81 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
     const childScopeCount = selectedScopeMembers.filter(node => node.isScope).length;
     const contentNodeCount = selectedScopeMembers.length - childScopeCount;
     body = (
-      <div
-        className="relative min-h-0 flex-1"
-        data-testid="knowledge-graph-container"
-        onPointerDownCapture={onActivity}
-        onPointerMoveCapture={onActivity}
-        onWheelCapture={onActivity}
-      >
-        <KnowledgeGraph
-          payload={graphQuery.data}
-          arrivals={arrivals}
-          focusedId={selected?.nodeId ?? null}
-          focusedRecordId={selected?.recordId ?? null}
-          // A structural member listing carries no edges — label every member
-          // so the lens reads as a directory, not a field of dots.
-          labelAll={Boolean(selection.scopeNodeId)}
-          onFocusChange={id => {
-            // A graph click starts a fresh trail; a pane click clears it.
-            if (!id) return setSelected(null);
-            const node = graphQuery.data?.nodes.find(entry => entry.id === id);
-            setSelected({ nodeId: id, name: node?.name ?? id, rung: node?.rung });
-          }}
-          onNodeClick={node => {
-            if (node.isScope) {
-              // Scope selection is identical in the tree and canvas: switch
-              // the lens and open that scope's detail surface in one action.
-              selectScope(
-                { scopeNodeId: node.id },
-                {
-                  id: node.id,
-                  address: node.name,
-                  name: node.name,
-                  ...(node.kind ? { kind: node.kind } : {}),
-                  ...(node.description ? { description: node.description } : {}),
-                  parentIds: [],
-                  memberCount: node.memberCount ?? 0,
-                  memberCountTruncated: node.memberCountTruncated ?? false,
-                  contentNodeCount: node.contentNodeCount ?? 0,
-                  childScopeCount: node.childScopeCount ?? 0,
-                },
-              );
-              return;
-            }
-            setSelected({ nodeId: node.id, name: node.name, rung: node.rung });
-          }}
-          onEdgeClick={edge => {
-            // Selecting an edge selects AND expands the supporting knowledge record (A7).
-            const node = graphQuery.data?.nodes.find(entry => entry.id === edge.source);
-            setSelected({
-              nodeId: edge.source,
-              name: node?.name ?? edge.source,
-              recordId: edge.recordId,
-              rung: node?.rung,
-            });
-          }}
-        />
-        {selectedScope && factoryProjectId ? (
+      // Details sit beside the canvas on desktop (never over it) and as a bottom sheet below md.
+      <div className="flex min-h-0 flex-1">
+        <div
+          className="relative min-h-0 min-w-0 flex-1"
+          data-testid="knowledge-graph-container"
+          onPointerDownCapture={onActivity}
+          onPointerMoveCapture={onActivity}
+          onWheelCapture={onActivity}
+        >
+          <KnowledgeGraph
+            payload={graphQuery.data}
+            arrivals={arrivals}
+            focusedId={selected?.nodeId ?? null}
+            focusedRecordId={selected?.recordId ?? null}
+            // A structural member listing carries no edges — label every member
+            // so the lens reads as a directory, not a field of dots.
+            labelAll={Boolean(selection.scopeNodeId)}
+            onFocusChange={id => {
+              // A pane click clears the selection; node clicks are handled by onNodeClick.
+              if (!id) setSelected(null);
+            }}
+            onNodeClick={node => {
+              // First tap selects and highlights; tapping the selected node again opens its details.
+              const open = selected?.nodeId === node.id;
+              if (node.isScope) {
+                // Scope selection is identical in the tree and canvas: switch the lens
+                // and select that scope; a second tap opens its detail surface.
+                selectScope(
+                  { scopeNodeId: node.id },
+                  {
+                    id: node.id,
+                    address: node.name,
+                    name: node.name,
+                    ...(node.kind ? { kind: node.kind } : {}),
+                    ...(node.description ? { description: node.description } : {}),
+                    parentIds: [],
+                    memberCount: node.memberCount ?? 0,
+                    memberCountTruncated: node.memberCountTruncated ?? false,
+                    contentNodeCount: node.contentNodeCount ?? 0,
+                    childScopeCount: node.childScopeCount ?? 0,
+                  },
+                  { open },
+                );
+                return;
+              }
+              setSelected({ nodeId: node.id, name: node.name, rung: node.rung }, { open });
+            }}
+            onEdgeClick={edge => {
+              // Selecting an edge selects its source node and the supporting knowledge record (A7),
+              // which the details panel expands once opened.
+              const node = graphQuery.data?.nodes.find(entry => entry.id === edge.source);
+              setSelected({
+                nodeId: edge.source,
+                name: node?.name ?? edge.source,
+                recordId: edge.recordId,
+                rung: node?.rung,
+              });
+            }}
+          />
+          {selected && !detailsOpen ? (
+            <div
+              role="toolbar"
+              aria-label="Selected knowledge"
+              className="border-border bg-card shadow-overlay absolute bottom-3 left-1/2 z-10 flex max-w-[90%] -translate-x-1/2 items-center gap-2 rounded-full border py-1 pr-1 pl-3"
+            >
+              <Txt as="span" variant="caption" className="text-foreground truncate">
+                {selected.name}
+              </Txt>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setDetailsOpen(true)}>
+                Details
+              </Button>
+            </div>
+          ) : null}
+        </div>
+        {!detailsOpen ? null : selectedScope && factoryProjectId ? (
           <KnowledgeScopeFlyout
             factoryProjectId={factoryProjectId}
             selection={selection}
@@ -832,6 +864,7 @@ function KnowledgeContent({ factoryProjectId }: { factoryProjectId: string | und
               if (!outside || outside.id === selected.nodeId) return;
 
               const entry = { nodeId: outside.id, name: outside.name, rung: outside.rung };
+              setDetailsOpen(true);
               setTrail([entry]);
               setSearchParams(params => {
                 const copy = new URLSearchParams(params);

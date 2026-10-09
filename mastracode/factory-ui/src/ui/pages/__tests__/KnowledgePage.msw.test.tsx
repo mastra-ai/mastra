@@ -323,6 +323,11 @@ function stubKnowledgeRoute(
   );
 }
 
+/** Selecting only highlights; details open from the selection toolbar's explicit action. */
+async function openDetails() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Details' }));
+}
+
 function renderRoute(path = `/factories/${FACTORY_ID}/knowledge?scope=resource`) {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [path],
@@ -383,6 +388,7 @@ describe('KnowledgePage', () => {
     // request input can never select a Knowledge runtime.
     renderRoute(`/factories/${FACTORY_ID}/knowledge?knowledgeKey=team&scope=resource`);
     fireEvent.click(await screen.findByText('Payments Service', { selector: GRAPH_NODE_LABEL_SELECTOR }));
+    await openDetails();
     await waitFor(() => expect(requests).toContain('node:null'));
     await user.click(screen.getByRole('tab', { name: 'activity' }));
     await waitFor(() => expect(requests).toContain('activity:null'));
@@ -495,10 +501,11 @@ describe('KnowledgePage', () => {
     expect(emptyMemoryScope).not.toHaveTextContent('0');
 
     // Selecting a structural scope fetches the bounded member subgraph by id
-    // and opens the selected scope's detail in the same action.
+    // and selects the scope; its detail opens on request.
     await user.click(within(scopes).getByRole('button', { name: /features feature/ }));
     expect(router.state.location.search).toContain('scope=22222222-2222-4222-8222-222222222222');
     expect(router.state.location.search).toContain('node=22222222-2222-4222-8222-222222222222');
+    await openDetails();
     expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('features');
     expect(screen.queryByRole('button', { name: 'Project' })).not.toBeInTheDocument();
     // The clicked scope node renders as its own graph root inside the lens.
@@ -528,6 +535,7 @@ describe('KnowledgePage', () => {
     fireEvent.click(
       await within(graphContainer).findByText('Memory Extraction', { selector: GRAPH_NODE_LABEL_SELECTOR }),
     );
+    await openDetails();
     expect(router.state.location.search).toContain('scope=22222222-2222-4222-8222-222222222222');
     expect(await screen.findByText(/Handles charging flows/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Close details' }));
@@ -540,6 +548,7 @@ describe('KnowledgePage', () => {
     if (!memoryNode) throw new Error('Expected the child scope node');
     fireEvent.click(memoryNode);
     await waitFor(() => expect(router.state.location.search).toContain('scope=33333333-3333-4333-8333-333333333333'));
+    await openDetails();
     expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('memory');
   });
 
@@ -584,6 +593,7 @@ describe('KnowledgePage', () => {
 
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
     await user.click(await within(scopes).findByRole('button', { name: /features feature/ }));
+    await openDetails();
     const featuresFlyout = await screen.findByTestId('knowledge-scope-flyout');
     expect(featuresFlyout).toHaveTextContent('Direct members1+');
 
@@ -596,6 +606,7 @@ describe('KnowledgePage', () => {
     if (!memoryNode) throw new Error('Expected the member scope node');
     fireEvent.click(memoryNode);
     await waitFor(() => expect(router.state.location.search).toContain(`scope=${memoryId}`));
+    await openDetails();
     expect(await screen.findByTestId('knowledge-scope-flyout')).toHaveTextContent('memory');
   });
 
@@ -710,6 +721,7 @@ describe('KnowledgePage', () => {
       selector: GRAPH_NODE_LABEL_SELECTOR,
     });
     fireEvent.click(paymentsGraphNode);
+    await openDetails();
     await waitFor(() => expect(nodeScopeLevels).toContain('resource'));
     expect(nodeScopeLevels).not.toContain('org');
 
@@ -782,7 +794,8 @@ describe('KnowledgePage', () => {
     const scopes = await screen.findByRole('complementary', { name: 'Knowledge scopes' });
     fireEvent.click(await within(scopes).findByRole('button', { name: /fp-1 project/ }));
 
-    // Tree selection changes the lens and opens its scope detail together.
+    // Tree selection changes the lens; its scope detail opens on request.
+    await openDetails();
     let flyout = await screen.findByTestId('knowledge-scope-flyout');
     expect(flyout).toHaveTextContent(`project:${FACTORY_ID}`);
     expect(flyout).not.toHaveTextContent(`resource:${FACTORY_ID}`);
@@ -801,12 +814,14 @@ describe('KnowledgePage', () => {
 
     // Clicking the same scope in the graph applies the identical selection.
     fireEvent.click(within(scopes).getByRole('button', { name: /fp-1 project/ }));
+    await openDetails();
     flyout = await screen.findByTestId('knowledge-scope-flyout');
     fireEvent.click(within(flyout).getByRole('button', { name: 'Close scope details' }));
     expect(screen.queryByTestId('knowledge-scope-flyout')).not.toBeInTheDocument();
     const root = (await screen.findAllByTestId('knowledge-node')).find(node => node.textContent?.includes(FACTORY_ID));
     if (!root) throw new Error('Expected the selected structural scope root');
     fireEvent.click(root);
+    await openDetails();
     flyout = await screen.findByTestId('knowledge-scope-flyout');
     expect(flyout).toHaveTextContent(`project:${FACTORY_ID}`);
     expect(flyout).not.toHaveTextContent(`resource:${FACTORY_ID}`);
@@ -1109,6 +1124,7 @@ describe('KnowledgePage', () => {
     expect(router.state.location.search).not.toContain('node=ent-x');
 
     fireEvent.click(screen.getByText('Payments Service', { selector: GRAPH_NODE_LABEL_SELECTOR }));
+    await openDetails();
     fireEvent.click(await screen.findByRole('button', { name: 'Elsewhere' }));
     await waitFor(() => {
       expect(router.state.location.search).toContain('scope=resource');
@@ -1221,6 +1237,31 @@ describe('KnowledgePage', () => {
     expect(screen.queryByTestId('knowledge-hover-description')).not.toBeInTheDocument();
   });
 
+  it('selecting a node only highlights it; details open from the Details action or a second tap', async () => {
+    stubKnowledgeRoute();
+    const { router } = renderRoute();
+
+    const nodes = await screen.findAllByTestId('knowledge-node');
+    fireEvent.click(nodes[0]);
+    const toolbar = await screen.findByRole('toolbar', { name: 'Selected knowledge' });
+    expect(toolbar).toHaveTextContent('Payments Service');
+    expect(router.state.location.search).toContain('node=');
+    expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
+
+    fireEvent.click(within(toolbar).getByRole('button', { name: 'Details' }));
+    expect(await screen.findByTestId('knowledge-flyout')).toBeInTheDocument();
+    expect(screen.queryByRole('toolbar', { name: 'Selected knowledge' })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Close details' }));
+    expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
+
+    // Tapping the already-selected node is the explicit open gesture.
+    const [node] = await screen.findAllByTestId('knowledge-node');
+    fireEvent.click(node!);
+    expect(screen.queryByTestId('knowledge-flyout')).not.toBeInTheDocument();
+    fireEvent.click(node!);
+    expect(await screen.findByTestId('knowledge-flyout')).toBeInTheDocument();
+  });
+
   it('omits flyout content chrome for whitespace-only content', async () => {
     stubKnowledgeRoute(undefined, {
       ...nodeFixture,
@@ -1230,6 +1271,7 @@ describe('KnowledgePage', () => {
 
     const nodes = await screen.findAllByTestId('knowledge-node');
     fireEvent.click(nodes[0]);
+    await openDetails();
 
     const flyout = await screen.findByTestId('knowledge-flyout');
     expect(await within(flyout).findByText('Knowledge node')).toBeInTheDocument();
@@ -1245,6 +1287,7 @@ describe('KnowledgePage', () => {
     // fireEvent (not userEvent): userEvent's mousedown trips d3-drag's nodrag
     // handler, which reads event.view — null in jsdom.
     fireEvent.click(nodes[0]);
+    await openDetails();
 
     const flyout = await screen.findByTestId('knowledge-flyout');
     // Knowledge records section resolves from the node endpoint: record rows with the
@@ -1277,6 +1320,7 @@ describe('KnowledgePage', () => {
 
     const nodes = await screen.findAllByTestId('knowledge-node');
     fireEvent.click(nodes[0]);
+    await openDetails();
     await user.click(await screen.findByText(/for charging flows/));
     await user.click(await screen.findByRole('button', { name: /thread-abc-123/ }));
 
@@ -1375,6 +1419,7 @@ describe('KnowledgePage', () => {
 
     const nodes = await screen.findAllByTestId('knowledge-node');
     fireEvent.click(nodes[0]);
+    await openDetails();
     // Hop to the referenced node via the knowledge record's wikilink.
     const recordCard = (await screen.findAllByTestId('knowledge-record'))[0]!;
     await user.click(within(recordCard).getByRole('button', { name: 'Deploy Runbook' }));

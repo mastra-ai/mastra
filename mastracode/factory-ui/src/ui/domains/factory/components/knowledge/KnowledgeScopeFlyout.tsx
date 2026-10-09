@@ -40,14 +40,14 @@ export function KnowledgeScopeFlyout({
     <aside
       data-testid="knowledge-scope-flyout"
       aria-label={`${scope.name} scope details`}
-      className="border-border bg-background shadow-overlay absolute top-0 right-0 z-20 h-full w-80 overflow-y-auto border-l"
+      className="border-border bg-background shadow-overlay fixed inset-x-0 bottom-0 z-30 max-h-[70vh] overflow-y-auto rounded-t-xl border-t md:static md:z-auto md:max-h-none md:w-80 md:shrink-0 md:rounded-none md:border-t-0 md:border-l md:shadow-none"
     >
       <header className="border-border flex items-start gap-3 border-b p-4">
         <div className="min-w-0 flex-1">
           <Txt as="h2" variant="subheading" className="text-foreground truncate font-semibold">
             {scope.name}
           </Txt>
-          <div className="text-badge-purple-indicator mt-1 text-xs">scope</div>
+          <div className="text-badge-purple-indicator mt-1 text-xs">{scope.kind || 'topic'}</div>
         </div>
         <button
           type="button"
