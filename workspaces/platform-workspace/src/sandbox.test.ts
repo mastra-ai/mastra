@@ -867,6 +867,32 @@ describe('PlatformSandbox', () => {
     // Callers persisting a reattach id (the Factory fleet reads metadata.sandboxId)
     // must get the id the proxy recognizes, not the local construction id.
     expect(info.metadata?.sandboxId).toBe('sbx_platform_uuid');
+    expect(sandbox.sandboxId).toBe('sbx_platform_uuid');
+  });
+
+  it('getInfo() before start answers locally instead of asking the proxy about the reattach hint', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi.fn();
+
+    // A resumed session hands back whatever id was persisted. Until start()
+    // confirms it with the proxy it is only a hint: the workspace tools call
+    // getInfo() before their first exec, and a proxy 404 here would fail the
+    // tool where start() would have fallen through to a fresh provision.
+    const sandbox = new PlatformSandbox({
+      id: 'session-1',
+      sandboxId: 'stale-or-logical-id',
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+
+    const info = await sandbox.getInfo();
+    expect(info.id).toBe('session-1');
+    expect(info.status).toBe('pending');
+    expect(fetchMock).not.toHaveBeenCalled();
+    // The hint is not reported as the physical id either.
+    expect(sandbox.sandboxId).toBeUndefined();
   });
 
   it('clears sandbox state on destroy so stale IDs cannot leak to later calls', async () => {

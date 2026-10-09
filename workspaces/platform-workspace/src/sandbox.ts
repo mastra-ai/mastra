@@ -413,6 +413,17 @@ export class PlatformSandbox extends MastraSandbox {
    */
   templatePending?: SandboxTemplatePending;
 
+  /**
+   * The platform's id for the provisioned sandbox, as returned by the create
+   * or reattach response. Persist this to reattach later via the `sandboxId`
+   * option. Undefined until the sandbox has been started in this process; a
+   * `sandboxId` passed to the constructor is only a hint for `start()` and is
+   * not reported here until the proxy confirms it.
+   */
+  get sandboxId(): string | undefined {
+    return this.status === 'running' ? this._sandboxId : undefined;
+  }
+
   private readonly _client: PlatformClient;
   private readonly _usesProviderRoutes: boolean;
   private readonly _environmentId: string;
@@ -1488,7 +1499,12 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   async getInfo(): Promise<SandboxInfo> {
-    if (!this._sandboxId) {
+    // Before this process has started the sandbox, `_sandboxId` is at best a
+    // caller-supplied hint for `start()` to reattach by. Asking the proxy
+    // about it here would surface a 404 for a hint the proxy does not know
+    // (and the workspace tools call `getInfo()` before their first exec),
+    // where `start()` would have fallen through to a fresh provision.
+    if (!this._sandboxId || this.status !== 'running') {
       return {
         id: this.id,
         name: this.name,
