@@ -3469,16 +3469,15 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     });
   }
 
-  async completeSemanticOutbox(input: { ids: string[]; workerId: string }): Promise<void> {
-    if (!input.ids.length) return;
-    await this.#transaction(async session => {
-      await (
-        await this.#collection(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX)
-      ).updateMany(
-        { id: { $in: input.ids }, status: 'processing', claimedBy: input.workerId },
-        { $set: { status: 'completed', completedAt: new Date() }, $unset: { claimedAt: '', claimedBy: '' } },
-        sessionOptions(session),
-      );
+  async completeSemanticOutbox(input: { ids: string[]; workerId: string }): Promise<string[]> {
+    if (!input.ids.length) return [];
+    return this.#transaction(async session => {
+      const outbox = await this.#collection(TABLE_KNOWLEDGE_SEMANTIC_OUTBOX);
+      const filter = { id: { $in: input.ids }, status: 'processing', claimedBy: input.workerId };
+      const claimed = await outbox.find(filter, { ...sessionOptions(session), projection: { id: 1 } }).toArray();
+      const completed = claimed.map(entry => String(entry.id));
+      if (completed.length) await outbox.deleteMany({ ...filter, id: { $in: completed } }, sessionOptions(session));
+      return completed;
     });
   }
 
