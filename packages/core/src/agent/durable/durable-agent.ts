@@ -3940,19 +3940,33 @@ export class DurableAgent<
         // callers only care about counts — so we just await the workflow
         // execution promise that `recover()` parks on the registry entry,
         // capture any failure it surfaces via `onError`, and drop the
-        // stream.
+        // stream. `recover()` cleans up on its own after FINISH/ERROR and keeps
+        // suspended runs registered, so thread subscribers still see the
+        // terminal event and a later approval can resume the run (#25891).
+        // With auto-cleanup disabled nothing else releases a finished run, and
+        // bulk callers never get the cleanup handle. Release it once the
+        // terminal event has been delivered; suspended runs never get here.
+        let releaseAfterTerminal: (() => void) | undefined;
+        const onTerminal = () => {
+          if (this.#cleanupTimeoutMs === 0) setTimeout(() => releaseAfterTerminal?.(), 0);
+        };
         const { cleanup } = await this.recover(targetRunId, {
           onError: ({ error }) => {
             runError = error instanceof Error ? error : new Error(String(error));
+            onTerminal();
           },
+          onFinish: onTerminal,
+          onAbort: onTerminal,
         });
+        releaseAfterTerminal = cleanup;
         try {
           const workflowExecution = globalRunRegistry.get(targetRunId)?.workflowExecution;
           if (workflowExecution) {
             await workflowExecution;
           }
-        } finally {
+        } catch (error) {
           cleanup();
+          throw error;
         }
         if (runError) throw runError;
         recovered.push({ runId: targetRunId, status: 'success' });

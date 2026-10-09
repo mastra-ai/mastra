@@ -4284,6 +4284,9 @@ export class AgentThreadStreamRuntime {
     // once its terminal control event proves it finished cleanly; failed,
     // aborted, or never-terminated (process crash) runs are dropped.
     const deferredRunsByStreamId = new Map<string, AgentThreadRunRecord<any>>();
+    // Earlier segments of a run retired by a newer live segment (the original
+    // process died and recovery took over). Redeliveries for them are ignored.
+    const supersededStreamIds = new Set<string>();
     const remoteRunLeaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
     const remoteRunLeaseWatchTokens = new Map<string, symbol>();
     const remoteRunSuspensionPrompts = new Set<string>();
@@ -4480,8 +4483,10 @@ export class AgentThreadStreamRuntime {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
       if (data.type === 'run-registered') {
+        if (supersededStreamIds.has(data.streamId)) return;
         const registrationRedelivery = handledRegistrationEventIds.has(event.id);
         handledRegistrationEventIds.add(event.id);
+        const firstRegistration = !registeredSeqsByRunId.get(data.runId)?.has(data.streamId);
         noteRunHalf(data.runId, { streamId: data.streamId, streamSeq: data.streamSeq });
         // A redelivered registration for a stream that already ended must not
         // restore the finished run as the thread's active run.
@@ -4534,6 +4539,29 @@ export class AgentThreadStreamRuntime {
             if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(data.runId);
             if (data.agentId) state.remoteAgentIdsByRunId.set(data.runId, data.agentId);
           }
+          // A live new segment of a run supersedes any earlier segment of the
+          // same run that never saw a terminal event: that segment's process
+          // died (e.g. recovery took the run over), and the lease now held
+          // under the same runId would otherwise keep it looking alive and
+          // queue the new segment behind it forever. Order by arrival, not
+          // streamSeq: sequences restart at 1 in a recovering process, and
+          // redeliveries of a segment never retire others.
+          for (const staleStreamId of firstRegistration ? (registeredSeqsByRunId.get(data.runId)?.keys() ?? []) : []) {
+            if (staleStreamId === data.streamId || terminalEventStreamIds.has(staleStreamId)) continue;
+            const staleRun = remoteRuns.get(staleStreamId);
+            if (!staleRun || staleRun.done) continue;
+            supersededStreamIds.add(staleStreamId);
+            if (deferredRunsByStreamId.has(staleStreamId)) {
+              discardDeferredRun(staleStreamId);
+              continue;
+            }
+            stopRemoteRunLeaseWatch(staleStreamId);
+            remoteRunSuspensionPrompts.delete(staleStreamId);
+            staleRun.done = true;
+            while (staleRun.waiters.length) staleRun.waiters.shift()?.();
+            while (staleRun.finishWaiters.length) staleRun.finishWaiters.shift()?.();
+            remoteRuns.delete(staleStreamId);
+          }
         }
         // Reuse a proxy that a stream-part-first delivery already created for
         // this stream — creating a fresh record here would orphan its
@@ -4554,6 +4582,7 @@ export class AgentThreadStreamRuntime {
         return;
       }
       if (data.type === 'stream-part') {
+        if (supersededStreamIds.has(data.streamId)) return;
         if (
           data.sourceId === this.#id &&
           (localStreamIds.has(data.streamId) || !replayedStreamIds.has(data.streamId))
