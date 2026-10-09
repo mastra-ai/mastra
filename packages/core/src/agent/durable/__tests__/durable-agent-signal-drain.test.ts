@@ -370,9 +370,9 @@ describe.each([false, true])('DurableAgent signal drain (excluded: %s)', exclude
             const originalDrain = entry.drainPendingSignals;
             entry.drainPendingSignals = (scope?: 'pending' | 'pre-run') => {
               // scope defaults to 'pending' in the real runtime (LoopRuntime contract)
-              if ((scope ?? 'pending') === 'pending' && callNum > 0) {
+              if ((scope ?? 'pending') === 'pending') {
                 pendingDrainCount++;
-                // Return the signal after the first model response, not at step entry.
+                // Return signal on the first pending drain only
                 if (pendingDrainCount === 1) {
                   return pendingSignals;
                 }

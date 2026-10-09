@@ -6,7 +6,6 @@ import { createScorer } from '../../../evals';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
-import { BatchPartsProcessor } from '../../../processors/processors/batch-parts';
 import { StructuredOutputProcessor } from '../../../processors/processors/structured-output';
 import { InMemoryStore } from '../../../storage';
 import type { ChunkType } from '../../../stream/types';
@@ -331,86 +330,6 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
     }
   });
 
-  it('drops built-in batch buffers without resetting accepted state', async () => {
-    const batch = new BatchPartsProcessor({ batchSize: 1_000, emitOnNonText: false, maxWaitTime: 60_000 });
-    const processing = vi.spyOn(batch, 'processOutputStream');
-    const prompts: unknown[] = [];
-    const memory = new MockMemory();
-    const onFinish = vi.fn();
-    const onStepFinish = vi.fn();
-    const { agent, mastra, customPubsub } = createOwner(engine, {
-      id: crypto.randomUUID(),
-      name: 'Batch cleanup',
-      instructions: 'Test',
-      memory,
-      outputProcessors: [batch],
-      model: new MockLanguageModelV2({
-        doStream: async ({ prompt, abortSignal }) => {
-          prompts.push(prompt);
-          if (prompts.length > 1) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
-          return {
-            warnings: [],
-            stream: new ReadableStream<LanguageModelV2StreamPart>({
-              start(controller) {
-                controller.enqueue({ type: 'stream-start', warnings: [] });
-                controller.enqueue({ type: 'reasoning-start', id: 'batched' });
-                controller.enqueue({ type: 'reasoning-delta', id: 'batched', delta: 'BATCH_DISCARDED' });
-                abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
-              },
-            }),
-          };
-        },
-      }),
-    });
-    const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
-    const stream = await agent.stream('initial question', {
-      memory: { thread: scope.threadId, resource: scope.resourceId },
-      maxSteps: 3,
-      onFinish,
-      onStepFinish,
-    });
-    const entry = globalRunRegistry.get(stream.runId)!;
-    const stepContents: unknown[] = [];
-    await mastra.pubsub.subscribe(`agent.stream.${stream.runId}`, event => {
-      if (event.data?.type === 'step-finish') stepContents.push(event.data.payload._durableStepContent);
-    });
-    const chunks: ChunkType[] = [];
-    const consumption = collect(stream.fullStream, chunks);
-    try {
-      await vi.waitFor(() =>
-        expect(JSON.stringify(processing.mock.calls.at(-1)?.[0].state.batch)).toContain('BATCH_DISCARDED'),
-      );
-      const state = processing.mock.calls.at(-1)![0].state;
-      state.retained = 'ACCEPTED_PROCESSOR_STATE';
-      await (
-        await agent.sendSignal({ type: 'user', contents: 'BATCH_SIGNAL' }, scope)
-      ).accepted;
-      await consumption;
-      await entry.workflowExecution;
-      expect(prompts).toHaveLength(2);
-      expect(onFinish).toHaveBeenCalledTimes(1);
-      // emitOnNonText:false also buffers lifecycle chunks; check producer accounting.
-      expect(stepContents).toHaveLength(1);
-      expect(JSON.stringify(stepContents[0])).toContain('replacement answer');
-      expect(JSON.stringify(stepContents)).not.toContain('BATCH_DISCARDED');
-      expect(onStepFinish).not.toHaveBeenCalled();
-      expect(state.retained).toBe('ACCEPTED_PROCESSOR_STATE');
-      expect(JSON.stringify(state.batch)).not.toContain('BATCH_DISCARDED');
-      expect(JSON.stringify(chunks)).not.toContain('BATCH_DISCARDED');
-      expect(JSON.stringify(prompts[1])).not.toContain('BATCH_DISCARDED');
-      const history = JSON.stringify((await memory.recall(scope)).messages);
-      expect(history).not.toContain('BATCH_DISCARDED');
-      expect(history).toContain('replacement answer');
-    } finally {
-      clearTimeout(processing.mock.calls.at(-1)?.[0].state.timeoutId);
-      stream.abort();
-      await consumption.catch(() => {});
-      await entry.workflowExecution;
-      stream.cleanup();
-      await customPubsub?.close();
-    }
-  });
-
   it('supplies only accepted replacement input to the built-in structuring processor', async () => {
     const prompts: unknown[] = [];
     const structuringPrompts: unknown[] = [];
@@ -687,6 +606,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
   it('preempts during input processing without resetting state or dropping processor signals', async () => {
     const held = barrier();
     let processing = false;
+    const processorSignals: (AbortSignal | undefined)[] = [];
     const ordinals: number[] = [];
     const stateCounts: number[] = [];
     const prompts: unknown[] = [];
@@ -705,7 +625,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       inputProcessors: [
         {
           id: 'input-barrier',
-          async processInputStep({ state, stepNumber, sendSignal }) {
+          async processInputStep({ state, stepNumber, sendSignal, abortSignal }) {
+            processorSignals.push(abortSignal);
             state.count = (state.count ?? 0) + 1;
             ordinals.push(stepNumber);
             stateCounts.push(state.count);
@@ -740,6 +661,8 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       expect(JSON.stringify(prompts[0])).toContain('PROCESSOR_HISTORY');
       expect(ordinals).toEqual([0, 0]);
       expect(stateCounts).toEqual([1, 2]);
+      // The interruption cancels only the model request, never the processors preparing it.
+      expect(processorSignals.some(signal => signal?.aborted)).toBe(false);
       const echoes = chunks.filter(chunk => chunk.type === 'data-signal');
       expect(JSON.stringify(echoes).match(/PROCESSOR_HISTORY/g)).toHaveLength(1);
       const history = JSON.stringify((await memory.recall({ ...scope, hideSignals: false })).messages);
@@ -750,6 +673,57 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       stream.abort();
       await consumption.catch(() => {});
       await entry.workflowExecution;
+      stream.cleanup();
+      await customPubsub?.close();
+    }
+  });
+
+  it('adds a signal queued after the loop drain to the next request', async () => {
+    const prompts: unknown[] = [];
+    const memory = new MockMemory();
+    const { agent, customPubsub } = createOwner(engine, {
+      id: crypto.randomUUID(),
+      name: 'Between steps',
+      instructions: 'Test',
+      memory,
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(prompt);
+          if (prompts.length > 1) return { stream: convertArrayToReadableStream(answer()), warnings: [] };
+          return {
+            stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
+              { type: 'stream-start', warnings: [] },
+              { type: 'tool-call', toolCallId: 'call-1', toolName: 'probe', input: '{}' },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+            warnings: [],
+          };
+        },
+      }),
+      tools: {
+        probe: createTool({ id: 'probe', description: 'Probe', inputSchema: z.object({}), execute: async () => 'ok' }),
+      },
+    });
+    const scope = { threadId: crypto.randomUUID(), resourceId: crypto.randomUUID() };
+    const stream = await agent.stream('initial question', {
+      memory: { thread: scope.threadId, resource: scope.resourceId },
+      maxSteps: 3,
+      // Runs after the loop drained signals and before the next step subscribes.
+      onIterationComplete: async ({ isFinal }: { isFinal: boolean }) => {
+        if (!isFinal) await (await agent.sendSignal({ type: 'user', contents: 'GAP_SIGNAL' }, scope)).accepted;
+      },
+    });
+    const entry = globalRunRegistry.get(stream.runId)!;
+    try {
+      await collect(stream.fullStream);
+      await entry.workflowExecution;
+      expect(prompts).toHaveLength(2);
+      expect(JSON.stringify(prompts[1])).toContain('GAP_SIGNAL');
+    } finally {
       stream.cleanup();
       await customPubsub?.close();
     }

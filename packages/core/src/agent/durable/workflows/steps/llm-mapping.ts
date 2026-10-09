@@ -110,7 +110,7 @@ export function createDurableLLMMappingStep() {
 
       if (llmOutput.stepResult.signalPreempted) {
         return {
-          messageListState: messageList.serialize(),
+          ...(await storeMessageListState(params, messageList.serialize())),
           messageId,
           stepResult: llmOutput.stepResult,
           toolResults: [],
