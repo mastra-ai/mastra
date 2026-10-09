@@ -70,6 +70,41 @@ describe('resolveModelConfig', () => {
     expect(result.provider).toBe(`anthropic`);
   });
 
+  describe('labeled { model, id } configs', () => {
+    it('exposes the label on a model built by a dynamic function', async () => {
+      const result = await resolveModelConfig(() => ({ model: openai('gpt-4o'), id: 'mastra/openai/gpt-4o' }));
+
+      expect(result).toBeInstanceOf(AISDKV5LanguageModel);
+      expect(result.provider).toBe('openai.responses');
+      expect(result.modelId).toBe('gpt-4o');
+      expect((result as { id?: string }).id).toBe('mastra/openai/gpt-4o');
+    });
+
+    it('resolves a labeled model ID string through the router', async () => {
+      const result = await resolveModelConfig({ model: 'openai/gpt-4o', id: 'custom/openai/gpt-4o' });
+
+      expect(result).toBeInstanceOf(ModelRouterLanguageModel);
+      expect((result as { id?: string }).id).toBe('custom/openai/gpt-4o');
+    });
+
+    it('is not mistaken for an OpenAI-compatible config', () => {
+      expect(isOpenAICompatibleObjectConfig({ model: 'openai/gpt-4o', id: 'openai/gpt-4o' } as never)).toBe(false);
+    });
+
+    it('leaves unlabeled model instances without an id', async () => {
+      const result = await resolveModelConfig(openai('gpt-4o'));
+      expect((result as { id?: string }).id).toBeUndefined();
+    });
+
+    it('exposes the router ID only when the ID alone resolves the same route', async () => {
+      const plain = await resolveModelConfig('mastra/openai/gpt-4o');
+      const configured = await resolveModelConfig({ id: 'openai/gpt-4o', apiKey: 'test-key' });
+
+      expect((plain as { id?: string }).id).toBe('mastra/openai/gpt-4o');
+      expect((configured as { id?: string }).id).toBeUndefined();
+    });
+  });
+
   it('should throw error for invalid config', async () => {
     await expect(resolveModelConfig({} as any)).rejects.toThrow('Invalid model configuration');
   });

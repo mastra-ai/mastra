@@ -16,6 +16,7 @@
 
 import type { Context } from 'hono';
 
+import { factoryUserOrgId } from '../auth.js';
 import type {
   CredentialRecord,
   LoginSessionKind,
@@ -72,7 +73,7 @@ export async function getTenantCredentialsStorage(
  * per-user synthetic org so credentials never become server-global.
  */
 export function tenantOrgId(tenant: { orgId?: string; userId: string }): string {
-  return tenant.orgId ?? `user:${tenant.userId}`;
+  return tenant.orgId ?? factoryUserOrgId({ id: tenant.userId }) ?? `user:${tenant.userId}`;
 }
 
 /**

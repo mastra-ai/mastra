@@ -6,11 +6,13 @@
     "│       └── model_generation: \"llm: 'mock-model-id'\"",
     "│           └── model_step: \"step: 0\"",
     "│               ├── processor_run: \"llm request processor: provider-history-compat\"",
+    "│               ├── processor_run: \"llm request processor: unsupported-file-handler\"",
     "│               └── model_inference: \"inference: 0\"",
     "│                   └── model_chunk: \"chunk: 'text'\"",
     "├── model_generation: \"llm: 'mock-model-id'\"",
     "│   └── model_step: \"step: 0\"",
     "│       ├── processor_run: \"llm request processor: provider-history-compat\"",
+    "│       ├── processor_run: \"llm request processor: unsupported-file-handler\"",
     "│       └── model_inference: \"inference: 0\"",
     "│           └── model_chunk: \"chunk: 'text'\"",
     "└── processor_run: \"output processor: summarizer\"",
@@ -18,6 +20,7 @@
     "        └── model_generation: \"llm: 'mock-model-id'\"",
     "            └── model_step: \"step: 0\"",
     "                ├── processor_run: \"llm request processor: provider-history-compat\"",
+    "                ├── processor_run: \"llm request processor: unsupported-file-handler\"",
     "                └── model_inference: \"inference: 0\"",
     "                    └── model_chunk: \"chunk: 'text'\""
   ],
@@ -289,6 +292,51 @@
                           "span": {
                             "id": "<span-7>",
                             "traceId": "<trace-1>",
+                            "name": "llm request processor: unsupported-file-handler",
+                            "type": "processor_run",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-5>",
+                            "entityType": "input_processor",
+                            "entityId": "unsupported-file-handler",
+                            "attributes": {
+                              "processorPhase": "llmRequest",
+                              "processorExecutor": "legacy",
+                              "processorIndex": 2
+                            },
+                            "metadata": {
+                              "runId": "<runId-2>",
+                              "environment": "test"
+                            },
+                            "input": {
+                              "prompt": [
+                                {
+                                  "role": "system",
+                                  "content": "You validate input messages"
+                                },
+                                {
+                                  "role": "user",
+                                  "content": [
+                                    {
+                                      "type": "text",
+                                      "text": "Validate:   Hello! How are you?  "
+                                    }
+                                  ]
+                                }
+                              ],
+                              "stepNumber": 0,
+                              "retryCount": 0
+                            },
+                            "output": {
+                              "shortCircuited": false
+                            }
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-8>",
+                            "traceId": "<trace-1>",
                             "name": "inference: 0",
                             "type": "model_inference",
                             "completed": true,
@@ -334,14 +382,14 @@
                           "children": [
                             {
                               "span": {
-                                "id": "<span-8>",
+                                "id": "<span-9>",
                                 "traceId": "<trace-1>",
                                 "name": "chunk: 'text'",
                                 "type": "model_chunk",
                                 "completed": true,
                                 "isEvent": false,
                                 "isRootSpan": false,
-                                "parentId": "<span-7>",
+                                "parentId": "<span-8>",
                                 "entityType": "agent",
                                 "entityId": "validator-agent",
                                 "attributes": {
@@ -369,7 +417,7 @@
         },
         {
           "span": {
-            "id": "<span-9>",
+            "id": "<span-10>",
             "traceId": "<trace-1>",
             "name": "llm: 'mock-model-id'",
             "type": "model_generation",
@@ -431,14 +479,14 @@
           "children": [
             {
               "span": {
-                "id": "<span-10>",
+                "id": "<span-11>",
                 "traceId": "<trace-1>",
                 "name": "step: 0",
                 "type": "model_step",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
-                "parentId": "<span-9>",
+                "parentId": "<span-10>",
                 "entityType": "agent",
                 "entityId": "test-agent",
                 "attributes": {
@@ -484,14 +532,14 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-11>",
+                    "id": "<span-12>",
                     "traceId": "<trace-1>",
                     "name": "llm request processor: provider-history-compat",
                     "type": "processor_run",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-10>",
+                    "parentId": "<span-11>",
                     "entityType": "input_processor",
                     "entityId": "provider-history-compat",
                     "attributes": {
@@ -529,14 +577,59 @@
                 },
                 {
                   "span": {
-                    "id": "<span-12>",
+                    "id": "<span-13>",
+                    "traceId": "<trace-1>",
+                    "name": "llm request processor: unsupported-file-handler",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-11>",
+                    "entityType": "input_processor",
+                    "entityId": "unsupported-file-handler",
+                    "attributes": {
+                      "processorPhase": "llmRequest",
+                      "processorExecutor": "legacy",
+                      "processorIndex": 3
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You are a helpful assistant"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "  Hello! How are you?  "
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 0,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-14>",
                     "traceId": "<trace-1>",
                     "name": "inference: 0",
                     "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-10>",
+                    "parentId": "<span-11>",
                     "entityType": "agent",
                     "entityId": "test-agent",
                     "attributes": {
@@ -575,14 +668,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-13>",
+                        "id": "<span-15>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'text'",
                         "type": "model_chunk",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-12>",
+                        "parentId": "<span-14>",
                         "entityType": "agent",
                         "entityId": "test-agent",
                         "attributes": {
@@ -606,7 +699,7 @@
         },
         {
           "span": {
-            "id": "<span-14>",
+            "id": "<span-16>",
             "traceId": "<trace-1>",
             "name": "output processor: summarizer",
             "type": "processor_run",
@@ -661,14 +754,14 @@
           "children": [
             {
               "span": {
-                "id": "<span-15>",
+                "id": "<span-17>",
                 "traceId": "<trace-1>",
                 "name": "agent run: 'summarizer-agent'",
                 "type": "agent_run",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
-                "parentId": "<span-14>",
+                "parentId": "<span-16>",
                 "entityType": "agent",
                 "entityId": "summarizer-agent",
                 "attributes": {
@@ -687,14 +780,14 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-16>",
+                    "id": "<span-18>",
                     "traceId": "<trace-1>",
                     "name": "llm: 'mock-model-id'",
                     "type": "model_generation",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-15>",
+                    "parentId": "<span-17>",
                     "entityType": "agent",
                     "entityId": "summarizer-agent",
                     "attributes": {
@@ -749,14 +842,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-17>",
+                        "id": "<span-19>",
                         "traceId": "<trace-1>",
                         "name": "step: 0",
                         "type": "model_step",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-16>",
+                        "parentId": "<span-18>",
                         "entityType": "agent",
                         "entityId": "summarizer-agent",
                         "attributes": {
@@ -803,14 +896,14 @@
                       "children": [
                         {
                           "span": {
-                            "id": "<span-18>",
+                            "id": "<span-20>",
                             "traceId": "<trace-1>",
                             "name": "llm request processor: provider-history-compat",
                             "type": "processor_run",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
-                            "parentId": "<span-17>",
+                            "parentId": "<span-19>",
                             "entityType": "input_processor",
                             "entityId": "provider-history-compat",
                             "attributes": {
@@ -848,14 +941,59 @@
                         },
                         {
                           "span": {
-                            "id": "<span-19>",
+                            "id": "<span-21>",
+                            "traceId": "<trace-1>",
+                            "name": "llm request processor: unsupported-file-handler",
+                            "type": "processor_run",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-19>",
+                            "entityType": "input_processor",
+                            "entityId": "unsupported-file-handler",
+                            "attributes": {
+                              "processorPhase": "llmRequest",
+                              "processorExecutor": "legacy",
+                              "processorIndex": 2
+                            },
+                            "metadata": {
+                              "runId": "<runId-3>",
+                              "environment": "test"
+                            },
+                            "input": {
+                              "prompt": [
+                                {
+                                  "role": "system",
+                                  "content": "You summarize text concisely"
+                                },
+                                {
+                                  "role": "user",
+                                  "content": [
+                                    {
+                                      "type": "text",
+                                      "text": "Summarize: Mock V2 stream response"
+                                    }
+                                  ]
+                                }
+                              ],
+                              "stepNumber": 0,
+                              "retryCount": 0
+                            },
+                            "output": {
+                              "shortCircuited": false
+                            }
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-22>",
                             "traceId": "<trace-1>",
                             "name": "inference: 0",
                             "type": "model_inference",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
-                            "parentId": "<span-17>",
+                            "parentId": "<span-19>",
                             "entityType": "agent",
                             "entityId": "summarizer-agent",
                             "attributes": {
@@ -895,14 +1033,14 @@
                           "children": [
                             {
                               "span": {
-                                "id": "<span-20>",
+                                "id": "<span-23>",
                                 "traceId": "<trace-1>",
                                 "name": "chunk: 'text'",
                                 "type": "model_chunk",
                                 "completed": true,
                                 "isEvent": false,
                                 "isRootSpan": false,
-                                "parentId": "<span-19>",
+                                "parentId": "<span-22>",
                                 "entityType": "agent",
                                 "entityId": "summarizer-agent",
                                 "attributes": {
