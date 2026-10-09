@@ -450,6 +450,11 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               payload: tripwire,
             });
           }
+          if (pubsub && !tripwire) {
+            for (const chunk of finishResult.structuredOutputChunks ?? []) {
+              await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
+            }
+          }
 
           const finalOutput = {
             messageListState: finishResult.messageListState,

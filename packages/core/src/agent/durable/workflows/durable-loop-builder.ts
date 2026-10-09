@@ -933,6 +933,12 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               });
             }
 
+            if (pubsub && !tripwire) {
+              for (const chunk of finishResult.structuredOutputChunks ?? []) {
+                await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
+              }
+            }
+
             const finalOutput = {
               messageListState: finishResult.messageListState,
               messageId: state.messageId,

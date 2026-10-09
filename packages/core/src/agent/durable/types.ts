@@ -158,8 +158,8 @@ export interface SerializableStructuredOutput {
   /** Model config for a dedicated structuring model (if different from the main model) */
   structuringModelConfig?: SerializableModelConfig;
   /**
-   * Whether the caller set `structuredOutput.model`. The durable path has no structuring
-   * pass yet, so the finish step must not derive the object from the main model's text.
+   * Whether the caller set `structuredOutput.model`. The main model then answers in plain
+   * text and the finish step runs a separate structuring pass, like Agent.
    */
   hasStructuringModel?: boolean;
   /** How validation failures are handled (see `StructuredOutputOptionsBase.errorStrategy`) */

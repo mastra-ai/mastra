@@ -161,16 +161,18 @@ describe('structured output persistence (issue #26432)', () => {
     },
   );
 
-  // A separate structuring model is not run on the durable path yet (#26431), so the caller
-  // gets no object. Persisting one parsed from the main model's text would disagree with it.
-  it('does not save structuredOutput when a structuring model is configured (durable)', async () => {
-    const { metadata } = await runAndRecall(
-      'durable',
-      { schema, model: createJsonModel(JSON.stringify(expected)) },
-      JSON.stringify(expected),
+  // With `structuredOutput.model`, the main model answers in prose and a separate
+  // structuring model produces the object (#26431).
+  it.each(['plain', 'durable'] as const)('runs the structuring model and saves its object (%s)', async engine => {
+    const structuringModel = createJsonModel(JSON.stringify(expected));
+    const { object, metadata } = await runAndRecall(
+      engine,
+      { schema, model: structuringModel },
+      'It is Alice, who is 30 years old.',
     );
 
-    expect(metadata).toBeDefined();
-    expect(metadata?.structuredOutput).toBeUndefined();
+    expect(structuringModel.doStreamCalls).toHaveLength(1);
+    expect(object).toEqual(expected);
+    expect(metadata?.structuredOutput).toEqual(expected);
   });
 });
