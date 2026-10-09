@@ -11,8 +11,6 @@ import type { PendingModelFallback } from '@mastra/code-sdk/auth/account-rotatio
 import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
   getAvailableModePacks,
-  getAvailableOmPacks,
-  selectPreferredOMPack,
   ONBOARDING_VERSION,
   loadSettings,
   saveSettings,
@@ -30,8 +28,9 @@ import {
   fetchChangelog,
   fetchLatestVersion,
   isNewerVersion,
-  performUpdate,
+  planUpdate,
 } from '@mastra/code-sdk/utils/update-check';
+import type { UpdatePlan } from '@mastra/code-sdk/utils/update-check';
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { disposeAssistantRenderState } from './assistant-render-registry.js';
@@ -61,7 +60,6 @@ import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input
 import { drainQueuedActionIfIdle } from './handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import { applyCurrentThreadPack, listResolvableModePacks } from './model-packs/apply.js';
-import { applyOMModelToSession, seedOMDefaultAfterLogin } from './om-defaults.js';
 import type { OnboardingResult } from './onboarding-inline.js';
 import { OnboardingInlineComponent } from './onboarding-inline.js';
 import { showModalOverlay } from './overlay.js';
@@ -94,6 +92,7 @@ import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js
 import { updateStatusLine } from './status-line.js';
 import { resumeThreadOnStartup } from './thread-startup.js';
 import { setCurrentThreadTitle } from './thread-title.js';
+import { offerUpdate } from './update-flow.js';
 
 // =============================================================================
 // Types
@@ -1432,6 +1431,7 @@ export class MastraTUI {
       authStorage: this.state.authStorage,
       processMemoryDiagnostics: this.state.options.processMemoryDiagnostics,
       knowledgeInspector: this.state.options.knowledgeInspector,
+      knowledgeInspectorUnavailableReason: this.state.options.knowledgeInspectorUnavailableReason,
       threadScheduler: this.state.options.threadScheduler,
       customSlashCommands: this.state.customSlashCommands,
       showInfo: msg => showInfo(this.state, msg),
@@ -1535,7 +1535,6 @@ export class MastraTUI {
           } else {
             showInfo(this.state, `Successfully logged in to ${providerName}`);
           }
-          await seedOMDefaultAfterLogin(this.state, providerId, message => showInfo(this.state, message));
 
           resolve();
         })
@@ -1566,8 +1565,6 @@ export class MastraTUI {
 
     const savedSettings = loadSettings();
     const modePacks = getAvailableModePacks(access, savedSettings.customModelPacks);
-    const omPacks = getAvailableOmPacks(access);
-    const preferredOmPack = selectPreferredOMPack(access, savedSettings.models.activeModelPackId ?? undefined);
 
     let prevModePackId = savedSettings.onboarding.modePackId;
     if (prevModePackId === 'custom' && savedSettings.models.activeModelPackId?.startsWith('custom:')) {
@@ -1576,7 +1573,6 @@ export class MastraTUI {
     const previous = savedSettings.onboarding.completedAt
       ? {
           modePackId: prevModePackId,
-          omPackId: savedSettings.onboarding.omPackId,
           yolo: savedSettings.preferences.yolo,
         }
       : undefined;
@@ -1586,8 +1582,6 @@ export class MastraTUI {
         tui: this.state.ui,
         authProviders,
         modePacks,
-        omPacks,
-        preferredOmPackId: preferredOmPack?.id,
         hasProviderAccess,
         previous,
         onComplete: async (result: OnboardingResult) => {
@@ -1613,9 +1607,6 @@ export class MastraTUI {
               const updatedAccess = await this.buildProviderAccess();
               const updatedHasAccess = Object.values(updatedAccess).some(Boolean);
               component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
-              const updatedOmPacks = getAvailableOmPacks(updatedAccess);
-              const preferred = selectPreferredOMPack(updatedAccess, providerId);
-              component.updateOmPacks(updatedOmPacks, preferred?.id);
               component.updateHasProviderAccess(updatedHasAccess);
             } catch (err) {
               console.error('Failed to refresh provider access after login:', err);
@@ -1668,17 +1659,12 @@ export class MastraTUI {
     const modePack = result.modePack;
     const modes = this.state.controller.listModes();
 
-    // With no reachable provider the OM step only offers an empty custom pack;
-    // recording that non-choice would block every later provider-aware seed.
-    const omPack = result.omPack.modelId ? result.omPack : undefined;
-    if (omPack) await applyOMModelToSession(this.state, omPack.modelId);
     await this.state.session.state.set({ yolo: result.yolo });
 
     const settings = loadSettings();
     settings.onboarding.completedAt = new Date().toISOString();
     settings.onboarding.skippedAt = null;
     settings.onboarding.version = ONBOARDING_VERSION;
-    settings.onboarding.omPackId = omPack?.id ?? null;
 
     const modeDefaults: Record<string, string> = {};
     for (const mode of modes) {
@@ -1712,12 +1698,6 @@ export class MastraTUI {
       settings.models.activeModelPackId = activeModePackId;
     }
 
-    settings.models.activeOmPackId = omPack?.id ?? null;
-    settings.models.omModelOverride = omPack?.id === 'custom' ? omPack.modelId : null;
-    // Clear any per-role overrides from prior /om use so the newly-selected
-    // pack (or custom modelId above) applies to both observer and reflector.
-    settings.models.observerModelOverride = null;
-    settings.models.reflectorModelOverride = null;
     settings.preferences.yolo = result.yolo;
 
     // Clear any manual subagent overrides so they derive from the active pack
@@ -1786,74 +1766,29 @@ export class MastraTUI {
       return;
     }
 
-    const [pm, changelog] = await Promise.all([detectPackageManager(), fetchChangelog(latestVersion)]);
+    const pm = await detectPackageManager();
+    const [plan, changelog] = await Promise.all([planUpdate(pm, latestVersion), fetchChangelog(latestVersion)]);
 
     // Prompt the user (and mark banner as shown so periodic checks don't repeat it)
     this.hasShownUpdateBanner = true;
-    await this.showUpdatePrompt(currentVersion, latestVersion, pm, changelog);
+    await this.showUpdatePrompt(currentVersion, latestVersion, pm, changelog, plan);
   }
 
   /**
-   * Show a Y/N prompt offering to auto-update (inline in the chat flow).
+   * Offer the update inline in the chat, or show the command to run when it
+   * can't be installed for the user.
    */
   private async showUpdatePrompt(
     currentVersion: string,
     latestVersion: string,
     pm: Awaited<ReturnType<typeof detectPackageManager>>,
     changelog: string | null,
+    plan: UpdatePlan,
   ): Promise<void> {
-    let question = `A new version of Mastra Code is available: v${latestVersion} (current: v${currentVersion}).`;
-    if (changelog) {
-      question += `\n\nWhat's new:\n${changelog}`;
-    }
-    question += `\n\nWould you like to update now?`;
-
-    const answer = await new Promise<string | null>(resolve => {
-      const component = new AskQuestionInlineComponent(
-        {
-          question,
-          options: [
-            { label: 'Yes', description: 'Update and restart' },
-            { label: 'No', description: 'Skip this version' },
-          ],
-          allowCustomResponse: false,
-          onSubmit: answer => {
-            this.state.activeInlineQuestion = undefined;
-            resolve(answer);
-          },
-          onCancel: () => {
-            this.state.activeInlineQuestion = undefined;
-            resolve(null);
-          },
-        },
-        this.state.ui,
-      );
-
-      insertChatComponentWithBoundarySpacing(this.state.chatContainer, component);
-      this.state.activeInlineQuestion = component;
-      component.focused = true;
-      flushRender(this.state);
-    });
-
-    if (answer === 'Yes') {
-      showInfo(this.state, `Updating to v${latestVersion}…`);
-      const outcome = await performUpdate(pm, latestVersion);
-      if (outcome.status === 'updated') {
-        // Printed after TUI teardown — a message rendered inside it is lost in the exit race.
-        this.stop();
-        console.info(outcome.message);
-        this.exit(0);
-      } else {
-        showError(this.state, outcome.message);
-      }
-    } else {
-      // User declined — save the dismissed version
-      const settings = loadSettings();
-      settings.updateDismissedVersion = latestVersion;
-      saveSettings(settings);
-      if (answer === 'No') {
-        showInfo(this.state, `Update skipped. Run /update to update later.`);
-      }
-    }
+    await offerUpdate(
+      { state: this.state, stop: () => this.stop(), exit: code => this.exit(code) },
+      { currentVersion, latestVersion, pm, changelog, plan },
+      { startup: true },
+    );
   }
 }

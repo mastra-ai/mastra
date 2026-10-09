@@ -2,6 +2,8 @@ import type { ComponentPropsWithRef, ReactNode } from 'react';
 
 import { cn } from '@/lib/utils';
 
+import './app-shell.css';
+
 export interface AppShellProps extends Omit<ComponentPropsWithRef<'div'>, 'children'> {
   children: ReactNode;
   mobileHeader?: ReactNode;

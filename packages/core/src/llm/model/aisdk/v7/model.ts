@@ -205,6 +205,8 @@ export class AISDKV7LanguageModel implements MastraLanguageModelV4 {
    * Provider-specific model ID for logging purposes.
    */
   readonly modelId: string;
+  /** Full `provider/model` ID this model was resolved from, when known. */
+  id?: string;
   /**
    * Supported URL patterns by media type for the provider.
    *

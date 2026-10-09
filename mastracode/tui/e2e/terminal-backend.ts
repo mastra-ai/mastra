@@ -393,6 +393,7 @@ async function startMastraCodeApp(
     backgroundCompletionEvents: result.backgroundCompletionEvents,
     storageMaintenance: result.storageMaintenance,
     knowledgeInspector: result.knowledgeInspector,
+    knowledgeInspectorUnavailableReason: result.knowledgeInspectorUnavailableReason,
     threadScheduler: result.threadScheduler,
     terminal,
     ...(options?.tui ?? {}),

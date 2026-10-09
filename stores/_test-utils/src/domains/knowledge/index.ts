@@ -1,9 +1,53 @@
-import type { KnowledgeStorage } from '@mastra/core/storage';
-import { KnowledgeConflictError, MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH } from '@mastra/core/storage';
+import type { KnowledgeStorage, KnowledgeStructurePlan } from '@mastra/core/storage';
+import {
+  KnowledgeConflictError,
+  KnowledgeSchemaResetRequiredError,
+  MAX_KNOWLEDGE_NODE_DESCRIPTION_LENGTH,
+  MAX_KNOWLEDGE_RECORD_TEXT_LENGTH,
+} from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
+
+export interface KnowledgeSchemaResetFixture {
+  store: KnowledgeStorage;
+  snapshot: () => Promise<unknown>;
+  assertResetResult: () => Promise<void>;
+  cleanup: () => Promise<void>;
+}
+
+export function createKnowledgeSchemaResetTests(createFixture: () => Promise<KnowledgeSchemaResetFixture>): void {
+  describe('knowledge schema reset contract', () => {
+    it('rejects an incompatible schema without mutation until explicitly reset', async () => {
+      const fixture = await createFixture();
+      try {
+        const before = await fixture.snapshot();
+        expect(await fixture.store.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
+
+        await expect(fixture.store.init()).rejects.toBeInstanceOf(KnowledgeSchemaResetRequiredError);
+        expect(await fixture.snapshot()).toEqual(before);
+
+        await fixture.store.dangerouslyReset();
+        expect(await fixture.store.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
+        await fixture.assertResetResult();
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+  });
+}
 
 const resource = ['org:acme', 'resource:mastra'];
 const thread = [...resource, 'thread:t1'];
+
+const STRUCTURE_PLAN: KnowledgeStructurePlan = {
+  scopes: [
+    { address: 'org:acme', name: 'acme' },
+    { address: 'features', name: 'features', parentAddresses: ['org:acme'] },
+  ],
+};
+
+function isUnsupportedStructure(error: unknown): boolean {
+  return error instanceof Error && error.name === 'KnowledgeUnsupportedCapabilityError';
+}
 
 export function createKnowledgeStorageTests(createStore: () => Promise<KnowledgeStorage> | KnowledgeStorage): void {
   describe('knowledge storage contract', () => {
@@ -13,6 +57,144 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       store = await createStore();
       await store.init();
       await store.dangerouslyClearAll();
+    });
+
+    it('filters scope nodes to one subtree or exact addresses and pages them by name', async () => {
+      let ids: Record<string, string>;
+      try {
+        ({ scopes: ids } = await store.reconcileStructure({
+          scopes: [
+            { address: 'org:acme', name: 'Acme' },
+            { address: 'team:a', name: 'A', parentAddresses: ['org:acme'] },
+            { address: 'team:b', name: 'B', parentAddresses: ['org:acme'] },
+            { address: 'project:p', name: 'P', parentAddresses: ['team:a', 'team:b'] },
+            { address: 'org:other', name: 'Other' },
+            { address: 'team:o', name: 'O', parentAddresses: ['org:other'] },
+          ],
+        }));
+      } catch (error) {
+        const unsupported =
+          error instanceof Error &&
+          (error.name === 'KnowledgeUnsupportedCapabilityError' ||
+            /does not support structured reconciliation/.test(error.message));
+        if (unsupported) return;
+        throw error;
+      }
+
+      const within = await store.listScopeNodes({ withinAddress: 'org:acme' });
+      expect(within.scopes.map(scope => scope.address)).toEqual(['team:a', 'org:acme', 'team:b', 'project:p']);
+      expect(within.nextCursor).toBeNull();
+      // Parent ids come back in a stable order so pages of the same query compare equal.
+      expect(within.scopes.find(scope => scope.address === 'project:p')?.parentIds).toEqual(
+        [ids['team:a'], ids['team:b']].sort(),
+      );
+
+      expect(await store.listScopeNodes({ withinAddress: 'org:acme', limit: Number.NaN })).toEqual(within);
+      const first = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3 });
+      expect(first.scopes).toHaveLength(3);
+      expect(first.nextCursor).toEqual(expect.any(String));
+      const second = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3, cursor: first.nextCursor! });
+      expect([...first.scopes, ...second.scopes]).toEqual(within.scopes);
+      expect(second.nextCursor).toBeNull();
+      await expect(store.listScopeNodes({ withinAddress: 'org:other', cursor: first.nextCursor! })).rejects.toThrow(
+        'does not match this query',
+      );
+
+      expect((await store.listScopeNodes({ withinAddress: 'team:b' })).scopes.map(scope => scope.address)).toEqual([
+        'team:b',
+        'project:p',
+      ]);
+      expect((await store.listScopeNodes({ addresses: ['team:o', 'missing'] })).scopes.map(scope => scope.id)).toEqual([
+        ids['team:o'],
+      ]);
+      expect(await store.listScopeNodes({ withinAddress: 'missing' })).toEqual({ scopes: [], nextCursor: null });
+
+      // An id filter inside a subtree answers "is this scope in that subtree?" with one bounded read.
+      expect(
+        (await store.listScopeNodes({ withinAddress: 'org:acme', ids: [ids['project:p']!], limit: 1 })).scopes.map(
+          scope => scope.address,
+        ),
+      ).toEqual(['project:p']);
+      expect(await store.listScopeNodes({ withinAddress: 'org:acme', ids: [ids['team:o']!] })).toEqual({
+        scopes: [],
+        nextCursor: null,
+      });
+      expect(await store.listScopeNodes({ ids: [] })).toEqual({ scopes: [], nextCursor: null });
+    });
+
+    it('adds newly declared parent edges and grants to existing static scopes, but never to materialized ones', async () => {
+      const org = { address: 'org:acme', name: 'Acme' };
+      const other = { address: 'org:other', name: 'Other' };
+      let first;
+      try {
+        first = await store.reconcileStructure({ scopes: [org, other, { address: 'team', name: 'Team' }] });
+      } catch (error) {
+        const unsupported =
+          error instanceof Error &&
+          (error.name === 'KnowledgeUnsupportedCapabilityError' ||
+            /does not support structured reconciliation/.test(error.message));
+        if (unsupported) return;
+        throw error;
+      }
+      const teamParents = async () => (await store.listScopeNodes({ addresses: ['team'] })).scopes[0]?.parentIds ?? [];
+
+      const withParent = await store.reconcileStructure({
+        scopes: [org, other, { address: 'team', name: 'Team', parentAddresses: ['org:acme'] }],
+      });
+      expect(withParent).toMatchObject({ changed: true, accessEpoch: first.accessEpoch + 1, createdScopeIds: [] });
+      expect(await teamParents()).toEqual([first.scopes['org:acme']]);
+
+      const teamWithGrant = {
+        address: 'team',
+        name: 'Team',
+        parentAddresses: ['org:acme'],
+        grants: [{ scopeRefAddress: 'org:acme', role: 'readonly' as const }],
+      };
+      const withGrant = await store.reconcileStructure({ scopes: [org, other, teamWithGrant] });
+      expect(withGrant).toMatchObject({ changed: true, accessEpoch: withParent.accessEpoch + 1 });
+      await expect(store.reconcileStructure({ scopes: [org, other, teamWithGrant] })).resolves.toMatchObject({
+        changed: false,
+        accessEpoch: withGrant.accessEpoch,
+      });
+
+      // Materialization plans keep a scope as it was created, even when its template changes.
+      await expect(
+        store.reconcileStructure({
+          scopes: [
+            {
+              ...teamWithGrant,
+              parentAddresses: ['org:acme', 'org:other'],
+              grants: [...teamWithGrant.grants, { scopeRefAddress: 'org:other', role: 'readonly' }],
+            },
+          ],
+          retrofit: false,
+        }),
+      ).resolves.toMatchObject({ changed: false, accessEpoch: withGrant.accessEpoch });
+      expect(await teamParents()).toEqual([first.scopes['org:acme']]);
+    });
+
+    it('lets content nodes share a scope name without blocking reconciliation', async () => {
+      const org = { address: 'org:acme', name: 'Acme' };
+      const team = { address: 'team', name: 'Team', parentAddresses: ['org:acme'] };
+      try {
+        await store.reconcileStructure({ scopes: [org] });
+      } catch (error) {
+        const unsupported =
+          error instanceof Error &&
+          (error.name === 'KnowledgeUnsupportedCapabilityError' ||
+            /does not support structured reconciliation/.test(error.message));
+        if (unsupported) return;
+        throw error;
+      }
+      await store.createNode({ name: 'Team', kind: 'topic', scope: ['org:acme'] });
+
+      await expect(store.reconcileStructure({ scopes: [org, team] })).resolves.toMatchObject({ changed: true });
+      await expect(store.reconcileStructure({ scopes: [org, team] })).resolves.toMatchObject({ changed: false });
+      await expect(
+        store.reconcileStructure({
+          scopes: [org, team, { address: 'team-2', name: 'team', parentAddresses: ['org:acme'] }],
+        }),
+      ).rejects.toThrow('Knowledge scope name team already exists under org:acme');
     });
 
     it('persists one content-capable node record', async () => {
@@ -30,6 +212,70 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         expect.objectContaining({ type: 'node', version: 1, content: 'See [[Deploy]]' }),
       );
       expect(await store.listNodes({ scope: thread, hasContent: true })).toEqual([
+        expect.objectContaining({ id: node.id }),
+      ]);
+    });
+
+    it('places created nodes into structural scopes by address', async () => {
+      let scopeIds: Record<string, string>;
+      try {
+        const result = await store.reconcileStructure(STRUCTURE_PLAN);
+        scopeIds = result.scopes;
+      } catch (error) {
+        if (isUnsupportedStructure(error)) {
+          // Adapters without structural scope support must still reject placement
+          // outright — never silently create an unplaced node.
+          await expect(
+            store.createNode({ name: 'Placed', kind: 'doc', scope: resource, scopeAddresses: ['features'] }),
+          ).rejects.toThrow(/does not expose structural scope/);
+          return;
+        }
+        throw error;
+      }
+
+      const node = await store.createNode({
+        name: 'Placed',
+        kind: 'doc',
+        scope: resource,
+        scopeAddresses: ['features'],
+      });
+      // Placement is additive membership: the identity scope is unchanged.
+      expect(node.scope).toEqual(resource);
+      expect(node.isScope).toBeUndefined();
+      expect((await store.listScopeMembers({ scopeNodeId: scopeIds['features']! })).members).toEqual([
+        expect.objectContaining({ id: node.id }),
+      ]);
+
+      // Unknown or deleted addresses fail the whole create without mutation.
+      await expect(
+        store.createNode({ name: 'Lost', kind: 'doc', scope: resource, scopeAddresses: ['missing'] }),
+      ).rejects.toThrow(/scope/i);
+      expect(await store.getNodeByName({ name: 'Lost', scope: resource })).toBeNull();
+
+      // Writing about a node that already exists still places it, and still rejects unknown addresses.
+      const existing = await store.createNode({ name: 'Existing', kind: 'doc', scope: resource });
+      const placed = await store.createNode({
+        name: 'existing',
+        kind: 'doc',
+        scope: resource,
+        scopeAddresses: ['org:acme'],
+      });
+      expect(placed.id).toBe(existing.id);
+      expect((await store.listScopeMembers({ scopeNodeId: scopeIds['org:acme']! })).members).toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: existing.id })]),
+      );
+      await expect(
+        store.createNode({ name: 'Existing', kind: 'doc', scope: resource, scopeAddresses: ['missing'] }),
+      ).rejects.toThrow(/scope/i);
+
+      // Updates keep structural placement: a description-only update (what the curator
+      // does right after creating a node) and a rescope both leave the node placed.
+      const described = await store.updateNode({ id: node.id, version: node.version, description: 'short summary' });
+      expect((await store.listScopeMembers({ scopeNodeId: scopeIds['features']! })).members).toEqual([
+        expect.objectContaining({ id: node.id }),
+      ]);
+      await store.updateNode({ id: node.id, version: described.version, scope: ['org:acme'] });
+      expect((await store.listScopeMembers({ scopeNodeId: scopeIds['features']! })).members).toEqual([
         expect.objectContaining({ id: node.id }),
       ]);
     });
@@ -80,7 +326,7 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
 
     it('applies record visibility independently from node scope', async () => {
       const node = await store.createNode({ name: 'Resource node', kind: 'task', scope: resource });
-      await store.appendKnowledge({
+      const record = await store.appendKnowledge({
         node,
         text: 'organization-visible knowledge',
         scope: ['org:acme'],
@@ -91,8 +337,71 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
 
       expect((await store.listKnowledgeAbout({ node, scope: ['org:acme'] })).records).toHaveLength(1);
       expect(await store.search({ query: 'organization-visible', scope: ['org:acme'] })).toEqual([
-        expect.objectContaining({ type: 'record', recordId: node.id, scope: ['org:acme'] }),
+        expect.objectContaining({
+          type: 'record',
+          recordId: record.id,
+          name: '(private node)',
+          scope: ['org:acme'],
+        }),
       ]);
+    });
+
+    it('resolves names only through visible nodes or merged aliases with a visible terminal', async () => {
+      const sibling = [...resource, 'thread:t2'];
+      const foreign = ['org:acme', 'resource:foreign'];
+      const alias = await store.createNode({ name: 'Resolve Alias', kind: 'person', scope: sibling });
+      const target = await store.createNode({ name: 'Resolve Target', kind: 'person', scope: resource });
+      await store.mergeNodes({ sourceId: alias.id, targetId: target.id, sourceVersion: alias.version });
+      await store.createNode({ name: 'Resolve Hidden', kind: 'person', scope: foreign });
+      const foreignAlias = await store.createNode({
+        name: 'Resolve Foreign Alias',
+        kind: 'person',
+        scope: [...foreign, 'thread:f1'],
+      });
+      const foreignTarget = await store.createNode({ name: 'Resolve Foreign Target', kind: 'person', scope: foreign });
+      await store.mergeNodes({
+        sourceId: foreignAlias.id,
+        targetId: foreignTarget.id,
+        sourceVersion: foreignAlias.version,
+      });
+
+      await expect(store.resolveNode({ name: 'Resolve Alias', scope: thread })).resolves.toMatchObject({
+        id: target.id,
+      });
+      await expect(store.resolveNode({ name: 'Resolve Hidden', scope: thread })).resolves.toBeNull();
+      await expect(store.resolveNode({ name: 'Resolve Foreign Alias', scope: thread })).resolves.toBeNull();
+    });
+
+    it('queries arbitrary companion scope memberships as visible scope subsets', async () => {
+      const resourceCompanion = 'resource:r1:uncurated';
+      const threadCompanion = 'thread:t1:uncurated';
+      const queryScope = [...thread, resourceCompanion, threadCompanion];
+      const target = await store.createNode({ name: 'Companion Target', kind: 'person', scope: resource });
+      const node = await store.createNode({
+        name: 'Companion Draft',
+        kind: 'note',
+        scope: [resourceCompanion, threadCompanion],
+      });
+      const record = await store.appendKnowledge({
+        node,
+        text: 'Draft mentions [[Companion Target]].',
+        scope: [threadCompanion],
+        sourceThreadId: 't1',
+        resolutionScope: queryScope,
+        defaultScope: node.scope,
+      });
+
+      expect((await store.listNodes({ scope: queryScope })).map(result => result.id)).toContain(node.id);
+      await expect(store.resolveNode({ name: node.name, scope: queryScope })).resolves.toMatchObject({ id: node.id });
+      expect(await store.search({ query: 'Draft mentions', scope: queryScope })).toEqual([
+        expect.objectContaining({ id: record.id, recordId: node.id }),
+      ]);
+      expect((await store.listKnowledgeAbout({ node, scope: queryScope })).records.map(result => result.id)).toEqual([
+        record.id,
+      ]);
+      expect(
+        (await store.listKnowledgeRelatedTo({ node: target, scope: queryScope })).records.map(result => result.id),
+      ).toEqual([record.id]);
     });
 
     it('persists optional KnowledgeRecord metadata and returns it on reads', async () => {
@@ -160,7 +469,6 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         sourceThreadId: 't1',
         resolutionScope: thread,
         defaultScope: resource,
-        maxScope: 'org',
       });
       const beforeMerge = (await store.listSemanticOutbox()).length;
       await store.mergeNodes({ sourceId: duplicate.id, targetId: target.id, sourceVersion: duplicate.version });
@@ -259,14 +567,27 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         text: 'private',
         scope: resource,
         sourceThreadId: 't1',
-        maxScope: 'resource',
         resolutionScope: thread,
         defaultScope: resource,
       });
-      await expect(store.rescopeKnowledge({ id: record.id, scope: ['org:acme'] })).rejects.toThrow('ceiling');
-      await store.raiseKnowledgeCeiling({ id: record.id, maxScope: 'org' });
-      await expect(store.raiseKnowledgeCeiling({ id: record.id, maxScope: 'resource' })).rejects.toThrow('lowered');
-      await store.rescopeKnowledge({ id: record.id, scope: ['org:acme'] });
+      // Knowledge v2 has no record ceilings: a record can be widened to any scope.
+      await expect(store.rescopeKnowledge({ id: record.id, scope: ['org:acme'] })).resolves.toMatchObject({
+        scope: ['org:acme'],
+      });
+      const widened = await store.getKnowledge({ id: record.id });
+      expect(widened?.scope).toEqual(['org:acme']);
+      expect(widened).not.toHaveProperty('maxScope');
+
+      const orgNode = await store.createNode({ name: 'Team practice', kind: 'task', scope: ['org:acme'] });
+      const orgRecord = await store.appendKnowledge({
+        node: orgNode.id,
+        text: 'Reviews happen on Tuesdays',
+        scope: ['org:acme'],
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+      expect((await store.getKnowledge({ id: orgRecord.id }))?.scope).toEqual(['org:acme']);
     });
 
     it('serializes semantic work for successive versions of the same document', async () => {
@@ -338,6 +659,26 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       const untouched = await store.getNode(node.id);
       expect(untouched?.description).toBe(atLimit);
       expect(untouched?.version).toBe(node.version);
+    });
+
+    it('rejects record text over the length bound before writing anything', async () => {
+      const node = await store.createNode({ name: 'Bounded records', kind: 'service', scope: resource });
+      const append = (text: string) =>
+        store.appendKnowledge({
+          node,
+          text,
+          scope: resource,
+          sourceThreadId: 't1',
+          resolutionScope: thread,
+          defaultScope: resource,
+        });
+
+      const atLimit = '😀'.repeat(MAX_KNOWLEDGE_RECORD_TEXT_LENGTH / 2);
+      expect((await append(atLimit)).text).toBe(atLimit);
+      await expect(append(`${atLimit}x`)).rejects.toThrow(`${MAX_KNOWLEDGE_RECORD_TEXT_LENGTH} UTF-16 code unit limit`);
+
+      const records = (await store.listKnowledgeAbout({ node, scope: resource })).records;
+      expect(records.map(record => record.text)).toEqual([atLimit]);
     });
 
     it('counts the description bound in UTF-16 code units', async () => {
@@ -539,18 +880,12 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
         resolutionScope: thread,
         defaultScope: resource,
       });
-      await store.advanceCurationCursor({
-        sourceThreadId: 't1',
-        agent: 'curate',
-        lastKnowledgeId: '01J00000000000000000000000',
-      });
 
       await store.dangerouslyClearAll();
 
       expect(await store.getNode(node.id)).toBeNull();
       expect(await store.getKnowledge({ id: record.id, includeDeleted: true })).toBeNull();
       expect(await store.listActivity({ scope: thread })).toEqual([]);
-      expect(await store.getCurationCursor({ sourceThreadId: 't1', agent: 'curate' })).toBeNull();
       expect(await store.listSemanticOutbox()).toEqual([]);
     });
 
@@ -567,16 +902,21 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(second.map(event => event.id)).toEqual(all.slice(2).map(event => event.id));
     });
 
-    it('persists activity, cursors, and recoverable semantic work', async () => {
-      const node = await store.createNode({ name: 'Release', kind: 'task', scope: resource });
-      await store.advanceCurationCursor({
-        sourceThreadId: 't1',
-        agent: 'curate',
-        lastKnowledgeId: '01J00000000000000000000000',
-      });
-      expect(await store.getCurationCursor({ sourceThreadId: 't1', agent: 'curate' })).toEqual(
-        expect.objectContaining({ lastKnowledgeId: '01J00000000000000000000000' }),
+    it('rejects the deprecated curation cursor methods', async () => {
+      await expect(store.getCurationCursor({ sourceThreadId: 't1', agent: 'curate' })).rejects.toThrow(
+        'Knowledge curation cursors were removed',
       );
+      await expect(
+        store.advanceCurationCursor({
+          sourceThreadId: 't1',
+          agent: 'curate',
+          lastKnowledgeId: '01J00000000000000000000000',
+        }),
+      ).rejects.toThrow('Knowledge curation cursors were removed');
+    });
+
+    it('persists activity and recoverable semantic work', async () => {
+      const node = await store.createNode({ name: 'Release', kind: 'task', scope: resource });
       expect((await store.listActivity({ scope: thread }))[0]).toEqual(expect.objectContaining({ recordId: node.id }));
       const pending = await store.listSemanticOutbox({ status: 'pending' });
       expect(pending).toHaveLength(1);

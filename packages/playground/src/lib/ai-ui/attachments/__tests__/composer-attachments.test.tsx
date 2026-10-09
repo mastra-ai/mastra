@@ -140,14 +140,12 @@ describe('composer attachments', () => {
       [0xff, 0xfe, 0xfd],
       [0xc3, 0x28],
       [0xe2, 0x82],
-    ])('rejects invalid bytes %j', async (...bytes) => {
+    ])('attaches invalid bytes %j as a file instead of reading them as text', async (...bytes) => {
       const { ref } = renderProvider();
-      let rejected;
       await act(async () => {
-        rejected = await ref.current!.addFiles([new File([new Uint8Array(bytes)], 'unknown.bin')]);
+        await ref.current!.addFiles([new File([new Uint8Array(bytes)], 'unknown.bin')]);
       });
-      expect(rejected).toEqual(['unknown.bin']);
-      expect(ref.current!.attachments).toEqual([]);
+      expect(ref.current!.attachments.map(file => [file.name, file.kind])).toEqual([['unknown.bin', 'file']]);
       expect(ref.current!.isAddingAttachments).toBe(false);
     });
   });
@@ -194,15 +192,13 @@ describe('composer attachments', () => {
 
   describe('when a local workbook name contains URL punctuation', () => {
     it.each(['leads#2026.xlsx', 'leads.csv#2026.xlsx', 'leads.csv?2026.xls'])(
-      'rejects %s rather than reading its bytes as text',
+      'attaches %s as a file rather than reading its bytes as text',
       async name => {
         const { ref } = renderProvider();
-        let rejected;
         await act(async () => {
-          rejected = await ref.current!.addFiles([new File(['fake workbook'], name)]);
+          await ref.current!.addFiles([new File(['fake workbook'], name)]);
         });
-        expect(rejected).toEqual([name]);
-        expect(ref.current!.attachments).toEqual([]);
+        expect(ref.current!.attachments.map(file => [file.name, file.kind])).toEqual([[name, 'file']]);
       },
     );
   });
@@ -219,22 +215,26 @@ describe('composer attachments', () => {
     });
   });
 
-  describe('when unsupported binary files are selected', () => {
-    it.each(['leads.xls', 'leads.xlsx', 'archive.zip', 'file.constructor'])(
-      'rejects %s while keeping supported files in the same selection',
-      async name => {
-        const { ref } = renderProvider();
-        let rejected: string[] = [];
-        await act(async () => {
-          rejected = await ref.current!.addFiles([textFile(), new File([new Uint8Array([80, 75, 0, 1, 2])], name)]);
-        });
-        expect(rejected).toEqual([name]);
-        expect(ref.current!.attachments.map(file => file.name)).toEqual(['notes.txt']);
-        expect(await ref.current!.toCoreUserMessages()).toEqual([
-          { role: 'user', content: '<attachment name="notes.txt">hello world</attachment>' },
-        ]);
-      },
-    );
+  describe('when binary files of an unknown kind are selected', () => {
+    it.each([
+      ['leads.xls', 'application/vnd.ms-excel'],
+      ['leads.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+      ['archive.zip', 'application/octet-stream'],
+      ['file.constructor', 'application/octet-stream'],
+    ])('sends %s as a file part with its bytes intact, next to the other files', async (name, mimeType) => {
+      const { ref } = renderProvider();
+      await act(async () => {
+        await ref.current!.addFiles([textFile(), new File([new Uint8Array([80, 75, 0, 1, 2])], name)]);
+      });
+      expect(ref.current!.attachments.map(file => file.name)).toEqual(['notes.txt', name]);
+      expect(await ref.current!.toCoreUserMessages()).toEqual([
+        { role: 'user', content: '<attachment name="notes.txt">hello world</attachment>' },
+        {
+          role: 'user',
+          content: [{ type: 'file', data: `data:${mimeType};base64,UEsAAQI=`, mimeType, filename: name }],
+        },
+      ]);
+    });
   });
 
   it('adds files and classifies them by kind', async () => {

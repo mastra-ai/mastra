@@ -141,6 +141,8 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
  * authoritative; the intake-stamped `githubRepositoryId` covers URL-less
  * cards. A card with neither signal cannot be attributed by number alone.
  */
+const MAX_STALE_RULE_ATTEMPTS = 3;
+
 export function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, repositoryFullName: string): boolean {
   const url = item.externalSource?.url;
   if (url) {
@@ -533,6 +535,7 @@ export class GithubRules {
       ingressIdentity: string,
       /** Set on the evaluation that files the pull request's own Review card. */
       pullRequestIntake = false,
+      attempt = 1,
     ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> => {
       const context: FactoryGithubRuleContext = {
         tenant: { orgId: project.orgId, projectId: project.factoryProjectId },
@@ -687,6 +690,16 @@ export class GithubRules {
         causalChain: [],
         now: new Date(),
       });
+      if (committed.status === 'stale') {
+        // The item was written concurrently. Re-read it and run the rule again
+        // against the fresh revision; nothing was persisted for this attempt.
+        if (attempt >= MAX_STALE_RULE_ATTEMPTS) {
+          throw new Error(`Factory GitHub rule evaluation for ${ingressIdentity} kept losing revision races.`);
+        }
+        const fresh = item ? await this.options.storage.get({ orgId: project.orgId, id: item.id }) : null;
+        if (item && !fresh) return { status: 'missing' };
+        return evaluate(fresh ?? undefined, ingressIdentity, pullRequestIntake, attempt + 1);
+      }
       return { status: committed.status };
     };
 

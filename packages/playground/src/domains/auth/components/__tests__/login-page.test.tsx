@@ -226,3 +226,42 @@ describe('LoginPage UI parity for /login and /signup', () => {
     });
   });
 });
+
+describe('LoginPage password manager autofill', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const expectNoIgnoreHints = (input: HTMLElement) => {
+    expect(input.hasAttribute('data-1p-ignore')).toBe(false);
+    expect(input.hasAttribute('data-lpignore')).toBe(false);
+    expect(input.hasAttribute('data-bwignore')).toBe(false);
+    expect(input.hasAttribute('data-form-type')).toBe(false);
+    expect(input.hasAttribute('data-protonpass-ignore')).toBe(false);
+  };
+
+  it('opts the sign in fields into credential autofill on /login', async () => {
+    mockCapabilities(credentialsCapabilities);
+    renderLogin();
+
+    const email = await screen.findByLabelText(/^Email/);
+    const password = screen.getByLabelText(/^Password/);
+    expect(email.getAttribute('autocomplete')).toBe('email');
+    expect(password.getAttribute('autocomplete')).toBe('current-password');
+    expectNoIgnoreHints(email);
+    expectNoIgnoreHints(password);
+  });
+
+  it('opts the sign up fields into new-account autofill on /signup', async () => {
+    mockCapabilities(credentialsCapabilities);
+    renderSignUp();
+
+    const name = await screen.findByLabelText(/^Name/);
+    const email = screen.getByLabelText(/^Email/);
+    const password = screen.getByLabelText(/^Password/);
+    expect(name.getAttribute('autocomplete')).toBe('name');
+    expect(email.getAttribute('autocomplete')).toBe('email');
+    expect(password.getAttribute('autocomplete')).toBe('new-password');
+    [name, email, password].forEach(expectNoIgnoreHints);
+  });
+});

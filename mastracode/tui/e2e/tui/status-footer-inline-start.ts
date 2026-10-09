@@ -23,6 +23,7 @@ export const statusFooterInlineStartScenario: McE2eScenario = {
   testName: 'animates the status footer in place when started below shell output',
   useOpenAIModel: true,
   aimockFixture: 'status-footer-inline-start.json',
+  enableTitleGeneration: true,
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as Record<string, any>;

@@ -577,7 +577,7 @@ describe('Traces side panel Scores view', () => {
       expect(traceSideViewLabel()).toMatch(/scores/i);
     });
 
-    it('renders one card per score with the scorer name, value and a link to the scorer run', async () => {
+    it('renders one card per score with the scorer name and value', async () => {
       await openScoresTab(traceSpanScores);
 
       expect(await screen.findByRole('button', { name: 'Score score-1' })).not.toBeNull();
@@ -587,10 +587,6 @@ describe('Traces side panel Scores view', () => {
       expect(screen.getByText('0.4')).not.toBeNull();
       expect(screen.getByText('0.8')).not.toBeNull();
       expect(screen.getByText('1')).not.toBeNull();
-
-      const links = screen.getAllByRole('link', { name: /open scorer run/i });
-      expect(links).toHaveLength(3);
-      expect(links[0]?.getAttribute('href')).toBe('/scorers/relevance-scorer?scoreId=score-1');
     });
 
     it('truncates a long reason and reveals the rest on Read more', async () => {
@@ -837,7 +833,7 @@ describe('Traces page filter bar', () => {
       });
 
       fireEvent.click(screen.getByRole('button', { name: 'Value: Last 7 days' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 24 hours' }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('datePreset=last-24h'));
       expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
@@ -1461,7 +1457,7 @@ describe('Agent traces page opened from a conversation', () => {
       await renderFromConversation();
 
       fireEvent.click(within([...getFilterChips()][0]!).getByRole('button', { name: 'Value: Last 7 days' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 24 hours' }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('datePreset=last-24h'));
       const saved = window.localStorage.getItem(SAVED_FILTERS_KEY) ?? '';

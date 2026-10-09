@@ -219,6 +219,8 @@ const { controller } = await createMastraCode({
 
 ### Available state fields
 
+`OMModel` accepts `"auto"` or a concrete model ID.
+
 | Field | Type | Default | Description |
 | - | - | - | - |
 | `yolo` | `boolean` | `true` | Auto-approve all tool calls |
@@ -226,7 +228,9 @@ const { controller } = await createMastraCode({
 | `smartEditing` | `boolean` | `true` | Use AST-based analysis for code edits |
 | `notifications` | `"bell" \| "system" \| "both" \| "off"` | `"off"` | Alert when the TUI needs attention |
 | `permissionRules` | `object` | Default policies | Per-category and per-tool approval policies |
-| `observerModelId` | `string` | `"google/gemini-2.5-flash"` | Model for observational memory observer |
-| `reflectorModelId` | `string` | `"google/gemini-2.5-flash"` | Model for observational memory reflector |
+| `observerModelId` | `string` | — | Legacy concrete model for the observational memory observer |
+| `reflectorModelId` | `string` | — | Legacy concrete model for the observational memory reflector |
+| `observerModelSelection` | `OMModel` | `"auto"` | Automatic or explicit observer model selection |
+| `reflectorModelSelection` | `OMModel` | `"auto"` | Automatic or explicit reflector model selection |
 | `observationThreshold` | `number` | `30000` | Token count triggering observation pass |
 | `reflectionThreshold` | `number` | `40000` | Token count triggering reflection pass |

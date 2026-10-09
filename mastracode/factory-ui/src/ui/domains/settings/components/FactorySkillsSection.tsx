@@ -1,10 +1,11 @@
 import { Code } from '@mastra/playground-ui/components/Code';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChevronRight, Code as CodeIcon, FileText } from 'lucide-react';
+import { Code as CodeIcon, FileText } from 'lucide-react';
 import { useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -66,7 +67,7 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
   return (
     <SettingsContainer>
       <Collapsible>
-        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-4 px-4 py-3 text-left">
+        <CollapsibleTrigger className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left">
           <div className="flex min-w-0 flex-col gap-0.5">
             <Txt tone="ink" as="span" variant="body">
               {title}
@@ -78,10 +79,7 @@ function SkillCard({ title, skill }: { title: string; skill: FactorySkillInfo })
               {skill.description}
             </Txt>
           </div>
-          <ChevronRight
-            aria-hidden="true"
-            className="text-muted-foreground size-4 shrink-0 transition-transform group-data-[state=open]:rotate-90"
-          />
+          <DisclosureChevron direction="right" className="text-muted-foreground size-4" />
         </CollapsibleTrigger>
         <CollapsibleContent>
           <SkillContent content={skill.content} />

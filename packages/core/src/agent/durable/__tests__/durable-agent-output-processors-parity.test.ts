@@ -28,16 +28,12 @@
  *   `{ retry: true }` abort ends the run in a tripwire instead of calling the model again. A known
  *   open bug is not something this port may pin as expected behaviour.
  *
- * `mutate` (COR-1414): the harness's KNOWN note records the divergence — "the plain Agent persists
- * the processOutputStream-mutated text ('FINISHED 1 STEPS'); durable/evented persist the original
- * deltas and only the processOutputResult mutation ('[out:out-a]') reaches memory" — and its own
- * engine pairing FAILs on `memoryUppercased` for both wrapped engines. At HEAD the parity helper sees
- * one more face of it: plain's final text is `FINISHED 1 STEPS [out:out-a]` (the `processOutputResult`
- * mutation reaches the public and full output) while durable and evented end at `FINISHED 1 STEPS`,
- * even though the tag does land on their persisted assistant message. That `text`/`fullOutput.text`
- * difference is declared with COR-1414 rather than ignored, and the wrapped contract is pinned at its
- * current values so the assertions go stale once the mutation reaches memory and the output
- * everywhere.
+ * `mutate`: every engine persists the processOutputStream-mutated text ('FINISHED 1 STEPS') and the
+ * processOutputResult tag (#26335 fixed durable/evented persisting the original deltas). One
+ * divergence remains (COR-1414): plain's final text is `FINISHED 1 STEPS [out:out-a]` (the
+ * `processOutputResult` mutation reaches the public and full output) while durable and evented end
+ * at `FINISHED 1 STEPS`, even though the tag lands on their persisted assistant message. That
+ * `text`/`fullOutput.text` difference is declared with COR-1414 rather than ignored.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -515,14 +511,9 @@ describe('T45 output processors (plain, durable, evented)', () => {
       });
     }
 
-    expect(contracts.get('plain'), 'plain contract').toEqual(PLAIN_CONTRACTS.mutate);
-    // COR-1414: durable and evented persist the processOutputResult tag but not the
-    // processOutputStream-upper-cased text, so their memory holds the original deltas. The harness's
-    // own KNOWN note records exactly this split; the per-engine values are pinned so the assertion
-    // goes stale once the mutation reaches memory everywhere.
-    const wrappedContract = { ...PLAIN_CONTRACTS.mutate, memoryUppercased: false };
-    for (const engine of ENGINES.slice(1)) {
-      expect(contracts.get(engine), `${engine} contract`).toEqual(wrappedContract);
+    // #26335: every engine persists the processOutputStream-upper-cased text, not the raw deltas.
+    for (const engine of ENGINES) {
+      expect(contracts.get(engine), `${engine} contract`).toEqual(PLAIN_CONTRACTS.mutate);
     }
   });
 

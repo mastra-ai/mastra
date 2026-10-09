@@ -1,0 +1,91 @@
+---
+title: "Reference: UnsupportedFileHandler | Processors"
+description: "The UnsupportedFileHandler is an error processor that uploads or notes the files a model rejects and calls the model again."
+packages:
+  - "@mastra/core"
+---
+
+# UnsupportedFileHandler
+
+The `UnsupportedFileHandler` is an **error processor** that keeps an agent working when the model rejects a file the user sent. It takes the file out of the prompt and calls the model again. When the agent's workspace has a sandbox, the file is uploaded there and the model gets its path. Otherwise, the model gets a placeholder in place of the file.
+
+Mastra adds this processor to every agent's `errorProcessors` by default, after `PrefillErrorHandler` and before `StreamErrorRetryProcessor`. It needs no configuration. Setting `errorProcessorDefaults: false` turns it off along with the other defaults.
+
+## How it works
+
+1. Every file goes to the model unchanged. Which file types a model reads varies by provider and changes over time, so the processor doesn't guess up front.
+1. The model call fails because of the file, in one of two ways:
+   - The provider SDK refuses the file type before the request goes out, with an `UnsupportedFunctionalityError` that names the media type. The OpenAI and Anthropic SDKs do, for example.
+   - The provider rejects the request in its HTTP response. The error often says nothing about the file: Gemini answers some file types with a `502`. Any API error counts, as long as the request holds a file that isn't an image, a PDF, or text. A status that asks to try again later, `408`, `409`, `429`, `503`, or `504`, doesn't count: [`StreamErrorRetryProcessor`](/reference/processors/stream-error-retry-processor) sends the same request again, file included.
+1. On the first refusal of the call, the processor takes the rejected file out of the prompt, along with every other file that isn't an image, a PDF, or text. The call is tried again only once, and this covers every file the model may not read in that one attempt.
+1. It returns `{ retry: true }`, and the model is called again. If the call fails again, the error surfaces.
+
+When the agent's workspace has a sandbox, each file is uploaded the way [`FileUploadProcessor`](/reference/processors/file-upload-processor#upload-location) does it, and the model gets a note with the sandbox path, so the agent can work on the file with its tools:
+
+```text
+[File uploaded to the sandbox]
+path: /home/user/uploads/thread-1/0b2f4c6e8a1d3f5b7c9e2a4d6f8b1c3e5a7d9f2b4c6e8a1d3f5b7c9e2a4d6f8b.xlsx
+name: leads.xlsx
+type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+size: 48213 bytes
+```
+
+Without a sandbox, or when the upload fails, the model gets the placeholder Mastra uses for any attachment it can't use, and the turn goes on. A file sent without a name shows its type instead:
+
+```text
+[Attachment unavailable: leads.xlsx]
+```
+
+The sandbox is the workspace of the step, the one the agent's tools use. Files over 10 MB aren't uploaded and get a note with the reason.
+
+Only the prompt sent to the model changes. The stored message keeps the file, so the thread, clients such as Studio, and a model that reads that type still have it. A thread that already stores a rejected file works again on its next turn, because the file is handled the same way on every turn.
+
+To choose which files go to the sandbox, and to upload them before the model sees them, add a `FileUploadProcessor` to `inputProcessors`.
+
+## Constructor parameters
+
+The `UnsupportedFileHandler` takes no constructor parameters.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'unsupported-file-handler'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: "'Unsupported File Handler'",
+    description: 'Processor display name.',
+    isOptional: false,
+  },
+  {
+    name: 'processAPIError',
+    type: '(args: ProcessAPIErrorArgs) => Promise<ProcessAPIErrorResult | void>',
+    description:
+      'Signals a retry when the provider refused a file, in its SDK or in its HTTP response, and leaves errors that ask to try again later to `StreamErrorRetryProcessor`. Only triggers on the first retry attempt.',
+    isOptional: false,
+  },
+  {
+    name: 'processLLMRequest',
+    type: '(args: ProcessLLMRequestArgs) => Promise<ProcessLLMRequestResult>',
+    description:
+      'Once a call of the request was refused for a file, uploads the files the model may not read to the sandbox, or replaces them with a placeholder, in the prompt of every following call.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Limitations
+
+- **Sandboxes shared across threads.** Files are written by default to the agent's sandbox, under a directory per thread that keeps them apart but doesn't protect them. In a sandbox shared by other threads or users, the command tool of any thread can read them. When files are private, resolve [one sandbox per user or thread](/docs/sandbox/overview#sandboxes-per-user-or-thread).
+- **One more attempt.** If the call still fails once the files are taken out, the error surfaces. An API error on a request that holds such a file is retried once without it, even when the file wasn't the cause, unless its status asks to try again later. A refusal unrelated to a file, on a request without one, is left alone.
+
+## Related
+
+- [Processor interface](/reference/processors/processor-interface)
+- [FileUploadProcessor](/reference/processors/file-upload-processor)
+- [PrefillErrorHandler](/reference/processors/prefill-error-handler)

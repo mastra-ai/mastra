@@ -1399,7 +1399,7 @@
     "callstack/apex": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "fireworks/ember-1": [
@@ -1641,7 +1641,7 @@
     "mistral/mistral-large-4": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "high"]
       }
     ],
     "mistral/mistral-medium-3.5": [

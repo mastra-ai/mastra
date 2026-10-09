@@ -8,6 +8,7 @@ import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
 
+import type { MastraFGAPermissionInput } from '../../auth/ee';
 import type { ActorSignal } from '../../auth/ee/fga-check';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
@@ -213,6 +214,12 @@ export interface SerializableClientTool {
 export interface SerializableDurableOptions {
   /** Call-time client tools, keyed by tool name, for cross-process rebuilds */
   clientTools?: Record<string, SerializableClientTool>;
+  /**
+   * Names of call-time `toolsets` tools. Their `execute` closures cannot cross
+   * a process boundary, so a worker rebuilding tools uses these names to fail
+   * loudly instead of silently dropping them.
+   */
+  toolsetToolNames?: string[];
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
   /** Tool selection strategy */
@@ -403,9 +410,7 @@ export interface DurableLLMStepOutput {
   stepSpanData?: unknown;
   /** Step finish payload data for closing step span later */
   stepFinishPayload?: unknown;
-  /** Deferred step-finish chunk for intermediate steps.
-   *  llm-execution defers emission so llm-mapping can emit it AFTER tool-result
-   *  chunks, matching the regular agent's chunk ordering. */
+  /** Deferred step-finish chunk carried until continuation policy resolves. */
   deferredStepFinishChunk?: unknown;
 }
 
@@ -548,6 +553,8 @@ export interface DurableAgenticExecutionOutput {
   backgroundTaskPending?: boolean;
   /** Whether a delegation hook called ctx.bail() during this iteration */
   delegationBailed?: boolean;
+  /** Step-finish chunk awaiting the loop's final continuation decision */
+  deferredStepFinishChunk?: unknown;
 }
 
 /**
@@ -614,6 +621,11 @@ export interface AgentStepFinishEventData {
   stepResult: DurableLLMStepOutput['stepResult'];
   toolResults?: DurableToolCallOutput[];
 }
+
+/**
+ * Payload passed to a durable agent's `onStepFinish` callback: the step-finish event data plus the run it belongs to.
+ */
+export type DurableAgentStepFinishResult = AgentStepFinishEventData & { runId: string };
 
 /**
  * Finish event data
@@ -729,6 +741,8 @@ export interface RunRegistryEntry {
   saveQueueManager?: SaveQueueManager;
   /** Memory instance for thread creation and message persistence */
   memory?: MastraMemory;
+  /** Successful in-flight memory authorization checks shared across this run. */
+  memoryAuthorizationChecks?: Map<MastraFGAPermissionInput, Promise<void>>;
   /** The language model instance (non-serializable, has doStream method) */
   model: MastraLanguageModel;
   /** Model list for fallback support (stores actual model instances) */

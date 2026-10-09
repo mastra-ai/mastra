@@ -249,7 +249,7 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     const dot = statusDot(this.done ? (this.isError ? 'error' : 'done') : 'running');
     const output: string[] = [];
     const emit = () => {
-      this.addChild(new Text(toolBlock(dot, footerText, output, width).join('\n'), BOX_INDENT, 0));
+      this.addChild(new Text(toolBlock(dot, footerText, output, width, 'uniform').join('\n'), BOX_INDENT, 0));
       this.invalidate();
       this.ui.requestRender();
     };

@@ -71,6 +71,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       trigger: this.opts.trigger,
       mainAgent: this.opts.agent,
       timeZone: this.opts.record.observedTimezone,
+      currentModel: this.opts.currentModel,
     });
     const hookedValues = await applyExtractorHooks({
       source: 'observer',
@@ -92,6 +93,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       writer: this.opts.writer,
       abortSignal: this.opts.abortSignal,
       requestContext: this.opts.requestContext,
+      observationCommitted: this.observationCommitted,
     });
     return {
       ...result,
@@ -145,8 +147,8 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     };
   }
 
-  async persist(processed: ProcessedObservation) {
-    if (!processed.observations) return;
+  async persist(processed: ProcessedObservation): Promise<boolean> {
+    if (!processed.observations) return false;
 
     const { record, threadId, resourceId, messages } = this.opts;
 
@@ -158,7 +160,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     const liveRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
     if (!liveRecord) {
       omDebug(`[OM:asyncBuffer] skipping persist for thread ${threadId}: observational memory record is gone`);
-      return;
+      return false;
     }
 
     const messageTokens = await this.tokenCounter.countMessagesAsync(messages);
@@ -232,6 +234,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
         }
       }
     }
+    return true;
   }
 
   async emitEndMarkers(_cycleId: string, processed: ProcessedObservation) {

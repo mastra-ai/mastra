@@ -1762,7 +1762,7 @@ describe('createScorer', () => {
         expect(captured.input?.requestContext).toEqual({ userId: 'u1', locale: 'en' });
       });
 
-      it('redacts the framework auth token even with the wildcard', async () => {
+      it('omits the framework auth token even with the wildcard', async () => {
         const { captured, scorer } = captureScorerRun();
 
         const requestContext = new RequestContext([
@@ -1776,8 +1776,7 @@ describe('createScorer', () => {
           requestContextKeys: ['*'],
         });
 
-        expect(captured.input?.requestContext?.userId).toBe('u1');
-        expect(captured.input?.requestContext?.[MASTRA_AUTH_TOKEN_KEY]).toBe('[REDACTED]');
+        expect(captured.input?.requestContext).toEqual({ userId: 'u1' });
       });
     });
 

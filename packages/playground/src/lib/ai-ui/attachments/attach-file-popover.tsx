@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -10,7 +9,6 @@ import { CloudUpload, Link, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useComposerAttachments } from './composer-attachments';
-import { unreadableFilesMessage } from './unreadable-files-message';
 
 /**
  * "+" composer action opening a popover to attach a file via public URL or
@@ -18,7 +16,6 @@ import { unreadableFilesMessage } from './unreadable-files-message';
  */
 export const AttachFilePopover = () => {
   const [open, setOpen] = useState(false);
-  const [error, setError] = useState('');
   const { addFiles, addUrl } = useComposerAttachments();
 
   const openFilePicker = () => {
@@ -41,9 +38,8 @@ export const AttachFilePopover = () => {
     input.onchange = async e => {
       const fileList = (e.target as HTMLInputElement).files;
       if (fileList && fileList.length > 0) {
-        const rejected = await addFiles(fileList);
-        setError(rejected.length > 0 ? unreadableFilesMessage(rejected) : '');
-        if (rejected.length === 0) setOpen(false);
+        await addFiles(fileList);
+        setOpen(false);
       }
       cleanup();
     };
@@ -70,13 +66,7 @@ export const AttachFilePopover = () => {
   };
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={value => {
-        setOpen(value);
-        setError('');
-      }}
-    >
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="icon-md" type="button" tooltip="Add attachment">
           <PlusIcon />
@@ -119,11 +109,6 @@ export const AttachFilePopover = () => {
             <CloudUpload className="size-8" />
             <Txt variant="heading">Add a local file</Txt>
           </button>
-          {error ? (
-            <div role="alert">
-              <Notice variant="destructive">{error}</Notice>
-            </div>
-          ) : null}
         </div>
       </PopoverContent>
     </Popover>
