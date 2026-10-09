@@ -34,7 +34,7 @@ export const factory = new MastraFactory({
 | - | - | - | - | - |
 | `PlatformFactorySandbox` | `@mastra/platform-workspace` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get` | |
 | `E2BFactorySandbox` | `@mastra/e2b` | `cpuCount`, `memoryMb`, `idleTimeoutMinutes` | `start`, `get`, `list` | |
-| `DockerFactorySandbox` | `@mastra/docker` | `baseImage`, `owner` | No | |
+| `DockerFactorySandbox` | `@mastra/docker` | `baseImage`, `owner` | `start`, `get` | |
 | `LocalFactorySandbox` | `@mastra/factory` | None | No | |
 
 Each provider class takes the same runtime options as its sandbox class (minus `id`, `sandboxId` and `template`, which the class fills in per session), plus `template` options for the repository template and `defaults` for settings the environment leaves unset.
@@ -171,6 +171,17 @@ Everything factory knows about the session, passed to `create`, `template` and t
 ## Build status
 
 `FactorySandboxBuild.status` is one of `pending`, `building`, `ready`, `failed` or `unknown`. `unknown` means the provider can't read the status of a build it didn't start in this process.
+
+## Environment builds
+
+When the sandbox declares `builds`, factory builds the environment template ahead of sessions and registers a `factory-environment-build` workflow through `prepare()`. A build runs:
+
+- on `POST /web/factory/projects/:id/environment/build` (the Environment page's Build now, or `mastra api factory project environment build <project-id>`)
+- after a `PATCH` of the environment that changes a setting, the working directory or the workspace setup command
+- on a cron schedule kept in core `Schedules`, enabled through `PATCH { buildTriggers: { schedule: { enabled: true, cron, timezone } } }`; needs a storage adapter with the schedules domain, otherwise the route reports `scheduleAvailable: false`
+- after a push to a linked repository's base branch when `buildTriggers.push.enabled` is set, at most once per `debounceMinutes`
+
+Scheduled and push builds skip when the last build is ready and no repository head moved. Factory stores only the last build id and the active template. Status and history come from the provider through `GET …/environment/builds/:buildId` and `GET …/environment/builds` (404 `no_history` when the provider keeps none).
 
 ## Related
 
