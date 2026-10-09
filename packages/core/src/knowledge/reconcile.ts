@@ -175,7 +175,7 @@ export function materializeKnowledgeScopePlan(
   const children = (config.children ?? []).map<KnowledgeStructureScope>(child => ({
     address: assertChildAddress(substituteParameters(child.address, childParameters), types),
     name: child.name.trim(),
-    description: child.description,
+    metadata: child.description ? { description: child.description } : undefined,
     parentAddresses: [input.address],
     grants: (child.access ?? [{ principal: 'self', role: 'owner' }]).map<KnowledgeStructureGrant>(access => ({
       scopeRefAddress:
@@ -201,7 +201,12 @@ export function materializeKnowledgeScopePlan(
   });
 }
 
-const IDENTITY_SCOPE_PATTERNS = ['org:$orgId', 'resource:$resourceId', 'thread:$threadId'];
+const IDENTITY_SCOPE_PATTERNS = [
+  'org:$orgId',
+  'resource:$resourceId',
+  'resource:$resourceId:thread:$threadId',
+  'thread:$threadId',
+];
 
 /**
  * Child templates must not mint identity scopes (those are host-vouched) or addresses owned by

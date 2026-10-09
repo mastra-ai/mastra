@@ -146,17 +146,23 @@ describe('Knowledge', () => {
 
     expect(a.createdScopeIds).toHaveLength(3);
     expect(b.createdScopeIds).toHaveLength(3);
-    const { scopes } = await storage.stores.knowledge!.listScopeNodes({
-      addresses: ['org:a:about-me', 'machines:a', 'org:b:about-me', 'machines:b'],
-    });
-    const parentsByAddress = Object.fromEntries(scopes.map(scope => [scope.address, scope.parentIds]));
+    const store = storage.stores.knowledge!;
+    const parentsByAddress = Object.fromEntries(
+      await Promise.all(
+        ['org:a:about-me', 'machines:a', 'org:b:about-me', 'machines:b'].map(async address => {
+          const scope = await store.getScopeAddress(address);
+          return [address, scope ? await store.getNodeScopeIds(scope.scopeNodeId) : undefined];
+        }),
+      ),
+    );
     expect(parentsByAddress).toEqual({
       'org:a:about-me': [a.scopes['org:a']],
       'machines:a': [a.scopes['org:a']],
       'org:b:about-me': [b.scopes['org:b']],
       'machines:b': [b.scopes['org:b']],
     });
-    expect(scopes.find(scope => scope.address === 'machines:b')?.name).toBe('Machines');
+    const machines = await store.getScopeAddress('machines:b');
+    expect((await store.getNode(machines!.scopeNodeId))?.name).toBe('Machines');
 
     const again = await knowledge.materializeScope({ address: 'org:a', contextualScopeAddress: 'org:a' });
     expect(again).toMatchObject({ changed: false, createdScopeIds: [] });
@@ -173,7 +179,7 @@ describe('Knowledge', () => {
     }).materializeScope(input);
 
     expect(later).toMatchObject({ changed: false, createdScopeIds: [], accessEpoch: created.accessEpoch });
-    expect((await storage.stores.knowledge!.listScopeNodes({ addresses: ['org:a:shared'] })).scopes).toEqual([]);
+    await expect(storage.stores.knowledge!.getScopeAddress('org:a:shared')).resolves.toBeNull();
   });
 
   it('keeps same-named scopes from different sources distinct by address across replays', async () => {
