@@ -10,7 +10,6 @@ import { ProviderConnectionDialogs } from './ProviderConnectionDialogs';
 
 export interface ModelProviderFactoryStepProps {
   initialChoice?: OnboardingModelChoice;
-  completionError?: string;
   onComplete: (choice?: OnboardingModelChoice) => void;
   onPreviewProvider?: PreviewProvider;
   onPreviewModel?: (model: string | undefined) => void;
@@ -18,13 +17,11 @@ export interface ModelProviderFactoryStepProps {
 
 export function ModelProviderFactoryStep({
   initialChoice,
-  completionError,
   onComplete,
   onPreviewModel,
   onPreviewProvider,
 }: ModelProviderFactoryStepProps) {
   const connection = useProviderConnection({ scope: 'org', initialSelection: initialChoice });
-  const error = connection.error ?? completionError;
   const needsAdmin =
     !connection.isPending &&
     !connection.catalogError &&
@@ -68,9 +65,9 @@ export function ModelProviderFactoryStep({
         <ModelProviderPicker connection={connection} onPreviewProvider={onPreviewProvider} />
       )}
 
-      {error && (
+      {connection.error && (
         <Txt as="p" variant="caption" className="text-destructive-foreground m-0" role="alert">
-          {error}
+          {connection.error}
         </Txt>
       )}
 

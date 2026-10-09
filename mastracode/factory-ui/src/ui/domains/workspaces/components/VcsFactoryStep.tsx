@@ -22,10 +22,7 @@ import { OnboardingConnectionRow } from './OnboardingConnectionRow';
 
 export interface VcsFactoryStepProps {
   initialRepository?: SourceControlRepository;
-  connectingRepositoryId: number | string | null;
   githubRedirecting: boolean;
-  mutationPending: boolean;
-  mutationError: string | null;
   onConnect: () => void;
   onManageConnection: () => void;
   onSelectRepository: (repository: SourceControlRepository) => void;
@@ -34,10 +31,7 @@ export interface VcsFactoryStepProps {
 
 export function VcsFactoryStep({
   initialRepository,
-  connectingRepositoryId,
   githubRedirecting,
-  mutationPending,
-  mutationError,
   onConnect,
   onManageConnection,
   onSelectRepository,
@@ -55,8 +49,17 @@ export function VcsFactoryStep({
   const connected = githubStatus.data?.connected === true;
   const gitlabStatus = useGitLabStatusQuery();
   const gitlabConfigured = Boolean(gitlabStatus.data?.enabled && gitlabStatus.data.configured);
+  // A draft can outlive its connection; a pin to a disconnected provider would wait on a disabled query forever.
+  const pinnedProvider =
+    (providerChoice === 'github' && !connected) || (providerChoice === 'gitlab' && !gitlabConfigured)
+      ? undefined
+      : providerChoice;
   const selectedProvider =
-    providerChoice === undefined ? (connected ? 'github' : gitlabConfigured ? 'gitlab' : 'providers') : providerChoice;
+    pinnedProvider === undefined ? (connected ? 'github' : gitlabConfigured ? 'gitlab' : 'providers') : pinnedProvider;
+  const repositoryForProvider =
+    chosenRepository && (isGitLabRepository(chosenRepository) ? 'gitlab' : 'github') === selectedProvider
+      ? chosenRepository
+      : undefined;
   const repos = useGithubReposQuery(debouncedQuery || undefined, connected && selectedProvider === 'github');
   const gitlabProjects = useGitLabProjectsQuery(gitlabConfigured && selectedProvider === 'gitlab');
   const gitlabRepos = (gitlabProjects.data ?? []).flatMap(project => {
@@ -112,7 +115,6 @@ export function VcsFactoryStep({
             <Button
               variant="ghost"
               size="sm"
-              disabled={mutationPending}
               onClick={() => {
                 setQuery('');
                 setChosenRepository(undefined);
@@ -126,7 +128,6 @@ export function VcsFactoryStep({
           <SearchInput
             label="Search repositories"
             placeholder="Find a repository…"
-            disabled={mutationPending}
             value={query}
             onValueChange={value => {
               setQuery(value);
@@ -134,7 +135,6 @@ export function VcsFactoryStep({
               onPreviewRepository?.(undefined);
             }}
           />
-          {mutationError && <RepositoryError message={mutationError} />}
           {repositoryQuery.isError && <RepositoryError message={repositoryQuery.error.message} />}
           <div
             onMouseLeave={() => onPreviewRepository?.(chosenRepository)}
@@ -146,8 +146,7 @@ export function VcsFactoryStep({
               repositories={selectedProvider === 'github' ? (repos.data ?? []) : gitlabRepos}
               query={selectedProvider === 'gitlab' ? debouncedQuery : ''}
               pending={repositoryQuery.isPending}
-              mutationPending={mutationPending}
-              selectedRepositoryId={chosenRepository?.id}
+              selectedRepositoryId={repositoryForProvider?.id}
               provider={selectedProvider}
               onSelectRepository={chooseRepository}
               onPreviewRepository={onPreviewRepository}
@@ -157,25 +156,21 @@ export function VcsFactoryStep({
             <Button
               variant="primary"
               className="group/onboarding-action"
-              disabled={!chosenRepository || mutationPending}
+              disabled={!repositoryForProvider}
               onClick={() => {
-                if (chosenRepository && !mutationPending) onSelectRepository(chosenRepository);
+                if (repositoryForProvider) onSelectRepository(repositoryForProvider);
               }}
             >
               Continue
               <span className="flex size-4 shrink-0 items-center justify-center">
-                {connectingRepositoryId !== null ? (
-                  <Spinner size="sm" aria-label="Connecting repository" />
-                ) : (
-                  <ArrowRight
-                    className="size-3.5 motion-safe:transition-transform motion-safe:duration-200 motion-safe:group-hover/onboarding-action:translate-x-0.5"
-                    aria-hidden="true"
-                  />
-                )}
+                <ArrowRight
+                  className="size-3.5 motion-safe:transition-transform motion-safe:duration-200 motion-safe:group-hover/onboarding-action:translate-x-0.5"
+                  aria-hidden="true"
+                />
               </span>
             </Button>
             {selectedProvider === 'github' && (
-              <Button variant="ghost" size="sm" disabled={mutationPending} onClick={onManageConnection}>
+              <Button variant="ghost" size="sm" onClick={onManageConnection}>
                 Manage access
               </Button>
             )}
@@ -278,7 +273,6 @@ function RepositoryRows({
   repositories,
   query,
   pending,
-  mutationPending,
   selectedRepositoryId,
   provider,
   onSelectRepository,
@@ -287,7 +281,6 @@ function RepositoryRows({
   repositories: SourceControlRepository[];
   query: string;
   pending: boolean;
-  mutationPending: boolean;
   selectedRepositoryId?: number | string;
   provider: 'github' | 'gitlab';
   onSelectRepository: (repository: SourceControlRepository) => void;
@@ -309,7 +302,6 @@ function RepositoryRows({
     <RadioGroup
       aria-label="Choose a repository"
       value={selectedRepositoryId === undefined ? null : String(selectedRepositoryId)}
-      disabled={mutationPending}
       onValueChange={value => {
         const repository = visible.find(repo => String(repo.id) === value);
         if (repository) onSelectRepository(repository);
@@ -322,7 +314,6 @@ function RepositoryRows({
           className={cn(
             'group/onboarding-repo hover:bg-fill focus-within:bg-fill flex cursor-pointer items-center gap-3 rounded-lg px-3 py-3 transition-colors',
             selectedRepositoryId === repo.id && 'bg-fill',
-            mutationPending && 'pointer-events-none opacity-60',
           )}
           onMouseEnter={() => onPreviewRepository?.(repo)}
           onFocus={() => onPreviewRepository?.(repo)}

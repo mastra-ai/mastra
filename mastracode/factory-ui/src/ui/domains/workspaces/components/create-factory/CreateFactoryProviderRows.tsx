@@ -38,11 +38,9 @@ export function CreateFactoryProviderRows({ connection, query, error }: CreateFa
               icon={<ProviderBrandIcon provider={provider.provider} />}
               title={providerDisplayName(provider.provider)}
               subtitle={
-                connection.isConfigured(provider, 'oauth')
-                  ? 'Signed in on this deployment'
-                  : 'Sign in with your account'
+                connection.isConfigured(provider) ? 'Signed in on this deployment' : 'Sign in with your account'
               }
-              badge={connection.isConfigured(provider, 'oauth') ? 'Connected' : undefined}
+              badge={connection.isConfigured(provider) ? 'Connected' : undefined}
               value={`signin-${provider.provider}`}
               disabled={connection.pending}
               onSelect={() => connection.chooseSignInProvider(provider)}
@@ -57,8 +55,8 @@ export function CreateFactoryProviderRows({ connection, query, error }: CreateFa
               key={provider.provider}
               icon={<ProviderBrandIcon provider={provider.provider} />}
               title={providerDisplayName(provider.provider)}
-              subtitle={connection.isConfigured(provider, 'api_key') ? 'API key saved' : 'Connect with an API key'}
-              badge={connection.isConfigured(provider, 'api_key') ? 'Connected' : undefined}
+              subtitle={connection.isConfigured(provider) ? 'API key saved' : 'Connect with an API key'}
+              badge={connection.isConfigured(provider) ? 'Connected' : undefined}
               value={`key-${provider.provider}`}
               disabled={connection.pending}
               onSelect={() => connection.chooseKeyProvider(provider)}

@@ -142,10 +142,7 @@ export function EmptyFactoryState() {
               {step === 'vcs' && (
                 <VcsFactoryStep
                   initialRepository={draft.repository}
-                  connectingRepositoryId={null}
                   githubRedirecting={githubRedirecting}
-                  mutationPending={false}
-                  mutationError={null}
                   onConnect={() => {
                     setGithubRedirecting(true);
                     persistBeforeRedirect('vcs');

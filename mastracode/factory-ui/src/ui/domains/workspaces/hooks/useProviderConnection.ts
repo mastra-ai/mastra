@@ -46,10 +46,6 @@ export interface ProviderConnection {
   completeOAuth: () => void;
 }
 
-export function isProviderConfigured(provider: ProviderInfo): boolean {
-  return provider.source !== 'none';
-}
-
 /** Read the requested scope, independently of the caller's winning credential. */
 export function providerCredentialMethod(
   provider: ProviderInfo,
@@ -70,10 +66,6 @@ export function providerCredentialMethod(
   }
   if (provider.source === 'none') return undefined;
   return provider.source.startsWith('oauth') ? 'oauth' : 'api_key';
-}
-
-export function hasScopedCredential(provider: ProviderInfo, scope: ProviderCredentialScope): boolean {
-  return providerCredentialMethod(provider, scope) !== undefined;
 }
 
 export function matchesProviderQuery(provider: ProviderInfo, query: string): boolean {
@@ -112,9 +104,11 @@ export function useProviderConnection({
 
   const authEnabled = authQuery.data?.authEnabled === true;
   const orgKeyAdmin = !authEnabled || (orgKeyAdminQuery.data ?? true);
+  const credentialScope = authEnabled ? scope : undefined;
   const isConfigured = (provider: ProviderInfo, method?: ProviderConnectionMethod) => {
-    const saved = providerCredentialMethod(provider, authEnabled ? scope : undefined);
-    return method ? saved === method : saved !== undefined;
+    const saved = providerCredentialMethod(provider, credentialScope);
+    // Unscoped credentials resolve by precedence (sign-in over saved key), so any one serves both methods.
+    return method && credentialScope ? saved === method : saved !== undefined;
   };
   const byConfiguredThenName = (left: ProviderInfo, right: ProviderInfo): number => {
     if (isConfigured(left) !== isConfigured(right)) return isConfigured(left) ? -1 : 1;
@@ -140,7 +134,7 @@ export function useProviderConnection({
       setActiveOAuth({
         provider: chosen.provider,
         session,
-        replaces: providerCredentialMethod(chosen, authEnabled ? scope : undefined),
+        replaces: providerCredentialMethod(chosen, credentialScope),
       });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Failed to start provider sign in');

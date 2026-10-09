@@ -64,6 +64,16 @@ describe('provider method and scope are independent choices', () => {
     expect(writes).toEqual([{ key: 'test-key', envVar: 'ANTHROPIC_API_KEY', scope: 'org' }]);
   });
 
+  it('uses a local sign-in from the API key list instead of asking for a key it would never use', async () => {
+    server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => new HttpResponse(null, { status: 404 })));
+    registerProvider(() => ({ ...anthropic, source: 'oauth' }));
+    const user = userEvent.setup();
+    renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
+    await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
+    expect(await screen.findByRole('combobox')).toHaveTextContent('anthropic/claude-fable-5');
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('starts organization sign-in instead of treating an existing API key as a sign-in connection', async () => {
     registerProvider(() => ({ ...anthropic, source: 'stored-org', orgCredential: 'api_key' }));
     const starts: unknown[] = [];

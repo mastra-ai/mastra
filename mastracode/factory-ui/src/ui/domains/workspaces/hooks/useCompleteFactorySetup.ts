@@ -5,10 +5,10 @@ import { queryKeys } from '../../../../api/keys';
 import { useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSetDefaultModel } from '../../../../hooks/use-default-model';
 import { usesPersonalFactoryModel } from '../services/onboardingModelChoice';
-import { readJsonOrThrow } from '../services/http';
 import {
   createFactoryProject,
   listFactoryProjects,
+  renameFactoryProject,
   unlinkRepository,
   updateFactoryDefaultModel,
 } from '../services/github';
@@ -41,15 +41,7 @@ export function useCompleteFactorySetup() {
       const factory = existing ?? (await createFactoryProject(baseUrl, repo.name));
       // Set the routing marker before anything refetches the Factory list.
       persistOnboardingFactory(factory.id);
-      if (existing && existing.name !== repo.name) {
-        const response = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factory.id)}`, {
-          method: 'PATCH',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: repo.name }),
-        });
-        await readJsonOrThrow(response, 'Failed to update Factory name');
-      }
+      if (existing && existing.name !== repo.name) await renameFactoryProject(baseUrl, factory.id, repo.name);
       const linked = await link.mutateAsync({ factoryProjectId: factory.id, repo });
       // A failed confirmation (or an older wizard) may have linked a previous choice.
       // Replace only this pending Factory's links, after the new one succeeds.

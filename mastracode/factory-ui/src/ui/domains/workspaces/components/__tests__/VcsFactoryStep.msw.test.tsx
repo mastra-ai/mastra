@@ -38,10 +38,7 @@ describe('VCS Factory step', () => {
     const onSelectRepository = vi.fn();
     renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
         onSelectRepository={onSelectRepository}
@@ -73,10 +70,7 @@ describe('VCS Factory step', () => {
 
     const { client } = renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
         onSelectRepository={vi.fn()}
@@ -128,10 +122,7 @@ describe('VCS Factory step', () => {
 
     renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
         onSelectRepository={vi.fn()}
@@ -169,10 +160,7 @@ describe('VCS Factory step', () => {
 
     renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={onConnect}
         onManageConnection={vi.fn()}
         onSelectRepository={vi.fn()}
@@ -183,6 +171,31 @@ describe('VCS Factory step', () => {
 
     expect(onConnect).toHaveBeenCalledOnce();
     expect(open).not.toHaveBeenCalled();
+  });
+
+  it('asks to reconnect when the drafted repository’s provider was disconnected', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, installations: [], reason: 'not_connected' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' }),
+      ),
+    );
+
+    renderWithProviders(
+      <VcsFactoryStep
+        initialRepository={repo}
+        githubRedirecting={false}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole('button', { name: 'Connect GitHub' })).toBeEnabled();
+    expect(screen.queryByText('GitHub connected')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
   });
 
   it('starts a Platform connect session when GitLab has no active account yet', async () => {
@@ -218,10 +231,7 @@ describe('VCS Factory step', () => {
 
     renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
         onSelectRepository={vi.fn()}
@@ -264,10 +274,7 @@ describe('VCS Factory step', () => {
 
     renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
         onSelectRepository={vi.fn()}
@@ -309,10 +316,7 @@ describe('VCS Factory step', () => {
 
     renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
         onSelectRepository={vi.fn()}
@@ -345,10 +349,7 @@ describe('VCS Factory step', () => {
 
     renderWithProviders(
       <VcsFactoryStep
-        connectingRepositoryId={null}
         githubRedirecting={false}
-        mutationPending={false}
-        mutationError={null}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
         onSelectRepository={vi.fn()}

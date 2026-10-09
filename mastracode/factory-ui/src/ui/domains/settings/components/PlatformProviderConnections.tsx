@@ -134,7 +134,7 @@ export function ProviderConnectControl({
         icon={icon}
         className={className}
         disabled={pending}
-        aria-label={label}
+        aria-label={buttonLabel && !pending ? label : undefined}
         onClick={() => (meta.authKind === 'apiKey' ? setCollectingApiKey(true) : void run())}
       >
         {pending ? 'Connecting…' : (buttonLabel ?? label)}
