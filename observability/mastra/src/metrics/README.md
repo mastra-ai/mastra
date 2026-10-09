@@ -1,19 +1,16 @@
 # Embedded Pricing Model
 
-This directory contains the embedded pricing snapshot used by `@mastra/observability` for v0 runtime cost estimation.
+This directory contains the pricing snapshot used by `@mastra/observability` for runtime cost estimation.
 
 ## Source of Truth
 
-- `pricing-data.jsonl` is generated externally
+Prices come from [models.dev](https://models.dev) (`https://models.dev/api.json`), the same catalog the model router in `@mastra/core` uses.
 
-The upstream generation process:
+- `scripts/generate-pricing.ts` converts the models.dev `cost` data into `pricing-data.jsonl` (see `models-dev.ts`). The "Regenerate Providers & Docs" workflow runs it every 6 hours and commits changes with an `@mastra/observability` changeset.
+- At runtime, `PricingRegistry.getGlobal()` starts from the copy cached in `~/.cache/mastra/pricing-data.json`, or from this snapshot, and refreshes from models.dev in the background once a day and when a model has no price. `MASTRA_AUTO_REFRESH_PRICING=false` or `MASTRA_OFFLINE=true` turns the refresh off.
+- A model with a missing or wrong price is fixed upstream, with a pull request to [models.dev](https://github.com/anomalyco/models.dev). Do not hand-edit `pricing-data.jsonl`.
 
-- fetches provider and aggregator pricing snapshots
-- normalizes them into per-source pricing rules
-- applies source precedence and provider overrides
-- writes the final minified pricing model JSONL artifact
-
-The copy in this directory is the embedded runtime snapshot, not the place where pricing data is authored or rolled up.
+models.dev data is MIT licensed, Copyright (c) 2025 models.dev.
 
 ## v0 Scope
 
@@ -22,9 +19,8 @@ The embedded data is intentionally narrow:
 - one row per canonical `provider + model`
 - token pricing only
 - base pricing only unless the model has prompt-threshold pricing
-- prompt-threshold tiers currently use `total_input_tokens > 200000`
-- every kept tier includes both input and output token pricing
-- if a source only exposes `output_reasoning_tokens` for a tier, that value is promoted to `output_tokens` for v0
+- context tiers use `total_input_tokens >= <tier size>`, highest threshold first
+- every kept tier includes both input and output token pricing; zero prices are dropped
 - models left without both sides are excluded
 - embedding-only and other input-only models are excluded
 
@@ -88,7 +84,7 @@ Condition keys currently used:
           }
         },
         {
-          "w": [{ "f": "tit", "op": "gt", "value": 200000 }],
+          "w": [{ "f": "tit", "op": "gte", "value": 200000 }],
           "r": {
             "icrt": { "c": 2.5e-7 },
             "it": { "c": 0.0000025 },
@@ -113,4 +109,4 @@ The intended v0 runtime behavior is:
   metric rows that will actually be emitted for the reported usage payload
 - preserve explicitly reported zero-value total token rows with `estimatedCost: 0`
 
-This file is optimized for shipping size, not readability. If a human-readable data or provenance-oriented lineage file is needed, use the upstream costing pipeline outputs instead of editing or expanding the embedded snapshot here.
+This file is optimized for shipping size, not readability.

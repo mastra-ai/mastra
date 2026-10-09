@@ -7,8 +7,6 @@ import { TokenMetrics } from './types';
 
 const fixturePath = path.join(import.meta.dirname, '__fixtures__', 'pricing-data-test.jsonl');
 const pricingRegistry = PricingRegistry.fromText(fs.readFileSync(fixturePath, 'utf-8'));
-const embeddedPricingPath = path.join(import.meta.dirname, 'pricing-data.jsonl');
-const embeddedPricingRegistry = PricingRegistry.fromText(fs.readFileSync(embeddedPricingPath, 'utf-8'));
 
 describe('estimateCosts', () => {
   it.each([
@@ -18,7 +16,7 @@ describe('estimateCosts', () => {
     ['gpt-5.6-luna', '3ad0e58759c048c0', 0.0002, 0.00002, 0.00025, 0.0012, 0.0000004, 0.0000018],
     ['gpt-6-luna', 'e07d69e66a4bdabd', 0.0001, 0.00001, 0.000125, 0.0005, 0.0000002, 0.00000075],
   ])(
-    'estimates embedded OpenAI pricing for %s',
+    'estimates OpenAI pricing for %s',
     (
       model,
       pricingId,
@@ -40,7 +38,7 @@ describe('estimateCosts', () => {
             outputDetails: { text: 1_000 },
           },
         },
-        embeddedPricingRegistry,
+        pricingRegistry,
       );
 
       expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(inputCost);
@@ -55,7 +53,7 @@ describe('estimateCosts', () => {
           model,
           usage: { inputTokens: 272_001, outputTokens: 1_000 },
         },
-        embeddedPricingRegistry,
+        pricingRegistry,
       );
 
       expect(longContextCosts.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(272_001 * longContextInputRate);
@@ -71,30 +69,27 @@ describe('estimateCosts', () => {
     ['claude-fable-5', '00de3426817c9886', 0.01, 0.001, 0.0125, 0.05],
     ['claude-opus-4-8', '93c628c3a9d22500', 0.005, 0.0005, 0.00625, 0.025],
     ['claude-sonnet-5', '916837951831cfe5', 0.002, 0.0002, 0.0025, 0.01],
-  ])(
-    'estimates embedded Anthropic pricing for %s',
-    (model, pricingId, inputCost, cacheReadCost, cacheWriteCost, outputCost) => {
-      const costs = estimateCosts(
-        {
-          provider: 'anthropic',
-          model,
-          usage: {
-            inputTokens: 3_000,
-            outputTokens: 1_000,
-            inputDetails: { text: 1_000, cacheRead: 1_000, cacheWrite: 1_000 },
-            outputDetails: { text: 1_000 },
-          },
+  ])('estimates Anthropic pricing for %s', (model, pricingId, inputCost, cacheReadCost, cacheWriteCost, outputCost) => {
+    const costs = estimateCosts(
+      {
+        provider: 'anthropic',
+        model,
+        usage: {
+          inputTokens: 3_000,
+          outputTokens: 1_000,
+          inputDetails: { text: 1_000, cacheRead: 1_000, cacheWrite: 1_000 },
+          outputDetails: { text: 1_000 },
         },
-        embeddedPricingRegistry,
-      );
+      },
+      pricingRegistry,
+    );
 
-      expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(inputCost);
-      expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(cacheReadCost);
-      expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE)?.estimatedCost).toBeCloseTo(cacheWriteCost);
-      expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(outputCost);
-      expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({ pricing_id: pricingId, tier_index: 0 });
-    },
-  );
+    expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(inputCost);
+    expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(cacheReadCost);
+    expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE)?.estimatedCost).toBeCloseTo(cacheWriteCost);
+    expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(outputCost);
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({ pricing_id: pricingId, tier_index: 0 });
+  });
 
   it('estimates Anthropic cache writes using TTL-specific rates without double charging', () => {
     const costs = estimateCosts(
@@ -107,7 +102,7 @@ describe('estimateCosts', () => {
           inputDetails: { text: 1_000, cacheWrite: 1_000, cacheWrite5m: 500, cacheWrite1h: 500 },
         },
       },
-      embeddedPricingRegistry,
+      pricingRegistry,
     );
 
     expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE_5M)?.estimatedCost).toBeCloseTo(0.00125);
@@ -127,7 +122,7 @@ describe('estimateCosts', () => {
           inputDetails: { text: 1_000, cacheWrite: 1_500, cacheWrite5m: 500 },
         },
       },
-      embeddedPricingRegistry,
+      pricingRegistry,
     );
 
     expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE_5M)?.estimatedCost).toBeCloseTo(0.00125);
@@ -146,7 +141,7 @@ describe('estimateCosts', () => {
           inputDetails: { text: 1_000, cacheWrite: 1_000, cacheWrite1h: 400 },
         },
       },
-      embeddedPricingRegistry,
+      pricingRegistry,
     );
 
     expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE_1H)?.estimatedCost).toBeCloseTo(0.0016);
@@ -165,7 +160,7 @@ describe('estimateCosts', () => {
           inputDetails: { text: 1_000, cacheWrite: 500, cacheWrite5m: 400, cacheWrite1h: 300 },
         },
       },
-      embeddedPricingRegistry,
+      pricingRegistry,
     );
 
     expect(costs.get(TokenMetrics.INPUT_CACHE_WRITE_5M)?.estimatedCost).toBeCloseTo(0.001);
@@ -174,7 +169,7 @@ describe('estimateCosts', () => {
     expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.0042);
   });
 
-  it('estimates embedded Google pricing for gemini-3.5-flash', () => {
+  it('estimates Google pricing for gemini-3.5-flash', () => {
     const costs = estimateCosts(
       {
         provider: 'google',
@@ -186,7 +181,7 @@ describe('estimateCosts', () => {
           outputDetails: { text: 1_000 },
         },
       },
-      embeddedPricingRegistry,
+      pricingRegistry,
     );
 
     expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(0.0015);
@@ -202,7 +197,7 @@ describe('estimateCosts', () => {
     ['grok-4.5', 'ec1c2a95e38faa9b', 0.002, 0.0003, 0.006, 0.000004, 0.0000006, 0.000012],
     ['grok-build-0.1', 'd03e4214108e83a2', 0.001, 0.0002, 0.002, 0.000002, 0.0000004, 0.000004],
   ])(
-    'estimates embedded xAI pricing for %s',
+    'estimates xAI pricing for %s',
     (model, pricingId, inputCost, cacheReadCost, outputCost, longInputRate, longCacheReadRate, longOutputRate) => {
       const costs = estimateCosts(
         {
@@ -215,7 +210,7 @@ describe('estimateCosts', () => {
             outputDetails: { text: 1_000 },
           },
         },
-        embeddedPricingRegistry,
+        pricingRegistry,
       );
 
       expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(inputCost);
@@ -234,7 +229,7 @@ describe('estimateCosts', () => {
             outputDetails: { text: 1_000 },
           },
         },
-        embeddedPricingRegistry,
+        pricingRegistry,
       );
 
       expect(longContextCosts.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(200_000 * longInputRate);

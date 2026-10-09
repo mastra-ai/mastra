@@ -1,14 +1,23 @@
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import os from 'node:os';
 import path from 'node:path';
+import { MIN_MODELS_DEV_PRICING_ROWS, MODELS_DEV_API_URL, modelsDevToPricingRows } from './models-dev';
 import { PricingModel, PricingTier } from './pricing-model';
 import type { PricingMeter, PricingConditionOperator, PricingConditionField } from './types';
 
 const DATA_FILE_NAME = 'pricing-data.jsonl';
+const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const MIN_REFRESH_ATTEMPT_INTERVAL_MS = 60 * 60 * 1000;
+const REFRESH_TIMEOUT_MS = 5_000;
+// Same cache folder as the model router. A function, so importing this module never calls
+// os.homedir(), which throws in some sandboxes.
+const CACHE_FILE = () => path.join(os.homedir(), '.cache', 'mastra', 'pricing-data.json');
 const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac', 'jp', 'au']);
 const AI_SDK_VERCEL_GATEWAY_PROVIDER_ID = 'gateway';
 const VERCEL_PRICING_PROVIDER_ID = 'vercel';
 const AI_SDK_PROVIDER_NAMESPACE_ALIASES = new Map([
+  ['fireworks', 'fireworks-ai'],
   ['google.vertex', 'google-vertex'],
   ['vertex.anthropic', 'google-vertex-anthropic'],
   ['vertex.maas', 'google-vertex'],
@@ -23,12 +32,12 @@ interface MinifiedCondition {
   value: number;
 }
 
-interface MinifiedTier {
+export interface MinifiedTier {
   w?: MinifiedCondition[];
   r: Partial<Record<MinifiedMeterKey, { c: number }>>;
 }
 
-interface MinifiedPricingModelRow {
+export interface MinifiedPricingModelRow {
   i: string;
   p: string;
   m: string;
@@ -58,28 +67,39 @@ const MINIFIED_CONDITION_FIELD_TO_CANONICAL: Record<MinifiedConditionFieldKey, P
 };
 
 let cachedLoadError: string | null = null;
+let globalRegistry: PricingRegistry | null = null;
+// When the global pricing was last confirmed against models.dev. 0 means the bundled snapshot.
+let refreshedAt = 0;
+let lastRefreshAttemptAt = 0;
+let refreshEtag: string | undefined;
+let refreshInFlight = false;
+const refreshedMissKeys = new Set<string>();
 
 export class PricingRegistry {
-  private static globalRegistry: PricingRegistry | null = null;
-
   constructor(private readonly pricingModels: Map<string, PricingModel>) {}
 
   static fromText(pricingModelText: string): PricingRegistry {
     return new PricingRegistry(parsePricingModelText(pricingModelText));
   }
 
+  /**
+   * The registry used for cost estimates. It starts from the models.dev copy cached in
+   * `~/.cache/mastra`, or from the bundled snapshot, and refreshes from models.dev in the
+   * background once a day and when a model has no price. Lookups never wait for a refresh.
+   */
   static getGlobal(): PricingRegistry | null {
-    if (PricingRegistry.globalRegistry) {
-      return PricingRegistry.globalRegistry;
+    if (!globalRegistry) {
+      const pricingModels = loadCachedPricingModels() ?? loadPricingModels();
+      if (pricingModels) {
+        globalRegistry = new PricingRegistry(pricingModels);
+      }
     }
 
-    const pricingModels = loadPricingModels();
-    if (!pricingModels) {
-      return null;
+    if (Date.now() - refreshedAt >= REFRESH_INTERVAL_MS) {
+      refreshGlobalPricing();
     }
 
-    PricingRegistry.globalRegistry = new PricingRegistry(pricingModels);
-    return PricingRegistry.globalRegistry;
+    return globalRegistry;
   }
 
   get(args: { provider: string; model: string }): PricingModel | null {
@@ -91,7 +111,112 @@ export class PricingRegistry {
         if (match) return match;
       }
     }
+
+    // A model with no price may be newer than the pricing in use. One refresh per missing model.
+    const missKey = makePricingKey(args);
+    if (this === globalRegistry && !refreshedMissKeys.has(missKey) && refreshGlobalPricing()) {
+      refreshedMissKeys.add(missKey);
+    }
     return null;
+  }
+}
+
+/** Same `MASTRA_OFFLINE` switch as the model router's `isOfflineMode()` in `@mastra/core`. */
+function isRefreshEnabled(): boolean {
+  const offline = process.env.MASTRA_OFFLINE;
+  return offline !== 'true' && offline !== '1' && process.env.MASTRA_AUTO_REFRESH_PRICING !== 'false';
+}
+
+/**
+ * Start a background refresh from models.dev. Returns false when refresh is off, one is
+ * already running, or the last attempt was less than an hour ago.
+ */
+function refreshGlobalPricing(): boolean {
+  if (refreshInFlight || !isRefreshEnabled() || Date.now() - lastRefreshAttemptAt < MIN_REFRESH_ATTEMPT_INTERVAL_MS) {
+    return false;
+  }
+
+  refreshInFlight = true;
+  lastRefreshAttemptAt = Date.now();
+  void fetchModelsDevPricing()
+    .catch(() => {
+      // Keep the pricing in use. The next attempt can start an hour later.
+    })
+    .finally(() => {
+      refreshInFlight = false;
+    });
+  return true;
+}
+
+async function fetchModelsDevPricing(): Promise<void> {
+  const response = await fetch(MODELS_DEV_API_URL, {
+    headers: refreshEtag ? { 'if-none-match': refreshEtag } : undefined,
+    signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
+  });
+
+  if (response.status === 304) {
+    refreshedAt = Date.now();
+    await touchCacheFile();
+    return;
+  }
+  if (!response.ok) {
+    throw new Error(`models.dev responded with ${response.status}`);
+  }
+
+  const rows = modelsDevToPricingRows(await response.json());
+  if (rows.length < MIN_MODELS_DEV_PRICING_ROWS) {
+    throw new Error(
+      `models.dev returned ${rows.length} pricing rows, expected at least ${MIN_MODELS_DEV_PRICING_ROWS}`,
+    );
+  }
+
+  globalRegistry = new PricingRegistry(rowsToPricingModels(rows));
+  refreshedAt = Date.now();
+  refreshEtag = response.headers.get('etag') ?? undefined;
+  await writeCacheFile(JSON.stringify({ etag: refreshEtag, rows }));
+}
+
+/** The cache file's mtime records when its rows were last confirmed against models.dev. */
+function loadCachedPricingModels(): Map<string, PricingModel> | null {
+  if (!isRefreshEnabled()) {
+    return null;
+  }
+
+  try {
+    const cacheFile = CACHE_FILE();
+    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf-8')) as { etag?: unknown; rows?: unknown };
+    if (!Array.isArray(cached.rows) || cached.rows.length < MIN_MODELS_DEV_PRICING_ROWS) {
+      return null;
+    }
+
+    const pricingModels = rowsToPricingModels(cached.rows as MinifiedPricingModelRow[]);
+    refreshEtag = typeof cached.etag === 'string' ? cached.etag : undefined;
+    refreshedAt = fs.statSync(cacheFile).mtimeMs;
+    return pricingModels;
+  } catch {
+    return null;
+  }
+}
+
+/** Write-to-temp-then-rename, like the model router's cache writes, so readers never see a partial file. */
+async function writeCacheFile(content: string): Promise<void> {
+  try {
+    const cacheFile = CACHE_FILE();
+    const tempFile = `${cacheFile}.${process.pid}.${Date.now()}.tmp`;
+    await fs.promises.mkdir(path.dirname(cacheFile), { recursive: true });
+    await fs.promises.writeFile(tempFile, content, 'utf-8');
+    await fs.promises.rename(tempFile, cacheFile);
+  } catch {
+    // Read-only home folders (some containers and serverless hosts) keep the refresh in memory only.
+  }
+}
+
+async function touchCacheFile(): Promise<void> {
+  try {
+    const now = new Date();
+    await fs.promises.utimes(CACHE_FILE(), now, now);
+  } catch {
+    // Nothing cached yet, or the cache folder is read-only.
   }
 }
 
@@ -110,19 +235,21 @@ function loadPricingModels(): Map<string, PricingModel> | null {
 }
 
 function parsePricingModelText(content: string): Map<string, PricingModel> {
+  const rows = content
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => JSON.parse(line) as MinifiedPricingModelRow);
+
+  return rowsToPricingModels(rows);
+}
+
+function rowsToPricingModels(rows: MinifiedPricingModelRow[]): Map<string, PricingModel> {
   const pricingModels = new Map<string, PricingModel>();
-
-  for (const line of content.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      continue;
-    }
-
-    const parsed = JSON.parse(trimmed) as MinifiedPricingModelRow;
-    const pricingModel = expandPricingModelRow(parsed);
+  for (const row of rows) {
+    const pricingModel = expandPricingModelRow(row);
     pricingModels.set(makePricingKey(pricingModel), pricingModel);
   }
-
   return pricingModels;
 }
 
