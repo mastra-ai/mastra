@@ -619,6 +619,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'tools/datacircle',
+          label: 'Datacircle',
+          customProps: { icon: '/img/integrations/datacircle.svg' },
+        },
+        {
+          type: 'doc',
           id: 'tools/firecrawl',
           label: 'Firecrawl',
           customProps: { icon: '/img/integrations/firecrawl.svg' },

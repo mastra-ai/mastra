@@ -1,0 +1,117 @@
+---
+title: 'Datacircle | Tools'
+description: 'Use Datacircle with Mastra to fetch live LinkedIn profiles from B2B data APIs through its MCP server, with no markup.'
+packages:
+  - '@mastra/core'
+  - '@mastra/mcp'
+---
+
+# Datacircle
+
+[Datacircle](https://datacircle.dev) is a data co-op: "Query your favorite B2B data APIs through us. Same request, same price, no markup. Right now we have 2 live LinkedIn profile APIs that we trust: Up2Data and HarvestAPI."
+
+The [Datacircle MCP server](https://docs.datacircle.dev/mcp-server) is hosted at `https://api.datacircle.dev/mcp` over Streamable HTTP. Connect it with [`MCPClient`](/reference/tools/mcp-client) to give your agents tools that look up LinkedIn profiles. Each call is paid from your Datacircle balance at the provider's price.
+
+## Prerequisites
+
+- Node.js `v22.13.0` or later installed
+- A Datacircle API key. Sign up at [datacircle.dev](https://datacircle.dev) with your work email: a $5 credit, that's 4,000 LinkedIn profiles at $1.25 per 1,000. Your key is on your dashboard.
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project. Follow [Get started](/docs) to create one.
+
+## Installation
+
+Install the MCP client package:
+
+```bash npm2yarn
+npm install @mastra/mcp
+```
+
+## Configure environment variables
+
+Add your Datacircle API key to the `.env` file in your project root:
+
+```bash title=".env"
+DATACIRCLE_API_KEY=your-datacircle-api-key
+```
+
+## Connect the MCP server
+
+Create an MCP client that sends your API key as a Bearer token:
+
+```typescript title="src/mastra/mcp/datacircle.ts"
+import { MCPClient } from '@mastra/mcp'
+
+export const datacircle = new MCPClient({
+  servers: {
+    datacircle: {
+      url: new URL('https://api.datacircle.dev/mcp'),
+      requestInit: {
+        headers: {
+          Authorization: `Bearer ${process.env.DATACIRCLE_API_KEY}`,
+        },
+      },
+    },
+  },
+})
+```
+
+The server also supports OAuth. Visit [OAuth authentication](/reference/tools/mcp-client#oauth-authentication) to sign in with a Datacircle account instead of an API key.
+
+## Use the tools with an agent
+
+Pass the server's tools to an agent:
+
+```typescript title="src/mastra/agents/lead-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { datacircle } from '../mcp/datacircle'
+
+export const leadAgent = new Agent({
+  id: 'lead-agent',
+  name: 'Lead Agent',
+  instructions:
+    'Look up LinkedIn profiles with the Datacircle tools and answer from what they return.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: await datacircle.listTools(),
+})
+```
+
+Then ask the agent, for example:
+
+```typescript
+const response = await leadAgent.generate(
+  'Get the LinkedIn profile at https://www.linkedin.com/in/williamhgates and tell me where he works now.',
+)
+console.log(response.text)
+```
+
+The agent calls `datacircle_get_linkedin_profile` and answers from the profile it returns. Each request goes to the provider and gets the profile as it is today.
+
+You can also call a tool directly, without a model, then close the connection:
+
+```typescript
+const tools = await datacircle.listTools()
+const balance = await tools.datacircle_get_balance.execute({})
+
+await datacircle.disconnect()
+```
+
+## Available tools
+
+`listTools()` prefixes each tool name with the server name, `datacircle_`.
+
+| Tool | Description |
+| - | - |
+| `get_linkedin_profile` | Fetches a LinkedIn profile by its URL: name, headline, location, current company and title, positions, education, and skills. `provider` is `up2data` (the default) or `harvestapi`. |
+| `get_balance` | Returns the account's balance in USD. Free. |
+| `list_files` | Lists the data files the account can download, including the free 10M+ U.S. B2B leads flat file. Free. |
+| `get_download_link` | Returns a download link for one of those files. Free. |
+| `add_funds` | Returns a Stripe Checkout link to add funds to the balance. Nothing is charged until the link is paid. |
+| `get_invite_link` | Returns the account's invite link. Free. |
+
+## Related
+
+- [Datacircle MCP server documentation](https://docs.datacircle.dev/mcp-server)
+- [Datacircle pricing](https://docs.datacircle.dev/pricing)
+- [MCP overview](/docs/connections/mcp)
+- [`MCPClient` reference](/reference/tools/mcp-client)
