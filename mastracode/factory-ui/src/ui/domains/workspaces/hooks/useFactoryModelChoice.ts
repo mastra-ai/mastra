@@ -1,6 +1,5 @@
 import { useState } from 'react';
 
-import { useApplyProviderOMDefaults } from '../../../../hooks/use-om';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { useSetFactoryDefaultModelMutation } from '../../../../hooks/useFactoryDefaultModel';
 import { useProviderModels } from './useProviderModels';
@@ -17,7 +16,7 @@ export interface FactoryModelChoice {
   save: (modelId?: string) => Promise<void>;
 }
 
-/** The model an existing Factory's runs start on, saved with its Observational Memory defaults. */
+/** The model an existing Factory's runs start on. */
 export function useFactoryModelChoice({
   factoryId,
   providerId,
@@ -29,7 +28,6 @@ export function useFactoryModelChoice({
 }): FactoryModelChoice {
   const catalog = useProviderModels(providerId);
   const setDefaultModel = useSetFactoryDefaultModelMutation(factoryId);
-  const applyOMDefaults = useApplyProviderOMDefaults();
   const [selectedModelId, setSelectedModelId] = useState('');
   const [error, setError] = useState<string>();
 
@@ -41,16 +39,15 @@ export function useFactoryModelChoice({
     models: catalog.models,
     modelId,
     setModelId: setSelectedModelId,
-    saving: setDefaultModel.isPending || applyOMDefaults.isPending,
+    saving: setDefaultModel.isPending,
     error,
     save: async (chosenModelId = modelId) => {
       if (!providerId || !chosenModelId) return;
       setError(undefined);
       try {
-        await Promise.all([
-          setDefaultModel.mutateAsync(chosenModelId),
-          applyOMDefaults.mutateAsync({ providerId, factoryModelId: chosenModelId, factoryId }),
-        ]);
+        // Connecting a provider selects the run's main model; it deliberately
+        // does not touch the observer/reflector rows, which stay on auto.
+        await setDefaultModel.mutateAsync(chosenModelId);
         onSaved();
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : 'Failed to configure model defaults');

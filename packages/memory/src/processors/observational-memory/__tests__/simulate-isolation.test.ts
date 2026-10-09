@@ -26,7 +26,7 @@ describe('direct replay isolation', () => {
   it('keeps separate replay stores independent', async () => {
     const memoryA = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
     const memoryB = new Memory({ storage: new InMemoryStore(), ...semanticInfrastructure });
-    const subconscious = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' });
+    const subconscious = new Subconscious({ defaultScope: 'resource' });
 
     vi.spyOn(Agent.prototype, 'sendMessage').mockImplementation(function (this: Agent, message: any, options: any) {
       const consumeStream = async () => {

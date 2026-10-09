@@ -85,7 +85,6 @@ export function TokenUsageCard({ onViewTraces, onTimeRangeClick }: TokenUsageCar
           series={series}
           height="fill"
           showLegend={false}
-          showYAxis={false}
           valueFormatter={isTokens ? formatCount : formatUsd}
           axisFormatter={isTokens ? formatAxisCount : axisUsd}
           onBucketClick={onTimeRangeClick && (row => onTimeRangeClick(bucketWindow(Number(row.ts), stepHours)))}

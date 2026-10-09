@@ -14,6 +14,13 @@
   transition: border-color var(--duration-fast) var(--ease-out-custom);
 }
 
+/* Boundary nodes stand in for ancestors outside the current lens. */
+[data-node-type='boundary'] > .knowledge-circle {
+  background: var(--fill-subtle);
+  border-style: dashed;
+  opacity: 0.75;
+}
+
 .knowledge-circle[data-selected='true'],
 .knowledge-canvas .react-flow__node:focus-visible .knowledge-circle {
   border-color: var(--knowledge-color);

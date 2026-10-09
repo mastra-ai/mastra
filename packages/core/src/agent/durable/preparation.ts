@@ -1,4 +1,6 @@
 import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
+import { MastraFGAPermissions } from '../../auth/ee';
+import type { MastraFGAPermissionInput } from '../../auth/ee';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
@@ -52,8 +54,9 @@ import {
   applyClientToolModelOutput,
   fireClientToolOutputHooks,
 } from '../workflows/prepare-stream/client-tool-output-hooks';
+import { authorizeDurableMemory } from './memory-fga';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
-import { createWorkflowInput, serializeClientTools } from './utils/serialize-state';
+import { createWorkflowInput, serializeClientTools, serializeToolsetToolNames } from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 import { isJsonSafe } from './workflows/shared/schemas';
 
@@ -438,10 +441,25 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Setting the context first keeps read (inject) and write (tool) in sync.
   const memory = await typedAgent.getMemory({ requestContext });
   const memoryConfig = execOptions?.memory?.options;
+  const memoryAuthorizationChecks = new Map<MastraFGAPermissionInput, Promise<void>>();
+  const authorizeMemory = (permission: MastraFGAPermissionInput) =>
+    authorizeDurableMemory(memoryAuthorizationChecks, {
+      mastra,
+      user: requestContext.get('user'),
+      threadId: threadId!,
+      resourceId,
+      agentId: publicAgentId,
+      requestContext,
+      permission,
+      actor: execOptions?.actor,
+    });
   if (memory && threadId && resourceId) {
+    await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
     const existingThread = await memory.getThreadById({ threadId });
     if (existingThread) {
       assertThreadOwnedByResource({ thread: existingThread, resourceId, agentName: publicAgentName });
+    } else {
+      await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
     }
     threadObject =
       existingThread ??
@@ -749,6 +767,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     scorers,
     options: {
       clientTools: serializeClientTools(execOptions?.clientTools, tools),
+      toolsetToolNames: serializeToolsetToolNames(execOptions?.toolsets),
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
       activeTools: execOptions?.activeTools,
@@ -818,6 +837,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     tools,
     saveQueueManager,
     memory,
+    memoryAuthorizationChecks,
     model,
     modelList: modelList
       ? modelList.map((entry: AgentModelManagerConfig) => ({

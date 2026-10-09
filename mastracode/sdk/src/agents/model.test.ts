@@ -19,7 +19,12 @@ import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import { setCredentialStoreProvider } from './credential-resolver.js';
 import { MastraCodeGateway } from './mastracode-gateway.js';
-import { createRequestScopedCredentialStore, getDynamicModel, resolveModel } from './model.js';
+import {
+  createRequestScopedCredentialStore,
+  getActiveRouteMemoryModelId,
+  getDynamicModel,
+  resolveModel,
+} from './model.js';
 
 afterEach(() => {
   if (previousEnv.kimiApiKey === undefined) delete process.env.KIMI_API_KEY;
@@ -239,22 +244,34 @@ describe('getDynamicModel model route', () => {
     const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5'));
 
     expect(Array.isArray(model)).toBe(false);
-    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+    expect((model as { model: { modelId?: string } }).model.modelId).toBe('claude-fable-5');
+    expect((model as { id: string }).id).toBe('anthropic/claude-fable-5');
+  });
+
+  it('labels a custom-provider model with its provider/model ID', () => {
+    const model = getDynamicModel(requestWithSession('mastracode/anthropic/claude-fable-5'));
+
+    expect((model as { id: string }).id).toBe('anthropic/claude-fable-5');
   });
 
   it('returns a bare model when the route does not start with the selected model', () => {
     const model = getDynamicModel(requestWithSession('openai/gpt-5.4-mini', { route }));
 
     expect(Array.isArray(model)).toBe(false);
-    expect((model as { modelId?: string }).modelId).toBe('gpt-5.4-mini');
+    expect((model as { model: { modelId?: string } }).model.modelId).toBe('gpt-5.4-mini');
   });
 
   it('builds a fallback array from the host-supplied route', () => {
     const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5', { route }));
-    const entries = model as Array<{ id?: string; model: { modelId?: string } }>;
+    const entries = model as Array<{ id?: string; model: { model: { modelId?: string } } }>;
 
     expect(entries.map(entry => entry.id)).toEqual(['anthropic', 'openai', 'github-copilot']);
-    expect(entries.map(entry => entry.model.modelId)).toEqual(['claude-fable-5', 'gpt-5.6-sol', 'gpt-4.1']);
+    expect(entries.map(entry => entry.model.model.modelId)).toEqual(['claude-fable-5', 'gpt-5.6-sol', 'gpt-4.1']);
+    expect(entries.map(entry => (entry.model as unknown as { id: string }).id)).toEqual([
+      'anthropic/claude-fable-5',
+      'openai/gpt-5.6-sol',
+      'github-copilot/gpt-4.1',
+    ]);
   });
 
   it('starts at a same-thread pending route hop', () => {
@@ -272,10 +289,10 @@ describe('getDynamicModel model route', () => {
         },
       }),
     );
-    const entries = model as Array<{ id?: string; model: { modelId?: string } }>;
+    const entries = model as Array<{ id?: string; model: { model: { modelId?: string } } }>;
 
     expect(entries.map(entry => entry.id)).toEqual(['openai', 'github-copilot']);
-    expect(entries.map(entry => entry.model.modelId)).toEqual(['gpt-5.6-sol', 'gpt-4.1']);
+    expect(entries.map(entry => entry.model.model.modelId)).toEqual(['gpt-5.6-sol', 'gpt-4.1']);
   });
 
   it('ignores pending fallback state captured for another thread', () => {
@@ -315,7 +332,7 @@ describe('getDynamicModel model route', () => {
     );
 
     expect(Array.isArray(model)).toBe(false);
-    expect((model as { modelId?: string }).modelId).toBe('gpt-5.4-mini');
+    expect((model as { model: { modelId?: string } }).model.modelId).toBe('gpt-5.4-mini');
   });
 
   it('caps route resolution for persisted state that bypassed schema validation', () => {
@@ -338,7 +355,7 @@ describe('getDynamicModel model route', () => {
     );
 
     expect(Array.isArray(model)).toBe(false);
-    expect((model as { modelId?: string }).modelId).toBe('claude-fable-5');
+    expect((model as { model: { modelId?: string } }).model.modelId).toBe('claude-fable-5');
   });
 
   it('gives a revisited entry id a unique occurrence suffix', () => {
@@ -346,5 +363,34 @@ describe('getDynamicModel model route', () => {
     const model = getDynamicModel(requestWithSession('anthropic/claude-fable-5', { route: repeatedRoute }));
 
     expect((model as Array<{ id?: string }>).map(entry => entry.id)).toEqual(['anthropic', 'openai', 'anthropic#2']);
+  });
+});
+
+describe('getActiveRouteMemoryModelId', () => {
+  const entries = [
+    { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5' },
+    { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol', memoryModelId: 'openai/gpt-5.4-mini' },
+  ];
+
+  it('returns undefined when the route sets no memory model', () => {
+    expect(getActiveRouteMemoryModelId({ modelRoute: { entries: [entries[0]] } })).toBeUndefined();
+  });
+
+  it('returns Auto only when the first route entry sets memory to Auto', () => {
+    expect(
+      getActiveRouteMemoryModelId({ modelRoute: { entries: [{ ...entries[0], memoryModelId: 'auto' }, entries[1]] } }),
+    ).toBe('auto');
+    expect(getActiveRouteMemoryModelId({ modelRoute: { entries } })).toBe('openai/gpt-5.4-mini');
+  });
+
+  it('honors a pending fallback hop only for its own thread', () => {
+    const state = {
+      modelRoute: {
+        entries: [{ ...entries[0], memoryModelId: 'anthropic/claude-haiku-4-5' }, entries[1]],
+      },
+      mastracodePendingModelFallback: { toEntryId: 'openai', threadId: 'thread-1' },
+    };
+    expect(getActiveRouteMemoryModelId(state, 'thread-1')).toBe('openai/gpt-5.4-mini');
+    expect(getActiveRouteMemoryModelId(state, 'thread-2')).toBe('anthropic/claude-haiku-4-5');
   });
 });
