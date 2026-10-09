@@ -444,6 +444,7 @@ function isPlatformAuthCustomDomain(provider: IMastraAuthProvider, publicUrl?: s
 async function handleAuthMe(provider: IMastraAuthProvider, c: Context, publicUrl?: string): Promise<Response> {
   const token = getBearerToken(c.req.header('Authorization'));
   const user = await authenticateRequest(provider, token, c.req.raw);
+  forwardPendingResponseHeaders(provider, c);
   // Provider identity for the SPA: `/signin` renders the hosted-login button
   // for WorkOS and an email/password form for better-auth (with sign-up hidden
   // when the provider disables it).
