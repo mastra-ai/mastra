@@ -1,6 +1,7 @@
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { copyFileSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
@@ -519,7 +520,37 @@ describe('BUILTIN_SERVERS command()', () => {
     });
 
     it('returns undefined when binary not found', () => {
-      expect(eslintCommand(tempDir)).toBeUndefined();
+      // PATH holds only the lookup utility, so the PATH probe really runs but cannot
+      // see a host-installed server; cwd is isolated so the repo's node_modules is skipped.
+      // Windows resolves commands by extension (PATHEXT), so the copies keep theirs;
+      // copying avoids needing symlink privileges there.
+      const isWindows = process.platform === 'win32';
+      const lookup = isWindows ? 'where' : 'which';
+      const pathDir = join(tempDir, 'path-bin');
+      mkdirSync(pathDir);
+      const lookupPath = execFileSync(lookup, [lookup], { encoding: 'utf8' }).split(/\r?\n/)[0]!.trim();
+      if (isWindows) {
+        copyFileSync(lookupPath, join(pathDir, basename(lookupPath)));
+      } else {
+        symlinkSync(lookupPath, join(pathDir, lookup));
+      }
+      vi.stubEnv('PATH', pathDir);
+      const cwd = vi.spyOn(process, 'cwd').mockReturnValue(tempDir);
+      try {
+        expect(eslintCommand(tempDir)).toBeUndefined();
+
+        // Control: the same PATH probe finds the server once it exists, so the
+        // undefined above comes from the lookup, not from a lookup that could not run.
+        writeFileSync(
+          join(pathDir, isWindows ? 'vscode-eslint-language-server.cmd' : 'vscode-eslint-language-server'),
+          isWindows ? '@echo off\r\n' : '#!/bin/sh\n',
+          { mode: 0o755 },
+        );
+        expect(eslintCommand(tempDir)).toBe('vscode-eslint-language-server --stdio');
+      } finally {
+        cwd.mockRestore();
+        vi.unstubAllEnvs();
+      }
     });
   });
 

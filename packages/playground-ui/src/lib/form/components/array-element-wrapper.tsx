@@ -1,5 +1,5 @@
 import type { ArrayElementWrapperProps } from '@autoform/react';
-import { Check, ChevronRight, Trash2 } from 'lucide-react';
+import { Check, Trash2 } from 'lucide-react';
 import { useContext, useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { ArrayAddButtonContext, FieldPathContext, FormReadOnlyContext } from '../field-context';
@@ -7,6 +7,7 @@ import { useSectionDisclosure } from '../use-section-disclosure';
 import { isPlainObject } from '../utils';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
 
 const HUMAN_SUMMARY_KEYS = ['title', 'name', 'label'];
@@ -45,7 +46,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
           aria-label={invalid ? `${itemLabel}, Needs input` : itemLabel}
           className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-left text-caption focus-visible:-outline-offset-1"
         >
-          <ChevronRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+          <DisclosureChevron direction="right" className="size-3.5 text-muted-foreground" />
           <span className="shrink-0 text-muted-foreground">Item {index + 1}</span>
           {summary && (
             <span className="truncate text-foreground" title={summary}>
