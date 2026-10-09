@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InMemoryDB } from '../../inmemory-db';
+import { KnowledgeNotFoundError } from '../base';
 import { InMemoryKnowledgeStorage } from '../inmemory';
 
 const ORG_SCOPE_ID = '10000000-0000-4000-8000-000000000001';
@@ -281,7 +282,7 @@ describe('InMemoryKnowledgeStorage setRecordScopes validation', () => {
     const record = await store.createRecord({ node, text: 'Must stay reachable', scopeIds: [PROJECT_SCOPE_ID] });
 
     await expect(store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [] })).rejects.toThrow(
-      'Knowledge records require at least one scope.',
+      KnowledgeNotFoundError,
     );
 
     expect(await store.getRecord({ id: record.id })).toEqual(record);

@@ -5,7 +5,6 @@ import { resolve } from 'node:path';
 import {
   createKnowledgeCoreLoader,
   canonicalizeKnowledgeNodeId,
-  canonicalizeKnowledgeRecordScopeIds,
   canonicalizeKnowledgeScopeIds,
   isKnowledgeNodeVisible,
   KNOWLEDGE_ACCESS_STATE_SCHEMA,
@@ -924,7 +923,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async #createRecord(tx: Transaction, input: CreateKnowledgeRecordInput): Promise<KnowledgeRecord> {
-    const scopeIds = canonicalizeKnowledgeRecordScopeIds(input.scopeIds);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     const nodeId = nodeReferenceId(input.node);
     const parent = await this.#getNode(tx, nodeId);
     if (!parent || parent.deletedAt) throw new KnowledgeNotFoundError('node', nodeId);
@@ -1050,7 +1050,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     importRunId?: string;
     contextScopeId?: string;
   }): Promise<KnowledgeRecord> {
-    const scopeIds = canonicalizeKnowledgeRecordScopeIds(input.scopeIds);
+    const scopeIds = canonicalizeKnowledgeScopeIds(input.scopeIds);
+    if (scopeIds.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     return this.#transaction(async tx => {
       const record = await this.#getRecord(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
