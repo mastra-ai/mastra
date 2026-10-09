@@ -4,7 +4,7 @@ import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { ChevronDown, GripVertical } from 'lucide-react';
 import { useState } from 'react';
 
@@ -197,36 +197,34 @@ function RepositoryRow({
         />
       </div>
       {expanded && (
-        <div className="flex flex-col gap-3 px-2 pt-1 pb-3 pl-9">
+        <div className="divide-border flex flex-col divide-y pl-7">
           {repository.lastBuildStatus === 'failed' && repository.lastBuildError && (
-            <Txt as="p" font="mono" variant="meta" className="text-destructive whitespace-pre-wrap">
+            <Txt as="p" font="mono" variant="meta" className="text-destructive px-2 py-2 whitespace-pre-wrap">
               {repository.lastBuildError}
             </Txt>
           )}
-          <div className="flex flex-col gap-1">
-            <Txt as="span" variant="meta" tone="muted">
-              Setup: runs in this checkout while the template builds.
-            </Txt>
-            <CommittedInput
-              label={`Setup command for ${label}`}
-              value={repository.setupCommand ?? ''}
-              placeholder="e.g. pnpm i && pnpm build"
-              disabled={disabled}
-              onCommit={value => onCommands({ setupCommand: value || null })}
-            />
-          </div>
-          <div className="flex flex-col gap-1">
-            <Txt as="span" variant="meta" tone="muted">
-              Teardown: runs when the session is retired, and again if setup fails.
-            </Txt>
-            <CommittedInput
-              label={`Teardown command for ${label}`}
-              value={repository.teardownCommand ?? ''}
-              placeholder="e.g. docker compose down"
-              disabled={disabled}
-              onCommit={value => onCommands({ teardownCommand: value || null })}
-            />
-          </div>
+          <SettingsRow label="Setup" description="Runs in this checkout while the template builds.">
+            <div className="w-full lg:max-w-96">
+              <CommittedInput
+                label={`Setup command for ${label}`}
+                value={repository.setupCommand ?? ''}
+                placeholder="e.g. pnpm i && pnpm build"
+                disabled={disabled}
+                onCommit={value => onCommands({ setupCommand: value || null })}
+              />
+            </div>
+          </SettingsRow>
+          <SettingsRow label="Teardown" description="Runs when the session is retired, and again if setup fails.">
+            <div className="w-full lg:max-w-96">
+              <CommittedInput
+                label={`Teardown command for ${label}`}
+                value={repository.teardownCommand ?? ''}
+                placeholder="e.g. docker compose down"
+                disabled={disabled}
+                onCommit={value => onCommands({ teardownCommand: value || null })}
+              />
+            </div>
+          </SettingsRow>
         </div>
       )}
     </div>
