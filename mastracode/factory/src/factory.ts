@@ -383,6 +383,36 @@ function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'
   return liveSessions;
 }
 
+/**
+ * The fleet-era `sandbox` options and what replaced each one. Only the keys
+ * the host actually passed are explained, so a host that never used the fleet
+ * gets the short message.
+ */
+const RETIRED_SANDBOX_OPTIONS: Record<string, string> = {
+  machine:
+    "'machine' becomes the provider instance: one sandbox per session, constructed by the FactorySandbox, instead of one template machine cloned per repository",
+  workdir:
+    "'workdir' is gone: remote providers clone into the VM's home directory and local providers check out under their own workingDirectory",
+  maxSandboxes: "'maxSandboxes' is gone with the sandbox fleet: there is one sandbox per session and no pool to cap",
+};
+
+function invalidSandboxOptionMessage(option: unknown): string {
+  const lines = [
+    `MastraFactory: 'sandbox' must be a FactorySandbox instance or a callback constructing a MastraSandbox from a FactorySandboxContext:`,
+    `  sandbox: new PlatformFactorySandbox()`,
+    `  sandbox: ctx => new PlatformSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId })`,
+    `Omit 'sandbox' entirely to disable sandboxes.`,
+  ];
+  if (typeof option === 'object' && option !== null) {
+    const retired = Object.keys(RETIRED_SANDBOX_OPTIONS).filter(key => key in option);
+    if (retired.length > 0) {
+      lines.push(`The options object you passed is the retired sandbox fleet config. Its options map as follows:`);
+      for (const key of retired) lines.push(`  ${RETIRED_SANDBOX_OPTIONS[key]}.`);
+    }
+  }
+  return lines.join('\n');
+}
+
 export class MastraFactory {
   readonly #config: MastraFactoryConfig;
   /** The normalized sandbox, set by `prepare()`. Undefined until then and when sandboxes are disabled. */
@@ -598,21 +628,8 @@ export class MastraFactory {
       sandboxConfig = sandboxOption;
     } else if (typeof sandboxOption === 'function') {
       sandboxConfig = new CallbackFactorySandbox(sandboxOption);
-    } else if (typeof sandboxOption === 'object' && sandboxOption !== null) {
-      // An unbranded object here is almost certainly the pre-callback config,
-      // which described a fleet the factory managed itself. That fleet is
-      // gone: sandboxes are per session and the host constructs them, so say
-      // what to write instead rather than only naming the expected type.
-      throw new Error(
-        `MastraFactory: 'sandbox' is now a callback, not an options object. It receives a FactorySandboxContext and returns a MastraSandbox, so the host chooses the provider per session:\n` +
-          `  sandbox: ctx => new E2BSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId })\n` +
-          `Or pass a FactorySandbox instance such as new PlatformFactorySandbox({ ... }).\n` +
-          `The old options map three ways: 'machine' becomes the provider instance you construct inside the callback (one per session instead of one cloned template); 'workdir' is gone. Remote providers clone into the VM's home directory and local providers check out under their own workingDirectory; 'maxSandboxes' is gone with the sandbox fleet. There is one sandbox per session and no pool to cap. Omit 'sandbox' entirely to disable sandboxes.`,
-      );
     } else {
-      throw new Error(
-        `MastraFactory: 'sandbox' must be a function constructing a MastraSandbox from a FactorySandboxContext, or a FactorySandbox instance.`,
-      );
+      throw new Error(invalidSandboxOptionMessage(sandboxOption));
     }
     this.#sandbox = sandboxConfig;
 
