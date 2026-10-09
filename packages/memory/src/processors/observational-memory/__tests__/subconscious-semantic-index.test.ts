@@ -142,7 +142,11 @@ describe('knowledge semantic index lost claims', () => {
   it('treats an adapter that reports no completions as still holding its claim', async () => {
     const { store, scopeIds, coordinator, embeddedTexts } = await fixture();
     // Store adapters published before completions were reported resolve to undefined.
-    vi.spyOn(store, 'completeSemanticOutbox').mockResolvedValue(undefined as unknown as string[]);
+    const complete = store.completeSemanticOutbox.bind(store);
+    vi.spyOn(store, 'completeSemanticOutbox').mockImplementation(async input => {
+      await complete(input);
+      return undefined as unknown as string[];
+    });
     await store.createNode({ name: 'Project Atlas', kind: 'project', scopeIds });
     await coordinator.drain(scopeIds);
     expect(embeddedTexts.filter(text => text === 'Project Atlas')).toHaveLength(1);
