@@ -530,18 +530,19 @@ export interface SyncEnvironmentRepositoryOptions {
 }
 
 export interface EnvironmentSyncResult {
-  outcome: 'resumed' | 'kept' | 'default';
+  outcome: 'resumed' | 'created' | 'kept';
   /** The branch the checkout ends on; `null` when it stays detached. */
   branch: string | null;
 }
 
 /**
- * Bring a secondary environment repository up to date at session start.
- * The primary repository keeps {@link checkoutSessionBranch}; every other
- * repository follows a conservative rule: resume the session branch only
- * when the remote has it, leave a checkout that sits on a branch alone (it
- * may carry local-only commits), and move only a detached HEAD (a template
- * image pinned at its build commit) to the default branch tip.
+ * Bring a secondary environment repository onto the session branch at
+ * session start. The primary repository keeps {@link checkoutSessionBranch};
+ * every other repository follows a conservative rule: resume the session
+ * branch when the remote or the local clone has it, otherwise create it from
+ * the default branch tip (a detached HEAD, the template image pinned at its
+ * build commit, is moved there first). A checkout that sits on any other
+ * branch is left alone: it may carry local-only commits.
  */
 export async function syncEnvironmentRepository(
   sandbox: ExecutableSandbox,
@@ -561,6 +562,19 @@ export async function syncEnvironmentRepository(
   const kept = { outcome: 'kept' as const, branch: currentBranch || null };
   if (currentBranch === branch) return kept;
 
+  // A local session branch may hold commits the remote never saw; switch
+  // to it instead of resetting it onto the remote tip.
+  const local = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]);
+  if (local.exitCode === 0) {
+    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', branch], {
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment branch checkout',
+    });
+    if (checkout.exitCode === 0) return { outcome: 'resumed', branch };
+    if (isBlockedByLocalWork(checkout)) return kept;
+    throw classifyGitFailure(checkout, 'pull-failed');
+  }
+
   const remoteHeads = await gitTransfer(
     sandbox,
     ['-C', workdir, 'ls-remote', '--heads', 'origin', `refs/heads/${branch}`],
@@ -568,18 +582,6 @@ export async function syncEnvironmentRepository(
   );
   if (remoteHeads.exitCode !== 0) throw classifyGitFailure(remoteHeads, 'pull-failed');
   if (remoteHeads.stdout.trim()) {
-    // A local session branch may hold commits the remote never saw; switch
-    // to it instead of resetting it onto the remote tip.
-    const local = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]);
-    if (local.exitCode === 0) {
-      const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', branch], {
-        timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
-        phase: 'environment branch checkout',
-      });
-      if (checkout.exitCode === 0) return { outcome: 'resumed', branch };
-      if (isBlockedByLocalWork(checkout)) return kept;
-      throw classifyGitFailure(checkout, 'pull-failed');
-    }
     const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', branch], {
       env: authEnv,
       timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
@@ -596,23 +598,33 @@ export async function syncEnvironmentRepository(
     throw classifyGitFailure(checkout, 'pull-failed');
   }
 
-  // A checkout on any branch stays where it is: it may hold work the remote
-  // never saw. Only a detached HEAD moves, to the default branch tip.
-  if (currentBranch) return kept;
-  const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', defaultBranch], {
-    env: authEnv,
+  // A checkout on any other branch stays where it is: it may hold work the
+  // remote never saw. The default branch and a detached HEAD (the template
+  // image pinned at its build commit) become the session branch.
+  if (currentBranch && currentBranch !== defaultBranch) return kept;
+  if (!currentBranch) {
+    const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', defaultBranch], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment default fetch',
+    });
+    if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
+    const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-B', defaultBranch, 'FETCH_HEAD'], {
+      env: authEnv,
+      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+      phase: 'environment default checkout',
+    });
+    if (checkout.exitCode !== 0) {
+      if (isBlockedByLocalWork(checkout)) return kept;
+      throw classifyGitFailure(checkout, 'pull-failed');
+    }
+  }
+  const created = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch], {
     timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
-    phase: 'environment default fetch',
+    phase: 'environment branch create',
   });
-  if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
-  const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-B', defaultBranch, 'FETCH_HEAD'], {
-    env: authEnv,
-    timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
-    phase: 'environment default checkout',
-  });
-  if (checkout.exitCode === 0) return { outcome: 'default', branch: defaultBranch };
-  if (isBlockedByLocalWork(checkout)) return kept;
-  throw classifyGitFailure(checkout, 'pull-failed');
+  if (created.exitCode === 0) return { outcome: 'created', branch };
+  throw classifyGitFailure(created, 'pull-failed');
 }
 
 /** Refresh an existing GitLab review checkout without exposing its credential to the agent. */

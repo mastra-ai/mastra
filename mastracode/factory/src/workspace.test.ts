@@ -79,7 +79,7 @@ const mocks = vi.hoisted(() => ({
   }),
   materializeRepo: vi.fn(async (_input: unknown) => {}),
   checkoutSessionBranch: vi.fn(async () => {}),
-  syncEnvironmentRepository: vi.fn(async () => ({ outcome: 'default' as const, branch: 'main' })),
+  syncEnvironmentRepository: vi.fn(async () => ({ outcome: 'created' as const, branch: 'factory/issue-7' })),
   runSetupCommand: vi.fn(async () => {}),
   runTeardownCommand: vi.fn(async () => {}),
   /** Released sandboxes claimable by new sessions; claim() consumes matches. */
