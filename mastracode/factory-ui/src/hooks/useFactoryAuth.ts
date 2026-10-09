@@ -1,5 +1,4 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect } from 'react';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -9,7 +8,7 @@ import { fetchAuthState } from '../ui/domains/auth/services/auth';
 export function useFactoryAuth({ monitorSession = false } = {}) {
   const { baseUrl } = useApiConfig();
 
-  const auth = useQuery({
+  return useQuery({
     queryKey: queryKeys.factoryAuth(),
     queryFn: () => fetchAuthState(baseUrl),
     // Only route boundaries monitor the session; identity consumers share the cache.
@@ -21,15 +20,4 @@ export function useFactoryAuth({ monitorSession = false } = {}) {
       return monitorSession && query.state.data?.authEnabled ? 60_000 : false;
     },
   });
-
-  const { refetch } = auth;
-  useEffect(() => {
-    if (!monitorSession) return;
-    // React Query v5 observes tab visibility, but not focus between windows.
-    const checkSession = () => void refetch({ cancelRefetch: false });
-    window.addEventListener('focus', checkSession);
-    return () => window.removeEventListener('focus', checkSession);
-  }, [monitorSession, refetch]);
-
-  return auth;
 }

@@ -7,12 +7,12 @@
  * (dev); tests set it directly on `window` the same way the injected script
  * would.
  */
-import { fireEvent, waitFor } from '@testing-library/react';
+import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
-import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { useFactoryAuth } from '../useFactoryAuth';
 
 const AUTH_ME_URL = `${TEST_BASE_URL}/auth/me`;
@@ -22,27 +22,6 @@ afterEach(() => {
 });
 
 describe('useFactoryAuth', () => {
-  describe('when monitoring the session in Strict Mode', () => {
-    it('revalidates once per focus and stops monitoring after unmount', async () => {
-      const checked = vi.fn(() => HttpResponse.json({ authenticated: true, provider: 'workos' }));
-      server.use(http.get(AUTH_ME_URL, checked));
-      const { client, unmount } = renderHookWithProviders(() => useFactoryAuth({ monitorSession: true }), {
-        reactStrictMode: true,
-      });
-      await waitForMutationsIdle(client);
-      expect(checked).toHaveBeenCalledTimes(1);
-
-      fireEvent.focus(window);
-      await waitForMutationsIdle(client);
-      expect(checked).toHaveBeenCalledTimes(2);
-
-      unmount();
-      fireEvent.focus(window);
-      await waitForMutationsIdle(client);
-      expect(checked).toHaveBeenCalledTimes(2);
-    });
-  });
-
   describe('given the server injected authEnabled: false', () => {
     it('resolves the disabled state without touching the network', async () => {
       window.__MASTRACODE_CONFIG__ = { authEnabled: false };

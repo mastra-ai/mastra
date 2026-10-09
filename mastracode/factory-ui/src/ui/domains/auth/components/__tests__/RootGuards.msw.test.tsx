@@ -35,36 +35,43 @@ function renderApp() {
   return { router, ...rendered };
 }
 
+function returnToTab() {
+  fireEvent(document, new Event('visibilitychange', { bubbles: true }));
+}
+
 afterEach(() => vi.useRealTimers());
 
 describe('Factory session expiry', () => {
   it.each([
     { provider: 'workos', signInAction: 'Continue with GitHub' },
     { provider: 'better-auth', signInAction: 'Sign in' },
-  ])('keeps the draft and return URL when $provider expires on window focus', async ({ provider, signInAction }) => {
-    server.use(http.get(AUTH_ME_URL, () => HttpResponse.json({ ...signedIn, provider })));
-    const { router, client } = renderApp();
-    const draft = await screen.findByRole('textbox', { name: 'Draft' });
-    await userEvent.type(draft, 'Unsent work');
-    await waitForMutationsIdle(client);
+  ])(
+    'keeps the draft and return URL when $provider expires while away from the tab',
+    async ({ provider, signInAction }) => {
+      server.use(http.get(AUTH_ME_URL, () => HttpResponse.json({ ...signedIn, provider })));
+      const { router, client } = renderApp();
+      const draft = await screen.findByRole('textbox', { name: 'Draft' });
+      await userEvent.type(draft, 'Unsent work');
+      await waitForMutationsIdle(client);
 
-    server.use(http.get(AUTH_ME_URL, () => new HttpResponse(undefined, { status: 401 })));
-    fireEvent.focus(window);
+      server.use(http.get(AUTH_ME_URL, () => new HttpResponse(undefined, { status: 401 })));
+      returnToTab();
 
-    const dialog = await screen.findByRole('alertdialog', { name: 'Session expired' });
-    expect(dialog).toHaveTextContent('Factory has stopped receiving updates');
-    expect(router.state.location.pathname).toBe('/factories/factory-1/work');
-    expect(draft).toHaveValue('Unsent work');
-    await userEvent.keyboard('{Escape}');
-    expect(dialog).toBeInTheDocument();
+      const dialog = await screen.findByRole('alertdialog', { name: 'Session expired' });
+      expect(dialog).toHaveTextContent('Factory has stopped receiving updates');
+      expect(router.state.location.pathname).toBe('/factories/factory-1/work');
+      expect(draft).toHaveValue('Unsent work');
+      await userEvent.keyboard('{Escape}');
+      expect(dialog).toBeInTheDocument();
 
-    // A 401 carries no provider metadata; the sign-in page must check it afresh.
-    server.use(http.get(AUTH_ME_URL, () => HttpResponse.json({ ...signedOut, provider })));
-    await userEvent.click(screen.getByRole('button', { name: 'Sign in again' }));
-    await screen.findByRole('button', { name: signInAction });
-    expect(router.state.location.pathname).toBe('/signin');
-    expect(new URLSearchParams(router.state.location.search).get('returnTo')).toBe(CURRENT_PATH);
-  });
+      // A 401 carries no provider metadata; the sign-in page must check it afresh.
+      server.use(http.get(AUTH_ME_URL, () => HttpResponse.json({ ...signedOut, provider })));
+      await userEvent.click(screen.getByRole('button', { name: 'Sign in again' }));
+      await screen.findByRole('button', { name: signInAction });
+      expect(router.state.location.pathname).toBe('/signin');
+      expect(new URLSearchParams(router.state.location.search).get('returnTo')).toBe(CURRENT_PATH);
+    },
+  );
 
   it('detects expiry in a tab that stays open without any navigation or focus event', async () => {
     server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedIn)));
@@ -74,7 +81,7 @@ describe('Factory session expiry', () => {
 
     // Install fake timers before the next successful check schedules its heartbeat.
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-    fireEvent.focus(window);
+    returnToTab();
     await act(async () => {
       await vi.waitFor(() => expect(client.isFetching()).toBe(0));
     });
@@ -87,18 +94,6 @@ describe('Factory session expiry', () => {
     expect(await screen.findByRole('alertdialog', { name: 'Session expired' })).toBeInTheDocument();
   });
 
-  it('checks the session when the tab becomes visible even while the auth cache is fresh', async () => {
-    server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedIn)));
-    const { client } = renderApp();
-    await screen.findByRole('textbox', { name: 'Draft' });
-    await waitForMutationsIdle(client);
-
-    server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedOut)));
-    fireEvent(document, new Event('visibilitychange', { bubbles: true }));
-
-    expect(await screen.findByRole('alertdialog', { name: 'Session expired' })).toBeInTheDocument();
-  });
-
   it('keeps the app mounted during a server outage and detects expiry on recovery', async () => {
     server.use(http.get(AUTH_ME_URL, () => HttpResponse.json(signedIn)));
     const { client } = renderApp();
@@ -108,7 +103,7 @@ describe('Factory session expiry', () => {
 
     const outage = vi.fn(() => new HttpResponse(undefined, { status: 503 }));
     server.use(http.get(AUTH_ME_URL, outage));
-    fireEvent.focus(window);
+    returnToTab();
     await waitFor(() => expect(outage).toHaveBeenCalled());
     await waitForMutationsIdle(client);
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
@@ -116,7 +111,7 @@ describe('Factory session expiry', () => {
     expect(draft).toHaveValue('Keep this draft');
 
     server.use(http.get(AUTH_ME_URL, () => new HttpResponse(undefined, { status: 401 })));
-    fireEvent.focus(window);
+    returnToTab();
     expect(await screen.findByRole('alertdialog', { name: 'Session expired' })).toBeInTheDocument();
   });
 
