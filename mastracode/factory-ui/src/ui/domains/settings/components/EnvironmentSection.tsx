@@ -2,6 +2,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
@@ -14,9 +15,9 @@ import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { SettingsSubsection } from './SettingsSubsection';
 
 /**
- * The Factory's environment: what every session's sandbox boots from. The sandbox settings,
- * the ordered repositories with their setup and the workspace setup command
- * all live here.
+ * The Factory's environment: what every session's sandbox boots from. The
+ * Template section holds the ordered repositories and the workspace setup, the
+ * Advanced section the sandbox provider's own settings.
  */
 export function EnvironmentSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -94,19 +95,41 @@ function EnvironmentBlocks({
         () => false,
       );
 
+  const disabled = saveMutation.isPending;
   return (
-    <div className="flex flex-col gap-8">
-      <Txt as="p" variant="meta" tone="faint">
-        {providerLine(environment.sandbox.provider)}
-      </Txt>
-      <SandboxBlock environment={environment} disabled={saveMutation.isPending} onSave={save} />
-      <RepositoriesBlock
-        repositories={environment.repositories}
-        providers={providers}
-        disabled={saveMutation.isPending}
-        onSave={save}
-      />
-      <WorkspaceSetupBlock value={environment.workspaceSetupCommand} disabled={saveMutation.isPending} onSave={save} />
+    <div className="flex flex-col gap-10">
+      <EnvironmentPart title="Template">
+        <Txt as="p" variant="meta" tone="faint">
+          {providerLine(environment.sandbox.provider)}
+        </Txt>
+        <RepositoriesBlock
+          repositories={environment.repositories}
+          providers={providers}
+          disabled={disabled}
+          onSave={save}
+        />
+        <WorkspaceSetupBlock
+          workdir={environment.sandboxWorkdir}
+          command={environment.workspaceSetupCommand}
+          disabled={disabled}
+          onSave={save}
+        />
+      </EnvironmentPart>
+      <EnvironmentPart title="Advanced">
+        <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
+      </EnvironmentPart>
     </div>
+  );
+}
+
+/** One titled part of the page: Template, Builds, Advanced. */
+export function EnvironmentPart({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-6">
+      <Txt as="h2" variant="subheading">
+        {title}
+      </Txt>
+      {children}
+    </section>
   );
 }

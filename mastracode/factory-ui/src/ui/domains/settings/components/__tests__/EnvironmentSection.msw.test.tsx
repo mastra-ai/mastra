@@ -1,5 +1,5 @@
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -49,16 +49,18 @@ function renderEnvironmentSettings() {
 }
 
 describe('Environment settings', () => {
-  it('renders the section for the factory with its environment', async () => {
+  it('renders the Template and Advanced parts in order, the working directory under workspace setup', async () => {
     useFactory();
     useEnvironment(environmentPayload());
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByRole('heading', { name: 'Environment' })).toBeInTheDocument();
     expect(await screen.findByRole('heading', { name: 'Repositories' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Sandbox' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Workspace setup' })).toBeInTheDocument();
+    const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
+    expect(headings).toEqual(['Environment', 'Template', 'Repositories', 'Workspace setup', 'Advanced', 'Sandbox']);
+    const setup = screen.getByRole('heading', { name: 'Workspace setup' }).parentElement!;
+    expect(within(setup).getByRole('textbox', { name: 'Working directory' })).toBeInTheDocument();
+    expect(within(setup).getByRole('textbox', { name: 'Workspace setup command' })).toBeInTheDocument();
   });
 
   it('points to Repositories when nothing is linked yet', async () => {
@@ -280,6 +282,7 @@ describe('Environment settings', () => {
 
     expect(await screen.findByText('Sessions run on a custom sandbox.')).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Working directory' })).toBeInTheDocument();
+    expect(screen.getByText('This sandbox has no settings to tune.')).toBeInTheDocument();
     expect(screen.queryByRole('spinbutton')).not.toBeInTheDocument();
   });
 
