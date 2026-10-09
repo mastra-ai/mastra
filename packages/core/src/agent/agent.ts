@@ -1255,6 +1255,15 @@ export class Agent<
     return (runId, listener) => agentThreadStreamRuntime.subscribePendingSignals(runId, listener, pubsub);
   }
 
+  /** @internal Read one JSON-safe request-context value captured in a suspended run snapshot. */
+  async __getSuspendedRunRequestContextValue({ runId, key }: { runId: string; key: string }): Promise<unknown> {
+    const snapshot = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: '__getSuspendedRunRequestContextValue',
+    });
+    return snapshot.requestContext?.[key];
+  }
+
   /**
    * Registers the agent the shared `AgentThreadStreamRuntime` calls back into
    * for this agent's signal, message, and subscription APIs. The runtime starts

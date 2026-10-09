@@ -26,7 +26,7 @@ import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMe
 import type { DynamicArgument } from '../types';
 import { Workspace } from '../workspace/workspace';
 
-import { Session, migratePersistedModelSelection } from './session';
+import { Session, THREAD_OWNER_ID_CONTEXT_KEY, migratePersistedModelSelection } from './session';
 import type { SessionState, SharedRunOptions, ThreadDataStore } from './session';
 import { addTokenUsage, toStepTokenUsage } from './stream-content';
 import {
@@ -2498,6 +2498,7 @@ export class AgentController<TState = {}> {
     const inheritedControllerContext = requestContext?.get('controller') as
       | AgentControllerRequestContext<TState>
       | undefined;
+    const persistedThreadOwnerId = requestContext?.getRaw(THREAD_OWNER_ID_CONTEXT_KEY);
     requestContext = new RequestContext(requestContext?.entries());
     const inheritedContext = requestContext.get('controller') as AgentControllerRequestContext<TState> | undefined;
     const inherited = inheritedContext && this.#executionViews.get(inheritedContext);
@@ -2553,6 +2554,10 @@ export class AgentController<TState = {}> {
     if (scope?.runId && scope.modeId) view.setSelection({ ...view.selection(), modeId: scope.modeId });
     const executionView = { session, view, retained };
     runScope?.set(this.#executionViewKey, executionView);
+    const threadOwnerId =
+      scope?.threadOwnerId ??
+      inheritedControllerContext?.threadOwnerId ??
+      (typeof persistedThreadOwnerId === 'string' ? persistedThreadOwnerId : undefined);
     const controllerContext: AgentControllerRequestContext<TState> = {
       controllerId: this.id,
       harnessId: this.id,
@@ -2564,7 +2569,7 @@ export class AgentController<TState = {}> {
       setThreadSetting: persistSetting,
       isThreadActive: () => session.thread.getId() === threadId && session.identity.getResourceId() === resourceId,
       threadId,
-      threadOwnerId: scope?.threadOwnerId ?? inheritedControllerContext?.threadOwnerId,
+      threadOwnerId,
       resourceId,
       scope: this.#sessionScopes.get(session),
       session: {
@@ -2594,6 +2599,7 @@ export class AgentController<TState = {}> {
 
     this.#executionViews.set(controllerContext, executionView);
     requestContext.set('controller', controllerContext);
+    if (threadOwnerId !== undefined) requestContext.setRaw(THREAD_OWNER_ID_CONTEXT_KEY, threadOwnerId);
 
     return requestContext;
   }
