@@ -47,9 +47,10 @@ if tonumber(fenceClaim[1]) ~= tonumber(ARGV[#ARGV - 1]) or fenceClaim[2] ~= ARGV
 end
 `;
 
-// A run's claim is a hash of generation, ownerId and, while leased,
-// leaseExpiresAt. Every script reads and writes it in one atomic step. Leases
-// are measured on the caller's clock: Upstash does not document TIME inside
+// A run's claim is a hash of generation, ownerId, updatedAt and, while leased,
+// leaseExpiresAt. A raised fence also holds retiredAt once retired. Every
+// script reads and writes it in one atomic step. Leases and timestamps are
+// measured on the caller's clock: Upstash does not document TIME inside
 // scripts, and skew between callers only delays or hastens takeover, while the
 // generation check keeps stale writers out either way.
 //
@@ -69,7 +70,9 @@ local generation = tonumber(redis.call('HGET', KEYS[1], 'generation'))
 local expected = ARGV[3]
 if not generation then
   if expected ~= '' and expected ~= '0' then return owner(0) end
-  redis.call('HSET', KEYS[1], 'generation', '1', 'ownerId', ARGV[1], 'leaseExpiresAt', ARGV[5])
+  -- The first generation comes from the clock, so a claim after this hash is
+  -- removed still outranks a surviving fence.
+  redis.call('HSET', KEYS[1], 'generation', string.format('%d', math.max(1, tonumber(ARGV[4]))), 'ownerId', ARGV[1], 'leaseExpiresAt', ARGV[5], 'updatedAt', ARGV[4])
   return owner(1)
 end
 if expected ~= '' and generation ~= tonumber(expected) then return owner(0) end
@@ -77,23 +80,24 @@ if ARGV[2] ~= '1' then
   local expires = tonumber(redis.call('HGET', KEYS[1], 'leaseExpiresAt'))
   if expires and expires > tonumber(ARGV[4]) then return owner(0) end
 end
-redis.call('HSET', KEYS[1], 'generation', string.format('%d', generation + 1), 'ownerId', ARGV[1], 'leaseExpiresAt', ARGV[5])
+redis.call('HSET', KEYS[1], 'generation', string.format('%d', generation + 1), 'ownerId', ARGV[1], 'leaseExpiresAt', ARGV[5], 'updatedAt', ARGV[4])
 return owner(1)
 `;
 
-// ARGV: generation, ownerId, leaseExpiresAt
+// ARGV: generation, ownerId, leaseExpiresAt, now
 const RENEW = `${OWNER}
 local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId', 'leaseExpiresAt')
 if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] or not r[3] then return owner(0) end
-redis.call('HSET', KEYS[1], 'leaseExpiresAt', ARGV[3])
+redis.call('HSET', KEYS[1], 'leaseExpiresAt', ARGV[3], 'updatedAt', ARGV[4])
 return owner(1)
 `;
 
-// ARGV: generation, ownerId
+// ARGV: generation, ownerId, now
 const RELEASE = `
 local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
 if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then return 0 end
 redis.call('HDEL', KEYS[1], 'leaseExpiresAt')
+redis.call('HSET', KEYS[1], 'updatedAt', ARGV[3])
 return 1
 `;
 
@@ -107,10 +111,20 @@ local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
 local current = tonumber(r[1])
 if not current or current < tonumber(ARGV[1]) then
   redis.call('HSET', KEYS[1], 'generation', ARGV[1], 'ownerId', ARGV[2])
-  return 1
+elseif current ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then
+  return 0
 end
-if current == tonumber(ARGV[1]) and r[2] == ARGV[2] then return 1 end
-return 0
+-- Every write un-retires the fence.
+redis.call('HDEL', KEYS[1], 'retiredAt')
+return 1
+`;
+
+// ARGV: generation, ownerId, now
+const RETIRE = `
+local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
+if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then return 0 end
+redis.call('HSET', KEYS[1], 'retiredAt', ARGV[3])
+return 1
 `;
 
 // Run after FENCE_GUARD. ARGV: each command as its argument count followed by
@@ -205,7 +219,7 @@ export async function renewRunOwnership(
     client,
     RENEW,
     fence.runId,
-    [String(fence.generation), fence.ownerId, String(now + leaseMs)],
+    [String(fence.generation), fence.ownerId, String(now + leaseMs), String(now)],
     now,
   );
   return applied ? { renewed: true, record: record! } : { renewed: false, record };
@@ -215,7 +229,7 @@ export async function releaseRunOwnership(client: Redis, fence: RunFence): Promi
   const released = await client.eval(
     RELEASE,
     [runClaimKey(TABLE_WORKFLOW_RUN_OWNERS, fence.runId)],
-    [String(fence.generation), fence.ownerId],
+    [String(fence.generation), fence.ownerId, String(Date.now())],
   );
   return Number(released) === 1;
 }
@@ -231,6 +245,15 @@ export async function raiseRunFence(client: Redis, fence: RunFence): Promise<boo
     [String(fence.generation), fence.ownerId],
   );
   return Number(raised) === 1;
+}
+
+export async function retireRunFence(client: Redis, fence: RunFence): Promise<boolean> {
+  const retired = await client.eval(
+    RETIRE,
+    [runClaimKey(TABLE_MEMORY_RUN_FENCES, fence.runId)],
+    [String(fence.generation), fence.ownerId, String(Date.now())],
+  );
+  return Number(retired) === 1;
 }
 
 // Matches @upstash/redis's default serializer, so a fenced write stores the

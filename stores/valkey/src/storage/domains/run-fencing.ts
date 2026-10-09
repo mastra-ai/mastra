@@ -33,9 +33,10 @@ export function runClaimKey(claims: RunClaimTable, runId: string): string {
   return `${claims}:run_id:${runId}`;
 }
 
-// A run's claim is a hash of generation, ownerId and, while leased,
-// leaseExpiresAt. Every script reads and writes it in one atomic step, and
-// leases are measured on the store's clock.
+// A run's claim is a hash of generation, ownerId, updatedAt and, while
+// leased, leaseExpiresAt. A raised fence also holds retiredAt once retired.
+// Every script reads and writes it in one atomic step, and leases and
+// timestamps are measured on the store's clock.
 const LIB = `
 local function now()
   local t = redis.call('TIME')
@@ -50,12 +51,15 @@ end
 // ARGV: ownerId, leaseMs, force ('1' or '0'), expectedGeneration ('' when unset)
 const CLAIM = `${LIB}
 local t = now()
+local stamp = string.format('%d', t)
 local lease = string.format('%d', t + tonumber(ARGV[2]))
 local generation = tonumber(redis.call('HGET', KEYS[1], 'generation'))
 local expected = ARGV[4]
 if not generation then
   if expected ~= '' and expected ~= '0' then return owner(0, t) end
-  redis.call('HSET', KEYS[1], 'generation', '1', 'ownerId', ARGV[1], 'leaseExpiresAt', lease)
+  -- The first generation comes from the store's clock, so a claim after this
+  -- hash is removed still outranks a surviving fence.
+  redis.call('HSET', KEYS[1], 'generation', string.format('%d', math.max(1, t)), 'ownerId', ARGV[1], 'leaseExpiresAt', lease, 'updatedAt', stamp)
   return owner(1, t)
 end
 if expected ~= '' and generation ~= tonumber(expected) then return owner(0, t) end
@@ -63,7 +67,7 @@ if ARGV[3] ~= '1' then
   local expires = tonumber(redis.call('HGET', KEYS[1], 'leaseExpiresAt'))
   if expires and expires > t then return owner(0, t) end
 end
-redis.call('HSET', KEYS[1], 'generation', string.format('%d', generation + 1), 'ownerId', ARGV[1], 'leaseExpiresAt', lease)
+redis.call('HSET', KEYS[1], 'generation', string.format('%d', generation + 1), 'ownerId', ARGV[1], 'leaseExpiresAt', lease, 'updatedAt', stamp)
 return owner(1, t)
 `;
 
@@ -72,15 +76,17 @@ const RENEW = `${LIB}
 local t = now()
 local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId', 'leaseExpiresAt')
 if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] or not r[3] then return owner(0, t) end
-redis.call('HSET', KEYS[1], 'leaseExpiresAt', string.format('%d', t + tonumber(ARGV[3])))
+redis.call('HSET', KEYS[1], 'leaseExpiresAt', string.format('%d', t + tonumber(ARGV[3])), 'updatedAt', string.format('%d', t))
 return owner(1, t)
 `;
 
 // ARGV: generation, ownerId
-const RELEASE = `
+const RELEASE = `${LIB}
+local t = now()
 local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
 if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then return 0 end
 redis.call('HDEL', KEYS[1], 'leaseExpiresAt')
+redis.call('HSET', KEYS[1], 'updatedAt', string.format('%d', t))
 return 1
 `;
 
@@ -94,10 +100,21 @@ local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
 local current = tonumber(r[1])
 if not current or current < tonumber(ARGV[1]) then
   redis.call('HSET', KEYS[1], 'generation', ARGV[1], 'ownerId', ARGV[2])
-  return 1
+elseif current ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then
+  return 0
 end
-if current == tonumber(ARGV[1]) and r[2] == ARGV[2] then return 1 end
-return 0
+-- Every write un-retires the fence.
+redis.call('HDEL', KEYS[1], 'retiredAt')
+return 1
+`;
+
+// ARGV: generation, ownerId
+const RETIRE = `${LIB}
+local t = now()
+local r = redis.call('HMGET', KEYS[1], 'generation', 'ownerId')
+if tonumber(r[1]) ~= tonumber(ARGV[1]) or r[2] ~= ARGV[2] then return 0 end
+redis.call('HSET', KEYS[1], 'retiredAt', string.format('%d', t))
+return 1
 `;
 
 // ARGV: generation, ownerId, then each command as its argument count followed by its arguments
@@ -189,6 +206,16 @@ export async function raiseRunFence(client: ValkeyClient, fence: RunFence): Prom
     [String(fence.generation), fence.ownerId],
   );
   return Number(raised) === 1;
+}
+
+export async function retireRunFence(client: ValkeyClient, fence: RunFence): Promise<boolean> {
+  const retired = await evalScript(
+    client,
+    RETIRE,
+    [runClaimKey(TABLE_MEMORY_RUN_FENCES, fence.runId)],
+    [String(fence.generation), fence.ownerId],
+  );
+  return Number(retired) === 1;
 }
 
 /**

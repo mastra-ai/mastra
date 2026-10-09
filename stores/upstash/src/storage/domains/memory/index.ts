@@ -34,7 +34,7 @@ import type {
 import type { Redis } from '@upstash/redis';
 import { UpstashDB, resolveUpstashConfig } from '../../db';
 import type { UpstashDomainConfig } from '../../db';
-import { assertRunFence, raiseRunFence, runClaimKey, writeBatch } from '../run-fencing';
+import { assertRunFence, raiseRunFence, retireRunFence, runClaimKey, writeBatch } from '../run-fencing';
 import type { RunFenceCheck } from '../run-fencing';
 import { getKey, processRecord } from '../utils';
 
@@ -74,6 +74,22 @@ export class StoreMemoryUpstash extends MemoryStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('UPSTASH', 'RAISE_RUN_FENCE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runId: fence.runId },
+        },
+        error,
+      );
+    }
+  }
+
+  override async retireRunFence(fence: RunFence): Promise<boolean> {
+    try {
+      return await retireRunFence(this.client, fence);
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'RETIRE_RUN_FENCE', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { runId: fence.runId },
