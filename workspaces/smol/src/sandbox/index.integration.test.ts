@@ -12,7 +12,7 @@ live('SmolSandbox with a real local VM', () => {
     const dir = await mkdtemp(join(tmpdir(), 'mastra-smol-'));
     const options = {
       id: `mastra-smol-test-${Date.now()}`,
-      image: 'node:24-alpine',
+      image: process.env.MASTRA_SMOL_TEST_BUILTIN === '1' ? null : 'node:24-alpine',
       workingDirectory: '/workspace',
       network: false,
       mounts: [{ source: dir, target: '/workspace' }],
@@ -45,12 +45,13 @@ live('SmolSandbox with a real local VM', () => {
   it('captures a portable checkpoint when no host directory is mounted', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'mastra-smol-checkpoint-'));
     const checkpointPath = join(dir, 'snapshot.smolcheckpoint');
-    const sandbox = new SmolSandbox({
+    const options = {
       id: `mastra-smol-checkpoint-${Date.now()}`,
-      image: 'node:24-alpine',
+      image: process.env.MASTRA_SMOL_TEST_BUILTIN === '1' ? null : 'node:24-alpine',
       network: false,
       checkpointPath,
-    });
+    } as const;
+    const sandbox = new SmolSandbox(options);
     try {
       await sandbox._start();
       expect((await sandbox.executeCommand('echo checkpoint > /workspace/checkpoint.txt')).success).toBe(true);
@@ -58,8 +59,9 @@ live('SmolSandbox with a real local VM', () => {
       expect((await stat(checkpointPath)).size).toBeGreaterThan(0);
       expect(sandbox.checkpointInfo?.id).toBe(checkpointPath);
       await sandbox._stop();
-      expect(await sandbox._start()).toMatchObject({ outcome: 'connected' });
-      expect((await sandbox.executeCommand('cat', ['/workspace/checkpoint.txt'])).stdout).toBe('checkpoint\n');
+      const reconnected = new SmolSandbox(options);
+      expect(await reconnected._start()).toMatchObject({ outcome: 'connected' });
+      expect((await reconnected.executeCommand('cat', ['/workspace/checkpoint.txt'])).stdout).toBe('checkpoint\n');
     } finally {
       await sandbox._destroy();
       await rm(dir, { recursive: true, force: true });
