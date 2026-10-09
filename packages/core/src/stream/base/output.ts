@@ -1215,11 +1215,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   const iterationPartOffset = stepMessage
                     ? findIterationPartOffset(self.messageList, stepMessage, lastStepText)
                     : undefined;
+                  const processorMessageList =
+                    stepMessage && iterationPartOffset ? self.messageList.clone() : self.messageList;
                   const separatedIteration =
                     stepMessage && iterationPartOffset
-                      ? self.messageList.splitResponseMessageAtPartOffset(stepMessage.id, iterationPartOffset)
+                      ? processorMessageList.splitResponseMessageAtPartOffset(stepMessage.id, iterationPartOffset)
                       : undefined;
 
+                  self.messageList = processorMessageList;
                   self.messageList = await self.processorRunner.runOutputProcessors(
                     self.messageList,
                     resolveObservabilityContext(options),
@@ -1259,6 +1262,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                         : (outputText ?? '')
                       : undefined;
 
+                  if (separatedIteration) {
+                    self.messageList.coalesceSplitResponseMessages(
+                      separatedIteration.earlierMessageId,
+                      separatedIteration.currentMessageId,
+                    );
+                  }
+
                   // Earlier buffered steps retain their model text. When multiple iterations share one response
                   // message, separate the current iteration before result processing so its reconciled step text comes
                   // directly from the processor's output. Compare against undefined, not truthiness, so clearing to ''
@@ -1280,8 +1290,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     const { providerMetadata, request, ...otherMetadata } = chunk.payload.metadata;
                     response = {
                       ...otherMetadata,
-                      messages: messageList.get.response.aiV5.model(),
-                      uiMessages: messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
+                      messages: self.messageList.get.response.aiV5.model(),
+                      uiMessages:
+                        self.messageList.get.response.aiV5.ui() as LLMStepResult<OUTPUT>['response']['uiMessages'],
                     };
                   }
 

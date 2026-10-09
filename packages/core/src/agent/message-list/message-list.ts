@@ -314,6 +314,7 @@ export class MessageList {
   private _agentNetworkAppend = false;
   private filterIncompleteToolCalls: boolean;
   private logger?: IMastraLogger;
+  private responseMessageSplits = new Map<string, string>();
 
   private toAIV5UIMessages(messages: MastraDBMessage[], options?: { transformToolPayloads?: boolean }) {
     return mergeSignalDataParts(messages.map(message => AIV5Adapter.toUIMessage(message, options)));
@@ -606,6 +607,7 @@ export class MessageList {
     this.taggedSystemMessages = data.taggedSystemMessages;
     this.memoryInfo = data.memoryInfo;
     this._agentNetworkAppend = data.agentNetworkAppend;
+    this.responseMessageSplits.clear();
     for (const message of this.messages) {
       this.updateLastCreatedAt(message);
     }
@@ -620,6 +622,26 @@ export class MessageList {
       }
     }
     return this;
+  }
+
+  /** @internal */
+  public clone(): MessageList {
+    return new MessageList({
+      generateMessageId: this.generateMessageId,
+      logger: this.logger,
+      filterIncompleteToolCalls: this.filterIncompleteToolCalls,
+    }).deserialize(this.serialize());
+  }
+
+  /** @internal */
+  public cloneForPersistence(): MessageList {
+    if (this.responseMessageSplits.size === 0) return this;
+
+    const clone = this.clone();
+    for (const [currentMessageId, earlierMessageId] of this.responseMessageSplits) {
+      clone.coalesceSplitResponseMessages(earlierMessageId, currentMessageId);
+    }
+    return clone;
   }
 
   /**
@@ -837,8 +859,64 @@ export class MessageList {
       state[key] = state[key].flatMap(id => (id === messageId ? [earlierMessageId, messageId] : [id]));
     }
     this.deserialize(state);
+    this.responseMessageSplits.set(messageId, earlierMessageId);
 
     return { earlierMessageId, currentMessageId: messageId };
+  }
+
+  /**
+   * Restore a split processor view to the accumulated response shape used for persistence.
+   * The original response id belongs to the current iteration and remains stable even when
+   * the processor removes that half.
+   * @internal
+   */
+  public coalesceSplitResponseMessages(earlierMessageId: string, currentMessageId: string): void {
+    this.responseMessageSplits.delete(currentMessageId);
+    const earlierIndex = this.messages.findIndex(message => message.id === earlierMessageId);
+    const currentIndex = this.messages.findIndex(message => message.id === currentMessageId);
+    const earlierMessage = this.messages[earlierIndex];
+    const currentMessage = this.messages[currentIndex];
+
+    if (!earlierMessage) return;
+
+    if (!currentMessage) {
+      earlierMessage.id = currentMessageId;
+      return;
+    }
+
+    const parts = [...(earlierMessage.content.parts ?? []), ...(currentMessage.content.parts ?? [])];
+    const content = {
+      ...earlierMessage.content,
+      ...currentMessage.content,
+      parts,
+    };
+    if (typeof earlierMessage.content.content === 'string' || typeof currentMessage.content.content === 'string') {
+      content.content = parts.reduce((text, part) => (part.type === 'text' ? part.text : text), '');
+    }
+    if (
+      Array.isArray(earlierMessage.content.toolInvocations) ||
+      Array.isArray(currentMessage.content.toolInvocations)
+    ) {
+      const invocations = [
+        ...(earlierMessage.content.toolInvocations ?? []),
+        ...(currentMessage.content.toolInvocations ?? []),
+      ];
+      const toolCallIds = new Set(
+        parts.flatMap(part =>
+          part.type === 'tool-invocation' && part.toolInvocation ? [part.toolInvocation.toolCallId] : [],
+        ),
+      );
+      content.toolInvocations = invocations.filter(
+        (invocation, index) =>
+          toolCallIds.has(invocation.toolCallId) &&
+          invocations.findIndex(candidate => candidate.toolCallId === invocation.toolCallId) === index,
+      );
+    }
+
+    currentMessage.content = content;
+    this.messages.splice(Math.max(earlierIndex, currentIndex), 1);
+    this.messages.splice(Math.min(earlierIndex, currentIndex), 1, currentMessage);
+    this.stateManager.removeMessage(earlierMessage);
   }
 
   /**
