@@ -1,6 +1,6 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { KnowledgeRecord, KnowledgeScope } from '@mastra/core/storage';
-import { RequestContext } from '@mastra/core/request-context';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { describe, expect, it } from 'vitest';
 
