@@ -1,0 +1,15 @@
+{
+  "name": "examples-platform-memory-langchain",
+  "type": "module",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "start": "tsx index.ts"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.0.0",
+    "@langchain/openai": "^1.0.0",
+    "@mastra/platform-memory": "link:../../platform/memory",
+    "tsx": "^4.20.0"
+  }
+}
