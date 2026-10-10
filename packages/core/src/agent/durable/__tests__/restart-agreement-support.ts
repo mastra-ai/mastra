@@ -244,6 +244,21 @@ export async function buildAgreementGraph<A>(opts: {
   };
 }
 
+/**
+ * Ends a generation's hold on `runId` the way its process dying would: its
+ * claim heartbeats stop, and its storage claim lapses (released through the
+ * store, which leaves the same not-live record an expired lease does). Work it
+ * has parked stays parked.
+ */
+export async function lapseOwnership(gen: AgreementGraph, runId: string) {
+  gen.core.resetExecutionFences();
+  const workflows = await gen.storage.getStore('workflows');
+  const record = await workflows.getRunOwnership({ runId });
+  if (record?.live) {
+    await workflows.releaseRunOwnership({ runId, generation: record.generation, ownerId: record.ownerId });
+  }
+}
+
 /** Reads a workflow row's snapshot, parsed. */
 export async function readRow(storage: any, runId: string, workflowName: string) {
   const store = await storage.getStore('workflows');
