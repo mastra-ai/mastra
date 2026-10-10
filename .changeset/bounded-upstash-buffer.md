@@ -2,7 +2,11 @@
 '@mastra/loggers': patch
 ---
 
-Fixed `UpstashTransport` using unbounded memory during an Upstash outage. Records that cannot be sent are now held in a buffer capped by the new `maxBufferSize` option (a positive integer that defaults to `maxListLength`, or 10000 when `maxListLength` disables trimming); once it is full, the oldest records are dropped and counted in `droppedRecords`. Only one request to Upstash is in flight at a time, so a burst of writes during an outage no longer opens hundreds of concurrent requests.
+Fixed `UpstashTransport` using unlimited memory while Upstash is down.
+
+- The new `maxBufferSize` option limits how many unsent records are kept in memory. It must be a positive integer. It defaults to `maxListLength`, or 10000 when `maxListLength` turns off trimming.
+- When the buffer is full, the oldest records are dropped. The new `droppedRecords` field counts them.
+- Only one request is sent to Upstash at a time, so many writes during an outage no longer open hundreds of requests.
 
 ```ts
 const transport = new UpstashTransport({
