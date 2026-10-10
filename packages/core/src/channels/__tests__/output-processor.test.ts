@@ -194,6 +194,13 @@ describe('ChatChannelOutputProcessor', () => {
       );
       expect(calls.filter(c => c.kind === 'post')).toEqual([]);
     });
+
+    it.each([false, true])('posts a connect request part as a link (streaming: %s)', async streaming => {
+      const { channels, calls, chatThread } = makeChannels({ streaming });
+      const data = { reason: 'Linear is needed.', displayName: 'Linear', connectUrl: 'https://c.example/s' };
+      await drive(channels, [{ type: 'data-mastra-connect-request', data }], chatThread);
+      expect(calls).toContainEqual({ kind: 'post', arg: 'Linear is needed.\nConnect Linear: https://c.example/s' });
+    });
   });
 
   describe('textFormat reply dialect', () => {

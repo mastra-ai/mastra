@@ -3,7 +3,7 @@ import type { Adapter, StreamChunk, Thread } from 'chat';
 import type { IMastraLogger } from '../logger/logger';
 import type { AgentChunkType } from '../stream/types';
 import { chatModule } from './chat-lazy';
-import { formatToolApproval } from './formatting';
+import { CONNECT_REQUEST_PART, formatConnectRequest, formatToolApproval } from './formatting';
 import { asOmChunk, formatTokens, renderOmTaskUpdate } from './om';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
@@ -71,6 +71,7 @@ export interface StreamingDriverArgs {
    * posts the bare string. The native streaming path is always markdown.
    */
   textFormat?: 'markdown' | 'plain';
+  linkButtons: boolean;
 }
 
 interface StreamingSession {
@@ -102,6 +103,7 @@ export async function runStreamingDriver({
   typingGate,
   formatError,
   textFormat,
+  linkButtons,
 }: StreamingDriverArgs): Promise<void> {
   const platform = adapter.name;
 
@@ -383,6 +385,11 @@ export async function runStreamingDriver({
         // The agent's reply to a signal should land as its own message after
         // the user's signal echo, so close any in-flight session.
         await closeSession();
+        continue;
+      }
+      const connectRequest = chunkType === CONNECT_REQUEST_PART && formatConnectRequest(chunk, linkButtons);
+      if (connectRequest) {
+        await postOutOfBand(connectRequest);
         continue;
       }
       const om = asOmChunk(chunk);
