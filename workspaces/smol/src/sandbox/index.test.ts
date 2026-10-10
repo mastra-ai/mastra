@@ -72,6 +72,7 @@ describe('SmolSandbox', () => {
       target: 'cloud',
       id: 'other',
       machineId: 'mach-test',
+      checkpointable: true,
       cloud: { apiKey: 'smk_dummy' },
     });
     sdk.machine.state.mockResolvedValue('paused');
@@ -118,11 +119,35 @@ describe('SmolSandbox', () => {
     expect(sdk.machine.pause).not.toHaveBeenCalled();
   });
 
+  it('stops ordinary Cloud VMs and only pauses explicitly checkpointable ones', async () => {
+    const ordinary = new SmolSandbox({ target: 'cloud', id: 'ordinary' });
+    await ordinary.start();
+    expect(sdk.create.mock.calls[0]?.[0].forkable).toBeUndefined();
+    expect(ordinary.supportsCheckpoints).toBe(false);
+    await ordinary._stop();
+    expect(sdk.machine.stop).toHaveBeenCalledOnce();
+    expect(sdk.machine.pause).not.toHaveBeenCalled();
+    await expect(ordinary.snapshot()).rejects.toThrow('checkpointable: true');
+
+    vi.clearAllMocks();
+    sdk.list.mockResolvedValue([]);
+    sdk.create.mockResolvedValue(sdk.machine);
+    const checkpointable = new SmolSandbox({ target: 'cloud', id: 'ram', checkpointable: true });
+    await checkpointable.start();
+    expect(sdk.create.mock.calls[0]?.[0].forkable).toBe(true);
+    expect(checkpointable.supportsCheckpoints).toBe(true);
+    await checkpointable._stop();
+    expect(sdk.machine.pause).toHaveBeenCalledOnce();
+    expect(sdk.machine.stop).not.toHaveBeenCalled();
+  });
+
   it('uses the built-in local guest when image is null', async () => {
     const sandbox = new SmolSandbox({ id: 'builtin', image: null });
     await sandbox.start();
     expect(sdk.create).toHaveBeenCalledWith(expect.objectContaining({ image: undefined }), expect.anything());
     expect(() => new SmolSandbox({ target: 'cloud', image: null })).toThrow('require an image');
+    expect(() => new SmolSandbox({ target: 'local', checkpointable: true })).toThrow('cloud-only');
+    expect(() => new SmolSandbox({ target: 'cloud', checkpointPath: '/tmp/ckpt' })).toThrow('local-only');
   });
 
   it('rejects cloud host mounts and contradictory egress configuration', () => {

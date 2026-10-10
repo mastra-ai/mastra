@@ -18,4 +18,4 @@ const workspace = new Workspace({
 })
 ```
 
-Set `target: 'cloud'` to run without local virtualization. Sandboxes without host mounts pause and resume with memory intact, and `snapshot()` saves a durable checkpoint when configured.
+Set `target: 'cloud'` to run without local virtualization. Local sandboxes without host mounts pause and resume with memory intact. Cloud sandboxes stop and restart with disk intact by default; set `checkpointable: true` for RAM pause/resume and durable checkpoints.
