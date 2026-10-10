@@ -2676,6 +2676,77 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(assistantMessage?.content.metadata?.modelId).not.toBe(apiResponseModelId);
     expect(assistantMessage?.content.metadata?.provider).toBe('openai');
   });
+
+  it('should preserve response id when response-metadata is split across multiple chunks (OpenRouter)', async () => {
+    const doStream = vi.fn(async () => ({
+      stream: convertArrayToReadableStream([
+        // OpenRouter's AI SDK adapter splits one response-metadata event into
+        // an id-only chunk followed by a modelId-only chunk. A flat replace on
+        // the second chunk silently drops the id set by the first.
+        { type: 'response-metadata', id: 'resp-split-1', timestamp: new Date(0) },
+        { type: 'response-metadata', modelId: 'or-model' },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: 'Hello!' },
+        { type: 'text-end', id: 'text-1' },
+        { type: 'finish', finishReason: 'stop', usage: testUsage },
+      ]),
+      request: {},
+      response: { headers: undefined },
+      warnings: [],
+    }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'openrouter',
+            modelId: 'or-model',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const input = createIterationInput();
+    input.stepResult.isContinued = false;
+
+    const result = await llmExecutionStep.execute(createExecuteParams(input));
+
+    // The response id lives on the execute() result's `metadata`, built by merging
+    // runState.state.responseMetadata (see llm-execution-step.ts ~line 3321). A flat
+    // replace in the response-metadata chunk handler would have dropped `id` here
+    // once the second, modelId-only chunk arrived.
+    expect((result.metadata as Record<string, unknown> | undefined)?.id).toBe('resp-split-1');
+    expect((result.metadata as Record<string, unknown> | undefined)?.modelId).toBe('or-model');
+  });
 });
 
 describe('PROVIDER_TOOL_CALL observability spans', () => {

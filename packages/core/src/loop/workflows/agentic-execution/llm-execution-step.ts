@@ -834,16 +834,23 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     switch (chunk.type) {
-      case 'response-metadata':
+      case 'response-metadata': {
+        // A provider can split response-metadata across multiple chunks (e.g. OpenRouter's
+        // AI SDK adapter sends an id-only chunk followed by a modelId-only chunk for one
+        // SSE event). Merge onto the previous value instead of replacing wholesale, so a
+        // later partial chunk cannot erase a field an earlier chunk already set.
+        const prevResponseMetadata = runState.state.responseMetadata;
         runState.setState({
           responseMetadata: {
-            id: chunk.payload.id,
-            timestamp: chunk.payload.timestamp,
-            modelId: chunk.payload.modelId,
-            headers: chunk.payload.headers,
+            ...prevResponseMetadata,
+            id: chunk.payload.id ?? prevResponseMetadata?.id,
+            timestamp: chunk.payload.timestamp ?? prevResponseMetadata?.timestamp,
+            modelId: chunk.payload.modelId ?? prevResponseMetadata?.modelId,
+            headers: chunk.payload.headers ?? prevResponseMetadata?.headers,
           },
         });
         break;
+      }
 
       case 'tool-call-input-streaming-start': {
         const tool = toolInputStartToolDef || resolveDirectOrIdTool(chunk.payload.toolName);
