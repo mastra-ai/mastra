@@ -18,11 +18,15 @@ function registerAuthHandler() {
   );
 }
 
-function registerPersistenceHandlers(onFactoryModel: (body: unknown) => void) {
+function registerPersistenceHandlers(onFactoryModel: (body: unknown) => void, onOMDefaults: (body: unknown) => void) {
   server.use(
     http.patch(`${TEST_BASE_URL}/web/factory/projects/factory-1`, async ({ request }) => {
       onFactoryModel(await request.json());
       return HttpResponse.json({ project: { id: 'factory-1', name: 'Factory', defaultModelId: 'openai/gpt-5.6-sol' } });
+    }),
+    http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, async ({ request }) => {
+      onOMDefaults(await request.json());
+      return HttpResponse.json({ error: 'Removed endpoint' }, { status: 404 });
     }),
   );
 }
@@ -38,7 +42,7 @@ describe('Model provider onboarding', () => {
         http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [] })),
       );
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
 
       expect(await screen.findByRole('alert')).toHaveTextContent('Provider catalog unavailable');
       expect(screen.queryByText(/No providers match/)).not.toBeInTheDocument();
@@ -59,17 +63,16 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
 
-      expect(await screen.findByRole('button', { name: 'Continue with Anthropic' })).toBeInTheDocument();
+      expect(await screen.findByRole('tab', { name: 'Provider sign-in' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Amazon Bedrock' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Groq' })).toBeInTheDocument();
       await user.type(screen.getByRole('searchbox', { name: 'Search model providers' }), 'bedrock');
 
       expect(screen.getByRole('button', { name: 'Amazon Bedrock' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Groq' })).not.toBeInTheDocument();
-      // The sign-in section is a fixed top-level section — search never hides it.
-      expect(screen.getByRole('button', { name: 'Continue with Anthropic' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Provider sign-in' })).toBeInTheDocument();
 
       await user.clear(screen.getByRole('searchbox', { name: 'Search model providers' }));
       await user.type(screen.getByRole('searchbox', { name: 'Search model providers' }), 'no-such-provider');
@@ -102,9 +105,10 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
 
-      await user.click(await screen.findByRole('button', { name: 'Continue with Anthropic' }));
+      await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
+      await user.click(screen.getByRole('button', { name: 'Continue with Anthropic' }));
 
       expect(await screen.findByRole('dialog')).toBeInTheDocument();
       expect(onStart).toHaveBeenCalledWith({ mode: 'paste-code', scope: 'org' });
@@ -112,8 +116,9 @@ describe('Model provider onboarding', () => {
   });
 
   describe('when OpenAI is already connected', () => {
-    it('persists the suggested Factory model without materializing automatic OM models', async () => {
+    it('keeps the suggested Factory model in the draft without saving defaults', async () => {
       const onFactoryModel = vi.fn<(body: unknown) => void>();
+      const onOMDefaults = vi.fn<(body: unknown) => void>();
       const onComplete = vi.fn<() => void>();
       const providers: ProviderInfo[] = [
         {
@@ -126,7 +131,7 @@ describe('Model provider onboarding', () => {
         { provider: 'anthropic', source: 'none' },
       ];
       registerAuthHandler();
-      registerPersistenceHandlers(onFactoryModel);
+      registerPersistenceHandlers(onFactoryModel, onOMDefaults);
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers })),
         http.get(`${TEST_BASE_URL}/web/config/models`, () =>
@@ -137,7 +142,7 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={onComplete} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} />);
 
       await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
 
@@ -147,20 +152,27 @@ describe('Model provider onboarding', () => {
       expect(screen.getByRole('button', { name: 'Change provider' })).toBeInTheDocument();
       expect(screen.queryByRole('searchbox', { name: 'Search model providers' })).not.toBeInTheDocument();
       expect(screen.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
-      await user.click(screen.getByRole('button', { name: 'Finish setup' }));
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
 
       await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
-      expect(onFactoryModel).toHaveBeenCalledWith({ defaultModelId: 'openai/gpt-5.6-sol' });
+      expect(onFactoryModel).not.toHaveBeenCalled();
+      expect(onOMDefaults).not.toHaveBeenCalled();
+      expect(onComplete).toHaveBeenCalledWith({
+        providerId: 'openai',
+        modelId: 'openai/gpt-5.6-sol',
+        method: 'api_key',
+      });
     });
   });
 
   describe('when OpenAI has only a personal API key', () => {
     it('still requires an organization credential and fixes the dialog to org scope', async () => {
       const onFactoryModel = vi.fn<(body: unknown) => void>();
+      const onOMDefaults = vi.fn<(body: unknown) => void>();
       const onComplete = vi.fn<() => void>();
       let connected = false;
       registerAuthHandler();
-      registerPersistenceHandlers(onFactoryModel);
+      registerPersistenceHandlers(onFactoryModel, onOMDefaults);
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
           HttpResponse.json({
@@ -193,7 +205,7 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={onComplete} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} />);
 
       // Unconnected providers are browseable without searching; picking the
       // badge opens the API key dialog directly.
@@ -203,10 +215,16 @@ describe('Model provider onboarding', () => {
       expect(dialog.queryByRole('button', { name: 'Everyone in org' })).not.toBeInTheDocument();
       await user.type(dialog.getByLabelText('API key for OpenAI'), 'sk-test');
       await user.click(dialog.getByRole('button', { name: 'Save' }));
-      await user.click(await screen.findByRole('button', { name: 'Finish setup' }));
+      await user.click(await screen.findByRole('button', { name: 'Continue' }));
 
       await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
-      expect(onFactoryModel).toHaveBeenCalledWith({ defaultModelId: 'openai/gpt-5.6-sol' });
+      expect(onFactoryModel).not.toHaveBeenCalled();
+      expect(onOMDefaults).not.toHaveBeenCalled();
+      expect(onComplete).toHaveBeenCalledWith({
+        providerId: 'openai',
+        modelId: 'openai/gpt-5.6-sol',
+        method: 'api_key',
+      });
     });
   });
 
@@ -235,14 +253,14 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
 
       const bedrock = await screen.findByRole('button', { name: 'Amazon Bedrock' });
       expect(bedrock).toBeEnabled();
       expect(screen.queryByText(/Ask an organization admin/)).not.toBeInTheDocument();
       await user.click(bedrock);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      expect(await screen.findByRole('button', { name: 'Finish setup' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
       expect(screen.getByText('amazon-bedrock/anthropic.claude-sonnet-4-5')).toBeInTheDocument();
     });
   });
@@ -269,18 +287,20 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
 
       expect(await screen.findByRole('button', { name: 'OpenAI' })).toBeEnabled();
       expect(screen.queryByText(/Ask an organization admin/)).not.toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Continue with Anthropic' })).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Groq' })).toBeDisabled();
+      await user.click(screen.getByRole('tab', { name: 'Provider sign-in' }));
+      expect(screen.getByRole('button', { name: 'Continue with Anthropic' })).toBeDisabled();
+      await user.click(screen.getByRole('tab', { name: 'API key' }));
 
       await user.click(screen.getByRole('button', { name: 'OpenAI' }));
-      expect(await screen.findByRole('button', { name: 'Finish setup' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
     });
 
-    it('guides members to an admin when no organization provider is connected', async () => {
+    it('lets members continue to personal access when no organization provider is connected', async () => {
       registerAuthHandler();
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
@@ -291,10 +311,12 @@ describe('Model provider onboarding', () => {
         ),
       );
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
-
-      expect(await screen.findByText(/Ask an organization admin/)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'OpenAI' })).toBeDisabled();
+      const onComplete = vi.fn();
+      const user = userEvent.setup();
+      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} />);
+      await user.click(await screen.findByRole('button', { name: 'Continue with personal access' }));
+      expect(onComplete).toHaveBeenCalledOnce();
+      expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
     });
   });
 
@@ -343,10 +365,10 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
 
       await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
-      expect(await screen.findByRole('button', { name: 'Finish setup' })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
     });
   });
 });

@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ArrowRight, GitBranch, LayoutList, Sparkles } from 'lucide-react';
 
 export interface InitialFactoryStepProps {
   onContinue: () => void;
@@ -7,59 +8,34 @@ export interface InitialFactoryStepProps {
 
 export function InitialFactoryStep({ onContinue }: InitialFactoryStepProps) {
   return (
-    <>
-      <div className="w-full max-w-2xl text-left" aria-hidden="true">
-        <div className="grid grid-cols-3 gap-3">
-          <div className="border-border bg-background/80 rounded-xl border p-3">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="bg-placeholder size-2 rounded-full" />
-              <Txt tone="muted" as="span" variant="meta" className="block">
-                To do
-              </Txt>
-            </div>
-            <div className="relative min-h-[140px]">
-              <div className="animate-factory-ticket-move bg-card shadow-raised absolute inset-x-0 top-0 z-10 h-[64px] rounded-lg px-3 py-2.5 motion-reduce:animate-none">
-                <Txt as="span" variant="meta" tone="muted" className="block">
-                  ENG-124
-                </Txt>
-                <Txt as="span" variant="column" tone="ink" className="mt-1 block">
-                  Add repository search
-                </Txt>
-              </div>
-              <div className="animate-factory-ticket-appear bg-card shadow-raised absolute inset-x-0 top-[76px] h-[64px] rounded-lg px-3 py-2.5 motion-reduce:animate-none">
-                <Txt as="span" variant="meta" tone="muted" className="block">
-                  ENG-125
-                </Txt>
-                <Txt as="span" variant="column" tone="ink" className="mt-1 block">
-                  Improve setup flow
-                </Txt>
-              </div>
-            </div>
-          </div>
-          <div className="border-border bg-background/80 rounded-xl border p-3">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="bg-badge-green-indicator size-2 rounded-full" />
-              <Txt tone="muted" as="span" variant="meta" className="block">
-                In progress
-              </Txt>
-            </div>
-            <div className="min-h-[140px]" />
-          </div>
-          <div className="border-border bg-background/80 rounded-xl border p-3">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="bg-badge-blue-indicator size-2 rounded-full" />
-              <Txt tone="muted" as="span" variant="meta" className="block">
-                Deployed
-              </Txt>
-            </div>
-            <div className="min-h-[140px]" />
-          </div>
+    <div className="flex flex-col items-start gap-8">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <GitBranch className="text-muted-foreground size-4" aria-hidden="true" />
+          <Txt variant="caption" tone="muted">
+            Connect your repository
+          </Txt>
+        </div>
+        <div className="flex items-center gap-3">
+          <LayoutList className="text-muted-foreground size-4" aria-hidden="true" />
+          <Txt variant="caption" tone="muted">
+            Bring in your work
+          </Txt>
+        </div>
+        <div className="flex items-center gap-3">
+          <Sparkles className="text-muted-foreground size-4" aria-hidden="true" />
+          <Txt variant="caption" tone="muted">
+            Choose your model
+          </Txt>
         </div>
       </div>
-
-      <Button variant="primary" size="lg" className="mt-8 min-h-14" onClick={onContinue}>
+      <Button variant="primary" size="lg" className="group/onboarding-action" onClick={onContinue}>
         Create my first factory
+        <ArrowRight
+          className="motion-safe:transition-transform motion-safe:duration-200 motion-safe:group-hover/onboarding-action:translate-x-0.5"
+          aria-hidden="true"
+        />
       </Button>
-    </>
+    </div>
   );
 }

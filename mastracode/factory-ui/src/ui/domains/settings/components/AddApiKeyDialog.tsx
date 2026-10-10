@@ -18,6 +18,17 @@ import type { ProviderInfo } from '../../../../api/types';
 import { useOrgKeyAdminQuery, useSaveProviderKey } from '../../../../hooks/use-providers';
 import { providerDisplayName } from './provider-display-name';
 
+type KeyScope = 'user' | 'org';
+
+const SCOPED_KEY_ACCESS: Record<KeyScope, string> = {
+  org: 'Everyone in your organization can use this key.',
+  user: 'Only you can use this key. Shared organization access stays unchanged.',
+};
+
+function credentialAtScope(provider: ProviderInfo, scope: KeyScope) {
+  return scope === 'org' ? provider.orgCredential : provider.userCredential;
+}
+
 interface AddApiKeyDialogProps {
   provider: ProviderInfo;
   authEnabled: boolean;
@@ -27,8 +38,8 @@ interface AddApiKeyDialogProps {
    * `'user'` default. An existing org key always wins so edits don't silently
    * narrow a shared key.
    */
-  defaultScope?: 'user' | 'org';
-  fixedScope?: 'user' | 'org';
+  defaultScope?: KeyScope;
+  fixedScope?: KeyScope;
   onClose: () => void;
 }
 
@@ -46,14 +57,19 @@ export function AddApiKeyDialog({
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
   const preferredScope = provider.source === 'stored-org' ? 'org' : defaultScope;
   const [keyDraft, setKeyDraft] = useState('');
-  const [scope, setScope] = useState<'user' | 'org'>(fixedScope ?? (canWriteOrgKey ? preferredScope : 'user'));
+  const writableScope = canWriteOrgKey ? preferredScope : 'user';
+  const [scope, setScope] = useState<KeyScope>(fixedScope ?? writableScope);
 
+  const replacesSignIn = fixedScope !== undefined && credentialAtScope(provider, fixedScope) === 'oauth';
+  const description = fixedScope
+    ? SCOPED_KEY_ACCESS[fixedScope]
+    : 'The key is stored securely and never displayed again.';
   const error = saveKeyMutation.error instanceof Error ? saveKeyMutation.error.message : undefined;
   const personalOnlyWarning = authEnabled && preferredScope === 'org' && !canWriteOrgKey;
 
   const saveKey = async () => {
     const key = keyDraft.trim();
-    if (!key) return;
+    if (!key || saveKeyMutation.isPending) return;
     try {
       await saveKeyMutation.mutateAsync({
         provider: provider.provider,
@@ -74,7 +90,10 @@ export function AddApiKeyDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>API key for {displayName}</DialogTitle>
-          <DialogDescription>The key is stored securely and never displayed again.</DialogDescription>
+          <DialogDescription>
+            {description}
+            {replacesSignIn && ' Saving replaces the provider sign-in at this scope.'}
+          </DialogDescription>
         </DialogHeader>
         <DialogBody>
           <Input
@@ -83,6 +102,7 @@ export function AddApiKeyDialog({
             aria-label={`API key for ${displayName}`}
             placeholder="Paste API key"
             value={keyDraft}
+            disabled={saveKeyMutation.isPending}
             onChange={event => setKeyDraft(event.target.value)}
             onKeyDown={event => {
               if (event.key === 'Enter') void saveKey();
@@ -118,7 +138,7 @@ export function AddApiKeyDialog({
             </Txt>
           )}
           {error && (
-            <Txt as="p" variant="caption" className="text-destructive-foreground">
+            <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
               {error}
             </Txt>
           )}

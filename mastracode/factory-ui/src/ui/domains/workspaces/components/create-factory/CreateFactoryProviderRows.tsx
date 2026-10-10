@@ -4,7 +4,7 @@ import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPale
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { providerDisplayName } from '../../../settings/components/provider-display-name';
 import type { ProviderConnection } from '../../hooks/useProviderConnection';
-import { isProviderConfigured, matchesProviderQuery } from '../../hooks/useProviderConnection';
+import { matchesProviderQuery } from '../../hooks/useProviderConnection';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
 
@@ -37,8 +37,10 @@ export function CreateFactoryProviderRows({ connection, query, error }: CreateFa
               key={provider.provider}
               icon={<ProviderBrandIcon provider={provider.provider} />}
               title={providerDisplayName(provider.provider)}
-              subtitle={isProviderConfigured(provider) ? 'Signed in on this deployment' : 'Sign in with your account'}
-              badge={isProviderConfigured(provider) ? 'Connected' : undefined}
+              subtitle={
+                connection.isConfigured(provider) ? 'Signed in on this deployment' : 'Sign in with your account'
+              }
+              badge={connection.isConfigured(provider) ? 'Connected' : undefined}
               value={`signin-${provider.provider}`}
               disabled={connection.pending}
               onSelect={() => connection.chooseSignInProvider(provider)}
@@ -53,8 +55,8 @@ export function CreateFactoryProviderRows({ connection, query, error }: CreateFa
               key={provider.provider}
               icon={<ProviderBrandIcon provider={provider.provider} />}
               title={providerDisplayName(provider.provider)}
-              subtitle={isProviderConfigured(provider) ? 'API key saved' : 'Connect with an API key'}
-              badge={isProviderConfigured(provider) ? 'Connected' : undefined}
+              subtitle={connection.isConfigured(provider) ? 'API key saved' : 'Connect with an API key'}
+              badge={connection.isConfigured(provider) ? 'Connected' : undefined}
               value={`key-${provider.provider}`}
               disabled={connection.pending}
               onSelect={() => connection.chooseKeyProvider(provider)}

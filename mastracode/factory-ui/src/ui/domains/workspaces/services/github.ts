@@ -346,22 +346,36 @@ export async function fetchFactoryProject(baseUrl: string, factoryProjectId: str
 }
 
 /** Set (or clear, with null) the Factory's default model for factory runs. */
-export async function updateFactoryDefaultModel(
+async function patchFactoryProject(
   baseUrl: string,
   factoryProjectId: string,
-  defaultModelId: string | null,
+  patch: Record<string, unknown>,
+  failureMessage: string,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ defaultModelId }),
+    body: JSON.stringify(patch),
   });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
-    'Failed to update Factory default model',
-  );
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, failureMessage);
   return project;
+}
+
+export async function renameFactoryProject(
+  baseUrl: string,
+  factoryProjectId: string,
+  name: string,
+): Promise<FactoryProjectPayload> {
+  return patchFactoryProject(baseUrl, factoryProjectId, { name }, 'Failed to update Factory name');
+}
+
+export async function updateFactoryDefaultModel(
+  baseUrl: string,
+  factoryProjectId: string,
+  defaultModelId: string | null,
+): Promise<FactoryProjectPayload> {
+  return patchFactoryProject(baseUrl, factoryProjectId, { defaultModelId }, 'Failed to update Factory default model');
 }
 
 export interface ApplyFactoryDefaultModelResult {
@@ -395,14 +409,7 @@ export async function updateFactoryAutomation(
   factoryProjectId: string,
   patch: { autoRunEnabled?: boolean; autoApprovePlans?: boolean },
 ): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(patch),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automation');
-  return project;
+  return patchFactoryProject(baseUrl, factoryProjectId, patch, 'Failed to update automation');
 }
 
 /** Enable or disable Work-board item creation for new Slack sessions. */
@@ -411,17 +418,12 @@ export async function updateFactorySlackWorkItems(
   factoryProjectId: string,
   slackWorkItemsEnabled: boolean,
 ): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ slackWorkItemsEnabled }),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
+  return patchFactoryProject(
+    baseUrl,
+    factoryProjectId,
+    { slackWorkItemsEnabled },
     'Failed to update Slack work-item setting',
   );
-  return project;
 }
 
 /**
