@@ -495,6 +495,37 @@ describe('metadata filter URL params', () => {
   });
 });
 
+describe('synthetic filter URL params', () => {
+  describe('when status or primitive type is "is any of"', () => {
+    const tokens = [
+      { fieldId: 'rootEntityType', operatorId: 'in' as const, value: ['agent', 'workflow_run'] },
+      { fieldId: 'status', operatorId: 'in' as const, value: ['success', 'error'] },
+    ];
+
+    it('keeps every value through a URL round trip', () => {
+      const params = new URLSearchParams();
+      applyTracePropertyFilterTokens(params, tokens);
+
+      expect(getTracePropertyFilterTokens(params)).toEqual(tokens);
+    });
+
+    it('keeps every value when persisted for storage', () => {
+      const params = new URLSearchParams();
+      applyTracePropertyFilterTokens(params, tokens);
+
+      expect(getTracePropertyFilterTokens(getPreservedTraceFilterParams(params))).toEqual(tokens);
+    });
+  });
+
+  it('drops a stale operator when status goes back to a single value', () => {
+    const params = new URLSearchParams('status=success&status=error&status.op=in');
+
+    applyTracePropertyFilterTokens(params, [{ fieldId: 'status', value: 'error' }]);
+
+    expect(params.toString()).toBe('status=error');
+  });
+});
+
 describe('filter group URL params', () => {
   const group: TraceFilterGroup = {
     id: 'g1',
