@@ -1,6 +1,6 @@
 import { DataListCell } from './data-list-cells';
 import { DataListRoot } from './data-list-root';
-import type { DataListFit, DataListSize, DataListVariant } from './data-list-root';
+import type { DataListFit, DataListVariant } from './data-list-root';
 import { DataListTop } from './data-list-top';
 import { DataListTopCell } from './data-list-top-cell';
 import { dataListRowOuterStyles, splitColumns } from './shared';
@@ -14,7 +14,6 @@ export type DataListSkeletonProps = {
   numberOfRows?: number;
   fit?: DataListFit;
   variant?: DataListVariant;
-  size?: DataListSize;
 };
 
 function SkeletonBar({ width, className }: { width: string; className?: string }) {
@@ -61,14 +60,13 @@ export function DataListSkeleton({
   numberOfRows = 3,
   fit,
   variant,
-  size,
 }: DataListSkeletonProps) {
   const columnParts = splitColumns(columns);
   const columnCount = columnParts.length;
   const skeletonColumns = columnParts.map(col => (col === 'auto' ? 'minmax(6rem, auto)' : col)).join(' ');
 
   return (
-    <DataListRoot columns={skeletonColumns} fit={fit} variant={variant} size={size}>
+    <DataListRoot columns={skeletonColumns} fit={fit} variant={variant}>
       <DataListTop>
         {Array.from({ length: columnCount }).map((_, colIdx) => (
           <DataListTopCell key={colIdx}>

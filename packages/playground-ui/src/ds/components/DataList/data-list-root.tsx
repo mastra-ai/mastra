@@ -40,8 +40,6 @@ export type DataListFit = 'content' | 'container';
  */
 export type DataListVariant = 'default' | 'light';
 
-export type DataListSize = 'default' | 'lg';
-
 export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation' | 'mask'> & {
   children: ReactNode;
   columns: string;
@@ -75,8 +73,6 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
    * Without it, the order is persisted by index and resets when the column count changes.
    */
   columnKeys?: string[];
-  size?: DataListSize;
-  toolbar?: ReactNode;
 };
 
 type DataListRootStyle = CSSProperties & {
@@ -137,11 +133,6 @@ const dataListVariantClasses: Record<DataListVariant, string> = {
 const dataListVariantBackground: Record<DataListVariant, string> = {
   default: 'var(--card)',
   light: 'var(--background)',
-};
-
-const dataListSizeClasses: Record<DataListSize, string> = {
-  default: '',
-  lg: '[&_.data-list-row]:min-h-11',
 };
 
 const dataListFitClasses: Record<DataListFit, string> = {
@@ -239,8 +230,6 @@ function DataListBase({
   mask,
   scrollRef,
   reorder,
-  size,
-  toolbar,
   ...props
 }: DataListBaseProps) {
   const scopeId = useId();
@@ -266,13 +255,7 @@ function DataListBase({
     <div
       // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.
       // It is also the offsetParent rows are measured against and the highlight is positioned in.
-      className={cn(
-        'grid content-start',
-        ...dataListGridStyles,
-        dataListFitClasses[fit],
-        size && dataListSizeClasses[size],
-        menu.containerClassName,
-      )}
+      className={cn('grid content-start', ...dataListGridStyles, dataListFitClasses[fit], menu.containerClassName)}
       style={gridStyle}
       data-data-list={reorder.reorderable ? scopeId : undefined}
       {...menu.getContainerProps({})}
@@ -305,7 +288,6 @@ function DataListBase({
         className,
       )}
     >
-      {toolbar}
       <ScrollAreaViewport ref={scrollRef} className="min-h-0 flex-1 basis-auto">
         <DataListReorderContext.Provider value={reorder}>{grid}</DataListReorderContext.Provider>
       </ScrollAreaViewport>

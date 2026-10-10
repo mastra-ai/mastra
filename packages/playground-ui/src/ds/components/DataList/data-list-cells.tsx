@@ -22,24 +22,9 @@ export type DataListCellProps = {
    * scrolls sideways.
    */
   sticky?: DataListSticky;
-  align?: DataListCellAlign;
-  tone?: DataListCellTone;
 } & Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className'>;
 
-export type DataListCellAlign = 'start' | 'end';
-export type DataListCellTone = 'ink' | 'muted';
-
-const dataListCellAlignClasses: Record<DataListCellAlign, string> = {
-  start: 'justify-items-start text-left',
-  end: 'justify-items-end text-right',
-};
-
-const dataListCellToneClasses: Record<DataListCellTone, string> = {
-  ink: 'text-foreground',
-  muted: 'text-muted-foreground',
-};
-
-export function DataListCell({ children, className, as, sticky, align, tone, ...rest }: DataListCellProps) {
+export function DataListCell({ children, className, as, sticky, ...rest }: DataListCellProps) {
   const Component = as || 'span';
   return (
     <Component
@@ -47,8 +32,6 @@ export function DataListCell({ children, className, as, sticky, align, tone, ...
         'relative grid max-w-full min-w-0 items-center overflow-hidden text-body-sm whitespace-nowrap text-muted-foreground empty:before:text-placeholder empty:before:content-["—"]',
         sticky === 'start' && dataListStickyStartStyles,
         className,
-        align && dataListCellAlignClasses[align],
-        tone && dataListCellToneClasses[tone],
       )}
       {...rest}
     >
@@ -141,19 +124,6 @@ export function DataListDescriptionCell({ children, className }: DataListCellPro
       <span className={dataListTruncateContentStyles}>
         <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
       </span>
-    </DataListCell>
-  );
-}
-
-export type DataListStackedCellProps = DataListCellProps & {
-  description?: ReactNode;
-};
-
-export function DataListStackedCell({ children, description, className, ...rest }: DataListStackedCellProps) {
-  return (
-    <DataListCell className={cn('content-center', className)} {...rest}>
-      <span className="min-w-0 truncate text-foreground">{children}</span>
-      {description ? <span className="min-w-0 truncate text-caption text-muted-foreground">{description}</span> : null}
     </DataListCell>
   );
 }

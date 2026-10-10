@@ -129,6 +129,12 @@
         "default": "./dist/new/settings.es.js"
       }
     },
+    "./new/table": {
+      "import": {
+        "types": "./dist/new/table.d.ts",
+        "default": "./dist/new/table.es.js"
+      }
+    },
     "./new/layout/app-shell": {
       "import": {
         "types": "./dist/new/layout/app-shell.d.ts",

@@ -1,6 +1,5 @@
 import type { ComponentPropsWithoutRef, DragEvent, ElementType, KeyboardEvent, ReactNode } from 'react';
 import { forwardRef, useState } from 'react';
-import type { DataListCellAlign } from './data-list-cells';
 import { useDataListReorder } from './data-list-reorder-context';
 import { dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
@@ -19,16 +18,10 @@ export type DataListTopCellProps = {
   as?: ElementType;
   /** Pins the top cell to the horizontal start edge while the list scrolls sideways. */
   sticky?: DataListSticky;
-  align?: DataListCellAlign;
 } & Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className' | 'ref'>;
 
-const dataListTopCellAlignClasses: Record<DataListCellAlign, string> = {
-  start: 'justify-start text-left',
-  end: 'justify-end text-right',
-};
-
 export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>(
-  ({ children, className, as, sticky, align, ...rest }, ref) => {
+  ({ children, className, as, sticky, ...rest }, ref) => {
     const Component = as || 'span';
     const isText = typeof children === 'string' || typeof children === 'number';
     const { reorderable, order, move } = useDataListReorder();
@@ -86,7 +79,6 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
             'cursor-grab active:cursor-grabbing data-drop-target:shadow-[inset_2px_0_0_var(--border-focus)]',
           canReorder && focusRingInset,
           className,
-          align && dataListTopCellAlignClasses[align],
         )}
         {...reorderProps}
         {...rest}

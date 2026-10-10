@@ -98,6 +98,51 @@ For a free-text prompt, replace `AskUser.Options` with `AskUser.TextAnswer` and 
 
 Interactive examples live under **AI / Ask User** in Storybook, including composed layouts with the submit control outside the options.
 
+### Tables
+
+`Table` renders a data table from the native `table`, `thead`, `tbody`, `tr`, `th`, and `td` elements with the same raised surface as `DataList`. Each part takes its element's props, so `colSpan`, `rowSpan`, and `aria-*` work as they do in HTML, and any component can go in a cell.
+
+```tsx
+import { Table } from '@mastra/playground-ui/new/table';
+
+export function CreditHistory({ credits }: { credits: Credit[] }) {
+  return (
+    <Table aria-labelledby="credit-history">
+      <Table.Header>
+        <Table.Row>
+          <Table.Head>Type</Table.Head>
+          <Table.Head className="w-full">Description</Table.Head>
+          <Table.Head align="end">Balance</Table.Head>
+        </Table.Row>
+      </Table.Header>
+      <Table.Body>
+        {credits.map(credit => (
+          <Table.Row key={credit.id}>
+            <Table.Cell>
+              <Table.RowLink href={`/billing/credits/${credit.id}`}>{credit.type}</Table.RowLink>
+            </Table.Cell>
+            <Table.Cell>{credit.title}</Table.Cell>
+            <Table.Cell align="end" tone="muted">
+              {credit.balance}
+            </Table.Cell>
+          </Table.Row>
+        ))}
+      </Table.Body>
+    </Table>
+  );
+}
+```
+
+- `Table` takes `columnDividers` to draw lines between columns.
+- `Table.Head` takes `align` (`start`, `center`, or `end`).
+- `Table.Cell` takes `align` and `tone` (`ink` or `muted`).
+- `Table.RowLink` makes the whole row a link. Pass `render={<Link to="…" />}` for a router link.
+- Rows are at least 36px tall and grow with their content. Cells stay on one line unless you wrap their text in an element with `whitespace-normal`.
+
+Use `Table` for data people read and compare, such as billing history or usage. Use `DataList` for lists of entities people click into, such as agents or traces, which need row keyboard navigation, sticky or reorderable columns, or virtualization. Search and filters go in an `ActionRow` above either one.
+
+The full guide, with recipes for spanning cells, editable cells, sorting, loading, and empty states, is the **New / Table** docs page in Storybook.
+
 ### Semantic color tokens
 
 `theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.
