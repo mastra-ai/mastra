@@ -1,8 +1,9 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { createOpenAI } from '@ai-sdk/openai';
 import { Agent as PiAgent } from '@earendil-works/pi-agent-core';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
 import { Type } from '@earendil-works/pi-ai';
 import { getModel, streamSimple } from '@earendil-works/pi-ai/compat';
-import { createOpenAI } from '@ai-sdk/openai';
 import { tool as lcTool } from '@langchain/core/tools';
 import { ChatOpenAI } from '@langchain/openai';
 import { Agent } from '@mastra/core/agent';
@@ -13,7 +14,6 @@ import { Memory } from '@mastra/memory';
 import { generateText, stepCountIs, tool, wrapLanguageModel } from 'ai';
 import { createDeepAgent } from 'deepagents';
 import { createAgent } from 'langchain';
-import { readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
