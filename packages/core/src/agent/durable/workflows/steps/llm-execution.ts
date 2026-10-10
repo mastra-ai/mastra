@@ -479,6 +479,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           await emitChunkEvent(pubsub, runId, feedbackSignal.toDataPart() as any);
         }
       }
+      // Mirror Agent: later iterations continue the same assistant message behind a step-start
+      // boundary, so sequential tool steps aren't replayed as parallel calls (#26332).
+      const iterationBoundary = previousSteps.length > 0 ? messageList.openStepBoundary().boundary : undefined;
       let terminalAttemptContext:
         | {
             recordTerminalError: (error: unknown) => void;
@@ -2354,7 +2357,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Remove the rejected response so the retry doesn't send it back to the model, and
             // so a rejection that ends the run isn't persisted or returned (issue #26048).
             if (processOutputStepTripwire) {
-              messageList.rollbackToStepBoundary(materializationMessageId);
+              messageList.rollbackToStepBoundary(materializationMessageId, iterationBoundary);
             }
 
             const stepTripwire = processOutputStepTripwire
