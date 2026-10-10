@@ -8,6 +8,7 @@ import { AIMessage } from '@langchain/core/messages';
 import type { BaseMessage } from '@langchain/core/messages';
 import type { ChatResult } from '@langchain/core/outputs';
 import { tool as lcTool } from '@langchain/core/tools';
+import { createDeepAgent } from 'deepagents';
 import { createAgent } from 'langchain';
 import { platformMemoryAgentMiddleware } from './langgraph';
 import { withPlatformMemory } from './pi-agent';
@@ -559,6 +560,42 @@ describe.skipIf(!live)('long tool loop (LangGraph)', () => {
       }
     }
     const agent = createAgent({
+      model: new LoopModel({}),
+      tools: [lcTool(async () => rows, { name: 'bulk', description: 'Bulk rows', schema: z.object({}) })],
+      systemPrompt: 'Use the bulk tool repeatedly.',
+      middleware: [platformMemoryAgentMiddleware({ client })],
+    });
+    await agent.invoke(
+      { messages: [{ role: 'user', content: 'Collect all the rows.' }] },
+      { configurable: { thread_id: threadId } },
+    );
+    await expectLoopStored(client, threadId, prompts);
+  });
+});
+
+describe.skipIf(!live)('long tool loop (Deep Agents)', () => {
+  it('observes mid-turn so the prompt stays bounded', async () => {
+    const client = liveClient();
+    const threadId = `da-loop-${Date.now()}`;
+    const prompts: string[] = [];
+    class LoopModel extends BaseChatModel {
+      _llmType() {
+        return 'loop';
+      }
+      bindTools() {
+        return this;
+      }
+      async _generate(messages: BaseMessage[]): Promise<ChatResult> {
+        prompts.push(JSON.stringify(messages.map(m => m.content)));
+        const step = prompts.length;
+        const message =
+          step <= 6
+            ? new AIMessage({ content: '', tool_calls: [{ id: `call-${step}`, name: 'bulk', args: {} }] })
+            : new AIMessage(reply);
+        return { generations: [{ message, text: message.text }] };
+      }
+    }
+    const agent = createDeepAgent({
       model: new LoopModel({}),
       tools: [lcTool(async () => rows, { name: 'bulk', description: 'Bulk rows', schema: z.object({}) })],
       systemPrompt: 'Use the bulk tool repeatedly.',

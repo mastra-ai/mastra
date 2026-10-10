@@ -41,7 +41,11 @@ export function platformMemoryAgentMiddleware(options: PlatformMemoryAgentMiddle
   const client = options.client ?? new PlatformMemoryClient(options);
   const turns = createTurnMemory(client, options.readOnly);
 
-  const idsOf = (runtime: { configurable?: { thread_id?: string } }) => {
+  type Runtime = { configurable?: { thread_id?: string; ls_agent_type?: string } };
+  // Deep Agents subagents inherit the parent's thread_id; their internal loops are not the user's conversation.
+  const isSubagent = (runtime: Runtime) => runtime.configurable?.ls_agent_type === 'subagent';
+
+  const idsOf = (runtime: Runtime) => {
     const threadId = options.threadId ?? runtime.configurable?.thread_id;
     if (!threadId) throw new Error('Platform Memory needs a threadId option or configurable.thread_id');
     return { threadId, resourceId: options.resourceId ?? threadId };
@@ -51,17 +55,21 @@ export function platformMemoryAgentMiddleware(options: PlatformMemoryAgentMiddle
     name: 'PlatformMemory',
 
     async wrapModelCall(request, handler) {
+      if (isSubagent(request.runtime)) return handler(request);
       const { threadId, resourceId } = idsOf(request.runtime);
-      const saved = await turns.beforeStep(threadId, resourceId, toItems(request.messages));
+      // Graph state holds the raw transcript; outer middleware (e.g. Deep Agents summarization) may have rewritten request.messages.
+      const messages = (request.state as { messages?: BaseMessage[] }).messages ?? request.messages;
+      const saved = await turns.beforeStep(threadId, resourceId, toItems(messages));
       const context = await client.getContext(threadId, resourceId);
       // The current turn: the last run of human messages and everything after. Earlier turns come from memory.
-      let first = request.messages.findLastIndex(m => m.getType() === 'human');
-      while (first > 0 && request.messages[first - 1]!.getType() === 'human') first--;
-      const turn = saved || first < 0 ? [] : request.messages.slice(first);
+      let first = messages.findLastIndex(m => m.getType() === 'human');
+      while (first > 0 && messages[first - 1]!.getType() === 'human') first--;
+      const turn = saved || first < 0 ? [] : messages.slice(first);
       return handler({ ...request, messages: [...promptOf(context).flatMap(fromMemory), ...turn] });
     },
 
     async afterAgent(state, runtime) {
+      if (isSubagent(runtime)) return;
       const { threadId, resourceId } = idsOf(runtime);
       await turns.save(threadId, resourceId, toItems(state.messages));
     },
