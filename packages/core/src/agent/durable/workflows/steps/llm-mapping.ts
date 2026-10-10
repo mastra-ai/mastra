@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { PubSub } from '../../../../events/pubsub';
+import { MastraFGAPermissions } from '../../../../auth/ee';
 import {
   commitToolResult,
   computeModelOutputProviderMetadata,
@@ -9,17 +9,17 @@ import { SpanType } from '../../../../observability';
 import type { ExportedSpan } from '../../../../observability';
 import { persistProcessorDataChunk } from '../../../../stream/base/output';
 import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
-import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { DurableStepIds } from '../../constants';
 import { assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
+import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { globalRunRegistry } from '../../run-registry';
-import { emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
   DurableAgenticExecutionOutput,
+  DurableAgenticWorkflowInput,
   SerializableDurableState,
 } from '../../types';
 import { rebuildRunToolsFromMastra } from '../../utils/resolve-runtime';
@@ -57,6 +57,7 @@ const durableLLMMappingOutputSchema = z.object({
   delegationBailed: z.boolean().optional(),
   processorRetryCount: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
+  deferredStepFinishChunk: z.any().optional(),
 });
 
 /**
@@ -76,7 +77,7 @@ export function createDurableLLMMappingStep() {
     inputSchema: durableLLMMappingInputSchema,
     outputSchema: durableLLMMappingOutputSchema,
     execute: async params => {
-      const { inputData, mastra, requestContext } = params;
+      const { inputData, mastra, requestContext, getInitData } = params;
       const {
         llmOutput,
         toolResults,
@@ -338,7 +339,24 @@ export function createDurableLLMMappingStep() {
         requestContext.set('__mastra_delegationBailed', false);
       }
 
-      // 4. Build the output
+      // 4. Carry the deferred step-finish after tool-result chunks have been
+      // emitted. The loop predicate adds step content and emits it after resolving
+      // continuation policy, avoiding duplicate tool results in persisted snapshots.
+      const deferredChunk = llmOutput.deferredStepFinishChunk as any;
+      const deferredStepFinishChunk = deferredChunk
+        ? {
+            ...deferredChunk,
+            payload: {
+              ...deferredChunk.payload,
+              stepResult: {
+                ...deferredChunk.payload?.stepResult,
+                isContinued,
+              },
+            },
+          }
+        : undefined;
+
+      // 5. Build the output
       const output: DurableAgenticExecutionOutput = {
         ...(await storeMessageListState(params, messageList.serialize())),
         messageId,
@@ -364,6 +382,7 @@ export function createDurableLLMMappingStep() {
         processorRetryCount: llmOutput.processorRetryCount,
         processorRetryFeedback: llmOutput.processorRetryFeedback,
         delegationBailed,
+        deferredStepFinishChunk,
       };
 
       // Close the MODEL_STEP span for tool-calling iterations: the LLM step defers it so
@@ -389,73 +408,6 @@ export function createDurableLLMMappingStep() {
         }
       }
 
-      // Emit the deferred step-finish chunk for intermediate steps.
-      // llm-execution defers step-finish emission for tool-calling steps so that
-      // it arrives AFTER tool-result chunks (emitted by tool-call.ts). This
-      // matches the regular agent's chunk ordering which MastraModelOutput
-      // relies on for correct step content reconstruction in onStepFinish.
-      // Unlike the main loop — where one in-process driver holds the deferred
-      // chunk in a local variable — the emission point here lives in a
-      // different workflow step than the stream that produced it, so the
-      // deferral must ride the serialized step output
-      // (`deferredStepFinishChunk`).
-      const deferredChunk = llmOutput.deferredStepFinishChunk as any;
-      const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
-      if (deferredChunk && pubsub) {
-        try {
-          // Build step content directly from this iteration's data.
-          // We cannot rely on messageList.get.response.aiV5.modelContent(-1)
-          // because each durable step deserializes a fresh MessageList, so
-          // the MastraModelOutput's reference is stale. Instead, construct
-          // the content array from the LLM output (text + tool calls) and
-          // the tool results collected in this step.
-          const stepContent: unknown[] = [];
-          if (llmOutput.text) {
-            stepContent.push({ type: 'text', text: llmOutput.text });
-          }
-          for (const tc of llmOutput.toolCalls ?? []) {
-            stepContent.push({
-              type: 'tool-call',
-              toolCallId: tc.toolCallId,
-              toolName: tc.toolName,
-              args: tc.args,
-            });
-          }
-          for (const tr of toolResults ?? []) {
-            // Public step content must not show a completed result for a call the client
-            // has not answered yet.
-            if (isPendingClientCall(tr)) continue;
-            stepContent.push({
-              type: 'tool-result',
-              toolCallId: tr.toolCallId,
-              toolName: tr.toolName,
-              result: tr.error ? tr.error.message : tr.result,
-              ...(tr.error ? { isError: true } : {}),
-            });
-          }
-
-          const enrichedChunk = {
-            ...deferredChunk,
-            payload: {
-              ...deferredChunk.payload,
-              // Stamp the value the loop actually decided on — the same one this step returns on
-              // `output.stepResult` and the dowhile predicate reads. It can disagree with the model's
-              // finish reason, because a tool error forces another turn so the model can self-correct,
-              // and the chunk must not claim otherwise: ChatChannelOutputProcessor closes its render
-              // queue on the first step-finish whose isContinued is not `true` (#23341).
-              stepResult: {
-                ...deferredChunk.payload?.stepResult,
-                isContinued,
-              },
-              _durableStepContent: stepContent,
-            },
-          };
-          await emitChunkEvent(pubsub, _runId, enrichedChunk);
-        } catch (error) {
-          mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
-        }
-      }
-
       // savePerStep: persist this step before the loop continues, like the regular agent's
       // onStepFinish. The final step is saved by finalize-run. Observational memory saves on its
       // own, and a save here would corrupt its bookkeeping (same exclusion as finalize-run).
@@ -467,6 +419,21 @@ export function createDurableLLMMappingStep() {
         state.threadId &&
         state.resourceId
       ) {
+        const authorizationEntry = globalRunRegistry.get(_runId);
+        const authorizationRequestContext = authorizationEntry?.requestContext ?? requestContext;
+        const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
+          authorizeDurableMemory(getDurableMemoryAuthorizationChecks(authorizationEntry), {
+            mastra: mastra as Mastra | undefined,
+            user: authorizationRequestContext?.get('user'),
+            threadId: state.threadId!,
+            resourceId: state.resourceId!,
+            agentId: _agentId,
+            requestContext: authorizationRequestContext,
+            permission,
+            actor: (getInitData?.() as DurableAgenticWorkflowInput | undefined)?.options?.actor,
+          });
+        await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
+        if (!state.threadExists) await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
         try {
           // Re-read the entry: tool-call may have rebuilt the save queue into it. A connect()
           // worker in another process has none until something rebuilds it.

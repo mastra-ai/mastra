@@ -2,7 +2,6 @@
   "attachment": [
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
-    "qwen/qwen3.6-27b",
     "qwen/qwen3.8-27b",
     "stepfun/step-3.7-flash",
     "xiaomi/mimo-v2.5"
@@ -13,7 +12,9 @@
     "deepseek/deepseek-v4-flash-0731",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
+    "qwen/qwen3-30b-a3b-instruct-2507",
     "qwen/qwen3.6-27b",
+    "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.8-27b",
     "stepfun/step-3.7-flash",
     "xiaomi/mimo-v2.5",
@@ -27,7 +28,9 @@
     "deepseek/deepseek-v4-flash-0731",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
+    "qwen/qwen3-30b-a3b-instruct-2507",
     "qwen/qwen3.6-27b",
+    "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.8-27b",
     "stepfun/step-3.7-flash",
     "xiaomi/mimo-v2.5",

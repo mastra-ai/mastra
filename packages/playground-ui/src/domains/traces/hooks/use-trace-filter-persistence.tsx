@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { hasAnyTraceFilterParams, loadTraceFiltersFromStorage, saveTraceFiltersToStorage } from '../trace-filters';
+import {
+  hasAnyTraceFilterParams,
+  loadTraceFiltersFromStorage,
+  saveTraceFiltersToStorage,
+  traceFilterOperatorParam,
+} from '../trace-filters';
 import type { SetURLSearchParamsLike } from './use-trace-url-state';
 
 export interface TraceFilterPersistenceOptions {
@@ -7,6 +12,19 @@ export interface TraceFilterPersistenceOptions {
   storageKey?: string;
   /** Skip the once-on-mount hydration from localStorage. Default: false (hydration runs). */
   skipHydration?: boolean;
+  /** URL params (and their `.op` operators) that stay in the URL but are never saved or restored,
+   *  e.g. a filter that carries navigation context rather than the user's choice. */
+  excludeParams?: readonly string[];
+}
+
+function withoutParams(params: URLSearchParams, excludeParams: readonly string[] | undefined): URLSearchParams {
+  if (!excludeParams?.length) return params;
+  const next = new URLSearchParams(params);
+  for (const param of excludeParams) {
+    next.delete(param);
+    next.delete(traceFilterOperatorParam(param));
+  }
+  return next;
 }
 
 /**
@@ -17,14 +35,15 @@ export interface TraceFilterPersistenceOptions {
  *   update itself; only relative date presets are kept (see `saveTraceFiltersToStorage`).
  *   Route every filter mutation through the returned setter (e.g. hand it to `useTraceUrlState`).
  *
- * Pass `storageKey` to scope persistence (e.g. per-entity).
+ * Pass `storageKey` to scope persistence (e.g. per-entity), and `excludeParams` to keep
+ * context filters out of it.
  */
 export function useTraceFilterPersistence(
   searchParams: URLSearchParams,
   setSearchParams: SetURLSearchParamsLike,
   options?: TraceFilterPersistenceOptions,
 ): SetURLSearchParamsLike {
-  const { storageKey, skipHydration } = options ?? {};
+  const { storageKey, skipHydration, excludeParams } = options ?? {};
 
   // Hydrate from the saved filter set on mount, but only when the URL is
   // filter-clean (user arrived via a plain sidebar nav). If the URL already
@@ -35,8 +54,9 @@ export function useTraceFilterPersistence(
     if (hydratedRef.current) return;
     hydratedRef.current = true;
     if (hasAnyTraceFilterParams(searchParams)) return;
-    const saved = loadTraceFiltersFromStorage(storageKey);
-    if (!saved) return;
+    const loaded = loadTraceFiltersFromStorage(storageKey);
+    const saved = loaded && withoutParams(loaded, excludeParams);
+    if (!saved?.toString()) return;
     setSearchParams(
       prev => {
         const next = new URLSearchParams(prev);
@@ -58,10 +78,10 @@ export function useTraceFilterPersistence(
     (next, setOptions) => {
       setSearchParams(prev => {
         const resolved = typeof next === 'function' ? next(prev) : next;
-        saveTraceFiltersToStorage(resolved, storageKey);
+        saveTraceFiltersToStorage(withoutParams(resolved, excludeParams), storageKey);
         return resolved;
       }, setOptions);
     },
-    [setSearchParams, storageKey],
+    [setSearchParams, storageKey, excludeParams],
   );
 }

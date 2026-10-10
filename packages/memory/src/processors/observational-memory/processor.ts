@@ -209,8 +209,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const runState = memoryContext?.runState?.();
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
-    const actorModelContext = model?.modelId
-      ? { provider: model.provider, modelId: model.modelId, providerOptions: args.providerOptions }
+    const actorModelContext = model
+      ? {
+          provider: model.provider,
+          modelId: model.modelId,
+          providerOptions: args.providerOptions,
+          model,
+        }
       : undefined;
     state.__omActorModelContext = actorModelContext;
 
@@ -438,7 +443,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         const liveTurn = turn && !turn.ended ? turn : undefined;
 
         if (liveTurn) {
-          await liveTurn.end();
+          // Use the pipeline's accepted terminal list as the persistence authority,
+          // rather than relying on the list captured when the turn began.
+          await liveTurn.end(messageList);
         }
         this.turn = undefined;
         state.__omTurn = undefined;

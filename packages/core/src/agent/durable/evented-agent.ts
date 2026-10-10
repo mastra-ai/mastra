@@ -148,6 +148,12 @@ export class EventedAgent<
    * @param workflowInput - The serialized workflow input
    * @internal
    */
+  // The evented engine may resolve before the suspended snapshot lands, so
+  // closeOnSuspend keeps closing on the SUSPENDED event.
+  protected override get suspendPersistedOnReturn(): boolean {
+    return false;
+  }
+
   protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     // Captured now: a later resume() replaces the registry's fence before this
     // segment's background promise settles.

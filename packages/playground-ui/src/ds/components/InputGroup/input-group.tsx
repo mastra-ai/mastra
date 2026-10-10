@@ -13,6 +13,7 @@ import {
   fieldErrorRimWithin,
   inputSurfaceAndFocusWithinStyle,
 } from '@/ds/primitives/form-element';
+import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { TextareaControl } from '@/ds/primitives/textarea-control';
 import { cn } from '@/lib/utils';
 
@@ -169,7 +170,7 @@ export type InputGroupInputProps = Omit<React.ComponentProps<'input'>, 'size'> &
   error?: boolean;
 };
 
-function InputGroupInput({ className, testId, error, type = 'text', ...props }: InputGroupInputProps) {
+function InputGroupInput({ className, testId, error, type = 'text', autoComplete, ...props }: InputGroupInputProps) {
   return (
     <InputPrimitive
       type={type}
@@ -188,6 +189,7 @@ function InputGroupInput({ className, testId, error, type = 'text', ...props }: 
       )}
       {...deprecatedErrorAria(error)}
       {...props}
+      {...textFieldAutofillProps(autoComplete)}
       {...keepOwnAccessibleName(props)}
     />
   );

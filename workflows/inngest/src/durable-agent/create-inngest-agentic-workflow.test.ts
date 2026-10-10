@@ -5,6 +5,7 @@ import { Mastra } from '@mastra/core/mastra';
 import type { AnyExportedSpan, ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { MockStore } from '@mastra/core/storage';
+import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import { Observability } from '@mastra/observability';
 import { Inngest } from 'inngest';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -62,6 +63,132 @@ function findForeachEntry(steps: any[]): any {
   }
   return undefined;
 }
+
+describe('createInngestDurableAgenticWorkflow step-finish emission', () => {
+  const conditionFor = (maxSteps: number) => {
+    const workflow = createInngestDurableAgenticWorkflow({
+      inngest: new Inngest({ id: `inngest-step-finish-${maxSteps}` }),
+      maxSteps,
+    });
+    const loop = findEntry((workflow as any).executionGraph.steps, entry => entry.type === 'loop');
+    expect(loop).toBeDefined();
+    return loop.condition;
+  };
+
+  const runCondition = async (
+    condition: any,
+    state: any,
+    stepRun: (_id: string, fn: () => Promise<boolean>) => Promise<boolean> = async (_id, fn) => fn(),
+  ) => {
+    const published: any[] = [];
+    const pubsub = { publish: vi.fn(async (_topic: string, event: any) => void published.push(event)) };
+    const result = await condition({
+      inputData: state,
+      engine: { step: { run: stepRun } },
+      [PUBSUB_SYMBOL]: pubsub,
+    });
+    return { result, chunks: published.map(event => event.data) };
+  };
+
+  it('emits a terminating step-finish after maxSteps resolves continuation', async () => {
+    const deferredStepFinishChunk = {
+      type: 'step-finish',
+      runId: 'run-max-steps',
+      payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
+    };
+    const state = {
+      runId: 'run-max-steps',
+      iterationCount: 1,
+      options: {},
+      accumulatedSteps: [
+        {
+          text: '',
+          toolCalls: [{ toolCallId: 'call-1', toolName: 'step', args: {} }],
+          toolResults: [{ toolCallId: 'call-1', toolName: 'step', result: { done: true } }],
+        },
+      ],
+      lastStepResult: { reason: 'tool-calls', isContinued: true, warnings: [] },
+      deferredStepFinishChunk,
+    };
+    const { result, chunks } = await runCondition(conditionFor(1), state);
+
+    expect(result).toBe(false);
+    expect(state.deferredStepFinishChunk).toBeUndefined();
+    expect(chunks).toEqual([
+      {
+        ...deferredStepFinishChunk,
+        payload: {
+          stepResult: { reason: 'tool-calls', isContinued: false },
+          _durableStepContent: [
+            { type: 'tool-call', toolCallId: 'call-1', toolName: 'step', args: {} },
+            { type: 'tool-result', toolCallId: 'call-1', toolName: 'step', result: { done: true } },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('emits a continuing step-finish when the loop continues', async () => {
+    const deferredStepFinishChunk = {
+      type: 'step-finish',
+      runId: 'run-continue',
+      payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
+    };
+    const { result, chunks } = await runCondition(conditionFor(3), {
+      runId: 'run-continue',
+      iterationCount: 1,
+      options: {},
+      accumulatedSteps: [{ text: '', toolCalls: [], toolResults: [] }],
+      lastStepResult: { reason: 'tool-calls', isContinued: true, warnings: [] },
+      deferredStepFinishChunk,
+    });
+
+    expect(result).toBe(true);
+    expect(chunks[0]).toMatchObject({
+      type: 'step-finish',
+      payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
+    });
+  });
+
+  it('emits the completed step-finish before a stopWhen decision error propagates', async () => {
+    const condition = conditionFor(3);
+    const published: any[] = [];
+    const policyError = new Error('stopWhen failed');
+
+    await expect(
+      condition({
+        inputData: {
+          runId: 'run-stop-when-error',
+          iterationCount: 1,
+          options: {},
+          accumulatedSteps: [{ text: '', toolCalls: [], toolResults: [] }],
+          lastStepResult: { reason: 'tool-calls', isContinued: true, warnings: [] },
+          deferredStepFinishChunk: {
+            type: 'step-finish',
+            runId: 'run-stop-when-error',
+            payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
+          },
+        },
+        engine: {
+          step: {
+            run: vi.fn(async (id: string, fn: () => Promise<boolean>) => {
+              if (id.startsWith('stop-when-')) throw policyError;
+              return fn();
+            }),
+          },
+        },
+        [PUBSUB_SYMBOL]: { publish: vi.fn(async (_topic: string, event: any) => void published.push(event)) },
+      }),
+    ).rejects.toBe(policyError);
+
+    expect(published.map(event => event.data)).toMatchObject([
+      {
+        type: 'step-finish',
+        payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
+      },
+    ]);
+  });
+});
 
 describe('createInngestDurableAgenticWorkflow tool-call concurrency', () => {
   const inngest = new Inngest({ id: 'inngest-agentic-workflow-concurrency-tests' });
@@ -459,6 +586,49 @@ describe('createInngestDurableAgenticWorkflow snapshot policy (#24796)', () => {
   );
 });
 
+describe('Inngest prepareStep system-message baseline', () => {
+  it('forwards the original system messages after a one-step override mutates the transcript', async () => {
+    const inngest = new Inngest({ id: 'inngest-prepare-step-system-message-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const steps = (workflow as any).executionGraph.steps;
+    const initEntry = findEntry(
+      steps,
+      candidate => candidate.type === 'mapping' && candidate.id === 'init-iteration-state',
+    );
+    const llmInputEntry = findEntry(
+      steps,
+      candidate => candidate.type === 'mapping' && candidate.id === 'map-to-llm-input',
+    );
+
+    const initialMessageList = new MessageList();
+    initialMessageList.addSystem('original system message');
+    const iterationState = await initEntry.mapConfig({
+      inputData: {
+        runId: 'run-1',
+        agentId: 'agent-1',
+        messageId: 'msg-1',
+        messageListState: initialMessageList.serialize(),
+        toolsMetadata: [],
+        modelConfig: {},
+        options: {},
+        state: {},
+      },
+    });
+
+    const overriddenMessageList = new MessageList().deserialize(iterationState.messageListState);
+    overriddenMessageList.replaceAllSystemMessages([{ role: 'system', content: 'step-two-only override' }]);
+    iterationState.messageListState = overriddenMessageList.serialize();
+    iterationState.iterationCount = 2;
+    iterationState.stepIndex = 2;
+
+    const mapped = await llmInputEntry.mapConfig({ inputData: iterationState });
+    expect(new MessageList().deserialize(mapped.messageListState).getSystemMessages()).toEqual([
+      { role: 'system', content: 'step-two-only override' },
+    ]);
+    expect(mapped.initialUntaggedSystemMessages).toEqual([{ role: 'system', content: 'original system message' }]);
+  });
+});
+
 describe('Inngest per-step processor history (#25193)', () => {
   it('forwards accumulated steps to the LLM execution step on later iterations', async () => {
     const inngest = new Inngest({ id: 'inngest-processor-history-tests' });
@@ -485,5 +655,45 @@ describe('Inngest per-step processor history (#25193)', () => {
     const mapped = await entry.mapConfig({ inputData });
     expect(mapped.stepIndex).toBe(1);
     expect(mapped.accumulatedSteps).toEqual([priorStep]);
+  });
+});
+
+describe('Inngest fallback model list (#26146)', () => {
+  it('carries modelList into the LLM step on every iteration', async () => {
+    const inngest = new Inngest({ id: 'inngest-model-list-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const steps = (workflow as any).executionGraph.steps;
+    const byId = (id: string) => findEntry(steps, c => c.type === 'mapping' && c.id === id);
+
+    const modelList = [
+      { id: 'primary', config: { provider: 'openai', modelId: 'a' }, maxRetries: 0, enabled: true },
+      { id: 'backup', config: { provider: 'openai', modelId: 'b' }, maxRetries: 0, enabled: true },
+    ];
+    const state = await byId('init-iteration-state').mapConfig({
+      inputData: {
+        runId: 'run-1',
+        agentId: 'agent-1',
+        messageId: 'msg-1',
+        messageListState: emptyMessageListState(),
+        toolsMetadata: [],
+        modelConfig: {},
+        modelList,
+        options: {},
+        state: {},
+      },
+    });
+    expect((await byId('map-to-llm-input').mapConfig({ inputData: state })).modelList).toEqual(modelList);
+
+    const next = await byId('update-iteration-state').mapConfig({
+      inputData: {
+        messageListState: emptyMessageListState(),
+        messageId: 'msg-1',
+        state: {},
+        output: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        stepResult: { reason: 'tool-calls' },
+      },
+      getInitData: () => state,
+    });
+    expect((await byId('map-to-llm-input').mapConfig({ inputData: next })).modelList).toEqual(modelList);
   });
 });

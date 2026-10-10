@@ -141,8 +141,12 @@ export class WorkingMemory implements Processor {
       };
     }
 
-    // Check if readOnly mode is enabled (from options or memoryConfig)
-    const isReadOnly = this.options.readOnly || memoryContext.memoryConfig?.readOnly;
+    // Read-only when configured, or when the agent has no updateWorkingMemory tool (agentManaged: false)
+    const workingMemoryConfig = memoryContext.memoryConfig?.workingMemory;
+    const isReadOnly =
+      this.options.readOnly ||
+      memoryContext.memoryConfig?.readOnly ||
+      (typeof workingMemoryConfig === 'object' && workingMemoryConfig.agentManaged === false);
 
     // Format working memory instruction
     let instruction: string;

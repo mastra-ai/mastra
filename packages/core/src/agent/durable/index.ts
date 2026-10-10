@@ -154,6 +154,7 @@ export type {
   AgentStreamEvent,
   AgentChunkEventData,
   AgentStepFinishEventData,
+  DurableAgentStepFinishResult,
   AgentFinishEventData,
   AgentErrorEventData,
   AgentSuspendedEventData,

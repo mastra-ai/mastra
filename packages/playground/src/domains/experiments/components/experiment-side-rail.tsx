@@ -18,7 +18,7 @@ export interface ExperimentSideRailProps {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="grid gap-3">
+    <section className="grid grid-cols-1 gap-3">
       <Txt as="h2" variant="subheading" tone="ink">
         {title}
       </Txt>
@@ -41,7 +41,11 @@ export function ExperimentSideRail({ experiment, metrics, className }: Experimen
       : null;
 
   return (
-    <Card as="aside" aria-label="Experiment details" className={cn('grid content-start gap-5 p-5', className)}>
+    <Card
+      as="aside"
+      aria-label="Experiment details"
+      className={cn('grid grid-cols-1 content-start gap-5 p-5', className)}
+    >
       <Section title="Pipeline">
         <ExperimentFlowChain experiment={experiment} />
         {experiment.agentVersion && (

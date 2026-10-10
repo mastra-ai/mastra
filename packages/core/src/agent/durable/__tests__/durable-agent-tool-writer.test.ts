@@ -141,11 +141,12 @@ describe('DurableAgent tool writer', () => {
     });
 
     // Simulate a separate worker process: the run-registry entry exists but has
-    // no tools, so the tool-call step falls through to `mastra.getTool()`, which
-    // returns the raw `Tool` instance (not a CoreToolBuilder wrapper).
+    // no per-step tool snapshot, so the tool-call step falls through to
+    // `mastra.getTool()`, which returns the raw `Tool` instance (not a
+    // CoreToolBuilder wrapper).
     const originalSet = globalRunRegistry.set.bind(globalRunRegistry);
     globalRunRegistry.set = ((runId: string, entry: any) =>
-      originalSet(runId, { ...entry, tools: {} })) as typeof globalRunRegistry.set;
+      originalSet(runId, { ...entry, tools: undefined, baseTools: undefined })) as typeof globalRunRegistry.set;
 
     try {
       const chunks = await drain((await durableAgent.stream('go', { maxSteps: 3 })).fullStream);

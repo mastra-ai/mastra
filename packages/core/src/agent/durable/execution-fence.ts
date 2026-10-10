@@ -776,7 +776,11 @@ export class ExecutionFence implements RunFenceScope {
     this.#markLost(new DurableExecutionFenceError(EXECUTION_ABANDONED_ERROR_ID, this.#details()));
     try {
       const successor = await this.#backend.abandon(this.claim);
-      if (successor && this.#memoryStore) await this.#memoryStore.raiseRunFence(successor);
+      if (successor && this.#memoryStore) {
+        await this.#memoryStore.raiseRunFence(successor);
+        // Nothing executes under the successor; retire it so retention can prune it.
+        await this.#retireMemoryFence(successor);
+      }
     } catch (error) {
       this.#logger?.warn?.(
         `[DurableAgent] run ${this.runId}: failed to release the abandoned run; it can be recovered once its claim expires: ${error}`,
@@ -790,6 +794,21 @@ export class ExecutionFence implements RunFenceScope {
       await this.#backend.release(this.claim);
     } catch (error) {
       this.#logger?.warn?.(`[DurableAgent] run ${this.runId}: failed to release the execution claim: ${error}`);
+    }
+    if (this.generation !== undefined) {
+      await this.#retireMemoryFence({ runId: this.runId, generation: this.generation, ownerId: this.executionId });
+    }
+  }
+
+  /** Mark a settled fence retired in memory so `memory.runFences` retention can prune it. */
+  async #retireMemoryFence(fence: RunFence): Promise<void> {
+    if (!this.#memoryStore) return;
+    try {
+      await this.#memoryStore.retireRunFence(fence);
+    } catch (error) {
+      this.#logger?.warn?.(
+        `[DurableAgent] run ${this.runId}: failed to retire the memory run fence; retention will not prune it: ${error}`,
+      );
     }
   }
 
@@ -960,6 +979,32 @@ export async function assertExecutionOwned(args: {
   const backend = await resolveRemoteBackend(args.mastra, args.agentId, args.runId, claim);
   if (!backend) return;
   await backend.verify(claim, { agentId: args.agentId, runId: args.runId, executionId: claim.executionId });
+}
+
+/**
+ * {@link assertExecutionOwned} for writes that may land after the execution
+ * settled, such as a background task's result. Once the claim is released,
+ * the write is accepted until another execution claims the run, as storage
+ * accepts the released claim's writes.
+ */
+export async function assertExecutionNotSuperseded(args: {
+  runId: string;
+  agentId: string;
+  requestContext: RequestContext | undefined;
+  mastra: Mastra | undefined;
+}): Promise<void> {
+  const claim = getExecutionClaim(args.requestContext, args.runId);
+  if (!claim) return;
+
+  const local = fencesByExecutionId.get(claim.executionId);
+  if (local) return local.verify();
+
+  const backend = await resolveRemoteBackend(args.mastra, args.agentId, args.runId, claim);
+  if (!backend) return;
+  const details = { agentId: args.agentId, runId: args.runId, executionId: claim.executionId };
+  if (await retryOnce(() => backend.isSuperseded(claim), details)) {
+    throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
+  }
 }
 
 type FenceableStep = { execute: (params: any) => Promise<any> };

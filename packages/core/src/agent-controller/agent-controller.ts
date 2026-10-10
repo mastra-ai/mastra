@@ -1,14 +1,18 @@
 import { Agent } from '../agent';
+import { DurableStepIds } from '../agent/durable/constants';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
 import { isUserAuthoredMessage } from '../agent/signals';
 import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
+import type { ActorSignal, MastraFGAPermissionInput } from '../auth/ee';
+import { MastraFGAPermissions } from '../auth/ee';
 import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
 import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import type { MastraModelConfig } from '../llm/model/shared.types';
+import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { Mastra } from '../mastra';
 import { TITLE_PINNED_THREAD_METADATA_KEY } from '../memory';
 import type { MastraMemory } from '../memory/memory';
@@ -395,8 +399,10 @@ export class AgentController<TState = {}> {
     });
     session.om.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
-      setState: updates => void session.state.set(updates as Partial<TState>),
+      getCurrentModelId: () => session.model.get() || undefined,
+      setState: updates => session.state.set(updates as Partial<TState>),
       setSetting: ({ key, value }) => session.thread.setSetting({ key, value }),
+      deleteSetting: ({ key }) => session.thread.deleteSetting({ key }),
       omConfig: this.config.omConfig,
       gateways: this.config.gateways ?? [],
     });
@@ -413,6 +419,20 @@ export class AgentController<TState = {}> {
     session.setMachinery({
       getAgent: () => this.getCurrentAgent(session),
       getRunScope: runId => this.getMastra()?.__getRunScope(runId),
+      releaseSuspendedRun: async runId => {
+        const mastra = this.getMastra();
+        if (!mastra) return;
+        mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
+        const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+        await Promise.all(
+          [
+            AGENTIC_LOOP_WORKFLOW_ID,
+            AGENTIC_EXECUTION_WORKFLOW_ID,
+            DurableStepIds.AGENTIC_LOOP,
+            DurableStepIds.AGENTIC_EXECUTION,
+          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
+        );
+      },
       // History lets the runtime skip retained run parts that storage already
       // covers, so a fresh session never re-acts on finished runs.
       subscribeToThread: async ({ agent, resourceId, threadId, requestContext }) =>
@@ -426,6 +446,13 @@ export class AgentController<TState = {}> {
       buildSharedRunOptions: () => this.buildSharedRunOptions(session),
       buildToolsets: requestContext => this.buildToolsets(session, requestContext),
       buildRequestContext: requestContext => this.buildRequestContext(session, requestContext),
+      authorizeExecute: requestContext =>
+        this.requireAgentControllerFGA({
+          permission: MastraFGAPermissions.AGENT_CONTROLLER_EXECUTE,
+          requestContext,
+          resourceId: session.identity.getResourceId(),
+          sessionId: session.identity.getId(),
+        }),
       persistTokenUsage: () => this.persistTokenUsage(session),
       generateId: () => this.generateId(),
       resolveTransitionModeId: () => this.resolveTransitionModeId(session),
@@ -515,6 +542,13 @@ export class AgentController<TState = {}> {
     const effectiveSessionId = id ?? this.config.id;
     const effectiveOwnerId = ownerId ?? this.config.id;
     const registryKey = sessionRegistryKey(effectiveResourceId, scope);
+
+    await this.requireAgentControllerFGA({
+      permission: MastraFGAPermissions.AGENT_CONTROLLER_EXECUTE,
+      requestContext,
+      resourceId: effectiveResourceId,
+      sessionId: effectiveSessionId,
+    });
 
     // Get-or-create loop: a (resourceId, scope) pair maps to exactly one
     // durable session per AgentController. Asking for the same resource+scope
@@ -760,7 +794,16 @@ export class AgentController<TState = {}> {
    * signals as the session that owns the target thread, rather than an
    * arbitrary session.
    */
-  async getSessionByResource(resourceId: string, scope?: string): Promise<Session<TState> | undefined> {
+  async getSessionByResource(
+    resourceId: string,
+    scope?: string,
+    requestContext?: RequestContext,
+  ): Promise<Session<TState> | undefined> {
+    await this.requireAgentControllerFGA({
+      permission: MastraFGAPermissions.AGENT_CONTROLLER_READ,
+      requestContext,
+      resourceId,
+    });
     return this.#sessionsByResource.get(sessionRegistryKey(resourceId, scope));
   }
 
@@ -830,6 +873,42 @@ export class AgentController<TState = {}> {
    */
   getMastra(): Mastra | undefined {
     return this.#externalMastra ?? this.#internalMastra;
+  }
+
+  /** @internal */
+  async requireAgentControllerFGA({
+    permission,
+    requestContext,
+    resourceId,
+    sessionId,
+  }: {
+    permission: MastraFGAPermissionInput;
+    requestContext?: RequestContext;
+    resourceId?: string;
+    sessionId?: string;
+  }): Promise<void> {
+    const fgaProvider = this.getMastra()?.getServer()?.fga;
+    if (!fgaProvider) return;
+
+    const user = requestContext?.get('user');
+    const actor = requestContext?.get('actor') as ActorSignal | undefined;
+    if (!user && !actor) return;
+
+    const { requireFGA } = await import('../auth/ee/fga-check');
+    await requireFGA({
+      fgaProvider,
+      user,
+      resource: { type: 'agent-controller', id: this.id },
+      permission,
+      requestContext,
+      actor,
+      context: resourceId ? { resourceId } : undefined,
+      metadata: {
+        controllerId: this.id,
+        resourceId,
+        sessionId,
+      },
+    });
   }
 
   /**
@@ -1385,7 +1464,7 @@ export class AgentController<TState = {}> {
       throw new Error('This conversation has no message to name it from yet.');
     }
 
-    const session = resourceId ? await this.getSessionByResource(resourceId, scope) : undefined;
+    const session = resourceId ? await this.getSessionByResource(resourceId, scope, callerContext) : undefined;
     const agent = session
       ? this.getCurrentAgent(session)
       : this.propagateRuntimeServicesToAgent(this.getAgentForMode(this.#defaultMode));

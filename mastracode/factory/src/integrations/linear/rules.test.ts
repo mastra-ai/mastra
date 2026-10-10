@@ -354,6 +354,37 @@ describe('LinearRules', () => {
     },
   );
 
+  it('re-reads the card and commits at its fresh revision when a concurrent write makes the commit stale', async () => {
+    const { project, service, workItems } = await setup();
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: `linear:${issue.identifier}`,
+          url: issue.url,
+        },
+        title: `${issue.identifier}: ${issue.title}`,
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const original = workItems.commitRuleEvaluation.bind(workItems);
+    const commit = vi
+      .spyOn(workItems, 'commitRuleEvaluation')
+      .mockImplementationOnce(input => original({ ...input, expectedRevision: (input.expectedRevision ?? 0) - 1 }));
+
+    await expect(
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
+    ).resolves.toEqual({ status: 'committed', ingested: 1 });
+    expect(commit).toHaveBeenCalledTimes(2);
+    expect(commit.mock.calls[1]?.[0].workItemId).toEqual(expect.any(String));
+  });
+
   it('retains ingestion bookkeeping when an event is disabled', async () => {
     const { project, service, workItems } = await setup({ issueObserved: null });
     const input = { orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] };

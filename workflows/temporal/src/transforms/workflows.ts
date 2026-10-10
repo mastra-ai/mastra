@@ -108,16 +108,28 @@ function getTemporalWorkflowRuntimeOptions(program: t.Program): t.ObjectExpressi
         continue;
       }
 
-      for (const property of temporalParams.properties) {
-        if (
-          t.isObjectProperty(property) &&
-          getObjectPropertyName(property) === 'startToCloseTimeout' &&
-          t.isExpression(property.value)
-        ) {
-          return t.objectExpression([
-            t.objectProperty(t.identifier('startToCloseTimeout'), t.cloneNode(property.value, true)),
-          ]);
+      const runtimeProperties = new Map<string, t.ObjectProperty>();
+      const collectRuntimeProperties = (params: t.ObjectExpression): void => {
+        for (const property of params.properties) {
+          if (t.isSpreadElement(property)) {
+            if (!t.isObjectExpression(property.argument)) {
+              continue;
+            }
+            collectRuntimeProperties(property.argument);
+            continue;
+          }
+          if (!t.isObjectProperty(property) || !t.isExpression(property.value)) {
+            continue;
+          }
+          const name = getObjectPropertyName(property);
+          if (name === 'startToCloseTimeout' || name === 'retry') {
+            runtimeProperties.set(name, t.objectProperty(t.identifier(name), t.cloneNode(property.value, true)));
+          }
         }
+      };
+      collectRuntimeProperties(temporalParams);
+      if (runtimeProperties.size > 0) {
+        return t.objectExpression([...runtimeProperties.values()]);
       }
     }
   }

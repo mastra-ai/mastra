@@ -141,6 +141,32 @@ describe('turn.end() idle buffering', () => {
     );
   });
 
+  it('uses an explicitly supplied terminal list for both persistence and idle buffering', async () => {
+    const mockOM = createMockOM({ asyncEnabled: true });
+    mockOM.getUnobservedMessages = vi.fn((messages: MastraDBMessage[]) => messages);
+    const stepMessageList = new MessageList({ threadId, resourceId });
+    stepMessageList.add(createTestMessage('Stale response', 'assistant', 'stale-response'), 'response');
+    const finalMessageList = new MessageList({ threadId, resourceId });
+    finalMessageList.add(createTestMessage('Final response', 'assistant', 'final-response'), 'response');
+
+    const turn = new ObservationTurn({
+      om: mockOM as any,
+      threadId,
+      resourceId,
+      messageList: stepMessageList,
+    });
+    turn.setRecord(mockOM._mockRecord);
+
+    await turn.end(finalMessageList);
+
+    expect(mockOM.persistMessages).toHaveBeenCalledTimes(1);
+    expect(mockOM.persistMessages).toHaveBeenCalledWith(finalMessageList.get.response.db(), threadId, resourceId);
+    expect(mockOM.getUnobservedMessages).toHaveBeenCalledWith(finalMessageList.get.all.db(), mockOM._mockRecord);
+    expect(mockOM.buffer).toHaveBeenCalledWith(
+      expect.objectContaining({ messages: finalMessageList.get.response.db() }),
+    );
+  });
+
   // Regression: https://github.com/mastra-ai/mastra/issues/19730
   // `context`-sourced messages are per-run ephemeral input. They must never reach the
   // buffer/seal/persist pipeline, which would upsert them as durable user messages.
@@ -337,7 +363,7 @@ describe('turn.end() idle buffering', () => {
     expect(mockOM.buffer).toHaveBeenCalledTimes(1);
   });
 
-  it('should pass all context fields to buffer()', async () => {
+  it('captures the invocation model for automatic resolution in the async buffer', async () => {
     const unobservedMessages = createMessages(3);
     const mockOM = createMockOM({ asyncEnabled: true, unobservedMessages });
     const mockMessageList = createMockMessageList(unobservedMessages);
@@ -345,7 +371,8 @@ describe('turn.end() idle buffering', () => {
     const mockSendSignal = vi.fn();
     const mockRequestContext = { get: vi.fn() };
     const mockObservabilityContext = { span: vi.fn() };
-    const mockActorModelContext = { provider: 'test-provider', modelId: 'test-model' };
+    const actorModel = { provider: 'test-provider', modelId: 'test-model' };
+    const mockActorModelContext = { provider: 'test-provider', modelId: 'test-model', model: actorModel };
 
     const turn = new ObservationTurn({
       om: mockOM as any,

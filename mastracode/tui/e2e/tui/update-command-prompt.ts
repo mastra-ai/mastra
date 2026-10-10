@@ -19,17 +19,17 @@ export const updateCommandPromptScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
     terminal.submit('/update');
 
-    await runtime.waitForScreenText(/A new version is available: v99\.0\.0/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Mastra Code v\S+ → v99\.0\.0/i, terminal, 10_000);
     await runtime.waitForScreenText(/What's new/i, terminal);
     await runtime.waitForScreenText(/Update prompt e2e fixture entry/i, terminal);
-    await runtime.waitForScreenText(/Would you like to update now/i, terminal);
+    await runtime.waitForScreenText(/Update now\?/i, terminal);
     await runtime.waitForScreenText(/Yes/i, terminal);
     await runtime.waitForScreenText(/No/i, terminal);
 
     terminal.write('\x1b[B');
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Update skipped/i, terminal);
+    await runtime.waitForScreenText(/Skipped v99\.0\.0\. Run \/update to install it later/i, terminal);
     await (expect(terminal.getByText(/→|›|>/gi, { full: true, strict: false })) as any).toBeVisible();
 
     terminal.keyCtrlC();

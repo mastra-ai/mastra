@@ -15,11 +15,12 @@ export const DataListRowStatic = forwardRef<HTMLDivElement, DataListRowStaticPro
   ({ children, className, colStart, colEnd, featured, variant, style, ...rest }, ref) => {
     const isWrapped = useDataListRowWrapperContext();
     const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
+    const cellsClass = hasColumnOverride ? undefined : 'data-list-cells';
     const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
     return (
       <div
         ref={ref}
-        className={cn(isWrapped ? 'grid grid-cols-subgrid gap-4 px-3' : dataListRowStaticStyles, className)}
+        className={cn(isWrapped ? 'grid grid-cols-subgrid gap-4 px-3' : dataListRowStaticStyles, cellsClass, className)}
         style={resolvedStyle}
         data-featured={featured || undefined}
         data-variant={variant ?? 'default'}

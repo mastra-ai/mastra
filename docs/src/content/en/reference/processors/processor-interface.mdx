@@ -625,6 +625,13 @@ processLLMRequest?(
     isOptional: true,
   },
   {
+    name: 'workspace',
+    type: 'Workspace',
+    description:
+      "The workspace of this step, the one the agent's tools use. Undefined when the agent has no workspace.",
+    isOptional: true,
+  },
+  {
     name: 'stepNumber',
     type: 'number',
     description: 'Current step number (0-indexed). Step 0 is the initial LLM call.',

@@ -36,12 +36,14 @@ import type {
   StreamObjectResult,
   StreamTextResult,
 } from '../llm/model/base.types';
+import { validateModelTimeoutSettings } from '../llm/model/model-settings';
 import { MastraLLMVNext } from '../llm/model/model.loop';
 import { mergeProviderOptions } from '../llm/model/provider-options';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
+import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { networkLoop } from '../loop/network';
 import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
@@ -57,6 +59,7 @@ import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import { normalizeMessageHistoryConfig } from '../memory/message-history-config';
 import { getMemoryRunState } from '../memory/run-state';
+import { checkThreadFGA } from '../memory/thread-fga';
 import type { MemoryConfig, MemoryConfigInternal } from '../memory/types';
 import {
   resolveDeliveryFailureUpdate,
@@ -185,7 +188,7 @@ import type {
   DurableAgentStreamOptions,
   DurableAgentStreamResult,
 } from './durable/durable-agent';
-import type { AgentStepFinishEventData, AgentSuspendedEventData } from './durable/types';
+import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
@@ -446,6 +449,7 @@ type ProcessorLoadedToolsProvider = {
     requestContext: RequestContext;
     tools?: Record<string, unknown>;
     getMessages?: () => Promise<MastraDBMessage[]>;
+    runMessages?: MastraDBMessage[];
   }) => Record<string, ToolToConvert> | Promise<Record<string, ToolToConvert>>;
 };
 
@@ -3762,7 +3766,12 @@ export class Agent<
    * @internal
    */
   __resetToOriginalModel() {
-    this.model = Array.isArray(this.#originalModel) ? [...this.#originalModel] : this.#originalModel;
+    const originalModel = this.#originalModel;
+    if (Array.isArray(originalModel)) {
+      this.model = [...originalModel];
+      return;
+    }
+    this.model = originalModel;
   }
 
   /**
@@ -4614,10 +4623,13 @@ export class Agent<
     tools,
     getModel,
     memoryConfig,
+    runMessages,
     ...rest
   }: {
     processors: InputProcessorOrWorkflow[];
     memoryConfig?: MemoryConfigInternal;
+    /** In-flight messages of the run, not yet in memory (durable recovery). */
+    runMessages?: MastraDBMessage[];
     /**
      * Tools already resolved for this request. A processor that made a
      * request-scoped tool searchable needs them to rebuild its executor here,
@@ -4642,14 +4654,18 @@ export class Agent<
     // the persisted thread here. Loaded lazily and at most once.
     let messagesPromise: Promise<MastraDBMessage[]> | undefined;
     const getMessages = (): Promise<MastraDBMessage[]> => {
-      if (!threadId) return Promise.resolve([]);
+      if (!threadId) return Promise.resolve(runMessages ?? []);
       messagesPromise ??= this.getMemoryMessages({
         threadId,
         resourceId,
         vectorMessageSearch: '',
         memoryConfig,
         requestContext,
-      }).then(result => result.messages);
+      }).then(result => {
+        if (!runMessages?.length) return result.messages;
+        const seen = new Set(result.messages.map(m => m.id));
+        return [...result.messages, ...runMessages.filter(m => !seen.has(m.id))];
+      });
       return messagesPromise;
     };
 
@@ -4666,7 +4682,12 @@ export class Agent<
         return;
       }
 
-      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({ requestContext, tools, getMessages });
+      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({
+        requestContext,
+        tools,
+        getMessages,
+        runMessages,
+      });
       if (!loadedTools || Object.keys(loadedTools).length === 0) {
         return;
       }
@@ -5689,6 +5710,16 @@ export class Agent<
                 // Save rejection messages to sub-agent's memory so the UI can display them
                 const memory = await resolvedAgent.getMemory({ requestContext: subAgentRequestContext });
                 if (memory) {
+                  await checkThreadFGA({
+                    mastra: this.#mastra,
+                    user: subAgentRequestContext.get('user'),
+                    threadId: subAgentThreadId,
+                    resourceId: subAgentResourceId,
+                    agentId: resolvedAgent.id,
+                    requestContext: subAgentRequestContext,
+                    permission: MastraFGAPermissions.MEMORY_WRITE,
+                    actor: invocationActor,
+                  });
                   try {
                     // Create user message with the original prompt
                     const userMessage: MastraDBMessage = {
@@ -5731,6 +5762,7 @@ export class Agent<
                     await memory.createThread({
                       resourceId: subAgentResourceId,
                       threadId: subAgentThreadId,
+                      ...(startResult.threadMetadata ? { metadata: startResult.threadMetadata } : {}),
                     });
 
                     await memory.saveMessages({
@@ -5798,6 +5830,9 @@ export class Agent<
               // Only the framework-resolved context marker can select a suspended sub-agent run.
               // Model-authored resumeData and suspendedToolRunId arguments are not provenance.
               const shouldResumeSubAgent = resumeData !== undefined && !!suspendedToolRunId;
+              const subAgentThreadMetadata = shouldResumeSubAgent
+                ? undefined
+                : (startResult as DelegationStartResult | undefined)?.threadMetadata;
 
               // Apply messageFilter callback (runs after onDelegationStart so effectivePrompt
               // reflects any hook modifications). Falls back to full context on error.
@@ -5847,7 +5882,14 @@ export class Agent<
                     // alongside the snapshot-backfilled thread trips thread-ownership
                     // validation, since the thread belongs to the original run's resource.
                     memory: {
-                      ...(shouldResumeSubAgent ? {} : { resource: subAgentResourceId, thread: subAgentThreadId }),
+                      ...(shouldResumeSubAgent
+                        ? {}
+                        : {
+                            resource: subAgentResourceId,
+                            thread: subAgentThreadMetadata
+                              ? { id: subAgentThreadId, metadata: subAgentThreadMetadata }
+                              : subAgentThreadId,
+                          }),
                       options: {
                         lastMessages: false as const,
                         // Title generation is a top-level thread concern. Ephemeral subagent
@@ -5961,11 +6003,28 @@ export class Agent<
                 // Save response messages to sub-agent's memory so the UI can display them
                 const memory = await resolvedAgent.getMemory({ requestContext: subAgentRequestContext });
                 if (memory) {
+                  await checkThreadFGA({
+                    mastra: this.#mastra,
+                    user: subAgentRequestContext.get('user'),
+                    threadId: effectiveGenerateThreadId,
+                    resourceId: effectiveGenerateResourceId,
+                    agentId: resolvedAgent.id,
+                    requestContext: subAgentRequestContext,
+                    permission: MastraFGAPermissions.MEMORY_WRITE,
+                    actor: invocationActor,
+                  });
                   try {
-                    await memory.createThread({
-                      resourceId: effectiveGenerateResourceId,
-                      threadId: effectiveGenerateThreadId,
-                    });
+                    // On resume the thread already exists; re-creating it would overwrite its metadata.
+                    if (
+                      !shouldResumeSubAgent ||
+                      !(await memory.getThreadById({ threadId: effectiveGenerateThreadId }))
+                    ) {
+                      await memory.createThread({
+                        resourceId: effectiveGenerateResourceId,
+                        threadId: effectiveGenerateThreadId,
+                        ...(subAgentThreadMetadata ? { metadata: subAgentThreadMetadata } : {}),
+                      });
+                    }
 
                     await memory.saveMessages({
                       messages: fullSubAgentMessages,
@@ -6117,11 +6176,28 @@ export class Agent<
                 // Save response messages to sub-agent's memory so the UI can display them
                 const streamMemory = await resolvedAgent.getMemory({ requestContext: subAgentRequestContext });
                 if (streamMemory) {
+                  await checkThreadFGA({
+                    mastra: this.#mastra,
+                    user: subAgentRequestContext.get('user'),
+                    threadId: effectiveStreamThreadId,
+                    resourceId: effectiveStreamResourceId,
+                    agentId: resolvedAgent.id,
+                    requestContext: subAgentRequestContext,
+                    permission: MastraFGAPermissions.MEMORY_WRITE,
+                    actor: invocationActor,
+                  });
                   try {
-                    await streamMemory.createThread({
-                      resourceId: effectiveStreamResourceId,
-                      threadId: effectiveStreamThreadId,
-                    });
+                    // On resume the thread already exists; re-creating it would overwrite its metadata.
+                    if (
+                      !shouldResumeSubAgent ||
+                      !(await streamMemory.getThreadById({ threadId: effectiveStreamThreadId }))
+                    ) {
+                      await streamMemory.createThread({
+                        resourceId: effectiveStreamResourceId,
+                        threadId: effectiveStreamThreadId,
+                        ...(subAgentThreadMetadata ? { metadata: subAgentThreadMetadata } : {}),
+                      });
+                    }
 
                     await streamMemory.saveMessages({
                       messages: fullSubAgentMessages,
@@ -6264,7 +6340,17 @@ export class Agent<
                       resourceId,
                     };
                     const supervisorMemory = await this.getMemory({ requestContext });
-                    if (supervisorMemory) {
+                    if (supervisorMemory && threadId && resourceId) {
+                      await checkThreadFGA({
+                        mastra: this.#mastra,
+                        user: requestContext.get('user'),
+                        threadId,
+                        resourceId,
+                        agentId: this.id,
+                        requestContext,
+                        permission: MastraFGAPermissions.MEMORY_WRITE,
+                        actor: invocationActor,
+                      });
                       try {
                         await supervisorMemory.saveMessages({
                           messages: [feedbackMessage],
@@ -6359,7 +6445,17 @@ export class Agent<
                       resourceId,
                     };
                     const supervisorMemory = await this.getMemory({ requestContext });
-                    if (supervisorMemory) {
+                    if (supervisorMemory && threadId && resourceId) {
+                      await checkThreadFGA({
+                        mastra: this.#mastra,
+                        user: requestContext.get('user'),
+                        threadId,
+                        resourceId,
+                        agentId: this.id,
+                        requestContext,
+                        permission: MastraFGAPermissions.MEMORY_WRITE,
+                        actor: invocationActor,
+                      });
                       try {
                         await supervisorMemory.saveMessages({
                           messages: [feedbackMessage],
@@ -6752,6 +6848,8 @@ export class Agent<
     backgroundTaskEnabled?: boolean;
     backgroundTaskPolicy?: AgentExecutionOptionsBase<any>['backgroundTaskPolicy'];
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
+    /** @internal In-flight run messages, so recovery can restore processor-loaded tools. */
+    runMessages?: MastraDBMessage[];
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -6790,6 +6888,7 @@ export class Agent<
       backgroundTaskEnabled: options.backgroundTaskEnabled,
       backgroundTaskPolicy: mergedOptions.backgroundTaskPolicy,
       model: options.model,
+      runMessages: options.runMessages,
     });
   }
 
@@ -6814,6 +6913,7 @@ export class Agent<
     inputProcessors,
     hooks,
     model,
+    runMessages,
     ...rest
   }: {
     toolsets?: ToolsetsInput;
@@ -6835,6 +6935,7 @@ export class Agent<
     inputProcessors?: InputProcessorOrWorkflow[];
     hooks?: ToolHooks;
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
+    runMessages?: MastraDBMessage[];
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
     const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
@@ -7007,6 +7108,7 @@ export class Agent<
       processors: configuredInputProcessors,
       tools: requestResolvedTools,
       memoryConfig,
+      runMessages,
       runId,
       resourceId,
       threadId,
@@ -8129,6 +8231,7 @@ export class Agent<
       eagerToolExecution: options.eagerToolExecution ?? true,
       resumeContext,
       agentId: this.id,
+      actor: options.actor,
       agentVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
       agentName: this.name,
       toolCallId: options.toolCallId,
@@ -8143,6 +8246,8 @@ export class Agent<
       skipBgTaskWait: options._skipBgTaskWait,
       drainPendingSignals: (runId, scope) =>
         agentThreadStreamRuntime.drainPendingSignals(runId, threadStreamPubSub, scope),
+      subscribePendingSignals: (runId, listener) =>
+        agentThreadStreamRuntime.subscribePendingSignals(runId, listener, threadStreamPubSub),
     });
 
     // Register Mastra (if any) on the workflow for storage/observability access.
@@ -9068,13 +9173,49 @@ export class Agent<
       wrapperClose();
       return true;
     }
-    return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
+    const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
+    const parked = !!runId && agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
+    const aborted = agentThreadStreamRuntime.abortThread(options, this.getPubSub());
+    if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
+    return aborted;
   }
 
   abortRunStream(runId: string): boolean {
     const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
     wrapperClose?.();
-    return wrapperClose !== undefined || agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    if (wrapperClose !== undefined) return true;
+    const parked = agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
+    const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
+    return aborted;
+  }
+
+  /**
+   * An aborted suspended run can never be resumed, so drop its workflow
+   * registration and snapshot rows; otherwise it stays listed as suspended.
+   */
+  async #deleteAbortedSuspendedRun(runId: string): Promise<void> {
+    const mastra = this.#mastra;
+    if (!mastra) return;
+    const runtimeLoopWorkflowName = (
+      this.#threadRuntimeAgent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>> | undefined
+    )?.durableLoopWorkflowName;
+    const workflowNames = new Set([
+      AGENTIC_LOOP_WORKFLOW_ID,
+      AGENTIC_EXECUTION_WORKFLOW_ID,
+      DurableStepIds.AGENTIC_LOOP,
+      DurableStepIds.AGENTIC_EXECUTION,
+    ]);
+    if (typeof runtimeLoopWorkflowName === 'string') workflowNames.add(runtimeLoopWorkflowName);
+    try {
+      mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      await Promise.all(
+        [...workflowNames].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
+      );
+    } catch (error) {
+      this.logger.warn(`Failed to delete snapshot of aborted suspended run ${runId}`, { runId, error });
+    }
   }
 
   sendMessage<OUTPUT = TOutput>(
@@ -9443,6 +9584,7 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+    validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
@@ -10800,7 +10942,7 @@ export class Agent<
        */
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
-      onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+      onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
       onFinish?: MastraOnFinishCallback<TOutput>;
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;

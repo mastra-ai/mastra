@@ -172,29 +172,28 @@ describe('width-aware custom component rendering', () => {
     expect(component.render(8).every(line => visibleWidth(line) <= 8)).toBe(true);
   });
 
-  it('reflows quiet task progress without changing task status', () => {
+  it('reflows compact task progress without changing task status', () => {
     const component = new TaskProgressComponent();
     component.updateTasks([
       { id: 'active', content: source, activeForm: source, status: 'in_progress' },
       { id: 'pending', content: source, activeForm: source, status: 'pending' },
     ]);
-    component.setQuietMode(true);
     expectReflow(component);
     expect(component.getTasks().map(task => task.status)).toEqual(['in_progress', 'pending']);
   });
 
-  it('reflows enhanced tool output without changing quiet, streaming, or partial state', () => {
+  it('reflows enhanced tool output without changing compact, streaming, or partial state', () => {
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
       { command: source },
-      { quietDisplayMode: 'quiet', collapsedByDefault: false },
+      { collapsedByDefault: false },
       ui,
     );
     component.appendStreamingOutput(source);
     expectReflow(component);
-    expect(component.getChatSpacingKind()).toBe('quiet-shell-tool');
+    expect(component.getChatSpacingKind()).toBe('shell-tool');
     expect(component.isComplete()).toBe(false);
-    // Quiet mode hides output; the (syntax-highlighted) command footer still survives reflow.
+    // Compact rendering hides output; the (syntax-highlighted) command footer still survives reflow.
     const visible = component
       .render(140)
       .join('\n')

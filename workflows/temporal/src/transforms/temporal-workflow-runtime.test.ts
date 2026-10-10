@@ -109,6 +109,26 @@ describe('temporal workflow runtime helper module', () => {
     await expect(workflow({ inputData: { value: 21 } })).rejects.toBe(error);
   });
 
+  it.each([1, 5, 0])('forwards an activity retry policy with maximumAttempts %s', async maximumAttempts => {
+    const retry = {
+      initialInterval: '5 seconds',
+      backoffCoefficient: 2,
+      maximumInterval: '5 minutes',
+      maximumAttempts,
+      nonRetryableErrorTypes: ['ValidationError'],
+    };
+    const failure = new Error('permanent failure');
+    const failingStep = vi.fn().mockRejectedValue(failure);
+    proxyActivities.mockReturnValue({ failing: failingStep });
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('failing-workflow', { retry }).then('failing').commit();
+
+    await expect(workflow({ inputData: {} })).rejects.toBe(failure);
+    expect(proxyActivities).toHaveBeenCalledWith({ startToCloseTimeout: '1 minute', retry });
+    expect(failingStep).toHaveBeenCalledTimes(1);
+  });
+
   it('uses the configured activity timeout', async () => {
     proxyActivities.mockReturnValue({});
 

@@ -8,6 +8,7 @@ import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { InMemoryStore } from '../../storage/mock';
 import {
   __resetExecutionFencesForTests,
+  assertExecutionNotSuperseded,
   assertExecutionOwned,
   DurableExecutionFenceError,
   EXECUTION_ABANDONED_ERROR_ID,
@@ -405,10 +406,11 @@ describe('storage-backed ExecutionFence', () => {
     const pubsub = new EventEmitterPubSub();
     const fence = await storageClaim(workflowsStore, 'run-1', 'acquire', pubsub);
 
-    expect(fence.generation).toBe(1);
-    expect(fence.claim).toEqual({ executionId: fence.executionId, generation: 1 });
+    const generation = fence.generation;
+    expect(generation).toBeTypeOf('number');
+    expect(fence.claim).toEqual({ executionId: fence.executionId, generation });
     expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
-      generation: 1,
+      generation,
       ownerId: fence.executionId,
       live: true,
     });
@@ -425,7 +427,7 @@ describe('storage-backed ExecutionFence', () => {
     expect(await pubsub.getLeaseOwner(key('run-1'))).toBeUndefined();
 
     const fence = await storageClaim(workflowsStore, 'run-1', 'acquire', pubsub);
-    expect(fence.generation).toBe(1);
+    expect(fence.generation).toBeTypeOf('number');
     await fence.settle(async () => {});
   });
 
@@ -448,14 +450,14 @@ describe('storage-backed ExecutionFence', () => {
     const first = await storageClaim(workflowsStore, 'run-1');
     await first.settle(async () => {});
     expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
-      generation: 1,
+      generation: first.generation,
       ownerId: first.executionId,
       leaseExpiresAt: null,
       live: false,
     });
 
     const second = await storageClaim(workflowsStore, 'run-1');
-    expect(second.generation).toBe(2);
+    expect(second.generation).toBe(first.generation! + 1);
     await second.settle(async () => {});
   });
 
@@ -464,7 +466,7 @@ describe('storage-backed ExecutionFence', () => {
     const original = await storageClaim(workflowsStore, 'run-1');
     const recovered = await storageClaim(workflowsStore, 'run-1', 'takeover');
 
-    expect(recovered.generation).toBe(2);
+    expect(recovered.generation).toBe(original.generation! + 1);
     await expect(original.verify()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
     await expect(recovered.verify()).resolves.toBeUndefined();
 
@@ -472,7 +474,7 @@ describe('storage-backed ExecutionFence', () => {
     expect(await original.settle(writes)).toBe('superseded');
     expect(writes).not.toHaveBeenCalled();
     expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
-      generation: 2,
+      generation: recovered.generation,
       ownerId: recovered.executionId,
     });
     await recovered.settle(async () => {});
@@ -502,7 +504,7 @@ describe('storage-backed ExecutionFence', () => {
     const winners = results.flatMap(result => (result.status === 'fulfilled' ? [result.value] : []));
     const losers = results.flatMap(result => (result.status === 'rejected' ? [result.reason] : []));
     expect(winners).toHaveLength(1);
-    expect(winners[0]!.generation).toBe(2);
+    expect(winners[0]!.generation).toBe(original.generation! + 1);
     expect(losers).toHaveLength(racers - 1);
     for (const error of losers) expect(error.id).toBe(EXECUTION_CONFLICT_ERROR_ID);
     await expect(winners[0]!.verify()).resolves.toBeUndefined();
@@ -513,7 +515,11 @@ describe('storage-backed ExecutionFence', () => {
   it('orphaned: the claim was cleared but nobody claimed the run', async () => {
     const { workflowsStore } = await stores();
     const fence = await storageClaim(workflowsStore, 'run-1');
-    await workflowsStore.releaseRunOwnership({ runId: 'run-1', generation: 1, ownerId: fence.executionId });
+    await workflowsStore.releaseRunOwnership({
+      runId: 'run-1',
+      generation: fence.generation!,
+      ownerId: fence.executionId,
+    });
     const writes = vi.fn(async () => {});
 
     expect(await fence.settle(writes)).toBe('orphaned');
@@ -524,14 +530,22 @@ describe('storage-backed ExecutionFence', () => {
     const { workflowsStore, memoryStore } = await stores();
     const settled = await storageClaim(workflowsStore, 'run-1');
     await settled.coverMemory(memoryStore);
+    const retire = vi.spyOn(memoryStore, 'retireRunFence');
     expect(await settled.settle(async () => {})).toBe('owned');
+    // Retired for retention, still the run's fence.
+    expect(retire).toHaveBeenCalledWith({
+      runId: 'run-1',
+      generation: settled.generation,
+      ownerId: settled.executionId,
+    });
+    await expect(retire.mock.results[0]!.value).resolves.toBe(true);
     expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
-      generation: 1,
+      generation: settled.generation,
       ownerId: settled.executionId,
       live: false,
     });
     const thread = { id: 't-1', resourceId: 'r-1', title: '', createdAt: new Date(), updatedAt: new Date() };
-    const settledFence = { runId: 'run-1', generation: 1, ownerId: settled.executionId };
+    const settledFence = { runId: 'run-1', generation: settled.generation!, ownerId: settled.executionId };
     await expect(memoryStore.saveThread({ thread, fence: settledFence })).resolves.toMatchObject({ id: 't-1' });
 
     const next = await storageClaim(workflowsStore, 'run-1');
@@ -539,7 +553,7 @@ describe('storage-backed ExecutionFence', () => {
     await expect(memoryStore.saveThread({ thread, fence: settledFence })).rejects.toSatisfy(isRunFenceConflictError);
     expect(await next.settle(async () => {})).toBe('owned');
     expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
-      generation: 2,
+      generation: settled.generation! + 1,
       ownerId: next.executionId,
     });
   });
@@ -549,10 +563,14 @@ describe('storage-backed ExecutionFence', () => {
     const requestContext = new RequestContext();
     const original = await storageClaim(workflowsStore, 'run-1');
     await original.coverMemory(memoryStore);
-    expect(original.claim).toEqual({ executionId: original.executionId, generation: 1, memoryFenced: true });
+    expect(original.claim).toEqual({
+      executionId: original.executionId,
+      generation: original.generation,
+      memoryFenced: true,
+    });
     setExecutionClaim(requestContext, 'run-1', original.claim);
     const staleFence = getRunFence(requestContext, 'run-1', 'memory');
-    expect(staleFence).toEqual({ runId: 'run-1', generation: 1, ownerId: original.executionId });
+    expect(staleFence).toEqual({ runId: 'run-1', generation: original.generation, ownerId: original.executionId });
 
     const recovered = await storageClaim(workflowsStore, 'run-1', 'takeover');
     await recovered.coverMemory(memoryStore);
@@ -571,7 +589,7 @@ describe('storage-backed ExecutionFence', () => {
   it('coverMemory fails when a newer claim already raised memory', async () => {
     const { workflowsStore, memoryStore } = await stores();
     const fence = await storageClaim(workflowsStore, 'run-1');
-    await memoryStore.raiseRunFence({ runId: 'run-1', generation: 5, ownerId: 'newer' });
+    await memoryStore.raiseRunFence({ runId: 'run-1', generation: fence.generation! + 1, ownerId: 'newer' });
 
     await expect(fence.coverMemory(memoryStore)).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
     expect(fence.isLost()).toBe(true);
@@ -645,10 +663,26 @@ describe('storage-backed ExecutionFence', () => {
     });
   });
 
+  it("accepts a settled execution's late writes until another execution claims the run", async () => {
+    const { storage, workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const mastra = { getStorage: () => storage, getAgentById: () => undefined, pubsub: undefined } as any;
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, 'run-1', fence.claim);
+    const args = { runId: 'run-1', agentId, requestContext, mastra };
+
+    expect(await fence.settle(async () => {})).toBe('owned');
+    await expect(assertExecutionOwned(args)).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    await expect(assertExecutionNotSuperseded(args)).resolves.toBeUndefined();
+
+    await storageClaim(workflowsStore, 'run-1');
+    await expect(assertExecutionNotSuperseded(args)).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+  });
+
   it('covers the workflows rows of runs nested under the run, which storage checks against the run claim', async () => {
     const { workflowsStore } = await stores();
     const fence = await storageClaim(workflowsStore, 'run-1');
-    const runFence = { runId: 'run-1', generation: 1, ownerId: fence.executionId };
+    const runFence = { runId: 'run-1', generation: fence.generation, ownerId: fence.executionId };
 
     fence.coverNestedRun('run-1', 'child');
     fence.coverNestedRun('child', 'grandchild');
@@ -671,13 +705,20 @@ describe('storage-backed ExecutionFence', () => {
     const { workflowsStore, memoryStore } = await stores();
     const abandoned = await storageClaim(workflowsStore, 'run-1');
     await abandoned.coverMemory(memoryStore);
-    const staleFence = { runId: 'run-1', generation: 1, ownerId: abandoned.executionId };
+    const staleFence = { runId: 'run-1', generation: abandoned.generation!, ownerId: abandoned.executionId };
+    const retire = vi.spyOn(memoryStore, 'retireRunFence');
 
     await abandoned.abandon();
 
     const record = await workflowsStore.getRunOwnership({ runId: 'run-1' });
-    expect(record).toMatchObject({ generation: 2, leaseExpiresAt: null, live: false });
+    expect(record).toMatchObject({ generation: abandoned.generation! + 1, leaseExpiresAt: null, live: false });
     expect(record?.ownerId).not.toBe(abandoned.executionId);
+    // Nothing runs under the successor fence, so it is retired right away.
+    expect(retire).toHaveBeenCalledExactlyOnceWith({
+      runId: 'run-1',
+      generation: record!.generation,
+      ownerId: record!.ownerId,
+    });
     await expect(
       workflowsStore.updateWorkflowState({
         workflowName: 'wf',
@@ -700,7 +741,7 @@ describe('storage-backed ExecutionFence', () => {
       mode: 'recover',
       untrackedRun,
     });
-    expect(recovered.generation).toBe(3);
+    expect(recovered.generation).toBe(abandoned.generation! + 2);
     expect(untrackedRun.isLive).not.toHaveBeenCalled();
     await recovered.coverMemory(memoryStore);
     await recovered.settle(async () => {});
@@ -715,7 +756,7 @@ describe('storage-backed ExecutionFence', () => {
 
     expect(original.isLost()).toBe(true);
     expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
-      generation: 2,
+      generation: recovered.generation,
       ownerId: recovered.executionId,
       live: true,
     });
@@ -735,7 +776,7 @@ describe('storage-backed ExecutionFence', () => {
     expect(await fence.settle(async () => {})).toBe('superseded');
     // The claim stays until it expires.
     expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
-      generation: 1,
+      generation: fence.generation,
       ownerId: fence.executionId,
       live: true,
     });

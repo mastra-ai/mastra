@@ -68,7 +68,6 @@ export type {
   TraceQueryRelatedScope,
 } from './trace-query-filters';
 export { isTraceFilterGroup } from './trace-query-filters';
-import { hueAccentColor, hueForName } from '@/lib/colors';
 
 type EntityTypeValue = `${EntityType}`;
 
@@ -145,6 +144,7 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   entityId: 'filterEntityId',
   entityName: 'filterEntityName',
   traceId: 'filterTraceId',
+  durationMs: 'filterDurationMs',
   runId: 'filterRunId',
   threadId: 'filterThreadId',
   sessionId: 'filterSessionId',
@@ -304,6 +304,8 @@ const TRACE_NUMBER_OPERATORS: TraceFilterOperatorId[] = [
   'exists',
   'notExists',
 ];
+/** Root duration: only ranges make sense on a millisecond value. */
+const TRACE_ROOT_DURATION_OPERATORS: TraceFilterOperatorId[] = ['gt', 'gte', 'lt', 'lte'];
 const TRACE_PRESENCE_OPERATORS: TraceFilterOperatorId[] = ['exists', 'notExists'];
 const TRACE_TAGS_OPERATORS: TraceFilterOperatorId[] = ['in', 'notIn', 'exists', 'notExists'];
 const TRACE_TAGS_OPERATOR_TO_QUERY_OP: Partial<Record<TraceFilterOperatorId, string>> = {
@@ -345,6 +347,7 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   'spans.spanType': 'Span type',
   'spans.model': 'Model',
   'spans.provider': 'Provider',
+  durationMs: 'Duration (ms)',
   'spans.durationMs': 'Span duration (ms)',
   'spans.error': 'Span error',
   'scores.scorerId': 'Scorer',
@@ -354,43 +357,42 @@ const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   'feedback.comment': 'Feedback comment',
 };
 
-const TRACE_FILTER_BAR_FIELD_META: Record<string, { icon: LucideIcon; color: string }> = {
-  timeRange: { icon: ClockIcon, color: hueAccentColor('amber') },
-  rootEntityType: { icon: BoxIcon, color: hueAccentColor('purple') },
-  entityName: { icon: TagIcon, color: hueAccentColor('cyan') },
-  entityId: { icon: FingerprintIcon, color: hueAccentColor('pink') },
-  status: { icon: ActivityIcon, color: hueAccentColor('orange') },
-  tags: { icon: TagsIcon, color: hueAccentColor('pink') },
-  serviceName: { icon: ServerIcon, color: hueAccentColor('cyan') },
-  environment: { icon: GlobeIcon, color: hueAccentColor('green') },
-  traceId: { icon: WaypointsIcon, color: hueAccentColor('blue') },
-  runId: { icon: PlayIcon, color: hueAccentColor('purple') },
-  threadId: { icon: MessageSquareIcon, color: hueAccentColor('blue') },
-  sessionId: { icon: LayersIcon, color: hueAccentColor('orange') },
-  requestId: { icon: RadioIcon, color: hueAccentColor('amber') },
-  resourceId: { icon: HashIcon, color: hueAccentColor('green') },
-  userId: { icon: UserIcon, color: hueAccentColor('orange') },
-  organizationId: { icon: BuildingIcon, color: hueAccentColor('cyan') },
-  experimentId: { icon: FlaskConicalIcon, color: hueAccentColor('pink') },
-  'spans.name': { icon: GitBranchIcon, color: hueAccentColor('blue') },
-  'spans.spanType': { icon: ShapesIcon, color: hueAccentColor('purple') },
-  'spans.model': { icon: CpuIcon, color: hueAccentColor('green') },
-  'spans.provider': { icon: CloudIcon, color: hueAccentColor('cyan') },
-  'spans.durationMs': { icon: TimerIcon, color: hueAccentColor('orange') },
-  'spans.error': { icon: TriangleAlertIcon, color: 'var(--destructive-foreground)' },
-  'scores.scorerId': { icon: GaugeIcon, color: hueAccentColor('green') },
-  'scores.score': { icon: PercentIcon, color: hueAccentColor('amber') },
-  'feedback.feedbackType': { icon: ThumbsUpIcon, color: hueAccentColor('purple') },
-  'feedback.value': { icon: StarIcon, color: hueAccentColor('amber') },
-  'feedback.comment': { icon: MessageCircleIcon, color: hueAccentColor('blue') },
+const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
+  timeRange: ClockIcon,
+  rootEntityType: BoxIcon,
+  entityName: TagIcon,
+  entityId: FingerprintIcon,
+  status: ActivityIcon,
+  tags: TagsIcon,
+  serviceName: ServerIcon,
+  environment: GlobeIcon,
+  traceId: WaypointsIcon,
+  runId: PlayIcon,
+  threadId: MessageSquareIcon,
+  sessionId: LayersIcon,
+  requestId: RadioIcon,
+  resourceId: HashIcon,
+  userId: UserIcon,
+  organizationId: BuildingIcon,
+  experimentId: FlaskConicalIcon,
+  'spans.name': GitBranchIcon,
+  'spans.spanType': ShapesIcon,
+  'spans.model': CpuIcon,
+  'spans.provider': CloudIcon,
+  durationMs: TimerIcon,
+  'spans.durationMs': TimerIcon,
+  'spans.error': TriangleAlertIcon,
+  'scores.scorerId': GaugeIcon,
+  'scores.score': PercentIcon,
+  'feedback.feedbackType': ThumbsUpIcon,
+  'feedback.value': StarIcon,
+  'feedback.comment': MessageCircleIcon,
 };
 
-export const traceFilterFieldIcon = (fieldId: string) => TRACE_FILTER_BAR_FIELD_META[fieldId]?.icon;
+export const traceFilterFieldIcon = (fieldId: string) => TRACE_FILTER_BAR_FIELD_ICONS[fieldId];
 
-/** Stable per-field accent; known keys use a curated hue, others fall back to a hashed one. */
-export const traceFilterFieldColor = (fieldId: string) => {
-  return TRACE_FILTER_BAR_FIELD_META[fieldId]?.color ?? hueAccentColor(hueForName(fieldId));
-};
+/** Shared neutral accent for built-in, time-range, and dynamic filters. */
+export const traceFilterFieldColor = (_fieldId: string) => 'var(--muted-foreground)';
 
 const traceFieldBase = (id: string) => ({
   id,
@@ -467,7 +469,10 @@ export function createTraceFilterBarFields({
   canonicalTraceFields = [],
   valueSuggestions,
   withQueryTrace = true,
+  withRootDuration = false,
 }: {
+  /** Offer the root `durationMs` field. Only when the server declares `traceQueryRootDuration`. */
+  withRootDuration?: boolean;
   /** Trace-scope field descriptors from the query discovery endpoint. Empty when discovery is unavailable. */
   canonicalTraceFields?: readonly TraceQueryCanonicalFieldDescriptor[];
   availableRootEntityNames: string[];
@@ -550,7 +555,7 @@ export function createTraceFilterBarFields({
       id: path,
       label: path.slice(TRACE_METADATA_FILTER_FIELD_PREFIX.length),
       icon: BracesIcon,
-      color: hueAccentColor(hueForName(path)),
+      color: traceFilterFieldColor(path),
       operators: TRACE_STRING_OPERATORS,
       suggestions,
     }));
@@ -568,7 +573,10 @@ export function createTraceFilterBarFields({
   }
   return [
     ...[...pickFields, ...tagsFields].sort(byLabel),
-    ...textFields.sort(byLabel),
+    ...[
+      ...textFields,
+      ...(withRootDuration ? [{ ...number('durationMs'), operators: TRACE_ROOT_DURATION_OPERATORS }] : []),
+    ].sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),
   ]

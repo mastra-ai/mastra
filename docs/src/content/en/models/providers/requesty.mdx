@@ -7,7 +7,7 @@ description: "Browse Requesty model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/requesty.svg" alt="Requesty logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Requesty
 
-Access 170 Requesty models through Mastra's model router. Authentication is handled automatically using the `REQUESTY_API_KEY` environment variable.
+Access 171 Requesty models through Mastra's model router. Authentication is handled automatically using the `REQUESTY_API_KEY` environment variable.
 
 Learn more in the [Requesty documentation](https://requesty.ai/solution/llm-routing/models).
 
@@ -54,8 +54,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
-    "inputCost": 10,
-    "outputCost": 50
+    "inputCost": 11,
+    "outputCost": 55
   },
   {
     "model": "requesty/claude-fable-5.1",
@@ -329,7 +329,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 128000,
+    "maxOutput": 64000,
     "inputCost": 3,
     "outputCost": 15
   },
@@ -1364,6 +1364,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 256000,
     "inputCost": 0.3,
     "outputCost": 1.2
+  },
+  {
+    "model": "requesty/kimi-k2.5@eu",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 128000,
+    "maxOutput": 16000,
+    "inputCost": 0.72,
+    "outputCost": 3.6
   },
   {
     "model": "requesty/kimi-k2.6",

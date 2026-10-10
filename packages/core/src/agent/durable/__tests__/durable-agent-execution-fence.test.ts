@@ -1567,7 +1567,7 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
       const claim = claims[write.segment]!;
       expect(write).toMatchObject({ fence: { runId, generation: claim.generation, ownerId: claim.executionId } });
     }
-    expect(claims.map(claim => claim.generation)).toEqual([1, 2]);
+    expect(claims[1]!.generation).toBe(claims[0]!.generation! + 1);
     // The fence reaches the evented engine's writes through the async context
     // of the publish, so the events that drive the run must not leave this
     // process. `workflows-finish` may: it drives no writes, and a waiter

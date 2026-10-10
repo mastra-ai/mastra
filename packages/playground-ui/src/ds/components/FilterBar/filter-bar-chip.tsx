@@ -29,6 +29,7 @@ import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import './filter-bar-chip.css';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
@@ -344,6 +345,7 @@ function SegmentSearchInput<T>({
         className={comboboxStyles.searchInput}
         placeholder={placeholder}
         inputMode={inputMode}
+        {...passwordManagerOptOutProps}
         onKeyDown={event => onKeyDown?.(event, highlighted as T | null)}
       />
     </div>
@@ -564,6 +566,7 @@ function ValueEditor() {
     query,
     enabled: open,
     initialValue: chip.item.value,
+    setQuery,
     onCommit,
   });
 
@@ -602,7 +605,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
   return (
     <>
-      {step.hasSuggestions && (
+      {step.hasOptions && (
         <FilterBarOptionList<FilterBarOption>
           aria-label="Values"
           aria-multiselectable={step.isMany || undefined}
@@ -619,7 +622,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
           <Button size="sm" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
-          <Button size="sm" variant="default" onClick={() => step.commitSelection() || step.commitFreeText()}>
+          <Button size="sm" variant="default" onClick={() => step.commitDone()}>
             Done
             <Kbd size="xs">{modEnterLabel}</Kbd>
           </Button>

@@ -2224,16 +2224,23 @@ describe('Agent Routes Authorization', () => {
         publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: value } }, generation });
 
       const workflows = (await storage.getStore('workflows'))!;
-      await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
-      await workflows.claimRunOwnership({ runId, ownerId: 'successor', leaseMs: 30_000, force: true });
+      const lost = await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
+      const successor = await workflows.claimRunOwnership({
+        runId,
+        ownerId: 'successor',
+        leaseMs: 30_000,
+        force: true,
+      });
+      const stale = lost.record!.generation;
+      const current = successor.record!.generation;
 
-      await text('before takeover ', 1);
-      await publish({ type: AgentStreamEventTypes.OWNERSHIP_CLAIMED, generation: 2 });
-      await text('seen ', 2);
+      await text('before takeover ', stale);
+      await publish({ type: AgentStreamEventTypes.OWNERSHIP_CLAIMED, generation: current });
+      await text('seen ', current);
       // Published after the marker by the execution that lost the run.
-      await publish({ type: 'finish', data: {}, generation: 1 });
-      await text('recovered', 2);
-      await publish({ type: 'finish', data: {}, generation: 2 });
+      await publish({ type: 'finish', data: {}, generation: stale });
+      await text('recovered', current);
+      await publish({ type: 'finish', data: {}, generation: current });
 
       const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
         mastra,
@@ -2247,8 +2254,8 @@ describe('Agent Routes Authorization', () => {
       for await (const event of stream as any) events.push(event);
 
       expect(events.map(event => [event.type, event.data?.payload?.text, event.generation])).toEqual([
-        ['chunk', 'recovered', 2],
-        ['finish', undefined, 2],
+        ['chunk', 'recovered', current],
+        ['finish', undefined, current],
       ]);
     });
 

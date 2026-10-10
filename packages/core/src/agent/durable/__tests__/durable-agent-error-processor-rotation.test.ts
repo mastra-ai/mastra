@@ -364,7 +364,8 @@ describe('durable error-processor resolution', () => {
     throw new Error('resolver unavailable');
   };
 
-  it('keeps the configured output processors when the error-processor resolver throws', async () => {
+  it('fails closed when the error-processor resolver throws', async () => {
+    const modelCall = vi.fn();
     const redactor: Processor = {
       id: 'output-redactor',
       processOutputStream: vi.fn(async ({ part }) =>
@@ -375,23 +376,16 @@ describe('durable error-processor resolution', () => {
       id: 'durable-error-resolver-throws',
       name: 'durable-error-resolver-throws',
       instructions: 'You are helpful.',
-      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+      model: [{ model: makeFailThenAnswerModel(0, modelCall) as LanguageModelV2, maxRetries: 0 }],
       outputProcessors: [redactor],
       errorProcessors: throwingResolver,
     });
 
     const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
-    const stream = await durableAgent.stream('hello');
-    const chunks: any[] = [];
-    for await (const chunk of stream.fullStream) chunks.push(chunk);
-    await stream.cleanup?.();
 
-    const text = chunks
-      .filter(chunk => chunk.type === 'text-delta')
-      .map(chunk => chunk.payload.text)
-      .join('');
-    expect(redactor.processOutputStream).toHaveBeenCalled();
-    expect(text).toBe('[REDACTED]');
+    await expect(durableAgent.stream('hello')).rejects.toThrow('resolver unavailable');
+    expect(modelCall).not.toHaveBeenCalled();
+    expect(redactor.processOutputStream).not.toHaveBeenCalled();
   });
 
   it('resolves a dynamic error-processor list once and shares it with the request lane', async () => {
@@ -474,6 +468,7 @@ describe('durable error-processor resolution', () => {
       expect(rebuilt.errorProcessors!.map(processor => processor.id)).toEqual([
         'provider-history-compat',
         'prefill-error-handler',
+        'unsupported-file-handler',
         'stream-error-retry-processor',
       ]);
     });

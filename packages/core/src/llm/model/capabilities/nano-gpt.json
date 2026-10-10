@@ -110,6 +110,7 @@
     "gemma-4-12b-it-semancer",
     "gemma-4-12b-it-station-keeper",
     "gemma-4-26b-a4b-it-chimerax",
+    "gemma-4-26b-a4b-it-chimeraxheretic",
     "gemma-4-26b-a4b-it-darksoul",
     "gemma-4-26b-a4b-it-luminous",
     "gemma-4-26b-a4b-it-moonlight",
@@ -123,6 +124,7 @@
     "gemma-4-31b-it-gemsicle",
     "gemma-4-31b-it-isometry",
     "gemma-4-31b-it-novelist",
+    "gemma-4-31b-it-scarlet",
     "glm-4.1v-thinking-flash",
     "glm-4.1v-thinking-flashx",
     "google/gemini-3-flash-preview",
@@ -328,6 +330,7 @@
     "z-ai/glm-5v-turbo:thinking"
   ],
   "temperature": [
+    "Gryphe/MythoMax-L2-13b",
     "TEE/deepseek-v3.2",
     "TEE/deepseek-v4.1-flash",
     "TEE/gemma-4-31b-it",
@@ -411,6 +414,9 @@
     "google/gemma-4-26b-a4b-it:thinking",
     "google/gemma-4-31b-it",
     "google/gemma-4-31b-it:thinking",
+    "inclusionai/ling-3.0-flash",
+    "inclusionai/ling-3.0-flash-vl",
+    "inclusionai/ling-3.0-flash:thinking",
     "longcat-2.0",
     "longcat-2.0:thinking",
     "longcat-2.5-preview",
@@ -420,6 +426,7 @@
     "meta/muse-spark-1.1",
     "meta/muse-spark-1.2",
     "meta/muse-spark-1.3",
+    "microsoft/wizardlm-2-8x22b",
     "minimax/minimax-m2",
     "minimax/minimax-m2-her",
     "minimax/minimax-m2.1",
@@ -429,6 +436,7 @@
     "minimax/minimax-m3:thinking",
     "mistralai/codestral-2508",
     "mistralai/mistral-large-4",
+    "moonshotai/kimi-k2-instruct",
     "moonshotai/kimi-k2-thinking",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.6:thinking",
@@ -1098,12 +1106,8 @@
     ],
     "anthropic/claude-haiku-latest": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-opus-4.8": [

@@ -151,7 +151,7 @@ export function CreateFactoryWizard() {
             query={value}
             savingModelId={createFactory.isPending ? createFactory.variables?.modelId : undefined}
             error={createFactory.error ? errorMessage(createFactory.error) : undefined}
-            onPick={(providerId, modelId) => createFactory.mutate({ providerId, modelId })}
+            onPick={(_providerId, modelId) => createFactory.mutate({ modelId })}
           />
         )}
       </CreateFactoryPalette>

@@ -20,7 +20,6 @@
     "anthropic/claude-sonnet-4.6",
     "anthropic/claude-sonnet-5",
     "anthropic/claude-sonnet-5.5",
-    "baidu/ernie-4.5-vl-424b-a47b",
     "bytedance-seed/seed-1.6",
     "bytedance-seed/seed-1.6-flash",
     "bytedance-seed/seed-2-1-turbo",
@@ -170,12 +169,9 @@
     "prism-ml/ternary-bonsai-2-27b",
     "qwen/qwen2.5-vl-72b-instruct",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3-vl-30b-a3b-thinking",
-    "qwen/qwen3-vl-32b-instruct",
     "qwen/qwen3-vl-8b-instruct",
-    "qwen/qwen3-vl-8b-thinking",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -201,6 +197,7 @@
     "sakana/fugu-ultra-v2",
     "sakana/sakana-namazu",
     "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview",
     "thinkingmachines/inkling",
     "thinkingmachines/inkling-small",
     "thinkingmachines/inkling-small:free",
@@ -261,7 +258,6 @@
     "anthropic/claude-sonnet-4.6",
     "apodex/apodex-1.1-mini:free",
     "arcee-ai/trinity-large-thinking",
-    "baidu/ernie-4.5-vl-424b-a47b",
     "bytedance-seed/seed-1.6",
     "bytedance-seed/seed-1.6-flash",
     "bytedance-seed/seed-2-1-turbo",
@@ -330,7 +326,7 @@
     "inception/mercury-2.5",
     "inclusionai/ling-3.0-flash",
     "inclusionai/ling-3.0-flash-fin",
-    "inclusionai/ling-3.0-flash-sante:free",
+    "inclusionai/ling-3.0-flash-sante",
     "inclusionai/ling-3.0-flash-vl",
     "inclusionai/ling-3.1-flash",
     "inference-net/schematron-v2-small",
@@ -446,33 +442,23 @@
     "qwen/qwen-2.5-7b-instruct",
     "qwen/qwen-2.5-coder-32b-instruct",
     "qwen/qwen-plus",
-    "qwen/qwen-plus-2025-07-28",
     "qwen/qwen2.5-vl-72b-instruct",
     "qwen/qwen3-14b",
-    "qwen/qwen3-235b-a22b",
     "qwen/qwen3-235b-a22b-2507",
     "qwen/qwen3-235b-a22b-thinking-2507",
     "qwen/qwen3-30b-a3b",
     "qwen/qwen3-30b-a3b-instruct-2507",
-    "qwen/qwen3-30b-a3b-thinking-2507",
     "qwen/qwen3-32b",
-    "qwen/qwen3-8b",
     "qwen/qwen3-coder",
     "qwen/qwen3-coder-30b-a3b-instruct",
     "qwen/qwen3-coder-flash",
     "qwen/qwen3-coder-next",
-    "qwen/qwen3-coder-plus",
-    "qwen/qwen3-max",
-    "qwen/qwen3-max-thinking",
     "qwen/qwen3-next-80b-a3b-instruct",
     "qwen/qwen3-next-80b-a3b-thinking",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3-vl-30b-a3b-thinking",
-    "qwen/qwen3-vl-32b-instruct",
     "qwen/qwen3-vl-8b-instruct",
-    "qwen/qwen3-vl-8b-thinking",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -484,7 +470,6 @@
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.6-flash",
-    "qwen/qwen3.6-max-preview",
     "qwen/qwen3.6-plus",
     "qwen/qwen3.7-flash",
     "qwen/qwen3.7-max",
@@ -503,6 +488,7 @@
     "sao10k/l3.3-euryale-70b",
     "stepfun/step-3.5-flash",
     "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview",
     "tencent/hunyuan-a13b-instruct",
     "tencent/hy-mt2-1.8b",
     "tencent/hy-mt2-30b-a3b",
@@ -636,7 +622,6 @@
     "ibm-granite/granite-4.2-8b",
     "inception/mercury-2",
     "inception/mercury-2.5",
-    "inclusionai/ling-3.0-flash-fin",
     "inclusionai/ling-3.0-flash-vl",
     "inference-net/schematron-v2-small",
     "inference-net/schematron-v2-turbo",
@@ -767,7 +752,6 @@
     "qwen/qwen-2.5-72b-instruct",
     "qwen/qwen-2.5-7b-instruct",
     "qwen/qwen-plus",
-    "qwen/qwen-plus-2025-07-28",
     "qwen/qwen2.5-vl-72b-instruct",
     "qwen/qwen3-14b",
     "qwen/qwen3-235b-a22b-2507",
@@ -777,18 +761,12 @@
     "qwen/qwen3-coder",
     "qwen/qwen3-coder-30b-a3b-instruct",
     "qwen/qwen3-coder-next",
-    "qwen/qwen3-coder-plus",
-    "qwen/qwen3-max",
-    "qwen/qwen3-max-thinking",
     "qwen/qwen3-next-80b-a3b-instruct",
     "qwen/qwen3-next-80b-a3b-thinking",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3-vl-30b-a3b-thinking",
-    "qwen/qwen3-vl-32b-instruct",
     "qwen/qwen3-vl-8b-instruct",
-    "qwen/qwen3-vl-8b-thinking",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -800,7 +778,6 @@
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.6-flash",
-    "qwen/qwen3.6-max-preview",
     "qwen/qwen3.6-plus",
     "qwen/qwen3.7-max",
     "qwen/qwen3.7-plus",
@@ -820,6 +797,7 @@
     "sao10k/l3.1-euryale-70b",
     "sao10k/l3.3-euryale-70b",
     "stepfun/step-3.7-flash",
+    "stepfun/step-5-preview",
     "tencent/hunyuan-a13b-instruct",
     "tencent/hy-mt2-30b-a3b",
     "tencent/hy-mt2-7b",
@@ -1422,11 +1400,6 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "baidu/ernie-4.5-vl-424b-a47b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "x-ai/grok-4.20-multi-agent": [
       {
         "type": "effort",
@@ -1746,17 +1719,17 @@
         "values": ["none", "high"]
       }
     ],
-    "inclusionai/ling-3.0-flash-sante:free": [
-      {
-        "type": "toggle"
-      }
-    ],
     "inclusionai/ling-3.0-flash": [
       {
         "type": "toggle"
       }
     ],
     "inclusionai/ling-3.1-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "inclusionai/ling-3.0-flash-sante": [
       {
         "type": "toggle"
       }
@@ -1911,6 +1884,12 @@
         "type": "toggle"
       }
     ],
+    "stepfun/step-5-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "stepfun/step-3.7-flash": [
       {
         "type": "effort",
@@ -1997,11 +1976,6 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3-235b-a22b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen/qwen3.5-122b-a10b": [
       {
         "type": "toggle"
@@ -2018,11 +1992,6 @@
       }
     ],
     "qwen/qwen3.5-flash-02-23": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen/qwen3-max-thinking": [
       {
         "type": "toggle"
       }
@@ -2056,22 +2025,12 @@
         "type": "toggle"
       }
     ],
-    "qwen/qwen3.6-max-preview": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen/qwen3-30b-a3b": [
       {
         "type": "toggle"
       }
     ],
     "qwen/qwen3.5-397b-a17b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen/qwen3-8b": [
       {
         "type": "toggle"
       }

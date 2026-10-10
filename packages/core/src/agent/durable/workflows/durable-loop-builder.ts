@@ -42,6 +42,7 @@ import {
   executeDurableAgentScorers,
   readMessageListState,
   storeMessageListState,
+  buildDeferredStepFinishChunk,
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
@@ -421,7 +422,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads before persisting. Engine-aware: evented
           // retains running history (see pruneSnapshotHook).
-          pruneSnapshot: this.pruneSnapshotHook({ [COLLECT_TOOL_RESULTS_STEP_ID]: [llmExecutionStep.id] }),
+          pruneSnapshot: this.pruneSnapshotHook({
+            [toolCallStep.id]: [llmExecutionStep.id],
+            [COLLECT_TOOL_RESULTS_STEP_ID]: [llmExecutionStep.id],
+          }),
           validateInputs: false,
           // Deliberate divergence from the main loop (#21529): the workflow
           // engine's own step events repeatedly serialized cumulative
@@ -458,6 +462,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               agentId: state.agentId,
               agentName: state.agentName,
               messageListState: state.messageListState,
+              initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
               toolsMetadata: state.toolsMetadata,
               modelConfig: state.modelConfig,
               modelList: state.modelList,
@@ -585,6 +590,22 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       const initData = params.getInitData() as DurableAgenticWorkflowInput;
       const rt = this.resolveRuntime(params);
 
+      const emitStepFinish = async (isContinued: boolean) => {
+        if (state.lastStepResult) {
+          state.lastStepResult.isContinued = isContinued;
+        }
+
+        const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
+        state.deferredStepFinishChunk = undefined;
+        if (!deferredChunk) return;
+
+        try {
+          await this.emitChunk(rt, deferredChunk);
+        } catch (error) {
+          rt.logger?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
+        }
+      };
+
       // ── Abort check ────────────────────────────────────────────────
       // If the abort signal has fired, stop the loop immediately.
       // The llm-execution step may have already emitted the ABORT event
@@ -603,11 +624,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         const abortReason = getAbortReason(rt.abortSignal);
         const isTotalTimeout = isMastraTimeoutError(abortReason) && abortReason.timeoutType === 'total';
         if (isTotalTimeout && state.lastStepResult?.reason !== 'error') {
+          await emitStepFinish(true);
           return true;
         }
+        // The parked step completed before the run-level abort was observed. Emit its own outcome
+        // before recording the abort on loop state so consumers keep the completed step boundary.
+        await emitStepFinish(state.lastStepResult?.isContinued === true);
         if (state.lastStepResult) {
           state.lastStepResult.reason = isTotalTimeout ? 'error' : 'abort';
-          state.lastStepResult.isContinued = false;
         }
         return false;
       }
@@ -760,22 +784,19 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           transcript.messageListState = callbackList().serialize();
         },
         logger: rt.logger,
+      }).catch(async error => {
+        // User continuation policy can throw after the step has completed. Preserve that step's
+        // boundary on the stream before the workflow propagates the policy error.
+        await emitStepFinish(state.lastStepResult?.isContinued === true);
+        throw error;
       });
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
-      if (decision.forceContinue && state.lastStepResult) {
-        state.lastStepResult.isContinued = true;
-      }
       const isFinal = decision.isFinal;
+      await emitStepFinish(!isFinal);
 
-      // Each iteration's assistant response is a distinct message, mirroring
-      // the non-durable agentic loop. The mutated state.messageId flows into
-      // the next singleIterationWorkflow input via map-to-llm-input.
-      if (!isFinal) {
-        const boundaryList = createRunMessageList({ mastra: rt.mastra }).deserialize(transcript.messageListState);
-        state.messageId = boundaryList.rotateResponseMessageId();
-        transcript.messageListState = boundaryList.serialize();
-      }
+      // Like Agent, ordinary iterations keep the same response message; the next LLM step opens
+      // a step-start boundary inside it (#26332).
 
       // Emit an iteration-complete event for observability. This fires after
       // every iteration (including the last one) so client-side callbacks
@@ -844,14 +865,18 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       })
         // Initialize iteration state from input
         .map(
-          async ({ inputData, state, setState }) => {
+          async ({ inputData, state, setState, mastra }) => {
             const { messageListState, ...input } = inputData as DurableAgenticWorkflowInput;
+            const initialMessageList = createRunMessageList({ mastra: mastra as Mastra | undefined }).deserialize(
+              messageListState,
+            );
             // The transcript rides in workflow state from here on: each
             // persisted snapshot then holds one copy (in `value`) rather than
             // one per step payload. Steps read and update it there.
             await setState({ ...(state as object), messageListState });
             const iterationState: IterationState = {
               ...input,
+              initialUntaggedSystemMessages: initialMessageList.getSystemMessages(),
               iterationCount: 0,
               accumulatedSteps: [],
               accumulatedUsage: {

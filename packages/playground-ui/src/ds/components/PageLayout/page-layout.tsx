@@ -36,7 +36,7 @@ export function PageLayout({
   return (
     <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
       {(breadcrumbs || headerActions) && (
-        <Header className="h-10 min-h-10 shrink-0 gap-2 overflow-hidden px-2">
+        <Header className="min-h-header-default shrink-0 gap-2 overflow-hidden px-2">
           {breadcrumbs}
           {headerActions && (
             <div className="ml-auto flex shrink-0 items-center gap-2 overflow-hidden">{headerActions}</div>

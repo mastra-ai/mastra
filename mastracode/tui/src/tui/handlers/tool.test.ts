@@ -2,8 +2,8 @@ import { Container } from '@earendil-works/pi-tui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
-import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
 
+import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
 import type { TUIState } from '../state.js';
 import {
   clearToolInputParsers,
@@ -49,7 +49,6 @@ function createToolHandlerContext(): EventHandlerContext {
     pendingAskUserComponents: new Map(),
     pendingSubmitPlanComponents: new Map(),
     allToolComponents: [],
-    quietMode: false,
     toolOutputExpanded: false,
     hideThinkingBlock: false,
     taskToolInsertIndex: -1,
@@ -116,9 +115,10 @@ describe('background placeholder opt-in', () => {
       mastra: { backgroundTask: { taskId: 'visible-demo-123', status: 'running' } },
     });
     expect(ctx.state.pendingTools.has('collision')).toBe(enabled === true);
-    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n')).includes('background · visible-demo-123')).toBe(
-      enabled === true,
-    );
+    // The shell row marks an opted-in background task as started rather than finished.
+    const rendered = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(/◷ printf demo +started/.test(rendered)).toBe(enabled === true);
+    expect(rendered.includes('✓ printf demo')).toBe(enabled !== true);
   });
 
   it.each([undefined, false, true])('interprets plugin placeholders only when enabled is true (%s)', enabled => {
@@ -141,6 +141,7 @@ describe('background placeholder opt-in', () => {
 describe('task tool rendering', () => {
   afterEach(() => {
     clearToolInputParsers();
+    vi.useRealTimers();
   });
 
   it('keeps successful task tools out of the chat tool list', () => {
@@ -168,6 +169,18 @@ describe('task tool rendering', () => {
     expect(visibleChildren(ctx)[0]).toBe(ctx.state.allToolComponents[0]);
   });
 
+  it('renders a live task tool failure with the full renderer, not a compact row', () => {
+    const ctx = createToolHandlerContext();
+
+    handleToolStart(ctx, 'call-1', 'task_update', { id: 'missing', status: 'completed' });
+    handleToolEnd(ctx, 'call-1', { content: 'Task not found: missing', isError: true }, true);
+
+    const component = ctx.state.allToolComponents[0] as any;
+    expect(component.getChatSpacingKind()).toBe('full-tool');
+    const lines = component.render(100).map((line: string) => stripAnsi(line).trimEnd());
+    expect(lines).toEqual(['task_update id="missing", status="completed" ✗', '▎ Error', '▎ Task not found: missing']);
+  });
+
   it('does not recreate task tool state when input streaming starts after tool start', () => {
     const ctx = createToolHandlerContext();
 
@@ -182,9 +195,8 @@ describe('task tool rendering', () => {
     expect(ctx.state.chatContainer.children).toHaveLength(childCount);
   });
 
-  it('renders regular tools in quiet mode without demoting previous tools', () => {
+  it('renders regular tools without demoting previous tools', () => {
     const ctx = createToolHandlerContext();
-    ctx.state.quietMode = true;
 
     handleToolInputStart(ctx, 'call-1', 'view');
     const first = ctx.state.pendingTools.get('call-1')!;
@@ -197,25 +209,33 @@ describe('task tool rendering', () => {
     expect((second as any).render(100).join('\n')).not.toContain('╭──');
   });
 
-  it('marks quiet tool result objects with isError true as failed even when the event flag is false', async () => {
+  it.each([false, true])(
+    'preserves compact error paths before the render timer (parser advanced: %s)',
+    async advanceParser => {
+      const ctx = createToolHandlerContext();
+      const buffers = new Map([['call-1', { toolName: 'string_replace_lsp', text: '' }]]);
+      vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
+
+      handleToolInputStart(ctx, 'call-1', 'string_replace_lsp');
+      vi.useFakeTimers();
+      handleToolInputDelta(
+        ctx,
+        'call-1',
+        '{"path":"src/example.ts","old_string":"missing","new_string":"replacement"}',
+      );
+      if (advanceParser) await vi.advanceTimersByTimeAsync(0);
+      handleToolEnd(ctx, 'call-1', { content: 'The specified text was not found.', isError: true }, false);
+
+      const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+      expect(output).toContain('The specified text was not found.');
+      expect(output).toContain('▐edit▌src/example.ts▌ ✗');
+      expect(output).not.toContain('replacement');
+      expect(output).not.toContain('missing');
+    },
+  );
+
+  it('regroups compact tools as streamed args arrive', async () => {
     const ctx = createToolHandlerContext();
-    ctx.state.quietMode = true;
-    const buffers = new Map([['call-1', { toolName: 'string_replace_lsp', text: '' }]]);
-    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
-
-    handleToolInputStart(ctx, 'call-1', 'string_replace_lsp');
-    handleToolInputDelta(ctx, 'call-1', '{"path":"src/example.ts","old_string":"missing","new_string":"replacement"}');
-    await flushParser();
-    handleToolEnd(ctx, 'call-1', { content: 'The specified text was not found.', isError: true }, false);
-
-    const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
-    expect(output).toContain('The specified text was not found.');
-    expect(output).toContain('▐edit▌src/example.ts▌ ✗');
-  });
-
-  it('regroups quiet tools as streamed args arrive', async () => {
-    const ctx = createToolHandlerContext();
-    ctx.state.quietMode = true;
     const buffers = new Map([
       ['call-1', { toolName: 'view', text: '' }],
       ['call-2', { toolName: 'view', text: '' }],
@@ -254,10 +274,9 @@ describe('task tool rendering', () => {
   });
 });
 
-describe('quiet shell description streaming', () => {
+describe('compact shell description streaming', () => {
   it('never shows the streamed command before the description arrives', async () => {
     const ctx = createToolHandlerContext();
-    ctx.state.quietMode = true;
     const buffers = new Map([['call-1', { toolName: 'execute_command', text: '' }]]);
     vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
     const render = () => stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
@@ -286,7 +305,6 @@ describe('quiet shell description streaming', () => {
 
   it('streams the description into a grouped row as it arrives', async () => {
     const ctx = createToolHandlerContext();
-    ctx.state.quietMode = true;
     const buffers = new Map([['call-1', { toolName: 'execute_command', text: '' }]]);
     vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
     const row = () =>
@@ -309,7 +327,6 @@ describe('quiet shell description streaming', () => {
 
   it('falls back to the command once args finish without a description', async () => {
     const ctx = createToolHandlerContext();
-    ctx.state.quietMode = true;
     const buffers = new Map([['call-1', { toolName: 'execute_command', text: '' }]]);
     vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
 
@@ -323,10 +340,9 @@ describe('quiet shell description streaming', () => {
     ctx.state.pendingTools.get('call-1')?.stopLiveUpdates?.();
   });
 
-  it('only ever adds lines as quiet shell calls stream in, run, and finish', async () => {
+  it('only ever adds lines as compact shell calls stream in, run, and finish', async () => {
     const ctx = createToolHandlerContext();
-    ctx.state.quietMode = true;
-    ctx.state.quietModeMaxToolPreviewLines = 2;
+    ctx.state.previewLines = 2;
     const buffers = new Map<string, { toolName: string; text: string }>();
     vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
     const frames: string[][] = [];
@@ -372,7 +388,6 @@ describe('quiet shell description streaming', () => {
 
   it('marks a shell call failed from its live exit record when the result text does not say', () => {
     const ctx = createToolHandlerContext();
-    ctx.state.quietMode = true;
     handleToolStart(ctx, 'call-1', 'execute_command', { command: 'ls', description: 'Listing files' });
     // The sandbox threw: its exit event arrives before the result, which only carries `Error: …`.
     handleCommandExit(ctx, 'call-1', -1, false);
@@ -382,9 +397,8 @@ describe('quiet shell description streaming', () => {
     expect(output).toContain('└▸ Error: Sandbox failed to start');
   });
 
-  it('labels quiet shell boxes with the project root commands run in', () => {
+  it('labels compact shell boxes with the project root commands run in', () => {
     const ctx = createToolHandlerContext();
-    ctx.state.quietMode = true;
     ctx.state.projectInfo = { rootPath: '/work/repo' } as typeof ctx.state.projectInfo;
     handleToolStart(ctx, 'call-1', 'execute_command', {
       command: 'cd /work/repo/packages/core && ls',
@@ -396,7 +410,6 @@ describe('quiet shell description streaming', () => {
 
   it('marks a call rejected by input validation as failed', () => {
     const ctx = createToolHandlerContext();
-    ctx.state.quietMode = true;
     handleToolStart(ctx, 'call-1', 'execute_command', { command: 'git status' });
     // Validation failures come back as an ordinary result object, not an error result.
     handleToolEnd(ctx, 'call-1', { error: true, message: 'Tool input validation failed for execute_command.' }, false);
@@ -419,8 +432,10 @@ describe('inline tool approval', () => {
     const approval = ctx.state.activeInlineApproval;
     expect(approval).toBeDefined();
     expect(visibleChildren(ctx)).toContain(approval);
-    // The tool row above already shows the call, so the prompt is just the question and the keys.
-    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toContain('Allow?');
+    // Compact tool rows describe the call rather than repeat it, so the prompt names the tool and its arguments.
+    const rendered = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
+    expect(rendered).toContain('Allow execute_command?');
+    expect(rendered).toContain('command: pnpm test');
 
     approval!.handleInput('y');
 
@@ -460,9 +475,8 @@ describe('inline tool approval', () => {
     expect(output).toContain('path: src/auth.ts');
   });
 
-  it('names the command in quiet mode, where the row shows a description instead', () => {
+  it('names the command, where the row shows a description instead', () => {
     const ctx = createToolHandlerContext();
-    ctx.state.quietMode = true;
     (ctx.state.session as any).respondToToolApproval = vi.fn();
     const args = { command: 'rm -rf build', description: 'Cleaning the build output' };
 

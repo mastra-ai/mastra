@@ -10,6 +10,7 @@ export const omProviderErrorGuidanceScenario = {
   name: 'om-provider-error-guidance',
   description: 'Explains how to recover when the configured OM provider cannot authenticate.',
   testName: 'names the active OM model and recommends /memory or /connect',
+  enableObservationalMemory: true,
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = readMutableSettingsFixture(settingsPath);
@@ -19,7 +20,6 @@ export const omProviderErrorGuidanceScenario = {
       skippedAt: null,
       version: 1,
       omPackId: 'custom',
-      quietModePreferenceSelected: true,
     };
     settings.models = {
       ...settings.models,

@@ -181,11 +181,11 @@ Opacity is allowed only through design-system tokens, for layers whose job is to
 - Neutral hairlines: the `border` ladder, `surface-rim`, field/inset rims, and `gray-alpha-*`.
 - Effects that fade, glow, or animate inside a design-system component, such as the Composer ring and the sidebar meter bloom.
 
-Product code does not add opacity modifiers (`bg-green-500/20`) or `color-mix()` to chromatic colors, and does not write literal colors (`#hex`, `rgb()`, `oklch()`) outside the theme. Masks, brand marks, and screens that render before the theme loads are the exceptions. `src/color-rules.test.ts` enforces this across playground-ui, Studio, and Factory.
+Product code does not add opacity modifiers (`bg-green-500/20`) or `color-mix()` to chromatic colors, and does not write literal colors (`#hex`, `rgb()`, `oklch()`) outside the theme. Masks, brand marks, and screens that render before the theme loads are the exceptions.
 
 #### Border roles
 
-Choose a role at its authored opacity. Avoid extra modifiers such as `border-border/50` or `border-border-strong/40`; the color guard rejects these across the DS, Studio, Factory, and stories. Existing roles cover the following uses without adding a new token value:
+Choose a role at its authored opacity. Avoid extra modifiers such as `border-border/50` or `border-border-strong/40`. Existing roles cover the following uses without adding a new token value:
 
 | Role                | Token / utility                                              | Use                                                                     |
 | ------------------- | ------------------------------------------------------------ | ----------------------------------------------------------------------- |

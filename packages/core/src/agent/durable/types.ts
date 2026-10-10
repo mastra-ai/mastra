@@ -8,6 +8,7 @@ import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
 
+import type { MastraFGAPermissionInput } from '../../auth/ee';
 import type { ActorSignal } from '../../auth/ee/fga-check';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
@@ -16,6 +17,7 @@ import type { SystemMessage } from '../../llm';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../loop/types';
 import type { Mastra } from '../../mastra';
+import type { RunScope } from '../../mastra/run-scope';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
 import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
@@ -156,6 +158,15 @@ export interface SerializableStructuredOutput {
   useAgent?: boolean;
   /** Model config for a dedicated structuring model (if different from the main model) */
   structuringModelConfig?: SerializableModelConfig;
+  /**
+   * Whether the caller set `structuredOutput.model`. The durable path has no structuring
+   * pass yet, so the finish step must not derive the object from the main model's text.
+   */
+  hasStructuringModel?: boolean;
+  /** How validation failures are handled (see `StructuredOutputOptionsBase.errorStrategy`) */
+  errorStrategy?: 'strict' | 'warn' | 'fallback';
+  /** Value used when `errorStrategy` is `'fallback'`. Omitted when it is not JSON-safe. */
+  fallbackValue?: unknown;
 }
 
 /**
@@ -204,6 +215,12 @@ export interface SerializableClientTool {
 export interface SerializableDurableOptions {
   /** Call-time client tools, keyed by tool name, for cross-process rebuilds */
   clientTools?: Record<string, SerializableClientTool>;
+  /**
+   * Names of call-time `toolsets` tools. Their `execute` closures cannot cross
+   * a process boundary, so a worker rebuilding tools uses these names to fail
+   * loudly instead of silently dropping them.
+   */
+  toolsetToolNames?: string[];
   /** Maximum number of agentic loop iterations */
   maxSteps?: number;
   /** Tool selection strategy */
@@ -394,9 +411,7 @@ export interface DurableLLMStepOutput {
   stepSpanData?: unknown;
   /** Step finish payload data for closing step span later */
   stepFinishPayload?: unknown;
-  /** Deferred step-finish chunk for intermediate steps.
-   *  llm-execution defers emission so llm-mapping can emit it AFTER tool-result
-   *  chunks, matching the regular agent's chunk ordering. */
+  /** Deferred step-finish chunk carried until continuation policy resolves. */
   deferredStepFinishChunk?: unknown;
 }
 
@@ -539,6 +554,8 @@ export interface DurableAgenticExecutionOutput {
   backgroundTaskPending?: boolean;
   /** Whether a delegation hook called ctx.bail() during this iteration */
   delegationBailed?: boolean;
+  /** Step-finish chunk awaiting the loop's final continuation decision */
+  deferredStepFinishChunk?: unknown;
 }
 
 /**
@@ -608,6 +625,11 @@ export interface AgentStepFinishEventData {
   stepResult: DurableLLMStepOutput['stepResult'];
   toolResults?: DurableToolCallOutput[];
 }
+
+/**
+ * Payload passed to a durable agent's `onStepFinish` callback: the step-finish event data plus the run it belongs to.
+ */
+export type DurableAgentStepFinishResult = AgentStepFinishEventData & { runId: string };
 
 /**
  * Finish event data
@@ -723,6 +745,8 @@ export interface RunRegistryEntry {
   saveQueueManager?: SaveQueueManager;
   /** Memory instance for thread creation and message persistence */
   memory?: MastraMemory;
+  /** Successful in-flight memory authorization checks shared across this run. */
+  memoryAuthorizationChecks?: Map<MastraFGAPermissionInput, Promise<void>>;
   /** The language model instance (non-serializable, has doStream method) */
   model: MastraLanguageModel;
   /** Model list for fallback support (stores actual model instances) */
@@ -735,6 +759,8 @@ export interface RunRegistryEntry {
   mcp?: MCPToolExecutionContext;
   /** Cleanup function to call when run completes */
   cleanup?: () => void;
+  /** Per-run state shared by durable steps, released with the registry entry. */
+  runScope?: RunScope;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
   /** Resolved input processors (non-serializable, combined into workflow) */
@@ -923,6 +949,14 @@ export interface RunRegistryEntry {
    * that execution segment ends.
    */
   executionFence?: ExecutionFence;
+  /**
+   * Set while an engine that persists the suspended snapshot before returning
+   * is executing. The tool-call step queues suspension chunks/events here so
+   * they are published only after the snapshot is saved; otherwise a crash in
+   * between leaves a client holding a question that `resume()` rejects (#26435).
+   * @internal
+   */
+  pendingSuspensionEvents?: Array<() => Promise<void>>;
   /**
    * Mastra instance that owns this in-process run. Used during shutdown to
    * wait only for executions that may still need this instance's storage.

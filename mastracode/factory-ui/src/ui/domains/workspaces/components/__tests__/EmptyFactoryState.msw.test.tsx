@@ -77,9 +77,6 @@ describe('EmptyFactoryState', () => {
         http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
           HttpResponse.json({ project: { id: 'fp-1', name: 'hello', defaultModelId: 'openai/gpt-5.6-sol' } }),
         ),
-        http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, () =>
-          HttpResponse.json({ ok: true, config: {} }),
-        ),
       );
       const user = userEvent.setup();
 

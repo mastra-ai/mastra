@@ -177,6 +177,61 @@ describe('AgentLayout tool tabs', () => {
     });
   });
 
+  describe('when the user is in a conversation', () => {
+    it('opens Traces filtered to that conversation', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/threads/thread-1');
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Traces' }));
+
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/traces?filterThreadId=thread-1');
+    });
+  });
+
+  describe('when the user is in a new conversation', () => {
+    it('opens Traces for the whole agent', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/threads/new');
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Traces' }));
+
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/traces');
+    });
+  });
+
+  describe('when Traces is filtered to a conversation', () => {
+    it('returns to that conversation from Chat', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/traces?filterThreadId=thread-1');
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Chat' }));
+
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/threads/thread-1');
+    });
+  });
+
+  describe('when Traces excludes a conversation', () => {
+    it('opens a new conversation from Chat', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/traces?filterThreadId=thread-1&filterThreadId.op=isNot');
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Chat' }));
+
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/threads/new');
+    });
+  });
+
+  describe('when Traces has no conversation filter', () => {
+    it('opens a new conversation from Chat', async () => {
+      server.use(...commonHandlers(enabledPackages));
+      renderLayout('/agents/agent-1/traces');
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Chat' }));
+
+      expect(navigateSpy).toHaveBeenCalledWith('/agents/agent-1/threads/new');
+    });
+  });
+
   describe('when the agent tabs render', () => {
     it('does not expose Review as a top-level tab', async () => {
       server.use(...commonHandlers(enabledPackages));

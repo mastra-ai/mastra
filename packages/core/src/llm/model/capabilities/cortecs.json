@@ -3,6 +3,7 @@
     "claude-4-5-sonnet",
     "claude-4-6-sonnet",
     "claude-haiku-4-5",
+    "claude-haiku-5.5",
     "claude-opus-5",
     "claude-opus-5.5",
     "claude-opus4-5",
@@ -139,6 +140,7 @@
     "claude-4-5-sonnet",
     "claude-4-6-sonnet",
     "claude-haiku-4-5",
+    "claude-haiku-5.5",
     "claude-opus-5",
     "claude-opus-5.5",
     "claude-opus4-5",
@@ -277,6 +279,12 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "claude-haiku-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "gpt-5-mini": [

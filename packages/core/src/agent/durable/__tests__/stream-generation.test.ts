@@ -196,28 +196,33 @@ async function observedAgent() {
   return { durable, pubsub: durable.pubsub, transport, workflows };
 }
 
+/** Claims the run for an execution that then loses it to a successor; returns both claim generations. */
+async function takeOver(workflows: Awaited<ReturnType<typeof observedAgent>>['workflows'], runId: string) {
+  const lost = await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
+  const successor = await workflows.claimRunOwnership({ runId, ownerId: 'successor', leaseMs: 30_000, force: true });
+  return { stale: lost.record!.generation, current: successor.record!.generation };
+}
+
 describe('observe() from an offset', () => {
   it("follows the run's current claim when the takeover marker lies before the offset", async () => {
     const { durable, pubsub, transport, workflows } = await observedAgent();
     const runId = 'observed-run';
 
-    // The lost execution claimed generation 1; the successor took the run over at 2.
-    await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
-    await workflows.claimRunOwnership({ runId, ownerId: 'successor', leaseMs: 30_000, force: true });
+    const { stale, current } = await takeOver(workflows, runId);
 
-    await runInRunFenceScope(scopeAt(runId, 1), () => emitChunkEvent(pubsub, runId, textChunk('before takeover')));
-    await emitOwnershipClaimedEvent(pubsub, runId, 2);
-    await runInRunFenceScope(scopeAt(runId, 2), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
+    await runInRunFenceScope(scopeAt(runId, stale), () => emitChunkEvent(pubsub, runId, textChunk('before takeover')));
+    await emitOwnershipClaimedEvent(pubsub, runId, current);
+    await runInRunFenceScope(scopeAt(runId, current), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
 
     // The observer reconnects after everything above, so it never sees the marker.
     const observed = await durable.observe(runId, { offset: 3 });
     const reader = readFullStream(observed.fullStream as ReadableStream<any>);
 
-    await runInRunFenceScope(scopeAt(runId, 1), () => emitFinishEvent(pubsub, runId, finishData));
+    await runInRunFenceScope(scopeAt(runId, stale), () => emitFinishEvent(pubsub, runId, finishData));
     await delay(10);
     expect(reader.isClosed()).toBe(false);
 
-    await runInRunFenceScope(scopeAt(runId, 2), async () => {
+    await runInRunFenceScope(scopeAt(runId, current), async () => {
       await emitChunkEvent(pubsub, runId, textChunk('recovered'));
       await emitFinishEvent(pubsub, runId, finishData);
     });
@@ -233,13 +238,15 @@ describe('observe() from an offset', () => {
     const { durable, pubsub, transport, workflows } = await observedAgent();
     const runId = 'observed-run';
 
-    await workflows.claimRunOwnership({ runId, ownerId: 'owner', leaseMs: 30_000 });
-    await runInRunFenceScope(scopeAt(runId, 1), () => emitChunkEvent(pubsub, runId, textChunk('before ')));
+    const { record } = await workflows.claimRunOwnership({ runId, ownerId: 'owner', leaseMs: 30_000 });
+    await runInRunFenceScope(scopeAt(runId, record!.generation), () =>
+      emitChunkEvent(pubsub, runId, textChunk('before ')),
+    );
     vi.spyOn(workflows, 'getRunOwnership').mockRejectedValue(new Error('storage unavailable'));
 
     const observed = await durable.observe(runId, { offset: 1 });
     const reader = readFullStream(observed.fullStream as ReadableStream<any>);
-    await runInRunFenceScope(scopeAt(runId, 1), async () => {
+    await runInRunFenceScope(scopeAt(runId, record!.generation), async () => {
       await emitChunkEvent(pubsub, runId, textChunk('after'));
       await emitFinishEvent(pubsub, runId, finishData);
     });
@@ -254,23 +261,22 @@ describe('observe() from an offset', () => {
     const { durable, pubsub, transport, workflows } = await observedAgent();
     const runId = 'observed-run';
 
-    await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
-    await workflows.claimRunOwnership({ runId, ownerId: 'successor', leaseMs: 30_000, force: true });
+    const { stale, current } = await takeOver(workflows, runId);
 
-    await runInRunFenceScope(scopeAt(runId, 1), () => emitChunkEvent(pubsub, runId, textChunk('before takeover')));
-    await emitOwnershipClaimedEvent(pubsub, runId, 2);
-    await runInRunFenceScope(scopeAt(runId, 2), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
+    await runInRunFenceScope(scopeAt(runId, stale), () => emitChunkEvent(pubsub, runId, textChunk('before takeover')));
+    await emitOwnershipClaimedEvent(pubsub, runId, current);
+    await runInRunFenceScope(scopeAt(runId, current), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
     vi.spyOn(workflows, 'getRunOwnership').mockRejectedValueOnce(new Error('storage unavailable'));
 
     // The offset skips the marker and the first claim read fails.
     const observed = await durable.observe(runId, { offset: 3 });
     const reader = readFullStream(observed.fullStream as ReadableStream<any>);
 
-    await runInRunFenceScope(scopeAt(runId, 1), () => emitFinishEvent(pubsub, runId, finishData));
+    await runInRunFenceScope(scopeAt(runId, stale), () => emitFinishEvent(pubsub, runId, finishData));
     await delay(10);
     expect(reader.isClosed()).toBe(false);
 
-    await runInRunFenceScope(scopeAt(runId, 2), async () => {
+    await runInRunFenceScope(scopeAt(runId, current), async () => {
       await emitChunkEvent(pubsub, runId, textChunk('recovered'));
       await emitFinishEvent(pubsub, runId, finishData);
     });
@@ -317,23 +323,22 @@ describe('__subscribeToRunStream()', () => {
     const { durable, pubsub, transport, workflows } = await observedAgent();
     const runId = 'subscribed-run';
 
-    await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
-    await workflows.claimRunOwnership({ runId, ownerId: 'successor', leaseMs: 30_000, force: true });
-    await runInRunFenceScope(scopeAt(runId, 1), () => emitChunkEvent(pubsub, runId, textChunk('before takeover')));
-    await emitOwnershipClaimedEvent(pubsub, runId, 2);
-    await runInRunFenceScope(scopeAt(runId, 2), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
+    const { stale, current } = await takeOver(workflows, runId);
+    await runInRunFenceScope(scopeAt(runId, stale), () => emitChunkEvent(pubsub, runId, textChunk('before takeover')));
+    await emitOwnershipClaimedEvent(pubsub, runId, current);
+    await runInRunFenceScope(scopeAt(runId, current), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
 
     const events: any[] = [];
     const unsubscribe = await durable.__subscribeToRunStream(runId, { offset: 3 }, event => events.push(event));
-    await runInRunFenceScope(scopeAt(runId, 1), () => emitFinishEvent(pubsub, runId, finishData));
-    await runInRunFenceScope(scopeAt(runId, 2), async () => {
+    await runInRunFenceScope(scopeAt(runId, stale), () => emitFinishEvent(pubsub, runId, finishData));
+    await runInRunFenceScope(scopeAt(runId, current), async () => {
       await emitChunkEvent(pubsub, runId, textChunk('recovered'));
       await emitFinishEvent(pubsub, runId, finishData);
     });
 
     expect(summarize(events)).toEqual([
-      [AgentStreamEventTypes.CHUNK, 'recovered', 2],
-      [AgentStreamEventTypes.FINISH, undefined, 2],
+      [AgentStreamEventTypes.CHUNK, 'recovered', current],
+      [AgentStreamEventTypes.FINISH, undefined, current],
     ]);
     await unsubscribe();
     await transport.close();
@@ -343,25 +348,24 @@ describe('__subscribeToRunStream()', () => {
     const { durable, pubsub, transport, workflows } = await observedAgent();
     const runId = 'subscribed-run';
 
-    await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
-    await workflows.claimRunOwnership({ runId, ownerId: 'successor', leaseMs: 30_000, force: true });
-    await runInRunFenceScope(scopeAt(runId, 1), () => emitChunkEvent(pubsub, runId, textChunk('before takeover')));
-    await emitOwnershipClaimedEvent(pubsub, runId, 2);
-    await runInRunFenceScope(scopeAt(runId, 2), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
+    const { stale, current } = await takeOver(workflows, runId);
+    await runInRunFenceScope(scopeAt(runId, stale), () => emitChunkEvent(pubsub, runId, textChunk('before takeover')));
+    await emitOwnershipClaimedEvent(pubsub, runId, current);
+    await runInRunFenceScope(scopeAt(runId, current), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
     vi.spyOn(workflows, 'getRunOwnership').mockRejectedValueOnce(new Error('storage unavailable'));
 
     const events: any[] = [];
     const unsubscribe = await durable.__subscribeToRunStream(runId, { offset: 3 }, event => events.push(event));
-    await runInRunFenceScope(scopeAt(runId, 1), () => emitFinishEvent(pubsub, runId, finishData));
-    await runInRunFenceScope(scopeAt(runId, 2), async () => {
+    await runInRunFenceScope(scopeAt(runId, stale), () => emitFinishEvent(pubsub, runId, finishData));
+    await runInRunFenceScope(scopeAt(runId, current), async () => {
       await emitChunkEvent(pubsub, runId, textChunk('recovered'));
       await emitFinishEvent(pubsub, runId, finishData);
     });
     await delay(10);
 
     expect(summarize(events)).toEqual([
-      [AgentStreamEventTypes.CHUNK, 'recovered', 2],
-      [AgentStreamEventTypes.FINISH, undefined, 2],
+      [AgentStreamEventTypes.CHUNK, 'recovered', current],
+      [AgentStreamEventTypes.FINISH, undefined, current],
     ]);
     await unsubscribe();
     await transport.close();

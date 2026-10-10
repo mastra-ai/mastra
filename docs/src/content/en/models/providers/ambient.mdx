@@ -7,7 +7,7 @@ description: "Browse Ambient model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/ambient.svg" alt="Ambient logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Ambient
 
-Access 12 Ambient models through Mastra's model router. Authentication is handled automatically using the `AMBIENT_API_KEY` environment variable.
+Access 14 Ambient models through Mastra's model router. Authentication is handled automatically using the `AMBIENT_API_KEY` environment variable.
 
 Learn more in the [Ambient documentation](https://ambient.xyz).
 
@@ -106,8 +106,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.49
   },
   {
+    "model": "ambient/qwen/qwen3-30b-a3b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 131072,
+    "maxOutput": 32768,
+    "inputCost": 0.09,
+    "outputCost": 0.3
+  },
+  {
     "model": "ambient/qwen/qwen3.6-27b",
-    "imageInput": true,
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
@@ -116,6 +128,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.32,
     "outputCost": 3.2
+  },
+  {
+    "model": "ambient/qwen/qwen3.6-35b-a3b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.15,
+    "outputCost": 1
   },
   {
     "model": "ambient/qwen/qwen3.8-27b",
