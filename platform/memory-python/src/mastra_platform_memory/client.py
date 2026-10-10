@@ -26,9 +26,12 @@ class Context:
     messages: list[Message]
     observed_at: str | None
     continuation: str | None = None
+    prompt: list[dict[str, Any]] | None = None
 
     def as_chat_messages(self) -> list[dict[str, str]]:
-        """OpenAI-style chat messages: the system block (if any) followed by the tail."""
+        """OpenAI-style chat messages in the order the server (@mastra/memory) builds them."""
+        if self.prompt is not None:
+            return [{"role": m["role"], "content": m["content"]} for m in self.prompt]
         head = [{"role": "system", "content": self.system}] if self.system else []
         if self.continuation:
             head.append({"role": "user", "content": self.continuation})
@@ -98,6 +101,7 @@ class PlatformMemory:
             messages=res["messages"],
             observed_at=res.get("observedAt"),
             continuation=res.get("continuation"),
+            prompt=res.get("prompt"),
         )
 
     def save_messages(self, thread_id: str, *, resource_id: str, messages: list[Message]) -> list[dict[str, Any]]:
