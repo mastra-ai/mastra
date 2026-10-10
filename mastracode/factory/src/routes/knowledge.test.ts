@@ -16,6 +16,7 @@ import type {
   KnowledgeGraphPayload,
   KnowledgeRouteLimits,
   KnowledgeScopeTreePayload,
+  KnowledgeSearchPayload,
 } from './knowledge.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
@@ -562,8 +563,8 @@ describe('KnowledgeRoutes', () => {
     const h = await createHarness();
     const { scopes: ids } = await h.knowledge.reconcileStructure({
       scopes: [
-        { address: 'org:acme', name: 'mastra' },
-        { address: 'features', name: 'features', kind: 'domain', parentAddresses: ['org:acme'] },
+        { address: `org:${ORG}`, name: 'mastra' },
+        { address: 'features', name: 'features', kind: 'domain', parentAddresses: [`org:${ORG}`] },
         { address: 'features:child', name: 'child', kind: 'domain', parentAddresses: ['features'] },
       ],
     });
@@ -632,7 +633,7 @@ describe('KnowledgeRoutes', () => {
 
   it('omits the structural tree only for adapters without the capability, never for storage failures', async () => {
     const unsupported = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
-    unsupported.listScopeAddresses = async () => {
+    unsupported.listScopeNodes = async () => {
       throw new KnowledgeUnsupportedError();
     };
     const h1 = await createHarness({ knowledge: unsupported });
@@ -641,7 +642,7 @@ describe('KnowledgeRoutes', () => {
     expect(((await ok.json()) as KnowledgeScopeTreePayload).scopeNodes).toBeUndefined();
 
     const broken = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
-    broken.listScopeAddresses = async () => {
+    broken.listScopeNodes = async () => {
       throw new Error('db connection lost');
     };
     const h2 = await createHarness({ knowledge: broken });
@@ -923,6 +924,41 @@ describe('KnowledgeRoutes', () => {
     });
     const { status } = await nodeDetail(attacker, secret.id);
     expect(status).toBe(404);
+  });
+
+  it('404s a scope node from another org on the lens, node detail, and activity, and keeps it out of search', async () => {
+    const victim = await createHarness();
+    const { scopes } = await victim.knowledge.reconcileStructure({
+      scopes: [
+        { address: `org:${ORG}`, name: ORG },
+        { address: 'features:victim', name: 'Victim Features', parentAddresses: [`org:${ORG}`] },
+      ],
+    });
+    const secret = await victim.knowledge.createNode({
+      name: 'Victim Secret',
+      kind: 'concept',
+      scopeIds: [scopes['features:victim']!],
+    });
+    // Attacker has their own valid project in another org but shares the store.
+    const attacker = await createHarness({
+      orgId: OTHER_ORG,
+      user: { workosId: 'intruder', organizationId: OTHER_ORG },
+      knowledge: victim.knowledge,
+    });
+    const base = `/web/factory/projects/${attacker.projectId}/knowledge`;
+    const own = `/web/factory/projects/${victim.projectId}/knowledge`;
+    // Both viewers open their tree first, so each project rung exists and only the org check can 404.
+    expect((await attacker.app.request(`${base}/scopes`)).status).toBe(200);
+    expect((await victim.app.request(`${own}/scopes`)).status).toBe(200);
+    const foreign = scopes['features:victim'];
+    expect((await attacker.app.request(`${base}/subgraph?scopeNodeId=${foreign}`)).status).toBe(404);
+    expect((await attacker.app.request(`${base}/nodes/${secret.id}?scopeNodeId=${foreign}`)).status).toBe(404);
+    expect((await attacker.app.request(`${base}/activity?scopeNodeId=${foreign}`)).status).toBe(404);
+    const search = (await (await attacker.app.request(`${base}/search?q=victim`)).json()) as KnowledgeSearchPayload;
+    expect(search.results).toEqual([]);
+
+    // The owning org still reads its own scope.
+    expect((await victim.app.request(`${own}/subgraph?scopeNodeId=${foreign}`)).status).toBe(200);
   });
 
   // 10
