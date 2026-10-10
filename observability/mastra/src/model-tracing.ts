@@ -369,6 +369,7 @@ export class ModelSpanTracker {
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
   #completionStartTime?: Date;
+  #inferenceCompletionStartTime?: Date;
   #currentStepInputIsFinal: boolean = false;
   /** When true, step-finish chunks don't auto-close the step span (for durable execution) */
   #deferStepClose: boolean = false;
@@ -393,10 +394,9 @@ export class ModelSpanTracker {
    * Capture the completion start time (time to first token) when the first content chunk arrives.
    */
   #captureCompletionStartTime(): void {
-    if (this.#completionStartTime) {
-      return;
-    }
-    this.#completionStartTime = new Date();
+    const now = new Date();
+    this.#completionStartTime ??= now;
+    this.#inferenceCompletionStartTime ??= now;
   }
 
   /**
@@ -555,7 +555,7 @@ export class ModelSpanTracker {
         usage,
         finishReason: payload.stepResult.reason,
         warnings: payload.stepResult.warnings,
-        completionStartTime: this.#completionStartTime,
+        completionStartTime: this.#inferenceCompletionStartTime,
         ...(responseModel?.trim() ? { responseModel } : {}),
       },
     });
@@ -585,6 +585,7 @@ export class ModelSpanTracker {
       return;
     }
 
+    this.#inferenceCompletionStartTime = undefined;
     const input = extractStepInput(payload);
     const generationAttrs = this.#modelSpan?.attributes;
     const ctx = this.#inferenceContext;

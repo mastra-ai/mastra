@@ -381,6 +381,7 @@ export interface DurableLLMStepOutput {
     reason: LanguageModelV2FinishReason | 'abort' | 'tripwire' | 'retry';
     warnings: LanguageModelV2CallWarning[];
     isContinued: boolean;
+    signalPreempted?: boolean;
     logprobs?: LanguageModelV1LogProbs;
     totalUsage?: LanguageModelUsage;
     headers?: Record<string, string>;
@@ -864,6 +865,10 @@ export interface RunRegistryEntry {
    * signals sent to a restarted worker will not be drained.
    */
   drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  /** Owner-queue notifications, in-process only like the drain closure. */
+  subscribePendingSignals?: (listener: () => void) => () => void;
+  /** Releases the latest LLM step's pending-signal listener, whichever way that step exited. */
+  stopStepSignalListener?: () => void;
   /**
    * Thread title generation closure — mirrors the non-durable `#executeOnFinish`
    * title-generation branch, which was never ported to the durable finish step

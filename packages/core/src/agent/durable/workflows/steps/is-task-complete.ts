@@ -42,10 +42,11 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
           toolCalls?: Array<{ toolName?: string; args?: unknown }>;
           toolResults?: Array<{ toolName?: string; result?: unknown }>;
         }>;
-        lastStepResult?: { isContinued?: boolean; reason?: string };
+        lastStepResult?: { isContinued?: boolean; reason?: string; signalPreempted?: boolean };
         options?: { maxSteps?: number };
         backgroundTaskPending?: boolean;
       };
+      if (state.lastStepResult?.signalPreempted) return state;
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
       const initData = getInitData() as {
         agentId?: string;
