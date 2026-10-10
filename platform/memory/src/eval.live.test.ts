@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs';
+import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { Agent as PiAgent } from '@earendil-works/pi-agent-core';
 import type { AgentTool } from '@earendil-works/pi-agent-core';
@@ -42,10 +43,13 @@ const API = 'http://127.0.0.1:3010';
 const MODEL = 'gpt-4.1-mini';
 // Grader is a different, stronger model than the answerer so it doesn't share its blind spots.
 const JUDGE_MODEL = process.env.PLATFORM_MEMORY_EVAL_JUDGE ?? 'gpt-4.1';
+// Optional judge from another provider; the report shows how often the two agree.
+const SECOND_JUDGE = process.env.PLATFORM_MEMORY_EVAL_SECOND_JUDGE;
 export const OBSERVATION_TOKENS = 1500;
 export const REFLECTION_TOKENS = 4000;
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const creds = () => JSON.parse(readFileSync(evalFile!, 'utf8')) as { instanceId: string; token: string };
 const client = () =>
   new PlatformMemoryClient({ apiUrl: API, accessToken: creds().token, instanceId: creds().instanceId });
@@ -228,9 +232,9 @@ const RUNNERS: Record<string, (threadId: string, s: Scenario) => Runner> = {
 const NUGGET = { 0: 0, 0.5: 0.5, 1: 1 } as const;
 
 /** Scores each rubric nugget 0 (missing/wrong), 0.5 (partly) or 1 (fully); the question scores their mean. */
-async function judge(q: string, rubric: string[], answer: string) {
+async function judge(q: string, rubric: string[], answer: string, model = openai(JUDGE_MODEL)) {
   const { output } = await generateText({
-    model: openai(JUDGE_MODEL),
+    model,
     temperature: 0,
     output: Output.object({
       schema: z.object({
@@ -253,7 +257,7 @@ async function judge(q: string, rubric: string[], answer: string) {
 const only = process.env.PLATFORM_MEMORY_EVAL_ONLY?.split(',');
 const scenarios = process.env.PLATFORM_MEMORY_EVAL_SCENARIOS?.split(',');
 const RUNS = Number(process.env.PLATFORM_MEMORY_EVAL_RUNS ?? 1);
-type Graded = { q: string; ability: Ability; answer: string; score: number; reason: string };
+type Graded = { q: string; ability: Ability; answer: string; score: number; reason: string; second?: number };
 const results: {
   scenario: string;
   framework: string;
@@ -261,6 +265,7 @@ const results: {
   score: number;
   of: number;
   compressed: boolean | null;
+  observations: string;
   graded: Graded[];
 }[] = [];
 const judgeCheck: { scenario: string; q: string; score: number; reason: string }[] = [];
@@ -328,10 +333,25 @@ function summarize() {
   const failures = results.flatMap(r =>
     r.graded.filter(g => g.score < 1).map(g => ({ framework: r.framework, scenario: r.scenario, run: r.run, ...g })),
   );
+  const paired = results.flatMap(r => r.graded).filter(g => g.second !== undefined);
+  const agreement = paired.length
+    ? {
+        judges: [JUDGE_MODEL, SECOND_JUDGE],
+        n: paired.length,
+        exact: `${p(mean(paired.map(g => (g.score === g.second ? 1 : 0))))}%`,
+        meanAbsDiff: mean(paired.map(g => Math.abs(g.score - g.second!))).toFixed(3),
+        secondJudgeAccuracy: Object.fromEntries(
+          frameworks.map(f => [
+            f,
+            `${p(mean(results.filter(r => r.framework === f).flatMap(r => r.graded.map(g => g.second ?? NaN))))}%`,
+          ]),
+        ),
+      }
+    : null;
   writeFileSync(
     '/tmp/memory-eval.json',
     JSON.stringify(
-      { judge: JUDGE_MODEL, answerer: MODEL, overall, byScenario, byAbility, judgeCheck, failures, results },
+      { judge: JUDGE_MODEL, answerer: MODEL, agreement, overall, byScenario, byAbility, judgeCheck, failures, results },
       null,
       2,
     ),
@@ -377,11 +397,15 @@ describe.skipIf(!evalFile || !process.env.OPENAI_API_KEY)('memory quality eval (
             const graded: Graded[] = await Promise.all(
               s.quiz.map(async ({ q, rubric, ability }, i) => {
                 const answer = await (await fork(`${threadId}-q${i}`)).ask(q);
-                return { q, ability, answer, ...(await judge(q, rubric, answer)) };
+                const [first, second] = await Promise.all([
+                  judge(q, rubric, answer),
+                  SECOND_JUDGE ? judge(q, rubric, answer, anthropic(SECOND_JUDGE)) : undefined,
+                ]);
+                return { q, ability, answer, ...first, second: second?.score };
               }),
             );
             const score = graded.reduce((a, g) => a + g.score, 0);
-            results.push({ scenario: s.name, framework: name, run, score, of: s.quiz.length, compressed, graded });
+            results.push({ scenario: s.name, framework: name, run, score, of: s.quiz.length, compressed, observations, graded });
             summarize();
             expect(observations.length).toBeGreaterThan(0);
             if (compressed !== null) expect(compressed).toBe(true);
