@@ -7,6 +7,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ExperimentCrumb } from '../experiment-crumb';
+import { namedExperiment, unnamedExperiment } from './fixtures/experiment-lookup';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -26,7 +27,7 @@ const renderCrumb = (experimentId: string) => {
   );
 };
 
-const stubExperiment = (experiment: { id: string; datasetId: string; name?: string }) => {
+const stubExperiment = (experiment: typeof namedExperiment) => {
   server.use(http.get(`${BASE_URL}/api/experiments/${experiment.id}`, () => HttpResponse.json(experiment)));
 };
 
@@ -35,7 +36,7 @@ afterEach(() => cleanup());
 describe('ExperimentCrumb', () => {
   it('should render the experiment name when the experiment has one', async () => {
     // Given an experiment with a name
-    stubExperiment({ id: 'exp-named-0001', datasetId: 'ds-1', name: 'Nightly regression' });
+    stubExperiment(namedExperiment);
 
     // When the crumb renders for that experiment
     renderCrumb('exp-named-0001');
@@ -47,7 +48,7 @@ describe('ExperimentCrumb', () => {
 
   it('should fall back to the short id when the experiment has no name', async () => {
     // Given an experiment without a name
-    stubExperiment({ id: 'abcdef1234567890', datasetId: 'ds-1' });
+    stubExperiment(unnamedExperiment);
 
     // When the crumb renders
     renderCrumb('abcdef1234567890');

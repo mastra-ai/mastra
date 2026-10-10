@@ -17,6 +17,7 @@ import {
   noWorkflows,
   resultsResponse,
 } from './fixtures/experiment-item-route';
+import { newerExperimentsPage } from './fixtures/experiment-lookup';
 import { renamedPostgresWithMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import ExperimentPage from '@/pages/experiments/experiment';
 import { server } from '@/test/msw-server';
@@ -35,12 +36,6 @@ const renderExperimentRoute = (experimentId = EXPERIMENT_ID) => {
       </QueryClientProvider>
     </MastraReactProvider>,
   );
-};
-
-// The first page of the cross-dataset list holds only newer experiments, never the one being opened.
-const newerExperimentsPage = {
-  experiments: Array.from({ length: 10 }, (_, i) => ({ ...experiment, id: `exp-newer-${i}` })),
-  pagination: { total: 11, page: 0, perPage: 10, hasMore: true },
 };
 
 beforeEach(() => {
