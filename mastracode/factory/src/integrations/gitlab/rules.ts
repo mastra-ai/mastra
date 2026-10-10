@@ -393,6 +393,27 @@ export class GitLabRules {
         opened: string(mergeRequest?.state) === 'opened' && (actorTrusted || mergeRequestAuthorTrusted),
       });
     }
+    // A push moves the head a recorded review verdict was given on. Recording
+    // the new head lets the verdict badge show that it is outdated, while the
+    // verdict itself stays so the next pass still runs as a re-review. Updates
+    // that only edit the merge request carry the same head and write nothing.
+    const headSha = string(object(mergeRequest?.last_commit)?.id)?.toLowerCase();
+    if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
+      const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
+      // The authoring Work item mirrors the verdict of the merge request it has
+      // out; a push to an older one must not mark its successor's verdict.
+      const recorded = parent?.metadata?.openPullRequestNumber;
+      const parentOwned = parent && (typeof recorded !== 'number' || recorded === mergeRequestIid);
+      for (const card of [reviewItem, parentOwned ? parent : undefined]) {
+        if (!card || card.metadata?.pullRequestHeadSha === headSha) continue;
+        await this.options.storage.update({
+          orgId: card.orgId,
+          id: card.id,
+          userId: 'factory-rule-dispatcher',
+          patch: { metadata: { pullRequestHeadSha: headSha } },
+        });
+      }
+    }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
     return results[0] ?? { status: 'ignored' };

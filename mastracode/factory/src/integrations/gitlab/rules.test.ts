@@ -484,6 +484,103 @@ describe('GitLabRules', () => {
     ]);
   });
 
+  describe('recording the pushed head against a review verdict', () => {
+    const reviewedHeadSha = 'be10bfa000000000000000000000000000000000';
+    const pushedHeadSha = '8fa258d000000000000000000000000000000000';
+    const reviewKey = `gitlab-pr:${Buffer.from(
+      JSON.stringify({ version: 1, host: 'gitlab.example.com', projectId: 101, mergeRequestIid: 17 }),
+      'utf8',
+    ).toString('base64url')}`;
+
+    function mergeRequestUpdated(deliveryId: string, lastCommit: string, oldrev?: string) {
+      const base = mergeRequestOpened(deliveryId);
+      return {
+        ...base,
+        payload: {
+          ...base.payload,
+          object_attributes: {
+            ...base.payload.object_attributes,
+            action: 'update',
+            last_commit: { id: lastCommit },
+            ...(oldrev ? { oldrev } : {}),
+          },
+        },
+      };
+    }
+
+    async function seed(workMetadata: Record<string, unknown>) {
+      const { seeded, project, service } = await setup();
+      const verdict = { reviewVerdict: 'approve', reviewedHeadSha };
+      const work = (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:authoring' },
+            title: 'Authoring work',
+            board: 'work',
+            stages: ['execute'],
+            sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
+            metadata: { authorTrusted: true, ...verdict, ...workMetadata },
+          },
+        })
+      ).item;
+      const review = (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: reviewKey },
+            parentWorkItemId: work.id,
+            title: 'MR 17',
+            board: 'review',
+            stages: ['done'],
+            sessions: {},
+            metadata: { authorTrusted: true, ...verdict },
+          },
+        })
+      ).item;
+      const metadataOf = async (id: string) => (await seeded.workItems.get({ orgId: 'org-1', id }))?.metadata;
+      return { seeded, service, workId: work.id, reviewId: review.id, metadataOf };
+    }
+
+    it('stamps the new head on the Review card and its authoring Work item without clearing the verdict', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
+
+      await service.ingest(mergeRequestUpdated('delivery-mr-push', pushedHeadSha.toUpperCase(), reviewedHeadSha));
+
+      for (const id of [reviewId, workId]) {
+        expect(await metadataOf(id)).toMatchObject({
+          reviewVerdict: 'approve',
+          reviewedHeadSha,
+          pullRequestHeadSha: pushedHeadSha,
+        });
+      }
+    });
+
+    it('leaves a Work item alone when it has a different merge request out', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 18 });
+
+      await service.ingest(mergeRequestUpdated('delivery-mr-push-other', pushedHeadSha, reviewedHeadSha));
+
+      expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      expect(await metadataOf(workId)).not.toHaveProperty('pullRequestHeadSha');
+    });
+
+    it('does not rewrite the cards when an edit carries the head already recorded', async () => {
+      const { seeded, service, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
+      await service.ingest(mergeRequestUpdated('delivery-mr-push-1', pushedHeadSha, reviewedHeadSha));
+      const revision = (await seeded.workItems.get({ orgId: 'org-1', id: reviewId }))?.revision;
+
+      await service.ingest(mergeRequestUpdated('delivery-mr-title-edit', pushedHeadSha));
+
+      expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      expect((await seeded.workItems.get({ orgId: 'org-1', id: reviewId }))?.revision).toBe(revision);
+    });
+  });
+
   describe('open merge request tracking on the authoring Work card', () => {
     async function seedWork(
       seeded: Awaited<ReturnType<typeof setup>>['seeded'],

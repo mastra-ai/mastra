@@ -1728,6 +1728,115 @@ describe('GithubRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
+  describe('recording the pushed head against a review verdict', () => {
+    const reviewedHeadSha = 'be10bfa000000000000000000000000000000000';
+    const pushedHeadSha = '8fa258d000000000000000000000000000000000';
+
+    function push(deliveryId: string, sha: string) {
+      const delivery = pullRequest('synchronize', deliveryId);
+      return {
+        ...delivery,
+        payload: {
+          ...delivery.payload,
+          pull_request: { ...delivery.payload.pull_request, head: { ref: 'feature', sha } },
+        },
+      };
+    }
+
+    async function seed(permission: string, workMetadata: Record<string, unknown>) {
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(permission);
+      const verdict = { reviewVerdict: 'approve', reviewedHeadSha };
+      const work = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github:10:issue:42',
+            url: 'https://github.com/acme/repo/issues/42',
+          },
+          title: 'Issue 42',
+          stages: ['execute'],
+          sessions: {},
+          metadata: { ...verdict, ...workMetadata },
+        },
+      });
+      const review = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: 'github:10:pull-request:17',
+            url: 'https://github.com/acme/repo/pull/17',
+          },
+          parentWorkItemId: work.item.id,
+          title: 'PR 17',
+          stages: ['done'],
+          sessions: {},
+          metadata: { authorTrusted: true, ...verdict },
+        },
+      });
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createBoardRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const metadataOf = async (id: string) =>
+        (await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).find(item => item.id === id)?.metadata;
+      return { service, workItems, project, workId: work.item.id, reviewId: review.item.id, metadataOf };
+    }
+
+    it('stamps the new head on the Review card and its authoring Work item without clearing the verdict', async () => {
+      const { service, workItems, project, workId, reviewId, metadataOf } = await seed('write', {
+        openPullRequestNumber: 17,
+      });
+
+      await expect(service.ingest(push('delivery-head-1', pushedHeadSha.toUpperCase()))).resolves.toEqual({
+        status: 'committed',
+      });
+
+      for (const id of [reviewId, workId]) {
+        expect(await metadataOf(id)).toMatchObject({
+          reviewVerdict: 'approve',
+          reviewedHeadSha,
+          pullRequestHeadSha: pushedHeadSha,
+        });
+      }
+      // The kept verdict still makes the push start a re-review.
+      const transitions = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+        entry => entry.decision.type === 'transition',
+      );
+      expect(transitions).toHaveLength(1);
+    });
+
+    it('leaves a Work item alone when it has a different pull request out', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed('write', { openPullRequestNumber: 18 });
+
+      await service.ingest(push('delivery-head-other', pushedHeadSha));
+
+      expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      expect(await metadataOf(workId)).not.toHaveProperty('pullRequestHeadSha');
+    });
+
+    it('records the head from an untrusted push without starting a review', async () => {
+      const { service, workItems, project, reviewId, metadataOf } = await seed('read', {});
+
+      await service.ingest(push('delivery-head-untrusted', pushedHeadSha));
+
+      expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    });
+  });
+
   it.each(['maintain', 'triage', 'read', undefined])('fails closed for GitHub permission %s', async permission => {
     const seen = vi.fn(() => undefined);
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(permission, {

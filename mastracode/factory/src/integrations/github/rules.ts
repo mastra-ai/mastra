@@ -807,8 +807,38 @@ export class GithubRules {
       relatedItem.externalSource?.type !== 'pull-request'
         ? relatedItem
         : undefined;
+    // A push moves the head a recorded review verdict was given on. Recording
+    // the new head lets the verdict badge show that it is outdated, while the
+    // verdict itself stays so the next pass still runs as a re-review.
+    const stampHead = async () => {
+      const headSha = string(object(pullRequest?.head)?.sha)?.toLowerCase();
+      if (event !== 'pullRequestUpdated' || !headSha || !pullRequestNumber) return;
+      if (relatedItem?.externalSource?.type !== 'pull-request') return;
+      const parent = await this.#linkedClosureItem(
+        project.orgId,
+        project.factoryProjectId,
+        repositoryId,
+        repositoryName,
+        pullRequestNumber,
+        relatedItem,
+      );
+      // The authoring Work item mirrors the verdict of the pull request it has
+      // out; a push to an older one must not mark its successor's verdict.
+      const recorded = parent?.metadata?.openPullRequestNumber;
+      const parentOwned = parent && (typeof recorded !== 'number' || recorded === pullRequestNumber);
+      for (const card of [relatedItem, parentOwned ? parent : undefined]) {
+        if (!card || card.metadata?.pullRequestHeadSha === headSha) continue;
+        await this.options.storage.update({
+          orgId: card.orgId,
+          id: card.id,
+          userId: 'factory-rule-dispatcher',
+          patch: { metadata: { pullRequestHeadSha: headSha } },
+        });
+      }
+    };
     if (linked === undefined && authoringItem === undefined) {
       await stampClosed();
+      await stampHead();
       return primary;
     }
     const companion = linked ?? authoringItem;
