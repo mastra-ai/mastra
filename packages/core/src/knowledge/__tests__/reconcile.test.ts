@@ -56,6 +56,7 @@ describe('Knowledge structure reconciliation', () => {
         },
       ),
     ).toEqual({
+      retrofit: false,
       scopes: [
         {
           address: 'agent:weather:public',
