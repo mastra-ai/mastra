@@ -1642,7 +1642,7 @@ export class DurableAgent<
   ): Promise<T> {
     const requestContext = options.requestContext ?? new RequestContext();
     // A resumed run keeps its suspended scopes, so the Agent's configuration is not consulted.
-    const agentScopes = snapshot
+    const agentScopes = snapshot?.scopes
       ? []
       : [...((await this.getScopes({ requestContext })) ?? []), ...(defaultScopes ?? [])];
     if (!agentScopes.length && !callScopes?.length && !requestContext.has(MASTRA_SCOPES_KEY) && !snapshot?.scopes) {

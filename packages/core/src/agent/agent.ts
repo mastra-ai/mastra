@@ -7814,7 +7814,7 @@ export class Agent<
           }
         : undefined);
     // A resumed run keeps its suspended scopes, so the Agent's configuration is not consulted.
-    const agentScopes = resumeSnapshot
+    const agentScopes = resumeSnapshot?.scopes
       ? []
       : [...((await this.getScopes({ requestContext })) ?? []), ...(defaultScopes ?? [])];
     const resolved = resolveAgentScopes({
