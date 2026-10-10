@@ -32,6 +32,7 @@ const PROCESSOR_PHASE_LABELS: Record<ProcessorSpanPayloadPhase, string> = {
   outputResult: 'Output result',
   outputStep: 'Output step',
   toolResult: 'Tool result',
+  toolModelOutput: 'Tool model output',
   requestError: 'Request error',
 };
 

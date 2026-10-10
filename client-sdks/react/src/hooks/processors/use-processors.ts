@@ -1,4 +1,5 @@
 import type {
+  ExecuteProcessorParams as ClientExecuteProcessorParams,
   ExecuteProcessorResponse,
   GetProcessorDetailResponse,
   GetProcessorResponse,
@@ -21,7 +22,7 @@ export type {
 
 export interface ExecuteProcessorParams {
   processorId: string;
-  phase: ProcessorPhase;
+  phase: ClientExecuteProcessorParams['phase'];
   messages: MastraDBMessage[];
   agentId?: string;
 }

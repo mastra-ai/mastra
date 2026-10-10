@@ -189,16 +189,33 @@ export type ProcessorToolResultPhaseType = {
   retryCount?: number;
 };
 
+export type ProcessorToolModelOutputPhaseType = {
+  phase: 'toolModelOutput';
+  messages: ProcessorMessageType[];
+  messageList: MessageList;
+  stepNumber: number;
+  toolName: string;
+  toolCallId: string;
+  args?: unknown;
+  result?: unknown;
+  modelOutput?: unknown;
+  providerExecuted?: boolean;
+  systemMessages?: CoreMessageType[];
+  steps?: Array<StepResult<ToolSet>>;
+  retryCount?: number;
+};
+
 export type ProcessorStepInputType =
   | ProcessorInputPhaseType
   | ProcessorInputStepPhaseType
   | ProcessorOutputStreamPhaseType
   | ProcessorOutputResultPhaseType
   | ProcessorOutputStepPhaseType
-  | ProcessorToolResultPhaseType;
+  | ProcessorToolResultPhaseType
+  | ProcessorToolModelOutputPhaseType;
 
 export type ProcessorStepOutputType = {
-  phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult';
+  phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult' | 'toolModelOutput';
   messages?: ProcessorMessageType[];
   messageList?: MessageList;
   systemMessages?: CoreMessageType[];
@@ -220,6 +237,8 @@ export type ProcessorStepOutputType = {
   toolCallId?: string;
   args?: unknown;
   toolResultValue?: unknown;
+  /** Model-facing tool output carried through the toolModelOutput phase */
+  toolModelOutput?: unknown;
   providerExecuted?: boolean;
   model?: MastraLanguageModel;
   tools?: ProcessorStepToolsConfig;
@@ -660,6 +679,33 @@ export const ProcessorToolResultPhaseSchema = z.object({
 });
 
 /**
+ * Schema for 'toolModelOutput' phase - processToolModelOutput
+ * Adjusts the model-facing copy of a tool result after toModelOutput mapping.
+ * The stored and streamed result is never changed.
+ */
+export const ProcessorToolModelOutputPhaseSchema = z.object({
+  phase: z.literal('toolModelOutput'),
+  messages: messagesSchema,
+  messageList: messageListSchema,
+  stepNumber: z.number().describe('The current step number (0-indexed)'),
+  toolName: z.string().describe('Name of the tool that was executed'),
+  toolCallId: z.string().describe('Unique identifier for this specific tool call'),
+  args: z.unknown().optional().describe('Arguments the LLM passed to the tool'),
+  result: z.unknown().optional().describe('Final tool result, after all processToolResult rewrites'),
+  modelOutput: z
+    .unknown()
+    .optional()
+    .describe('Current model-facing output; undefined when the tool has no toModelOutput'),
+  providerExecuted: z
+    .boolean()
+    .optional()
+    .describe('Whether this result came from a provider-executed tool (e.g. Anthropic web_search)'),
+  systemMessages: systemMessagesSchema.optional(),
+  steps: z.custom<Array<StepResult<ToolSet>>>().optional().describe('Results from previous steps'),
+  retryCount: retryCountSchema,
+});
+
+/**
  * Discriminated union schema for processor step input in workflows.
  *
  * This schema uses a discriminated union based on the `phase` field,
@@ -674,6 +720,7 @@ export const ProcessorToolResultPhaseSchema = z.object({
  * - 'outputResult': Process complete output after streaming
  * - 'outputStep': Process output after each LLM response (before tools)
  * - 'toolResult': Process a tool's result after tool.execute() (before next LLM call)
+ * - 'toolModelOutput': Adjust the model-facing copy of a tool result after toModelOutput
  */
 export const ProcessorStepInputSchema: z.ZodType<ProcessorStepInputType> = z.discriminatedUnion('phase', [
   ProcessorInputPhaseSchema,
@@ -682,6 +729,7 @@ export const ProcessorStepInputSchema: z.ZodType<ProcessorStepInputType> = z.dis
   ProcessorOutputResultPhaseSchema,
   ProcessorOutputStepPhaseSchema,
   ProcessorToolResultPhaseSchema,
+  ProcessorToolModelOutputPhaseSchema,
 ]);
 
 /**
@@ -693,7 +741,7 @@ export const ProcessorStepInputSchema: z.ZodType<ProcessorStepInputType> = z.dis
  */
 export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.object({
   // Phase field
-  phase: z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep', 'toolResult']),
+  phase: z.enum(['input', 'inputStep', 'outputStream', 'outputResult', 'outputStep', 'toolResult', 'toolModelOutput']),
 
   // Message-based fields (used by most phases)
   messages: messagesSchema.optional(),
@@ -723,6 +771,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   toolCallId: z.string().optional(),
   args: z.unknown().optional(),
   toolResultValue: z.unknown().optional(),
+  toolModelOutput: z.unknown().optional(),
   providerExecuted: z.boolean().optional(),
 
   // Retry count

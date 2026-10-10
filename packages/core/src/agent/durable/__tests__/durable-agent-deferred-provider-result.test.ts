@@ -12,7 +12,8 @@
  * 1. the deferred result is patched onto the existing call part,
  * 2. `processToolResult` runs BEFORE the raw result is emitted or persisted
  *    (post-processor mutations reach both the stream and history), and
- * 3. a processor tripwire blocks the raw result entirely and bails the run.
+ * 3. a processor tripwire blocks the raw result entirely and bails the run, and
+ * 4. `processToolModelOutput` changes only the stored model-facing output.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -250,6 +251,48 @@ describe('DurableAgent deferred provider-executed tool results (#14282)', () => 
     const serialized = JSON.stringify(recalled.messages);
     expect(serialized).toContain('REDACTED');
     expect(serialized).not.toContain('SECRET-SOURCE');
+    result.cleanup();
+  });
+
+  it('runs processToolModelOutput on the deferred result and keeps the stored result whole', async () => {
+    const seen: Array<{ toolCallId: string; result: unknown; providerExecuted?: boolean }> = [];
+    const shortener = {
+      id: 'deferred-shortener',
+      processToolModelOutput: async ({ toolCallId, result, providerExecuted }: any) => {
+        seen.push({ toolCallId, result, providerExecuted });
+        if (toolCallId !== PROVIDER_CALL_ID) return;
+        return { modelOutput: { type: 'text', value: 'short' } };
+      },
+    };
+
+    const { mockMemory, durableAgent } = setup(pubsub, {
+      deferredResult: { hits: 3, source: 'full-source' },
+      outputProcessors: [shortener],
+    });
+
+    const result = await durableAgent.stream('search and check weather', {
+      memory: { thread: 'thread-deferred-mo', resource: 'resource-deferred-mo' },
+    });
+    const chunks = await drain(result.fullStream);
+
+    const providerCall = seen.find(s => s.toolCallId === PROVIDER_CALL_ID);
+    expect(providerCall?.result).toEqual({ hits: 3, source: 'full-source' });
+    expect(providerCall?.providerExecuted).toBe(true);
+
+    const streamedResult = chunks.find(
+      (c: any) => c.type === 'tool-result' && c.payload?.toolCallId === PROVIDER_CALL_ID,
+    );
+    expect(streamedResult?.payload?.result).toEqual({ hits: 3, source: 'full-source' });
+
+    const recalled = await mockMemory.recall({
+      threadId: 'thread-deferred-mo',
+      resourceId: 'resource-deferred-mo',
+    });
+    const invocations = findInvocations(recalled.messages, PROVIDER_CALL_ID);
+    const patched = invocations.find((inv: any) => inv.state === 'result');
+    expect(patched?.result).toEqual({ hits: 3, source: 'full-source' });
+    const part = findInvocationPart(recalled.messages, PROVIDER_CALL_ID);
+    expect(part?.providerMetadata?.mastra?.modelOutput).toEqual({ type: 'text', value: 'short' });
     result.cleanup();
   });
 

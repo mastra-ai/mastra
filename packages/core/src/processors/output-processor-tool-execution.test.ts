@@ -723,3 +723,121 @@ describe('processToolResult lifecycle hook', () => {
     expect(outputStreamChunks).toBeGreaterThan(0);
   });
 });
+
+describe('processToolModelOutput lifecycle hook', () => {
+  const makeModel = (prompts: any[]) =>
+    new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+        const hasToolResults = prompt.some((msg: any) => msg.role === 'tool');
+        return {
+          stream: convertArrayToReadableStream(
+            hasToolResults
+              ? [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'text-start', id: 't' },
+                  { type: 'text-delta', id: 't', delta: 'done' },
+                  { type: 'text-end', id: 't' },
+                  { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+                ]
+              : [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'tool-call', toolCallId: 'call-mo-1', toolName: 'echoTool', input: '{"text":"hello"}' },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                  },
+                ],
+          ) as any,
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+  const toolOutputInPrompt = (prompt: any[]) =>
+    prompt.find((m: any) => m.role === 'tool')?.content.find((c: any) => c.type === 'tool-result')?.output;
+
+  const run = async (processors: Processor[], toModelOutput?: (r: unknown) => unknown) => {
+    const prompts: any[] = [];
+    const echoTool = createTool({
+      id: 'echoTool',
+      description: 'echo',
+      inputSchema: z.object({ text: z.string() }),
+      execute: async ({ text }) => `Echo: ${text}`,
+      ...(toModelOutput ? { toModelOutput } : {}),
+    } as any);
+    const agent = new Agent({
+      id: 'mo-agent',
+      name: 'Test Agent',
+      instructions: 'mo',
+      model: makeModel(prompts) as any,
+      tools: { echoTool },
+      outputProcessors: processors,
+    });
+    const stream = await agent.stream('go', { maxSteps: 5 });
+    let streamedResult: unknown;
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-result') streamedResult = (chunk as any).payload.result;
+    }
+    return { prompts, streamedResult };
+  };
+
+  it('changes what the next prompt reads and leaves the streamed result alone', async () => {
+    const seen: unknown[] = [];
+    const shortener: Processor = {
+      id: 'shortener',
+      processToolModelOutput: ({ result, modelOutput }: any) => {
+        seen.push({ result, modelOutput });
+        return { modelOutput: { type: 'text', value: 'short' } };
+      },
+    };
+    const { prompts, streamedResult } = await run([shortener]);
+
+    expect(seen).toEqual([{ result: 'Echo: hello', modelOutput: undefined }]);
+    expect(streamedResult).toBe('Echo: hello');
+    expect(toolOutputInPrompt(prompts[1])).toEqual({ type: 'text', value: 'short' });
+  });
+
+  it('receives the toModelOutput mapping and chains processors in order', async () => {
+    const first: Processor = {
+      id: 'first',
+      processToolModelOutput: ({ modelOutput }: any) => ({
+        modelOutput: { type: 'text', value: `${modelOutput.value}+first` },
+      }),
+    };
+    const second: Processor = {
+      id: 'second',
+      processToolModelOutput: ({ modelOutput }: any) => ({
+        modelOutput: { type: 'text', value: `${modelOutput.value}+second` },
+      }),
+    };
+    const { prompts } = await run([first, second], () => ({ type: 'text', value: 'mapped' }));
+
+    expect(toolOutputInPrompt(prompts[1])).toEqual({ type: 'text', value: 'mapped+first+second' });
+  });
+
+  it('runs after processToolResult even when listed before it', async () => {
+    const seenResults: unknown[] = [];
+    const reader: Processor = {
+      id: 'reader',
+      processToolModelOutput: ({ result }: any) => {
+        seenResults.push(result);
+      },
+    };
+    const redactor: Processor = {
+      id: 'redactor',
+      processToolResult: ({ messageList, toolCallId, toolName, args }: any) => {
+        messageList.updateToolInvocation({
+          type: 'tool-invocation',
+          toolInvocation: { state: 'result', toolCallId, toolName, args, result: '[REDACTED]' },
+        });
+      },
+    };
+    const { streamedResult } = await run([reader, redactor]);
+
+    expect(streamedResult).toBe('[REDACTED]');
+    expect(seenResults).toEqual(['[REDACTED]']);
+  });
+});

@@ -98,6 +98,7 @@ import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-
 import { persistUnavailableAttachments } from '../../shared/persist-unavailable-attachments';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
+import { applyToolModelOutputProcessors } from '../../shared/steps/tool-result-commit-core';
 import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import type { TranscriptStep } from '../../shared/transcript-step';
 import { getTranscriptStepContent } from '../../shared/transcript-step';
@@ -1026,6 +1027,7 @@ async function processOutputStream<OUTPUT = undefined>({
           // tools take a different path through llm-mapping-step.ts, which has its
           // own processToolResult invocation site.
           if (outputProcessors && outputProcessors.length > 0) {
+            let processorPhase: 'processToolResult' | 'processToolModelOutput' = 'processToolResult';
             try {
               await getToolResultProcessorRunner().runProcessToolResult({
                 steps: (toolResultSteps ?? []) as Array<StepResult<any>>,
@@ -1050,6 +1052,26 @@ async function processOutputStream<OUTPUT = undefined>({
               if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
                 (chunk.payload as { result: unknown }).result = postProcessorResult;
               }
+              processorPhase = 'processToolModelOutput';
+              const nextProviderMetadata = await applyToolModelOutputProcessors(getToolResultProcessorRunner(), {
+                steps: (toolResultSteps ?? []) as Array<StepResult<any>>,
+                messageList,
+                stepNumber: toolResultStepNumber ?? 0,
+                toolName: chunk.payload.toolName,
+                toolCallId: chunk.payload.toolCallId,
+                toolArgs: chunk.payload.args,
+                result: chunk.payload.result,
+                providerExecuted: inferredProviderExecuted,
+                providerMetadata: chunk.payload.providerMetadata as Record<string, unknown> | undefined,
+                ...(toolResultObservability ?? {}),
+                requestContext,
+                retryCount: processorRetryCount ?? 0,
+                writer: toolResultWriter,
+                abortSignal: options?.abortSignal,
+              });
+              if (nextProviderMetadata !== chunk.payload.providerMetadata) {
+                (chunk.payload as { providerMetadata?: unknown }).providerMetadata = nextProviderMetadata;
+              }
             } catch (error) {
               if (error instanceof TripWire) {
                 toolResultTripwire = error;
@@ -1065,7 +1087,7 @@ async function processOutputStream<OUTPUT = undefined>({
                 runState.setState({ hasErrored: true });
                 break;
               }
-              logger?.error('Error in processToolResult processors:', error);
+              logger?.error(`Error in ${processorPhase} processors:`, error);
               throw error;
             }
           }
@@ -2263,8 +2285,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                           Boolean(
                             outputProcessors?.some(processor =>
                               isProcessorWorkflow(processor)
-                                ? processor.__processToolResult !== false
-                                : 'processToolResult' in processor,
+                                ? processor.__processToolResult !== false ||
+                                  processor.__processToolModelOutput !== false
+                                : 'processToolResult' in processor || 'processToolModelOutput' in processor,
                             ),
                           ),
                         isProviderTool,

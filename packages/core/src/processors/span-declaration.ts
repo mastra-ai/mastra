@@ -26,6 +26,7 @@ const WORKFLOW_PHASE_TO_SPAN_PHASE: Record<string, ProcessorSpanPhase> = {
   outputResult: 'output',
   outputStep: 'outputStep',
   toolResult: 'toolResult',
+  toolModelOutput: 'toolModelOutput',
   requestError: 'requestError',
 };
 
