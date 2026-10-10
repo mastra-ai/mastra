@@ -393,7 +393,12 @@ describe('restart after a checkpoint that shows the entry finished (issue #24615
  * then that snapshot is restarted in a fresh process.
  */
 describe('restart after a crash inside a parallel or foreach block (issue #26214)', () => {
-  async function crashMidBlock(build: (gate: Promise<void>) => Built, inputData: unknown, crashed: () => boolean) {
+  async function crashMidBlock(
+    build: (gate: Promise<void>) => Built,
+    inputData: unknown,
+    crashed: () => boolean,
+    snapshotReady: (snapshot: WorkflowRunState) => boolean,
+  ) {
     let release!: () => void;
     const gate = new Promise<void>(resolve => (release = resolve));
     const first = build(gate);
@@ -404,11 +409,13 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
     const done = run.start({ inputData });
 
     await vi.waitFor(() => expect(crashed()).toBe(true));
-    // Let the checkpoint for the finished arms/items land before the "crash".
-    await new Promise(resolve => setTimeout(resolve, 20));
-    const snapshot = JSON.parse(
-      JSON.stringify(await store.loadWorkflowSnapshot({ workflowName: first.workflow.id, runId: run.runId })),
-    );
+    // Wait for the checkpoint of the finished arms/items to land before the "crash".
+    let persisted: WorkflowRunState | null = null;
+    await vi.waitFor(async () => {
+      persisted = await store.loadWorkflowSnapshot({ workflowName: first.workflow.id, runId: run.runId });
+      expect(persisted && snapshotReady(persisted)).toBe(true);
+    });
+    const snapshot = JSON.parse(JSON.stringify(persisted));
     release();
     await done;
 
@@ -437,7 +444,12 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       return { workflow, fns: { start: start.fn, p1: p1.fn, p2: p2.fn, join: join.fn } };
     };
 
-    const { snapshot, restarted, fns } = await crashMidBlock(build, { n: 1 }, () => calls.includes('p2'));
+    const { snapshot, restarted, fns } = await crashMidBlock(
+      build,
+      { n: 1 },
+      () => calls.includes('p2'),
+      s => (s.context.p1 as any)?.status === 'success',
+    );
 
     expect(snapshot.status).toBe('running');
     expect(snapshot.context.p1.status).toBe('success');
@@ -469,7 +481,12 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       return { workflow, fns: { p1: p1.fn, p2: p2.fn } };
     };
 
-    const { restarted, fns } = await crashMidBlock(build, {}, () => calls.length === 2);
+    const { restarted, fns } = await crashMidBlock(
+      build,
+      {},
+      () => calls.length === 2,
+      s => (s.context.p1 as any)?.status === 'running' && (s.context.p2 as any)?.status === 'running',
+    );
 
     expect(fns.p1).toHaveBeenCalledTimes(1);
     expect(fns.p2).toHaveBeenCalledTimes(1);
@@ -495,7 +512,15 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       return { workflow, fns: { list: list.fn, charge: charge.fn, total: total.fn } };
     };
 
-    const { restarted, fns } = await crashMidBlock(build, {}, () => calls.includes(2));
+    const { restarted, fns } = await crashMidBlock(
+      build,
+      {},
+      () => calls.includes(2),
+      s => {
+        const done = (s.context.charge as any)?.suspendPayload?.__workflow_meta?.foreachOutput ?? [];
+        return done[0]?.status === 'success' && done[1]?.status === 'success';
+      },
+    );
 
     expect(fns.list).not.toHaveBeenCalled();
     expect(fns.charge.mock.calls.map(c => c[0].inputData)).toEqual([2, 3, 4]);
