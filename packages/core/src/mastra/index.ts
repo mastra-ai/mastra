@@ -668,7 +668,7 @@ export interface Config<
    *
    * `durableAgents` controls whether the deployer will automatically call
    * {@link Mastra.recoverAllDurableAgents} for every registered `DurableAgent`
-   * when the server starts (right after `restartAllActiveWorkflowRuns`).
+   * when the server starts (concurrently with `restartAllActiveWorkflowRuns`).
    *
    * - `'off'` (default): the deployer never auto-recovers durable agent runs.
    *   Operators can still call `mastra.recoverAllDurableAgents()` or
@@ -4220,17 +4220,7 @@ export class Mastra<
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
     const activeRuns = await this.listActiveWorkflowRuns();
-    const runs = activeRuns.runs.filter(runSnapshot => {
-      const workflow = this.getWorkflowById(runSnapshot.workflowName);
-      if (workflow?.options?.autoRestartActiveRuns === false) {
-        this.#logger.debug('Skipping workflow run auto-restart; workflow opts out of generic recovery', {
-          workflow: runSnapshot.workflowName,
-          runId: runSnapshot.runId,
-        });
-        return false;
-      }
-      return true;
-    });
+    const runs = activeRuns.runs;
     if (runs.length > 0) {
       this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
     }
@@ -4264,7 +4254,7 @@ export class Mastra<
    * agent that supports it (default-engine durable agents only — Inngest and
    * other externally-executed durable wrappers run their own recovery).
    *
-   * Intended to be called once on server boot, after
+   * Intended to be called once on server boot, concurrently with
    * `restartAllActiveWorkflowRuns()`. The deployer wires this up automatically
    * when `recovery.durableAgents` is set to `'auto'` in the Mastra config; you
    * can also call it directly if you need finer control (e.g. running it in a

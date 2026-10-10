@@ -1,6 +1,7 @@
 export const DEFAULT_RESTART_CONCURRENCY = 5;
 
 export function normalizeConcurrency(value: number | undefined): number {
+  if (value === Infinity) return Infinity;
   if (value === undefined || !Number.isFinite(value)) return DEFAULT_RESTART_CONCURRENCY;
   return Math.max(1, Math.floor(value));
 }

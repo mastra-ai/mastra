@@ -192,6 +192,40 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
     expect(t.peak()).toBe(2);
   });
 
+  it('treats workflowConcurrency: Infinity as no limit', async () => {
+    const t = await trackConcurrentRestarts({ workflowConcurrency: Infinity }, 8);
+    // run-0 fails immediately; the other 7 all start without waiting on each other.
+    await vi.waitFor(() => expect(t.peak()).toBe(7));
+    await t.releaseAll();
+    await t.sweep;
+  });
+
+  it('keeps restarting other runs when one run cannot resolve its workflow', async () => {
+    const goneWorkflow = createWorkflow({
+      id: 'gone-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    }).commit();
+    const liveWorkflow = createWorkflow({
+      id: 'live-wf',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+    }).commit();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: { goneWorkflow, liveWorkflow } });
+    stubActiveRun(goneWorkflow, 'gone-run');
+    const live = stubActiveRun(liveWorkflow, 'live-run');
+
+    // Simulate the workflow being removed while the active runs were listed.
+    const getWorkflowById = mastra.getWorkflowById.bind(mastra);
+    vi.spyOn(mastra, 'getWorkflowById').mockImplementation(((id: string) => {
+      if (id === 'gone-wf') throw new Error('Workflow with ID gone-wf not found');
+      return getWorkflowById(id as any);
+    }) as any);
+
+    await expect(mastra.restartAllActiveWorkflowRuns()).resolves.toBeUndefined();
+    expect(live.restart).toHaveBeenCalledTimes(1);
+  });
+
   it('resolves recovery defaults', () => {
     expect(new Mastra({ logger: false }).recoveryConfig).toEqual({
       workflows: 'auto',
