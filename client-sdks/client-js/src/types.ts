@@ -324,20 +324,22 @@ export type ResponsesStreamEvent =
   | ResponsesCompletedEvent;
 
 type WithoutMethods<T> = {
-  [K in keyof T as T[K] extends (...args: any[]) => any
-    ? never
-    : T[K] extends { (): any }
+  [
+    K in keyof T as T[K] extends (...args: any[]) => any
       ? never
-      : T[K] extends undefined | ((...args: any[]) => any)
+      : T[K] extends { (): any }
         ? never
-        : K]: T[K];
+        : T[K] extends undefined | ((...args: any[]) => any)
+          ? never
+          : K
+  ]: T[K];
 };
 
 export type NetworkStreamParams<OUTPUT = undefined> = {
   messages: MessageListInput;
   model?: string;
   tracingOptions?: TracingOptions;
-} & Omit<MultiPrimitiveExecutionOptions<OUTPUT>, 'model'>;
+} & Omit<MultiPrimitiveExecutionOptions<OUTPUT>, 'model' | 'scopes'>;
 
 export type GetAgentResponse = GeneratedResponse<'GET /agents/:agentId'> & {
   /** Handler-provided identifier omitted from the serialized route schema's value shape. */
@@ -420,7 +422,10 @@ export type StreamParamsBase<OUTPUT = undefined> = {
    */
   abortSignal?: AbortSignal;
 } & WithoutMethods<
-  Omit<AgentExecutionOptions<OUTPUT>, 'model' | 'requestContext' | 'clientTools' | 'options' | 'structuredOutput'>
+  Omit<
+    AgentExecutionOptions<OUTPUT>,
+    'model' | 'requestContext' | 'clientTools' | 'options' | 'structuredOutput' | 'scopes'
+  >
 >;
 export type StreamParamsBaseWithoutMessages<OUTPUT = undefined> = StreamParamsBase<OUTPUT>;
 export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
@@ -468,12 +473,7 @@ export type ListDynamicWorkflowsResponse = GeneratedResponse<'GET /stored/workfl
 export type UpsertDynamicWorkflowParams = GeneratedRequest<Body<'POST /stored/workflows'>>;
 export type UpsertDynamicWorkflowResponse = GeneratedResponse<'POST /stored/workflows'>;
 type DynamicWorkflowDefinitionField =
-  | 'description'
-  | 'inputSchema'
-  | 'outputSchema'
-  | 'stateSchema'
-  | 'requestContextSchema'
-  | 'graph';
+  'description' | 'inputSchema' | 'outputSchema' | 'stateSchema' | 'requestContextSchema' | 'graph';
 export type DynamicWorkflowDefinition = Omit<
   GeneratedResponse<'GET /stored/workflows/:dynamicWorkflowId'>,
   DynamicWorkflowDefinitionField
@@ -872,9 +872,7 @@ export interface SerializedMemoryConfig {
  * inline config, or a legacy untagged inline config.
  */
 export type StoredMemoryRef =
-  | { type: 'id'; memoryId: string }
-  | { type: 'inline'; config: SerializedMemoryConfig }
-  | SerializedMemoryConfig;
+  { type: 'id'; memoryId: string } | { type: 'inline'; config: SerializedMemoryConfig } | SerializedMemoryConfig;
 
 /**
  * Default options for agent execution (serializable subset of AgentExecutionOptionsBase)
@@ -1919,11 +1917,7 @@ export type ToolProviderHealthResponse = GeneratedResponse<'GET /tool-providers/
  * Distinct from ProcessorPhase which uses the short/unprefixed form for processor endpoints.
  */
 export type ProcessorProviderPhase =
-  | 'processInput'
-  | 'processInputStep'
-  | 'processOutputStream'
-  | 'processOutputResult'
-  | 'processOutputStep';
+  'processInput' | 'processInputStep' | 'processOutputStream' | 'processOutputResult' | 'processOutputStep';
 
 export interface ProcessorProviderInfo {
   id: string;
@@ -2222,13 +2216,7 @@ export interface DeletePromptBlockVersionResponse {
 }
 
 export type BackgroundTaskStatus =
-  | 'pending'
-  | 'running'
-  | 'suspended'
-  | 'completed'
-  | 'failed'
-  | 'cancelled'
-  | 'timed_out';
+  'pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
 
 export type BackgroundTaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
 
@@ -2293,14 +2281,7 @@ export type WorkflowSchedule = Extract<
 export type ScheduleResponse = AgentSchedule | WorkflowSchedule;
 
 export type ScheduleTriggerOutcome =
-  | 'published'
-  | 'succeeded'
-  | 'delivered'
-  | 'persisted'
-  | 'discarded'
-  | 'skipped'
-  | 'aborted'
-  | 'failed';
+  'published' | 'succeeded' | 'delivered' | 'persisted' | 'discarded' | 'skipped' | 'aborted' | 'failed';
 
 export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 
