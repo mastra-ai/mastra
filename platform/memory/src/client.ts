@@ -84,6 +84,19 @@ export interface MemoryObservationMatch {
   observedAt: string | null;
 }
 
+export interface MemoryObservationRun {
+  id: string;
+  threadId: string;
+  resourceId: string;
+  startedAt: string;
+  durationMs: number;
+  observed: boolean;
+  reflected: boolean;
+  tokensBefore: number;
+  tokensAfter: number | null;
+  error: string | null;
+}
+
 const DEFAULT_API_URL = 'https://platform.mastra.ai';
 
 function env(name: string): string | undefined {
@@ -220,6 +233,12 @@ export class PlatformMemoryClient {
   /** Live observation status: pending tokens against the observe/reflect thresholds. */
   getObservationStatus(threadId: string) {
     return this.request<MemoryObservationStatus>('GET', `/threads/${encodeURIComponent(threadId)}/observations/status`);
+  }
+
+  /** Observer/reflector runs for the instance, newest first: token compression, duration, failures. */
+  async listObservationRuns(query: { threadId?: string; limit?: number } = {}) {
+    const res = await this.request<{ runs: MemoryObservationRun[] }>('GET', '/runs', { query });
+    return res.runs;
   }
 
   /** Copies a thread, its messages, and its observations. */
