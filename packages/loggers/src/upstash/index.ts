@@ -235,7 +235,10 @@ export class UpstashTransport extends LoggerTransport {
         };
       }
 
-      const response = await this.executeUpstashCommands([['LRANGE', this.listName, 0, -1]]);
+      // Flushes LTRIM the list to maxListLength, so reading past it can only return entries
+      // that are about to be trimmed; bounding the snapshot keeps the read size predictable.
+      const lastIndex = this.maxListLength > 0 ? this.maxListLength - 1 : -1;
+      const response = await this.executeUpstashCommands([['LRANGE', this.listName, 0, lastIndex]]);
       const filteredLogs = this.parseLogs(response?.[0]?.result).filter(log =>
         this.matchesLog(log, { fromDate, toDate, logLevel, filters }),
       );
