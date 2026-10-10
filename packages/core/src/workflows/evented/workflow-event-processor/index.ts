@@ -2238,6 +2238,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             outputOptions,
           },
         });
+        return;
       } else {
         return this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.run',
@@ -2693,8 +2694,15 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
 
         // For foreach, store the full suspended result so its resume state is preserved.
-        // Completed iterations keep the public output array shape.
-        const iterationResult = prevResult.status === 'suspended' ? prevResult : (prevResult as any).output;
+        // Completed iterations keep the public output array shape. A failed iteration has no
+        // output; its slot stays null so iterations finishing after the run failed stop at the
+        // pending check below instead of advancing the loop.
+        const iterationResult =
+          prevResult.status === 'suspended'
+            ? prevResult
+            : prevResult.status === 'failed'
+              ? null
+              : (prevResult as any).output;
         const existingSuspendPayload = existingStepResult?.suspendPayload as any;
         const iterationSuspendPayload = prevResult.suspendPayload as any;
         const foreachOutput = [...(existingSuspendPayload?.__workflow_meta?.foreachOutput ?? [])];
@@ -2798,6 +2806,31 @@ export class WorkflowEventProcessor extends EventProcessor {
               },
             },
           });
+        }
+
+        // A failed iteration fails the whole foreach, like a failed regular step.
+        if (prevResult.status === 'failed') {
+          await this.mastra.pubsub.publish('workflows', {
+            type: 'workflow.fail',
+            runId,
+            data: {
+              workflowId,
+              runId,
+              executionPath,
+              resumeSteps,
+              parentWorkflow,
+              stepResults,
+              timeTravel,
+              restart,
+              prevResult,
+              activeStepsPath,
+              requestContext,
+              actor,
+              state: currentState,
+              outputOptions,
+            },
+          });
+          return;
         }
 
         if (pendingCount > 0) {

@@ -1247,6 +1247,170 @@ describe('Workflow (Evented Engine Specific)', () => {
     });
   });
 
+  describe('foreach iteration failure (issue #26390)', () => {
+    const items = [{ n: 1 }, { n: 2 }, { n: 3 }];
+    const itemSchema = z.object({ n: z.number() });
+
+    const raceHang = <T>(p: Promise<T>) =>
+      Promise.race([p, new Promise<{ status: 'HANG' }>(r => setTimeout(() => r({ status: 'HANG' }), 5000))]);
+
+    async function runForeach(id: string, body: any, concurrency: number, opts: { after?: any } = {}) {
+      const seed = createStep({
+        id: `${id}-seed`,
+        inputSchema: z.object({}),
+        outputSchema: z.array(itemSchema),
+        execute: async () => items,
+      });
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.any(),
+        retryConfig: { attempts: 0 },
+      });
+      const chain = workflow.then(seed).foreach(body, { concurrency });
+      (opts.after ? chain.then(opts.after) : chain).commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { [id]: workflow },
+      });
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        const result: any = await raceHang(run.start({ inputData: {} }));
+        return { result, runId: run.runId, mastra };
+      } catch (e) {
+        await mastra.stopWorkers();
+        throw e;
+      }
+    }
+
+    for (const concurrency of [1, 2]) {
+      it(`fails the run when an iteration fails (plain step, concurrency ${concurrency})`, async () => {
+        const executed: number[] = [];
+        const id = `foreach-iter-fail-step-c${concurrency}`;
+        const boom = createStep({
+          id: `${id}-boom`,
+          inputSchema: itemSchema,
+          outputSchema: itemSchema,
+          retries: 0,
+          execute: async ({ inputData }) => {
+            executed.push(inputData.n);
+            if (inputData.n === 2) throw new Error('iteration failed');
+            return inputData;
+          },
+        });
+
+        const { result, mastra } = await runForeach(id, boom, concurrency);
+        try {
+          expect(result.status).toBe('failed');
+          expect(result.error?.message).toBe('iteration failed');
+          if (concurrency === 1) {
+            // Fail-fast: the item after the failed one is never started.
+            expect(executed).toEqual([1, 2]);
+          }
+        } finally {
+          await mastra.stopWorkers();
+        }
+      });
+    }
+
+    it('fails the run when an iteration fails (nested workflow body, concurrency 2)', async () => {
+      const id = 'foreach-iter-fail-nested';
+      const inner = createStep({
+        id: `${id}-inner`,
+        inputSchema: itemSchema,
+        outputSchema: itemSchema,
+        retries: 0,
+        execute: async ({ inputData }) => {
+          if (inputData.n === 2) throw new Error('iteration failed');
+          return inputData;
+        },
+      });
+      const child = createWorkflow({
+        id: `${id}-child`,
+        inputSchema: itemSchema,
+        outputSchema: itemSchema,
+        retryConfig: { attempts: 0 },
+      })
+        .then(inner)
+        .commit();
+
+      const { result, mastra } = await runForeach(id, child, 2);
+      try {
+        expect(result.status).toBe('failed');
+        expect(result.error?.message).toBe('iteration failed');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('does not let a sibling finishing after the failure advance the run', async () => {
+      const id = 'foreach-iter-fail-late-sibling';
+      let afterRuns = 0;
+      const boom = createStep({
+        id: `${id}-boom`,
+        inputSchema: itemSchema,
+        outputSchema: itemSchema,
+        retries: 0,
+        execute: async ({ inputData }) => {
+          if (inputData.n === 2) throw new Error('iteration failed');
+          await new Promise(r => setTimeout(r, 100));
+          return inputData;
+        },
+      });
+      const after = createStep({
+        id: `${id}-after`,
+        inputSchema: z.any(),
+        outputSchema: z.any(),
+        execute: async ({ inputData }) => {
+          afterRuns++;
+          return inputData;
+        },
+      });
+
+      const { result, runId, mastra } = await runForeach(id, boom, 3, { after });
+      try {
+        expect(result.status).toBe('failed');
+        expect(result.error?.message).toBe('iteration failed');
+
+        // Let the slow siblings finish; they must not end or advance the run.
+        await new Promise(r => setTimeout(r, 300));
+        expect(afterRuns).toBe(0);
+        const workflowsStore = await testStorage.getStore('workflows');
+        const record = await workflowsStore?.getWorkflowRunById({ runId, workflowName: id });
+        expect((record?.snapshot as any)?.status).toBe('failed');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it('still succeeds when a failed iteration is retried successfully', async () => {
+      const id = 'foreach-iter-retry-success';
+      let attempts = 0;
+      const flaky = createStep({
+        id: `${id}-flaky`,
+        inputSchema: itemSchema,
+        outputSchema: itemSchema,
+        retries: 1,
+        execute: async ({ inputData }) => {
+          if (inputData.n === 2 && attempts++ === 0) throw new Error('transient');
+          return inputData;
+        },
+      });
+
+      const { result, mastra } = await runForeach(id, flaky, 2);
+      try {
+        expect(result.status).toBe('success');
+        expect(result.result).toEqual(items);
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+  });
+
   describe('foreach iteration records (issue #24943)', () => {
     it('does not copy the foreach input array into each iteration record', async () => {
       const items = Array.from({ length: 5 }, (_, i) => i);
