@@ -345,7 +345,7 @@ Group related observations (like tool sequences) by indenting:
   * -> applied fix, tests now pass
   * ✅ Tests passing, auth issue resolved
 
-Group observations by date, then list each with 24-hour time.
+Group observations by date. Within a date, list observations in the order the events happened (not by importance), each with 24-hour time.
 
 <observations>
 Date: Dec 4, 2025
@@ -625,6 +625,8 @@ interface ObserverFormattedLine {
   time: string;
   title: string;
   body: string;
+  /** Show the time even when it matches the previous line, so tool events can be ordered against user messages. */
+  alwaysShowTime?: boolean;
 }
 
 interface ObserverFormattedMessage {
@@ -908,8 +910,14 @@ function extractToolResultAttachments(
   return { resultWithoutAttachments: { ...record, value: newValue }, attachments };
 }
 
-function formatObserverPartLine(title: string, body: string, time: string, previousTime?: string): string {
-  const timeLabel = time && time !== previousTime ? `(${time})` : '';
+function formatObserverPartLine(
+  title: string,
+  body: string,
+  time: string,
+  previousTime?: string,
+  alwaysShowTime?: boolean,
+): string {
+  const timeLabel = time && (alwaysShowTime || time !== previousTime) ? `(${time})` : '';
 
   if (!title) {
     return timeLabel ? `${timeLabel}: ${body}` : body;
@@ -953,7 +961,7 @@ function formatObserverLines(
       previousTime = undefined;
     }
 
-    output.push(formatObserverPartLine(line.title, line.body, line.time, previousTime));
+    output.push(formatObserverPartLine(line.title, line.body, line.time, previousTime, line.alwaysShowTime));
     previousTime = line.time || previousTime;
   }
 
@@ -1130,7 +1138,9 @@ function formatObserverMessage(
 
   const temporalGapText = isTemporalGapMarker(msg) ? getTemporalGapMarkerText(msg) : undefined;
 
-  const pushLine = (title: string, body: string, createdAt?: unknown) => {
+  // Tool lines always carry their time, so the Observer can order tool calls and results
+  // against the messages around them even within the same minute.
+  const pushLine = (title: string, body: string, createdAt?: unknown, opts?: { tool?: boolean }) => {
     if (!body) {
       return;
     }
@@ -1141,6 +1151,7 @@ function formatObserverMessage(
       time: formatObserverTime(normalizedCreatedAt, timeZone),
       title,
       body,
+      alwaysShowTime: opts?.tool === true,
     });
   };
 
@@ -1173,6 +1184,7 @@ function formatObserverMessage(
             `Tool Call ${exchange.signature.toolName}`,
             formatObserverToolArguments(exchange.signature.args, maxLen),
             partCreatedAt,
+            { tool: true },
           );
         }
 
@@ -1208,6 +1220,7 @@ function formatObserverMessage(
               `${inv.isError ? 'Tool Error' : 'Tool Result'} ${inv.toolName}`,
               maybeTruncate(body, maxLen),
               partCreatedAt,
+              { tool: true },
             );
           }
           return;
@@ -1220,6 +1233,7 @@ function formatObserverMessage(
               `Tool Error ${inv.toolName}`,
               maybeTruncate(inv.errorText?.trim() ? inv.errorText : 'Tool execution failed', maxLen),
               partCreatedAt,
+              { tool: true },
             );
           } else if (inv.state === 'output-denied') {
             pushLine(
@@ -1229,13 +1243,16 @@ function formatObserverMessage(
                 maxLen,
               ),
               partCreatedAt,
+              { tool: true },
             );
           }
           return;
         }
 
         if (!exchange) {
-          pushLine(`Tool Call ${inv.toolName}`, formatObserverToolArguments(inv.args, maxLen), partCreatedAt);
+          pushLine(`Tool Call ${inv.toolName}`, formatObserverToolArguments(inv.args, maxLen), partCreatedAt, {
+            tool: true,
+          });
         }
         return;
       }
@@ -1595,7 +1612,7 @@ export function parseMultiThreadObserverOutput(
     }
 
     // Clean up observations and apply line truncation
-    observations = sanitizeObservationLines(observations.trim());
+    observations = sortObservationsByTime(sanitizeObservationLines(observations.trim()));
 
     threads.set(threadId, {
       observations,
@@ -1751,7 +1768,7 @@ export function parseObserverOutput(output: string, extractors: readonly Extract
 
   // Return observations WITHOUT current-task/suggested-response tags
   // Those are stored separately in thread metadata and injected dynamically
-  const observations = sanitizeObservationLines(parsed.observations || '');
+  const observations = sortObservationsByTime(sanitizeObservationLines(parsed.observations || ''));
 
   return {
     observations,
@@ -1902,6 +1919,78 @@ export function sanitizeObservationLines(observations: string): string {
     }
   }
   return changed ? lines.join('\n') : observations;
+}
+
+const OBSERVATION_TIME = /^[*-]\s+(?:\S+\s+)?\((\d{1,2}):(\d{2})\s*([AaPp])?\.?(?:[Mm]\.?)?\)/;
+
+/** Minutes since midnight for each item, or undefined when the group's times can't be ordered safely. */
+function observationMinutes(items: string[][]): number[] | undefined {
+  const times = items.map(item => OBSERVATION_TIME.exec(item[0]!));
+  if (times.some(t => !t)) return undefined;
+  const matches = times as RegExpExecArray[];
+  const marked = matches.filter(m => m[3]).length;
+  if (marked > 0 && marked < matches.length) return undefined;
+  if (marked === matches.length) {
+    return matches.map(m => (Number(m[1]) % 12) * 60 + (/p/i.test(m[3]!) ? 720 : 0) + Number(m[2]));
+  }
+  // Without AM/PM, "13:35" or "09:15" are 24-hour, "1:35" is 12-hour, and "10:30" could be either.
+  const hours = matches.map(m => m[1]!);
+  const twelveHour = hours.some(h => /^[1-9]$/.test(h));
+  const twentyFourHour = hours.some(h => /^(0\d|1[3-9]|2\d)$/.test(h));
+  if (twelveHour && (twentyFourHour || new Set(hours).size > 1)) return undefined;
+  return matches.map(m => Number(m[1]) * 60 + Number(m[2]));
+}
+
+/**
+ * Put the top-level observations of each "Date:" group in time order, keeping indented
+ * sub-items with their parent. The Observer writes a time on every observation but tends
+ * to list a user's message ahead of the earlier events it follows, which can make a
+ * superseded state read as the latest one. Groups are left as written when any
+ * observation has no time or the times are ambiguous.
+ */
+export function sortObservationsByTime(observations: string): string {
+  if (!observations) return observations;
+  const output: string[] = [];
+  let group: { header: string[]; items: string[][]; trailing: string[]; sortable: boolean } | undefined;
+
+  const flush = () => {
+    if (!group) return;
+    const minutes = group.sortable && group.items.length > 1 ? observationMinutes(group.items) : undefined;
+    const items = minutes
+      ? group.items
+          .map((item, i) => ({ item, minute: minutes[i]! }))
+          .sort((a, b) => a.minute - b.minute)
+          .map(x => x.item)
+      : group.items;
+    output.push(...group.header, ...items.flat(), ...group.trailing);
+    group = undefined;
+  };
+
+  for (const line of observations.split('\n')) {
+    if (/^\s*Date:\s/.test(line)) {
+      flush();
+      group = { header: [line], items: [], trailing: [], sortable: true };
+    } else if (!group) {
+      output.push(line);
+    } else if (/^[*-]\s/.test(line)) {
+      group.items.at(-1)?.push(...group.trailing);
+      group.trailing = [];
+      group.items.push([line]);
+    } else if (group.items.length === 0) {
+      group.header.push(line);
+    } else if (line.trim() === '') {
+      group.trailing.push(line);
+    } else if (/^\s/.test(line)) {
+      group.items.at(-1)!.push(...group.trailing, line);
+      group.trailing = [];
+    } else {
+      group.sortable = false;
+      group.items.at(-1)!.push(...group.trailing, line);
+      group.trailing = [];
+    }
+  }
+  flush();
+  return output.join('\n');
 }
 
 /**
