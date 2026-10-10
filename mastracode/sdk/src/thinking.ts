@@ -6,6 +6,7 @@ import {
 } from './providers/anthropic-thinking.js';
 import { runGeminiThinkingLevel } from './providers/google-thinking.js';
 import { normalizeAnthropicModelId, stripMastraGatewayPrefix } from './providers/model-ids.js';
+import { thinkingRequestFormatFor } from './providers/thinking-request.js';
 
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -67,6 +68,21 @@ function onlyTogglesThinking(reasoningOptions: readonly ModelReasoningOption[] |
   return !!reasoningOptions?.length && reasoningOptions.every(option => option.type === 'toggle');
 }
 
+export function requestableReasoningOptions(
+  modelId: string,
+  reasoningOptions: readonly ModelReasoningOption[] | undefined,
+): readonly ModelReasoningOption[] | undefined {
+  const format = thinkingRequestFormatFor(modelId);
+  if (!format || !reasoningOptions) return reasoningOptions;
+  const acceptedEfforts = format.sendEffort ? (format.acceptedEfforts ?? ACTIVE_THINKING_LEVELS) : [];
+  return reasoningOptions.flatMap((option): ModelReasoningOption[] => {
+    if (option.type === 'toggle') return format.enableThinking ? [option] : [];
+    if (option.type !== 'effort') return [];
+    const values = option.values.filter(value => acceptedEfforts.some(effort => effort === value));
+    return values.length ? [{ type: 'effort', values }] : [];
+  });
+}
+
 function closestOfferedEffort(
   level: ActiveThinkingLevel,
   reasoningOptions: readonly ModelReasoningOption[] | undefined,
@@ -116,11 +132,12 @@ export function runThinkingLevel(
   if (provider === 'anthropic') {
     return runAnthropicThinkingLevel(normalizeAnthropicModelId(bareModelId), level, reasoningOptions);
   }
-  const listedWithoutReasoningControls = reasoningOptions?.length === 0;
+  const requestable = requestableReasoningOptions(modelId, reasoningOptions);
+  const listedWithoutReasoningControls = requestable?.length === 0;
   if (listedWithoutReasoningControls) return 'off';
-  if (onlyTogglesThinking(reasoningOptions)) return TOGGLE_ON_LEVEL;
-  if (provider === 'openai') return runOpenAIThinkingLevel(bareModelId, level, reasoningOptions);
-  return closestOfferedEffort(level, reasoningOptions) ?? level;
+  if (onlyTogglesThinking(requestable)) return TOGGLE_ON_LEVEL;
+  if (provider === 'openai') return runOpenAIThinkingLevel(bareModelId, level, requestable);
+  return closestOfferedEffort(level, requestable) ?? level;
 }
 
 export function getAvailableThinkingLevelsForModel(

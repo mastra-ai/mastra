@@ -14,10 +14,11 @@ import { MastraCodeGateway, reloadAuthStorage } from './mastracode-gateway.js';
 
 mkdirSync(appDataDir, { recursive: true });
 
-function createGateway(thinkingLevel: ThinkingLevelSetting | undefined) {
+function createGateway(thinkingLevel: ThinkingLevelSetting | undefined, { routeThroughMastraGateway = false } = {}) {
   return new MastraCodeGateway({
     mastraGatewayBaseUrl: 'https://gateway.example.com',
-    routeThroughMastraGateway: false,
+    mastraGatewayApiKey: 'gateway-key',
+    routeThroughMastraGateway,
     thinkingLevel,
     customProviders: [{ name: 'My Local', url: 'https://custom.example.com/v1', models: ['local-model'] }] as any,
     settingsPath: join(tmpdir(), 'nonexistent-settings.json'),
@@ -83,6 +84,81 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect((await requestBody(resolve('xhigh', 'deepseek', 'deepseek-v4-pro'))).reasoning_effort).toBe('high');
   });
 
+  it('caps the effort at what the provider package accepts, so the request is not rejected', async () => {
+    expect((await requestBody(resolve('max', 'mistral', 'zai-glm-5-2'))).reasoning_effort).toBe('high');
+    expect((await requestBody(resolve('xhigh', 'xai', 'grok-4.7'))).reasoning).toEqual({ effort: 'high' });
+  });
+
+  it.each([
+    ['perplexity', 'sonar-reasoning-pro'],
+    ['cerebras', 'gpt-oss-120b'],
+  ])('passes %s the closest listed effort', async (providerId, modelId) => {
+    expect((await requestBody(resolve('max', providerId, modelId))).reasoning_effort).toBe('high');
+  });
+
+  it.each([
+    ['togetherai', 'Qwen/Qwen3.5-9B'],
+    ['deepinfra', 'XiaomiMiMo/MiMo-V2.6-Pro'],
+  ])('switches thinking on for %s models that only toggle it', async (providerId, modelId) => {
+    const on = await requestBody(resolve('high', providerId, modelId));
+    expect(on.reasoning).toEqual({ enabled: true });
+    expect(on).not.toHaveProperty('reasoning_effort');
+  });
+
+  it.each([
+    ['deepinfra', 'deepseek-ai/DeepSeek-V4.1-Flash'],
+    ['togetherai', 'thinkingmachines/Inkling'],
+  ])("caps %s's effort at the levels its API documents", async (providerId, modelId) => {
+    expect((await requestBody(resolve('max', providerId, modelId))).reasoning_effort).toBe('high');
+  });
+
+  it('switches Alibaba thinking on', async () => {
+    expect((await requestBody(resolve('high', 'alibaba', 'qwen-flash'))).enable_thinking).toBe(true);
+  });
+
+  it("sends OpenRouter's reasoning setting", async () => {
+    expect((await requestBody(resolve('max', 'openrouter', 'deepseek/deepseek-v4-pro'))).reasoning).toEqual({
+      effort: 'xhigh',
+    });
+    expect((await requestBody(resolve('high', 'openrouter', 'bytedance-seed/seed-1.6-flash'))).reasoning).toEqual({
+      enabled: true,
+    });
+  });
+
+  const resolveThroughGateway = (level: ThinkingLevelSetting, providerId: string, modelId: string) =>
+    createGateway(level, { routeThroughMastraGateway: true }).resolveLanguageModel({
+      providerId,
+      modelId,
+      apiKey: 'gateway-key',
+    });
+
+  it("sends OpenRouter's reasoning setting for models routed through the Mastra gateway", async () => {
+    expect((await requestBody(resolveThroughGateway('max', 'deepseek', 'deepseek-v4-pro'))).reasoning).toEqual({
+      effort: 'max',
+    });
+  });
+
+  it.each([
+    ['an effort Claude', 'max', 'anthropic', 'claude-opus-4-7', 'max'],
+    ['a budget Claude', 'high', 'anthropic', 'claude-sonnet-4-5', 'high'],
+    ['GPT', 'xhigh', 'openai', 'gpt-5.5', 'xhigh'],
+    ['a level Gemini', 'max', 'google', 'gemini-3-pro-preview', 'high'],
+    ['a budget Gemini', 'medium', 'google', 'gemini-2.5-flash', 'medium'],
+  ] as const)('sends the Mastra gateway the effort %s runs', async (_model, level, providerId, modelId, effort) => {
+    expect((await requestBody(resolveThroughGateway(level, providerId, modelId))).reasoning).toEqual({ effort });
+  });
+
+  it.each([
+    ['anthropic', 'claude-opus-4-7'],
+    ['openai', 'gpt-5.5'],
+    ['deepseek', 'deepseek-v4-pro'],
+  ])(
+    'leaves %s through the Mastra gateway on its default at off, like the direct path',
+    async (providerId, modelId) => {
+      expect(await requestBody(resolveThroughGateway('off', providerId, modelId))).not.toHaveProperty('reasoning');
+    },
+  );
+
   it("keeps the caller's own DeepSeek effort over the level", async () => {
     const body = await requestBody(resolve('low', 'deepseek', 'deepseek-v4-pro'), {
       deepseek: { reasoningEffort: 'max' },
@@ -95,9 +171,18 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect(await requestBody(resolve(level, 'openai', 'gpt-5.5'))).not.toHaveProperty('reasoning');
     const google = await requestBody(resolve(level, 'google', 'gemini-3-flash-preview'));
     expect(google.generationConfig?.thinkingConfig).toBeUndefined();
-    const deepseek = await requestBody(resolve(level, 'deepseek', 'deepseek-v4-pro'));
-    expect(deepseek).not.toHaveProperty('thinking');
-    expect(deepseek).not.toHaveProperty('reasoning_effort');
+    for (const [providerId, modelId] of [
+      ['deepseek', 'deepseek-v4-pro'],
+      ['groq', 'qwen/qwen3.8-27b'],
+      ['togetherai', 'Qwen/Qwen3.5-9B'],
+      ['alibaba', 'qwen-flash'],
+      ['openrouter', 'deepseek/deepseek-v4-pro'],
+    ] as const) {
+      const body = await requestBody(resolve(level, providerId, modelId));
+      for (const thinkingField of ['thinking', 'reasoning_effort', 'reasoning', 'enable_thinking']) {
+        expect(body).not.toHaveProperty(thinkingField);
+      }
+    }
   });
 
   it('leaves Gemini models without thinking support untouched', async () => {
@@ -114,5 +199,16 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     reloadAuthStorage();
 
     expect((await requestBody(resolve('xhigh', 'openai', 'gpt-5'))).reasoning).toMatchObject({ effort: 'high' });
+  });
+
+  it('sends the xAI OAuth path the same effort as the xAI API-key path', async () => {
+    writeFileSync(
+      join(appDataDir, 'auth.json'),
+      JSON.stringify({ xai: { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() + 1_000_000 } }),
+      'utf8',
+    );
+    reloadAuthStorage();
+
+    expect((await requestBody(resolve('xhigh', 'xai', 'grok-4.7'))).reasoning_effort).toBe('high');
   });
 });
