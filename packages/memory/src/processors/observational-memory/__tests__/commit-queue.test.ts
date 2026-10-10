@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { activeOMCommitKeys, isInOMCommit, runOMCommit } from '../commit-queue';
+import { activeOMCommitKeys, isInOMCommit, OM_COMMIT_STALL_MS, runOMCommit } from '../commit-queue';
 
 function deferred<T = void>() {
   let resolve!: (value: T) => void;
@@ -40,6 +40,77 @@ describe('runOMCommit', () => {
     expect(results).toEqual(['a', 'b', 'c']);
     expect(maxRunning).toBe(1);
     expect(order).toEqual(['start a', 'end a', 'start b', 'end b', 'start c', 'end c']);
+  });
+
+  it('releases a key held past the stall limit so later ops run, without settling the stalled op', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const hung = deferred<string>();
+      let stalledSettled = false;
+      const stalled = runOMCommit('thread:stall', () => hung.promise).then(value => {
+        stalledSettled = true;
+        return value;
+      });
+      let laterRan = false;
+      const later = runOMCommit('thread:stall', async () => {
+        laterRan = true;
+        return 'later';
+      });
+      let afterRan = false;
+      const after = runOMCommit('thread:stall', async () => {
+        afterRan = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(OM_COMMIT_STALL_MS - 1);
+      expect(laterRan).toBe(false);
+      expect(warn).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await later).toBe('later');
+      await after;
+      expect(afterRan).toBe(true);
+      expect(stalledSettled).toBe(false);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]![0])).toContain('thread:stall');
+
+      // The late settle must not start another op or touch the key's newer state.
+      let nextRan = 0;
+      const gate = deferred();
+      const next = runOMCommit('thread:stall', async () => {
+        nextRan++;
+        await gate.promise;
+      });
+      const queued = runOMCommit('thread:stall', async () => {
+        nextRan++;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(nextRan).toBe(1);
+      hung.resolve('stalled');
+      expect(await stalled).toBe('stalled');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(nextRan).toBe(1);
+      gate.resolve();
+      await Promise.all([next, queued]);
+      expect(nextRan).toBe(2);
+      expect(activeOMCommitKeys()).toBe(0);
+    } finally {
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears the stall timer when an op settles in time', async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      await runOMCommit('thread:quick', async () => 'done');
+      expect(vi.getTimerCount()).toBe(0);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+      vi.useRealTimers();
+    }
   });
 
   it('runs ops on different keys concurrently', async () => {

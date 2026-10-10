@@ -12,15 +12,20 @@ import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
  * Ops hold the storage commit, the head read it needs, and in-memory work on that head (such as
  * recomposing observation text against it). No model calls, indexing, or other slow I/O.
  *
- * There is no timeout. A storage call that never settles holds its key, and every later commit
- * for that thread or resource waits behind it. A timeout could not cancel the write, and
- * releasing the key while it still runs would break the ordering the queue provides.
+ * An op still running after `OM_COMMIT_STALL_MS` (a storage call that never settles, e.g. a
+ * Postgres row-lock wait with no `lock_timeout`) releases its key with a warning, so later
+ * commits for that thread or resource proceed. The stalled op is not cancelled and its caller
+ * keeps waiting for it. If it later lands, it races the newer commits the way a commit from
+ * another process does, and storage's generation fencing keeps that correct.
  *
  * Each op runs in the async context of the caller that enqueued it (tracing spans, logger
  * correlation), not the context of the op it waited behind.
  */
 
 export type OMCommitPriority = 'reflection' | 'normal';
+
+/** How long an op may hold its key before later ops on that key stop waiting for it. */
+export const OM_COMMIT_STALL_MS = 60_000;
 
 /** The per-thread / per-resource key shared by the commit queue and `BufferingCoordinator`. */
 export function getOMLockKey(
@@ -104,16 +109,31 @@ export function runOMCommit<T>(
       // Keep the keys the caller's own ops hold, so a nested op cannot enqueue on them either.
       const held = new Map(heldKeys.getStore());
       held.set(key, token);
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        clearTimeout(stallTimer);
+        runNext(key, owner);
+      };
+      const stallTimer = setTimeout(() => {
+        console.warn(
+          `[observational-memory] Commit on "${key}" has not settled after ${OM_COMMIT_STALL_MS}ms; ` +
+            'releasing the key so later commits can run. The stalled storage call is still pending.',
+        );
+        release();
+      }, OM_COMMIT_STALL_MS);
+      stallTimer.unref?.();
       // Release the key before settling the caller, so the caller observes it free.
       heldKeys
         .run(held, () => Promise.resolve().then(op))
         .then(
           value => {
-            runNext(key, owner);
+            release();
             resolve(value);
           },
           error => {
-            runNext(key, owner);
+            release();
             reject(error);
           },
         );
