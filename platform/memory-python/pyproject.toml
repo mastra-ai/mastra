@@ -1,0 +1,15 @@
+[project]
+name = "mastra-platform-memory"
+version = "0.0.0"
+description = "Client for Mastra Platform hosted Memory (observational memory as an API)"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
