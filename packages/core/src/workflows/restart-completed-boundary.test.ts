@@ -540,4 +540,71 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
     expect(restarted.status).toBe('success');
     expect(restarted.result).toEqual(original.result);
   });
+
+  function foreachWorkflow(id: string, items: number, concurrency: number, slowItem?: number) {
+    const list = step('list', async () => Array.from({ length: items }, (_, i) => i));
+    const charge = step('charge', async ({ inputData }) => {
+      if (inputData === slowItem) await new Promise(resolve => setTimeout(resolve, 100));
+      return { charged: inputData };
+    });
+    return createWorkflow({ id, inputSchema: anySchema, outputSchema: anySchema })
+      .then(list.step)
+      .foreach(charge.step, { concurrency })
+      .commit();
+  }
+
+  it('coalesces foreach progress checkpoints instead of writing one snapshot per item', async () => {
+    const items = 200;
+    const workflow = foreachWorkflow('restart-foreach-many', items, 10);
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    let writes = 0;
+    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+      if (args.workflowName === workflow.id) writes++;
+      await new Promise(resolve => setTimeout(resolve, 2));
+      return persist(args);
+    });
+
+    const run = await workflow.createRun();
+    const result = await run.start({ inputData: {} });
+
+    expect(result.status).toBe('success');
+    expect(result.steps.charge.output).toHaveLength(items);
+    // One start write per item, plus progress checkpoints. Uncoalesced, that is one more write per item.
+    expect(writes).toBeLessThan(items * 1.5);
+  });
+
+  it('fails the run, without an unhandled rejection, when a foreach progress checkpoint cannot be saved', async () => {
+    const workflow = foreachWorkflow('restart-foreach-storage-down', 2, 2, 1);
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+      if (args.snapshot?.context?.charge?.suspendPayload?.__workflow_meta?.foreachOutput?.length) {
+        throw new Error('storage down');
+      }
+      return persist(args);
+    });
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+
+    try {
+      const run = await workflow.createRun();
+      const outcome = await run.start({ inputData: {} }).then(
+        result => result,
+        error => ({ status: 'rejected', error }),
+      );
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      expect(outcome.status === 'failed' || outcome.status === 'rejected').toBe(true);
+      expect(String((outcome as any).error?.message ?? (outcome as any).error)).toContain('storage down');
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
 });

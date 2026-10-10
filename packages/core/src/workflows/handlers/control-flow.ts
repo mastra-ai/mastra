@@ -1074,7 +1074,41 @@ export async function executeForeach(
   let canceledResult: ForeachStepResult | null = null;
   let inFlight = 0;
   let resolveCompletion: (() => void) | undefined;
-  let itemCheckpoints: Promise<void> = Promise.resolve();
+  // Per-item progress checkpoints are not awaited by the worker, so they don't delay freeing its
+  // slot (which would change which items start before a sibling's suspend stops the queue).
+  // They are coalesced: one write in flight, and at most one pending that saves the latest
+  // progress, so the number of writes tracks storage speed rather than item count.
+  // A failed write is kept and rethrown once the foreach drains, never left as an unhandled rejection.
+  let checkpointInFlight: Promise<void> | undefined;
+  let checkpointPendingIndex: number | undefined;
+  let checkpointError: unknown;
+  const scheduleItemCheckpoint = (k: number) => {
+    checkpointPendingIndex = k;
+    if (checkpointInFlight) return;
+    checkpointInFlight = (async () => {
+      while (checkpointPendingIndex !== undefined && checkpointError === undefined) {
+        // Each item finishes once, so the phase stays unique per durable operation.
+        const index = checkpointPendingIndex;
+        checkpointPendingIndex = undefined;
+        try {
+          await engine.persistStepUpdate({
+            workflowId,
+            runId,
+            resourceId,
+            serializedStepGraph,
+            stepResults,
+            executionContext,
+            workflowStatus: 'running',
+            requestContext,
+            phase: `foreach-item-end.${index}`,
+          });
+        } catch (err) {
+          checkpointError = err;
+        }
+      }
+      checkpointInFlight = undefined;
+    })();
+  };
 
   /** Publish a workflow-step-progress event for a single foreach iteration. */
   const emitIterationProgress = (
@@ -1230,22 +1264,7 @@ export async function executeForeach(
             __workflow_meta: { ...prevSuspendPayload?.__workflow_meta, foreachOutput: prevForeachOutput },
           },
         } as StepResult<any, any, any, any>;
-        // Chained rather than awaited so the checkpoint doesn't delay freeing this worker's slot
-        // (which would change which items start before a sibling's suspend stops the queue).
-        // The chain is drained before the foreach returns.
-        itemCheckpoints = itemCheckpoints.then(() =>
-          engine.persistStepUpdate({
-            workflowId,
-            runId,
-            resourceId,
-            serializedStepGraph,
-            stepResults,
-            executionContext,
-            workflowStatus: 'running',
-            requestContext,
-            phase: `foreach-item-end.${k}`,
-          }),
-        );
+        scheduleItemCheckpoint(k);
       }
     } catch (err) {
       const errorObj = err instanceof Error ? err : new Error(String(err));
@@ -1327,7 +1346,10 @@ export async function executeForeach(
       resolveCompletion = resolve;
     });
   }
-  await itemCheckpoints;
+  await checkpointInFlight;
+  if (checkpointError !== undefined) {
+    throw checkpointError;
+  }
 
   // Handle cancellation
   if (canceledResult) {
