@@ -15,11 +15,13 @@ import { SpritesSandbox } from './sandbox';
 
 /**
  * Serializable subset of SpritesSandboxOptions for editor storage.
+ *
+ * `baseURL` is deliberately excluded: the sandbox falls back to the server's
+ * SPRITES_TOKEN, so a stored API host could redirect that token elsewhere.
  */
 interface SpritesProviderConfig {
   id?: string;
   token?: string;
-  baseURL?: string;
   env?: Record<string, string>;
   timeout?: number;
   workingDirectory?: string;
@@ -34,7 +36,6 @@ export const spritesSandboxProvider: SandboxProvider<SpritesProviderConfig> = {
     properties: {
       id: { type: 'string', description: 'Sprite name. An existing Sprite with this name is reused.' },
       token: { type: 'string', description: 'Sprites API token (falls back to SPRITES_TOKEN)' },
-      baseURL: { type: 'string', description: 'Sprites API base URL' },
       env: {
         type: 'object',
         description: 'Environment variables',
@@ -44,5 +45,7 @@ export const spritesSandboxProvider: SandboxProvider<SpritesProviderConfig> = {
       workingDirectory: { type: 'string', description: 'Default working directory for commands' },
     },
   },
-  createSandbox: config => new SpritesSandbox(config),
+  // Pick known fields so extra stored keys (such as baseURL) never reach the sandbox.
+  createSandbox: ({ id, token, env, timeout, workingDirectory }) =>
+    new SpritesSandbox({ id, token, env, timeout, workingDirectory }),
 };

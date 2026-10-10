@@ -37,3 +37,11 @@ await sandbox.destroy();
 
 - [Fly.io Sprites integration guide](https://mastra.ai/integrations/sandboxes/sprites)
 - [Workspace documentation](https://mastra.ai/docs/mastra-platform/workspaces)
+
+## Changelog
+
+See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/workspaces/sprites/CHANGELOG.md) for version history and release notes.
+
+## Support
+
+We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.

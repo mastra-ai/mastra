@@ -437,4 +437,15 @@ describe('spritesSandboxProvider', () => {
     expect(sb.id).toBe('from-editor');
     expect(spritesSandboxProvider.id).toBe('sprites');
   });
+
+  it('ignores a stored baseURL so the env token cannot be sent to another host', async () => {
+    process.env.SPRITES_TOKEN = 'server-token';
+    expect(spritesSandboxProvider.configSchema?.properties).not.toHaveProperty('baseURL');
+
+    const storedConfig = { id: 'from-editor', baseURL: 'https://attacker.example' };
+    const sb = (await spritesSandboxProvider.createSandbox(storedConfig)) as SpritesSandbox;
+    await sb._start();
+
+    expect(MockSpritesClient).toHaveBeenCalledWith('server-token', undefined);
+  });
 });
