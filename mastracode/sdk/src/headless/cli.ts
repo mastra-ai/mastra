@@ -10,8 +10,9 @@ import { existsSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 
 import { createMastraCode } from '../index.js';
+import { activateModePackInSettings, resolveModePackArg, resolvePackSelection } from '../onboarding/pack-activation.js';
 import { listBuiltinModePacks } from '../onboarding/packs.js';
-import { loadSettings, resolveModelDefaults } from '../onboarding/settings.js';
+import { loadSettings, resolveModelDefaults, saveSettings } from '../onboarding/settings.js';
 import {
   createProcessMemoryDiagnosticsFromEnvironment,
   startConfiguredProcessMemoryDiagnostics,
@@ -36,6 +37,7 @@ export interface HeadlessArgs {
   output: OutputMode;
   continue_: boolean;
   model?: string;
+  pack?: string;
   mode?: RunMode;
   thinkingLevel?: ThinkingLevel;
   settings?: string;
@@ -195,6 +197,22 @@ export async function runMCCli(
     process.exit(1);
   }
 
+  // Resolve and activate --pack up front: an unknown pack fails fast with the
+  // valid list, before MastraCode boots. Activation mirrors /models → Activate,
+  // so it also becomes the global default pack in settings.
+  const settings = loadSettings(args.settings);
+  let packId: string | undefined;
+  if (args.pack !== undefined) {
+    const resolved = resolveModePackArg(settings, args.pack);
+    if ('error' in resolved) {
+      process.stderr.write(`Error: ${resolved.error}\n`);
+      process.exit(1);
+    }
+    packId = resolved.packId;
+    activateModePackInSettings(settings, packId);
+    saveSettings(settings, args.settings);
+  }
+
   const diagnosticsSetup = createProcessMemoryDiagnosticsFromEnvironment(process.env);
   const processMemoryDiagnostics = await startConfiguredProcessMemoryDiagnostics(diagnosticsSetup, warning => {
     process.stderr.write(`Warning: ${warning}\n`);
@@ -207,7 +225,13 @@ export async function runMCCli(
   try {
     boot = await createMastraCode({ settingsPath: args.settings, coAuthor: options?.coAuthor });
     const { controller, session, mcpManager } = boot;
-    const effectiveDefaults = resolveModelDefaults(loadSettings(args.settings), listBuiltinModePacks());
+    const effectiveDefaults = resolveModelDefaults(settings, listBuiltinModePacks());
+
+    const packSelection = packId ? resolvePackSelection(settings, packId, args.mode ?? session.mode.get()) : undefined;
+    if (packId && !packSelection) {
+      process.stderr.write(`Error: Model pack "${packId}" has no model for ${args.mode ?? session.mode.get()} mode\n`);
+      process.exit(1);
+    }
 
     if (mcpManager?.hasServers()) {
       try {
@@ -227,6 +251,7 @@ export async function runMCCli(
       model: args.model,
       mode: args.mode,
       modeDefaults: effectiveDefaults,
+      ...(packId && packSelection ? { pack: { id: packId, ...packSelection } } : {}),
       thinkingLevel: args.thinkingLevel,
       thread: { id: args.thread, continueLatest: args.continue_, clone: args.cloneThread },
       resourceId: args.resourceId,

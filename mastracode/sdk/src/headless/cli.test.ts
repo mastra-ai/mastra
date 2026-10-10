@@ -128,6 +128,12 @@ describe('parseHeadlessArgs', () => {
     expect(args.settings).toBe('./s.json');
   });
 
+  it('parses --pack and --pack=<id>', () => {
+    expect(parseHeadlessArgs(argv('-p', 'x', '--pack', 'openai')).pack).toBe('openai');
+    expect(parseHeadlessArgs(argv('-p', 'x', '--pack=custom:Kimi')).pack).toBe('custom:Kimi');
+    expect(parseHeadlessArgs(argv('-p', 'x')).pack).toBeUndefined();
+  });
+
   it('parses --max-turns as a positive integer', () => {
     expect(parseHeadlessArgs(argv('-p', 'x', '--max-turns', '5')).maxTurns).toBe(5);
   });

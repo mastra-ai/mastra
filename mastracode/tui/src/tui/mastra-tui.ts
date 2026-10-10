@@ -805,6 +805,11 @@ export class MastraTUI {
 
     // Resume the latest unlocked thread for this directory.
     const startupResumeIssue = await resumeThreadOnStartup(this.state, this.state.options.resumeThreadId);
+    // A --pack startup applies to whatever thread startup selected, including a
+    // resumed one — it overrides the thread's sticky pack for this session.
+    if (this.state.options.initialPackId) {
+      await applyCurrentThreadPack({ state: this.state }, { packId: this.state.options.initialPackId });
+    }
     await this.syncThreadActivePackMetadata();
 
     // Subscribe to controller events

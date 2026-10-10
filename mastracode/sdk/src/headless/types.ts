@@ -8,6 +8,7 @@
 import type { AgentController, AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 
 import type { GoalManager } from '../goal-manager.js';
+import type { PackSelection } from '../onboarding/pack-activation.js';
 
 export type RunMode = 'build' | 'plan' | 'fast';
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -56,12 +57,20 @@ interface RunMCBaseOptions<TState extends Record<string, unknown> = Record<strin
   /** Session built via `createMastraCode(...)`. */
   session: Session<TState>;
 
-  /** Explicit model id override. Takes precedence over `mode`. */
+  /** Explicit model id override. Takes precedence over `mode` and `pack`. */
   model?: string;
   /** Execution mode; resolves a model from `modeDefaults` when `model` is absent. */
   mode?: RunMode;
   /** Per-mode default model ids (resolved from settings at startup). */
   modeDefaults?: Record<string, string>;
+  /**
+   * A model pack to activate for the run (canonical id from
+   * `resolveModePackArg`), with its selection pre-resolved for the run's mode
+   * via `resolvePackSelection`. Sets the thread's activeModelPackId, the
+   * subagent models, and the model route; `model` still wins for the active
+   * mode's session model.
+   */
+  pack?: { id: string } & PackSelection;
   /** Thinking-effort level. */
   thinkingLevel?: ThinkingLevel;
   /** Thread selection / mutation. */

@@ -13,8 +13,10 @@
 import { isSessionStartupCancelledError } from '@mastra/core/agent-controller';
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 
+import { MODEL_FALLBACK_STATE_KEY } from '../auth/account-rotation-processor.js';
 import { GoalManager } from '../goal-manager.js';
 import { createGoalReminderSignal } from '../goal-signal.js';
+import { THREAD_ACTIVE_MODEL_PACK_ID_KEY } from '../onboarding/settings.js';
 
 import { autoApprovePolicy } from './policy.js';
 import type { MCRun, ResolutionPolicy, RunMCOptions, RunMCResult, RunMCStatus } from './types.js';
@@ -358,7 +360,9 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
     const modeIdForModel = options.mode ?? (options.modeDefaults ? session.mode.get() : undefined);
     const configuredDefaultModelId = modeIdForModel ? options.modeDefaults?.[modeIdForModel] : undefined;
     const modelIdToApply =
-      options.model ?? (options.mode || !restoredThreadSelection ? configuredDefaultModelId : undefined);
+      options.model ??
+      options.pack?.modelId ??
+      (options.mode || !restoredThreadSelection ? configuredDefaultModelId : undefined);
     try {
       if (options.mode && !controller.listModes().some(mode => mode.id === options.mode)) {
         return fail(`Unknown mode: "${options.mode}"`);
@@ -416,6 +420,20 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
     try {
       if (options.mode) {
         await session.mode.switch({ modeId: options.mode });
+      }
+      if (options.pack) {
+        // Mirror /models → Activate on the session: sticky thread pack id,
+        // subagent models, and the fallback route. Clears any pending fallback
+        // from a continued thread so the pack's own route starts clean.
+        await session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: options.pack.id });
+        await session.thread.setSetting({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
+        for (const [agentType, modelId] of Object.entries(options.pack.subagentModels ?? {})) {
+          await session.subagents.model.set({ modelId, agentType });
+        }
+        await session.state.set({
+          modelRoute: options.pack.modelRoute,
+          [MODEL_FALLBACK_STATE_KEY]: null,
+        } as unknown as Partial<TState>);
       }
       if (modelIdToApply) {
         await session.model.switch(modelIdToApply);

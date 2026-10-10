@@ -8,10 +8,12 @@ import { createMastraCode } from '@mastra/code-sdk';
 import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
 import { hasHeadlessFlag, runMCCli } from '@mastra/code-sdk/headless/index';
+import { activateModePackInSettings, resolveModePackArg } from '@mastra/code-sdk/onboarding/pack-activation';
 import {
   createBrowserFromSettings,
   loadSettings,
   resolveStagehandModel,
+  saveSettings,
   toActiveBrowserSettings,
 } from '@mastra/code-sdk/onboarding/settings';
 import { formatScaffoldSuccess, scaffoldPlugin } from '@mastra/code-sdk/plugins/scaffold';
@@ -23,7 +25,7 @@ import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
 import { TUI_CO_AUTHOR } from './commit-attribution.js';
-import { initialMessageOptions, pipedInputConflict, takeInitialPrompt } from './initial-prompt.js';
+import { initialMessageOptions, pipedInputConflict, takeInitialPrompt, takePackFlag } from './initial-prompt.js';
 import {
   createOneShotFatalErrorHandler,
   createShutdownCoordinator,
@@ -65,8 +67,8 @@ function isTruthyEnv(name: string): boolean {
   return ['1', 'true', 'yes', 'on'].includes(process.env[name]?.trim().toLowerCase() ?? '');
 }
 
-function resolveInitialStateFromEnv() {
-  const currentModelId = process.env.MASTRACODE_MODEL_ID?.trim();
+function resolveInitialStateFromEnv(options: { ignoreModelEnv?: boolean } = {}) {
+  const currentModelId = options.ignoreModelEnv ? undefined : process.env.MASTRACODE_MODEL_ID?.trim();
   const initialState: Record<string, unknown> = {};
   if (currentModelId) initialState.currentModelId = currentModelId;
   if (isTruthyEnv('MASTRACODE_YOLO')) initialState.yolo = true;
@@ -85,7 +87,11 @@ process.on('unhandledRejection', reason => {
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
-async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> = {}, resumeThreadId?: string) {
+async function tuiMain(
+  startupMessage: ReturnType<typeof initialMessageOptions> = {},
+  resumeThreadId?: string,
+  startupPackId?: string,
+) {
   const settings = loadSettings();
   processMemoryDiagnostics = await startTuiProcessMemoryDiagnostics(process.env, warning => {
     console.info(`⚠ ${warning}`);
@@ -96,7 +102,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
     return browserPromise;
   };
 
-  const initialState = resolveInitialStateFromEnv();
+  const initialState = resolveInitialStateFromEnv({ ignoreModelEnv: startupPackId !== undefined });
   const result = await createMastraCode({
     createInitialThread: false,
     coAuthor: TUI_CO_AUTHOR,
@@ -182,6 +188,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
     version: getCurrentVersion(),
     inlineQuestions: true,
     initialModelOverride: Boolean(initialState?.currentModelId),
+    ...(startupPackId ? { initialPackId: startupPackId } : {}),
     ...(resumeThreadId ? { resumeThreadId } : {}),
     githubSignals: result.githubSignals,
     backgroundToolsEnabled: result.backgroundToolsEnabled,
@@ -438,12 +445,23 @@ async function main() {
     return process.exit(code);
   }
 
-  const initialPrompt = takeInitialPrompt(process.argv, process.env);
+  // --pack is shared with headless mode, which re-parses it from process.argv
+  // in runMCCli. Strip it here only for the interactive path's other argv
+  // consumers (initial prompt, resume) so the pack id is never mistaken for a
+  // positional prompt.
+  const packFlag = takePackFlag(process.argv);
+  if (packFlag.error) {
+    process.stderr.write(`${packFlag.error}\n`);
+    process.exit(1);
+  }
+
+  const initialPrompt = takeInitialPrompt(packFlag.argv, process.env);
   if (initialPrompt.error) {
     process.stderr.write(`${initialPrompt.error}\n`);
     process.exit(1);
   }
   if (initialPrompt.flag) process.argv = initialPrompt.argv;
+  const tuiArgv = initialPrompt.flag ? initialPrompt.argv : packFlag.argv;
   // The flag only means something to the interactive TUI. Paths that can't run
   // it reject the flag instead of dropping the prompt; an env var prompt is
   // just ignored there.
@@ -455,7 +473,7 @@ async function main() {
 
   let resumeThreadId: string | undefined;
   try {
-    resumeThreadId = parseResumeThreadId(process.argv.slice(2));
+    resumeThreadId = parseResumeThreadId(tuiArgv.slice(2));
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
@@ -475,6 +493,25 @@ async function main() {
       dangerousAutoApprove: process.argv.includes('--dangerous-auto-approve'),
       coAuthor: TUI_CO_AUTHOR,
     });
+  }
+
+  // Interactive --pack: fail fast on an unknown pack, then activate it the way
+  // /models → Activate does — the pack becomes the global default in settings
+  // and the TUI applies it to the session (and any resumed thread) at startup.
+  let startupPackId: string | undefined;
+  if (packFlag.value !== undefined) {
+    const settings = loadSettings();
+    const resolved = resolveModePackArg(settings, packFlag.value);
+    if ('error' in resolved) {
+      process.stderr.write(`Error: ${resolved.error}\n`);
+      process.exit(1);
+    }
+    startupPackId = resolved.packId;
+    activateModePackInSettings(settings, startupPackId);
+    saveSettings(settings);
+    if (process.env.MASTRACODE_MODEL_ID?.trim()) {
+      process.stderr.write('Note: --pack takes precedence over MASTRACODE_MODEL_ID for this session.\n');
+    }
   }
 
   if (shouldRejectResumeWithoutTTY(resumeThreadId, Boolean(process.stdin.isTTY))) {
@@ -507,7 +544,7 @@ async function main() {
     process.exit(1);
   }
 
-  return tuiMain(initialMessageOptions(initialPrompt, pipedInput), resumeThreadId);
+  return tuiMain(initialMessageOptions(initialPrompt, pipedInput), resumeThreadId, startupPackId);
 }
 
 main().catch(error => {
