@@ -3,7 +3,7 @@ import type { KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
 import type { Memory } from '../../..';
-import { omDebug, omError } from '../debug';
+import { omError } from '../debug';
 import { Extractor, type ExtractorOnExtractedContext } from '../extractor';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity, publishSubconsciousError } from './activity';
@@ -58,7 +58,7 @@ type CuratorContext = Pick<
 
 /** Returns undefined when the parent run has no org, in which case curation skips that run. */
 export function resolveCuratorScope(context: CuratorContext): KnowledgeScope | undefined {
-  const organizationId = resolveSubconsciousOrgId(context.requestContext, omDebug);
+  const organizationId = resolveSubconsciousOrgId(context.requestContext);
   if (!organizationId) return undefined;
   const resourceId = resolveKnowledgeResourceId(context.requestContext, context.resourceId) ?? context.threadId;
   return canonicalizeKnowledgeScope([`org:${organizationId}`, `resource:${resourceId}`, `thread:${context.threadId}`]);
