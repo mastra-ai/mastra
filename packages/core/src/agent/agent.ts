@@ -530,6 +530,24 @@ function getInvocationActor(context: unknown): ActorSignal | undefined {
   return (context as { actor?: ActorSignal } | undefined)?.actor;
 }
 
+/**
+ * Whether any step in the workflow (including nested workflows) can suspend.
+ * Mirrors the `canSuspend` rule used when serializing step graphs. Every
+ * builder method (then/parallel/branch/loops/foreach) registers its inner
+ * steps in `workflow.steps`, so no step-graph walk is needed.
+ */
+function workflowCanSuspend(workflow: unknown, seen = new Set<unknown>()): boolean {
+  if (!workflow || seen.has(workflow)) return false;
+  seen.add(workflow);
+  const steps = (workflow as { steps?: Record<string, unknown> }).steps;
+  return Object.values(steps ?? {}).some(step => {
+    const s = step as { suspendSchema?: unknown; resumeSchema?: unknown; component?: string } | undefined;
+    if (!s) return false;
+    if (s.suspendSchema || s.resumeSchema) return true;
+    return s.component === 'WORKFLOW' && workflowCanSuspend(s, seen);
+  });
+}
+
 type ProcessorWorkflowChildrenContainer = {
   steps?: Record<string, unknown> | unknown[];
   children?: Record<string, unknown> | unknown[];
@@ -6641,6 +6659,9 @@ export class Agent<
           description: workflow.description || `Workflow: ${workflowName}`,
           inputSchema: extendedInputSchema,
           outputSchema,
+          // Advertise suspension so tool-call concurrency gates serialize this tool.
+          // Permissive because any suspending step's payload may be forwarded.
+          ...(workflowCanSuspend(workflow) ? { suspendSchema: z.any() } : {}),
           mastra: this.#mastra,
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace

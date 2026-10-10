@@ -317,7 +317,7 @@ Evented agents always persist the full snapshot set: the evented engine coordina
 
 ### Automatic recovery
 
-Set `recovery.durableAgents` to `'auto'` in the Mastra config. The deployer calls `recoverAllDurableAgents()` on boot, right after restarting active workflow runs:
+Set `recovery.durableAgents` to `'auto'` in the Mastra config. The deployer calls `recoverAllDurableAgents()` on boot, alongside the workflow run restarts (the two run concurrently):
 
 ```typescript title="src/mastra/index.ts" {4}
 export const mastra = new Mastra({

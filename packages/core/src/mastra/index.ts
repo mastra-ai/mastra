@@ -113,6 +113,7 @@ import { createOnScorerHook } from './hooks';
 import { __registerMastraCtor } from './mastra-ctor-holder';
 import type { RunScope } from './run-scope';
 import { createRunScope } from './run-scope';
+import { DEFAULT_RESTART_CONCURRENCY, normalizeConcurrency, runWithConcurrency } from './run-with-concurrency';
 import type { VersionOverrides, VersionSelector } from './types';
 
 /**
@@ -660,9 +661,15 @@ export interface Config<
   /**
    * Boot-time recovery behavior for orphaned agent/workflow runs.
    *
+   * `workflows` controls whether the server calls
+   * {@link Mastra.restartAllActiveWorkflowRuns} on boot. Set it to `'off'` to
+   * skip the workflow sweep entirely (no storage queries), for example when
+   * several replicas share one database and you recover runs another way.
+   * `workflowConcurrency` caps how many runs that sweep restarts at once.
+   *
    * `durableAgents` controls whether the deployer will automatically call
    * {@link Mastra.recoverAllDurableAgents} for every registered `DurableAgent`
-   * when the server starts (right after `restartAllActiveWorkflowRuns`).
+   * when the server starts (concurrently with `restartAllActiveWorkflowRuns`).
    *
    * - `'off'` (default): the deployer never auto-recovers durable agent runs.
    *   Operators can still call `mastra.recoverAllDurableAgents()` or
@@ -675,7 +682,7 @@ export interface Config<
    * (must be idempotent). In multi-instance deploys a run another replica
    * still drives is skipped, and recovered once that replica's claim lapses.
    *
-   * @default { durableAgents: 'off' }
+   * @default { workflows: 'auto', workflowConcurrency: 5, durableAgents: 'off' }
    */
   recovery?: MastraRecoveryConfig;
 
@@ -701,6 +708,17 @@ export interface Config<
  * Boot-time recovery configuration. See {@link Mastra['recoveryConfig']}.
  */
 export interface MastraRecoveryConfig {
+  /**
+   * Restart RUNNING/WAITING workflow runs found in storage on server boot.
+   * @default 'auto'
+   */
+  workflows?: 'auto' | 'off';
+  /**
+   * Maximum number of workflow runs restarted at the same time by
+   * {@link Mastra.restartAllActiveWorkflowRuns}. Use `Infinity` for no limit.
+   * @default 5
+   */
+  workflowConcurrency?: number;
   /**
    * Auto-recover orphaned RUNNING durable agent runs on server boot.
    * @default 'off'
@@ -851,7 +869,11 @@ export class Mastra<
   #storageSource?: MastraCompositeStore;
   #storageExplicit = false;
   #storageFallbackWarningPending = false;
-  #recoveryConfig: MastraRecoveryConfig = { durableAgents: 'off' };
+  #recoveryConfig: MastraRecoveryConfig = {
+    workflows: 'auto',
+    workflowConcurrency: DEFAULT_RESTART_CONCURRENCY,
+    durableAgents: 'off',
+  };
   #durableRecoveryRechecks = new Map<string, ReturnType<typeof setTimeout>>();
   #durableRecoveryRechecksInFlight = new Set<Promise<void>>();
   #shuttingDown = false;
@@ -1586,6 +1608,8 @@ export class Mastra<
     // via `recovery: { durableAgents: 'auto' }` matches the existing
     // `restartAllActiveWorkflowRuns` boot hook.
     this.#recoveryConfig = {
+      workflows: config?.recovery?.workflows ?? 'auto',
+      workflowConcurrency: normalizeConcurrency(config?.recovery?.workflowConcurrency),
       durableAgents: config?.recovery?.durableAgents ?? 'off',
     };
 
@@ -4200,23 +4224,21 @@ export class Mastra<
     };
   }
 
+  /**
+   * Restart every RUNNING/WAITING run of the registered default-engine
+   * workflows. Runs are restarted `recovery.workflowConcurrency` at a time
+   * (default 5) and the promise resolves once all of them have settled.
+   * Failures are logged per run and never reject the sweep.
+   */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
     const activeRuns = await this.listActiveWorkflowRuns();
-    if (activeRuns.runs.length > 0) {
-      this.#logger.debug(
-        `Restarting ${activeRuns.runs.length} active workflow run${activeRuns.runs.length > 1 ? 's' : ''}`,
-      );
+    const runs = activeRuns.runs;
+    if (runs.length > 0) {
+      this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
     }
-    for (const runSnapshot of activeRuns.runs) {
-      const workflow = this.getWorkflowById(runSnapshot.workflowName);
-      if (workflow?.options?.autoRestartActiveRuns === false) {
-        this.#logger.debug('Skipping workflow run auto-restart; workflow opts out of generic recovery', {
-          workflow: runSnapshot.workflowName,
-          runId: runSnapshot.runId,
-        });
-        continue;
-      }
+    await runWithConcurrency(runs, this.#recoveryConfig.workflowConcurrency, async runSnapshot => {
       try {
+        const workflow = this.getWorkflowById(runSnapshot.workflowName);
         const run = await workflow.createRun({ runId: runSnapshot.runId });
         await run.restart();
         this.#logger.debug('Restarted workflow run', { workflow: runSnapshot.workflowName, runId: runSnapshot.runId });
@@ -4227,7 +4249,7 @@ export class Mastra<
           error,
         });
       }
-    }
+    });
   }
 
   /**
@@ -4244,7 +4266,7 @@ export class Mastra<
    * agent that supports it (default-engine durable agents only — Inngest and
    * other externally-executed durable wrappers run their own recovery).
    *
-   * Intended to be called once on server boot, after
+   * Intended to be called once on server boot, concurrently with
    * `restartAllActiveWorkflowRuns()`. The deployer wires this up automatically
    * when `recovery.durableAgents` is set to `'auto'` in the Mastra config; you
    * can also call it directly if you need finer control (e.g. running it in a
