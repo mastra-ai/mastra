@@ -1221,6 +1221,14 @@ describe('built-in board and integration handlers', () => {
     expect(decision).toMatchObject({ type: 'transition', board: 'work', stage: 'done' });
   });
 
+  it('does not target the Work board when a pull request from a custom board merges', async () => {
+    const context = githubContext('pullRequestMerged');
+    context.item = item;
+    context.board = 'release';
+    context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
+    expect(await defaultGithubRules.pullRequestMerged?.(context)).toBeUndefined();
+  });
+
   it('keeps the Work item in Review when an older pull request merges while a newer one is open', async () => {
     const context = githubContext('pullRequestMerged');
     context.item = { ...item, metadata: { openPullRequestNumber: 18 } };
