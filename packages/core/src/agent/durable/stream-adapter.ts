@@ -835,6 +835,19 @@ export async function emitChunkEvent<OUTPUT = undefined>(
 /**
  * Announce that the execution with `generation` claimed the run, so the run's
  * stream consumers drop what older executions still publish from here on.
+ *
+ * Readers only learn a generation from events they see. Without this marker,
+ * a reader's floor would rise only at the new execution's first event, which
+ * comes after rehydration and the first model call. Until then, an execution
+ * that stalled past its claim and resumed keeps publishing: it only learns it
+ * was superseded at its next heartbeat or step check, so `fencePubSub` doesn't
+ * stop it yet. Its chunks would reach readers, and its `finish` would end their
+ * streams before the new execution's answer arrives.
+ *
+ * Published on the run's stream topic, not a separate one, so it is ordered
+ * against the chunks around it and replayed to readers that reconnect from an
+ * offset. Readers swallow it and never forward it as a chunk. Readers that
+ * reconnect past it read the claim's generation from storage instead.
  */
 export async function emitOwnershipClaimedEvent(pubsub: PubSub, runId: string, generation: number): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
