@@ -270,7 +270,8 @@ export function defineBoard<
     throw new BoardDefinitionError(`Initial phase "${config.initialPhase}" must be a resting phase.`);
   }
   const sourceClosed = validateSourceClosed(config.sourceClosed, config.phases) as
-    BoardSourceClosed<PhaseId> | undefined;
+    | BoardSourceClosed<PhaseId>
+    | undefined;
 
   const transitions = Object.fromEntries(
     Object.entries(config.phases).map(([phaseId, phase]) => {

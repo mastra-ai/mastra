@@ -49,8 +49,13 @@ export function selectEventRule<E extends string, TContext>(
   event: E,
 ): FactoryRuleHandler<TContext> | null {
   const base = rules[event];
-  if (explicitOverrides.get(rules)?.has(event)) return base;
+  if (hasExplicitRuleOverride(rules, event)) return base;
   return composeEventRule(boardRules?.[event], base);
+}
+
+/** Whether the deployment set this event explicitly on the integration's `rules`. */
+export function hasExplicitRuleOverride(rules: object, event: string): boolean {
+  return explicitOverrides.get(rules)?.has(event) ?? false;
 }
 
 function isPromiseLike<T>(value: T | PromiseLike<T>): value is PromiseLike<T> {
