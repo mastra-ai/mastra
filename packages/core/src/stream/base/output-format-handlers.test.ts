@@ -242,7 +242,7 @@ describe('output-format-handlers', () => {
       from: ChunkFrom.AGENT,
       payload: { id: 'text-1', text },
     });
-    const finish = (reason: 'stop' | 'tool-calls'): ChunkType<Out> =>
+    const finish = (reason: 'stop' | 'tool-calls' | 'length' | 'content-filter'): ChunkType<Out> =>
       ({
         ...finishChunk('stop'),
         payload: { ...finishChunk('stop').payload, stepResult: { reason } },
@@ -316,6 +316,21 @@ describe('output-format-handlers', () => {
       expect(chunks.filter(chunk => chunk.type === 'object-result')).toEqual([]);
       expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
     });
+
+    it.each(['length', 'content-filter'] as const)(
+      'reports truncation on %s even with pending tool calls',
+      async reason => {
+        const chunks = await run([textDelta('{"answer":"dra'), toolCall(), finish(reason)]);
+
+        expect(chunks.filter(chunk => chunk.type === 'object-result')).toEqual([]);
+        const errors = chunks.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0]?.payload.error).toMatchObject({
+          id: 'STRUCTURED_OUTPUT_TRUNCATED',
+          details: { finishReason: reason },
+        });
+      },
+    );
   });
 
   describe.each([true, false])('recovery with text-end: %s', includeTextEnd => {
