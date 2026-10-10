@@ -1259,7 +1259,13 @@ export class DurableAgent<
 
     const messageList = new MessageList({ threadId, resourceId });
     try {
-      messageList.deserialize(workflowInput.messageListState);
+      // The persisted input keeps messages memory already stores as refs.
+      messageList.deserialize(
+        await hydrateMessageListState(
+          { state: undefined, getInitData: () => workflowInput, mastra: this.#mastra },
+          workflowInput.messageListState,
+        ),
+      );
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] recover(${runId}) messageList deserialize skipped: ${error}`);
     }

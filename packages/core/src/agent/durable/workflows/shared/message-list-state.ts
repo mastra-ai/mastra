@@ -3,10 +3,11 @@ import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { RequestContext } from '../../../../request-context';
 import { delay } from '../../../../utils';
-import { createStoredMessageLoader } from '../../../message-list/memory-message-refs';
+import type { WorkflowRunState } from '../../../../workflows/types';
+import { createStoredMessageLoader, isMemoryMessageRef } from '../../../message-list/memory-message-refs';
 import type { DehydratedMessageListState, StoredMessageLoader } from '../../../message-list/memory-message-refs';
 import type { SerializedMessageListState } from '../../../message-list/state';
-import { getRunMessageRefs, releaseRunMessageRefs } from '../../run-message-refs';
+import { getRunMessageRefs, peekRunMessageRefs, releaseRunMessageRefs } from '../../run-message-refs';
 import { globalRunRegistry } from '../../run-registry';
 import type { SerializableDurableState } from '../../types';
 import { restoreRequestContext } from '../../utils/resolve-runtime';
@@ -36,7 +37,8 @@ type WritableTranscriptParams = TranscriptParams & { setState(state: unknown): P
  *
  * In workflow state, messages memory already stores (recalled, or saved by
  * this run) are kept as refs to their memory rows (see {@link MemoryMessageRefs}): reads restore them, writes
- * re-create them. Step payloads always carry the full transcript.
+ * re-create them. Step payloads carry the full transcript while a step runs;
+ * {@link dehydrateSnapshotTranscripts} swaps in refs when a snapshot is persisted.
  */
 export async function readMessageListState(
   params: TranscriptParams,
@@ -44,10 +46,11 @@ export async function readMessageListState(
 ): Promise<SerializedMessageListState> {
   // Every durable run carries the transcript in at least one of the two;
   // workflow state wins.
-  const stored = (params.state as StoredMessageListStateCarrier | undefined)?.messageListState;
-  if (stored === undefined) {
-    return (stepPayload as MessageListStateCarrier).messageListState as SerializedMessageListState;
-  }
+  // A payload read back from a persisted snapshot can hold refs too.
+  const stored =
+    (params.state as StoredMessageListStateCarrier | undefined)?.messageListState ??
+    (stepPayload as StoredMessageListStateCarrier | undefined)?.messageListState;
+  if (!stored?.messages?.some(isMemoryMessageRef)) return stored as SerializedMessageListState;
   return hydrateMidRun(runTranscriptRefs(params), stored, params.abortSignal);
 }
 
@@ -88,6 +91,7 @@ export async function openMessageListState(
 ): Promise<{ read(): SerializedMessageListState; write(next: SerializedMessageListState): void }> {
   const workflowState = params.state as StoredMessageListStateCarrier | undefined;
   if (workflowState?.messageListState === undefined) {
+    stepPayload.messageListState = await readMessageListState(params, stepPayload);
     return {
       read: () => stepPayload.messageListState as SerializedMessageListState,
       write: next => {
@@ -183,6 +187,45 @@ export async function hydrateMessageListState(
 ): Promise<SerializedMessageListState> {
   const run = runTranscriptRefs(params);
   return run.refs.hydrate(stored, run.load, run);
+}
+
+/**
+ * Replaces messages memory already stores with refs in the transcript copies a
+ * persisted snapshot carries outside workflow state: the run input, step
+ * payloads and outputs, and the evented engine's `__state` mirror. Without
+ * this every checkpoint rewrites the conversation once per copy (#26600).
+ * Never reads storage; anything not yet saved stays inline. Copy-on-write.
+ */
+export function dehydrateSnapshotTranscripts(snapshot: WorkflowRunState): WorkflowRunState {
+  const context = snapshot.context as Record<string, unknown> | undefined;
+  const input = context?.input as { state?: SerializableDurableState } | undefined;
+  const refs = input?.state?.fixedMemory ? peekRunMessageRefs(snapshot.runId) : undefined;
+  if (!context || !refs) return snapshot;
+  const withRefs = (carrier: unknown) => {
+    const state = (carrier as MessageListStateCarrier | undefined)?.messageListState;
+    if (!state?.messages) return carrier;
+    const next = refs.dehydrate(state);
+    return next === state ? carrier : { ...(carrier as object), messageListState: next };
+  };
+  let changed = false;
+  const nextContext: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(context)) {
+    let next = value;
+    if (key === 'input' || key === '__state') {
+      next = withRefs(value);
+    } else if (value && typeof value === 'object') {
+      const step = value as { payload?: unknown; output?: unknown };
+      const payload = withRefs(step.payload);
+      const output = withRefs(step.output);
+      if (payload !== step.payload || output !== step.output) next = { ...step, payload, output };
+    }
+    changed ||= next !== value;
+    nextContext[key] = next;
+  }
+  // Workflow state was dehydrated when written, which can predate the save.
+  const value = withRefs(snapshot.value) as WorkflowRunState['value'];
+  if (!changed && value === snapshot.value) return snapshot;
+  return { ...snapshot, value, context: (changed ? nextContext : context) as WorkflowRunState['context'] };
 }
 
 /** Frees this process's verified rows once the run has read its transcript for the last time. */

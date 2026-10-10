@@ -27,6 +27,8 @@ export type { IterationStateUpdateInput, StepRecord } from './iteration-state';
 export { buildDeferredStepFinishChunk, buildDurableStepContent } from '@internal/core/durable';
 
 export {
+  dehydrateSnapshotTranscripts,
+  hydrateMessageListState,
   openMessageListState,
   readMessageListState,
   releaseMessageListState,

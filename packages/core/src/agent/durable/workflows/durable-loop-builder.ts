@@ -40,6 +40,8 @@ import {
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
+  dehydrateSnapshotTranscripts,
+  hydrateMessageListState,
   openMessageListState,
   readMessageListState,
   releaseMessageListState,
@@ -222,11 +224,13 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
    * that read an earlier step's result via `getStepResult` (reader → sources).
    * The evented engine additionally reads persisted step results back at every
    * step boundary during normal execution, so it retains running history. See
-   * `pruneAgentLoopSnapshot` for the rationale.
+   * `pruneAgentLoopSnapshot` for the rationale. What remains then stores
+   * messages memory already holds as refs (see `dehydrateSnapshotTranscripts`).
    */
   protected pruneSnapshotHook(stepResultReads: StepResultReads = {}): typeof pruneAgentLoopSnapshot {
     const retainRunningHistory = this.#options?.engine === 'evented';
-    return args => pruneAgentLoopSnapshot({ ...args, retainRunningHistory, stepResultReads });
+    return args =>
+      dehydrateSnapshotTranscripts(pruneAgentLoopSnapshot({ ...args, retainRunningHistory, stepResultReads }));
   }
 
   // ── Runtime hooks ──────────────────────────────────────────────────────
@@ -855,6 +859,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // resume never reads before persisting. Engine-aware: evented
           // retains running history (see pruneSnapshotHook).
           pruneSnapshot: this.pruneSnapshotHook(),
+          // Snapshots written up to the end reference this process's saved
+          // rows, so release them only once the run has persisted its result.
+          onFinish: ({ status, getInitData }) => {
+            if (status !== 'suspended') releaseMessageListState({ state: undefined, getInitData });
+          },
           validateInputs: false,
           // Engine step events off for the same reason as the iteration
           // workflow (#21529) — see singleIterationWorkflow.
@@ -872,7 +881,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         // Initialize iteration state from input
         .map(
           async params => {
-            const { messageListState, ...input } = params.inputData as DurableAgenticWorkflowInput;
+            const { messageListState: inputMessageListState, ...input } =
+              params.inputData as DurableAgenticWorkflowInput;
+            // A restart reads the input back from a snapshot, which keeps saved messages as refs.
+            const messageListState = await hydrateMessageListState(params, inputMessageListState);
             const initialMessageList = createRunMessageList({
               mastra: params.mastra as Mastra | undefined,
             }).deserialize(messageListState);
@@ -914,8 +926,6 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             let finalText = lastStep?.text;
 
             const messageListState = await readMessageListState(params, state);
-            // Nothing reads the stored transcript after this.
-            releaseMessageListState(params);
 
             const finishResult = await runDurableFinishSideEffects({
               runId: state.runId,
@@ -1030,14 +1040,27 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         )
         // Execute scorers (fire-and-forget, doesn't affect main result)
         .map(
-          async ({ inputData, getInitData, mastra, requestContext, tracingContext }) => {
-            executeDurableAgentScorers({
-              initData: getInitData() as DurableAgenticWorkflowInput,
-              finalOutput: inputData,
-              mastra: mastra as Mastra | undefined,
-              requestContext,
-              tracingContext,
-            });
+          async params => {
+            const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
+            const initData = getInitData() as DurableAgenticWorkflowInput;
+            if (initData.scorers && Object.keys(initData.scorers).length > 0) {
+              try {
+                // Both transcripts may come back from a snapshot that keeps saved messages as refs.
+                const [initial, final] = await Promise.all([
+                  hydrateMessageListState(params, initData.messageListState),
+                  hydrateMessageListState(params, inputData.messageListState),
+                ]);
+                executeDurableAgentScorers({
+                  initData: { ...initData, messageListState: initial },
+                  finalOutput: { ...inputData, messageListState: final },
+                  mastra: mastra as Mastra | undefined,
+                  requestContext,
+                  tracingContext,
+                });
+              } catch (error) {
+                mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`);
+              }
+            }
 
             return inputData;
           },

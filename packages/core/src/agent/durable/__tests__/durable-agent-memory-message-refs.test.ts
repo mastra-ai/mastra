@@ -234,6 +234,13 @@ const refIds = (snapshot: WorkflowRunState | undefined, engine: Engine = 'defaul
     .filter((m: any) => m.__ref === 'memory')
     .map((m: any) => m.id);
 
+/** JSON paths whose string values contain `needle`. */
+function copyPaths(value: unknown, needle: string, path = '$'): string[] {
+  if (typeof value === 'string') return value.includes(needle) ? [path] : [];
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, child]) => copyPaths(child, needle, `${path}.${key}`));
+}
+
 async function collectText(stream: { fullStream: AsyncIterable<any> }) {
   let text = '';
   for await (const chunk of stream.fullStream) {
@@ -299,6 +306,51 @@ describe('memory-recalled messages in durable runs', () => {
       expect(prompts).toHaveLength(4);
       expect(prompts[3]).toContain('Look it up');
     },
+  );
+
+  it.each(engines)(
+    'keeps at most one inline copy of a saved message in each running checkpoint (%s engine)',
+    async engine => {
+      const { durableAgent, workflows, storage } = await startProcess(history(), { engine, toolRounds: 5 });
+      const marker = 'saved-input-marker';
+      const persisted: SnapshotRow[] = [];
+      const persist = workflows.persistWorkflowSnapshot.bind(workflows);
+      workflows.persistWorkflowSnapshot = async args => {
+        persisted.push(structuredClone(args));
+        return persist(args);
+      };
+
+      const result = await durableAgent.stream(`${marker} ${'p'.repeat(20_000)}`, {
+        memory: memoryOption,
+        savePerStep: true,
+        maxSteps: 10,
+      });
+      expect(await collectText(result)).toBe('done');
+      // The closing steps (final output, scorers) persist after FINISH is emitted.
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // A message holds its text in more than one field; count each message once.
+      const copies = (row: SnapshotRow) => [
+        ...new Set(copyPaths(row.snapshot, marker).map(path => path.replace(/(\.messages\.\d+)\..*$/, '$1'))),
+      ];
+      const memoryStore = (await storage.getStore('memory'))!;
+      const { messages: stored } = await memoryStore.listMessages({ threadId, perPage: false });
+      const inputId = stored.find(m => m.role === 'user' && JSON.stringify(m.content).includes(marker))?.id;
+      expect(inputId).toBeDefined();
+      // Checkpoints written before memory stores the input can't reference it.
+      const inputRef = `"__ref":"memory","id":"${inputId}"`;
+      const firstRef = persisted.findIndex(row => JSON.stringify(row.snapshot).includes(inputRef));
+      const running = persisted.slice(firstRef).filter(row => row.snapshot.status === 'running');
+      expect(firstRef).toBeGreaterThanOrEqual(0);
+      expect(running.length).toBeGreaterThan(0);
+      // After that, each checkpoint keeps at most the one live copy a step is
+      // still reading; every other copy is a ref.
+      const overCopied = running
+        .map(row => ({ workflow: row.workflowName, copies: copies(row) }))
+        .filter(row => row.copies.length > 1);
+      expect(overCopied).toEqual([]);
+    },
+    30_000,
   );
 
   it('checkpoints a run still in flight at shutdown so another process can recover it', async () => {
@@ -382,7 +434,8 @@ describe('memory-recalled messages in durable runs', () => {
         engine,
       });
       const { runId, toolCallId } = await streamUntilApproval(durableAgent, workflows);
-      expect(refIds(await outerSnapshot(workflows, runId), engine)).toEqual(allHistoryIds);
+      // Recalled history, plus the messages this run saved before suspending.
+      expect(refIds(await outerSnapshot(workflows, runId), engine)).toEqual(expect.arrayContaining(allHistoryIds));
 
       const memoryStore = (await storage.getStore('memory'))!;
       await memoryStore.updateMessages({
@@ -415,7 +468,7 @@ describe('memory-recalled messages in durable runs', () => {
       });
       const { runId, toolCallId } = await streamUntilApproval(durableAgent, workflows);
       const suspended = await outerSnapshot(workflows, runId);
-      expect(refIds(suspended, engine)).toEqual(allHistoryIds);
+      expect(refIds(suspended, engine)).toEqual(expect.arrayContaining(allHistoryIds));
       expect(JSON.stringify(workflowState(suspended, engine))).not.toContain(historyText(0));
 
       const memoryStore = (await storage.getStore('memory'))!;

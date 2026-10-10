@@ -23,23 +23,31 @@ export function getRunMessageRefs(runId: string | undefined): MemoryMessageRefs 
   return refs;
 }
 
+/** The run's refs if this process holds them, without creating an entry. */
+export function peekRunMessageRefs(runId: string | undefined): MemoryMessageRefs | undefined {
+  return runId ? runMessageRefs.get(runId) : undefined;
+}
+
 export function releaseRunMessageRefs(runId: string | undefined): void {
   if (runId) runMessageRefs.delete(runId);
 }
 
 /**
  * A `SaveQueueManager` `onSaved` callback that records the rows a run saved,
- * so its persisted transcript references them instead of repeating them.
+ * so its persisted transcript references them instead of repeating them. Only
+ * runs that store refs hold an entry (the transcript store creates it), so saves
+ * for other runs, or landing after the run released its entry, are not kept.
  */
 export function recordRunSavedMessages(runId: string): (rows: MastraDBMessage[]) => void {
   return rows => {
+    const refs = peekRunMessageRefs(runId);
+    if (!refs) return;
     const byThread = new Map<string, MastraDBMessage[]>();
     for (const row of rows) {
       if (!row.threadId) continue;
       const key = `${row.threadId}\u0000${row.resourceId ?? ''}`;
       byThread.set(key, [...(byThread.get(key) ?? []), row]);
     }
-    const refs = getRunMessageRefs(runId);
     for (const threadRows of byThread.values()) {
       const { threadId, resourceId } = threadRows[0]!;
       refs.recordSaved(threadRows, { threadId: threadId!, resourceId });
