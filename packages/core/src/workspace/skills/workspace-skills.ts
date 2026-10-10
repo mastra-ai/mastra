@@ -55,6 +55,9 @@ interface SharedSearchState {
 /** @internal Prefix of every search document ID owned by a request-scoped skills view. */
 export const SKILL_SCOPE_DOCUMENT_PREFIX = 'skill-scope:';
 
+/** Search document ID suffix for a skill's name + description document. */
+const SKILL_METADATA_SOURCE = 'SKILL.md#metadata';
+
 // =============================================================================
 // WorkspaceSkillsImpl
 // =============================================================================
@@ -579,6 +582,8 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       const unchanged =
         oldSkill &&
         oldSkill.instructions === newSkill.instructions &&
+        oldSkill.name === newSkill.name &&
+        oldSkill.description === newSkill.description &&
         oldSkill.references.length === newSkill.references.length &&
         oldSkill.references.every((r, i) => r === newSkill.references[i]);
       if (unchanged) continue;
@@ -736,7 +741,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       ? this.#sharedSearchState.documentIds.size
       : [...this.#skills.values()].reduce(
           (count, candidates) =>
-            count + candidates.reduce((skillCount, skill) => skillCount + 1 + skill.references.length, 0),
+            count + candidates.reduce((skillCount, skill) => skillCount + 2 + skill.references.length, 0),
           0,
         );
     const expandedTopK = Math.max(skillNames ? topK * 3 : topK, totalIndexedDocuments);
@@ -780,13 +785,18 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
       }
       seenCanonicalSources.add(canonicalSourceKey);
 
+      // The name + description document isn't part of SKILL.md, so its line
+      // numbers would point at the wrong lines of the file.
+      const isMetadataHit = result.id === this.#searchDocumentId(skillPath, SKILL_METADATA_SOURCE);
+
       results.push({
         skillName: skill.name,
         skillPath: skill.path,
         source,
-        content: result.content,
+        // The metadata document starts with the name, which the result already carries
+        content: isMetadataHit ? skill.description : result.content,
         score: result.score,
-        lineRange: result.lineRange,
+        lineRange: isMetadataHit ? undefined : result.lineRange,
         scoreDetails: result.scoreDetails,
       });
 
@@ -1452,6 +1462,7 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
 
     const ids = [
       this.#searchDocumentId(skill.path, 'SKILL.md'),
+      this.#searchDocumentId(skill.path, SKILL_METADATA_SOURCE),
       ...skill.references.map(r => this.#searchDocumentId(skill.path, r)),
     ];
     for (const id of ids) {
@@ -1497,6 +1508,21 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
     });
     this.#sharedSearchState.documentIds.add(skillDocumentId);
 
+    // Index name + description as their own document so searches can find a
+    // skill by what it is for. Kept separate from the body so body line ranges
+    // stay accurate; shares source 'SKILL.md' so results de-dup per skill.
+    const metadataDocumentId = this.#searchDocumentId(skill.path, SKILL_METADATA_SOURCE);
+    await this.#searchEngine.index({
+      id: metadataDocumentId,
+      content: `${skill.name}\n${skill.description}`,
+      metadata: {
+        skillPath: skill.path,
+        source: 'SKILL.md',
+        ...(this.#searchNamespace ? { skillScope: this.#searchNamespace } : {}),
+      },
+    });
+    this.#sharedSearchState.documentIds.add(metadataDocumentId);
+
     // Index each reference file in parallel (independent reads + index calls)
     await Promise.all(
       skill.references.map(async refPath => {
@@ -1533,51 +1559,124 @@ export class WorkspaceSkillsImpl implements WorkspaceSkills {
    */
   async #simpleSearch(query: string, options: SkillSearchOptions): Promise<SkillSearchResult[]> {
     const { topK = 5, skillNames, includeReferences = true } = options;
-    const queryLower = query.toLowerCase();
-    const results: SkillSearchResult[] = [];
 
+    const skills: Skill[] = [];
     for (const candidates of this.#skills.values()) {
       // Use tie-break winner for each name
       const skill = await this.#tieBreak(candidates);
-      if (!skill) continue;
+      if (skill && (!skillNames || skillNames.includes(skill.name))) skills.push(skill);
+    }
 
-      // Filter by skill names if specified
-      if (skillNames && !skillNames.includes(skill.name)) {
-        continue;
+    // Score by the share of query words found (case-insensitive), so keyword
+    // queries rank skills instead of needing every word or the exact phrase.
+    // Words found in the name or description count double: they say what the
+    // skill is for. Words of one or two letters ("a", "do") appear in almost
+    // every skill, so they're ignored unless the query has nothing longer.
+    const allTerms = [
+      ...new Set(
+        query
+          .toLowerCase()
+          .split(/\s+/)
+          // "review," or "(test)" should match "review" and "test"
+          .map(word => word.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ''))
+          .filter(Boolean),
+      ),
+    ];
+    const longTerms = allTerms.filter(term => term.length > 2);
+    const terms = longTerms.length > 0 ? longTerms : allTerms;
+
+    if (terms.length === 0) {
+      return this.#listSkillDocuments(skills, topK, includeReferences);
+    }
+
+    const skillHits: SkillSearchResult[] = [];
+    for (const skill of skills) {
+      const lowerAbout = `${skill.name}\n${skill.description}`.toLowerCase();
+      const lowerBody = skill.instructions.toLowerCase();
+      let aboutMatches = 0;
+      let weighted = 0;
+      for (const term of terms) {
+        if (lowerAbout.includes(term)) {
+          aboutMatches++;
+          weighted += 1;
+        } else if (lowerBody.includes(term)) {
+          weighted += 0.5;
+        }
       }
-
-      // Search in instructions
-      if (skill.instructions.toLowerCase().includes(queryLower)) {
-        results.push({
+      if (weighted > 0) {
+        skillHits.push({
           skillName: skill.name,
           skillPath: skill.path,
           source: 'SKILL.md',
-          content: skill.instructions.substring(0, 200),
-          score: 1,
+          // Preview the description when it matched: it says what the skill is for
+          content: aboutMatches > 0 ? skill.description : skill.instructions.substring(0, 200),
+          score: weighted / terms.length,
         });
       }
+    }
+    // Stable sort keeps discovery order for equal scores
+    skillHits.sort((a, b) => b.score - a.score);
 
-      // Search in references if included
-      if (includeReferences) {
+    // Reference files are read from the filesystem, which may be remote, so read
+    // as few as possible. A reference scores at most 0.5, so skip them when topK
+    // skills already score higher. Otherwise read the best-matching skills'
+    // references first and stop after topK reference hits.
+    const referenceHits: SkillSearchResult[] = [];
+    if (includeReferences && skillHits.filter(hit => hit.score > 0.5).length < topK) {
+      const skillsByPath = new Map(skills.map(skill => [skill.path, skill]));
+      const byRank = skillHits.map(hit => skillsByPath.get(hit.skillPath)!);
+      for (const hit of skillHits) skillsByPath.delete(hit.skillPath);
+      byRank.push(...skillsByPath.values());
+      search: for (const skill of byRank) {
         for (const refPath of skill.references) {
-          if (results.length >= topK) break;
           const content = await this.getReference(skill.name, `references/${refPath}`);
-          if (content && content.toLowerCase().includes(queryLower)) {
-            results.push({
-              skillName: skill.name,
-              skillPath: skill.path,
-              source: `references/${refPath}`,
-              content: content.substring(0, 200),
-              score: 0.8,
-            });
-          }
+          if (!content) continue;
+          const lower = content.toLowerCase();
+          const matched = terms.filter(term => lower.includes(term)).length;
+          if (matched === 0) continue;
+          referenceHits.push({
+            skillName: skill.name,
+            skillPath: skill.path,
+            source: `references/${refPath}`,
+            content: content.substring(0, 200),
+            score: (0.5 * matched) / terms.length,
+          });
+          if (referenceHits.length >= topK) break search;
         }
       }
-
-      if (results.length >= topK) break;
     }
 
-    return results.slice(0, topK);
+    return [...skillHits, ...referenceHits].sort((a, b) => b.score - a.score).slice(0, topK);
+  }
+
+  /** Empty-query search: every skill and reference file, in discovery order. */
+  async #listSkillDocuments(skills: Skill[], topK: number, includeReferences: boolean): Promise<SkillSearchResult[]> {
+    const results: SkillSearchResult[] = [];
+    for (const skill of skills) {
+      if (results.length >= topK) break;
+      results.push({
+        skillName: skill.name,
+        skillPath: skill.path,
+        source: 'SKILL.md',
+        content: skill.instructions.substring(0, 200),
+        score: 1,
+      });
+      if (!includeReferences) continue;
+      for (const refPath of skill.references) {
+        if (results.length >= topK) break;
+        const content = await this.getReference(skill.name, `references/${refPath}`);
+        if (content) {
+          results.push({
+            skillName: skill.name,
+            skillPath: skill.path,
+            source: `references/${refPath}`,
+            content: content.substring(0, 200),
+            score: 0.8,
+          });
+        }
+      }
+    }
+    return results;
   }
 
   /**

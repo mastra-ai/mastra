@@ -882,7 +882,7 @@ Added when skills are configured:
 | Tool | Description |
 | - | - |
 | `skill` | Activate a skill by name or path. Returns the skill's full instructions, references, scripts, and assets. |
-| `skill_search` | Search across skill content. Accepts an optional list of skill names to filter and a `topK` parameter. |
+| `skill_search` | Search skill names, descriptions, and content. Accepts an optional list of skill names to filter and a `topK` parameter. |
 | `skill_read` | Read a specific file (reference, script, or asset) from a skill directory. |
 
 When multiple skills share the same name, `list()` returns all of them. `get()` with a name applies tie-breaking (local > managed > external). If two skills share the same name and source type, `get()` throws an error. Pass a skill's full path to `get()` to bypass tie-breaking. See [Skills with the same name](/docs/sandbox/skills#same-named-skills) for details.
