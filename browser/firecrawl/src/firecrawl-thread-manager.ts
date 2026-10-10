@@ -103,6 +103,9 @@ export class FirecrawlAgentBrowserThreadManager extends AgentBrowserThreadManage
       this.threadManagers.set(threadId, manager);
 
       try {
+        // Context-level setup (e.g. init scripts) before any page navigates.
+        await this.onBrowserLaunched?.(manager, threadId);
+
         if (savedState && savedState.tabs.length > 0) {
           this.logger?.debug?.(`Restoring browser state for thread ${threadId}: ${savedState.tabs.length} tabs`);
           await this.restoreBrowserState(manager, savedState);

@@ -104,6 +104,13 @@ then interact with elements using their refs (e.g., @e5).`,
       'Tool names to exclude from the browser toolset. Use this to disable specific tools for models that do not support certain capabilities, such as vision.',
     isOptional: true,
   },
+  {
+    name: 'webmcp',
+    type: 'WebmcpOptions',
+    description:
+      "Beta WebMCP settings. WebMCP is opt-in: pass { enabled: true } to have AgentBrowser inject an in-page bridge. When the browser is attached to an agent with `new Agent({ browser })`, page tools surface automatically as first-class `page_*` tools — no explicit `prepareStep` wiring needed. `toolDiscovery: 'auto'` (default) auto-attaches every page tool each step; `'manual'` adds a browser_webmcp_discover tool so the agent attaches tools on demand. `protocols` restricts which surfaces the bridge listens for ('mcpb', 'w3c'); omit for all. `allowedOrigins` restricts which page origins can expose callable tools; omit to allow any origin. `toolPrefix` overrides the default `page_` tool id prefix.",
+    isOptional: true,
+  },
 ]}
 />
 
@@ -112,6 +119,55 @@ then interact with elements using their refs (e.g., @e5).`,
 `AgentBrowser` provides 16 deterministic tools for browser automation. All tools that interact with elements use refs from the accessibility tree snapshot.
 
 When `recording` is configured, `AgentBrowser` also adds the Beta `browser_record` and `browser_record_caption` tools. See [Browser recording (Beta)](/docs/browser#record-browser-sessions).
+
+When `webmcp: { enabled: true, toolDiscovery: 'manual' }` is configured, `AgentBrowser` also adds the Beta `browser_webmcp_discover` tool. See [WebMCP](/integrations/browsers/agent-browser#webmcp).
+
+## WebMCP surface
+
+When WebMCP is enabled, page WebMCP tools surface as first-class Mastra tools (`page_<tool_name>`) the agent can call directly. Attach the browser to an agent and that's it:
+
+```typescript
+const browser = new AgentBrowser({ webmcp: { enabled: true } })
+
+const agent = new Agent({
+  name: 'shop',
+  instructions: '…',
+  model,
+  browser,
+})
+
+await agent.generate(input)
+```
+
+`new Agent({ browser })` calls `browser.getTools()` to pull in the browser's deterministic tools and `browser.getInputProcessors()` to pull in the browser's input processors. When WebMCP is enabled, the processors include a `browser-webmcp-prepare-step` processor that merges page tools into the toolset each step. A user-supplied `prepareStep` runs after it, sees the merged toolset, and can override anything.
+
+### `browser.prepareStep`
+
+A stable property on the browser instance (not a factory). The Agent runs it automatically through the `browser-webmcp-prepare-step` input processor. Touch it directly only to compose with other step logic, or to wire it into `defaultOptions.prepareStep` on an agent you build yourself. In `toolDiscovery: 'auto'` mode it merges every tool the current page exposes each step. In `'manual'` mode it merges only tools the agent attached via `browser_webmcp_discover`. When WebMCP is turned off, it's a no-op that returns `undefined`.
+
+The tool list is memoized by the current page URL inside the function, so repeat steps on the same page produce the same tool bytes. Base `browser_*` tools win on name collision.
+
+```typescript
+await agent.generate(input, {
+  prepareStep: browser.prepareStep,
+})
+```
+
+### `browser_webmcp_discover`
+
+Added to the toolset when `toolDiscovery: 'manual'`. The agent calls it to attach page tools to its own toolset. Attached tools surface on the next step. The attached set is dropped on navigation, so the agent re-attaches on the new page.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'names',
+    type: 'string[]',
+    description:
+      'Optional subset of page tool names to attach. When omitted, every tool the page exposes is attached. Unknown names are returned in `notFound`.',
+    isOptional: true,
+  },
+]}
+/>
 
 ### Core tools
 
