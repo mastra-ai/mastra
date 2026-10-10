@@ -391,6 +391,7 @@ export class GitLabRules {
         mergeRequestIid,
         eventAt: timestamp(mergeRequest?.updated_at),
         opened: string(mergeRequest?.state) === 'opened' && (actorTrusted || mergeRequestAuthorTrusted),
+        headSha: string(object(mergeRequest?.last_commit)?.id)?.toLowerCase(),
       });
     }
     // A push moves the head a recorded review verdict was given on. Recording
@@ -432,6 +433,7 @@ export class GitLabRules {
     mergeRequestIid: number;
     eventAt: number | undefined;
     opened: boolean;
+    headSha: string | undefined;
   }): Promise<void> {
     const settling = input.event === 'mergeRequestMerged' || input.event === 'mergeRequestClosed';
     if (input.event !== 'mergeRequestOpened' && !settling) return;
@@ -450,8 +452,11 @@ export class GitLabRules {
       const patch: Record<string, unknown> = {
         mergeRequestEvents: { ...events, [key]: { at: input.eventAt ?? lastAt ?? null, open: !settling } },
       };
-      if (!settling) patch.openPullRequestNumber = input.mergeRequestIid;
-      else if (recorded === input.mergeRequestIid) {
+      if (!settling) {
+        patch.openPullRequestNumber = input.mergeRequestIid;
+        // A head recorded for an earlier merge request must not mark this one's verdict outdated.
+        patch.pullRequestHeadSha = input.headSha ?? null;
+      } else if (recorded === input.mergeRequestIid) {
         patch.openPullRequestNumber = null;
         if (input.event === 'mergeRequestMerged' && typeof item.metadata?.reviewVerdict === 'string') {
           patch.reviewVerdict = null;

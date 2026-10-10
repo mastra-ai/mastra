@@ -1835,6 +1835,57 @@ describe('GithubRules', () => {
       expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
       expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
     });
+
+    it('replaces a head left by an earlier pull request when the Work item opens the next one', async () => {
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+      // Pull request 16 was pushed to and closed; its head is still on the Work item.
+      const work = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github:10:issue:42',
+            url: 'https://github.com/acme/repo/issues/42',
+          },
+          title: 'Issue 42',
+          stages: ['execute'],
+          sessions: {},
+          metadata: { openPullRequestNumber: null, pullRequestHeadSha: reviewedHeadSha },
+        },
+      });
+      await integrationStorage.subscriptions.create({
+        orgId: 'org-1',
+        targetKey: 'factory-pr-provenance:10:17',
+        threadId: 'thread-1',
+        status: 'active',
+        data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+      });
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createBoardRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const opened = pullRequest('opened', 'delivery-open-next');
+      opened.payload.pull_request.head = {
+        ref: 'feature',
+        sha: pushedHeadSha.toUpperCase(),
+      } as typeof opened.payload.pull_request.head;
+
+      await service.ingest(opened);
+
+      // A verdict recorded on the new pull request's head now reads as current.
+      expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata).toMatchObject({
+        openPullRequestNumber: 17,
+        pullRequestHeadSha: pushedHeadSha,
+      });
+    });
   });
 
   it.each(['maintain', 'triage', 'read', undefined])('fails closed for GitHub permission %s', async permission => {

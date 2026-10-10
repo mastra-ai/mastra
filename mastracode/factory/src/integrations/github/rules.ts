@@ -757,11 +757,14 @@ export class GithubRules {
             ? reviewCard !== undefined && reviewCard.metadata?.state !== 'closed'
             : reviewCard?.metadata?.state !== 'closed';
         if (authoringItem && trusted && stillOpen) {
+          // The head comes along so a head recorded for an earlier pull
+          // request cannot mark this one's verdict outdated.
+          const headSha = string(object(pullRequest?.head)?.sha)?.toLowerCase() ?? null;
           await this.options.storage.update({
             orgId: authoringItem.orgId,
             id: authoringItem.id,
             userId: 'factory-rule-dispatcher',
-            patch: { metadata: { openPullRequestNumber: pullRequestNumber } },
+            patch: { metadata: { openPullRequestNumber: pullRequestNumber, pullRequestHeadSha: headSha } },
           });
         }
         return;

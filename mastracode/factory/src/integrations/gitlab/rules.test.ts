@@ -634,6 +634,33 @@ describe('GitLabRules', () => {
       expect((await read())?.openPullRequestNumber).toBeNull();
     });
 
+    it('replaces a head left by an earlier merge request when the next one opens', async () => {
+      const { seeded, project, service } = await setup();
+      // Merge request 16 was pushed to and closed; its head is still on the card.
+      const work = await seedWork(seeded, project.id, {
+        pullRequestHeadSha: 'be10bfa000000000000000000000000000000000',
+      });
+      const opened = mergeRequestEvent('d-open-next', 'open', '2030-01-01T00:00:00Z');
+      const event = {
+        ...opened,
+        payload: {
+          ...opened.payload,
+          object_attributes: {
+            ...opened.payload.object_attributes,
+            last_commit: { id: '8FA258D000000000000000000000000000000000' },
+          },
+        },
+      };
+
+      await service.ingest(event);
+
+      // A verdict recorded on the new merge request's head now reads as current.
+      expect((await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata).toMatchObject({
+        openPullRequestNumber: 17,
+        pullRequestHeadSha: '8fa258d000000000000000000000000000000000',
+      });
+    });
+
     it('records a genuine reopen again but ignores an opening older than the close', async () => {
       const { seeded, project, service } = await setup();
       const work = await seedWork(seeded, project.id);
