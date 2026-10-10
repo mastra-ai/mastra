@@ -23,8 +23,11 @@ function createHarness() {
   return { tools, processor };
 }
 
-function makeArgs(overrides: Partial<ComputeStateSignalArgs> = {}): ComputeStateSignalArgs {
-  const context = new Map<string, unknown>([['organizationId', 'acme']]);
+function makeArgs(
+  overrides: Partial<ComputeStateSignalArgs> = {},
+  entries: [string, unknown][] = [['mastra__scopes', ['org:acme']]],
+): ComputeStateSignalArgs {
+  const context = new Map<string, unknown>(entries);
   return {
     threadId: 'alpha',
     resourceId: 'user-42',
@@ -105,6 +108,25 @@ describe('PinnedStateProcessor', () => {
     expect(result).toMatchObject({ mode: 'snapshot', tagName: 'pinned-knowledge' });
     expect(result!.contents).toContain(pinned.id);
     expect(result!.contents).toContain('Always speak French.');
+  });
+
+  it('resolves the org from the legacy organizationId key, prefers an org scope, and skips without an org', async () => {
+    const { tools, processor } = createHarness();
+    const pinned = await tools.knowledge_pin!.execute!({ text: 'Always speak French.' } as any, {} as any);
+
+    const legacy = await processor.computeStateSignal(makeArgs({}, [['organizationId', 'acme']]));
+    expect(legacy!.contents).toContain(pinned.id);
+    const scoped = await processor.computeStateSignal(
+      makeArgs({}, [
+        ['organizationId', 'other'],
+        ['mastra__scopes', ['org:acme', 'team:core']],
+      ]),
+    );
+    expect(scoped!.contents).toContain(pinned.id);
+    expect(await processor.computeStateSignal(makeArgs({}, [['mastra__scopes', ['team:core']]]))).toBeUndefined();
+    await expect(
+      processor.computeStateSignal(makeArgs({}, [['mastra__scopes', ['org:acme', 'org:beta']]])),
+    ).rejects.toThrow(/needs one org scope/);
   });
 
   it('emits a delta carrying only the change when a snapshot is in the window', async () => {
