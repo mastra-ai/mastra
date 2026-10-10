@@ -59,6 +59,67 @@ function warnUnrecognizedTopic(topic: string): void {
 }
 
 /**
+ * Inngest Realtime delivers messages over ~512 KB truncated, as an unparseable
+ * string (#20671). Stay safely under that cap.
+ */
+const REALTIME_MAX_BYTES = 480 * 1024;
+const TERMINAL_AGENT_EVENTS = new Set(['finish', 'error', 'abort']);
+
+function byteSize(value: unknown): number {
+  try {
+    return Buffer.byteLength(JSON.stringify(value) ?? '', 'utf8');
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Reduce an agent event that would exceed the Realtime cap. `finish` keeps the
+ * fields stream consumers read (text, usage, stepResult) and drops the
+ * per-step record; other oversized events are skipped (returns null) rather
+ * than delivered truncated. Full fidelity stays in the CachingPubSub replay.
+ */
+function fitAgentEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id' | 'createdAt'> | null {
+  if (byteSize(event) <= REALTIME_MAX_BYTES) return event;
+  if (event.type !== 'finish') {
+    return TERMINAL_AGENT_EVENTS.has(event.type) ? { type: event.type, runId: event.runId, data: {} } : null;
+  }
+  const data = (event.data ?? {}) as { output?: Record<string, unknown>; stepResult?: unknown };
+  const output = data.output ?? {};
+  const reduced = {
+    ...event,
+    data: {
+      stepResult: data.stepResult,
+      output: { text: output.text, usage: output.usage, steps: [] },
+    },
+  };
+  return byteSize(reduced) <= REALTIME_MAX_BYTES
+    ? reduced
+    : { ...event, data: { stepResult: data.stepResult, output: { usage: output.usage, steps: [] } } };
+}
+
+/**
+ * Recover an agent event Realtime truncated into a raw string. Terminal events are
+ * salvaged into a minimal envelope so attached streams close; anything else is dropped.
+ */
+function salvageTruncatedAgentEvent(raw: string, runId: string): { type: string; runId: string; data: unknown } | null {
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.type && parsed?.runId) return parsed;
+  } catch {
+    // truncated
+  }
+  const type = raw.slice(0, 256).match(/"type"\s*:\s*"([^"]+)"/)?.[1];
+  if (!type || !TERMINAL_AGENT_EVENTS.has(type)) return null;
+  const reason = raw.match(/"stepResult"\s*:\s*\{[^{}]*"reason"\s*:\s*"([^"]+)"/)?.[1];
+  return {
+    type,
+    runId,
+    data: type === 'finish' ? { output: { steps: [] }, stepResult: reason ? { reason } : undefined } : {},
+  };
+}
+
+/**
  * PubSub implementation for Inngest workflows.
  *
  * This bridges the PubSub abstract class interface with Inngest's realtime system:
@@ -127,7 +188,15 @@ export class InngestPubSub extends PubSub {
     try {
       // For agent stream/control events, send the full event structure so subscribers can access type/runId/data
       // For workflow events, send just the data (existing behavior)
-      const dataToSend = isAgentTopic ? event : event.data;
+      let dataToSend: unknown = event.data;
+      if (isAgentTopic) {
+        const fitted = fitAgentEvent(event);
+        if (!fitted) {
+          console.warn(`InngestPubSub: skipping oversized "${event.type}" event for run ${runId} (Realtime size cap)`);
+          return;
+        }
+        dataToSend = fitted;
+      }
       await this.inngest.realtime.publish(buildTopicRef(channel, inngestTopic), dataToSend);
     } catch (err: any) {
       // Rethrow when losing the event would break the caller:
@@ -196,7 +265,11 @@ export class InngestPubSub extends PubSub {
         // CachingPubSub deduplicates events by `id` — without a unique id, all events
         // after the first would be filtered out (since undefined === undefined in the seen set).
         let event: Event;
-        if (isAgentTopic && message.data?.type && message.data?.runId) {
+        if (isAgentTopic && typeof message.data === 'string') {
+          const salvaged = salvageTruncatedAgentEvent(message.data, runId);
+          if (!salvaged) return;
+          event = { id: crypto.randomUUID(), createdAt: new Date(), ...salvaged } as unknown as Event;
+        } else if (isAgentTopic && message.data?.type && message.data?.runId) {
           // Agent stream event - spread the AgentStreamEvent data and add required Event fields
           event = {
             id: crypto.randomUUID(),

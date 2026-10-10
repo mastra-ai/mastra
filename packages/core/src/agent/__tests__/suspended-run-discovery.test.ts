@@ -1557,3 +1557,24 @@ describe('snapshot path contract for threadId pushdown (#22627)', () => {
     expect(getSnapshotMemoryInfo(snapshot)).toEqual(expect.objectContaining({ threadId: 'durable-thread-1' }));
   }, 60000);
 });
+
+describe('aborting a suspended run (#25903)', () => {
+  it('abortThreadStream removes the approval-suspended run from listSuspendedRuns', async () => {
+    const { agent } = createSuspendedSetup();
+    const { runId } = await suspendRun(agent, 'abort-thread', 'abort-resource');
+    expect((await agent.listSuspendedRuns({ threadId: 'abort-thread' })).runs.map(r => r.runId)).toContain(runId);
+
+    expect(await agent.abortThreadStream({ threadId: 'abort-thread', resourceId: 'abort-resource' })).toBe(true);
+
+    expect((await agent.listSuspendedRuns({ threadId: 'abort-thread' })).runs).toHaveLength(0);
+  });
+
+  it('abortRunStream removes the approval-suspended run from listSuspendedRuns', async () => {
+    const { agent } = createSuspendedSetup();
+    const { runId } = await suspendRun(agent, 'abort-run', 'abort-resource');
+
+    await agent.abortRunStream(runId);
+
+    expect((await agent.listSuspendedRuns({ threadId: 'abort-run' })).runs).toHaveLength(0);
+  });
+});

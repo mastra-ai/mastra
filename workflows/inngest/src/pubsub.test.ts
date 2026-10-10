@@ -1,0 +1,81 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const subscribeMock = vi.hoisted(() => vi.fn());
+vi.mock('inngest/realtime', () => ({ subscribe: subscribeMock }));
+
+import { InngestPubSub } from './pubsub';
+
+function setup() {
+  const published: unknown[] = [];
+  const inngest = {
+    realtime: {
+      publish: vi.fn(async (_ref: unknown, data: unknown) => {
+        published.push(data);
+      }),
+    },
+  };
+  return { pubsub: new InngestPubSub(inngest as any, 'wf'), published, inngest };
+}
+
+const huge = 'x'.repeat(700_000);
+
+describe('InngestPubSub Realtime size cap (#20671)', () => {
+  beforeEach(() => {
+    subscribeMock.mockReset();
+  });
+
+  it('publishes agent events under the cap unchanged', async () => {
+    const { pubsub, published } = setup();
+    const event = { type: 'finish', runId: 'r1', data: { output: { text: 'hi', steps: [{ text: 'hi' }] } } };
+    await pubsub.publish('agent.stream.r1', event);
+    expect(published).toEqual([event]);
+  });
+
+  it('reduces an oversized finish to the fields stream consumers read', async () => {
+    const { pubsub, published } = setup();
+    await pubsub.publish('agent.stream.r1', {
+      type: 'finish',
+      runId: 'r1',
+      data: {
+        stepResult: { reason: 'stop' },
+        output: { text: 'done', usage: { totalTokens: 3 }, steps: [{ toolResults: [{ result: huge }] }] },
+      },
+    });
+    expect(published).toEqual([
+      {
+        type: 'finish',
+        runId: 'r1',
+        data: { stepResult: { reason: 'stop' }, output: { text: 'done', usage: { totalTokens: 3 }, steps: [] } },
+      },
+    ]);
+  });
+
+  it('skips an oversized non-terminal event instead of sending it truncated', async () => {
+    const { pubsub, published } = setup();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await pubsub.publish('agent.stream.r1', { type: 'step-start', runId: 'r1', data: { request: huge } });
+    expect(published).toEqual([]);
+    warn.mockRestore();
+  });
+
+  it('salvages a truncated terminal message and drops a truncated non-terminal one', async () => {
+    let onMessage: (m: unknown) => void = () => {};
+    subscribeMock.mockImplementation(async (opts: { onMessage: (m: unknown) => void }) => {
+      onMessage = opts.onMessage;
+      return { close: vi.fn() };
+    });
+    const { pubsub } = setup();
+    const received: any[] = [];
+    await pubsub.subscribe('agent.stream.r1', event => received.push(event));
+
+    onMessage({ data: '{"type":"step-start","runId":"r1","data":{"request":"xxxx' });
+    onMessage({ data: '{"type":"finish","runId":"r1","data":{"stepResult":{"reason":"stop"},"output":{"steps":[{"te' });
+
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({
+      type: 'finish',
+      runId: 'r1',
+      data: { output: { steps: [] }, stepResult: { reason: 'stop' } },
+    });
+  });
+});

@@ -588,6 +588,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Create model span tracker for MODEL_STEP and MODEL_CHUNK spans
             const modelSpanTracker: IModelSpanTracker | undefined = modelSpan?.createTracker();
 
+            // On remote engines (Inngest) the step's tracingContext span is not part of the
+            // exported trace, so parent client-tool spans on the rebuilt AGENT_RUN span instead.
+            const inputAgentSpanData = (globalRunRegistry.get(runId)?.resumeAgentSpanData ??
+              inputData.agentSpanData) as ExportedSpan<SpanType.AGENT_RUN> | undefined;
+            const agentRunSpan = inputAgentSpanData
+              ? (observability?.rebuildSpan(inputAgentSpanData) as AnySpan | undefined)
+              : undefined;
+
             // Set the step index for continuation (step: 0, 1, 2, ...)
             // This ensures step numbering continues across agentic loop iterations
             const stepIndex = inputData.stepIndex ?? 0;
@@ -1107,10 +1115,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               if (!proxy) return { toolDef };
 
               try {
-                const parentSpan =
-                  tracingContext.currentSpan.type === ('agent_run' as string)
-                    ? tracingContext.currentSpan
-                    : ((tracingContext.currentSpan as any).findParent?.('agent_run') ?? tracingContext.currentSpan);
+                const parentSpan = resolveAgentRunFallback(tracingContext.currentSpan as AnySpan);
                 const clientToolSpan = (parentSpan as any).createChildSpan?.({
                   type: 'client_tool_call',
                   name: `client_tool: '${toolName}'`,
@@ -1145,7 +1150,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const resolveAgentRunFallback = (span: AnySpan): AnySpan =>
               span.type === ('agent_run' as string)
                 ? span
-                : (((span as any).findParent?.('agent_run') ?? span) as AnySpan);
+                : ((agentRunSpan ?? (span as any).findParent?.('agent_run') ?? span) as AnySpan);
 
             const recordProviderToolCall = ({
               toolCallId,
