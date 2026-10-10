@@ -30,6 +30,7 @@ import {
   CANCEL_WORKFLOW_RUN_ROUTE,
   LIST_WORKFLOW_RUNS_ROUTE,
   STREAM_WORKFLOW_ROUTE,
+  TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE,
   TIME_TRAVEL_WORKFLOW_ROUTE,
 } from './workflows';
 
@@ -1184,6 +1185,61 @@ describe('vNext Workflow Handlers', () => {
         process.off('unhandledRejection', onUnhandled);
         createRunSpy.mockRestore();
       }
+    });
+  });
+
+  describe('TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE', () => {
+    it('should re-run a finished workflow from the given step with new input and return the result', async () => {
+      const addOne = vi.fn(async ({ inputData }: { inputData: { value: number } }) => ({ value: inputData.value + 1 }));
+      const double = vi.fn(async ({ inputData }: { inputData: { value: number } }) => ({ value: inputData.value * 2 }));
+      const step1 = createStep({
+        id: 'add-one',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: addOne,
+      });
+      const step2 = createStep({
+        id: 'double',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+        execute: double,
+      });
+      const workflow = createWorkflow({
+        id: 'time-travel-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ value: z.number() }),
+      })
+        .then(step1)
+        .then(step2)
+        .commit();
+      const mastra = new Mastra({
+        logger: false,
+        workflows: { 'time-travel-workflow': workflow },
+        storage: new MockStore(),
+      });
+
+      const run = await mastra.getWorkflow('time-travel-workflow').createRun({ runId: 'test-run-time-travel-async' });
+      const firstResult = await run.start({ inputData: { value: 1 } });
+      expect(firstResult).toMatchObject({ status: 'success', result: { value: 4 } });
+
+      const result = await TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workflowId: 'time-travel-workflow',
+        runId: 'test-run-time-travel-async',
+        step: 'double',
+        inputData: { value: 10 },
+      } as any);
+
+      expect(result).toMatchObject({ status: 'success', result: { value: 20 } });
+      // Only the target step runs again; the earlier step keeps its recorded output.
+      expect(addOne).toHaveBeenCalledTimes(1);
+      expect(double).toHaveBeenCalledTimes(2);
+      expect(double).toHaveBeenLastCalledWith(expect.objectContaining({ inputData: { value: 10 } }));
+
+      const storedRun = await mastra
+        .getWorkflow('time-travel-workflow')
+        .getWorkflowRunById('test-run-time-travel-async');
+      expect(storedRun).toMatchObject({ status: 'success', result: { value: 20 } });
     });
   });
 
