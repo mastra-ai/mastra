@@ -24,8 +24,10 @@ import type {
 import type { KnowledgeScope, KnowledgeStorage } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
+import { omDebug } from '../debug';
+
 import { listPinnedKnowledge, PINNED_DELTA_TAG, PINNED_SNAPSHOT_TAG, SUBCONSCIOUS_PINS_STATE_ID } from './pinned';
-import { resolveKnowledgeResourceId } from './scope';
+import { resolveKnowledgeResourceId, resolveSubconsciousOrgId } from './scope';
 
 export interface PinEntry {
   id: string;
@@ -140,8 +142,16 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
   // visible context (visibility is subset containment), never a level-narrowed
   // write scope.
   private resolveScope(args: ComputeStateSignalArgs): KnowledgeScope | undefined {
-    const organizationId = args.requestContext?.get?.('organizationId');
-    if (typeof organizationId !== 'string' || !organizationId.trim()) return undefined;
+    // This runs on every parent step, so an unusable org skips pins instead of failing the turn.
+    // Curate reports the same condition.
+    let organizationId: string | undefined;
+    try {
+      organizationId = resolveSubconsciousOrgId(args.requestContext);
+    } catch (error) {
+      omDebug(`[Subconscious] pinned state skipped: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
+    if (!organizationId) return undefined;
     const resourceId = resolveKnowledgeResourceId(args.requestContext, args.resourceId);
     if (!resourceId) return undefined;
     return canonicalizeKnowledgeScope([`org:${organizationId}`, `resource:${resourceId}`, `thread:${args.threadId}`]);

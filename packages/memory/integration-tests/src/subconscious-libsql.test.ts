@@ -156,7 +156,7 @@ describe('Subconscious LibSQL integration', () => {
     await memory.createThread({ threadId, resourceId, title: 'Subconscious curation' });
     await memory.saveMessages({ messages: [message(threadId, resourceId)] });
     const requestContext = new RequestContext();
-    requestContext.set('organizationId', 'acme');
+    requestContext.set('mastra__scopes', ['org:acme']);
 
     const result = await (await memory.omEngine)!.observe({
       threadId,
@@ -288,7 +288,7 @@ describe('Subconscious LibSQL integration', () => {
     await memory.createThread({ threadId, resourceId, title: 'Subconscious remind' });
     await memory.saveMessages({ messages: [message(threadId, resourceId, 'Help me schedule the launch.')] });
     const requestContext = new RequestContext();
-    requestContext.set('organizationId', 'acme');
+    requestContext.set('mastra__scopes', ['org:acme']);
     const sendSignal = vi.fn(async () => undefined) as any;
     const mainAgent = new Agent({ id: 'main-agent', name: 'Main Agent', instructions: 'Help the user.', model });
     const parentSendSignal = vi
@@ -460,7 +460,7 @@ describe('Subconscious LibSQL integration', () => {
       await memory.saveMessages({ messages: [message(threadId, resourceId, 'Plan Project Atlas.')] });
     }
     const requestContext = new RequestContext();
-    requestContext.set('organizationId', 'acme');
+    requestContext.set('mastra__scopes', ['org:acme']);
     const mainAgent = new Agent({ id: 'resource-main-agent', name: 'Main Agent', instructions: 'Help.', model });
     const targetedDeliveries: Array<{
       resourceId?: string;
@@ -594,7 +594,7 @@ describe('Subconscious LibSQL integration', () => {
       getParentAgent: () => parentAgent,
     });
     const requestContext = new RequestContext();
-    requestContext.set('organizationId', 'acme');
+    requestContext.set('mastra__scopes', ['org:acme']);
 
     const result = (await tool.execute?.({ question: 'When does Project Atlas launch?' }, {
       agent: { agentId: parentAgent.id, threadId: parentThreadId, resourceId, messages: [] },

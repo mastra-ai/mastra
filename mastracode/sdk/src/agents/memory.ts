@@ -248,6 +248,20 @@ export function hasSubconsciousTools(vector: MastraVector | undefined, state: Ma
  * Reads OM thresholds from controller state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
  */
+/**
+ * Agent-level scopes for the coding agent: the session's Knowledge org as `org:<id>`, so
+ * Subconscious acts under the parent run's org. Contributes nothing when Subconscious is off or a
+ * Factory session's org never resolved, so no Knowledge is written under a guessed org.
+ */
+export function getKnowledgeOrgScopes(vector: MastraVector | undefined) {
+  return ({ requestContext }: { requestContext: RequestContext }): string[] => {
+    if (!isSubconsciousEnabled(vector)) return [];
+    const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
+    const identity = resolveKnowledgeScopeIdentity(controller?.getState() as MastraCodeState | undefined);
+    return identity.resolved ? [`org:${identity.organizationId}`] : [];
+  };
+}
+
 export function getDynamicMemory(
   storage: MastraCompositeStore,
   vector?: MastraVector,

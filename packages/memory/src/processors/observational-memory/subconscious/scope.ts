@@ -16,3 +16,56 @@ export function resolveKnowledgeResourceId(
   if (typeof override === 'string' && override.trim()) return override;
   return fallback;
 }
+
+// Mirrors MASTRA_SCOPES_KEY in @mastra/core. Read by string so this package keeps its older Core peer floor.
+const AGENT_SCOPES_KEY = 'mastra__scopes';
+
+type ScopeRequestContext = { get?(key: string): unknown } | undefined;
+
+/**
+ * The parent run's resolved scopes (`<type>:<value>` addresses). The run that resolves scopes
+ * publishes only non-identity scopes here; resource and thread come from the run itself.
+ */
+export function getAgentScopes(requestContext: ScopeRequestContext): string[] {
+  const scopes = requestContext?.get?.(AGENT_SCOPES_KEY);
+  return Array.isArray(scopes) ? scopes.filter((scope): scope is string => typeof scope === 'string') : [];
+}
+
+/**
+ * Resolves the org Subconscious writes Knowledge under.
+ *
+ * An `org:<id>` agent scope and the legacy `organizationId` request-context key are both accepted.
+ * Returns undefined when neither is present: Knowledge needs an org for now, so Subconscious skips
+ * that run. Throws when the run holds more than one distinct org — two org scopes, or an org scope
+ * that differs from `organizationId` — or an org value containing `:`.
+ */
+export function resolveSubconsciousOrgId(requestContext: ScopeRequestContext): string | undefined {
+  const orgIds = [
+    ...new Set(
+      getAgentScopes(requestContext)
+        .filter(scope => scope.startsWith('org:'))
+        .map(scope => scope.slice('org:'.length))
+        .filter(Boolean),
+    ),
+  ];
+  const nested = orgIds.find(id => id.includes(':'));
+  if (nested) {
+    throw new Error(`Subconscious org scope "org:${nested}" must not contain ":".`);
+  }
+  const legacy = requestContext?.get?.('organizationId');
+  const mismatchedLegacy = typeof legacy === 'string' && legacy.trim() && !orgIds.includes(legacy);
+  if (mismatchedLegacy) {
+    if (!orgIds.length) return legacy;
+    orgIds.push(legacy);
+  }
+  if (orgIds.length > 1) {
+    throw new Error(
+      `Subconscious needs one org, but the run holds ${orgIds.length}: ${orgIds.map(id => `org:${id}`).join(', ')}.` +
+        (mismatchedLegacy ? ' An org scope must match the organizationId request-context key when both are set.' : ''),
+    );
+  }
+  return orgIds[0];
+}
+
+export const MISSING_ORG_SCOPE_MESSAGE =
+  'Knowledge needs an org:<id> agent scope (or the legacy organizationId request-context key) for now.';

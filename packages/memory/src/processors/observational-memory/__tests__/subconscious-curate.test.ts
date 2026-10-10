@@ -22,7 +22,7 @@ function fixture(knowledge?: Knowledge | false) {
   const config = subconscious.resolved.observation.find(agent => agent.name === 'curate')!;
   const extractor = new SubconsciousCurateExtractor(config, subconscious.resolved, () => curatorMemory, 'openai/test');
   const requestContext = new RequestContext();
-  requestContext.set('organizationId', 'acme');
+  requestContext.set('mastra__scopes', ['org:acme']);
   const context = {
     source: 'observer' as const,
     extractor,
@@ -247,6 +247,63 @@ describe('Subconscious observation curator', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
+  it('resolves the org from an org scope, then the legacy organizationId key', () => {
+    const { context } = fixture();
+    const withContext = (entries: [string, unknown][]) => ({ ...context, requestContext: new RequestContext(entries) });
+
+    expect(resolveCuratorScope(withContext([['organizationId', 'legacy']]))).toEqual([
+      'org:legacy',
+      'resource:user-42',
+      'thread:alpha',
+    ]);
+    expect(resolveCuratorScope(withContext([['mastra__scopes', ['org:acme', 'team:core']]]))).toEqual([
+      'org:acme',
+      'resource:user-42',
+      'thread:alpha',
+    ]);
+    // A matching org scope and organizationId agree on one org.
+    expect(
+      resolveCuratorScope(
+        withContext([
+          ['organizationId', 'acme'],
+          ['mastra__scopes', ['org:acme', 'team:core']],
+        ]),
+      ),
+    ).toEqual(['org:acme', 'resource:user-42', 'thread:alpha']);
+    // An org scope that differs from organizationId is two orgs, so the run is refused.
+    expect(() =>
+      resolveCuratorScope(
+        withContext([
+          ['organizationId', 'legacy'],
+          ['mastra__scopes', ['org:acme', 'team:core']],
+        ]),
+      ),
+    ).toThrow('Subconscious needs one org, but the run holds 2: org:acme, org:legacy.');
+    expect(resolveCuratorScope(withContext([['mastra__scopes', ['team:core']]]))).toBeUndefined();
+    expect(() => resolveCuratorScope(withContext([['mastra__scopes', ['org:acme', 'org:beta']]]))).toThrow(
+      /needs one org/,
+    );
+    expect(() => resolveCuratorScope(withContext([['mastra__scopes', ['org:a:resource:b']]]))).toThrow(
+      /must not contain ":"/,
+    );
+  });
+
+  it('hands the curator run the parent run scopes, custom scopes included', async () => {
+    const { context, extractor } = fixture();
+    const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage').mockReturnValue({
+      accepted: new Promise(() => {}),
+      signal: {},
+    } as any);
+    const requestContext = new RequestContext();
+    requestContext.set('mastra__scopes', ['org:acme', 'team:core']);
+
+    await extractor.onExtracted!({ ...context, requestContext });
+
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledOnce());
+    const curatorContext = sendMessage.mock.calls[0]![1]!.ifIdle!.streamOptions!.requestContext!;
+    expect(curatorContext.get('mastra__scopes')).toEqual(['org:acme', 'team:core']);
+  });
+
   it('uses the thread as the resource scope fallback', () => {
     const { context } = fixture();
 
@@ -455,19 +512,37 @@ describe('Subconscious observation curator', () => {
     );
   });
 
-  it('fails closed without dispatching when the host does not vouch for an organization', async () => {
+  it('skips quietly without dispatching when the run has no org', async () => {
+    const { memory, context, extractor } = fixture();
+    const writer = { custom: vi.fn().mockResolvedValue(undefined) };
+    const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage');
+    const getStore = vi.spyOn(memory, 'getKnowledgeStore');
+    const consoleError = vi.spyOn(console, 'error');
+    const requestContext = new RequestContext();
+    requestContext.set('mastra__scopes', ['team:core']);
+
+    await expect(extractor.onExtracted!({ ...context, writer, requestContext })).resolves.toBeUndefined();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(getStore).not.toHaveBeenCalled();
+    expect(writer.custom).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('reports a run that holds more than one org scope', async () => {
     const { context, extractor } = fixture();
     const writer = { custom: vi.fn().mockResolvedValue(undefined) };
     const sendMessage = vi.spyOn(Agent.prototype, 'sendMessage');
+    const requestContext = new RequestContext();
+    requestContext.set('mastra__scopes', ['org:acme', 'org:beta']);
 
-    await expect(
-      extractor.onExtracted!({ ...context, writer, requestContext: new RequestContext() }),
-    ).resolves.toBeUndefined();
+    await extractor.onExtracted!({ ...context, writer, requestContext });
 
     await vi.waitFor(() =>
       expect(writer.custom).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ error: expect.stringContaining('requires organizationId') }),
+          data: expect.objectContaining({ error: expect.stringContaining('needs one org') }),
         }),
       ),
     );

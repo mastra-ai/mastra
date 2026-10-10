@@ -11,7 +11,7 @@ import { createKnowledgeTools } from './knowledge-tools';
 import { createKnowledgeWriteTools } from './knowledge-write-tools';
 import { resolveSubconsciousAgentModel } from './model';
 import { createPinnedTools } from './pinned';
-import { resolveKnowledgeResourceId } from './scope';
+import { resolveKnowledgeResourceId, resolveSubconsciousOrgId } from './scope';
 import type { ResolvedSubconsciousAgent, ResolvedSubconsciousConfig } from './types';
 
 export const CURATION_AGENT = 'curate';
@@ -56,11 +56,10 @@ type CuratorContext = Pick<
   'abortSignal' | 'mainAgent' | 'requestContext' | 'resourceId' | 'threadId'
 >;
 
-export function resolveCuratorScope(context: CuratorContext): KnowledgeScope {
-  const organizationId = context.requestContext?.get('organizationId');
-  if (typeof organizationId !== 'string' || !organizationId.trim()) {
-    throw new Error('Subconscious curate requires organizationId in the request context.');
-  }
+/** Returns undefined when the parent run has no org, in which case curation skips that run. */
+export function resolveCuratorScope(context: CuratorContext): KnowledgeScope | undefined {
+  const organizationId = resolveSubconsciousOrgId(context.requestContext);
+  if (!organizationId) return undefined;
   const resourceId = resolveKnowledgeResourceId(context.requestContext, context.resourceId) ?? context.threadId;
   return canonicalizeKnowledgeScope([`org:${organizationId}`, `resource:${resourceId}`, `thread:${context.threadId}`]);
 }
@@ -115,6 +114,7 @@ async function curateCommittedObservations(
   let scope: KnowledgeScope | undefined;
   try {
     scope = resolveCuratorScope(context);
+    if (!scope) return;
     store = await memory.getKnowledgeStore();
 
     const agent = await createCuratorAgent(memory, getCuratorMemory(), context, scope, config, subconscious, omModel);
