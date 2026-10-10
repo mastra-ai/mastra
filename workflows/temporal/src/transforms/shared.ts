@@ -69,10 +69,57 @@ export function isWorkflowHelperDestructure(declaration: t.VariableDeclarator): 
   return declaration.id.properties.some(
     property =>
       t.isObjectProperty(property) &&
-      !property.computed &&
-      t.isIdentifier(property.value) &&
-      (property.value.name === 'createStep' || property.value.name === 'createWorkflow'),
+      (getObjectPropertyName(property) === 'createStep' || getObjectPropertyName(property) === 'createWorkflow') &&
+      t.isIdentifier(property.value),
   );
+}
+
+export function normalizeTemporalFactoryAliases(program: t.Program): void {
+  const aliases = new Map<string, 'createStep' | 'createWorkflow'>();
+
+  for (const statement of program.body) {
+    const declarationStatement = t.isVariableDeclaration(statement)
+      ? statement
+      : t.isExportNamedDeclaration(statement) && t.isVariableDeclaration(statement.declaration)
+        ? statement.declaration
+        : null;
+
+    if (!declarationStatement) {
+      continue;
+    }
+
+    for (const declaration of declarationStatement.declarations) {
+      if (!isWorkflowHelperDestructure(declaration) || !t.isObjectPattern(declaration.id)) {
+        continue;
+      }
+
+      for (const property of declaration.id.properties) {
+        if (!t.isObjectProperty(property) || !t.isIdentifier(property.value)) {
+          continue;
+        }
+
+        const propertyName = getObjectPropertyName(property);
+        if (propertyName === 'createStep' || propertyName === 'createWorkflow') {
+          aliases.set(property.value.name, propertyName);
+        }
+      }
+    }
+  }
+
+  if (aliases.size === 0) {
+    return;
+  }
+
+  walk(program, node => {
+    if (!t.isCallExpression(node) || !t.isIdentifier(node.callee)) {
+      return;
+    }
+
+    const factoryName = aliases.get(node.callee.name);
+    if (factoryName) {
+      node.callee = t.identifier(factoryName);
+    }
+  });
 }
 
 export function isCreateWorkflowCall(node: t.Node): node is t.CallExpression {
