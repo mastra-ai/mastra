@@ -2575,6 +2575,9 @@ export class DurableAgent<
       // `requestRemoteAbort`. The local controller above only reaches steps
       // running in this process.
       await this.requestRemoteAbort(runId);
+      // A run parked on a suspension has no steps left to stop; release it so
+      // it is no longer listed as suspended.
+      if (agentThreadStreamRuntime.isRunParked(runId, this.getPubSub())) super.abortRunStream(runId);
     };
 
     return {
@@ -3075,6 +3078,9 @@ export class DurableAgent<
       // `requestRemoteAbort`. The local controller above only reaches steps
       // running in this process.
       await this.requestRemoteAbort(runId);
+      // A run parked on a suspension has no steps left to stop; release it so
+      // it is no longer listed as suspended.
+      if (agentThreadStreamRuntime.isRunParked(runId, this.getPubSub())) super.abortRunStream(runId);
     };
 
     return {
@@ -3394,6 +3400,9 @@ export class DurableAgent<
       // `requestRemoteAbort`. The local controller above only reaches steps
       // running in this process.
       await this.requestRemoteAbort(runId);
+      // A run parked on a suspension has no steps left to stop; release it so
+      // it is no longer listed as suspended.
+      if (agentThreadStreamRuntime.isRunParked(runId, this.getPubSub())) super.abortRunStream(runId);
     };
 
     return {

@@ -2440,6 +2440,11 @@ export class AgentThreadStreamRuntime {
    * evicted from `preparedRunsById` by {@link #cleanupPreparedRun}), but its
    * record remains the thread's blocking run until it is resumed or released.
    */
+  /** Whether `runId` is parked on a tool suspension in this process. */
+  isRunParked(runId: string, pubsub?: PubSub): boolean {
+    return this.#isParkedRun(this.#getState(pubsub), runId);
+  }
+
   #isParkedRun(state: AgentThreadRuntimeState, runId: string): boolean {
     const record = state.threadRunsById.get(runId);
     return state.suspendedRunIds.has(runId) || record?.lifecycle === 'suspended' || record?.lifecycle === 'suspending';
@@ -2452,10 +2457,9 @@ export class AgentThreadStreamRuntime {
    * resume, and nothing sent after Stop is answered. The run is released the
    * way a finished run is: its records and thread reservation are dropped, then
    * the thread's pending work starts or its lease is given up. A run parked on
-   * a tool approval is left alone; its decline path releases it.
+   * a tool approval is released the same way: the abort is the decision.
    */
   #releaseParkedRun(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, runId: string): boolean {
-    if (state.approvalSuspendedRunIds.has(runId)) return false;
     const record = state.threadRunsById.get(runId);
     if (!this.#isParkedRun(state, runId) || !record) return false;
     const key = state.threadKeysByRunId.get(runId) ?? this.#threadKey(record.resourceId, record.threadId);

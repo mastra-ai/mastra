@@ -43,6 +43,7 @@ import type { ProviderOptions } from '../llm/model/provider-options';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import { RegisteredLogger } from '../logger';
+import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { networkLoop } from '../loop/network';
 import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
@@ -9153,13 +9154,49 @@ export class Agent<
       wrapperClose();
       return true;
     }
-    return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
+    const runId = agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
+    const parked = !!runId && agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
+    const aborted = agentThreadStreamRuntime.abortThread(options, this.getPubSub());
+    if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
+    return aborted;
   }
 
   abortRunStream(runId: string): boolean {
     const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
     wrapperClose?.();
-    return wrapperClose !== undefined || agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    if (wrapperClose !== undefined) return true;
+    const parked = agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
+    const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
+    return aborted;
+  }
+
+  /**
+   * An aborted suspended run can never be resumed, so drop its workflow
+   * registration and snapshot rows; otherwise it stays listed as suspended.
+   */
+  async #deleteAbortedSuspendedRun(runId: string): Promise<void> {
+    const mastra = this.#mastra;
+    if (!mastra) return;
+    const runtimeLoopWorkflowName = (
+      this.#threadRuntimeAgent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>> | undefined
+    )?.durableLoopWorkflowName;
+    const workflowNames = new Set([
+      AGENTIC_LOOP_WORKFLOW_ID,
+      AGENTIC_EXECUTION_WORKFLOW_ID,
+      DurableStepIds.AGENTIC_LOOP,
+      DurableStepIds.AGENTIC_EXECUTION,
+    ]);
+    if (typeof runtimeLoopWorkflowName === 'string') workflowNames.add(runtimeLoopWorkflowName);
+    try {
+      mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
+      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      await Promise.all(
+        [...workflowNames].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
+      );
+    } catch (error) {
+      this.logger.warn(`Failed to delete snapshot of aborted suspended run ${runId}`, { runId, error });
+    }
   }
 
   sendMessage<OUTPUT = TOutput>(
