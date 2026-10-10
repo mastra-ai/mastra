@@ -36,7 +36,8 @@ import type { MastraVector } from '@mastra/core/vector';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import {
   buildAuthRoutes,
-  createFactoryAuthGate,
+  createFactoryAfterAuth,
+  createFactoryLoginRedirect,
   createFactoryRouteAuth,
   factoryUserOrgId,
   getFactoryAuthOrgId,
@@ -1266,8 +1267,8 @@ export class MastraFactory {
         buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => [
           // Public `/auth/*` routes (login/callback/logout/me). Folded in as
           // `apiRoutes` (not plain Hono routes) because the entry can't touch the
-          // Hono app the deployer generates. `requiresAuth: false`; the gate
-          // skips `/auth/*`.
+          // Hono app the deployer generates. `requiresAuth: false` so they stay
+          // reachable while signed out.
           ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : []),
           ...new TelemetryRoutes({ auth: routeAuth, providerName: auth?.name, publicOrigin, allowedOrigins }).routes(),
           // Custom `/web/*` routes (fs / config / integrations / factory / audit).
@@ -1374,8 +1375,8 @@ export class MastraFactory {
           // deployer to both the top-level app and the custom-route sub-app.
           const onError = { onError: handleServerError };
           // Same-origin SPA: when a vite build is present (see resolveUiDistDir),
-          // serve it at `/` from this server. Mounted last so the auth gate (when
-          // enabled) covers it; it always passes `/api`, `/web`, `/auth` through.
+          // serve it at `/` from this server. Mounted last; it always passes `/api`,
+          // `/web`, `/auth` through.
           const uiDist = resolveUiDistDir();
           const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
           if (!auth) {
@@ -1391,27 +1392,37 @@ export class MastraFactory {
             };
           }
 
-          // Ordered middleware. The deployer applies these AFTER its context
-          // middleware sets `c.set('mastra', mastra)` and BEFORE routes, so:
-          //   1. gate   — validates the auth session, stashes the user, and 401s /
-          //               redirects unauthenticated requests. Skips public `/auth/*`.
+          // `auth` lands on `server.auth`, so core route auth (and Studio's
+          // dual-auth routing — see `studio.auth` on the returned args)
+          // authenticates every route that is not declared `requiresAuth: false`
+          // with this provider. Then, per route:
+          //   1. afterAuth — org selection / personal-org bootstrap, the normalized
+          //               user, and the message author (see createFactoryAfterAuth).
           //   2. primers — hydrate the caller's model-credential and custom
           //               provider snapshots so the request's first model call
           //               resolves tenant credentials and custom providers.
-          //   3. spa    — serves the built UI for everything the server doesn't own.
-          // `auth` also lands on `server.auth` so the core auth middleware (and
-          // Studio's dual-auth routing — see `studio.auth` on the returned args)
-          // authenticates core `/api/*` routes with the same provider.
+          // Global middleware: the `/login` → `/signin` hop and the SPA, which
+          // serves the built UI for everything the server doesn't own and sends
+          // signed-out visitors to `/signin` client-side.
           return {
             auth,
             middleware: [
-              createFactoryAuthGate(auth),
-              createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
-              createCustomProvidersPrimer({
-                auth: routeAuth,
-                storage: customProvidersStorage,
-                authEnabled: Boolean(auth),
-              }),
+              createFactoryLoginRedirect(),
+              { path: '*', phase: 'afterAuth', handler: createFactoryAfterAuth(auth) },
+              {
+                path: '*',
+                phase: 'afterAuth',
+                handler: createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
+              },
+              {
+                path: '*',
+                phase: 'afterAuth',
+                handler: createCustomProvidersPrimer({
+                  auth: routeAuth,
+                  storage: customProvidersStorage,
+                  authEnabled: true,
+                }),
+              },
               ...spa,
             ],
             ...cors,

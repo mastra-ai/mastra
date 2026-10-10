@@ -264,7 +264,6 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
     return [
       registerApiRoute('/web/config/providers/:provider/oauth/start', {
         method: 'POST',
-        requiresAuth: false,
         handler: async c => {
           const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: modelCredentials });
           if ('response' in ctx) return ctx.response;
@@ -325,7 +324,6 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
 
       registerApiRoute('/web/config/providers/:provider/oauth/complete', {
         method: 'POST',
-        requiresAuth: false,
         handler: async c => {
           const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: modelCredentials });
           if ('response' in ctx) return ctx.response;
@@ -385,7 +383,6 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
 
       registerApiRoute('/web/config/providers/:provider/oauth/poll', {
         method: 'POST',
-        requiresAuth: false,
         handler: async c => {
           const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: modelCredentials });
           if ('response' in ctx) return ctx.response;
@@ -471,7 +468,6 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
 
       registerApiRoute('/web/config/providers/:provider/oauth/session/:sessionId', {
         method: 'DELETE',
-        requiresAuth: false,
         handler: async c => {
           const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: modelCredentials });
           if ('response' in ctx) return ctx.response;
@@ -486,7 +482,6 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
 
       registerApiRoute('/web/config/providers/:provider/oauth', {
         method: 'DELETE',
-        requiresAuth: false,
         handler: async c => {
           const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: modelCredentials });
           if ('response' in ctx) return ctx.response;

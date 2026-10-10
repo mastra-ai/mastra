@@ -236,7 +236,6 @@ export function createSlackConnectRoutes(deps: {
     // you only ever see your own links.
     registerApiRoute('/web/channel-accounts', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         await auth.ensureUser(loose(c));
         const tenant = auth.tenant(loose(c));
@@ -262,7 +261,6 @@ export function createSlackConnectRoutes(deps: {
     // else's link.
     registerApiRoute('/web/channel-accounts', {
       method: 'DELETE',
-      requiresAuth: false,
       handler: async c => {
         await auth.ensureUser(loose(c));
         const tenant = auth.tenant(loose(c));
@@ -293,7 +291,6 @@ export function createSlackConnectRoutes(deps: {
     // org.
     registerApiRoute('/web/channel-accounts/default-factory', {
       method: 'PATCH',
-      requiresAuth: false,
       handler: async c => {
         await auth.ensureUser(loose(c));
         const tenant = auth.tenant(loose(c));

@@ -209,17 +209,14 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
     return [
       registerApiRoute('/web/factory/skills', {
         method: 'GET',
-        requiresAuth: false,
         handler: context => handleFactorySkillsList(context),
       }),
       registerApiRoute('/web/agent-controller/:controllerId/skills/prepare', {
         method: 'POST',
-        requiresAuth: false,
         handler: context => handleSkillRequest(context, false),
       }),
       registerApiRoute('/web/agent-controller/:controllerId/skills/invoke', {
         method: 'POST',
-        requiresAuth: false,
         handler: context => handleSkillRequest(context, true),
       }),
     ];

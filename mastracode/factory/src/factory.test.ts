@@ -1109,10 +1109,11 @@ describe('MastraFactory.prepare', () => {
     expect(paths.some(p => p.startsWith('/auth/'))).toBe(false);
   });
 
-  it('installs the auth gate and tenant credential primer when auth is configured', async () => {
+  it('installs the /login redirect and the afterAuth steps when auth is configured', async () => {
     // Both modes mount the custom-providers primer and the SPA static
     // middleware is environment-dependent (present when ui/dist exists), so
-    // assert the delta from the two auth-specific middleware.
+    // assert the delta: the /login redirect, the org/author afterAuth step and
+    // the tenant credential primer.
     const openConfig = await prepareFactory({ storage: fakeStorage(), auth: null });
     const openMiddleware = (openConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
 
@@ -1120,7 +1121,8 @@ describe('MastraFactory.prepare', () => {
 
     const gatedConfig = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
-    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
+    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 3);
+    expect(gatedMiddleware.filter(entry => (entry as { phase?: string }).phase === 'afterAuth')).toHaveLength(3);
   });
 
   it('passes the resolved auth provider to both server.auth and studio.auth', async () => {

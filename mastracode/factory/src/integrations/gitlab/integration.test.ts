@@ -79,14 +79,14 @@ describe('GitLabIntegration', () => {
         .routes({ auth: fakeRouteAuth({ enabled: true }), storage: { intake: {} } } as never)
         .map(route => ({ path: route.path, requiresAuth: route.requiresAuth })),
     ).toEqual([
-      { path: '/web/gitlab/status', requiresAuth: false },
-      { path: '/web/gitlab/projects', requiresAuth: false },
-      { path: '/web/gitlab/projects/registration', requiresAuth: false },
-      { path: '/web/gitlab/projects/:id/prs', requiresAuth: false },
-      { path: '/web/gitlab/projects/:id/prs/:number', requiresAuth: false },
-      { path: '/web/gitlab/issues', requiresAuth: false },
-      { path: '/web/gitlab/issues/:issueId', requiresAuth: false },
-      { path: '/web/gitlab/subscriptions', requiresAuth: false },
+      { path: '/web/gitlab/status', requiresAuth: undefined },
+      { path: '/web/gitlab/projects', requiresAuth: undefined },
+      { path: '/web/gitlab/projects/registration', requiresAuth: undefined },
+      { path: '/web/gitlab/projects/:id/prs', requiresAuth: undefined },
+      { path: '/web/gitlab/projects/:id/prs/:number', requiresAuth: undefined },
+      { path: '/web/gitlab/issues', requiresAuth: undefined },
+      { path: '/web/gitlab/issues/:issueId', requiresAuth: undefined },
+      { path: '/web/gitlab/subscriptions', requiresAuth: undefined },
       { path: '/web/gitlab/webhook', requiresAuth: false },
     ]);
     expect(gitlab.diagnostics()).toMatchObject({ webhookConfigured: true });
