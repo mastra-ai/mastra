@@ -62,6 +62,12 @@ export interface MemoryContext {
   observedAt: string | null;
 }
 
+export interface MemoryObservationRecord {
+  activeObservations: string | null;
+  lastObservedAt: string | null;
+  [key: string]: unknown;
+}
+
 export interface MemoryObservationMatch {
   text: string;
   threadId: string | null;
@@ -182,6 +188,23 @@ export class PlatformMemoryClient {
   async search(body: { resourceId: string; threadId?: string; query: string; limit?: number }) {
     const res = await this.request<{ matches: MemoryObservationMatch[] }>('POST', '/search', { body });
     return res.matches;
+  }
+
+  /** Current observational-memory record for the thread, or null before the first observation. */
+  async getObservations(threadId: string): Promise<MemoryObservationRecord | null> {
+    const res = await this.request<{ record: MemoryObservationRecord | null }>(
+      'GET',
+      `/threads/${encodeURIComponent(threadId)}/observations`,
+    );
+    return res.record;
+  }
+
+  /** Runs observation/reflection now instead of waiting for the background worker. */
+  observe(threadId: string) {
+    return this.request<{ observed: boolean; reflected: boolean; record: MemoryObservationRecord | null }>(
+      'POST',
+      `/threads/${encodeURIComponent(threadId)}/observe`,
+    );
   }
 
   private get base(): string {

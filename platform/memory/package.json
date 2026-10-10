@@ -50,10 +50,12 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@ai-sdk/provider": "3.0.14",
+    "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@langchain/core": "^1.0.0",
     "@mastra/core": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
