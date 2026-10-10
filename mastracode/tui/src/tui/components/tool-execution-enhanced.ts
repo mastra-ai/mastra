@@ -29,7 +29,6 @@ import type {
   CommandExitRecord,
   CompactToolLabelColor,
   IToolExecutionComponent,
-  QuietToolDisplayMode,
   ToolResult,
 } from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
@@ -40,38 +39,19 @@ export type { ToolResult };
 /** CSI, OSC, and DCS/SOS/PM/APC sequences (terminated or not), and other two-byte ESC sequences. */
 const TERMINAL_SEQUENCE_RE =
   /\x1b\[[\x20-\x3f]*[\x40-\x7e]?|\x1b[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)?|\x9b[\x20-\x3f]*[\x40-\x7e]?|\x1b[\x20-\x7e]?/g;
-const CODE_HIGHLIGHT_THEME: HighlightTheme = {
-  default: text => theme.fg('toolArgs', text),
-  keyword: chalk.hex('#c084fc'),
-  built_in: chalk.hex('#93c5fd'),
-  type: chalk.hex('#93c5fd'),
-  literal: chalk.hex('#fca5a5'),
-  number: chalk.hex('#fbbf24'),
-  string: chalk.hex('#86efac'),
-  regexp: chalk.hex('#fca5a5'),
-  title: chalk.hex('#93c5fd'),
-  function: chalk.hex('#93c5fd'),
-  params: chalk.hex('#d4d4d8'),
-  comment: chalk.hex('#71717a'),
-  meta: chalk.hex('#a1a1aa'),
-  attr: chalk.hex('#fbbf24'),
-  variable: chalk.hex('#d4d4d8'),
-  tag: chalk.hex('#c084fc'),
-  name: chalk.hex('#c084fc'),
-};
 
 const COMPACT_TOOL_COLOR = mastra.orange;
 const COMPACT_TOOL_ARGS_BG = '#141414';
-const QUIET_TOOL_RAIL = tintHex(COMPACT_TOOL_COLOR, 0.35);
-const QUIET_CODE_PREVIEW_MAX_CHARS = 2_000;
-const QUIET_SHELL_COMMAND_HIGHLIGHT_MAX_CHARS = 2_000;
+const TOOL_RAIL = tintHex(COMPACT_TOOL_COLOR, 0.35);
+const CODE_PREVIEW_MAX_CHARS = 2_000;
+const SHELL_COMMAND_HIGHLIGHT_MAX_CHARS = 2_000;
 
 function normalizeHexColor(color: string | undefined): string | undefined {
   if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return undefined;
   return color;
 }
 
-const QUIET_CODE_HIGHLIGHT_THEME: HighlightTheme = {
+const CODE_HIGHLIGHT_THEME: HighlightTheme = {
   default: chalk.hex('#b4b4bd'),
   keyword: chalk.hex('#c4b5fd'),
   built_in: chalk.hex('#93c5fd'),
@@ -114,8 +94,6 @@ const LIGHT_CODE_HIGHLIGHT_THEME: HighlightTheme = {
 
 const codeHighlightTheme = (): HighlightTheme =>
   getThemeMode() === 'light' ? LIGHT_CODE_HIGHLIGHT_THEME : CODE_HIGHLIGHT_THEME;
-const quietCodeHighlightTheme = (): HighlightTheme =>
-  getThemeMode() === 'light' ? LIGHT_CODE_HIGHLIGHT_THEME : QUIET_CODE_HIGHLIGHT_THEME;
 
 const SHELL_CONTROL_WORDS = new Set([
   'if',
@@ -138,8 +116,9 @@ export interface ToolExecutionOptions {
   showImages?: boolean;
   autoCollapse?: boolean;
   collapsedByDefault?: boolean;
-  quietDisplayMode?: QuietToolDisplayMode;
-  quietPreviewLineLimit?: number;
+  /** Render the full bordered box instead of a compact row. Only live task-mutation tools use this. */
+  fullRender?: boolean;
+  previewLineLimit?: number;
   compactToolModeColor?: string;
   /** Where shell commands run (the git root, not necessarily where the TUI was launched). */
   projectRoot?: string;
@@ -148,8 +127,8 @@ export interface ToolExecutionOptions {
  * Convert absolute path to tilde notation if it's in home directory
  */
 const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-/** Grouped quiet shell boxes start this narrow and widen, up to the full width, for longer rows. */
-const QUIET_SHELL_MIN_CONTENT_WIDTH = 76;
+/** Grouped compact shell boxes start this narrow and widen, up to the full width, for longer rows. */
+const SHELL_MIN_CONTENT_WIDTH = 76;
 
 /** First line of `message` when a failed result is a JSON error object, e.g. a rejected tool input. */
 function parseErrorMessage(output: string): string | undefined {
@@ -169,7 +148,7 @@ function parseErrorMessage(output: string): string | undefined {
 }
 
 /** Room kept for the right-aligned time so a ticking counter never changes the box width. */
-const QUIET_SHELL_TIME_WIDTH = 'started'.length;
+const SHELL_TIME_WIDTH = 'started'.length;
 
 function shortenPath(path: string): string {
   const home = os.homedir();
@@ -177,30 +156,6 @@ function shortenPath(path: string): string {
     return `~${path.slice(home.length)}`;
   }
   return path;
-}
-
-/**
- * Resolve a file path to an absolute path for use in file:// URLs.
- */
-function resolveAbsolutePath(filePath: string): string {
-  if (filePath.startsWith('/')) return filePath;
-  if (filePath.startsWith('~')) {
-    return os.homedir() + filePath.slice(1);
-  }
-  return process.cwd() + '/' + filePath;
-}
-
-/**
- * Wrap text in an OSC 8 hyperlink to a file path.
- * Terminals that support OSC 8 (iTerm2, WezTerm, Kitty, etc.) will
- * render the text as a clickable link that opens the file.
- * Other terminals will just show the visible text.
- */
-function fileLink(displayText: string, filePath: string, line?: number): string {
-  const absPath = resolveAbsolutePath(filePath);
-  const lineFragment = line ? `#${line}` : '';
-  // OSC 8: \x1b]8;params;URI\x07 ... \x1b]8;;\x07
-  return `\x1b]8;;file://${absPath}${lineFragment}\x07${displayText}\x1b]8;;\x07`;
 }
 
 /** Check if a tool name is a web search provider tool (e.g. web_search, web_search_20250305) */
@@ -258,7 +213,6 @@ function extractContent(text: string): { content: string; isError: boolean } {
  * Enhanced tool execution component with collapsible sections
  */
 /** Shell output lines shown before the rest is folded behind ctrl+e. */
-const SHELL_OUTPUT_LINES = 8;
 
 export class ToolExecutionComponentEnhanced extends WidthAwareContainer implements IToolExecutionComponent {
   private contentBox: Box;
@@ -280,15 +234,15 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   /** The sandbox's exit record for a shell call; more reliable than parsing the result text. */
   private commandExit?: CommandExitRecord;
   private liveUpdatesStopped = false;
-  private quietShellTicker?: ReturnType<typeof setInterval>;
-  private quietShellGroupWidth?: number;
-  private quietShellGroupPreview?: string[];
-  private quietShellHeld = false;
+  private shellTicker?: ReturnType<typeof setInterval>;
+  private shellGroupWidth?: number;
+  private shellGroupPreview?: string[];
+  private shellHeld = false;
   /** Rows the shell box preview has used so far; it never shrinks, so rows below don't jump. */
-  private quietShellPreviewRowFloor = 0;
-  private quietDisplayMode: QuietToolDisplayMode;
-  private quietPreviewLineLimit: number;
-  private quietPreviewRowFloor = 0;
+  private shellPreviewRowFloor = 0;
+  private readonly fullRender: boolean;
+  private previewLineLimit: number;
+  private previewRowFloor = 0;
   private compactToolContinuation = false;
   private compactToolHasFollowingContinuation = false;
   private compactToolPreviousSummary: string | undefined;
@@ -306,8 +260,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       ...options,
     };
     this.expanded = !this.options.collapsedByDefault;
-    this.quietDisplayMode = this.options.quietDisplayMode ?? 'normal';
-    this.quietPreviewLineLimit = this.options.quietPreviewLineLimit ?? 2;
+    this.fullRender = this.options.fullRender ?? false;
+    this.previewLineLimit = this.options.previewLineLimit ?? 2;
     this.compactToolModeColor = normalizeHexColor(this.options.compactToolModeColor);
 
     // Content box - left indent for chat history alignment, no background
@@ -394,17 +348,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     this.rebuild();
   }
 
-  setQuietModeDisplay(mode: QuietToolDisplayMode): void {
-    this.quietDisplayMode = mode;
-    this.updateTrailingSpacer();
-    this.rebuild();
-  }
-
-  setQuietPreviewLineLimit(limit: number): void {
+  setPreviewLineLimit(limit: number): void {
     const normalizedLimit = Number.isFinite(limit) ? limit : 2;
-    this.quietPreviewLineLimit = Math.min(8, Math.max(0, Math.floor(normalizedLimit)));
-    this.quietPreviewRowFloor = Math.min(this.quietPreviewRowFloor, this.quietPreviewLineLimit);
-    this.quietShellPreviewRowFloor = Math.min(this.quietShellPreviewRowFloor, this.quietPreviewLineLimit);
+    this.previewLineLimit = Math.min(8, Math.max(0, Math.floor(normalizedLimit)));
+    this.previewRowFloor = Math.min(this.previewRowFloor, this.previewLineLimit);
+    this.shellPreviewRowFloor = Math.min(this.shellPreviewRowFloor, this.previewLineLimit);
     this.rebuild();
   }
 
@@ -416,29 +364,27 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const nextColor = normalizeHexColor(color);
     if (this.compactToolModeColor === nextColor) return;
     this.compactToolModeColor = nextColor;
-    if (this.quietDisplayMode === 'quiet') this.rebuild();
+    if (!this.fullRender) this.rebuild();
   }
 
   getChatSpacingKind(): ChatSpacingKind | undefined {
-    if (this.quietDisplayMode === 'quiet') {
-      if (this.toolName !== MC_TOOLS.EXECUTE_COMMAND) return 'quiet-compact-tool';
-      if (this.isQuietCompactShell()) return this.quietShellHeld ? undefined : 'quiet-compact-tool';
-      return 'quiet-shell-tool';
-    }
-    return 'normal-tool';
+    if (this.fullRender) return 'full-tool';
+    if (this.toolName !== MC_TOOLS.EXECUTE_COMMAND) return 'compact-tool';
+    if (this.isCompactShell()) return this.shellHeld ? undefined : 'compact-tool';
+    return 'shell-tool';
   }
 
   getCompactToolGroupKey(): string | undefined {
     // Shell calls only share a box when they run in the same directory, so each box has one header.
-    if (this.toolName === MC_TOOLS.EXECUTE_COMMAND && this.isQuietCompactShell()) {
+    if (this.toolName === MC_TOOLS.EXECUTE_COMMAND && this.isCompactShell()) {
       return this.isShellDirectoryPending() ? PENDING_SHELL_GROUP_KEY : `$ ${this.getShellHeaderPath()}`;
     }
-    if (this.getChatSpacingKind() !== 'quiet-compact-tool') return undefined;
+    if (this.getChatSpacingKind() !== 'compact-tool') return undefined;
     return this.getCompactToolLabel();
   }
 
   getCompactToolGroupSummary(): string | undefined {
-    if (this.getChatSpacingKind() !== 'quiet-compact-tool') return undefined;
+    if (this.getChatSpacingKind() !== 'compact-tool') return undefined;
     if (this.toolName === MC_TOOLS.EXECUTE_COMMAND) return undefined;
     return this.getCompactToolSummary();
   }
@@ -471,7 +417,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return joinPath(expandedCwd, cdPath);
   }
 
-  /** The directory a quiet shell group shows in its `$ <path>` header, resolved the way the sandbox resolves it. */
+  /** The directory a compact shell group shows in its `$ <path>` header, resolved the way the sandbox resolves it. */
   private getShellHeaderPath(): string {
     const raw = this.getShellDirectory();
     const expanded = raw === '~' || raw.startsWith('~/') ? os.homedir() + raw.slice(1) : raw;
@@ -503,10 +449,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
    * that box, then moving it to its own directory's box, would make the chat jump. Rendered once
    * the directory is known, the row only ever adds lines.
    */
-  setQuietShellHeld(held: boolean): void {
-    if (this.quietShellHeld === held) return;
-    this.quietShellHeld = held;
-    if (this.isQuietCompactShell()) this.rebuild();
+  setShellHeld(held: boolean): void {
+    if (this.shellHeld === held) return;
+    this.shellHeld = held;
+    if (this.isCompactShell()) this.rebuild();
   }
 
   private getShellDescription(): string {
@@ -515,41 +461,41 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   /**
-   * In quiet mode, consecutive shell calls in one directory share a box: an optional preview of the
+   * Consecutive shell calls in one directory share a box: an optional preview of the
    * latest output, a `$ <path>` header, then one status row per call. Expanding shows the full box.
    */
-  private isQuietCompactShell(): boolean {
-    return this.quietDisplayMode === 'quiet' && this.toolName === MC_TOOLS.EXECUTE_COMMAND && !this.expanded;
+  private isCompactShell(): boolean {
+    return !this.fullRender && this.toolName === MC_TOOLS.EXECUTE_COMMAND && !this.expanded;
   }
 
   /**
-   * The last `quietPreviewLineLimit` lines this call printed, for its box's shared preview; `[]` when
+   * The last `previewLineLimit` lines this call printed, for its box's shared preview; `[]` when
    * it printed nothing and `undefined` when previews are off.
    */
-  getQuietShellPreviewLines(): string[] | undefined {
-    if (!this.isQuietCompactShell() || this.quietShellHeld || this.quietPreviewLineLimit <= 0) return undefined;
+  getShellPreviewLines(): string[] | undefined {
+    if (!this.isCompactShell() || this.shellHeld || this.previewLineLimit <= 0) return undefined;
     const output = this.streamingOutput.trim() ? this.streamingOutput : this.getFormattedOutput();
     const lines = output.split('\n').filter(line => !/^(?:stdout:|stderr:|Exit code: -?\d+)$/.test(line.trim()));
     while (lines.length > 0 && lines[0]!.trim() === '') lines.shift();
     while (lines.length > 0 && lines[lines.length - 1]!.trim() === '') lines.pop();
-    return lines.slice(-this.quietPreviewLineLimit);
+    return lines.slice(-this.previewLineLimit);
   }
 
   /** Set on the first call of a shell box, which draws the box's preview above its header. */
-  setQuietShellGroupPreview(lines: string[] | undefined): void {
-    const current = this.quietShellGroupPreview;
+  setShellGroupPreview(lines: string[] | undefined): void {
+    const current = this.shellGroupPreview;
     if (current === lines || (current && lines && current.join('\n') === lines.join('\n'))) return;
-    this.quietShellGroupPreview = lines;
-    if (this.isQuietCompactShell()) this.rebuild();
+    this.shellGroupPreview = lines;
+    if (this.isCompactShell()) this.rebuild();
   }
 
   /**
-   * Text for a grouped quiet shell row: the description; while it may still stream in, `...` or how
+   * Text for a grouped compact shell row: the description; while it may still stream in, `...` or how
    * much of the command has arrived (some models write a long command first); or the command's
    * first line when the call has none (e.g. it was rejected for a missing description).
    * Muted text is not the description, and truncates rather than widening the box.
    */
-  private getQuietShellRowText(): { text: string; muted: boolean } {
+  private getShellRowText(): { text: string; muted: boolean } {
     const description = this.getShellDescription();
     if (description) return { text: description, muted: false };
     const command = (this.args as Record<string, unknown> | undefined)?.command;
@@ -565,12 +511,12 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return { text: firstLine.trim(), muted: true };
   }
 
-  hasQuietStreamingPreview(): boolean {
+  hasStreamingPreview(): boolean {
     return (
-      this.quietDisplayMode === 'quiet' &&
+      !this.fullRender &&
       this.toolName !== MC_TOOLS.EXECUTE_COMMAND &&
-      this.quietPreviewLineLimit > 0 &&
-      (this.quietPreviewRowFloor > 0 || this.getQuietActivePreview() !== '')
+      this.previewLineLimit > 0 &&
+      (this.previewRowFloor > 0 || this.getActivePreview() !== '')
     );
   }
 
@@ -621,16 +567,6 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return defaultLimit;
   }
 
-  private shouldShowLeadingPadding(): boolean {
-    return this.quietDisplayMode === 'normal';
-  }
-
-  private addLeadingPadding(): void {
-    if (this.shouldShowLeadingPadding()) {
-      this.contentBox.addChild(new Text('', 0, 0));
-    }
-  }
-
   /**
    * Full clear-and-rebuild. Called when:
    * - args change (updateArgs)
@@ -641,49 +577,20 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   protected rebuildForWidth(_width: number): void {
     this.updateBgColor();
     this.contentBox.clear();
-    if (!this.isQuietCompactShell()) this.syncQuietShellTicker(false);
+    if (!this.isCompactShell()) this.syncShellTicker(false);
 
-    if (this.quietDisplayMode === 'quiet' && this.toolName !== MC_TOOLS.EXECUTE_COMMAND) {
-      this.renderCompactTool();
+    if (this.fullRender) {
+      if (this.toolName === 'task_write') this.renderTaskWriteEnhanced();
+      else this.renderGenericToolEnhanced();
       return;
     }
 
-    switch (this.toolName) {
-      case MC_TOOLS.VIEW:
-        this.renderViewToolEnhanced();
-        break;
-      case MC_TOOLS.EXECUTE_COMMAND:
-        this.renderBashToolEnhanced();
-        break;
-      case MC_TOOLS.STRING_REPLACE_LSP:
-        this.renderEditToolEnhanced();
-        break;
-      case MC_TOOLS.WRITE_FILE:
-        this.renderWriteToolEnhanced();
-        break;
-      case MC_TOOLS.FIND_FILES:
-        this.renderListFilesEnhanced();
-        break;
-      case MC_TOOLS.LSP_INSPECT:
-        this.renderLspInspectEnhanced();
-        break;
-      case MC_TOOLS.GET_PROCESS_OUTPUT:
-      case MC_TOOLS.KILL_PROCESS:
-        this.renderProcessToolEnhanced();
-        break;
-      case MC_TOOLS.AGENT_SIGNAL_SEND:
-        this.renderAgentSignalSendEnhanced();
-        break;
-      case 'task_write':
-        this.renderTaskWriteEnhanced();
-        break;
-      default:
-        if (isWebSearchTool(this.toolName)) {
-          this.renderWebSearchEnhanced();
-        } else {
-          this.renderGenericToolEnhanced();
-        }
+    if (this.toolName === MC_TOOLS.EXECUTE_COMMAND) {
+      this.renderBashToolEnhanced();
+      return;
     }
+
+    this.renderCompactTool();
   }
 
   private renderCompactTool(): void {
@@ -696,56 +603,48 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
   }
 
-  private getQuietPreviewLines(maxLineWidth: number): string[] {
-    if (
-      this.quietDisplayMode !== 'quiet' ||
-      this.toolName === MC_TOOLS.EXECUTE_COMMAND ||
-      this.quietPreviewLineLimit <= 0
-    )
-      return [];
+  private getPreviewLines(maxLineWidth: number): string[] {
+    if (this.fullRender || this.toolName === MC_TOOLS.EXECUTE_COMMAND || this.previewLineLimit <= 0) return [];
 
-    const preview = this.getQuietActivePreview();
+    const preview = this.getActivePreview();
     let lines: string[] = [];
 
     if (preview) {
-      if (this.isQuietCodePreviewTool()) {
-        lines = this.getQuietCodePreviewLines(preview, maxLineWidth);
+      if (this.isCodePreviewTool()) {
+        lines = this.getCodePreviewLines(preview, maxLineWidth);
       } else {
         const firstLineWidth = Math.max(10, maxLineWidth - 4);
         const continuationWidth = Math.max(10, maxLineWidth - 4);
         // Signal messages lead with the request, so show their opening lines instead of the latest output.
         const wrapped =
           this.toolName === MC_TOOLS.AGENT_SIGNAL_SEND
-            ? this.wrapAgentSignalMessageLines(preview, Math.max(1, firstLineWidth - 2)).slice(
-                0,
-                this.quietPreviewLineLimit,
-              )
-            : this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(-this.quietPreviewLineLimit);
+            ? this.wrapAgentSignalMessageLines(preview, Math.max(1, firstLineWidth - 2)).slice(0, this.previewLineLimit)
+            : this.wrapPreviewLines(preview, firstLineWidth, continuationWidth).slice(-this.previewLineLimit);
 
         lines = wrapped.map(line => {
-          const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
-          return truncateAnsi(`${linePrefix}${this.formatQuietActivePreview(line)}`, maxLineWidth);
+          const linePrefix = `  ${chalk.hex(this.getToolRailColor())('│')} `;
+          return truncateAnsi(`${linePrefix}${this.formatActivePreview(line)}`, maxLineWidth);
         });
       }
     }
 
-    this.quietPreviewRowFloor = Math.min(this.quietPreviewLineLimit, Math.max(this.quietPreviewRowFloor, lines.length));
-    const padding = Array.from({ length: this.quietPreviewRowFloor - lines.length }, () => {
-      const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
+    this.previewRowFloor = Math.min(this.previewLineLimit, Math.max(this.previewRowFloor, lines.length));
+    const padding = Array.from({ length: this.previewRowFloor - lines.length }, () => {
+      const linePrefix = `  ${chalk.hex(this.getToolRailColor())('│')} `;
       return truncateAnsi(linePrefix, maxLineWidth);
     });
     return [...padding, ...lines];
   }
 
-  private getQuietCodePreviewLines(preview: string, maxLineWidth: number): string[] {
-    const linePrefix = `  ${chalk.hex(this.getQuietToolRailColor())('│')} `;
-    return this.highlightQuietCodePreview(preview)
+  private getCodePreviewLines(preview: string, maxLineWidth: number): string[] {
+    const linePrefix = `  ${chalk.hex(this.getToolRailColor())('│')} `;
+    return this.highlightCodePreview(preview)
       .split('\n')
-      .slice(-this.quietPreviewLineLimit)
+      .slice(-this.previewLineLimit)
       .map(line => truncateAnsi(`${linePrefix}${line}`, maxLineWidth));
   }
 
-  private isQuietCodePreviewTool(): boolean {
+  private isCodePreviewTool(): boolean {
     return (
       this.toolName === MC_TOOLS.VIEW ||
       this.toolName === MC_TOOLS.WRITE_FILE ||
@@ -753,19 +652,19 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     );
   }
 
-  private getQuietPreviewCapLine(): string {
-    return `  ${chalk.hex(this.getQuietToolRailColor())('╰──')}`;
+  private getPreviewCapLine(): string {
+    return `  ${chalk.hex(this.getToolRailColor())('╰──')}`;
   }
 
-  private getQuietPreviewSpacerLine(): string {
-    return `  ${chalk.hex(this.getQuietToolRailColor())('│')}`;
+  private getPreviewSpacerLine(): string {
+    return `  ${chalk.hex(this.getToolRailColor())('│')}`;
   }
 
-  private shouldCloseQuietPreview(): boolean {
+  private shouldClosePreview(): boolean {
     return !this.compactToolHasFollowingContinuation;
   }
 
-  private formatQuietActivePreview(preview: string): string {
+  private formatActivePreview(preview: string): string {
     if (this.toolName === MC_TOOLS.FIND_FILES || this.toolName === MC_TOOLS.SEARCH_CONTENT) {
       return theme.fg('toolOutput', preview);
     }
@@ -773,20 +672,20 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return theme.fg('text', preview);
   }
 
-  private highlightQuietCodePreview(preview: string): string {
+  private highlightCodePreview(preview: string): string {
     const path = this.getFirstStringArg('path');
     try {
       return highlight(preview, {
         language: getLanguageFromPath(path),
         ignoreIllegals: true,
-        theme: quietCodeHighlightTheme(),
+        theme: codeHighlightTheme(),
       });
     } catch {
       return theme.fg('toolArgs', preview);
     }
   }
 
-  private highlightQuietShellCommandToken(token: string): string {
+  private highlightShellCommandToken(token: string): string {
     if (token === '&&' || token === '||' || token === '|' || token === ';' || token === '&') {
       return theme.fg('muted', token);
     }
@@ -798,7 +697,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return theme.fg('toolArgs', token);
   }
 
-  private highlightQuietShellCommandLine(
+  private highlightShellCommandLine(
     line: string,
     quote: 'single' | 'double' | undefined,
   ): { line: string; quote: 'single' | 'double' | undefined } {
@@ -811,7 +710,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       if (!plain) return;
       highlighted += plain.replace(
         /&&|\|\||[|;&()<>]|-{1,2}[a-zA-Z0-9_.=/-]+|\b\d+(?:\.\d+)?\b|\b[a-zA-Z_][a-zA-Z0-9_]*\b/g,
-        token => this.highlightQuietShellCommandToken(token),
+        token => this.highlightShellCommandToken(token),
       );
       plain = '';
     };
@@ -855,7 +754,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return { line: highlighted, quote: activeQuote };
   }
 
-  private wrapQuietShellCommand(command: string, width: number): string[] {
+  private wrapShellCommand(command: string, width: number): string[] {
     const lines: string[] = [];
     let current = '';
     let currentWidth = 0;
@@ -863,8 +762,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     let quote: 'single' | 'double' | undefined;
 
     const pushCurrent = () => {
-      const highlightLength = Math.min(current.length, QUIET_SHELL_COMMAND_HIGHLIGHT_MAX_CHARS - highlightedChars);
-      const highlighted = this.highlightQuietShellCommandLine(current.slice(0, highlightLength), quote);
+      const highlightLength = Math.min(current.length, SHELL_COMMAND_HIGHLIGHT_MAX_CHARS - highlightedChars);
+      const highlighted = this.highlightShellCommandLine(current.slice(0, highlightLength), quote);
       lines.push(highlighted.line + current.slice(highlightLength));
       highlightedChars += highlightLength;
       quote = highlighted.quote;
@@ -925,7 +824,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const toolLabel = this.getCompactToolLabel();
     const toolLabelColor = this.getCompactToolLabelColor();
     const summary = this.compactToolContinuation ? this.getCompactContinuationSummary() : this.getCompactToolSummary();
-    const detailLines = this.getQuietPreviewLines(this.renderWidth - BOX_INDENT * 2 - 2);
+    const detailLines = this.getPreviewLines(this.renderWidth - BOX_INDENT * 2 - 2);
     const firstLine = this.compactToolContinuation
       ? summary
         ? `${this.getCompactContinuationIndent()}${this.formatCompactContinuationLine(summary)}${status}`
@@ -935,8 +834,8 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       : `${this.formatCompactToolHeader(toolLabel, toolLabelColor, summary)}${status}`;
 
     if (detailLines.length === 0) return [firstLine];
-    const previewLines = this.shouldCloseQuietPreview() ? [...detailLines, this.getQuietPreviewCapLine()] : detailLines;
-    if (this.compactToolHasFollowingContinuation) previewLines.push(this.getQuietPreviewSpacerLine());
+    const previewLines = this.shouldClosePreview() ? [...detailLines, this.getPreviewCapLine()] : detailLines;
+    if (this.compactToolHasFollowingContinuation) previewLines.push(this.getPreviewSpacerLine());
     return [firstLine, ...previewLines];
   }
 
@@ -973,16 +872,16 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return this.compactToolModeColor ?? COMPACT_TOOL_COLOR;
   }
 
-  private getQuietToolRailColor(): string {
+  private getToolRailColor(): string {
     const color = this.isErrorResult()
       ? tintHex(mastra.red, 0.35)
       : this.compactToolModeColor
         ? tintHex(this.compactToolModeColor, 0.35)
-        : QUIET_TOOL_RAIL;
+        : TOOL_RAIL;
     return ensureTerminalGlyphContrast(color);
   }
 
-  private getQuietToolCircleColor(color: string): string {
+  private getToolCircleColor(color: string): string {
     return ensureTerminalGlyphContrast(color);
   }
 
@@ -1010,23 +909,23 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return false;
   }
 
-  private getQuietActivePreview(): string {
-    if (this.isErrorResult()) return this.formatQuietErrorPreview();
-    if (isWebSearchTool(this.toolName)) return this.formatQuietWebSearchPreview();
-    if (isBrowserTool(this.toolName)) return this.formatQuietBrowserPreview();
-    if (isSkillTool(this.toolName)) return this.formatQuietSkillPreview();
-    if (this.toolName === MC_TOOLS.GET_PROCESS_OUTPUT) return this.formatQuietProcessOutputPreview();
-    if (this.toolName === MC_TOOLS.FILE_STAT) return this.formatQuietFileStatPreview();
+  private getActivePreview(): string {
+    if (this.isErrorResult()) return this.formatErrorPreview();
+    if (isWebSearchTool(this.toolName)) return this.formatWebSearchPreview();
+    if (isBrowserTool(this.toolName)) return this.formatBrowserPreview();
+    if (isSkillTool(this.toolName)) return this.formatSkillPreview();
+    if (this.toolName === MC_TOOLS.GET_PROCESS_OUTPUT) return this.formatProcessOutputPreview();
+    if (this.toolName === MC_TOOLS.FILE_STAT) return this.formatFileStatPreview();
 
     switch (this.toolName) {
       case MC_TOOLS.VIEW:
-        return this.formatQuietViewPreview();
+        return this.formatViewPreview();
       case MC_TOOLS.FIND_FILES:
-        return this.formatQuietListPreview();
+        return this.formatListPreview();
       case 'skill':
         return '';
       case MC_TOOLS.STRING_REPLACE_LSP:
-        return this.formatQuietEditPreview();
+        return this.formatEditPreview();
       case MC_TOOLS.WRITE_FILE:
         return this.getLatestCodePreview('content');
       case MC_TOOLS.SEARCH_CONTENT:
@@ -1036,11 +935,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       case MC_TOOLS.AGENT_SIGNAL_SEND:
         return this.formatAgentSignalSendPreview();
       default:
-        return this.formatQuietGenericResultPreview();
+        return this.formatGenericResultPreview();
     }
   }
 
-  private formatQuietEditPreview(): string {
+  private formatEditPreview(): string {
     return (
       this.getLatestCodePreview('new_str') ||
       this.getLatestCodePreview('new_string') ||
@@ -1055,15 +954,15 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const normalized = value.replace(/\r\n/g, '\n').replace(/^\n+|\n+$/g, '');
     if (!normalized) return '';
     const lines = normalized.split('\n');
-    const latestLines = lines.slice(-Math.max(1, this.quietPreviewLineLimit)).join('\n');
+    const latestLines = lines.slice(-Math.max(1, this.previewLineLimit)).join('\n');
     if (this.isPartial && (this.toolName === MC_TOOLS.WRITE_FILE || this.toolName === MC_TOOLS.STRING_REPLACE_LSP)) {
       return latestLines;
     }
-    if (latestLines.length <= QUIET_CODE_PREVIEW_MAX_CHARS) return latestLines;
-    return latestLines.slice(-QUIET_CODE_PREVIEW_MAX_CHARS);
+    if (latestLines.length <= CODE_PREVIEW_MAX_CHARS) return latestLines;
+    return latestLines.slice(-CODE_PREVIEW_MAX_CHARS);
   }
 
-  private formatQuietErrorPreview(): string {
+  private formatErrorPreview(): string {
     const outputLines = this.stripAnsi(this.getFormattedOutput())
       .split('\n')
       .map(line => line.trim())
@@ -1074,7 +973,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return outputLines.slice(0, 2).join('\n');
   }
 
-  private formatQuietViewPreview(): string {
+  private formatViewPreview(): string {
     if (!this.result) return '';
 
     const output = this.getFormattedOutput();
@@ -1086,7 +985,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return getPlainCodeFromViewOutput(output, startLine);
   }
 
-  private formatQuietListPreview(): string {
+  private formatListPreview(): string {
     if (!this.result) return '';
 
     const entries = this.getListResultEntries();
@@ -1095,7 +994,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return entries.slice(0, 2).join('\n');
   }
 
-  private formatQuietWebSearchPreview(): string {
+  private formatWebSearchPreview(): string {
     if (!this.result) return '';
 
     return this.stripAnsi(this.formatWebSearchResults())
@@ -1106,7 +1005,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       .join('\n');
   }
 
-  private formatQuietBrowserPreview(): string {
+  private formatBrowserPreview(): string {
     if (!this.result || !['browser_snapshot', 'browser_evaluate'].includes(this.toolName)) return '';
     const output = this.unwrapBrowserToolOutput(this.getFormattedOutput());
     return this.stripAnsi(output)
@@ -1153,7 +1052,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return String(value);
   }
 
-  private formatQuietProcessOutputPreview(): string {
+  private formatProcessOutputPreview(): string {
     if (!this.result) return '';
     return this.stripAnsi(this.getFormattedOutput())
       .split('\n')
@@ -1163,13 +1062,13 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       .join('\n');
   }
 
-  private formatQuietFileStatPreview(): string {
+  private formatFileStatPreview(): string {
     if (!this.result) return '';
     const output = this.stripAnsi(this.getFormattedOutput()).trim();
     return output.replace(/^\S+\s+/, '').replace(/\s+/g, ' ');
   }
 
-  private formatQuietGenericResultPreview(): string {
+  private formatGenericResultPreview(): string {
     if (!this.result) return '';
     const output = this.stripAnsi(this.getFormattedOutput()).trim();
     if (!output) return '';
@@ -1184,7 +1083,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       .map(line => line.trimEnd())
       .filter(Boolean);
 
-    return (this.isPartial ? lines : lines.slice(0, this.quietPreviewLineLimit)).join('\n');
+    return (this.isPartial ? lines : lines.slice(0, this.previewLineLimit)).join('\n');
   }
 
   private formatCompactJsonResult(output: string): string {
@@ -1201,7 +1100,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
   }
 
-  private formatQuietSkillPreview(): string {
+  private formatSkillPreview(): string {
     if (!this.result || this.toolName !== 'skill_search') return '';
     return this.stripAnsi(this.getFormattedOutput())
       .split('\n')
@@ -1231,10 +1130,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   private formatEmptyCompactContinuationLine(): string {
-    const railColor = this.getQuietToolRailColor();
-    const isStreamingContinuation = !this.isComplete() && this.quietPreviewLineLimit > 0;
+    const railColor = this.getToolRailColor();
+    const isStreamingContinuation = !this.isComplete() && this.previewLineLimit > 0;
     if (isStreamingContinuation) {
-      const circleColor = this.getQuietToolCircleColor(this.getCompactToolAccentColor(this.getCompactToolLabelColor()));
+      const circleColor = this.getToolCircleColor(this.getCompactToolAccentColor(this.getCompactToolLabelColor()));
       return `${chalk.hex(circleColor)('●')}${chalk.hex(railColor)('─')}`;
     }
     return chalk.hex(railColor)(this.compactToolHasFollowingContinuation ? '├─' : '╰─');
@@ -1244,16 +1143,15 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const lineMatch = summary.match(/^─+/);
     const linePrefix = lineMatch?.[0] ?? '';
     const separator = linePrefix ? '' : ' ';
-    const hasFollowing = this.compactToolHasFollowingContinuation || this.hasQuietStreamingPreview();
-    const hasPreview = this.hasQuietStreamingPreview();
+    const hasFollowing = this.compactToolHasFollowingContinuation || this.hasStreamingPreview();
+    const hasPreview = this.hasStreamingPreview();
     const toolLabelColor = this.getCompactToolLabelColor();
     const color = this.getCompactToolAccentColor(toolLabelColor);
     const argsBg = this.getCompactToolArgsBg(toolLabelColor);
     const argsColor = this.getCompactToolArgsColor(toolLabelColor);
-    const railColor = this.getQuietToolRailColor();
-    const circleColor = this.getQuietToolCircleColor(color);
-    const isStreamingContinuation =
-      this.compactToolContinuation && !this.isComplete() && this.quietPreviewLineLimit > 0;
+    const railColor = this.getToolRailColor();
+    const circleColor = this.getToolCircleColor(color);
+    const isStreamingContinuation = this.compactToolContinuation && !this.isComplete() && this.previewLineLimit > 0;
     const branch =
       hasFollowing || isStreamingContinuation
         ? `${hasPreview || isStreamingContinuation ? chalk.hex(circleColor)('●') : chalk.hex(railColor)('├')}${chalk.hex(railColor)(`─${separator}${linePrefix}`)}`
@@ -1584,101 +1482,14 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return firstLine.length > maxLength ? `${firstLine.slice(0, maxLength)}…` : firstLine;
   }
 
-  private renderViewToolEnhanced(): void {
-    const argsObj = this.args as Record<string, unknown> | undefined;
-    const fullPath = argsObj?.path ? String(argsObj.path) : '';
-    const viewRange = argsObj?.view_range as [number, number] | undefined;
-    const offset = argsObj?.offset as number | undefined;
-    const limit = argsObj?.limit as number | undefined;
-    // view tool uses view_range[0], workspace read_file uses offset
-    const startLine = viewRange?.[0] ?? offset ?? 1;
-
-    // Build range display from view_range or offset/limit
-    let rangeDisplay = '';
-    if (viewRange) {
-      rangeDisplay = theme.fg('muted', `:${viewRange[0]}-${viewRange[1]}`);
-    } else if (offset || limit) {
-      const from = offset ?? 1;
-      const to = limit ? from + limit - 1 : undefined;
-      rangeDisplay = theme.fg('muted', to ? `:${from}-${to}` : `:${from}`);
-    }
-
-    if (!this.result || this.isPartial) {
-      const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
-      const status = this.getStatusIndicator();
-      const pathDisplay = fullPath
-        ? fileLink(theme.fg('toolArgs', path), fullPath, startLine)
-        : theme.fg('toolArgs', path);
-      const footerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
-      this.startBlock();
-      this.endBlock(footerText);
-      return;
-    }
-
-    const status = this.getStatusIndicator();
-
-    // Calculate available width for path and truncate from beginning if needed
-    const termWidth = this.renderWidth;
-    const fixedParts = '╰── view  ' + (rangeDisplay ? `:XXX,XXX` : '') + ' ✓'; // approximate fixed width
-    const availableForPath = termWidth - fixedParts.length - 6 - BOX_INDENT * 2; // buffer
-    let path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
-    if (path.length > availableForPath && availableForPath > 10) {
-      path = '…' + path.slice(-(availableForPath - 1));
-    }
-
-    const pathDisplay = fullPath
-      ? fileLink(theme.fg('toolArgs', path), fullPath, startLine)
-      : theme.fg('toolArgs', path);
-    const footerText = `${theme.bold(theme.fg('toolTitle', 'view'))} ${pathDisplay}${rangeDisplay}${status}`;
-
-    // Empty line padding above
-    this.addLeadingPadding();
-
-    // Top border
-    this.startBlock();
-
-    // Syntax-highlighted content with left border, truncated to prevent soft wrap
-    const output = this.getFormattedOutput();
-    if (output) {
-      const termWidth = this.renderWidth;
-      const maxLineWidth = termWidth - 4 - BOX_INDENT * 2; // Account for border "│ " (2) + buffer (2)
-      const highlighted = highlightCode(output, fullPath, startLine);
-      let lines = highlighted.split('\n');
-
-      // Limit lines when collapsed
-      const collapsedLines = this.getCollapsedLineLimit(20);
-      const totalLines = lines.length;
-      const hasMore = !this.expanded && totalLines > collapsedLines + 1;
-
-      if (hasMore) {
-        lines = lines.slice(0, collapsedLines);
-      }
-
-      const borderedLines = lines.map(line => {
-        const truncated = truncateAnsi(line, maxLineWidth);
-        return theme.fg('toolOutput', truncated);
-      });
-      this.blockLines(borderedLines);
-
-      // Show truncation indicator
-      if (hasMore) {
-        const remaining = totalLines - collapsedLines;
-        this.blockLine(theme.fg('muted', `... ${remaining} more lines (ctrl+e to expand)`));
-      }
-    }
-
-    // Bottom border with tool info
-    this.endBlock(footerText);
-  }
-
   private renderBashToolEnhanced(): void {
     const argsObj = this.args as Record<string, unknown> | undefined;
     const { command } = this.parseShellCommand();
     const timeout = argsObj?.timeout as number | undefined;
 
-    if (this.isQuietCompactShell()) {
-      if (this.quietShellHeld) this.syncQuietShellTicker(false);
-      else this.renderQuietShellGroupRow();
+    if (this.isCompactShell()) {
+      if (this.shellHeld) this.syncShellTicker(false);
+      else this.renderShellGroupRow();
       return;
     }
 
@@ -1701,24 +1512,14 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       const prompt = `${theme.bold(theme.fg('toolTitle', '$'))} `;
       const suffix = `${cwdSuffix}${timeSuffix}${status}`;
       const titleWidth = Math.max(1, this.renderWidth - BOX_INDENT * 2 - 2 - visibleWidth(prompt));
-      const commandLines = this.wrapQuietShellCommand(command, titleWidth);
+      const commandLines = this.wrapShellCommand(command, titleWidth);
       const title = commandLines.map((line, i) => (i === 0 ? prompt : ' '.repeat(visibleWidth(prompt))) + line);
       const last = title.length - 1;
       if (visibleWidth(commandLines[last] ?? '') + visibleWidth(suffix) <= titleWidth) title[last] += suffix;
       else title.push(' '.repeat(visibleWidth(prompt)) + suffix);
-      // Long output never fills the chat: a live tail while running, a preview + hint when done.
-      let shown = outputLines;
-      let hiddenNote: string | undefined;
-      if (!this.expanded && outputLines.length > SHELL_OUTPUT_LINES) {
-        const hidden = outputLines.length - SHELL_OUTPUT_LINES;
-        shown = outputLines.slice(-SHELL_OUTPUT_LINES);
-        hiddenNote = this.isPartial
-          ? theme.fg('dim', `… ${hidden} earlier lines`)
-          : theme.fg('dim', `… ${hidden} more lines · `) + theme.fg('muted', 'ctrl+e') + theme.fg('dim', ' to expand');
-      }
+      // Only reached when expanded (collapsed shells use the compact group row), so all output shows.
       this.startBlock();
-      if (hiddenNote) this.blockLine(hiddenNote);
-      this.blockLines(shown.map(line => theme.fg('toolOutput', line)));
+      this.blockLines(outputLines.map(line => theme.fg('toolOutput', line)));
       this.endBlock(title, failed);
     };
 
@@ -1764,13 +1565,13 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   /**
-   * One call's slice of a shared quiet shell box. The first call in a run opens the box with a
+   * One call's slice of a shared compact shell box. The first call in a run opens the box with a
    * `$ <path>` header, a call in a new directory adds another header, and the last call closes it.
    */
-  private renderQuietShellGroupRow(): void {
+  private renderShellGroupRow(): void {
     const fullWidth = Math.max(20, this.renderWidth - BOX_INDENT * 2 - 4); // Account for "│ " + " │"
-    const naturalWidth = this.quietShellGroupWidth ?? this.getQuietShellNaturalWidth() ?? 0;
-    const contentWidth = Math.min(fullWidth, Math.max(QUIET_SHELL_MIN_CONTENT_WIDTH, naturalWidth));
+    const naturalWidth = this.shellGroupWidth ?? this.getShellNaturalWidth() ?? 0;
+    const contentWidth = Math.min(fullWidth, Math.max(SHELL_MIN_CONTENT_WIDTH, naturalWidth));
     // A bordered box rather than a shaded panel: the frame keeps grouped calls readable at a glance.
     const border = (char: string) =>
       theme.bold(chalk.hex(ensureTerminalGlyphContrast(theme.getTheme().toolBorderSuccess))(char));
@@ -1798,13 +1599,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const lines: string[] = [];
     if (!this.compactToolContinuation) {
       lines.push(rule('╭', '╮'));
-      const preview = this.quietShellGroupPreview ?? [];
-      this.quietShellPreviewRowFloor = Math.min(
-        this.quietPreviewLineLimit,
-        Math.max(this.quietShellPreviewRowFloor, preview.length),
-      );
-      if (this.quietShellPreviewRowFloor > 0) {
-        for (let i = 0; i < this.quietShellPreviewRowFloor; i++) {
+      const preview = this.shellGroupPreview ?? [];
+      this.shellPreviewRowFloor = Math.min(this.previewLineLimit, Math.max(this.shellPreviewRowFloor, preview.length));
+      if (this.shellPreviewRowFloor > 0) {
+        for (let i = 0; i < this.shellPreviewRowFloor; i++) {
           lines.push(row(theme.fg('toolOutput', singleLine(preview[i] ?? ''))));
         }
         lines.push(rule('├', '┤'));
@@ -1812,7 +1610,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       lines.push(header, rule('├', '┤'));
     }
 
-    const rowText = this.getQuietShellRowText();
+    const rowText = this.getShellRowText();
     const description = rowText.muted ? theme.fg('muted', singleLine(rowText.text)) : singleLine(rowText.text);
     const isBackground =
       !!this.backgroundTaskId || (this.args as Record<string, unknown> | undefined)?.background === true;
@@ -1844,7 +1642,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     // Last guard for terminals too narrow for the minimum box: clip rather than wrap.
     const maxLineWidth = Math.max(1, this.renderWidth - BOX_INDENT * 2);
     this.contentBox.addChild(new Text(lines.map(line => truncateAnsi(line, maxLineWidth)).join('\n'), 0, 0));
-    this.syncQuietShellTicker(running && !isBackground && !this.liveUpdatesStopped);
+    this.syncShellTicker(running && !isBackground && !this.liveUpdatesStopped);
   }
 
   /**
@@ -1886,719 +1684,42 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   }
 
   /** Keeps a running grouped row's spinner and seconds counter moving between output events. */
-  private syncQuietShellTicker(active: boolean): void {
+  private syncShellTicker(active: boolean): void {
     if (!active) {
-      if (this.quietShellTicker) clearInterval(this.quietShellTicker);
-      this.quietShellTicker = undefined;
+      if (this.shellTicker) clearInterval(this.shellTicker);
+      this.shellTicker = undefined;
       return;
     }
-    if (this.quietShellTicker) return;
-    this.quietShellTicker = setInterval(() => {
+    if (this.shellTicker) return;
+    this.shellTicker = setInterval(() => {
       this.rebuild();
       this.ui.requestRender();
     }, 100);
-    this.quietShellTicker.unref?.();
+    this.shellTicker.unref?.();
   }
 
   /** Content width this call's rows need; reconciliation gives the whole group the widest one. */
-  getQuietShellNaturalWidth(): number | undefined {
-    if (!this.isQuietCompactShell() || this.quietShellHeld) return undefined;
+  getShellNaturalWidth(): number | undefined {
+    if (!this.isCompactShell() || this.shellHeld) return undefined;
     const header = 2 + visibleWidth(this.getShellHeaderPath());
-    const rowText = this.getQuietShellRowText();
+    const rowText = this.getShellRowText();
     const textWidth = rowText.muted ? 0 : visibleWidth(rowText.text);
-    const row = 2 + textWidth + 1 + QUIET_SHELL_TIME_WIDTH;
+    const row = 2 + textWidth + 1 + SHELL_TIME_WIDTH;
     return Math.max(header, row);
   }
 
-  setQuietShellGroupWidth(width: number | undefined): void {
-    if (this.quietShellGroupWidth === width) return;
-    this.quietShellGroupWidth = width;
-    if (this.isQuietCompactShell()) this.rebuild();
+  setShellGroupWidth(width: number | undefined): void {
+    if (this.shellGroupWidth === width) return;
+    this.shellGroupWidth = width;
+    if (this.isCompactShell()) this.rebuild();
   }
 
   /** Called when the agent run ends without this tool finishing, so nothing keeps animating. */
   stopLiveUpdates(): void {
     if (this.liveUpdatesStopped) return;
     this.liveUpdatesStopped = true;
-    this.syncQuietShellTicker(false);
+    this.syncShellTicker(false);
     this.rebuild();
-  }
-
-  private renderProcessToolEnhanced(): void {
-    const argsObj = this.args as Record<string, unknown> | undefined;
-    const pid = argsObj?.pid ? Number(argsObj.pid) : 0;
-    const isKill = this.toolName === MC_TOOLS.KILL_PROCESS;
-    const isWait = !isKill && argsObj?.wait === true;
-
-    const timeSuffix = this.isPartial ? '' : this.getDurationSuffix();
-    const label = isKill ? 'kill' : isWait ? 'wait' : 'output';
-
-    const renderBorderedProcess = (status: string, outputLines: string[]) => {
-      const footerText = `${theme.bold(theme.fg('toolTitle', label))} ${theme.fg('toolArgs', `PID ${pid}`)}${timeSuffix}${status}`;
-
-      this.startBlock();
-
-      const termWidth = this.renderWidth;
-      const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
-      const borderedLines = outputLines.map(line => {
-        const truncated = truncateAnsi(line, maxLineWidth);
-        return theme.fg('toolOutput', truncated);
-      });
-      if (borderedLines.join('\n').trim()) this.blockLines(borderedLines);
-
-      this.endBlock(footerText);
-    };
-
-    const prepareOutputLines = (output: string): string[] => {
-      let lines = output.split('\n');
-      while (lines.length > 0 && lines[0] === '') lines.shift();
-      while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
-      return lines;
-    };
-
-    if (!this.result || this.isPartial) {
-      const status = this.getStatusIndicator();
-      let lines = this.streamingOutput ? this.streamingOutput.split('\n') : [];
-      while (lines.length > 0 && lines[0] === '') lines.shift();
-      while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
-      renderBorderedProcess(status, lines);
-      return;
-    }
-
-    const status = this.getStatusIndicator(this.result.isError);
-    const output = this.streamingOutput.trim() || this.getFormattedOutput();
-    {
-      renderBorderedProcess(status, prepareOutputLines(output));
-    }
-  }
-
-  private renderEditToolEnhanced(): void {
-    const argsObj = this.args as Record<string, unknown> | undefined;
-    const fullPath = argsObj?.path ? String(argsObj.path) : '';
-    const startLineNum = argsObj?.start_line ? Number(argsObj.start_line) : undefined;
-    const startLine = startLineNum ? `:${String(startLineNum)}` : '';
-
-    // While streaming / pending — show diff preview if old_str + new_str available
-    if (!this.result || this.isPartial) {
-      const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
-      const status = this.getStatusIndicator();
-      const pathDisplay = fullPath
-        ? fileLink(theme.fg('toolArgs', path), fullPath, startLineNum)
-        : theme.fg('toolArgs', path);
-
-      // If both old_str/old_string and new_str/new_string are available, show a bordered diff preview
-      const oldStr = argsObj?.old_str ?? argsObj?.old_string;
-      const newStr = argsObj?.new_str ?? argsObj?.new_string;
-      if (oldStr != null && newStr != null) {
-        const termWidth = this.renderWidth;
-        const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
-        const footerText = `${theme.bold(theme.fg('toolTitle', 'edit'))} ${pathDisplay}${theme.fg('muted', startLine)}${status}`;
-
-        this.addLeadingPadding();
-        this.startBlock();
-
-        const { lines: diffLines } = this.generateDiffLines(String(oldStr), String(newStr));
-
-        // While streaming, show the tail so new content scrolls in at the bottom
-        const collapsedLines = this.getCollapsedLineLimit(15);
-        const totalLines = diffLines.length;
-        const hasMore = !this.expanded && totalLines > collapsedLines + 1;
-        let linesToShow = diffLines;
-        let skippedAbove = 0;
-        if (hasMore) {
-          skippedAbove = totalLines - collapsedLines;
-          linesToShow = diffLines.slice(-collapsedLines);
-        }
-
-        if (skippedAbove > 0) {
-          this.blockLine(theme.fg('muted', `... ${skippedAbove} lines above (ctrl+e to expand)`));
-        }
-
-        const borderedLines = linesToShow.map(line => {
-          const truncated = truncateAnsi(line, maxLineWidth);
-          return theme.fg('toolOutput', truncated);
-        });
-        this.blockLines(borderedLines);
-
-        this.endBlock(footerText);
-        return;
-      }
-
-      // No diff args yet — show bordered header
-      const headerText = `${theme.bold(theme.fg('toolTitle', 'edit'))} ${pathDisplay}${theme.fg('muted', startLine)}${status}`;
-      this.startBlock();
-      this.endBlock(headerText);
-      return;
-    }
-
-    const status = this.getStatusIndicator();
-
-    // Calculate available width for path and truncate from beginning if needed
-    const termWidth = this.renderWidth;
-    const fixedParts = '╰── edit  ' + startLine + ' ✓'; // approximate fixed width
-    const availableForPath = termWidth - fixedParts.length - 6 - BOX_INDENT * 2; // buffer
-    let path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
-    if (path.length > availableForPath && availableForPath > 10) {
-      path = '…' + path.slice(-(availableForPath - 1));
-    }
-
-    const pathDisplay = fullPath
-      ? fileLink(theme.fg('toolArgs', path), fullPath, startLineNum)
-      : theme.fg('toolArgs', path);
-    const footerText = `${theme.bold(theme.fg('toolTitle', 'edit'))} ${pathDisplay}${theme.fg('muted', startLine)}${status}`;
-
-    // Empty line padding above
-    this.addLeadingPadding();
-
-    // Top border
-    this.startBlock();
-
-    // For edits, show the diff
-    const finalOldStr = argsObj?.old_str ?? argsObj?.old_string;
-    const finalNewStr = argsObj?.new_str ?? argsObj?.new_string;
-    if (finalOldStr != null && finalNewStr != null && !this.result.isError) {
-      const { lines: diffLines, firstChangeIndex } = this.generateDiffLines(String(finalOldStr), String(finalNewStr));
-
-      // Limit lines when collapsed, windowed around first change
-      const collapsedLines = this.getCollapsedLineLimit(15);
-      const totalLines = diffLines.length;
-      const hasMore = !this.expanded && totalLines > collapsedLines + 1;
-
-      let linesToShow = diffLines;
-      let skippedBefore = 0;
-      if (hasMore) {
-        // Show 3 context lines before the first change, rest after
-        const contextBefore = 3;
-        const start = Math.max(0, firstChangeIndex - contextBefore);
-        linesToShow = diffLines.slice(start, start + collapsedLines);
-        skippedBefore = start;
-      }
-      // Render diff lines with border, truncated to prevent wrap
-      const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
-
-      // Show "skipped above" indicator
-      if (skippedBefore > 0) {
-        this.blockLine(theme.fg('muted', `... ${skippedBefore} lines above`));
-      }
-
-      const borderedLines = linesToShow.map(line => {
-        const truncated = truncateAnsi(line, maxLineWidth);
-        return theme.fg('toolOutput', truncated);
-      });
-      this.blockLines(borderedLines);
-
-      // Show truncation indicator
-      if (hasMore) {
-        const remaining = totalLines - (skippedBefore + linesToShow.length);
-        if (remaining > 0) {
-          this.blockLine(theme.fg('muted', `... ${remaining} more lines (ctrl+e to expand)`));
-        }
-      }
-    } else if (this.result.isError) {
-      // Show error output
-      const output = this.getFormattedOutput();
-      if (output) {
-        const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
-        const lines = output.split('\n').map(line => {
-          const truncated = truncateAnsi(line, maxLineWidth);
-          return theme.fg('error', truncated);
-        });
-        this.blockLines(lines);
-      }
-    }
-
-    // Bottom border with tool info
-    this.endBlock(footerText);
-
-    // LSP diagnostics below the box
-    const diagnostics = this.parseLSPDiagnostics();
-    if (diagnostics && !diagnostics.hasIssues) {
-      this.contentBox.addChild(new Text(theme.fg('muted', `  ✓ No LSP issues`), 0, 0));
-    } else if (diagnostics && diagnostics.hasIssues) {
-      const COLLAPSED_DIAG_LINES = 3;
-      const shouldCollapse = !this.expanded && diagnostics.entries.length > COLLAPSED_DIAG_LINES + 1;
-      const maxDiags = shouldCollapse ? COLLAPSED_DIAG_LINES : diagnostics.entries.length;
-      const entriesToShow = diagnostics.entries.slice(0, maxDiags);
-      for (const diag of entriesToShow) {
-        const t = theme.getTheme();
-        const color = diag.severity === 'error' ? t.error : diag.severity === 'warning' ? t.warning : t.muted;
-        const icon = diag.severity === 'error' ? '✗' : diag.severity === 'warning' ? '⚠' : 'ℹ';
-        const location = diag.location ? chalk.hex(color)(diag.location) + ' ' : '';
-        const line = `  ${chalk.hex(color)(icon)} ${location}${theme.fg('thinkingText', diag.message)}`;
-        this.contentBox.addChild(new Text(line, 0, 0));
-      }
-      if (shouldCollapse) {
-        const remaining = diagnostics.entries.length - COLLAPSED_DIAG_LINES;
-        this.contentBox.addChild(
-          new Text(
-            theme.fg('muted', `  ... ${remaining} more diagnostic${remaining > 1 ? 's' : ''} (ctrl+e to expand)`),
-            0,
-            0,
-          ),
-        );
-      }
-    }
-  }
-
-  private parseLSPDiagnostics(): {
-    hasIssues: boolean;
-    entries: Array<{
-      severity: 'error' | 'warning' | 'info' | 'hint';
-      location: string;
-      message: string;
-    }>;
-  } | null {
-    const output = this.getFormattedOutput();
-    const lspIdx = output.indexOf('LSP Diagnostics:');
-    if (lspIdx === -1) return null;
-
-    const lspText = output.slice(lspIdx + 'LSP Diagnostics:'.length);
-    if (lspText.includes('No errors or warnings')) {
-      return { hasIssues: false, entries: [] };
-    }
-
-    const entries: Array<{
-      severity: 'error' | 'warning' | 'info' | 'hint';
-      location: string;
-      message: string;
-    }> = [];
-    let currentSeverity: 'error' | 'warning' | 'info' | 'hint' = 'error';
-
-    for (const line of lspText.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      if (trimmed === 'Errors:') {
-        currentSeverity = 'error';
-      } else if (trimmed === 'Warnings:') {
-        currentSeverity = 'warning';
-      } else if (trimmed === 'Info:') {
-        currentSeverity = 'info';
-      } else if (trimmed === 'Hints:') {
-        currentSeverity = 'hint';
-      } else {
-        const match = trimmed.match(/^((?:.*:)?\d+:\d+)\s*-\s*(.+)$/);
-        if (match) {
-          entries.push({
-            severity: currentSeverity,
-            location: match[1]!,
-            message: match[2]!,
-          });
-        }
-      }
-    }
-
-    return { hasIssues: entries.length > 0, entries };
-  }
-  private generateDiffLines(oldStr: string, newStr: string): { lines: string[]; firstChangeIndex: number } {
-    const oldLines = oldStr.split('\n');
-    const newLines = newStr.split('\n');
-    const lines: string[] = [];
-    let firstChangeIndex = -1;
-
-    // Use soft red for removed, green for added
-    const removedColor = chalk.hex(mastra.red); // soft red
-    const addedColor = chalk.hex(theme.getTheme().success); // soft green
-
-    const maxLines = Math.max(oldLines.length, newLines.length);
-
-    for (let i = 0; i < maxLines; i++) {
-      if (i >= oldLines.length) {
-        if (firstChangeIndex === -1) firstChangeIndex = lines.length;
-        lines.push(addedColor(newLines[i]));
-      } else if (i >= newLines.length) {
-        if (firstChangeIndex === -1) firstChangeIndex = lines.length;
-        lines.push(removedColor(oldLines[i]));
-      } else if (oldLines[i] !== newLines[i]) {
-        if (firstChangeIndex === -1) firstChangeIndex = lines.length;
-        lines.push(removedColor(oldLines[i]!));
-        lines.push(addedColor(newLines[i]!));
-      } else {
-        // Context line
-        lines.push(theme.fg('muted', oldLines[i]!));
-      }
-    }
-
-    return {
-      lines,
-      firstChangeIndex: firstChangeIndex === -1 ? 0 : firstChangeIndex,
-    };
-  }
-  private renderWriteToolEnhanced(): void {
-    const argsObj = this.args as Record<string, unknown> | undefined;
-    const fullPath = argsObj?.path ? String(argsObj.path) : '';
-    const content = argsObj?.content ? String(argsObj.content) : '';
-
-    // While streaming args (no result yet), show bordered box with content as it arrives
-    if (!this.result || this.isPartial) {
-      if (!content) {
-        // No content yet — show bordered pending header
-        const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
-        const status = this.getStatusIndicator();
-        const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
-        const footerText = `${theme.bold(theme.fg('toolTitle', 'write'))} ${pathDisplay}${status}`;
-        this.startBlock();
-        this.endBlock(footerText);
-        return;
-      }
-
-      // Content is streaming in — show bordered box with syntax-highlighted preview
-      const status = this.getStatusIndicator();
-      const termWidth = this.renderWidth;
-      const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
-
-      let path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
-      const fixedParts = '╰── write   ⋯';
-      const availableForPath = termWidth - fixedParts.length - 6 - BOX_INDENT * 2;
-      if (path.length > availableForPath && availableForPath > 10) {
-        path = '…' + path.slice(-(availableForPath - 1));
-      }
-      const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
-      const footerText = `${theme.bold(theme.fg('toolTitle', 'write'))} ${pathDisplay}${status}`;
-
-      this.addLeadingPadding();
-      this.startBlock();
-
-      const highlighted = highlightCode(content, fullPath, undefined, false);
-      let lines = highlighted.split('\n');
-
-      const collapsedLines = this.getCollapsedLineLimit(20);
-      const totalLines = lines.length;
-      const hasMore = !this.expanded && totalLines > collapsedLines + 1;
-      let skippedAbove = 0;
-      if (hasMore) {
-        skippedAbove = totalLines - collapsedLines;
-        lines = lines.slice(-collapsedLines);
-      }
-
-      if (skippedAbove > 0) {
-        this.blockLine(theme.fg('muted', `... ${skippedAbove} lines above (ctrl+e to expand)`));
-      }
-
-      const borderedLines = lines.map(line => {
-        const truncated = truncateAnsi(line, maxLineWidth);
-        return theme.fg('toolOutput', truncated);
-      });
-      this.blockLines(borderedLines);
-
-      this.endBlock(footerText);
-      return;
-    }
-
-    // Complete — show final bordered result
-    const status = this.getStatusIndicator();
-    const termWidth = this.renderWidth;
-    const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
-
-    let path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
-    const fixedParts = '╰── write   ✓';
-    const availableForPath = termWidth - fixedParts.length - 6 - BOX_INDENT * 2;
-    if (path.length > availableForPath && availableForPath > 10) {
-      path = '…' + path.slice(-(availableForPath - 1));
-    }
-    const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
-    const footerText = `${theme.bold(theme.fg('toolTitle', 'write'))} ${pathDisplay}${status}`;
-
-    this.addLeadingPadding();
-    this.startBlock();
-
-    if (this.result.isError) {
-      const output = this.getFormattedOutput();
-      if (output) {
-        const lines = output.split('\n').map(line => {
-          const truncated = truncateAnsi(line, maxLineWidth);
-          return theme.fg('error', truncated);
-        });
-        this.blockLines(lines);
-      }
-    } else if (content) {
-      const highlighted = highlightCode(content, fullPath, undefined, false);
-      let lines = highlighted.split('\n');
-
-      const collapsedLines = this.getCollapsedLineLimit(20);
-      const totalLines = lines.length;
-      const hasMore = !this.expanded && totalLines > collapsedLines + 1;
-      let skippedAbove = 0;
-      if (hasMore) {
-        skippedAbove = totalLines - collapsedLines;
-        lines = lines.slice(-collapsedLines);
-      }
-
-      if (skippedAbove > 0) {
-        this.blockLine(theme.fg('muted', `... ${skippedAbove} lines above (ctrl+e to expand)`));
-      }
-
-      const borderedLines = lines.map(line => {
-        const truncated = truncateAnsi(line, maxLineWidth);
-        return theme.fg('toolOutput', truncated);
-      });
-      this.blockLines(borderedLines);
-    }
-
-    this.endBlock(footerText);
-  }
-  private renderListFilesEnhanced(): void {
-    const argsObj = this.args as Record<string, unknown> | undefined;
-    const fullPath = argsObj?.path ? String(argsObj.path) : '';
-    const path = argsObj?.path ? shortenPath(String(argsObj.path)) : '/';
-    const pattern = argsObj?.pattern ? String(argsObj.pattern) : '';
-    const patternDisplay = pattern ? ' ' + theme.fg('muted', pattern) : '';
-    const status = this.getStatusIndicator();
-    const termWidth = this.renderWidth;
-    const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
-
-    if (!this.result || this.isPartial) {
-      const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
-      const footerText = `${theme.bold(theme.fg('toolTitle', 'list'))} ${pathDisplay}${patternDisplay}${status}`;
-      this.startBlock();
-      this.endBlock(footerText);
-      return;
-    }
-
-    const output = this.getFormattedOutput();
-    if (output) {
-      // Extract summary line (e.g. "5 directories, 9 files") from tree output for the footer
-      let lines = output.split('\n');
-      const lastLine = lines[lines.length - 1]?.trim() || '';
-      const summaryMatch = lastLine.match(/^\d+\s+directories?,\s+\d+\s+files?$/);
-      const summaryDisplay = summaryMatch ? ' ' + theme.fg('muted', lastLine) : '';
-      // Remove the summary line from content if it matched
-      if (summaryMatch) {
-        lines = lines.slice(0, -1);
-      }
-
-      const collapsedLines = this.getCollapsedLineLimit(15);
-      const totalLines = lines.length;
-      const hasMore = !this.expanded && totalLines > collapsedLines + 1;
-      let skippedAbove = 0;
-      if (hasMore) {
-        skippedAbove = totalLines - collapsedLines;
-        lines = lines.slice(-collapsedLines);
-      }
-
-      const pathDisplay = fullPath ? fileLink(theme.fg('toolArgs', path), fullPath) : theme.fg('toolArgs', path);
-      const footerText = `${theme.bold(theme.fg('toolTitle', 'list'))} ${pathDisplay}${patternDisplay}${summaryDisplay}${status}`;
-
-      this.startBlock();
-
-      if (skippedAbove > 0) {
-        this.blockLine(theme.fg('muted', `... ${skippedAbove} lines above (ctrl+e to expand)`));
-      }
-
-      const borderedLines = lines.map(line => {
-        const truncated = truncateAnsi(line, maxLineWidth);
-        return theme.fg('toolOutput', truncated);
-      });
-      this.blockLines(borderedLines);
-
-      this.endBlock(footerText);
-    }
-  }
-
-  private renderLspInspectEnhanced(): void {
-    const status = this.getStatusIndicator();
-    const termWidth = this.renderWidth;
-    const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
-    const argsObj = this.args as { path?: string; line?: number; match?: string } | undefined;
-    const path_ = argsObj?.path;
-    const line = argsObj?.line;
-    const match = argsObj?.match;
-
-    // Build args summary for footer
-    const argsSummary = [
-      path_ ? shortenPath(path_.replace(process.cwd() + '/', '')) : null,
-      line ? `L${line}` : null,
-      match ? truncateAnsi(match.replace(/<<</g, '‹‹‹'), 40) : null,
-    ]
-      .filter(Boolean)
-      .join(' ');
-
-    if (!this.result || this.isPartial) {
-      const footerText = `${theme.bold(theme.fg('toolTitle', 'lsp_inspect'))}${argsSummary ? ' ' + theme.fg('toolArgs', argsSummary) : ''}${status}`;
-      this.startBlock();
-      this.endBlock(footerText);
-      return;
-    }
-
-    // Extract raw text from result
-    const rawText = this.result.content
-      .filter(c => c.type === 'text' && c.text)
-      .map(c => c.text!)
-      .join('\n');
-
-    if (this.result.isError || !rawText.trim()) {
-      const footerText = `${theme.bold(theme.fg('toolTitle', 'lsp_inspect'))}${argsSummary ? ' ' + theme.fg('toolArgs', argsSummary) : ''}${status}`;
-      const output = this.getFormattedOutput();
-      this.startBlock();
-      if (output) {
-        this.blockLine(theme.fg('error', output));
-      }
-      this.endBlock(footerText);
-      return;
-    }
-
-    // Parse lsp_inspect result
-    let parsed: {
-      hover?: { value: string; kind: string };
-      diagnostics?: Array<{ severity: string; message: string; source: string | null }>;
-      definition?: Array<{ location: string; preview: string | null }>;
-      implementation?: string[];
-      error?: string;
-    };
-    try {
-      parsed = JSON.parse(rawText);
-    } catch {
-      // Fall back to generic rendering if not valid JSON
-      this.renderGenericToolEnhanced();
-      return;
-    }
-
-    if (parsed.error) {
-      const footerText = `${theme.bold(theme.fg('toolTitle', 'lsp_inspect'))}${argsSummary ? ' ' + theme.fg('toolArgs', argsSummary) : ''}${status}`;
-      this.startBlock();
-      this.blockLine(theme.fg('error', parsed.error));
-      this.endBlock(footerText);
-      return;
-    }
-
-    const footerText = `${theme.bold(theme.fg('toolTitle', 'lsp_inspect'))}${argsSummary ? ' ' + theme.fg('toolArgs', argsSummary) : ''}${status}`;
-
-    this.startBlock();
-
-    // Render hover content
-    if (parsed.hover) {
-      const hoverValue = parsed.hover.value || '';
-      const hoverLines = hoverValue.split('\n').filter(line => line.trim() !== '');
-      if (hoverLines.length > 0) {
-        this.blockLine(theme.fg('toolArgs', 'hover:'));
-      }
-      for (const line of hoverLines) {
-        const truncated = truncateAnsi(line, maxLineWidth - 2);
-        this.blockLine(theme.fg('text', truncated));
-      }
-    }
-
-    // Render line diagnostics
-    if (parsed.diagnostics && parsed.diagnostics.length > 0) {
-      this.blockLine('');
-      this.blockLine(theme.fg('toolArgs', 'diagnostics:'));
-
-      for (const diagnostic of parsed.diagnostics) {
-        const label = diagnostic.source ? `${diagnostic.severity} (${diagnostic.source})` : diagnostic.severity;
-        const diagLine = `${label}: ${diagnostic.message}`;
-        this.blockLine(
-          theme.fg(diagnostic.severity === 'error' ? 'error' : 'text', truncateAnsi(diagLine, maxLineWidth - 2)),
-        );
-      }
-    }
-
-    // Render definition entries
-    if (parsed.definition && parsed.definition.length > 0) {
-      // Add blank line before definition section for visual separation
-      this.blockLine('');
-      this.blockLine(theme.fg('toolArgs', 'definition:'));
-
-      for (const def of parsed.definition) {
-        const location = def.location || '';
-        const preview = def.preview || '';
-        // Parse location: "$cwd/path:Lline:Cchar" or just "path:Lline:Cchar"
-        const parsedLoc = this.parseLspLocation(location);
-        const displayLoc = parsedLoc
-          ? fileLink(
-              theme.fg('toolOutput', parsedLoc.shortPath + ':' + parsedLoc.lineCol),
-              parsedLoc.absPath,
-              parsedLoc.line,
-            )
-          : theme.fg('toolOutput', location);
-
-        const defLine = displayLoc;
-        this.blockLine(truncateAnsi(defLine, maxLineWidth));
-
-        if (preview) {
-          const previewLine = '  ' + theme.fg('text', truncateAnsi(preview, maxLineWidth - 3));
-          this.blockLine(previewLine);
-        }
-      }
-    }
-
-    // Render implementation entries
-    if (parsed.implementation && parsed.implementation.length > 0) {
-      const implCount = parsed.implementation.length;
-      const implLabel = implCount === 1 ? 'implementation:' : `implementations (${implCount}):`;
-
-      // Add blank line before implementation section for visual separation
-      this.blockLine('');
-
-      // Show first few implementations inline, collapse rest
-      const maxShow = this.expanded ? parsed.implementation.length : 5;
-      const shown = parsed.implementation.slice(0, maxShow);
-      const remaining = parsed.implementation.length - maxShow;
-
-      this.blockLine(theme.fg('toolArgs', implLabel));
-
-      for (const loc of shown) {
-        const parsedLoc = this.parseLspLocation(loc);
-        const displayLoc = parsedLoc
-          ? fileLink(
-              theme.fg('toolOutput', parsedLoc.shortPath + ':' + parsedLoc.lineCol),
-              parsedLoc.absPath,
-              parsedLoc.line,
-            )
-          : theme.fg('toolOutput', loc);
-        const implLine = displayLoc;
-        this.blockLine(truncateAnsi(implLine, maxLineWidth));
-      }
-
-      if (remaining > 0 && !this.expanded) {
-        const moreLine = theme.fg('toolOutput', `... ${remaining} more (ctrl+e to expand)`);
-        this.blockLine(moreLine);
-      }
-    }
-
-    // Show message if no results found
-    if (!parsed.hover && !parsed.diagnostics?.length && !parsed.definition?.length && !parsed.implementation?.length) {
-      this.blockLine(theme.fg('muted', 'No hover, diagnostics, definition, or implementation results'));
-    }
-
-    this.endBlock(footerText);
-  }
-
-  /**
-   * Parse an LSP location string like "$cwd/path:Lline:Cchar" into components.
-   */
-  private parseLspLocation(
-    location: string,
-  ): { absPath: string; shortPath: string; line: number; lineCol: string } | null {
-    // Match patterns like:
-    // - "$cwd/packages/core/src/foo.ts:L10:C5"
-    // - "/absolute/path/to/file.ts:L1:C1"
-    // - "path/to/file.ts:L10:C5"
-    const match = location.match(/^(.+?):L(\d+):C(\d+)$/);
-    if (!match) return null;
-
-    const rawPath = match[1]!;
-    const line = parseInt(match[2]!, 10);
-    const lineCol = `L${match[2]}:C${match[3]}`;
-
-    // Resolve to absolute path
-    let absPath: string;
-    let shortPath: string;
-    if (rawPath.startsWith('$cwd/')) {
-      absPath = process.cwd() + '/' + rawPath.slice(5);
-      shortPath = rawPath.slice(5); // Strip $cwd/ prefix
-    } else if (rawPath.startsWith('~')) {
-      absPath = os.homedir() + rawPath.slice(1);
-      shortPath = shortenPath(absPath);
-    } else if (rawPath.startsWith('/')) {
-      absPath = rawPath;
-      shortPath = absPath.startsWith(process.cwd() + '/')
-        ? absPath.slice(process.cwd().length + 1)
-        : shortenPath(absPath);
-    } else {
-      absPath = process.cwd() + '/' + rawPath;
-      shortPath = rawPath;
-    }
-
-    return { absPath, shortPath, line, lineCol };
   }
 
   private renderTaskWriteEnhanced(): void {
@@ -2622,79 +1743,6 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     }
 
     this.endBlock(footerText);
-  }
-
-  private renderWebSearchEnhanced(): void {
-    const argsObj = this.args as Record<string, unknown> | undefined;
-    const action = argsObj?.action as Record<string, unknown> | undefined;
-    let query = argsObj?.query ? String(argsObj.query) : action?.query ? String(action.query) : '';
-    // Fallback: extract query from result content (OpenAI format: { action: { query } })
-    if (!query && this.result) {
-      try {
-        const raw = this.getFormattedOutput();
-        const parsed = JSON.parse(raw);
-        if (parsed?.action?.query) query = String(parsed.action.query);
-      } catch {
-        /* ignore */
-      }
-    }
-    const status = this.getStatusIndicator();
-
-    const queryDisplay = query ? ` ${theme.fg('toolArgs', `"${query}"`)}` : '';
-    const footerText = `${theme.bold(theme.fg('toolTitle', 'web_search'))}${queryDisplay}${status}`;
-
-    if (!this.result || this.isPartial) {
-      this.startBlock();
-      this.endBlock(footerText);
-      return;
-    }
-
-    if (this.result.isError) {
-      this.renderErrorResult(footerText);
-      return;
-    }
-
-    // Parse search results and format as a clean list of titles + URLs
-    const output = this.formatWebSearchResults();
-    if (output) {
-      const termWidth = this.renderWidth;
-      const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
-
-      // Empty line padding above
-      this.addLeadingPadding();
-
-      // Top border
-      this.startBlock();
-
-      let lines = output.split('\n');
-
-      // Limit lines when collapsed
-      const collapsedLines = this.getCollapsedLineLimit(10);
-      const totalLines = lines.length;
-      const hasMore = !this.expanded && totalLines > collapsedLines + 1;
-
-      if (hasMore) {
-        lines = lines.slice(0, collapsedLines);
-      }
-
-      const borderedLines = lines.map(line => {
-        const truncated = truncateAnsi(line, maxLineWidth);
-        return theme.fg('toolOutput', truncated);
-      });
-      this.blockLines(borderedLines);
-
-      // Show truncation indicator
-      if (hasMore) {
-        const remaining = totalLines - collapsedLines;
-        this.blockLine(theme.fg('muted', `... ${remaining} more lines (ctrl+e to expand)`));
-      }
-
-      // Bottom border with tool info
-      this.endBlock(footerText);
-    } else {
-      this.startBlock();
-      this.endBlock(footerText);
-    }
   }
 
   /**
@@ -2779,43 +1827,6 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     return outcome ? `Outcome: ${outcome}` : '';
   }
 
-  private renderAgentSignalSendEnhanced(): void {
-    // Panel indent (2) + field indent (2) + right margin (2)
-    const maxLineWidth = Math.max(10, this.renderWidth - BOX_INDENT * 2 - 6);
-    const args = this.args as Record<string, unknown> | undefined;
-    const target = sanitizeAnsiForRendering(typeof args?.targetId === 'string' ? args.targetId : 'unknown peer');
-    const priority = sanitizeAnsiForRendering(typeof args?.priority === 'string' ? args.priority : 'medium');
-    const expectsReply = args?.expectsReply === true ? 'yes' : 'no';
-    const message = sanitizeAnsiForRendering(this.getFirstStringArg('message'));
-    const outcome = sanitizeAnsiForRendering(this.getFormattedOutput());
-    const status = this.getStatusIndicator();
-    const footerText = `${theme.bold(theme.fg('toolTitle', MC_TOOLS.AGENT_SIGNAL_SEND))}${status}`;
-
-    const renderField = (label: string, value: string, preserveMessageFormatting = false): void => {
-      const displayValue = value || '—';
-      const lines = preserveMessageFormatting
-        ? this.wrapAgentSignalMessageLines(displayValue, maxLineWidth)
-        : this.wrapPreviewLines(displayValue, maxLineWidth, maxLineWidth);
-      this.blockLine(`${theme.fg('toolArgs', `${label}:`)}`);
-      for (const line of lines) {
-        this.blockLine(`  ${theme.fg('text', line)}`);
-      }
-    };
-
-    this.startBlock();
-    renderField('target', target);
-    this.blockLine(
-      `${theme.fg('toolArgs', 'priority:')} ${theme.fg('text', priority)}  ${theme.fg('toolArgs', 'expects reply:')} ${theme.fg('text', expectsReply)}`,
-    );
-    this.blockLine('');
-    renderField('message', message, true);
-    if (outcome) {
-      this.blockLine('');
-      renderField('outcome', outcome);
-    }
-    this.endBlock(footerText);
-  }
-
   private renderGenericToolEnhanced(): void {
     const status = this.getStatusIndicator();
 
@@ -2847,7 +1858,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
       // Empty line padding above
-      this.addLeadingPadding();
+      this.contentBox.addChild(new Text('', 0, 0));
 
       // Top border
       this.startBlock();
@@ -3209,20 +2220,6 @@ function getPlainCodeFromViewOutput(content: string, startLine?: number): string
   return codeLines.join('\n');
 }
 
-/** Strip line number formatting (cat -n or workspace →) and apply syntax highlighting */
-function highlightCode(content: string, path: string, startLine?: number, hasLineNumbers = true): string {
-  // Only view output carries line numbers; stripping them from file content would eat a leading "1." etc.
-  const code = hasLineNumbers ? getPlainCodeFromViewOutput(content, startLine) : content.replace(/\n+$/, '');
-  try {
-    return highlight(code, {
-      language: getLanguageFromPath(path),
-      ignoreIllegals: true,
-      theme: codeHighlightTheme(),
-    });
-  } catch {
-    return code;
-  }
-}
 /** Parse a `Name: message\n  at ...` error string into an Error object.
  *  Returns null if the content does not look like a JavaScript Error.
  *  Preserves the behaviour of the original `/^([A-Z][a-zA-Z]*Error):\s*(.+)$/m`

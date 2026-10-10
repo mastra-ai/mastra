@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MastraFGAPermissions } from '../../../../auth/ee';
 import { executeAdoptedBackgroundOperation } from '../../../../background-tasks/adoption';
 import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
@@ -42,6 +43,7 @@ import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
 import { DurableStepIds } from '../../constants';
+import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
@@ -636,6 +638,13 @@ export function createDurableToolCallStep() {
 
       const toolsForTransform = globalRunRegistry.get(runId)?.tools ?? rebuiltTools;
       const messageList: MessageList | undefined = globalRunRegistry.get(runId)?.messageList;
+      // Hold suspension chunks/events until the engine has saved the suspended
+      // snapshot, when the running engine supports that (#26435).
+      const publishAfterPersist = async (publish: () => Promise<void>) => {
+        const pending = globalRunRegistry.get(runId)?.pendingSuspensionEvents;
+        if (pending) pending.push(publish);
+        else await publish();
+      };
       let resumeMessageList = messageList;
       // A durable engine can replay the completed LLM step on a cold resume,
       // so its runtime rehydration never runs before this suspended tool step.
@@ -669,6 +678,30 @@ export function createDurableToolCallStep() {
       }
 
       const doFlush = async (messagesToFlush = messageList) => {
+        if (
+          saveQueueManager &&
+          messagesToFlush &&
+          memory &&
+          state?.threadId &&
+          state.resourceId &&
+          !state.memoryConfig?.readOnly
+        ) {
+          const authorizationRequestContext =
+            registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, requestContext);
+          const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
+            authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
+              mastra: mastra as Mastra | undefined,
+              user: authorizationRequestContext.get('user'),
+              threadId: state.threadId!,
+              resourceId: state.resourceId!,
+              agentId: initData.agentId,
+              requestContext: authorizationRequestContext,
+              permission,
+              actor: agentOptions.actor,
+            });
+          await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
+          if (!threadExists) await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
+        }
         await flushMessagesBeforeSuspension({
           saveQueueManager,
           messageList: messagesToFlush,
@@ -907,18 +940,20 @@ export function createDurableToolCallStep() {
               logger: logger as any,
             },
           );
-          await emitChunkEvent(pubsub, runId, approvalChunk);
+          await publishAfterPersist(() => emitChunkEvent(pubsub, runId, approvalChunk));
         }
 
         // Emit suspended event for the stream adapter
         if (pubsub) {
-          await emitSuspendedEvent(pubsub, runId, {
-            toolCallId,
-            toolName,
-            args,
-            type: 'approval',
-            resumeSchema: approvalResumeSchema,
-          });
+          await publishAfterPersist(() =>
+            emitSuspendedEvent(pubsub, runId, {
+              toolCallId,
+              toolName,
+              args,
+              type: 'approval',
+              resumeSchema: approvalResumeSchema,
+            }),
+          );
         }
 
         // Add approval metadata to message before persisting
@@ -1229,17 +1264,19 @@ export function createDurableToolCallStep() {
                   logger: logger as any,
                 },
               );
-              await emitChunkEvent(pubsub, runId, approvalChunk);
+              await publishAfterPersist(() => emitChunkEvent(pubsub, runId, approvalChunk));
             }
 
             if (pubsub) {
-              await emitSuspendedEvent(pubsub, runId, {
-                toolCallId,
-                toolName: approvalToolName,
-                args: approvalArgs,
-                type: 'approval',
-                resumeSchema: approvalResumeSchema,
-              });
+              await publishAfterPersist(() =>
+                emitSuspendedEvent(pubsub, runId, {
+                  toolCallId,
+                  toolName: approvalToolName,
+                  args: approvalArgs,
+                  type: 'approval',
+                  resumeSchema: approvalResumeSchema,
+                }),
+              );
             }
 
             // Add approval metadata to message before persisting
@@ -1296,9 +1333,8 @@ export function createDurableToolCallStep() {
                   logger: logger as any,
                 },
               );
-              await emitChunkEvent(pubsub, runId, suspensionChunk);
-
-              await emitSuspendedEvent(pubsub, runId, suspendedEventData);
+              await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
+              await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
             }
 
             // Add suspension metadata to message before persisting

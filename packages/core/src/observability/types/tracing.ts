@@ -1624,6 +1624,13 @@ export interface IModelSpanTracker {
   startInference?(payload?: StepStartPayload): void;
 
   /**
+   * End the open MODEL_INFERENCE span as interrupted, keeping the MODEL_STEP open.
+   * Called when a queued signal cancels the model request so its replacement
+   * opens its own inference span under the same step.
+   */
+  interruptInference?(): void;
+
+  /**
    * Set the request-side context applied to subsequent MODEL_INFERENCE spans
    * (parameters, providerOptions, availableTools, tools, toolChoice, responseFormat).
    * Call after input processors have finalised the tool set, just before

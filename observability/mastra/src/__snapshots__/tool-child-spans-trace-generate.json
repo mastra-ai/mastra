@@ -4,6 +4,7 @@
     "└── model_generation: \"llm: 'mock-model-id'\"",
     "    ├── model_step: \"step: 0\"",
     "    │   ├── processor_run: \"llm request processor: provider-history-compat\"",
+    "    │   ├── processor_run: \"llm request processor: unsupported-file-handler\"",
     "    │   ├── model_inference: \"inference: 0\"",
     "    │   │   ├── model_chunk: \"chunk: 'tool-call'\"",
     "    │   │   └── model_chunk: \"chunk: 'tool-result'\"",
@@ -11,6 +12,7 @@
     "    │       └── generic: \"tool-child-operation\"",
     "    └── model_step: \"step: 1\"",
     "        ├── processor_run: \"llm request processor: provider-history-compat\"",
+    "        ├── processor_run: \"llm request processor: unsupported-file-handler\"",
     "        └── model_inference: \"inference: 1\"",
     "            └── model_chunk: \"chunk: 'text'\""
   ],
@@ -241,6 +243,51 @@
                   "span": {
                     "id": "<span-5>",
                     "traceId": "<trace-1>",
+                    "name": "llm request processor: unsupported-file-handler",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "input_processor",
+                    "entityId": "unsupported-file-handler",
+                    "attributes": {
+                      "processorPhase": "llmRequest",
+                      "processorExecutor": "legacy",
+                      "processorIndex": 2
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You use tools that create child spans"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Use child span tool to process test-data"
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 0,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-6>",
+                    "traceId": "<trace-1>",
                     "name": "inference: 0",
                     "type": "model_inference",
                     "completed": true,
@@ -312,14 +359,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-6>",
+                        "id": "<span-7>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'tool-call'",
                         "type": "model_chunk",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-5>",
+                        "parentId": "<span-6>",
                         "entityType": "agent",
                         "entityId": "child-span-agent",
                         "attributes": {
@@ -341,14 +388,14 @@
                     },
                     {
                       "span": {
-                        "id": "<span-7>",
+                        "id": "<span-8>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'tool-result'",
                         "type": "model_chunk",
                         "completed": true,
                         "isEvent": true,
                         "isRootSpan": false,
-                        "parentId": "<span-5>",
+                        "parentId": "<span-6>",
                         "entityType": "agent",
                         "entityId": "child-span-agent",
                         "attributes": {
@@ -367,7 +414,7 @@
                 },
                 {
                   "span": {
-                    "id": "<span-8>",
+                    "id": "<span-9>",
                     "traceId": "<trace-1>",
                     "name": "tool: 'childSpanTool'",
                     "type": "tool_call",
@@ -397,14 +444,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-9>",
+                        "id": "<span-10>",
                         "traceId": "<trace-1>",
                         "name": "tool-child-operation",
                         "type": "generic",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-8>",
+                        "parentId": "<span-9>",
                         "entityType": "tool",
                         "entityId": "childSpanTool",
                         "metadata": {
@@ -424,7 +471,7 @@
             },
             {
               "span": {
-                "id": "<span-10>",
+                "id": "<span-11>",
                 "traceId": "<trace-1>",
                 "name": "step: 1",
                 "type": "model_step",
@@ -486,14 +533,14 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-11>",
+                    "id": "<span-12>",
                     "traceId": "<trace-1>",
                     "name": "llm request processor: provider-history-compat",
                     "type": "processor_run",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-10>",
+                    "parentId": "<span-11>",
                     "entityType": "input_processor",
                     "entityId": "provider-history-compat",
                     "attributes": {
@@ -563,14 +610,91 @@
                 },
                 {
                   "span": {
-                    "id": "<span-12>",
+                    "id": "<span-13>",
+                    "traceId": "<trace-1>",
+                    "name": "llm request processor: unsupported-file-handler",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-11>",
+                    "entityType": "input_processor",
+                    "entityId": "unsupported-file-handler",
+                    "attributes": {
+                      "processorPhase": "llmRequest",
+                      "processorExecutor": "legacy",
+                      "processorIndex": 2
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You use tools that create child spans"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Use child span tool to process test-data"
+                            }
+                          ]
+                        },
+                        {
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "tool-call",
+                              "toolCallId": "call-child-span-1",
+                              "toolName": "childSpanTool",
+                              "input": {
+                                "input": "test-data"
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "role": "tool",
+                          "content": [
+                            {
+                              "type": "tool-result",
+                              "toolCallId": "call-child-span-1",
+                              "toolName": "childSpanTool",
+                              "output": {
+                                "type": "json",
+                                "value": {
+                                  "output": "Tool processed: test-data"
+                                }
+                              },
+                              "input": {
+                                "input": "test-data"
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 1,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-14>",
                     "traceId": "<trace-1>",
                     "name": "inference: 1",
                     "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-10>",
+                    "parentId": "<span-11>",
                     "entityType": "agent",
                     "entityId": "child-span-agent",
                     "attributes": {
@@ -628,14 +752,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-13>",
+                        "id": "<span-15>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'text'",
                         "type": "model_chunk",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-12>",
+                        "parentId": "<span-14>",
                         "entityType": "agent",
                         "entityId": "child-span-agent",
                         "attributes": {

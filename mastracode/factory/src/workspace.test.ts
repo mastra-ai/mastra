@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
+  /** When false, the stub models a provider with no separate physical id (undefined `sandboxId`). */
+  physicalId: true,
   createSandbox: vi.fn((ctx: { sessionId: string; sandboxId?: string }) => {
     // Models a well-behaved provider: lazy start via ensureRunning() on the
     // first command/info call (coalesced, failures never latch), the hook
@@ -29,7 +31,7 @@ const mocks = vi.hoisted(() => ({
       // Physical, reattachable VM id — distinct from the logical `id` — as a
       // real provider (e.g. Railway) exposes. Reflects the reattach id when the
       // callback is given one, else the freshly provisioned VM id.
-      sandboxId: ctx.sandboxId ?? `vm-${ctx.sessionId}`,
+      sandboxId: mocks.physicalId ? (ctx.sandboxId ?? `vm-${ctx.sessionId}`) : undefined,
       provider: mocks.localRoot ? 'local' : 'stub',
       status: 'pending',
       ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
@@ -1194,6 +1196,28 @@ describe('GitHub session workspace preparation', () => {
     await restarted.workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-session-a' }));
+  });
+
+  it('persists no sandbox id for a provider without a physical one, so resume provisions by logical id', async () => {
+    mocks.physicalId = false;
+    try {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      const session = addSession({ id: 'session-a' });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      // The logical id must not be stored as a reattach hint: handed back as
+      // `sandboxId`, the provider would ask about a resource it never issued.
+      expect(session.sandboxId).toBeNull();
+
+      __clearSessionSandboxesForTests();
+      mocks.createSandbox.mockClear();
+      const restarted = await createLocalFactory();
+      await restarted.workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: undefined }));
+    } finally {
+      mocks.physicalId = true;
+    }
   });
 
   it('does not register GitHub refresh after an infrastructure setup failure', async () => {

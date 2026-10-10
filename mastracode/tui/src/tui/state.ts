@@ -178,6 +178,8 @@ export interface MastraTUIOptions {
 
   /** Session-scoped, read-only Subconscious knowledge inspection capability. */
   knowledgeInspector?: KnowledgeInspector;
+  /** Why `knowledgeInspector` is absent, as reported by startup. */
+  knowledgeInspectorUnavailableReason?: string;
 
   /** Process-local scheduler behind /schedules. */
   threadScheduler?: ThreadScheduler;
@@ -253,10 +255,11 @@ export interface TUIState {
   pendingSubagents: Map<string, SubagentExecutionComponent>;
   toolOutputExpanded: boolean;
   hideThinkingBlock: boolean;
-  quietMode: boolean;
-  quietModeMaxToolPreviewLines: number;
+  previewLines: number;
   /** Active goal judge status-line override while evaluating the last turn. */
   activeGoalJudge?: { modelId: string; abortController: AbortController; component: JudgeDisplayComponent };
+  /** OM role model shown in the status line, resolved once per observing/reflecting phase. */
+  omStatusLineModel?: { status: 'observing' | 'reflecting'; modelId: string | undefined };
 
   // ── Thread / conversation ─────────────────────────────────────────────
   /** True when we want a new thread but haven't created it yet */
@@ -347,7 +350,6 @@ export interface TUIState {
   // ── Observational Memory ──────────────────────────────────────────────
   omProgressComponent?: OMProgressComponent;
   activeOMMarker?: OMMarkerComponent;
-  activeBufferingMarker?: OMMarkerComponent;
   activeActivationMarker?: OMMarkerComponent;
   activeActivationData?: OMMarkerData;
   activeActivationProviderChangeMarker?: OMMarkerComponent;
@@ -456,8 +458,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     pendingSubagents: new Map(),
     toolOutputExpanded: false,
     hideThinkingBlock: true,
-    quietMode: false,
-    quietModeMaxToolPreviewLines: 2,
+    previewLines: 2,
 
     // Thread / conversation
     pendingNewThread: false,

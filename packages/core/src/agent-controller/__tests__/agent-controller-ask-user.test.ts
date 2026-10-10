@@ -214,6 +214,13 @@ describe('AgentController: ask_user native suspension', () => {
     await vi.waitFor(() => expect(firstEvents.some(event => event.type === 'tool_suspended')).toBe(true));
     expect(pubsub.retainedTopics()).not.toEqual([]);
 
+    // Detach only once the run is parked in storage: detaching must leave a
+    // parked run resumable by another controller.
+    const workflowsStore = await storage.getStore('workflows');
+    await vi.waitFor(async () => {
+      const { runs } = await workflowsStore!.listWorkflowRuns({ status: 'suspended' });
+      expect(JSON.stringify(runs)).toContain('toolCallSuspended');
+    });
     await firstSession.thread.detachFromCurrent();
     pubsub = pubsub.restart();
     agentThreadStreamRuntime.resetForTests();

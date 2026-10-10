@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
 import {
   getAvailableModePacks,
   getAvailableOmPacks,
+  resolveAutoOMModelId,
   resolveProviderOMDefault,
   selectPreferredOMPack,
   type ProviderAccess,
@@ -20,6 +21,10 @@ function providerAccess(overrides: Partial<ProviderAccess> = {}): ProviderAccess
     ...overrides,
   };
 }
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('getAvailableModePacks', () => {
   it('uses GPT-5.6 for OpenAI plan and build modes while keeping fast on GPT-5.4 mini', () => {
@@ -103,8 +108,8 @@ describe('getAvailableModePacks', () => {
 describe('OM packs', () => {
   it.each([
     ['anthropic', 'anthropic', 'anthropic/claude-haiku-4-5'],
-    ['openai-codex', 'openai', 'openai/gpt-5.4-mini'],
-    ['openai', 'openai', 'openai/gpt-5.4-mini'],
+    ['openai-codex', 'openai', 'openai/gpt-6-luna'],
+    ['openai', 'openai', 'openai/gpt-6-luna'],
     ['google', 'gemini', 'google/gemini-3.5-flash'],
   ])('maps %s to the %s OM pack', (providerId, packId, modelId) => {
     expect(resolveProviderOMDefault(providerId)).toMatchObject({ id: packId, modelId });
@@ -115,6 +120,23 @@ describe('OM packs', () => {
       id: 'custom',
       modelId: 'xai/grok-4.5',
     });
+  });
+
+  it.each([
+    ['anthropic/claude-opus-4-8', 'anthropic/claude-haiku-4-5'],
+    ['openai-codex/gpt-5.6-sol', 'openai/gpt-6-luna'],
+    ['mastracode/google/gemini-3.1-pro-preview', 'google/gemini-3.5-flash'],
+    ['mastra/openai/gpt-5.5', 'mastra/openai/gpt-6-luna'],
+    ['custom-provider/custom-model', 'custom-provider/custom-model'],
+    ['mastracode/custom-provider/custom-model', 'mastracode/custom-provider/custom-model'],
+  ])('resolves auto from main model %s to %s', (mainModelId, expected) => {
+    vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+    expect(resolveAutoOMModelId(mainModelId)).toBe(expected);
+  });
+
+  it('prefers Mastra Code Gemini Flash for auto when a Google API key is set', () => {
+    vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-key');
+    expect(resolveAutoOMModelId('anthropic/claude-opus-4-8')).toBe('google/gemini-3.5-flash');
   });
 
   it('lists only reachable packs, labelled by how each provider is reached', () => {
@@ -144,7 +166,7 @@ describe('selectPreferredOMPack', () => {
   it('prefers the matching reachable provider over earlier packs', () => {
     const pack = selectPreferredOMPack(providerAccess({ anthropic: 'oauth', openai: 'oauth' }), 'openai-codex');
 
-    expect(pack).toMatchObject({ id: 'openai', modelId: 'openai/gpt-5.4-mini' });
+    expect(pack).toMatchObject({ id: 'openai', modelId: 'openai/gpt-6-luna' });
   });
 
   it('ignores a selected provider that is not reachable', () => {

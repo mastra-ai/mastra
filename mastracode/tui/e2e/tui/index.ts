@@ -96,12 +96,14 @@ import {
 } from './initial-prompt.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { knowledgeBrowserScenario } from './knowledge-browser.js';
+import { legacySettingsNoPromptScenario } from './legacy-settings-no-prompt.js';
+import { legacySettingsUpgradeScenario } from './legacy-settings-upgrade.js';
 import { legacyThreadModelRestoreScenario, savedThreadModelRestoreScenario } from './legacy-thread-model-restore.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
 import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
 import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
+import { loginKeepsOmAutoScenario } from './login-keeps-om-auto.js';
 import { loginPreservesModelPackScenario } from './login-preserves-model-pack.js';
-import { loginSeedsOmDefaultScenario } from './login-seeds-om-default.js';
 import { mcpDisableEnableScenario } from './mcp-disable-enable.js';
 import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
 import { mcpLongRunningToolScenario } from './mcp-long-running-tool.js';
@@ -117,6 +119,7 @@ import { modelSearchScenario } from './model-search.js';
 import { modelSelectionApiKeyPromptScenario } from './model-selection-api-key-prompt.js';
 import { modelSelectionCancelEnvScenario } from './model-selection-cancel-env.js';
 import { modelsPackActivationPersistenceScenario } from './models-pack-activation-persistence.js';
+import { modelsPackMemoryAutoScenario } from './models-pack-memory-auto.js';
 import { modelsPackMemoryModelScenario } from './models-pack-memory-model.js';
 import { multiAccountLoginScenario } from './multi-account-login.js';
 import { notificationInboxCrudFlowScenario } from './notification-inbox-crud-flow.js';
@@ -126,6 +129,7 @@ import { notificationSignalInterruptScenario } from './notification-signal-inter
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { notifyInputRequestHookScenario } from './notify-input-request-hook.js';
 import { omAttachmentObservationScenario } from './om-attachment-observation.js';
+import { omAutoSelectionScenario } from './om-auto-selection.js';
 import { omGlobalSettingsPersistenceScenario } from './om-global-settings-persistence.js';
 import { omModelOverrideReloadScenario } from './om-model-override-reload.js';
 import { omPackStartupRestoreScenario } from './om-pack-startup-restore.js';
@@ -160,6 +164,7 @@ import {
   pluginsScaffoldInstallToolScenario,
   pluginsStreamingToolOutputScenario,
 } from './plugins.js';
+import { previewLinesSettingsScenario } from './preview-lines-settings.js';
 import { processShortcutsScenario } from './process-shortcuts.js';
 import { profileCommandScenario } from './profile-command.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
@@ -168,11 +173,6 @@ import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
 import { pruneCommandScenario } from './prune-command.js';
 import { pruneRenderStateScenario } from './prune-render-state.js';
-import { quietSettingsScenario } from './quiet-settings.js';
-import { quietShellDescriptionScenario } from './quiet-shell-description.js';
-import { quietShellGroupedScenario } from './quiet-shell-grouped.js';
-import { quietStreamingPreviewHeightScenario } from './quiet-streaming-preview-height.js';
-import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
 import { resourceidDriftPromptAcceptScenario } from './resourceid-drift-prompt-accept.js';
@@ -186,6 +186,8 @@ import { setupCompletionPersistenceScenario } from './setup-completion-persisten
 import { setupCustomPackCompletionScenario } from './setup-custom-pack-completion.js';
 import { setupLoginRefreshScenario } from './setup-login-refresh.js';
 import { setupNestedModelSelectorScenario } from './setup-nested-model-selector.js';
+import { shellDescriptionScenario } from './shell-description.js';
+import { shellGroupedScenario } from './shell-grouped.js';
 import { shellPassthroughConfiguredSettingsScenario } from './shell-passthrough-configured-settings.js';
 import { shellPassthroughDuringRunScenario } from './shell-passthrough-during-run.js';
 import { shellPassthroughEnvOverrideScenario } from './shell-passthrough-env-override.js';
@@ -206,6 +208,7 @@ import { storageFallbackHistoryReloadScenario } from './storage-fallback-history
 import { storageSettingsScenario } from './storage-settings.js';
 import { storageStartupPgFallbackScenario } from './storage-startup-pg-fallback.js';
 import { streamErrorRetryScenario } from './stream-error-retry.js';
+import { streamingPreviewHeightScenario } from './streaming-preview-height.js';
 import { streamingRenderStabilityScenario } from './streaming-render-stability.js';
 import { streamingToolArgsScenario } from './streaming-tool-args.js';
 import { subagentDelegationScenario } from './subagent-delegation.js';
@@ -220,6 +223,7 @@ import { taskPromptContextNextTurnScenario } from './task-prompt-context-next-tu
 import { terminalResizeReflowScenario } from './terminal-resize-reflow.js';
 import { thinkPickerPerModelScenario } from './think-picker-per-model.js';
 import { threadHistoryScenario } from './thread-history.js';
+import { toolHistoryParityScenario } from './tool-history-parity.js';
 import { toolHistoryReloadScenario } from './tool-history-reload.js';
 import { toolSchemaCompatScenario } from './tool-schema-compat.js';
 import { toolSuspensionSameRunResumeScenario } from './tool-suspension-same-run-resume.js';
@@ -338,7 +342,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'lifecycle-hooks-events': lifecycleHooksEventsScenario,
   'login-dialog-masked-input': loginDialogMaskedInputScenario,
   'login-preserves-model-pack': loginPreservesModelPackScenario,
-  'login-seeds-om-default': loginSeedsOmDefaultScenario,
+  'login-keeps-om-auto': loginKeepsOmAutoScenario,
   'modal-and-shell': modalAndShellScenario,
   'mcp-disable-enable': mcpDisableEnableScenario,
   'mcp-http-tool-call': mcpHttpToolCallScenario,
@@ -355,6 +359,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'model-selection-cancel-env': modelSelectionCancelEnvScenario,
   'mode-switch-applies-pack-model': modeSwitchAppliesPackModelScenario,
   'models-pack-activation-persistence': modelsPackActivationPersistenceScenario,
+  'models-pack-memory-auto': modelsPackMemoryAutoScenario,
   'models-pack-memory-model': modelsPackMemoryModelScenario,
   'notification-inbox-crud-flow': notificationInboxCrudFlowScenario,
   'notification-inbox-reload': notificationInboxReloadScenario,
@@ -364,6 +369,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notify-input-request-hook': notifyInputRequestHookScenario,
   'knowledge-browser': knowledgeBrowserScenario,
   'om-attachment-observation': omAttachmentObservationScenario,
+  'om-auto-selection': omAutoSelectionScenario,
   'om-global-settings-persistence': omGlobalSettingsPersistenceScenario,
   'om-model-override-reload': omModelOverrideReloadScenario,
   'om-pack-startup-restore': omPackStartupRestoreScenario,
@@ -404,12 +410,14 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'prune-command': pruneCommandScenario,
   'prune-render-state': pruneRenderStateScenario,
   'cross-agent-settings': crossAgentSettingsScenario,
-  'quiet-settings': quietSettingsScenario,
-  'quiet-shell-description': quietShellDescriptionScenario,
-  'quiet-shell-grouped': quietShellGroupedScenario,
+  'legacy-settings-no-prompt': legacySettingsNoPromptScenario,
+  'legacy-settings-upgrade': legacySettingsUpgradeScenario,
+  'preview-lines-settings': previewLinesSettingsScenario,
+  'shell-description': shellDescriptionScenario,
+  'shell-grouped': shellGroupedScenario,
   'web-search-provider-settings': webSearchProviderSettingsScenario,
-  'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,
-  'quiet-tool-history-parity': quietToolHistoryParityScenario,
+  'streaming-preview-height': streamingPreviewHeightScenario,
+  'tool-history-parity': toolHistoryParityScenario,
   'report-issue-command': reportIssueCommandScenario,
   'request-access-modal': requestAccessModalScenario,
   'state-commands': stateCommandsScenario,

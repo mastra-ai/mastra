@@ -7,12 +7,6 @@ packages:
 
 # QuickJsCodeModeTransport
 
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
-
 The `QuickJsCodeModeTransport` class runs [Code mode](/docs/agents/code-mode) programs in an in-process [QuickJS](https://bellard.org/quickjs/) runtime compiled to WebAssembly. The runtime is the execution boundary, so no workspace sandbox is required: the program has no filesystem, network, process, or module access. Its only capabilities are the `external_*` functions, which call back into the real tools on the host.
 
 Unlike [`IsolatedVmCodeModeTransport`](/reference/tools/isolated-vm-transport), this transport installs no native binaries and needs no Node.js flags, so it runs on serverless platforms that disallow both. The tradeoff is speed: see [Choosing a transport](#choosing-a-transport).

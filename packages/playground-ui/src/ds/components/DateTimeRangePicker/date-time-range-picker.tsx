@@ -1,14 +1,11 @@
-import { isValid, parse } from 'date-fns';
-import { CalendarIcon, Check } from 'lucide-react';
-import { useId, useState } from 'react';
+import { CalendarIcon } from 'lucide-react';
+import { useState } from 'react';
 import type { ReactElement } from 'react';
+import { CustomRangeEditor } from './custom-range-editor';
 import { Button } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
-import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
-import { Field, FieldError } from '@/ds/components/Field';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
-import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type DateRangePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
@@ -22,12 +19,6 @@ const DATE_PRESETS: { value: DateRangePreset; label: string; ms?: number }[] = [
   { value: 'last-30d', label: 'Last 30 days', ms: 30 * 24 * 60 * 60 * 1000 },
   { value: 'custom', label: 'Custom range...' },
 ];
-
-function buildDateWithTime(date: Date, timeStr: string): Date | null {
-  const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const combined = parse(timeStr, 'h:mm a', dateOnly);
-  return isValid(combined) ? combined : null;
-}
 
 export interface DateTimeRangePickerProps {
   preset?: DateRangePreset;
@@ -65,27 +56,20 @@ export function DateTimeRangePicker({
   renderTrigger,
 }: DateTimeRangePickerProps) {
   const visiblePresets = presets ? DATE_PRESETS.filter(p => presets.includes(p.value)) : DATE_PRESETS;
-  const fallbackPreset: DateRangePreset = visiblePresets.find(p => p.value !== 'custom')?.value ?? 'all';
   const [customRangeOpen, setCustomRangeOpen] = useState(false);
-  const [draftDateFrom, setDraftDateFrom] = useState<Date | undefined>(dateFrom);
-  const [draftDateTo, setDraftDateTo] = useState<Date | undefined>(dateTo);
-  const [draftTimeFrom, setDraftTimeFrom] = useState('12:00 AM');
-  const [draftTimeTo, setDraftTimeTo] = useState('11:59 PM');
-  const [customRangeError, setCustomRangeError] = useState<string | undefined>();
-  const customRangeErrorId = useId();
+  const [presetMenuOpen, setPresetMenuOpen] = useState(false);
+  // The preset active before "Custom range..." was picked, until a range is applied.
+  // "← Presets" restores it instead of jumping to the first preset in the list.
+  const [presetBeforeCustom, setPresetBeforeCustom] = useState<DateRangePreset | undefined>();
 
-  const datePresetLabel = DATE_PRESETS.find(p => p.value === preset)?.label ?? 'All';
+  // "← Presets" restores the previous preset through the parent, which may apply it a
+  // render later (e.g. a router URL update). Show it right away instead of "custom".
+  const restoringPreset = presetMenuOpen && preset === 'custom' ? presetBeforeCustom : undefined;
+  const shownPreset = restoringPreset ?? preset;
+  const datePresetLabel = DATE_PRESETS.find(p => p.value === shownPreset)?.label ?? 'All';
 
-  const handlePresetSelect = (value: DateRangePreset) => {
+  const applyPreset = (value: DateRangePreset) => {
     onPresetChange?.(value);
-    if (value === 'custom') {
-      setDraftDateFrom(dateFrom);
-      setDraftDateTo(dateTo);
-      setDraftTimeFrom('12:00 AM');
-      setDraftTimeTo('11:59 PM');
-      setCustomRangeOpen(true);
-      return;
-    }
     const entry = DATE_PRESETS.find(p => p.value === value);
     if (entry?.ms) {
       onDateChange?.(new Date(Date.now() - entry.ms), 'from');
@@ -96,25 +80,40 @@ export function DateTimeRangePicker({
     }
   };
 
-  const applyCustomRange = () => {
-    const fromDate = draftDateFrom ? (buildDateWithTime(draftDateFrom, draftTimeFrom) ?? draftDateFrom) : undefined;
-    const toDate = draftDateTo ? (buildDateWithTime(draftDateTo, draftTimeTo) ?? draftDateTo) : undefined;
-    if (fromDate && toDate && fromDate.getTime() > toDate.getTime()) {
-      setCustomRangeError('Start date/time must be before end date/time');
+  const handlePresetSelect = (value: DateRangePreset) => {
+    setPresetMenuOpen(false);
+    if (value === 'custom') {
+      if (preset !== 'custom') setPresetBeforeCustom(preset);
+      onPresetChange?.(value);
+      setCustomRangeOpen(true);
       return;
     }
-    setCustomRangeError(undefined);
+    setPresetBeforeCustom(undefined);
+    applyPreset(value);
+  };
+
+  const applyCustomRange = (fromDate: Date | undefined, toDate: Date | undefined) => {
     if (onDateRangeChange) {
       onDateRangeChange(fromDate, toDate);
     } else {
       onDateChange?.(fromDate, 'from');
       onDateChange?.(toDate, 'to');
     }
+    setPresetBeforeCustom(undefined);
     setCustomRangeOpen(false);
   };
 
-  if (preset === 'custom') {
-    const customLabel = `${dateFrom ? dateFrom.toLocaleDateString() : 'Start'} \u2013 ${dateTo ? dateTo.toLocaleDateString() : 'End'}`;
+  // Back to the preset list. Restores the preset the user came from; an applied custom
+  // range matches no preset, so it stays and the list shows "Custom range..." as current.
+  const showPresets = () => {
+    setCustomRangeOpen(false);
+    if (presetBeforeCustom) applyPreset(presetBeforeCustom);
+    setPresetMenuOpen(true);
+  };
+
+  const customLabel = `${dateFrom ? dateFrom.toLocaleDateString() : 'Start'} \u2013 ${dateTo ? dateTo.toLocaleDateString() : 'End'}`;
+
+  if (shownPreset === 'custom' && !presetMenuOpen) {
     return (
       <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
         {renderTrigger ? (
@@ -127,99 +126,46 @@ export function DateTimeRangePicker({
           </PopoverTrigger>
         )}
         <PopoverContent align="start" className={cn('w-auto p-0')}>
-          <div
-            role="group"
-            aria-label="Custom date range"
-            aria-invalid={customRangeError ? true : undefined}
-            aria-describedby={customRangeError ? customRangeErrorId : undefined}
-            className="flex"
-          >
-            <div className={cn('border-r border-border')}>
-              <Txt as="span" variant="column" tone="muted" className="block px-4 pt-3">
-                Start
-              </Txt>
-              <DatePicker
-                mode="single"
-                selected={draftDateFrom}
-                month={draftDateFrom}
-                onSelect={setDraftDateFrom}
-                disabled={disabled}
-                toDate={draftDateTo}
-              />
-              <TimePicker
-                label="Start time"
-                className="mx-4 mb-3 w-auto"
-                defaultValue={draftTimeFrom}
-                onValueChange={v => {
-                  if (!disabled) setDraftTimeFrom(v);
-                }}
-              />
-            </div>
-            <div>
-              <Txt as="span" variant="column" tone="muted" className="block px-4 pt-3">
-                End
-              </Txt>
-              <DatePicker
-                mode="single"
-                selected={draftDateTo}
-                month={draftDateTo}
-                onSelect={setDraftDateTo}
-                disabled={disabled}
-                fromDate={draftDateFrom}
-              />
-              <TimePicker
-                label="End time"
-                className="mx-4 mb-3 w-auto"
-                defaultValue={draftTimeTo}
-                onValueChange={v => {
-                  if (!disabled) setDraftTimeTo(v);
-                }}
-              />
-            </div>
-          </div>
-          <Field invalid={Boolean(customRangeError)}>
-            <FieldError id={customRangeErrorId} className="px-4 pb-1">
-              {customRangeError}
-            </FieldError>
-          </Field>
-          <div className={cn('flex items-center justify-between px-4 pb-3')}>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={disabled}
-              onClick={() => {
-                setCustomRangeError(undefined);
-                handlePresetSelect(fallbackPreset);
-              }}
-            >
-              &larr; Presets
-            </Button>
-            <Button icon={<Check />} variant="primary" size="sm" onClick={applyCustomRange} disabled={disabled}>
-              Apply
-            </Button>
-          </div>
+          <CustomRangeEditor
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            disabled={disabled}
+            onApply={applyCustomRange}
+            onShowPresets={showPresets}
+          />
         </PopoverContent>
       </Popover>
     );
   }
 
+  const triggerLabel = shownPreset === 'custom' ? customLabel : datePresetLabel;
+
   return (
-    <DropdownMenu>
+    <DropdownMenu open={presetMenuOpen} onOpenChange={setPresetMenuOpen}>
       {renderTrigger ? (
-        <DropdownMenu.Trigger render={renderTrigger({ label: datePresetLabel, disabled })} />
+        <DropdownMenu.Trigger render={renderTrigger({ label: triggerLabel, disabled })} />
       ) : (
         <DropdownMenu.Trigger asChild>
           <Button size={size} disabled={disabled} icon={<CalendarIcon />}>
-            {datePresetLabel}
+            {triggerLabel}
           </Button>
         </DropdownMenu.Trigger>
       )}
       <DropdownMenu.Content align="start">
-        {visiblePresets.map(p => (
-          <DropdownMenu.Item key={p.value} onSelect={() => handlePresetSelect(p.value)}>
-            {p.label}
-          </DropdownMenu.Item>
-        ))}
+        {/* Items select on click (not onValueChange) so re-picking the checked
+            "Custom range..." still reopens the range editor. */}
+        <DropdownMenu.RadioGroup value={shownPreset}>
+          {visiblePresets.map(p => (
+            <DropdownMenu.RadioItem
+              key={p.value}
+              value={p.value}
+              closeOnClick
+              onClick={() => handlePresetSelect(p.value)}
+            >
+              {p.label}
+            </DropdownMenu.RadioItem>
+          ))}
+        </DropdownMenu.RadioGroup>
       </DropdownMenu.Content>
     </DropdownMenu>
   );

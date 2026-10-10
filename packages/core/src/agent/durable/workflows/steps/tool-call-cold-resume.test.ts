@@ -66,7 +66,7 @@ describe('cold durable tool-call resume (#25978)', () => {
         options: {},
         state: { threadId: 'thread-1', resourceId: 'user-1', threadExists: true },
       }),
-      mastra: { getLogger: () => undefined, listTools: () => ({}) },
+      mastra: { getLogger: () => undefined, getServer: () => undefined, listTools: () => ({}) },
       [PUBSUB_SYMBOL]: { publish: vi.fn(), subscribe: vi.fn(), unsubscribe: vi.fn(), flush: vi.fn() },
     });
     expect(result.error).toBeUndefined();
@@ -153,6 +153,7 @@ describe('cold durable tool-call resume (#25978)', () => {
         }),
         mastra: {
           getLogger: () => undefined,
+          getServer: () => undefined,
           listTools: () => ({}),
           getAgentById: () => {
             throw new Error('Agent not registered');

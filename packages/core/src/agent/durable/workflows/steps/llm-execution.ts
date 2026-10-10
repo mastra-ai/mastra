@@ -190,9 +190,8 @@ const durableLLMOutputSchema = z.object({
   modelSpanData: z.any().optional(),
   stepSpanData: z.any().optional(),
   stepFinishPayload: z.any().optional(),
-  // Deferred step-finish chunk for intermediate steps: llm-execution defers
-  // emission so llm-mapping can emit it AFTER tool-result chunks, matching
-  // the regular agent's chunk ordering.
+  // Deferred step-finish chunk carried until the loop predicate has resolved
+  // the actual continuation decision.
   deferredStepFinishChunk: z.any().optional(),
 });
 
@@ -480,6 +479,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           await emitChunkEvent(pubsub, runId, feedbackSignal.toDataPart() as any);
         }
       }
+      // Mirror Agent: later iterations continue the same assistant message behind a step-start
+      // boundary, so sequential tool steps aren't replayed as parallel calls (#26332).
+      const iterationBoundary = previousSteps.length > 0 ? messageList.openStepBoundary().boundary : undefined;
       let terminalAttemptContext:
         | {
             recordTerminalError: (error: unknown) => void;
@@ -518,6 +520,32 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           // once streaming state exists; undefined means nothing streamed yet.
           const textDeltas: string[] = [];
           let materializeStreamedMessages: (() => void) | undefined;
+          let deferredStepFinishChunk: any = null;
+          const prepareDeferredStepFinishChunk = ({
+            reason,
+            isContinued,
+            tripwire,
+          }: {
+            reason?: DurableLLMStepOutput['stepResult']['reason'];
+            isContinued: boolean;
+            tripwire?: DurableLLMStepOutput['stepResult']['tripwire'];
+          }) => {
+            if (!deferredStepFinishChunk) return undefined;
+
+            deferredStepFinishChunk = {
+              ...deferredStepFinishChunk,
+              payload: {
+                ...deferredStepFinishChunk.payload,
+                stepResult: {
+                  ...deferredStepFinishChunk.payload?.stepResult,
+                  ...(reason ? { reason } : {}),
+                  isContinued,
+                },
+                ...(tripwire ? { output: { ...deferredStepFinishChunk.payload?.output, steps: [{ tripwire }] } } : {}),
+              },
+            };
+            return deferredStepFinishChunk;
+          };
           try {
             // Resolve the model - for single model case (no modelList), use resolved model
             // For model list case, try registry first (works with mock models), then config resolution (for Inngest)
@@ -562,6 +590,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // Create model span tracker for MODEL_STEP and MODEL_CHUNK spans
             const modelSpanTracker: IModelSpanTracker | undefined = modelSpan?.createTracker();
+
+            // On remote engines (Inngest) the step's tracingContext span is not part of the
+            // exported trace, so parent client-tool spans on the rebuilt AGENT_RUN span instead.
+            const inputAgentSpanData = (globalRunRegistry.get(runId)?.resumeAgentSpanData ??
+              inputData.agentSpanData) as ExportedSpan<SpanType.AGENT_RUN> | undefined;
+            const agentRunSpan = inputAgentSpanData
+              ? (observability?.rebuildSpan(inputAgentSpanData) as AnySpan | undefined)
+              : undefined;
 
             // Set the step index for continuation (step: 0, 1, 2, ...)
             // This ensures step numbering continues across agentic loop iterations
@@ -911,6 +947,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   prompt: inputMessages,
                   model: currentModel,
                   messageList,
+                  workspace: registryEntry?.workspace,
                   stepNumber: inputData.stepIndex ?? 0,
                   steps: inputData.accumulatedSteps ?? [],
                   retryCount: processorRetryCount,
@@ -1081,10 +1118,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               if (!proxy) return { toolDef };
 
               try {
-                const parentSpan =
-                  tracingContext.currentSpan.type === ('agent_run' as string)
-                    ? tracingContext.currentSpan
-                    : ((tracingContext.currentSpan as any).findParent?.('agent_run') ?? tracingContext.currentSpan);
+                const parentSpan = resolveAgentRunFallback(tracingContext.currentSpan as AnySpan);
                 const clientToolSpan = (parentSpan as any).createChildSpan?.({
                   type: 'client_tool_call',
                   name: `client_tool: '${toolName}'`,
@@ -1119,7 +1153,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const resolveAgentRunFallback = (span: AnySpan): AnySpan =>
               span.type === ('agent_run' as string)
                 ? span
-                : (((span as any).findParent?.('agent_run') ?? span) as AnySpan);
+                : ((agentRunSpan ?? (span as any).findParent?.('agent_run') ?? span) as AnySpan);
 
             const recordProviderToolCall = ({
               toolCallId,
@@ -1390,8 +1424,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             );
             // Wrap with ModelSpanTracker to create/close MODEL_STEP and MODEL_CHUNK spans
             const trackedStream = modelSpanTracker?.wrapStream(stepBoundaryStream) ?? stepBoundaryStream;
-
-            let deferredStepFinishChunk: any = null;
 
             // ── processToolResult support for provider-executed results (#14282 parity port) ──
             // Provider-executed tool results (same-stream or deferred) never reach
@@ -1687,17 +1719,18 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // fatal error is propagated via emitError (mirrors the regular agent's
                 // deferredErrorChunk pattern).
                 //
-                // Defer 'step-finish': for intermediate steps (hasToolCalls) we save it
-                // on the output so llm-mapping can emit it AFTER tool-result chunks,
-                // matching the regular agent's ordering (tool-result → step-finish).
-                // For final steps (no tool calls) we emit it after the assistant message
-                // is added to messageList.
+                // Defer 'step-finish' until the loop predicate resolves whether the run continues.
+                // Carry it through llm-mapping so tool-result chunks are emitted first, matching the
+                // regular agent's ordering (tool-result → step-finish).
+                // Set when output processors ran on this chunk: the processed chunk
+                // (what the client received), or null when a processor dropped it.
+                let processedChunk: typeof clientChunk | null | undefined;
                 if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
                   if (rawChunk.type === 'step-finish') {
                     deferredStepFinishChunk = clientChunk;
                   } else if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
                     try {
-                      await processAndEmitChunk(clientChunk, {
+                      processedChunk = await processAndEmitChunk(clientChunk, {
                         runner: getToolResultRunner(),
                         processorStates: registryEntry.processorStates,
                         observabilityContext: createObservabilityContext(
@@ -1743,23 +1776,27 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 }
 
                 // Collect every chunk for post-stream message building and the
-                // processLLMResponse hook. Always collect — reasoning parts
-                // (including empty spans with providerMetadata carrying
-                // OpenAI itemIds) are required to correctly reconstruct the
-                // assistant message and preserve pairing with subsequent
-                // tool-calls (#19365). The payload always comes from the raw
-                // chunk (internal state is never affected by display-layer
-                // transforms), but the metadata comes from the client chunk:
-                // the payload transform is purely additive metadata
+                // processLLMResponse hook. Collect every chunk an output processor
+                // didn't drop — reasoning parts (including empty spans with
+                // providerMetadata carrying OpenAI itemIds) are required to
+                // correctly reconstruct the assistant message and preserve
+                // pairing with subsequent tool-calls (#19365). When output
+                // processors ran, persist the processed payload so memory holds
+                // exactly what the client streamed (default-loop parity, #26335);
+                // otherwise the raw payload. Metadata comes from the client
+                // chunk: the payload transform is purely additive metadata
                 // (`mastra.toolPayloadTransform`), and buildMessagesFromChunks
                 // layers it into the persisted providerMetadata so transcript
-                // targets apply on recall (L18b). When no transform is
-                // configured the client chunk IS the raw chunk.
-                collectedChunks.push({
-                  type: rawChunk.type,
-                  payload: 'payload' in rawChunk ? rawChunk.payload : undefined,
-                  metadata: (clientChunk as { metadata?: Record<string, unknown> }).metadata,
-                });
+                // targets apply on recall (L18b). Internal state below (tool
+                // args, finish reason, usage) still reads the raw chunk.
+                if (processedChunk !== null) {
+                  const persistedChunk = processedChunk ?? rawChunk;
+                  collectedChunks.push({
+                    type: persistedChunk.type,
+                    payload: 'payload' in persistedChunk ? persistedChunk.payload : undefined,
+                    metadata: (clientChunk as { metadata?: Record<string, unknown> }).metadata,
+                  });
+                }
 
                 if (STEP_CONTENT_CHUNK_TYPES.has(rawChunk.type)) {
                   hasStepContent = true;
@@ -2026,6 +2063,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   },
                   metadata: { modelId: currentModel.modelId },
                   state: typedInput.state,
+                  deferredStepFinishChunk: prepareDeferredStepFinishChunk({ reason: 'abort', isContinued: false }),
                 } satisfies DurableLLMStepOutput;
               }
 
@@ -2110,6 +2148,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   },
                   metadata: { modelId: currentModel.modelId },
                   state: typedInput.state,
+                  deferredStepFinishChunk: prepareDeferredStepFinishChunk({ reason: 'abort', isContinued: false }),
                 } satisfies DurableLLMStepOutput;
               }
 
@@ -2150,6 +2189,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   modelId: currentModel.modelId,
                 },
                 state: typedInput.state,
+                deferredStepFinishChunk: prepareDeferredStepFinishChunk({
+                  reason: 'tripwire',
+                  isContinued: false,
+                }),
               } satisfies DurableLLMStepOutput;
             }
 
@@ -2209,6 +2252,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       modelId: currentModel.modelId,
                     },
                     state: typedInput.state,
+                    deferredStepFinishChunk: prepareDeferredStepFinishChunk({
+                      reason: 'tripwire',
+                      isContinued: false,
+                    }),
                   } satisfies DurableLLMStepOutput;
                 }
                 logger?.error?.('Error in processLLMResponse processors:', error);
@@ -2310,7 +2357,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Remove the rejected response so the retry doesn't send it back to the model, and
             // so a rejection that ends the run isn't persisted or returned (issue #26048).
             if (processOutputStepTripwire) {
-              messageList.rollbackToStepBoundary(materializationMessageId);
+              messageList.rollbackToStepBoundary(materializationMessageId, iterationBoundary);
             }
 
             const stepTripwire = processOutputStepTripwire
@@ -2322,54 +2369,23 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 }
               : undefined;
 
-            // 13.9. step-finish emission strategy:
+            // 13.9. Prepare step-finish for post-decision emission.
             //
-            // For FINAL steps (no tool calls): emit step-finish now. The assistant
-            // message is in messageList and there are no tool-results to wait for.
-            //
-            // For INTERMEDIATE steps (hasToolCalls): save the step-finish chunk
-            // on the output so llm-mapping can emit it AFTER tool-call.ts has
-            // emitted tool-result chunks. This matches the regular agent's chunk
-            // ordering (tool-result → step-finish) which MastraModelOutput relies
-            // on for correct step content reconstruction.
-            if (pubsub && deferredStepFinishChunk) {
-              // A rejected response's tool calls never run, so its step finishes here too.
-              if (!hasToolCalls || processOutputStepTripwire) {
-                // Final step: emit immediately with pre-computed content
-                // Build step content directly from the current step's data rather
-                // than relying on messageList which may contain response messages
-                // from previous iterations after deserialization.
-                const stepContent: Array<{ type: string; [key: string]: unknown }> = [];
-                const currentText = textDeltas.join('');
-                if (currentText) {
-                  stepContent.push({ type: 'text', text: currentText });
-                }
-                deferredStepFinishChunk = {
-                  ...deferredStepFinishChunk,
-                  payload: {
-                    ...deferredStepFinishChunk.payload,
-                    // The regular loop stamps isContinued on every step-finish chunk it emits
-                    // (loop/workflows/agentic-loop/index.ts). Output processors depend on it:
-                    // ChatChannelOutputProcessor closes its render queue on the first chunk where the
-                    // flag is not `true`, so a durable chunk that omits it ends channel rendering at
-                    // the tool step and drops everything after it (#23341).
-                    stepResult: {
-                      ...deferredStepFinishChunk.payload?.stepResult,
-                      ...(processOutputStepTripwire ? { reason: shouldRetry ? 'retry' : 'tripwire' } : {}),
-                      isContinued: shouldRetry || (!processOutputStepTripwire && isContinued),
-                    },
-                    // The stream reader reads a rejected step's tripwire from here, like the main loop's.
-                    ...(stepTripwire
-                      ? { output: { ...deferredStepFinishChunk.payload?.output, steps: [{ tripwire: stepTripwire }] } }
-                      : {}),
-                    _durableStepContent: stepContent,
-                  },
-                };
-                await emitChunkEvent(pubsub, runId, deferredStepFinishChunk);
-                deferredStepFinishChunk = null;
-              }
-              // else: intermediate step — saved in output.deferredStepFinishChunk below
-            }
+            // The durable continuation decision runs after this step and may override
+            // the model's continuation state because of maxSteps, stopWhen, feedback,
+            // signals, task-completion scorers, or goals. Carry the chunk through the
+            // serialized iteration state so the predicate can stamp and emit the loop's
+            // actual decision. Tool-calling steps still reach this point only after their
+            // tool-result chunks have been emitted by tool-call.ts.
+            // Build step content directly from the current step's data rather than
+            // relying on messageList, which may contain response messages from
+            // previous iterations after deserialization. The stream reader reads a
+            // rejected step's tripwire from the chunk payload, like the main loop's.
+            prepareDeferredStepFinishChunk({
+              reason: processOutputStepTripwire ? (shouldRetry ? 'retry' : 'tripwire') : undefined,
+              isContinued: shouldRetry || (!processOutputStepTripwire && isContinued),
+              tripwire: stepTripwire,
+            });
 
             // 14. Export spans if there are tool calls (so tools can be children of model_step)
             // Don't end the spans yet - they will be ended after tool execution
@@ -2406,9 +2422,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               modelSpanData: hasToolCalls && !processOutputStepTripwire ? modelSpan?.exportSpan?.() : undefined,
               stepSpanData,
               stepFinishPayload,
-              // For intermediate steps (hasToolCalls), save the deferred step-finish
-              // chunk so llm-mapping can emit it AFTER tool-result chunks.
-              deferredStepFinishChunk: hasToolCalls && !processOutputStepTripwire ? deferredStepFinishChunk : undefined,
+              // Carry step-finish through the iteration so the loop predicate can
+              // stamp and emit the actual post-policy continuation decision.
+              deferredStepFinishChunk: deferredStepFinishChunk ?? undefined,
             };
 
             // 16. End step span only if there are NO tool calls
@@ -2489,6 +2505,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 },
                 metadata: { modelId: modelEntry.config.modelId },
                 state: typedInput.state,
+                deferredStepFinishChunk: prepareDeferredStepFinishChunk({ reason: 'abort', isContinued: false }),
               } satisfies DurableLLMStepOutput;
             }
 

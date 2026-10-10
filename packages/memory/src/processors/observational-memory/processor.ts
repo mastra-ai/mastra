@@ -209,8 +209,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const runState = memoryContext?.runState?.();
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
-    const actorModelContext = model?.modelId
-      ? { provider: model.provider, modelId: model.modelId, providerOptions: args.providerOptions }
+    const actorModelContext = model
+      ? {
+          provider: model.provider,
+          modelId: model.modelId,
+          providerOptions: args.providerOptions,
+          model,
+        }
       : undefined;
     state.__omActorModelContext = actorModelContext;
 

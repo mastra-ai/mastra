@@ -150,14 +150,21 @@ function getLastModelFromMessageList(messageList?: MessageList): string | undefi
   return undefined;
 }
 
-type ConcreteReflectionModel = Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens>;
+type ConcreteReflectionModel = Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens | 'auto'>;
 
-type ReflectionModelResolver = (inputTokens: number) => {
+type ReflectionModelResolver = (
+  inputTokens: number,
+  options?: {
+    requestContext?: RequestContext;
+    mainAgent?: ProcessorContext['agent'];
+    currentModel?: ObservationModelContext;
+  },
+) => Promise<{
   model: ConcreteReflectionModel;
   selectedThreshold?: number;
   routingStrategy?: 'model-by-input-tokens';
   routingThresholds?: string;
-};
+}>;
 
 async function withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T> {
   if (abortSignal?.aborted) throw new Error('The operation was aborted.');
@@ -365,6 +372,7 @@ export class ReflectorRunner {
     model?: ConcreteReflectionModel,
     mainAgent?: ProcessorContext['agent'],
     sendSignal?: ProcessorContext['sendSignal'],
+    currentModel?: ObservationModelContext,
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
@@ -374,7 +382,9 @@ export class ReflectorRunner {
     providerMetadata?: ProviderMetadata;
   }> {
     const originalTokens = this.tokenCounter.countObservations(observations);
-    const resolvedModel = model ? { model } : this.resolveModel(originalTokens);
+    const resolvedModel = model
+      ? { model }
+      : await this.resolveModel(originalTokens, { requestContext, mainAgent, currentModel });
     const activeExtractors = await resolveExtractors(
       (skipContinuationHints
         ? this.reflectionConfig.extractors?.filter(
@@ -668,6 +678,7 @@ export class ReflectorRunner {
     mainAgent?: ProcessorContext['agent'],
     sendSignal?: ProcessorContext['sendSignal'],
     trigger?: ObserveTrigger,
+    currentModel?: ObservationModelContext,
   ): void {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -702,6 +713,7 @@ export class ReflectorRunner {
           mainAgent,
           sendSignal,
           trigger,
+          currentModel,
         );
       } catch (error) {
         reflectionError = error instanceof Error ? error : new Error(String(error));
@@ -767,6 +779,7 @@ export class ReflectorRunner {
     mainAgent?: ProcessorContext['agent'],
     sendSignal?: ProcessorContext['sendSignal'],
     trigger?: ObserveTrigger,
+    currentModel?: ObservationModelContext,
   ): Promise<
     | {
         usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -852,6 +865,7 @@ export class ReflectorRunner {
       undefined,
       mainAgent,
       sendSignal,
+      currentModel,
     );
     reflectResult.observations = await applyTextTransform(
       this.hooks,
@@ -1170,6 +1184,7 @@ export class ReflectorRunner {
           mainAgent,
           sendSignal,
           trigger,
+          currentModel,
         );
       }
     }
@@ -1277,6 +1292,7 @@ export class ReflectorRunner {
           mainAgent,
           sendSignal,
           trigger,
+          currentModel,
         );
         return;
       }
@@ -1378,6 +1394,7 @@ export class ReflectorRunner {
         undefined,
         mainAgent,
         sendSignal,
+        currentModel,
       );
       reflectResult.observations = await applyTextTransform(
         this.hooks,

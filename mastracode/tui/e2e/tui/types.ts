@@ -131,8 +131,8 @@ export type ScenarioName =
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
+  | 'login-keeps-om-auto'
   | 'login-preserves-model-pack'
-  | 'login-seeds-om-default'
   | 'modal-and-shell'
   | 'mcp-disable-enable'
   | 'mcp-http-tool-call'
@@ -148,6 +148,7 @@ export type ScenarioName =
   | 'model-selection-cancel-env'
   | 'mode-switch-applies-pack-model'
   | 'models-pack-activation-persistence'
+  | 'models-pack-memory-auto'
   | 'notification-inbox-crud-flow'
   | 'notification-inbox-reload'
   | 'notification-inbox-tool-flow'
@@ -155,6 +156,7 @@ export type ScenarioName =
   | 'notification-signal-rendering'
   | 'notify-input-request-hook'
   | 'om-settings'
+  | 'om-auto-selection'
   | 'om-attachment-observation'
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'
@@ -163,10 +165,12 @@ export type ScenarioName =
   | 'om-status-indicator'
   | 'om-threshold-persistence'
   | 'onboarding-om-follows-login'
-  | 'quiet-settings'
+  | 'legacy-settings-no-prompt'
+  | 'legacy-settings-upgrade'
+  | 'preview-lines-settings'
   | 'web-search-provider-settings'
-  | 'quiet-streaming-preview-height'
-  | 'quiet-tool-history-parity'
+  | 'streaming-preview-height'
+  | 'tool-history-parity'
   | 'report-issue-command'
   | 'request-access-modal'
   | 'state-commands'
@@ -306,6 +310,10 @@ export type McE2eScenario = {
   projectFixture?: 'long-branch' | 'manual';
   useOpenAIModel?: boolean;
   disableMemory?: boolean;
+  /** Opt into OM model work, which deterministic TUI scenarios suppress by default. */
+  enableObservationalMemory?: boolean;
+  /** Opt into title model work, which deterministic TUI scenarios suppress by default. */
+  enableTitleGeneration?: boolean;
   aimockFixture?: string;
   env?: (context: McE2ePrepareContext) => Record<string, string | null>;
   entrypoint?: (context: McE2ePrepareContext) => string;

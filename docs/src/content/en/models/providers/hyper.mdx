@@ -7,7 +7,7 @@ description: "Browse Charm Hyper model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/hyper.svg" alt="Charm Hyper logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Charm Hyper
 
-Access 23 Charm Hyper models through Mastra's model router. Authentication is handled automatically using the `HYPER_API_KEY` environment variable.
+Access 21 Charm Hyper models through Mastra's model router. Authentication is handled automatically using the `HYPER_API_KEY` environment variable.
 
 Learn more in the [Charm Hyper documentation](https://hyper.charm.land).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "hyper/deepseek-v4-flash"
+  model: "hyper/deepseek-v4-flash-0731"
 });
 
 // Generate a response
@@ -46,18 +46,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "hyper/deepseek-v4-flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 0.2,
-    "outputCost": 0.4
-  },
-  {
     "model": "hyper/deepseek-v4-flash-0731",
     "imageInput": false,
     "audioInput": false,
@@ -68,18 +56,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 384000,
     "inputCost": 0.44,
     "outputCost": 1.32
-  },
-  {
-    "model": "hyper/deepseek-v4-pro",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 2.4,
-    "outputCost": 4.8
   },
   {
     "model": "hyper/deepseek-v4-pro-0813",
@@ -336,7 +312,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://hyper.charm.land/v1",
-    id: "hyper/deepseek-v4-flash",
+    id: "hyper/deepseek-v4-flash-0731",
     apiKey: process.env.HYPER_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -355,7 +331,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "hyper/qwen3.8-max"
-      : "hyper/deepseek-v4-flash";
+      : "hyper/deepseek-v4-flash-0731";
   }
 });
 ```

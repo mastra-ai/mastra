@@ -2,7 +2,7 @@ import { Container, Text } from '@earendil-works/pi-tui';
 import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
-import { showError, showFormattedError, showInfo } from './display.js';
+import { showError, showFormattedError, showInfo, showLines, showProgress } from './display.js';
 import type { TUIState } from './state.js';
 
 function createState(): TUIState {
@@ -21,6 +21,45 @@ function createState(): TUIState {
 function renderedText(state: TUIState): string {
   return stripAnsi(state.chatContainer.render(120).join('\n'));
 }
+
+describe('showProgress', () => {
+  it('spins with elapsed seconds and removes itself when stopped', () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let now = 10_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      const state = createState();
+      showInfo(state, 'Before');
+
+      const stop = showProgress(state, 'Installing with pnpm');
+      expect(renderedText(state)).toMatch(/⠋ Installing with pnpm {2}0s/);
+
+      now += 1_000;
+      vi.advanceTimersByTime(80);
+      expect(renderedText(state)).toContain('Installing with pnpm  1s');
+
+      stop();
+      vi.advanceTimersByTime(1_000);
+      expect(renderedText(state)).not.toContain('Installing');
+      expect(renderedText(state)).toContain('Before');
+    } finally {
+      nowSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('showLines', () => {
+  it('keeps the colors it is given instead of muting the whole message', () => {
+    const state = createState();
+
+    showLines(state, ['\x1b[32m✓\x1b[39m Up to date', 'second line']);
+
+    const raw = state.chatContainer.render(120).join('\n');
+    expect(raw).toContain('\x1b[32m✓\x1b[39m Up to date');
+    expect(renderedText(state)).toContain('second line');
+  });
+});
 
 describe('showFormattedError', () => {
   it('does not show retry timing when no retry was scheduled', () => {

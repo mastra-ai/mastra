@@ -1,4 +1,6 @@
 import { APICallError } from '@internal/ai-sdk-v5';
+import { MastraFGAPermissions } from '../../../auth/ee';
+import type { MastraFGAPermissionInput } from '../../../auth/ee';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
@@ -41,6 +43,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   agentVersionId?: string;
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
+  authorizeMemory: (permission: MastraFGAPermissionInput, threadId: string) => Promise<void>;
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
@@ -58,6 +61,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   agentVersionId,
   methodType,
   saveQueueManager,
+  authorizeMemory,
   runScope,
 }: MapResultsStepOptions<OUTPUT>): Step<
   string,
@@ -95,6 +99,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
         // When OM is enabled saving per step corrupts things because OM handles its own saving
         const shouldSavePerStep = options.savePerStep && !memoryConfig?.observationalMemory;
         if (shouldSavePerStep && !memoryConfig?.readOnly) {
+          if (memoryData.thread?.id) {
+            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
+          }
           if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
             await memory.createThread({
               threadId: memoryData.thread?.id,
@@ -384,6 +391,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
                   ? JSON.stringify(payload.object)
                   : payload.text || '';
 
+              if (!memoryConfig?.readOnly && result.threadId) {
+                await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, result.threadId);
+              }
               await capabilities.executeOnFinish({
                 result: payload,
                 outputText,

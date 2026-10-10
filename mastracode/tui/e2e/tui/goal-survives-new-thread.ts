@@ -44,6 +44,10 @@ export const goalSurvivesNewThreadScenario: McE2eScenario = {
 
     terminal.submit(`/goal ${OBJECTIVE}`);
     await runtime.waitForScreenText(/Mid-goal thread switch e2e acknowledged\./i, terminal, 20_000);
+    // The goal judge runs after each turn and locks input until it settles (this
+    // fixture has no judge verdict, so the goal pauses). Typing before then lands
+    // in a locked editor and turns the next command into garbage.
+    await runtime.waitForScreenText(/Goal\s+!\s+paused/i, terminal, 20_000);
 
     terminal.submit('/goal status');
     await runtime.waitForScreenText(/Keep the mid-goal thread switch e2e objective alive\./i, terminal, 10_000);

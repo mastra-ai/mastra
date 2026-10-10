@@ -26,7 +26,7 @@ export const knowledgeBrowserScenario: McE2eScenario = {
         const secondary = await result.session.thread.create({ title: SECONDARY_TITLE });
         await result.session.thread.switch({ threadId: primary.id });
 
-        const knowledge = result.storage.stores?.knowledge;
+        const knowledge = await result.storage.getStore('knowledge');
         if (!knowledge) throw new Error('Knowledge storage unavailable in knowledge-browser E2E scenario.');
 
         // The inspector reads the rung the Subconscious writes under, not the session owner id.

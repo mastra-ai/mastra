@@ -72,6 +72,7 @@
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
     "google/gemini-flash-latest",
+    "google/gemini-nano-banana-2.1",
     "google/gemini-pro-latest",
     "minimax/MiniMax-M3",
     "mistral/codestral-2508",
@@ -136,6 +137,7 @@
     "qwen/qwen-vl-plus",
     "qwen/qwen3-vl-235b-a22b-instruct",
     "qwen/qwen3-vl-235b-a22b-thinking",
+    "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3.8-27b",
     "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
@@ -217,6 +219,7 @@
     "cloudflare/@cf/aisingapore/gemma-sea-lion-v4-27b-it",
     "cloudflare/@cf/deepseek-ai/deepseek-v4-flash-0731",
     "cloudflare/@cf/deepseek-ai/deepseek-v4-pro-0813",
+    "cloudflare/@cf/meta/llama-3.2-1b-instruct",
     "cloudflare/@cf/meta/llama-guard-3-8b",
     "cloudflare/@cf/openai/gpt-oss-120b",
     "cloudflare/@cf/openai/gpt-oss-20b",
@@ -236,7 +239,9 @@
     "databricks/databricks-inkling",
     "deepinfra/ByteDance/Seed-2.0-code",
     "deepinfra/ByteDance/Seed-2.0-mini",
+    "deepinfra/Gryphe/MythoMax-L2-13b",
     "deepinfra/deepseek-ai/DeepSeek-R1",
+    "deepinfra/deepseek-ai/DeepSeek-R1-0528",
     "deepinfra/deepseek-ai/DeepSeek-V3",
     "deepinfra/deepseek-ai/DeepSeek-V3-0324",
     "deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731",
@@ -249,6 +254,8 @@
     "deepinfra/meta-llama/Llama-3.3-70B-Instruct",
     "deepinfra/meta-llama/Llama-Guard-3-8B",
     "deepinfra/meta-models/Muse-Glimmer-30B",
+    "deepinfra/microsoft/WizardLM-2-8x22B",
+    "deepinfra/moonshotai/Kimi-K2-Instruct",
     "deepinfra/nemotron-3-ultra-550b-a55b",
     "deepinfra/nvidia/Llama-3.1-Nemotron-70B-Instruct",
     "deepinfra/nvidia/Nemotron-3-Nano-30B-A3B",
@@ -351,6 +358,7 @@
     "qwen/deepseek-v4-pro-0813",
     "qwen/deepseek-v4.1-flash",
     "qwen/qwen-max",
+    "qwen/qwen-mt-plus",
     "qwen/qwen-vl-max",
     "qwen/qwen-vl-plus",
     "qwen/qwen3-235b-a22b-instruct-2507",
@@ -366,6 +374,7 @@
     "qwen/qwen3-next-80b-a3b-thinking",
     "qwen/qwen3-vl-235b-a22b-instruct",
     "qwen/qwen3-vl-235b-a22b-thinking",
+    "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3.8-2.4t-a95b",
     "qwen/qwen3.8-27b",
     "qwen/qwen3.8-max",
@@ -378,6 +387,7 @@
     "tencent/deepseek-v4-pro-0813",
     "tencent/hy3",
     "tencent/hy4-preview",
+    "tensorx/deepseek/deepseek-r1-0528",
     "tensorx/deepseek/deepseek-v4-flash-0731",
     "tensorx/deepseek/deepseek-v4-pro-0813",
     "tensorx/deepseek/deepseek-v4.1-flash",
@@ -480,6 +490,8 @@
     "cohere/command-r7b-12-2024",
     "deepinfra/ByteDance/Seed-2.0-code",
     "deepinfra/ByteDance/Seed-2.0-mini",
+    "deepinfra/Gryphe/MythoMax-L2-13b",
+    "deepinfra/deepseek-ai/DeepSeek-R1-0528",
     "deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepinfra/deepseek-ai/DeepSeek-V4-Pro-0813",
     "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash",
@@ -529,6 +541,7 @@
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
     "google/gemini-flash-latest",
+    "google/gemini-nano-banana-2.1",
     "google/gemini-pro-latest",
     "greenference/deepseek-v4.1-flash",
     "greenference/gpt-oss-20b",
@@ -620,12 +633,14 @@
     "qwen/qwen3-next-80b-a3b-thinking",
     "qwen/qwen3-vl-235b-a22b-instruct",
     "qwen/qwen3-vl-235b-a22b-thinking",
+    "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3.8-2.4t-a95b",
     "qwen/qwen3.8-27b",
     "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
     "qwen/qwen3.8-max-0902",
     "qwen/qwen3.8-omni-flash",
+    "tensorx/deepseek/deepseek-r1-0528",
     "tensorx/moonshotai/kimi-k2.5",
     "together_ai/deepseek-ai/DeepSeek-V4-Flash-0731",
     "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813",
@@ -964,12 +979,6 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "tencent/step-5-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "tencent/deepseek-v4-pro-0813": [
       {
         "type": "effort",
@@ -1166,6 +1175,12 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "google/gemini-nano-banana-2.1": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "high"]
       }
     ],
     "google/gemini-3.1-flash-lite": [
@@ -1400,6 +1415,12 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-nano-banana-2.1": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "high"]
       }
     ],
     "vertex/gemini-3.1-flash-lite": [

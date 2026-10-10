@@ -16,11 +16,15 @@ import type { KnowledgeSemanticIndexCoordinator } from './semantic-index';
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
 
-type KnowledgeToolsMemory = {
-  storage: {
+export type KnowledgeStoreMemory = {
+  getKnowledgeStore?: () => Promise<KnowledgeStorage>;
+  storage?: {
     getStore(name: 'knowledge'): Promise<KnowledgeStorage | undefined>;
   };
-  getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator>;
+};
+
+type KnowledgeToolsMemory = KnowledgeStoreMemory & {
+  getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined>;
 };
 
 export type KnowledgeToolContext = {
@@ -40,8 +44,9 @@ export function resolveKnowledgeToolScope(context: KnowledgeToolContext | undefi
   return [`org:${organizationId}`, `resource:${resourceId}`, `thread:${threadId}`];
 }
 
-async function getKnowledgeStore(memory: KnowledgeToolsMemory): Promise<KnowledgeStorage> {
-  const store = await memory.storage.getStore('knowledge');
+export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<KnowledgeStorage> {
+  if (memory.getKnowledgeStore) return memory.getKnowledgeStore();
+  const store = await memory.storage?.getStore('knowledge');
   if (!store) throw new Error('Knowledge tools require a configured knowledge storage domain.');
   return store;
 }
@@ -165,9 +170,8 @@ export function createKnowledgeTools(
       const scope = fixedScope ?? resolveKnowledgeToolScope(context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
-      const semanticCandidates = await memory
-        .getKnowledgeSemanticIndex()
-        .then(index => index.search(query, scope, limit * 2));
+      const semanticIndex = await memory.getKnowledgeSemanticIndex();
+      const semanticCandidates = semanticIndex ? await semanticIndex.search(query, scope, limit * 2) : [];
       const lexical = await store.search({ query, scope, limit: limit * 2 });
       const semantic = (
         await Promise.all(semanticCandidates.map(candidate => loadSemanticResult(store, scope, candidate)))

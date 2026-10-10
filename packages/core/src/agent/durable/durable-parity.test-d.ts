@@ -142,6 +142,7 @@ type PhantomSerializedKeys = Exclude<
   | 'transform' // shadow of transform policy (targets only)
   | 'isTaskComplete' // shadow of isTaskComplete (scorer names only)
   | 'structuredOutput' // serialized form of structuredOutput
+  | 'toolsetToolNames' // names of call-time toolsets tools (cross-process detection)
 >;
 
 describe('DurableAgent ↔ Agent parity gate', () => {

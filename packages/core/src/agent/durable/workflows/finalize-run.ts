@@ -1,3 +1,4 @@
+import { MastraFGAPermissions } from '../../../auth/ee';
 import type { IMastraLogger } from '../../../logger';
 import { noopLogger } from '../../../logger/noop-logger';
 import type { Mastra } from '../../../mastra';
@@ -12,6 +13,7 @@ import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
 import { TripWire } from '../../trip-wire';
+import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
 import { globalRunRegistry } from '../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
@@ -125,6 +127,15 @@ export async function runDurableFinishSideEffects({
   }
 
   const effectiveRequestContext = restoreRequestContext(initData.requestContextEntries, requestContext);
+  // Snapshots drop MastraMemory (it holds a live instance), but memory processors read
+  // memoryConfig (e.g. readOnly) from it. Restore it from durable state when it's missing.
+  if (!effectiveRequestContext.has('MastraMemory') && durableState?.threadId) {
+    effectiveRequestContext.set('MastraMemory', {
+      thread: { id: durableState.threadId },
+      resourceId: durableState.resourceId,
+      memoryConfig: durableState.memoryConfig,
+    });
+  }
   // Deserialize into the run's existing MessageList when there is one. MastraModelOutput
   // holds that instance and reads it during final processing, so swapping in a new one
   // would leave the stream reporting pre-processor messages.
@@ -226,6 +237,20 @@ export async function runDurableFinishSideEffects({
 
   const saveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
   const memory = registryEntry?.memory ?? rebuiltMemory;
+  const authorizeMemory =
+    durableState?.threadId && durableState.resourceId
+      ? (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
+          authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
+            mastra,
+            user: effectiveRequestContext.get('user'),
+            threadId: durableState.threadId!,
+            resourceId: durableState.resourceId!,
+            agentId: initData.agentId,
+            requestContext: effectiveRequestContext,
+            permission,
+            actor: initData.options?.actor,
+          })
+      : undefined;
 
   if (
     saveQueueManager &&
@@ -235,6 +260,8 @@ export async function runDurableFinishSideEffects({
     !durableState.observationalMemory &&
     !durableState.memoryConfig?.readOnly
   ) {
+    await authorizeMemory!(MastraFGAPermissions.MEMORY_WRITE);
+    if (!durableState.threadExists) await authorizeMemory!(MastraFGAPermissions.MEMORY_READ);
     try {
       if (!durableState.threadExists) {
         await memory.createThread?.({
@@ -274,6 +301,8 @@ export async function runDurableFinishSideEffects({
     };
 
     const generateThreadTitle = registryEntry?.generateThreadTitle;
+    await authorizeMemory!(MastraFGAPermissions.MEMORY_READ);
+    await authorizeMemory!(MastraFGAPermissions.MEMORY_WRITE);
     titleGeneration = (async () => {
       if (generateThreadTitle) {
         await generateThreadTitle(titleArgs);

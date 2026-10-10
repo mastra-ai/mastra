@@ -1,6 +1,7 @@
 import { File, Folder } from 'lucide-react';
 import * as React from 'react';
 import { useTreeDepth } from './tree-context';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -86,6 +87,7 @@ export const TreeInput = React.forwardRef<HTMLLIElement, TreeInputProps>(
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
           onFocus={handleFocus}
+          {...passwordManagerOptOutProps}
           className="min-w-0 flex-1 border-none bg-transparent text-caption text-foreground outline-hidden placeholder:text-muted-foreground"
         />
       </li>

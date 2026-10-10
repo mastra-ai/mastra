@@ -1,6 +1,6 @@
 import { once } from 'node:events';
 import { createServer } from 'node:http';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2Prompt, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
@@ -177,7 +177,7 @@ describe('attachment download recovery', () => {
       }
       return { text, errors, chunks };
     }
-    return { agent, run, prompts, memory };
+    return { agent, runner, run, prompts, memory };
   }
 
   function attachment(kind: 'image' | 'file' = 'file'): Parameters<Agent['stream']>[0] {
@@ -743,4 +743,61 @@ describe('attachment download recovery', () => {
     expect(fallback.prompts).toHaveLength(0);
     expect(requests).toBe(1);
   });
+  it.each([false])(
+    'keeps an attachment skipped when a queued signal interrupts the skip retry (durable: %s)',
+    async durable => {
+      const prompts: LanguageModelV2Prompt[] = [];
+      let notifyReasoning!: () => void;
+      const reasoning = new Promise<void>(resolve => (notifyReasoning = resolve));
+      const answer = (): LanguageModelV2StreamPart[] => [
+        { type: 'stream-start', warnings: [] },
+        { type: 'text-start', id: 'text' },
+        { type: 'text-delta', id: 'text', delta: 'ok' },
+        { type: 'text-end', id: 'text' },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+      ];
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt, abortSignal }) => {
+          prompts.push(prompt);
+          if (prompts.length !== 2) return { stream: convertArrayToReadableStream(answer()) };
+          return {
+            stream: new ReadableStream<LanguageModelV2StreamPart>({
+              start(controller) {
+                controller.enqueue({ type: 'reasoning-start', id: 'stale' });
+                controller.enqueue({ type: 'reasoning-delta', id: 'stale', delta: 'STALE_REASONING' });
+                abortSignal?.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
+                notifyReasoning();
+              },
+            }),
+          };
+        },
+      });
+      const { runner, run, memory } = setup({ durable, models: [model] });
+      expect((await run(attachment())).text).toBe('ok');
+      await waitForHistory(memory);
+      failure = '404';
+      const interrupted = run('Continue');
+      await reasoning;
+      const signal = await runner.sendSignal(
+        { type: 'user-message', contents: 'SIGNAL_DURING_SKIP' },
+        { threadId: 'thread', resourceId: 'resource' },
+      );
+      await signal.accepted;
+      const result = await interrupted;
+      expect(result.errors).toEqual([]);
+      expect(result.text).toBe('ok');
+      expect(prompts).toHaveLength(3);
+      for (const prompt of prompts.slice(1)) {
+        expect(promptAttachments(prompt)).toEqual({
+          files: [],
+          placeholders: ['[Attachment unavailable: application/pdf]'],
+        });
+      }
+      expect(JSON.stringify(prompts[2])).toContain('SIGNAL_DURING_SKIP');
+      expect(JSON.stringify(prompts[2])).not.toContain('STALE_REASONING');
+      // First turn, then the failed download and the check before skipping it. The replacement
+      // request reuses the recorded placeholder instead of downloading again.
+      expect(requests).toBe(3);
+    },
+  );
 });
