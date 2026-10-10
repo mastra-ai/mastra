@@ -176,6 +176,15 @@ export async function loadMessageListStateForResume(params: TranscriptParams): P
   await run.refs.hydrate(stored, run.load, run);
 }
 
+/** Restores the refs in a transcript read straight from a persisted snapshot. */
+export async function hydrateMessageListState(
+  params: TranscriptParams,
+  stored: DehydratedMessageListState,
+): Promise<SerializedMessageListState> {
+  const run = runTranscriptRefs(params);
+  return run.refs.hydrate(stored, run.load, run);
+}
+
 /** Frees this process's verified rows once the run has read its transcript for the last time. */
 export function releaseMessageListState(params: TranscriptParams): void {
   const { runId } = (params.getInitData() ?? {}) as RunIdentity;

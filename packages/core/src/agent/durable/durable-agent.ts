@@ -56,7 +56,7 @@ import type {
 } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
-import { loadMessageListStateForResume } from './workflows/shared/message-list-state';
+import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 const RECOVERY_LEASE_TTL_MS = 30_000;
@@ -911,15 +911,23 @@ export class DurableAgent<
     runId: string,
     loopSnapshot: WorkflowRunState,
   ): Promise<unknown> {
+    let latest: unknown;
     try {
       const nested = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_EXECUTION });
       const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
-      const fromNested = snapshot && latestMessageListState(snapshot);
-      if (fromNested) return fromNested;
+      latest = snapshot && latestMessageListState(snapshot);
     } catch {
       // Fall back to the loop snapshot.
     }
-    return latestMessageListState(loopSnapshot);
+    latest ??= latestMessageListState(loopSnapshot);
+    if (!latest) return latest;
+    // Messages memory already stores are kept as refs; restore them so callers
+    // see the full rows (e.g. ToolSearch results). #loadRecalledMessages has
+    // already loaded them, so this normally needs no storage read.
+    return hydrateMessageListState(
+      { state: undefined, getInitData: () => loopSnapshot.context?.input, mastra: this.#mastra },
+      latest as Parameters<typeof hydrateMessageListState>[1],
+    );
   }
 
   async #loadRecoverableSnapshot(
