@@ -1,0 +1,123 @@
+{
+  "model": "anthropic/claude-sonnet-4-6",
+  "startedAt": "2026-10-10T00:41:43.096Z",
+  "statuses": ["running", "terminated"],
+  "sandboxId": "sbx-18p4gdb4ojho473hc738ibd90",
+  "baselineExitCode": 1,
+  "providerResponses": [
+    {
+      "id": "msg_011CfsdMHbCr7q31MiPy4cKj",
+      "modelId": "claude-sonnet-4-6"
+    },
+    {
+      "id": "msg_011CfsdMVLtZwb6zox3FWVnB",
+      "modelId": "claude-sonnet-4-6"
+    },
+    {
+      "id": "msg_011CfsdMjj5GrxdFw9VT4NKg",
+      "modelId": "claude-sonnet-4-6"
+    },
+    {
+      "id": "msg_011CfsdMrk13WtsLHgHMA31W",
+      "modelId": "claude-sonnet-4-6"
+    },
+    {
+      "id": "msg_011CfsdMynvE5WUdyy1dCanh",
+      "modelId": "claude-sonnet-4-6"
+    },
+    {
+      "id": "msg_011CfsdN6bhHCEtTSeatKWKN",
+      "modelId": "claude-sonnet-4-6"
+    },
+    {
+      "id": "msg_011CfsdNFHLL78ZsQmkAxYRx",
+      "modelId": "claude-sonnet-4-6"
+    },
+    {
+      "id": "msg_011CfsdNQxk7XFsPWETRYGAv",
+      "modelId": "claude-sonnet-4-6"
+    },
+    {
+      "id": "msg_011CfsdNgFFJZHKS7sVJjx9A",
+      "modelId": "claude-sonnet-4-6"
+    },
+    {
+      "id": "msg_011CfsdNvnNaeon8FFdbYNX9",
+      "modelId": "claude-sonnet-4-6"
+    }
+  ],
+  "totalUsage": {
+    "inputTokens": 22686,
+    "outputTokens": 1106,
+    "totalTokens": 23792,
+    "cachedInputTokens": 0,
+    "cacheCreationInputTokens": 0,
+    "cacheCreationInputTokens5m": 0,
+    "cacheCreationInputTokens1h": 0,
+    "raw": {
+      "inputTokens": {
+        "total": 3116,
+        "noCache": 3116,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "outputTokens": {
+        "total": 321
+      },
+      "raw": {
+        "input_tokens": 3116,
+        "output_tokens": 321,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 0
+        },
+        "service_tier": "standard",
+        "inference_geo": "global"
+      }
+    }
+  },
+  "toolCalls": [
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    }
+  ],
+  "verifiedStdout": "\u2714 sums all three orders (1.05811ms)\n\u2714 handles a single order (0.127535ms)\n\u2714 handles an empty file with a header (0.086074ms)\n\u2714 includes refunds (0.078022ms)\n\u2139 tests 4\n\u2139 suites 0\n\u2139 pass 4\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 49.287102\nVerified report: total=42, row_count=3\n",
+  "report": {
+    "total": 42,
+    "row_count": 3
+  },
+  "testsPassed": 4,
+  "taskPassed": true,
+  "cleanup": {
+    "id": "sbx-18p4gdb4ojho473hc738ibd90",
+    "status": "terminated",
+    "terminatedAt": "2026-10-10T00:42:21.464232Z"
+  },
+  "core": "1.76.0-alpha.5"
+}

@@ -1,0 +1,83 @@
+{
+  "name": "@mastra/render",
+  "version": "0.0.0",
+  "description": "Render Sandbox provider for Mastra agent workspaces",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown --silent --config tsdown.config.ts",
+    "typecheck": "tsc -p tsconfig.check.json --noEmit",
+    "test": "vitest run .integration.test.ts",
+    "example": "tsx examples/code-repair/index.ts",
+    "test:live": "tsx scripts/live.ts",
+    "test:cancellation": "tsx scripts/cancellation-repro.ts",
+    "test:live-cancellation": "tsx scripts/live-cancellation.ts",
+    "test:production-live": "tsx scripts/production-live.mjs",
+    "test:production-cleanup": "tsx scripts/production-cleanup.mjs",
+    "test:operations": "tsx scripts/operation-audit.mjs",
+    "test:coverage": "node scripts/operation-coverage.mjs",
+    "lint": "oxlint . && eslint .",
+    "test:unit": "vitest run --exclude '**/*.integration.test.ts'",
+    "test:package": "node scripts/package-check.mjs",
+    "build:lib": "pnpm build",
+    "build:watch": "pnpm build --watch",
+    "test:cloud": "pnpm test",
+    "test:watch": "vitest watch",
+    "lint:fix": "oxlint --fix . && eslint --fix ."
+  },
+  "dependencies": {
+    "@renderinc/sdk": "1.2.0"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.67.0-0 <2.0.0-0"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@types/node": "22.20.1",
+    "eslint": "^10.7.0",
+    "tsdown": "0.22.9",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "typescript-classic": "npm:typescript@^6.0.3"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "license": "Apache-2.0",
+  "author": "Render",
+  "homepage": "https://mastra.ai",
+  "keywords": [
+    "mastra",
+    "render",
+    "sandbox",
+    "agents"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "workspaces/render"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  }
+}

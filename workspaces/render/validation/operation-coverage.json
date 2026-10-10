@@ -1,0 +1,268 @@
+{
+  "checkedAt": "2026-10-10T00:47:08.967Z",
+  "scope": "All public high-level Sandbox SDK 1.2.0 methods; adapter methods, sdk getter and editor factory. Cumulative live evidence, not every parameter combination or service failure.",
+  "sdk": [
+    {
+      "operation": "SandboxesClient.get",
+      "evidence": "production-live.json",
+      "case": "metadata, listing and groups",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "SandboxesClient.create",
+      "evidence": "operation-audit.json",
+      "case": "owned terminate, attached terminate and direct SDK lifecycle",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "SandboxesClient.list",
+      "evidence": "production-live.json",
+      "case": "metadata, listing and groups",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "SandboxesClient.listGroups",
+      "evidence": "production-live.json",
+      "case": "metadata, listing and groups",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "SandboxesClient.terminate",
+      "evidence": "operation-audit.json",
+      "case": "owned terminate, attached terminate and direct SDK lifecycle",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "SandboxesClient.upload",
+      "evidence": "production-live.json",
+      "case": "streamed upload and download above 16 MiB",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "SandboxesClient.download",
+      "evidence": "production-live.json",
+      "case": "streamed upload and download above 16 MiB",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "SandboxesClient.exec",
+      "evidence": "operation-audit.json",
+      "case": "native exec stdout, stderr, exit status and early iterator close",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "SandboxSnapshotsClient.create",
+      "evidence": "operation-audit.json",
+      "case": "snapshot create, wait, expiry, checkpoint priority and clone overrides",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "SandboxSnapshotsClient.get",
+      "evidence": "production-live.json",
+      "case": "filesystem capture, lookup, pagination and restore",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "SandboxSnapshotsClient.list",
+      "evidence": "production-live.json",
+      "case": "filesystem capture, lookup, pagination and restore",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "SandboxSnapshotsClient.delete",
+      "evidence": "operation-audit.json",
+      "case": "snapshot create, wait, expiry, checkpoint priority and clone overrides",
+      "result": "LIVE_PASS"
+    }
+  ],
+  "adapter": [
+    {
+      "operation": "RenderSandbox.sdk",
+      "evidence": "operation-audit.json",
+      "case": "owned terminate, attached terminate and direct SDK lifecycle",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.start",
+      "evidence": "operation-audit.json",
+      "case": "owned terminate, attached terminate and direct SDK lifecycle",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.executeCommand",
+      "evidence": "production-live.json",
+      "case": "command argv, cwd, env, stdout, stderr and nonzero status",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.exec",
+      "evidence": "operation-audit.json",
+      "case": "native exec stdout, stderr, exit status and early iterator close",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.writeFiles",
+      "evidence": "production-live.json",
+      "case": "command argv, cwd, env, stdout, stderr and nonzero status",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.readFile",
+      "evidence": "production-live.json",
+      "case": "local file, tar directory and gzip archive uploads",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.upload",
+      "evidence": "production-live.json",
+      "case": "streamed upload and download above 16 MiB",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.uploadFile",
+      "evidence": "production-live.json",
+      "case": "local file, tar directory and gzip archive uploads",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.uploadDirectory",
+      "evidence": "production-live.json",
+      "case": "local file, tar directory and gzip archive uploads",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.download",
+      "evidence": "production-live.json",
+      "case": "streamed upload and download above 16 MiB",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.downloadToFile",
+      "evidence": "production-live.json",
+      "case": "streamed upload and download above 16 MiB",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.stop",
+      "evidence": "operation-audit.json",
+      "case": "clone fresh base fallback and attached clone",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.destroy",
+      "evidence": "operation-audit.json",
+      "case": "owned terminate, attached terminate and direct SDK lifecycle",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.snapshot",
+      "evidence": "production-live.json",
+      "case": "Mastra checkpoint hook",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.captureSnapshot",
+      "evidence": "production-live.json",
+      "case": "filesystem capture, lookup, pagination and restore",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.restore",
+      "evidence": "production-live.json",
+      "case": "filesystem capture, lookup, pagination and restore",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.clone",
+      "evidence": "operation-audit.json",
+      "case": "clone fresh base fallback and attached clone",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.refresh",
+      "evidence": "production-live.json",
+      "case": "metadata, listing and groups",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.listSandboxes",
+      "evidence": "production-live.json",
+      "case": "metadata, listing and groups",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.listGroups",
+      "evidence": "production-live.json",
+      "case": "metadata, listing and groups",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.terminate",
+      "evidence": "operation-audit.json",
+      "case": "owned terminate, attached terminate and direct SDK lifecycle",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.getInfo",
+      "evidence": "operation-audit.json",
+      "case": "factory, cached info, instructions, client options and creation env",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSandbox.getInstructions",
+      "evidence": "operation-audit.json",
+      "case": "factory, cached info, instructions, client options and creation env",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSnapshots.create",
+      "evidence": "operation-audit.json",
+      "case": "snapshot create, wait, expiry, checkpoint priority and clone overrides",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSnapshots.get",
+      "evidence": "production-live.json",
+      "case": "filesystem capture, lookup, pagination and restore",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSnapshots.list",
+      "evidence": "production-live.json",
+      "case": "filesystem capture, lookup, pagination and restore",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSnapshots.delete",
+      "evidence": "operation-audit.json",
+      "case": "snapshot create, wait, expiry, checkpoint priority and clone overrides",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSnapshots.waitForAvailable",
+      "evidence": "operation-audit.json",
+      "case": "snapshot create, wait, expiry, checkpoint priority and clone overrides",
+      "result": "LIVE_PASS"
+    },
+    {
+      "operation": "RenderSnapshots.capture",
+      "evidence": "production-live.json",
+      "case": "filesystem capture, lookup, pagination and restore",
+      "result": "LIVE_PASS"
+    }
+  ],
+  "factory": {
+    "operation": "renderSandboxProvider.createSandbox",
+    "evidence": "operation-audit.json",
+    "case": "factory, cached info, instructions, client options and creation env",
+    "result": "LIVE_PASS"
+  },
+  "limits": [
+    "Fault injection covers authentication failures, interrupted streams, races, delayed creates and failed cleanup; no real provider outage was induced.",
+    "Snapshot expiry timestamp was accepted and read back; automatic expiry was not waited out.",
+    "Region and plan options are passed through; current early access fixes actual placement and compute size.",
+    "Command cancellation verifies the command process group; deliberately detached descendants are outside that guarantee.",
+    "Mastra native agent tool calls use executeCommand. Lifecycle, transfer and snapshot operations were exercised directly from the host.",
+    "Generated REST-only endpoints absent from the high-level SDK are outside this inventory."
+  ]
+}

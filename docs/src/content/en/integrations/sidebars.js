@@ -245,6 +245,15 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'sandboxes/render',
+          label: 'Render',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/render/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/render/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'sandboxes/vercel',
           label: 'Vercel',
           customProps: {

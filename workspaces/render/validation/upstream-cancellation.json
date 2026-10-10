@@ -1,0 +1,35 @@
+{
+  "startedAt": "2026-10-09T21:27:21.225Z",
+  "cases": [
+    {
+      "attached": true,
+      "sandboxId": "sbx-18p4gdb4log7f3r2c73a087gg",
+      "toolOutput": "started\n\nCommand aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.\nError: Render sandbox aborted failure. Remote work may still be running; termination was not confirmed.",
+      "statusAfterAbort": "running",
+      "remoteCommandContinued": true,
+      "toolIncorrectlyClaimsKilled": true,
+      "passed": true,
+      "cleanup": {
+        "id": "sbx-18p4gdb4log7f3r2c73a087gg",
+        "status": "terminated",
+        "terminatedAt": "2026-10-09T21:27:33.512666Z"
+      }
+    },
+    {
+      "attached": false,
+      "sandboxId": "sbx-18p4gdb4lohij9qps73d1mas0",
+      "toolOutput": "started\n\nCommand aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.\nError: Render sandbox aborted failure",
+      "terminationAfterAbort": {
+        "id": "sbx-18p4gdb4lohij9qps73d1mas0",
+        "status": "terminated",
+        "terminatedAt": "2026-10-09T21:27:35.819614Z"
+      },
+      "passed": true,
+      "cleanup": {
+        "id": "sbx-18p4gdb4lohij9qps73d1mas0",
+        "status": "terminated",
+        "terminatedAt": "2026-10-09T21:27:35.819614Z"
+      }
+    }
+  ]
+}

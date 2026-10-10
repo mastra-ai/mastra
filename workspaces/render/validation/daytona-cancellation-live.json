@@ -1,0 +1,140 @@
+{
+  "core": "1.75.0",
+  "daytonaProvider": "0.11.2",
+  "daytonaSdk": "0.201.0",
+  "providerSource": "918704fd4608aa4d9d90d4d92c0a3429de2b880a",
+  "startedAt": "2026-10-09T22:42:07.730Z",
+  "name": "mastra-daytona-cancel-1791585727730",
+  "evidence": "Live Daytona cloud sandbox, unchanged source-built adapter and core; no mocks",
+  "config": {
+    "language": "python",
+    "ephemeral": true,
+    "autoStopInterval": 2,
+    "autoDeleteInterval": 0,
+    "networkBlockAll": true,
+    "public": false
+  },
+  "cases": [
+    {
+      "mode": "normal",
+      "startedAt": "2026-10-09T22:42:09.033Z",
+      "pids": [139, 140],
+      "exitEvent": {
+        "exitCode": 0,
+        "success": true,
+        "executionTimeMs": 3743
+      },
+      "toolOutput": "started:139 child:140\n",
+      "toolReturnedAt": "2026-10-09T22:42:13.351Z",
+      "immediateObservation": {
+        "states": ["absent", "absent"],
+        "running": [false, false],
+        "markers": [true, true]
+      },
+      "delayedObservation": {
+        "states": ["absent", "absent"],
+        "running": [false, false],
+        "markers": [true, true]
+      },
+      "sandboxState": "started",
+      "behavior": "PASS: normal command completed"
+    },
+    {
+      "mode": "abort",
+      "startedAt": "2026-10-09T22:42:13.848Z",
+      "pids": [158, 159],
+      "abortRequestedAt": "2026-10-09T22:42:14.541Z",
+      "exitEvent": {
+        "exitCode": 137,
+        "success": false,
+        "executionTimeMs": 694,
+        "killed": true,
+        "timedOut": false
+      },
+      "toolOutput": "started:158 child:159\n\nCommand aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.\nExit code: 137",
+      "toolReturnedAt": "2026-10-09T22:42:14.810Z",
+      "immediateObservation": {
+        "states": ["absent", "absent"],
+        "running": [false, false],
+        "markers": [false, false]
+      },
+      "delayedObservation": {
+        "states": ["absent", "absent"],
+        "running": [false, false],
+        "markers": [false, false]
+      },
+      "sandboxState": "started",
+      "metadataCorrect": true,
+      "behavior": "PASS: parent and child stopped, no delayed files, correct kill and timeout metadata"
+    },
+    {
+      "mode": "timeout",
+      "startedAt": "2026-10-09T22:42:19.361Z",
+      "pids": [178, 179],
+      "exitEvent": {
+        "exitCode": 124,
+        "success": false,
+        "executionTimeMs": 1208,
+        "killed": true,
+        "timedOut": true
+      },
+      "toolOutput": "stdout:\nstarted:178 child:179\n\n\nstderr:\nCommand timed out after 1000ms\n\nExit code: 124",
+      "toolReturnedAt": "2026-10-09T22:42:20.890Z",
+      "immediateObservation": {
+        "states": ["absent", "absent"],
+        "running": [false, false],
+        "markers": [false, false]
+      },
+      "delayedObservation": {
+        "states": ["absent", "absent"],
+        "running": [false, false],
+        "markers": [false, false]
+      },
+      "sandboxState": "started",
+      "metadataCorrect": true,
+      "behavior": "PASS: parent and child stopped, no delayed files, correct kill and timeout metadata"
+    }
+  ],
+  "sandboxId": "fcf0d9d1-bc29-401a-b683-0d5d41186933",
+  "resources": {
+    "cpu": 1,
+    "memory": 1,
+    "disk": 3
+  },
+  "initialState": "started",
+  "testExecution": "COMPLETE",
+  "cancellationCorrect": true,
+  "cleanup": {
+    "deleted": true,
+    "sandboxId": "fcf0d9d1-bc29-401a-b683-0d5d41186933",
+    "verification": "Fresh independent SDK client: lookup returned terminal state/not-found and label-filtered list contained no active resource",
+    "observations": [
+      {
+        "at": "2026-10-09T22:43:20.978Z",
+        "lookup": "DaytonaNotFoundError",
+        "matching": []
+      }
+    ],
+    "verifiedAt": "2026-10-09T22:43:20.980Z"
+  },
+  "finishedAt": "2026-10-09T22:42:26.969Z",
+  "initialCleanupVerification": {
+    "confirmed": false,
+    "sandboxId": "fcf0d9d1-bc29-401a-b683-0d5d41186933",
+    "name": "mastra-daytona-cancel-1791585727730",
+    "error": "AssertionError: No live sandbox with the test label may remain\n\n1 !== 0\n"
+  },
+  "scriptSha256": "29092f1145753038e1afabd89c88190120e2156e47f2df55cc81905361462c10",
+  "cleanupAuditSha256": "0bbaae8ebcf0dd4ff95494b284aabaa179e652554590dba25fcc47c1c0b07f55",
+  "providerArchiveSha256": "cbb1aa470371e94fa7f52484ef1183a3dbcec6d6ffd3f8d118b09cd8582aa6e7",
+  "initialRunExitCode": 1,
+  "cleanupAuditExitCode": 0,
+  "review": {
+    "behavior": "PASS: all three live cases. Abort and timeout removed both parent and child, prevented both delayed marker files, and kept the sandbox usable.",
+    "metadata": "Abort reported killed:true, timedOut:false, exit 137. Timeout reported killed:true, timedOut:true, exit 124.",
+    "cleanup": "The first script exited 1 because immediate ID lookup and label-list checks did not both confirm deletion. A fresh independent SDK client later returned DaytonaNotFoundError for the ID and an empty label-filtered list. Cleanup is now confirmed; the initial failure is retained above.",
+    "scope": "Source-built adapter 0.11.2 from the pinned official Mastra revision, published core 1.75.0 and the exact adapter SDK dependency 0.201.0. No provider or SDK mocks or fixes.",
+    "credentials": "API key was supplied through hidden input to the host process environment, never persisted or injected into the cloud sandbox.",
+    "build": "17 upstream build tasks passed; public package imports and deduplicated core/SDK dependency checks passed."
+  }
+}

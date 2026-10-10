@@ -1,0 +1,131 @@
+{
+  "model": "anthropic/claude-haiku-4-5-20251001",
+  "startedAt": "2026-10-10T00:06:13.957Z",
+  "statuses": ["running", "terminated"],
+  "sandboxId": "sbx-18p4gdb4o2tg473hc738ggdt0",
+  "baselineExitCode": 1,
+  "toolCalls": [
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    }
+  ],
+  "verifiedStdout": "\u2714 sums all three orders (1.071541ms)\n\u2714 handles a single order (0.109762ms)\n\u2714 handles an empty file with a header (0.084309ms)\n\u2714 includes refunds (0.116053ms)\n\u2139 tests 4\n\u2139 suites 0\n\u2139 pass 4\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 52.335213\nVerified report: total=42, row_count=3\n",
+  "report": {
+    "total": 42,
+    "row_count": 3
+  },
+  "testsPassed": 4,
+  "taskPassed": true,
+  "cleanup": {
+    "id": "sbx-18p4gdb4o2tg473hc738ggdt0",
+    "status": "terminated",
+    "terminatedAt": "2026-10-10T00:06:40.038348Z"
+  },
+  "additionalModelRuns": [
+    {
+      "model": "anthropic/claude-sonnet-4-6",
+      "startedAt": "2026-10-10T00:16:54.613Z",
+      "statuses": ["running", "terminated"],
+      "sandboxId": "sbx-18p4gdb4o7tnlk1mc73fdvtqg",
+      "baselineExitCode": 1,
+      "providerResponses": [
+        {
+          "id": "msg_011CfsbTY4Hy3ofVZt9xqkY6",
+          "modelId": "claude-sonnet-4-6"
+        },
+        {
+          "id": "msg_011CfsbTjnz1a7N2HhctFqCb",
+          "modelId": "claude-sonnet-4-6"
+        },
+        {
+          "id": "msg_011CfsbU8J5A5fd85HdY2diw",
+          "modelId": "claude-sonnet-4-6"
+        },
+        {
+          "id": "msg_011CfsbUJnbWEVdSYUa6iETP",
+          "modelId": "claude-sonnet-4-6"
+        },
+        {
+          "id": "msg_011CfsbUXDTZb4gw4bgchtSj",
+          "modelId": "claude-sonnet-4-6"
+        }
+      ],
+      "totalUsage": {
+        "inputTokens": 10265,
+        "outputTokens": 934,
+        "totalTokens": 11199,
+        "cachedInputTokens": 0,
+        "cacheCreationInputTokens": 0,
+        "cacheCreationInputTokens5m": 0,
+        "cacheCreationInputTokens1h": 0,
+        "raw": {
+          "inputTokens": {
+            "total": 2589,
+            "noCache": 2589,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "outputTokens": {
+            "total": 262
+          },
+          "raw": {
+            "input_tokens": 2589,
+            "output_tokens": 262,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "service_tier": "standard",
+            "inference_geo": "global"
+          }
+        }
+      },
+      "toolCalls": [
+        {
+          "toolName": "mastra_workspace_execute_command"
+        },
+        {
+          "toolName": "mastra_workspace_execute_command"
+        },
+        {
+          "toolName": "mastra_workspace_execute_command"
+        },
+        {
+          "toolName": "mastra_workspace_execute_command"
+        }
+      ],
+      "verifiedStdout": "\u2714 sums all three orders (1.150235ms)\n\u2714 handles a single order (0.120851ms)\n\u2714 handles an empty file with a header (0.08738ms)\n\u2714 includes refunds (0.095401ms)\n\u2139 tests 4\n\u2139 suites 0\n\u2139 pass 4\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 47.68802\nVerified report: total=42, row_count=3\n",
+      "report": {
+        "total": 42,
+        "row_count": 3
+      },
+      "testsPassed": 4,
+      "taskPassed": true,
+      "cleanup": {
+        "id": "sbx-18p4gdb4o7tnlk1mc73fdvtqg",
+        "status": "terminated",
+        "terminatedAt": "2026-10-10T00:17:21.624832Z"
+      }
+    }
+  ]
+}

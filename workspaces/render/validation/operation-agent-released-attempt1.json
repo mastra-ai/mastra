@@ -1,0 +1,114 @@
+{
+  "model": "anthropic/claude-haiku-4-5-20251001",
+  "startedAt": "2026-10-10T00:42:10.327Z",
+  "statuses": ["running", "terminated"],
+  "sandboxId": "sbx-18p4gdb4ojonlk1mc73ff86u0",
+  "baselineExitCode": 1,
+  "providerResponses": [
+    {
+      "id": "msg_011CfsdPGjB1HLEzrTR7QdxG",
+      "modelId": "claude-haiku-4-5-20251001"
+    },
+    {
+      "id": "msg_011CfsdPUd3GnBMHfTvjP47o",
+      "modelId": "claude-haiku-4-5-20251001"
+    },
+    {
+      "id": "msg_011CfsdPkmPY9uZNGzcKmDAe",
+      "modelId": "claude-haiku-4-5-20251001"
+    },
+    {
+      "id": "msg_011CfsdPuSXwPwzjbV9hAtV4",
+      "modelId": "claude-haiku-4-5-20251001"
+    },
+    {
+      "id": "msg_011CfsdQ8GxP2gznn5vfiB4g",
+      "modelId": "claude-haiku-4-5-20251001"
+    },
+    {
+      "id": "msg_011CfsdQFhgiwSzc2Es9AAiw",
+      "modelId": "claude-haiku-4-5-20251001"
+    },
+    {
+      "id": "msg_011CfsdQSpfHS4FniwRDW4n4",
+      "modelId": "claude-haiku-4-5-20251001"
+    }
+  ],
+  "totalUsage": {
+    "inputTokens": 17649,
+    "outputTokens": 1343,
+    "totalTokens": 18992,
+    "cachedInputTokens": 0,
+    "cacheCreationInputTokens": 0,
+    "cacheCreationInputTokens5m": 0,
+    "cacheCreationInputTokens1h": 0,
+    "raw": {
+      "inputTokens": {
+        "total": 3356,
+        "noCache": 3356,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "outputTokens": {
+        "total": 233
+      },
+      "raw": {
+        "input_tokens": 3356,
+        "output_tokens": 233,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 0
+        },
+        "service_tier": "standard",
+        "inference_geo": "not_available"
+      }
+    }
+  },
+  "toolCalls": [
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    }
+  ],
+  "taskPassed": false,
+  "error": "RenderSandboxError: Render sandbox stream failure",
+  "cleanup": {
+    "id": "sbx-18p4gdb4ojonlk1mc73ff86u0",
+    "status": "terminated",
+    "terminatedAt": "2026-10-10T00:42:36.518065Z"
+  },
+  "failureDetails": {
+    "phase": "independent artifact download",
+    "statusCode": 429,
+    "message": "rate limit exceeded",
+    "source": "observed SDK ClientError cause in launcher output"
+  }
+}

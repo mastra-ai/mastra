@@ -1,0 +1,114 @@
+{
+  "model": "anthropic/claude-haiku-4-5-20251001",
+  "startedAt": "2026-10-10T00:44:29.980Z",
+  "statuses": ["running", "terminated"],
+  "sandboxId": "sbx-18p4gdb4okrh42hec73ee32r0",
+  "baselineExitCode": 1,
+  "providerResponses": [
+    {
+      "id": "msg_011CfsdZXRUyh6j6LoU7FH1s",
+      "modelId": "claude-haiku-4-5-20251001"
+    },
+    {
+      "id": "msg_011CfsdZiq5ZyN3UhGhMQkBh",
+      "modelId": "claude-haiku-4-5-20251001"
+    },
+    {
+      "id": "msg_011Cfsda2ee5kXJtfxt6Nxbn",
+      "modelId": "claude-haiku-4-5-20251001"
+    },
+    {
+      "id": "msg_011CfsdaBctqirxGmsGE8mX2",
+      "modelId": "claude-haiku-4-5-20251001"
+    },
+    {
+      "id": "msg_011CfsdaMgsxNFKJYRuDN6ac",
+      "modelId": "claude-haiku-4-5-20251001"
+    },
+    {
+      "id": "msg_011CfsdaX8QBkrmVWycP6tNd",
+      "modelId": "claude-haiku-4-5-20251001"
+    },
+    {
+      "id": "msg_011Cfsdagk79vQ3MSbuCpA4j",
+      "modelId": "claude-haiku-4-5-20251001"
+    }
+  ],
+  "totalUsage": {
+    "inputTokens": 17713,
+    "outputTokens": 1392,
+    "totalTokens": 19105,
+    "cachedInputTokens": 0,
+    "cacheCreationInputTokens": 0,
+    "cacheCreationInputTokens5m": 0,
+    "cacheCreationInputTokens1h": 0,
+    "raw": {
+      "inputTokens": {
+        "total": 3371,
+        "noCache": 3371,
+        "cacheRead": 0,
+        "cacheWrite": 0
+      },
+      "outputTokens": {
+        "total": 278
+      },
+      "raw": {
+        "input_tokens": 3371,
+        "output_tokens": 278,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "cache_creation": {
+          "ephemeral_5m_input_tokens": 0,
+          "ephemeral_1h_input_tokens": 0
+        },
+        "service_tier": "standard",
+        "inference_geo": "not_available"
+      }
+    }
+  },
+  "toolCalls": [
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    }
+  ],
+  "verifiedStdout": "\u2714 sums all three orders (1.10562ms)\n\u2714 handles a single order (0.116856ms)\n\u2714 handles an empty file with a header (0.084598ms)\n\u2714 includes refunds (0.105295ms)\n\u2139 tests 4\n\u2139 suites 0\n\u2139 pass 4\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 46.817122\nVerified report: total=42, row_count=3\n",
+  "report": {
+    "total": 42,
+    "row_count": 3
+  },
+  "testsPassed": 4,
+  "taskPassed": true,
+  "cleanup": {
+    "id": "sbx-18p4gdb4okrh42hec73ee32r0",
+    "status": "terminated",
+    "terminatedAt": "2026-10-10T00:44:56.975122Z"
+  },
+  "core": "1.75.0"
+}

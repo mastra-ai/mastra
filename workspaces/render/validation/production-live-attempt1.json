@@ -1,0 +1,176 @@
+{
+  "startedAt": "2026-10-09T23:57:30.729Z",
+  "sdk": "1.2.0",
+  "core": "1.75.0",
+  "cases": [
+    {
+      "name": "metadata, listing and groups",
+      "startedAt": "2026-10-09T23:57:33.326Z",
+      "evidence": {
+        "metadata": {
+          "id": "sbx-18p4gdb4nuqjtqb8s73bg7dp0",
+          "status": "running",
+          "plan": "starter",
+          "networkPolicy": {
+            "type": "deny-all",
+            "default": "deny-all"
+          },
+          "region": "oregon",
+          "timeoutSeconds": 900,
+          "createdAt": "2026-10-09T23:57:30Z",
+          "terminatedAt": null
+        },
+        "groups": ["sbg-dav967vlot8c73bg8650"],
+        "pagination": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "command argv, cwd, env, stdout, stderr and nonzero status",
+      "startedAt": "2026-10-09T23:57:35.344Z",
+      "evidence": {
+        "command": "python3",
+        "args": [
+          "-c",
+          "import os,sys; print(os.getcwd());print(os.environ[\"CUSTOM\"]);print(sys.argv[1]);print(\"error\",file=sys.stderr);sys.exit(7)",
+          "literal $HOME; echo injected"
+        ],
+        "success": false,
+        "exitCode": 7,
+        "stdout": "/tmp/production-20376ced-7654-4a2d-9eef-7cae4cd8a5c1\na b\nliteral $HOME; echo injected\n",
+        "stderr": "error\n",
+        "executionTimeMs": 550,
+        "killed": false,
+        "timedOut": false,
+        "stdoutTruncated": false,
+        "stderrTruncated": false,
+        "stdoutDroppedBytes": 0,
+        "stderrDroppedBytes": 0
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "Mastra normal with parent, child and unrelated concurrent work",
+      "startedAt": "2026-10-09T23:57:39.015Z",
+      "evidence": {
+        "toolResult": "started:672 child:673\n",
+        "exitEvent": {
+          "exitCode": 0,
+          "success": true,
+          "executionTimeMs": 3733,
+          "killed": false,
+          "timedOut": false
+        },
+        "pids": [672, 673],
+        "actual": {
+          "alive": [false, false],
+          "markers": [true, true],
+          "unrelated": "preserved"
+        }
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "Mastra abort with parent, child and unrelated concurrent work",
+      "startedAt": "2026-10-09T23:57:48.454Z",
+      "evidence": {
+        "toolResult": "started:683 child:684\n\nCommand aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.\nExit code: 137",
+        "exitEvent": {
+          "exitCode": 137,
+          "success": false,
+          "executionTimeMs": 975,
+          "killed": true,
+          "timedOut": false
+        },
+        "pids": [683, 684],
+        "actual": {
+          "alive": [false, false],
+          "markers": [false, false],
+          "unrelated": "preserved"
+        }
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "Mastra timeout with parent, child and unrelated concurrent work",
+      "startedAt": "2026-10-09T23:57:57.546Z",
+      "evidence": {
+        "toolResult": "started:695 child:696\n\nExit code: 137",
+        "exitEvent": {
+          "exitCode": 137,
+          "success": false,
+          "executionTimeMs": 1459,
+          "killed": true,
+          "timedOut": true
+        },
+        "pids": [695, 696],
+        "actual": {
+          "alive": [false, false],
+          "markers": [false, false],
+          "unrelated": "preserved"
+        }
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "attached command cancellation preserves resource and adapter",
+      "startedAt": "2026-10-09T23:58:06.610Z",
+      "evidence": {
+        "result": {
+          "command": "echo attached-ready; sleep 30",
+          "args": [],
+          "success": false,
+          "exitCode": 137,
+          "stdout": "attached-ready\n",
+          "stderr": "",
+          "executionTimeMs": 802,
+          "killed": true,
+          "timedOut": false,
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "stdoutDroppedBytes": 0,
+          "stderrDroppedBytes": 0
+        },
+        "reused": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "native exec cancellation stops observation and preserves resource",
+      "startedAt": "2026-10-09T23:58:10.182Z",
+      "evidence": {
+        "remoteCompletedAfterObservationStopped": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "streamed upload and download above 16 MiB",
+      "startedAt": "2026-10-09T23:58:14.826Z",
+      "evidence": {
+        "bytes": 17825792,
+        "sha256": "1844ad8e5529c2d37622a4158196a0749493fafc81f3e5afe85aa1eacce739e1",
+        "contentType": "application/octet-stream",
+        "atomicLocalDownload": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "local file, tar directory and gzip archive uploads",
+      "startedAt": "2026-10-09T23:58:20.625Z",
+      "result": "FAIL",
+      "error": "RenderSandboxError: Render sandbox stream failure"
+    }
+  ],
+  "resources": ["sbx-18p4gdb4nuqjtqb8s73bg7dp0"],
+  "snapshots": [],
+  "cleanup": [
+    {
+      "id": "sbx-18p4gdb4nuqjtqb8s73bg7dp0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-09T23:58:22.68152Z"
+    }
+  ],
+  "result": "FAIL",
+  "error": "RenderSandboxError: Render sandbox stream failure",
+  "finishedAt": "2026-10-09T23:58:22.989Z"
+}

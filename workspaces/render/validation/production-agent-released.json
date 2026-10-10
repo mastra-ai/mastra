@@ -1,0 +1,144 @@
+{
+  "model": "anthropic/claude-haiku-4-5-20251001",
+  "startedAt": "2026-10-10T00:05:14.842Z",
+  "statuses": ["running", "terminated"],
+  "sandboxId": "sbx-18p4gdb4o2eo473hc738gehcg",
+  "baselineExitCode": 1,
+  "toolCalls": [
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    },
+    {
+      "toolName": "mastra_workspace_execute_command"
+    }
+  ],
+  "verifiedStdout": "\u2714 sums all three orders (1.060849ms)\n\u2714 handles a single order (0.110629ms)\n\u2714 handles an empty file with a header (0.090453ms)\n\u2714 includes refunds (0.082161ms)\n\u2139 tests 4\n\u2139 suites 0\n\u2139 pass 4\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 45.509989\nVerified report: total=42, row_count=3\n",
+  "report": {
+    "total": 42,
+    "row_count": 3
+  },
+  "testsPassed": 4,
+  "taskPassed": true,
+  "cleanup": {
+    "id": "sbx-18p4gdb4o2eo473hc738gehcg",
+    "status": "terminated",
+    "terminatedAt": "2026-10-10T00:05:42.237867Z"
+  },
+  "additionalModelRuns": [
+    {
+      "model": "anthropic/claude-sonnet-4-6",
+      "startedAt": "2026-10-10T00:16:59.110Z",
+      "statuses": ["running", "terminated"],
+      "sandboxId": "sbx-18p4gdb4o7urbc2fs73b7c7fg",
+      "baselineExitCode": 1,
+      "providerResponses": [
+        {
+          "id": "msg_011CfsbTrxbFT4xTNYLrdjGw",
+          "modelId": "claude-sonnet-4-6"
+        },
+        {
+          "id": "msg_011CfsbU4QuxuSd8sZrCfo9a",
+          "modelId": "claude-sonnet-4-6"
+        },
+        {
+          "id": "msg_011CfsbUKUXdpkRcKjC7Tqym",
+          "modelId": "claude-sonnet-4-6"
+        },
+        {
+          "id": "msg_011CfsbUUpMT5FXgZN1L7WJn",
+          "modelId": "claude-sonnet-4-6"
+        },
+        {
+          "id": "msg_011CfsbUkr1YXA5AFBhF64BU",
+          "modelId": "claude-sonnet-4-6"
+        },
+        {
+          "id": "msg_011CfsbUud6iFKhQCNZwULtQ",
+          "modelId": "claude-sonnet-4-6"
+        }
+      ],
+      "totalUsage": {
+        "inputTokens": 12858,
+        "outputTokens": 813,
+        "totalTokens": 13671,
+        "cachedInputTokens": 0,
+        "cacheCreationInputTokens": 0,
+        "cacheCreationInputTokens5m": 0,
+        "cacheCreationInputTokens1h": 0,
+        "raw": {
+          "inputTokens": {
+            "total": 2804,
+            "noCache": 2804,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          },
+          "outputTokens": {
+            "total": 279
+          },
+          "raw": {
+            "input_tokens": 2804,
+            "output_tokens": 279,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation": {
+              "ephemeral_5m_input_tokens": 0,
+              "ephemeral_1h_input_tokens": 0
+            },
+            "service_tier": "standard",
+            "inference_geo": "global"
+          }
+        }
+      },
+      "toolCalls": [
+        {
+          "toolName": "mastra_workspace_execute_command"
+        },
+        {
+          "toolName": "mastra_workspace_execute_command"
+        },
+        {
+          "toolName": "mastra_workspace_execute_command"
+        },
+        {
+          "toolName": "mastra_workspace_execute_command"
+        },
+        {
+          "toolName": "mastra_workspace_execute_command"
+        },
+        {
+          "toolName": "mastra_workspace_execute_command"
+        }
+      ],
+      "verifiedStdout": "\u2714 sums all three orders (1.052581ms)\n\u2714 handles a single order (0.121261ms)\n\u2714 handles an empty file with a header (0.083765ms)\n\u2714 includes refunds (0.081894ms)\n\u2139 tests 4\n\u2139 suites 0\n\u2139 pass 4\n\u2139 fail 0\n\u2139 cancelled 0\n\u2139 skipped 0\n\u2139 todo 0\n\u2139 duration_ms 63.90206\nVerified report: total=42, row_count=3\n",
+      "report": {
+        "total": 42,
+        "row_count": 3
+      },
+      "testsPassed": 4,
+      "taskPassed": true,
+      "cleanup": {
+        "id": "sbx-18p4gdb4o7urbc2fs73b7c7fg",
+        "status": "terminated",
+        "terminatedAt": "2026-10-10T00:17:27.548664Z"
+      }
+    }
+  ]
+}

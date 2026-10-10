@@ -1,0 +1,36 @@
+{
+  "startedAt": "2026-10-09T23:59:03.173Z",
+  "sdk": "1.2.0",
+  "core": "1.75.0",
+  "cases": [
+    {
+      "name": "local file, tar directory and gzip archive uploads",
+      "startedAt": "2026-10-09T23:59:06.862Z",
+      "result": "FAIL",
+      "error": "RenderSandboxError: Render sandbox stream failure",
+      "causes": [
+        {
+          "name": "RenderSandboxError",
+          "message": "Render sandbox stream failure",
+          "code": "STREAM"
+        },
+        {
+          "name": "ClientError",
+          "message": "Failed to upload sandbox file: {\"code\":\"bad_archive\",\"message\":\"bad archive: tar: /usr/bin/tar: This does not look like a tar archive\\n/usr/bin/tar: Exiting with failure status due to previous errors\"}\n"
+        }
+      ]
+    }
+  ],
+  "resources": ["sbx-18p4gdb4nvht9fdbs73a91e4g"],
+  "snapshots": [],
+  "cleanup": [
+    {
+      "id": "sbx-18p4gdb4nvht9fdbs73a91e4g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-09T23:59:09.153015Z"
+    }
+  ],
+  "result": "FAIL",
+  "error": "RenderSandboxError: Render sandbox stream failure",
+  "finishedAt": "2026-10-09T23:59:09.600Z"
+}

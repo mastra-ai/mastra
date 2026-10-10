@@ -1,0 +1,292 @@
+{
+  "startedAt": "2026-10-10T00:05:27.443Z",
+  "sdk": "1.2.0",
+  "core": "1.75.0",
+  "cases": [
+    {
+      "name": "metadata, listing and groups",
+      "startedAt": "2026-10-10T00:05:31.173Z",
+      "evidence": {
+        "metadata": {
+          "id": "sbx-18p4gdb4o2hvlot8c73cd2m7g",
+          "status": "running",
+          "plan": "starter",
+          "networkPolicy": {
+            "type": "deny-all",
+            "default": "deny-all"
+          },
+          "region": "oregon",
+          "timeoutSeconds": 900,
+          "createdAt": "2026-10-10T00:05:27Z",
+          "terminatedAt": null
+        },
+        "groups": ["sbg-dav967vlot8c73bg8650"],
+        "pagination": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "command argv, cwd, env, stdout, stderr and nonzero status",
+      "startedAt": "2026-10-10T00:05:33.163Z",
+      "evidence": {
+        "command": "python3",
+        "args": [
+          "-c",
+          "import os,sys; print(os.getcwd());print(os.environ[\"CUSTOM\"]);print(sys.argv[1]);print(\"error\",file=sys.stderr);sys.exit(7)",
+          "literal $HOME; echo injected"
+        ],
+        "success": false,
+        "exitCode": 7,
+        "stdout": "/tmp/production-1735457f-f3d0-41c9-805e-e3fbbd1962b9\na b\nliteral $HOME; echo injected\n",
+        "stderr": "error\n",
+        "executionTimeMs": 515,
+        "killed": false,
+        "timedOut": false,
+        "stdoutTruncated": false,
+        "stderrTruncated": false,
+        "stdoutDroppedBytes": 0,
+        "stderrDroppedBytes": 0
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "Mastra normal with parent, child and unrelated concurrent work",
+      "startedAt": "2026-10-10T00:05:36.540Z",
+      "evidence": {
+        "toolResult": "started:674 child:675\n",
+        "exitEvent": {
+          "exitCode": 0,
+          "success": true,
+          "executionTimeMs": 3524,
+          "killed": false,
+          "timedOut": false
+        },
+        "pids": [674, 675],
+        "actual": {
+          "alive": [false, false],
+          "markers": [true, true],
+          "unrelated": "preserved"
+        }
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "Mastra abort with parent, child and unrelated concurrent work",
+      "startedAt": "2026-10-10T00:05:45.894Z",
+      "evidence": {
+        "toolResult": "started:685 child:686\n\nCommand aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.\nExit code: 137",
+        "exitEvent": {
+          "exitCode": 137,
+          "success": false,
+          "executionTimeMs": 1116,
+          "killed": true,
+          "timedOut": false
+        },
+        "pids": [685, 686],
+        "actual": {
+          "alive": [false, false],
+          "markers": [false, false],
+          "unrelated": "preserved"
+        }
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "Mastra timeout with parent, child and unrelated concurrent work",
+      "startedAt": "2026-10-10T00:05:54.952Z",
+      "evidence": {
+        "toolResult": "started:697 child:698\n\nExit code: 137",
+        "exitEvent": {
+          "exitCode": 137,
+          "success": false,
+          "executionTimeMs": 1366,
+          "killed": true,
+          "timedOut": true
+        },
+        "pids": [697, 698],
+        "actual": {
+          "alive": [false, false],
+          "markers": [false, false],
+          "unrelated": "preserved"
+        }
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "attached command cancellation preserves resource and adapter",
+      "startedAt": "2026-10-10T00:06:03.926Z",
+      "evidence": {
+        "result": {
+          "command": "echo attached-ready; sleep 30",
+          "args": [],
+          "success": false,
+          "exitCode": 137,
+          "stdout": "attached-ready\n",
+          "stderr": "",
+          "executionTimeMs": 816,
+          "killed": true,
+          "timedOut": false,
+          "stdoutTruncated": false,
+          "stderrTruncated": false,
+          "stdoutDroppedBytes": 0,
+          "stderrDroppedBytes": 0
+        },
+        "reused": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "native exec cancellation stops observation and preserves resource",
+      "startedAt": "2026-10-10T00:06:07.137Z",
+      "evidence": {
+        "remoteCompletedAfterObservationStopped": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "streamed upload and download above 16 MiB",
+      "startedAt": "2026-10-10T00:06:11.679Z",
+      "evidence": {
+        "bytes": 17825792,
+        "sha256": "1844ad8e5529c2d37622a4158196a0749493fafc81f3e5afe85aa1eacce739e1",
+        "contentType": "application/octet-stream",
+        "atomicLocalDownload": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "local file, tar directory and gzip archive uploads",
+      "startedAt": "2026-10-10T00:06:18.578Z",
+      "evidence": {
+        "localFile": true,
+        "directoryTar": true,
+        "gzip": true,
+        "binary": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "filesystem capture, lookup, pagination and restore",
+      "startedAt": "2026-10-10T00:06:23.839Z",
+      "evidence": {
+        "snapshot": {
+          "capturedAt": "2026-10-10T00:06:24.152142Z",
+          "expiresAt": "2026-10-13T00:06:23.959301Z",
+          "id": "snp-db4o2vphmtc000bn2mi0",
+          "kind": "filesystem",
+          "name": "mastra-production-1735457f-f3d0-41c9-805e-e3fbbd1962b9",
+          "plan": "starter",
+          "requestedAt": "2026-10-10T00:06:24.002774Z",
+          "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+          "sourceSandboxId": "sbx-18p4gdb4o2hvlot8c73cd2m7g",
+          "status": "available"
+        },
+        "restoredId": "sbx-18p4gdb4o33t9fdbs73a9ejug",
+        "bytesAndPermissionsPreserved": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "runtime capture and restore running process memory",
+      "startedAt": "2026-10-10T00:06:44.609Z",
+      "evidence": {
+        "snapshot": {
+          "capturedAt": "2026-10-10T00:06:57.086411Z",
+          "expiresAt": "2026-10-13T00:06:46.039535Z",
+          "id": "snp-db4o35h37lj0009k0vdg",
+          "kind": "runtime",
+          "name": "mastra-runtime-1735457f-f3d0-41c9-805e-e3fbbd1962b9",
+          "plan": "starter",
+          "requestedAt": "2026-10-10T00:06:46.099499Z",
+          "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+          "sourceSandboxId": "sbx-18p4gdb4o2hvlot8c73cd2m7g",
+          "status": "available"
+        },
+        "restoredId": "sbx-18p4gdb4o3el9fdbs73a9ft70",
+        "before": 109,
+        "after": 114,
+        "processMemoryResumed": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "Mastra checkpoint hook",
+      "startedAt": "2026-10-10T00:07:29.449Z",
+      "evidence": {
+        "snapshotId": "snp-db4o3g937lj0009k1040",
+        "name": "render-ec73100a-b3d0-4f38-8a65-074e888ad469"
+      },
+      "result": "PASS"
+    }
+  ],
+  "resources": ["sbx-18p4gdb4o2hvlot8c73cd2m7g", "sbx-18p4gdb4o33t9fdbs73a9ejug", "sbx-18p4gdb4o3el9fdbs73a9ft70"],
+  "snapshots": [
+    {
+      "capturedAt": "2026-10-10T00:06:24.152142Z",
+      "expiresAt": "2026-10-13T00:06:23.959301Z",
+      "id": "snp-db4o2vphmtc000bn2mi0",
+      "kind": "filesystem",
+      "name": "mastra-production-1735457f-f3d0-41c9-805e-e3fbbd1962b9",
+      "plan": "starter",
+      "requestedAt": "2026-10-10T00:06:24.002774Z",
+      "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+      "sourceSandboxId": "sbx-18p4gdb4o2hvlot8c73cd2m7g",
+      "status": "available"
+    },
+    {
+      "capturedAt": "2026-10-10T00:06:57.086411Z",
+      "expiresAt": "2026-10-13T00:06:46.039535Z",
+      "id": "snp-db4o35h37lj0009k0vdg",
+      "kind": "runtime",
+      "name": "mastra-runtime-1735457f-f3d0-41c9-805e-e3fbbd1962b9",
+      "plan": "starter",
+      "requestedAt": "2026-10-10T00:06:46.099499Z",
+      "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+      "sourceSandboxId": "sbx-18p4gdb4o2hvlot8c73cd2m7g",
+      "status": "available"
+    },
+    {
+      "capturedAt": "2026-10-10T00:07:29.696423Z",
+      "expiresAt": "2026-10-13T00:07:29.519925Z",
+      "id": "snp-db4o3g937lj0009k1040",
+      "kind": "filesystem",
+      "name": "render-ec73100a-b3d0-4f38-8a65-074e888ad469",
+      "plan": "starter",
+      "requestedAt": "2026-10-10T00:07:29.563705Z",
+      "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+      "sourceSandboxId": "sbx-18p4gdb4o2hvlot8c73cd2m7g",
+      "status": "available"
+    }
+  ],
+  "cleanup": [
+    {
+      "snapshotId": "snp-db4o2vphmtc000bn2mi0",
+      "deleted": true
+    },
+    {
+      "snapshotId": "snp-db4o35h37lj0009k0vdg",
+      "deleted": true
+    },
+    {
+      "snapshotId": "snp-db4o3g937lj0009k1040",
+      "deleted": true
+    },
+    {
+      "id": "sbx-18p4gdb4o3el9fdbs73a9ft70",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:07:27.90321Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o33t9fdbs73a9ejug",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:06:42.976903Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o2hvlot8c73cd2m7g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:07:47.315458Z"
+    }
+  ],
+  "result": "PASS",
+  "finishedAt": "2026-10-10T00:07:47.595Z"
+}

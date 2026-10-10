@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+.env.*
+!.env.example
+validation/*-artifacts/
+validation/*.tgz
+*.tgz
+validation/*-artifacts.*
+
+# Private local credential launcher. Live tests accept environment variables directly.
+scripts/run-with-local-credentials.py

@@ -1,0 +1,84 @@
+{
+  "startedAt": "2026-10-09T23:05:24.171Z",
+  "core": "1.75.0",
+  "renderSdk": "1.2.0",
+  "evidence": "Live Render sandbox; prototype process-group control through public WorkspaceSandbox and SDK APIs; current adapter unchanged",
+  "name": "mastra-proc-proof-68a03301-d4ec-4201-8e2d-18c8895ef621",
+  "cases": [
+    {
+      "mode": "normal",
+      "pids": [668, 669],
+      "exitEvent": {
+        "exitCode": 0,
+        "success": true,
+        "executionTimeMs": 3454,
+        "killed": false,
+        "timedOut": false
+      },
+      "toolOutput": "started:668 child:669\n",
+      "observed": {
+        "alive": [false, false],
+        "markers": [true, true],
+        "unrelated": "preserved"
+      },
+      "sandboxState": "running",
+      "result": "PASS"
+    },
+    {
+      "mode": "abort",
+      "pids": [678, 679],
+      "exitEvent": {
+        "exitCode": 9,
+        "success": false,
+        "executionTimeMs": 1712,
+        "killed": true,
+        "timedOut": false
+      },
+      "toolOutput": "stdout:\nstarted:678 child:679\n\n\nstderr:\nsetsid: child 677 did not exit normally: Success\n\nCommand aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.\nExit code: 9",
+      "observed": {
+        "alive": [false, false],
+        "markers": [false, false],
+        "unrelated": "preserved"
+      },
+      "sandboxState": "running",
+      "result": "PASS"
+    },
+    {
+      "mode": "timeout",
+      "pids": [693, 694],
+      "exitEvent": {
+        "exitCode": 9,
+        "success": false,
+        "executionTimeMs": 1899,
+        "killed": true,
+        "timedOut": true
+      },
+      "toolOutput": "stdout:\nstarted:693 child:694\n\n\nstderr:\nsetsid: child 692 did not exit normally: Success\n\nExit code: 9",
+      "observed": {
+        "alive": [false, false],
+        "markers": [false, false],
+        "unrelated": "preserved"
+      },
+      "sandboxState": "running",
+      "result": "PASS"
+    }
+  ],
+  "sandboxId": "sbx-18p4gdb4n6d67bikc73fg4eqg",
+  "prerequisites": "/usr/bin/setsid\n/usr/bin/python3\n",
+  "result": "PASS",
+  "cleanup": {
+    "id": "sbx-18p4gdb4n6d67bikc73fg4eqg",
+    "status": "terminated",
+    "terminatedAt": "2026-10-09T23:05:42.619225Z"
+  },
+  "finishedAt": "2026-10-09T23:05:42.806Z",
+  "scriptSha256": "56561ce55944da352fafb1bb6a25b074b8c3a26d9f54cb92872d6c2e682d9e55",
+  "review": {
+    "diagnosis": "The current adapter lacks command-level process control. Docker implements a shell process-group wrapper and a second exec kill helper. Daytona deletes a dedicated session. Render SDK request cancellation alone does not terminate the process.",
+    "liveFinding": "The prototype used only public Render SDK exec and public Mastra WorkspaceSandbox/createWorkspaceTools on unpatched core 1.75.0. Normal, abort and timeout cases all passed; ordinary parent and child stopped, delayed files were prevented, and unrelated work plus sandbox were preserved.",
+    "ownership": "Preserving an attached sandbox does not prevent the adapter from terminating commands it launched. Current owned-sandbox cancellation already works by terminating the entire sandbox.",
+    "reporting": "The separate Mastra core false-killed-on-error defect remains. A confirmed killed:true result works on current core; uncertain termination errors still require truthful core wording.",
+    "scope": "Feasibility prototype only; no production Render adapter changes. It requires setsid -w and tests ordinary descendants that remain in the process group. It does not establish protection against deliberate session escape, PID/identity races, tampering, or failed control-plane calls.",
+    "exitStatus": "The actual Render exec exit was 9 after setsid reported its child received a signal. The probe preserved this observed exit rather than fabricating 137 or 124. Production exit reporting and cleanup/error races still need implementation and tests."
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "core": "1.75.0",
+  "modalProvider": "0.7.1",
+  "modalSdk": "0.10.1",
+  "providerSource": "918704fd4608aa4d9d90d4d92c0a3429de2b880a",
+  "startedAt": "2026-10-09T22:34:59.379Z",
+  "evidence": "Live Modal cloud sandbox, unchanged source-built adapter and core; no mocks",
+  "appName": "mastra",
+  "name": "mastra-modal-cancel-1791585299379",
+  "image": "python:3.13-slim",
+  "sandboxLifetimeMs": 300000,
+  "cases": [
+    {
+      "mode": "normal",
+      "startedAt": "2026-10-09T22:35:06.552Z",
+      "pids": [5, 6],
+      "exitEvent": {
+        "exitCode": 0,
+        "success": true,
+        "executionTimeMs": 3165
+      },
+      "toolOutput": "started:5 child:6\n",
+      "toolReturnedAt": "2026-10-09T22:35:10.438Z",
+      "immediateObservation": {
+        "alive": [false, false],
+        "markers": [true, true]
+      },
+      "delayedObservation": {
+        "alive": [false, false],
+        "markers": [true, true]
+      },
+      "sandboxStillRunning": true,
+      "behavior": "PASS: normal command completed"
+    },
+    {
+      "mode": "abort",
+      "startedAt": "2026-10-09T22:35:11.435Z",
+      "pids": [10, 11],
+      "abortRequestedAt": "2026-10-09T22:35:11.606Z",
+      "exitEvent": {
+        "exitCode": 137,
+        "success": false,
+        "executionTimeMs": 81,
+        "killed": true,
+        "timedOut": false
+      },
+      "toolOutput": "started:10 child:11\n\nCommand aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.\nExit code: 137",
+      "toolReturnedAt": "2026-10-09T22:35:11.607Z",
+      "immediateObservation": {
+        "alive": [true, true],
+        "markers": [false, false]
+      },
+      "delayedObservation": {
+        "alive": [false, false],
+        "markers": [true, true]
+      },
+      "sandboxStillRunning": true,
+      "behavior": "FAIL: adapter claimed killed but remote work continued and wrote a delayed file"
+    },
+    {
+      "mode": "timeout",
+      "startedAt": "2026-10-09T22:35:16.164Z",
+      "pids": [15, 16],
+      "exitEvent": {
+        "exitCode": 1,
+        "success": false,
+        "executionTimeMs": 1004
+      },
+      "toolOutput": "started:15 child:16\n\nExit code: 1",
+      "toolReturnedAt": "2026-10-09T22:35:17.261Z",
+      "immediateObservation": {
+        "alive": [true, true],
+        "markers": [false, false]
+      },
+      "delayedObservation": {
+        "alive": [false, false],
+        "markers": [true, true]
+      },
+      "sandboxStillRunning": true,
+      "behavior": "INCONCLUSIVE: inspect raw observations"
+    }
+  ],
+  "sandboxId": "sb-fuPahYsUSpfVpfkQ1n2Os1",
+  "testExecution": "COMPLETE",
+  "cancellationCorrect": false,
+  "cleanup": {
+    "sandboxId": "sb-fuPahYsUSpfVpfkQ1n2Os1",
+    "terminated": true,
+    "exitCode": 137,
+    "cleanupFallback": true,
+    "verifiedAt": "2026-10-09T22:35:52.184Z",
+    "verification": "Independent ModalClient sandbox poll returned terminal exit code"
+  },
+  "finishedAt": "2026-10-09T22:35:52.184Z",
+  "scriptSha256": "05d0b9339935dad657831fb73fc1e388b9135746c8535321e51feecb93d191f1",
+  "providerArchiveSha256": "58d5f50641516d090ec61e4d42737f1750216b17590f0fc0d6c8923cc71dd066",
+  "review": {
+    "normal": "PASS: parent and child completed and produced both expected files.",
+    "abort": "FAIL: reported killed:true and exit 137; independent SDK observation found both processes alive, then both delayed files were written.",
+    "timeout": "FAIL: the one-second command timeout did not stop remote work. The tool returned exit 1 without timedOut metadata; both processes then wrote their delayed files.",
+    "timeoutClassificationNote": "The original automated classifier checked false affirmative killed metadata and emitted INCONCLUSIVE when that flag was absent. The raw observations above establish continued remote work after the timeout; they do not establish which SDK/server layer owns timeout enforcement.",
+    "scope": "Unmodified source-built Mastra Modal adapter 0.7.1, published core 1.75.0, Modal JavaScript SDK 0.10.1. No Modal adapter or SDK fix was applied.",
+    "cleanup": "Independent ModalClient confirmed terminal exit code 137 after workspace.destroy and a terminate(wait:true) fallback. An immediate poll after destroy was still running; this alone does not prove destroy failed.",
+    "credentials": "Provided credentials were passed only in host process memory, were not persisted to a profile or repository file, and were not injected into the sandbox."
+  }
+}
