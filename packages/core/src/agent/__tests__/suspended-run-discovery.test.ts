@@ -1566,7 +1566,9 @@ describe('aborting a suspended run (#25903)', () => {
 
     expect(await agent.abortThreadStream({ threadId: 'abort-thread', resourceId: 'abort-resource' })).toBe(true);
 
-    expect((await agent.listSuspendedRuns({ threadId: 'abort-thread' })).runs).toHaveLength(0);
+    await vi.waitFor(async () => {
+      expect((await agent.listSuspendedRuns({ threadId: 'abort-thread' })).runs).toHaveLength(0);
+    });
   });
 
   it('abortRunStream removes the approval-suspended run from listSuspendedRuns', async () => {
@@ -1575,6 +1577,8 @@ describe('aborting a suspended run (#25903)', () => {
 
     await agent.abortRunStream(runId);
 
-    expect((await agent.listSuspendedRuns({ threadId: 'abort-run' })).runs).toHaveLength(0);
+    await vi.waitFor(async () => {
+      expect((await agent.listSuspendedRuns({ threadId: 'abort-run' })).runs).toHaveLength(0);
+    });
   });
 });

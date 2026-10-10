@@ -116,9 +116,13 @@ function fitAgentEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id'
       output: { text: output.text, usage: output.usage, steps: [] },
     },
   };
-  return byteSize(reduced) <= REALTIME_MAX_BYTES
-    ? reduced
-    : { ...event, data: { stepResult: data.stepResult, output: { usage: output.usage, steps: [] } } };
+  if (byteSize(reduced) <= REALTIME_MAX_BYTES) return reduced;
+  const reason = (data.stepResult as { reason?: unknown } | undefined)?.reason;
+  // Last resort: the bare terminal envelope always fits, so the stream still closes.
+  return {
+    ...event,
+    data: { stepResult: typeof reason === 'string' ? { reason } : undefined, output: { steps: [] } },
+  };
 }
 
 /**
