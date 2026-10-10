@@ -1,5 +1,5 @@
 import type { ListEmbeddersResponse, ListVectorsResponse } from '@mastra/client-js';
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useForm } from 'react-hook-form';
 import { describe, expect, it } from 'vitest';
@@ -42,6 +42,21 @@ const useMemoryPageHandlers = () => {
 };
 
 describe('MemoryPage', () => {
+  it('shows and hides the message count through the message history switch', async () => {
+    useMemoryPageHandlers();
+
+    renderWithProviders(<Harness scope="thread" />);
+
+    const messageHistorySwitch = await screen.findByRole('switch', { name: 'Enable message history' });
+    expect(screen.getByRole<HTMLInputElement>('spinbutton', { name: 'Recent messages' }).value).toBe('40');
+
+    fireEvent.click(messageHistorySwitch);
+    expect(screen.queryByLabelText('Recent messages')).toBeNull();
+
+    fireEvent.click(messageHistorySwitch);
+    expect(screen.getByRole<HTMLInputElement>('spinbutton', { name: 'Recent messages' }).value).toBe('40');
+  });
+
   describe('when observational memory uses resource scope', () => {
     it('labels the selected scope as deprecated', async () => {
       useMemoryPageHandlers();

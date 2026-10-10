@@ -54,7 +54,7 @@ export function IntegrationToolsSection({ selectedToolIds, onSubmitTools }: Inte
             const count = toolCountsByProvider[provider.id] ?? 0;
 
             return (
-              <Entity key={provider.id} onClick={() => setSelectedProvider(provider)} className="bg-background">
+              <Entity key={provider.id} onClick={() => setSelectedProvider(provider)}>
                 <div
                   className={cn(
                     'flex size-11 shrink-0 items-center justify-center rounded-lg uppercase shadow-inset',
