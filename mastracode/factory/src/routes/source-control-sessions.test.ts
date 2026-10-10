@@ -1,6 +1,21 @@
+import { stateSchema } from '@mastra/code-sdk/schema';
+import type { MastraCodeState } from '@mastra/code-sdk/schema';
+import { Agent } from '@mastra/core/agent';
+import { AgentController } from '@mastra/core/agent-controller';
+import { RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
+import { Workspace } from '@mastra/core/workspace';
 import { Hono } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { getFactorySessionAddress, resolveFactorySessionAddress } from '../rules/binding-context.js';
+import {
+  FACTORY_OPEN_RUNS_SETTING,
+  listSessionOpenRuns,
+  observeSessionRunEnd,
+  recordSessionRunStart,
+  waitForSessionRunAudit,
+} from '../session/run-audit.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
@@ -11,6 +26,7 @@ const user = { workosId: 'user-1', organizationId: 'org-1' };
 function buildApp(
   sourceControls: readonly SourceControlStorageHandle[],
   memorySettings: Parameters<typeof buildSourceControlSessionRoutes>[0]['memorySettings'],
+  controller?: Parameters<typeof buildSourceControlSessionRoutes>[0]['controller'],
 ) {
   const app = new Hono();
   app.use('*', async (context, next) => {
@@ -23,6 +39,7 @@ function buildApp(
       auth: fakeRouteAuth(),
       sourceControls,
       memorySettings,
+      controller,
     }),
   );
   return app;
@@ -64,10 +81,178 @@ async function seedGitLabRepository() {
     sandboxProvider: 'local',
     sandboxWorkdir: '/workspace/factory-gitlab-primary',
   });
-  return { seed, sourceControl, projectRepository };
+  return { seed, sourceControl, projectRepository, project };
 }
 
 describe('source-control session routes', () => {
+  it('resolves binding, run audit, and title flows when the hosted thread differs from the Factory session', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const sessionId = 'factory-session-1';
+    const threadId = 'conversation-1';
+    const row = await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/review-1',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const storage = new InMemoryStore({ id: 'factory-single-thread-host' });
+    const controller = new AgentController<MastraCodeState>({
+      id: 'code',
+      stateSchema,
+      storage,
+      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          agent: new Agent({
+            id: 'test-agent',
+            name: 'Test agent',
+            instructions: 'Test Factory session addressing.',
+            model: { id: 'openai/gpt-5.5' },
+          }),
+        },
+      ],
+    });
+    await controller.init();
+    const session = await controller.createSession({
+      id: sessionId,
+      resourceId: sessionId,
+      ownerId: 'user-1',
+      threadId,
+    });
+    onTestFinished(async () => {
+      await controller.deleteSession({ resourceId: sessionId });
+    });
+    expect(session.identity.getId()).toBe(sessionId);
+    expect(session.thread.getId()).toBe(threadId);
+    const prepared = await seed.workItems.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      workItem: {
+        input: {
+          title: 'Review change',
+          stages: ['reviewing'],
+          externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: 'pr-1' },
+        },
+      },
+      role: 'review',
+      session: { sessionId, threadId, branch: row.branch },
+      resourceId: sessionId,
+      kickoffKey: 'review-kickoff',
+      kickoffMessage: null,
+    });
+    const caller = new RequestContext();
+    caller.set('user', user);
+    const requestContext = await session.machinery.buildRequestContext(caller);
+    const getBySessionId = vi.spyOn(sourceControl.sessions, 'getBySessionId');
+    const recovered = await resolveFactorySessionAddress({
+      requestContext,
+      storage: seed.workItems,
+      sessions: sourceControl.sessions,
+    });
+    const address = {
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      resourceId: sessionId,
+      sessionId,
+      threadId,
+    };
+    expect(recovered).toMatchObject({ address, binding: { id: prepared.binding.id } });
+    expect(getBySessionId).toHaveBeenCalledWith(sessionId);
+    expect(session.state.get()).toMatchObject({
+      factoryProjectId: project.id,
+      factoryOrgId: 'org-1',
+      projectRepositoryId: projectRepository.id,
+      untrustedCheckout: true,
+      baseRef: 'main',
+    });
+    expect(getFactorySessionAddress(requestContext)).toEqual(address);
+    await session.state.set({ untrustedCheckout: false, baseRef: '' });
+    await expect(
+      resolveFactorySessionAddress({
+        requestContext,
+        storage: seed.workItems,
+        sessions: sourceControl.sessions,
+        forceBindingLookup: true,
+      }),
+    ).resolves.toMatchObject({ address, binding: { id: prepared.binding.id } });
+    expect(session.state.get()).toMatchObject({ untrustedCheckout: true, baseRef: 'main' });
+
+    const unsubscribe = observeSessionRunEnd(session, { audit: seed.audit });
+    onTestFinished(unsubscribe);
+    await recordSessionRunStart(session, {
+      audit: seed.audit,
+      actorType: 'human',
+      observedEnd: () => undefined,
+      run: {
+        kickoffId: 'review-kickoff',
+        bindingId: prepared.binding.id,
+        role: 'review',
+        startedBy: 'user-1',
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        workItemId: prepared.item.id,
+        sessionId,
+        threadId,
+        branch: row.branch,
+      },
+    });
+    await expect(listSessionOpenRuns(session)).resolves.toEqual([
+      expect.objectContaining({ sessionId, threadId, kickoffId: 'review-kickoff' }),
+    ]);
+    const memory = await storage.getStore('memory');
+    const persistedThread = await memory!.getThreadById({ threadId });
+    expect(persistedThread?.metadata?.[FACTORY_OPEN_RUNS_SETTING]).toEqual([
+      expect.objectContaining({ sessionId, threadId }),
+    ]);
+    await expect(memory!.getThreadById({ threadId: sessionId })).resolves.toBeNull();
+    session.emit({ type: 'agent_end', reason: 'complete' });
+    await waitForSessionRunAudit(session);
+    await expect(listSessionOpenRuns(session)).resolves.toEqual([]);
+    const endedThread = await memory!.getThreadById({ threadId });
+    expect(endedThread?.metadata?.[FACTORY_OPEN_RUNS_SETTING]).toEqual([]);
+    const { events } = await seed.audit.list({ orgId: 'org-1' });
+    expect(events.filter(event => event.action === 'factory.run.started')).toHaveLength(1);
+    expect(events.filter(event => event.action === 'factory.run.ended')).toHaveLength(1);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: 'factory.run.started',
+          metadata: expect.objectContaining({ sessionId, threadId }),
+        }),
+        expect.objectContaining({
+          action: 'factory.run.ended',
+          actorId: `agent:${threadId}`,
+          metadata: expect.objectContaining({ sessionId, threadId, reason: 'complete' }),
+        }),
+      ]),
+    );
+
+    const queryThreads = vi.spyOn(controller, 'queryThreads');
+    const generateTitle = vi.spyOn(controller, 'generateThreadTitle').mockResolvedValue('  Review   change  ');
+    const app = buildApp([sourceControl], seed.memorySettings, controller);
+    const response = await app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ title: 'Review change' });
+    expect(queryThreads).toHaveBeenCalledWith({ resourceId: sessionId });
+    expect(generateTitle).toHaveBeenCalledWith({
+      threadId,
+      resourceId: sessionId,
+      requestContext: expect.any(RequestContext),
+    });
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      id: row.id,
+      title: 'Review change',
+    });
+    await expect(sourceControl.sessions.getBySessionId(threadId)).resolves.toBeNull();
+  });
+
   it('lists and opens a session stored in the GitLab partition', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const session = await sourceControl.sessions.create({
