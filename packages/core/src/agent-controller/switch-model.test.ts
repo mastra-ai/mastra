@@ -252,11 +252,12 @@ describe('session.model.switch', () => {
     const syncing = session.model.syncFromPersisted();
     await validationStarted;
     session.thread.set({ threadId: 'newly-bound-thread' });
+    listener.mockClear();
     release();
     await syncing;
 
-    expect(session.model.get()).toBe('openai/gpt-4o');
-    expect(session.state.get().thinkingLevel).toBe('low');
+    expect(session.model.get()).toBe('');
+    expect(session.state.get().thinkingLevel).toBeUndefined();
     expect(listener).not.toHaveBeenCalled();
   });
 
@@ -332,10 +333,11 @@ describe('session.model.switch', () => {
 
       const switching = session.model.switch('openai/gpt-5.5', options);
       session.thread.set({ threadId: 'newly-bound-thread' });
+      listener.mockClear();
       await expect(switching).rejects.toThrow('Model switch canceled');
 
-      expect(session.model.get()).toBe('openai/gpt-4o');
-      expect(session.state.get().thinkingLevel).toBe('low');
+      expect(session.model.get()).toBe('');
+      expect(session.state.get().thinkingLevel).toBeUndefined();
       expect(listener).not.toHaveBeenCalled();
       expect(trackModelUse).not.toHaveBeenCalled();
 
@@ -380,14 +382,15 @@ describe('session.model.switch', () => {
 
     const switching = session.model.switch('openai/gpt-5.5');
     session.thread.set({ threadId: 'newly-bound-thread' });
+    listener.mockClear();
     await expect(switching).resolves.toBeUndefined();
 
     expect((await session.thread.getById({ threadId: thread.id }))?.metadata).toMatchObject({
       currentModelId: 'openai/gpt-5.5',
       thinkingLevel: 'low',
     });
-    expect(session.model.get()).toBe('openai/gpt-4o');
-    expect(session.state.get().thinkingLevel).toBe('low');
+    expect(session.model.get()).toBe('');
+    expect(session.state.get().thinkingLevel).toBeUndefined();
     expect(listener).not.toHaveBeenCalled();
     expect(trackModelUse).toHaveBeenCalledExactlyOnceWith('openai/gpt-5.5');
   });
@@ -422,6 +425,7 @@ describe('session.model.switch', () => {
       const switching = session.model.switch('openai/gpt-5.5', options);
       await writeStarted;
       session.thread.set({ threadId: 'newly-bound-thread' });
+      listener.mockClear();
       release();
       await expect(switching).resolves.toBeUndefined();
 
@@ -429,8 +433,8 @@ describe('session.model.switch', () => {
         currentModelId: 'openai/gpt-5.5',
         thinkingLevel: options?.thinkingLevel ?? 'low',
       });
-      expect(session.model.get()).toBe('openai/gpt-4o');
-      expect(session.state.get().thinkingLevel).toBe('low');
+      expect(session.model.get()).toBe('');
+      expect(session.state.get().thinkingLevel).toBeUndefined();
       expect(listener).not.toHaveBeenCalled();
       expect(trackModelUse).toHaveBeenCalledExactlyOnceWith('openai/gpt-5.5');
     },
@@ -570,7 +574,6 @@ describe('session.model.switch', () => {
     const { controller, session } = await createSession(undefined, storage);
     await session.thread.create();
     await session.model.switch('openai/gpt-4o', { thinkingLevel: 'low' });
-    session.setTokenUsage({ promptTokens: 10, completionTokens: 5, totalTokens: 15 });
     const memory = (await storage.getStore('memory'))!;
     const save = memory.saveThread.bind(memory);
     let release = () => {};
@@ -586,7 +589,10 @@ describe('session.model.switch', () => {
       await saveGate;
       return save(args);
     });
-    const persisting = controller['persistTokenUsage'](session);
+    // The executing run records its step usage through the same metadata queue.
+    const persisting = session.machinery.buildSharedRunOptions().onStepFinish!({
+      usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+    });
     await saveStarted;
     const switching = session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' });
     try {
@@ -598,7 +604,11 @@ describe('session.model.switch', () => {
     await Promise.all([persisting, switching]);
     expect(await session.thread.getSetting({ key: 'currentModelId' })).toBe('openai/gpt-5.5');
     expect(await session.thread.getSetting({ key: 'thinkingLevel' })).toBe('high');
-    expect(await session.thread.getSetting({ key: 'tokenUsage' })).toEqual(session.getTokenUsage());
+    expect(await session.thread.getSetting({ key: 'tokenUsage' })).toMatchObject({
+      promptTokens: 10,
+      completionTokens: 5,
+      totalTokens: 15,
+    });
   });
 
   it('tracks model selection via modelUseCountTracker', async () => {

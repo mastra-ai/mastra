@@ -305,7 +305,17 @@ describe('agent-controller routes', () => {
         const session = await getRouteSession(`user-bg-${name}`);
         const failure = new Error('signal failed before stream started');
         vi.spyOn(session, method as any).mockRejectedValue(failure);
-        vi.spyOn(session, 'claimToolSuspension').mockReturnValue({ accepted: true, toolCallId: 'call' });
+        vi.spyOn(session, 'claimToolSuspension').mockReturnValue({
+          accepted: true,
+          toolCallId: 'call',
+          address: {
+            threadId: session.thread.requireId(),
+            resourceId: session.identity.getResourceId(),
+            runId: 'run',
+            toolCallId: 'call',
+          },
+          claimKey: `${session.thread.requireId()}\0run\0call`,
+        });
         const errorLog = vi.spyOn(mastra.getLogger(), 'error').mockImplementation(() => {});
 
         const events: any[] = [];
@@ -553,7 +563,18 @@ describe('agent-controller routes', () => {
 
     it('forwards requestContext to session.respondToToolSuspension', async () => {
       const session = await getRouteSession('user-rc');
-      vi.spyOn(session, 'claimToolSuspension').mockReturnValue({ accepted: true, toolCallId: 'call' });
+      const address = {
+        threadId: session.thread.requireId(),
+        resourceId: session.identity.getResourceId(),
+        runId: 'run-2',
+        toolCallId: 'call-2',
+      };
+      const claim = vi.spyOn(session, 'claimToolSuspension').mockReturnValue({
+        accepted: true,
+        toolCallId: address.toolCallId,
+        address,
+        claimKey: `${address.threadId}\0${address.runId}\0${address.toolCallId}`,
+      });
       const spy = vi.spyOn(session, 'respondToToolSuspension').mockResolvedValue(undefined);
       const requestContext = makeRequestContext();
 
@@ -562,16 +583,29 @@ describe('agent-controller routes', () => {
         controllerId: 'code',
         resourceId: 'user-rc',
         toolCallId: 'call-2',
+        runId: 'run-2',
         resumeData: 'Yes',
         requestContext,
       } as any);
 
-      expect(spy).toHaveBeenCalledWith({ toolCallId: 'call-2', resumeData: 'Yes', requestContext });
+      expect(claim).toHaveBeenCalledWith('call-2', 'run-2');
+      expect(spy).toHaveBeenCalledWith({ address, resumeData: 'Yes', requestContext });
     });
 
     it('acks a tool suspension without waiting for the resumed run to finish', async () => {
       const session = await getRouteSession('user-suspension-ack');
-      vi.spyOn(session, 'claimToolSuspension').mockReturnValue({ accepted: true, toolCallId: 'call' });
+      const address = {
+        threadId: session.thread.requireId(),
+        resourceId: session.identity.getResourceId(),
+        runId: 'run-3',
+        toolCallId: 'call-3',
+      };
+      vi.spyOn(session, 'claimToolSuspension').mockReturnValue({
+        accepted: true,
+        toolCallId: address.toolCallId,
+        address,
+        claimKey: `${address.threadId}\0${address.runId}\0${address.toolCallId}`,
+      });
       vi.spyOn(session, 'respondToToolSuspension').mockReturnValue(new Promise<void>(() => {}));
 
       const result = await Promise.race([
@@ -650,7 +684,13 @@ describe('agent-controller routes', () => {
 
     it('acks only one of two concurrent answers to the same suspension', async () => {
       const session = await getRouteSession('user-ack-race');
-      vi.spyOn(session.suspensions, 'resolveToolCallId').mockReturnValue('q-1');
+      session.suspensions.register({
+        threadId: session.thread.requireId(),
+        resourceId: session.identity.getResourceId(),
+        runId: 'run-1',
+        toolCallId: 'q-1',
+        toolName: 'ask_user',
+      });
       let finish!: () => void;
       const spy = vi
         .spyOn(session, 'respondToToolSuspension')
@@ -670,7 +710,7 @@ describe('agent-controller routes', () => {
 
       finish();
       await new Promise(resolve => setTimeout(resolve, 0));
-      expect(session.claimToolResponse('q-1')).toBe(true);
+      expect(session.claimToolSuspension('q-1')).toMatchObject({ accepted: true });
     });
 
     it('acks only one of two concurrent answers to the same persisted approval', async () => {
