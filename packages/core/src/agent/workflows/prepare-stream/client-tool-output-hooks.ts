@@ -1,6 +1,7 @@
 import type { IMastraLogger } from '../../../logger';
 import { normalizeModelOutput } from '../../../loop/shared/normalize-model-output';
 import type { CoreTool } from '../../../tools/types';
+import { markServerAppliedModelOutput } from '../../message-list';
 import type { MessageList, MessageListInput } from '../../message-list';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 
@@ -205,6 +206,8 @@ export async function applyClientToolModelOutput({
           ...part.providerMetadata,
           mastra: nextMastra,
         } as unknown as typeof part.providerMetadata;
+        // In-process provenance for memory reconciliation — not forgeable via client metadata.
+        markServerAppliedModelOutput(part);
       } catch (error) {
         // Client-tool mapping runs during preparation on an already-finished
         // result, outside the execution path, so log and preserve the raw result.
