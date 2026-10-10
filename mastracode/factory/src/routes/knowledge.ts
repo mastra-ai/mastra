@@ -7,15 +7,15 @@ import type {
   KnowledgeImportTriggerKind,
   KnowledgeNode,
   KnowledgeRecord,
-  KnowledgeScopeAddress,
   KnowledgeScopeIds,
+  KnowledgeScopeNodeSummary,
   KnowledgeStorage,
-  ListKnowledgeScopeMembersOutput,
 } from '@mastra/core/storage';
 import {
   isKnowledgeNodeVisible,
   isKnowledgeScopeVisible,
   KnowledgeUnsupportedError,
+  MAX_KNOWLEDGE_SCOPE_NODES,
   knowledgeScopeIdsKey,
   parseKnowledgeWikilinks,
 } from '@mastra/core/storage';
@@ -32,9 +32,19 @@ export interface KnowledgeRouteLimits {
   maxNodes: number;
   maxRecords: number;
   maxFallbackLookups: number;
+  /** Max `listScopeNodes` pages (of up to 1,000 scopes) read for one org; past it responses report `truncated`. */
+  maxOrgScopePages: number;
 }
 
-const DEFAULT_LIMITS: KnowledgeRouteLimits = { maxNodes: 500, maxRecords: 2000, maxFallbackLookups: 100 };
+const DEFAULT_LIMITS: KnowledgeRouteLimits = {
+  maxNodes: 500,
+  maxRecords: 2000,
+  maxFallbackLookups: 100,
+  maxOrgScopePages: 10,
+};
+const SEARCH_SCAN_CAP = 1000;
+const SEARCH_RESULT_LIMIT = 20;
+const SEARCH_QUERY_LIMIT = 128;
 
 export interface KnowledgeRoutesDeps extends RouteDependencies {
   projects: FactoryProjectsStorage;
@@ -71,6 +81,24 @@ export interface KnowledgeScopeTreePayload {
   }>;
   defaultLevel: 'resource';
   scopeNodes?: KnowledgeScopeTreeNode[];
+  /** Set when the org has more scopes than the route reads. */
+  truncated?: true;
+}
+
+export interface KnowledgeSearchResult {
+  id: string;
+  name: string;
+  kind: string;
+  type: 'scope' | 'node';
+  rung: KnowledgeRung | null;
+  threadId?: string;
+  address?: string;
+  description?: string;
+}
+
+export interface KnowledgeSearchPayload {
+  results: KnowledgeSearchResult[];
+  truncated: boolean;
 }
 
 export interface KnowledgeGraphNode {
@@ -258,21 +286,62 @@ interface ScopeAddressEntry {
   parentIds: string[];
 }
 
+/**
+ * Addresses for the given scope nodes and their ancestors, read by id so the cost follows what
+ * the response shows rather than how many scopes every tenant holds.
+ */
 async function scopeAddressIndex(
   store: KnowledgeStorage,
-  addresses: KnowledgeScopeAddress[],
+  scopeIds: Iterable<string>,
 ): Promise<Map<string, ScopeAddressEntry>> {
-  return new Map(
-    await Promise.all(
-      addresses.map(
-        async entry =>
-          [
-            entry.scopeNodeId,
-            { address: entry.address, parentIds: await store.getNodeScopeIds(entry.scopeNodeId) },
-          ] as const,
-      ),
-    ),
-  );
+  const index = new Map<string, ScopeAddressEntry>();
+  const requested = new Set<string>();
+  let pending = [...new Set(scopeIds)];
+  try {
+    for (let depth = 0; pending.length > 0 && depth < 16; depth += 1) {
+      for (const id of pending) requested.add(id);
+      const next: string[] = [];
+      for (let start = 0; start < pending.length; start += MAX_KNOWLEDGE_SCOPE_NODES) {
+        const { scopes } = await store.listScopeNodes({ ids: pending.slice(start, start + MAX_KNOWLEDGE_SCOPE_NODES) });
+        for (const scope of scopes) {
+          index.set(scope.id, { address: scope.address, parentIds: scope.parentIds });
+          next.push(...scope.parentIds.filter(id => !requested.has(id)));
+        }
+      }
+      pending = [...new Set(next)];
+    }
+  } catch (error) {
+    // Adapters without the structural read show paths without addresses.
+    if (!(error instanceof KnowledgeUnsupportedError)) throw error;
+  }
+  return index;
+}
+
+/**
+ * Scopes in one org (the org scope and everything beneath it), filtered and paged in storage.
+ * Reads at most `maxPages` pages; `truncated` is true when scopes remain past that point.
+ */
+async function listOrgScopeNodes(
+  store: KnowledgeStorage,
+  orgId: string,
+  maxPages: number,
+): Promise<{ scopes: KnowledgeScopeNodeSummary[]; truncated: boolean }> {
+  const scopes: KnowledgeScopeNodeSummary[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < maxPages; page += 1) {
+    const result = await store.listScopeNodes({ withinAddress: `org:${orgId}`, cursor });
+    scopes.push(...result.scopes);
+    if (!result.nextCursor) return { scopes, truncated: false };
+    cursor = result.nextCursor;
+  }
+  return { scopes, truncated: true };
+}
+
+function knowledgeSearchRank(name: string, query: string): number {
+  const normalized = name.toLocaleLowerCase();
+  if (normalized === query) return 0;
+  if (normalized.startsWith(query)) return 1;
+  return 2;
 }
 
 function addressPath(scopeIds: KnowledgeScopeIds, addresses: Map<string, ScopeAddressEntry>): KnowledgeAddressPath {
@@ -538,6 +607,22 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       ];
       if (preflight.scopeId) {
         if (!UUID_RE.test(preflight.scopeId)) return { response: c.json({ error: 'scope_not_found' }, 404) };
+        // Identity scopes are vouched by address; any other scope must sit inside the viewer's org.
+        if (!visibleScopeIds.includes(preflight.scopeId)) {
+          let inOrg = false;
+          try {
+            const { scopes } = await store.listScopeNodes({
+              withinAddress: orgAddress,
+              ids: [preflight.scopeId],
+              limit: 1,
+            });
+            inOrg = scopes.length > 0;
+          } catch (error) {
+            // Without the structural read there is no way to prove org membership: fail closed.
+            if (!(error instanceof KnowledgeUnsupportedError)) throw error;
+          }
+          if (!inOrg) return { response: c.json({ error: 'scope_not_found' }, 404) };
+        }
         const scope = await store.getNode(preflight.scopeId);
         if (!scope?.isScope || scope.deletedAt) return { response: c.json({ error: 'scope_not_found' }, 404) };
       }
@@ -553,19 +638,26 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       }
     }
 
-    const org = await knowledge.materializeScope({
-      address: orgAddress,
-      contextualScopeAddress: orgAddress,
-      parameters: { orgId: tenant.orgId },
-    });
-    const resource = await knowledge.materializeScope({
-      address: resourceAddress,
-      parentAddresses: [orgAddress],
-      contextualScopeAddress: orgAddress,
-      parameters: { orgId: tenant.orgId, resourceId: projectId },
-    });
-    const orgScopeId = org.scopes[orgAddress]!;
-    const resourceScopeId = resource.scopes[resourceAddress]!;
+    // Materialized scopes are never retrofitted, so only a missing rung needs the write path.
+    const orgScopeId =
+      (await store.getScopeAddress(orgAddress))?.scopeNodeId ??
+      (
+        await knowledge.materializeScope({
+          address: orgAddress,
+          contextualScopeAddress: orgAddress,
+          parameters: { orgId: tenant.orgId },
+        })
+      ).scopes[orgAddress]!;
+    const resourceScopeId =
+      (await store.getScopeAddress(resourceAddress))?.scopeNodeId ??
+      (
+        await knowledge.materializeScope({
+          address: resourceAddress,
+          parentAddresses: [orgAddress],
+          contextualScopeAddress: orgAddress,
+          parameters: { orgId: tenant.orgId, resourceId: projectId },
+        })
+      ).scopes[resourceAddress]!;
     const defaultScopeIds = [orgScopeId, resourceScopeId];
     if (!threadId) {
       return {
@@ -852,25 +944,18 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const view = await this.#resolveView(loose(c));
           if ('response' in view) return view.response;
           let scopeNodes: KnowledgeScopeTreeNode[] | undefined;
+          let scopesTruncated = false;
           try {
-            const addresses = await view.store.listScopeAddresses({ limit: this.#limits.maxNodes });
-            scopeNodes = (
-              await Promise.all(
-                addresses.map(async ({ address, scopeNodeId }) => {
-                  const node = await view.store.getNode(scopeNodeId);
-                  if (!node?.isScope || node.deletedAt) return null;
-                  const description = metadataString(node.metadata, 'description');
-                  return {
-                    id: node.id,
-                    address,
-                    name: address === `resource:${view.projectId}` ? view.projectName : node.name,
-                    kind: scopeKindLabel(address, node.kind),
-                    ...(description ? { description } : {}),
-                    parentIds: await view.store.getNodeScopeIds(node.id),
-                  } satisfies KnowledgeScopeTreeNode;
-                }),
-              )
-            ).filter(node => node !== null);
+            const orgScopes = await listOrgScopeNodes(view.store, view.orgId, this.#limits.maxOrgScopePages);
+            scopesTruncated = orgScopes.truncated;
+            scopeNodes = orgScopes.scopes.map(scope => ({
+              id: scope.id,
+              address: scope.address,
+              name: scope.address === `resource:${view.projectId}` ? view.projectName : scope.name,
+              kind: scopeKindLabel(scope.address, scope.kind),
+              ...(scope.description ? { description: scope.description } : {}),
+              parentIds: scope.parentIds,
+            }));
             const sessionNames = await this.#sessionNames(scopeNodes);
             scopeNodes = scopeNodes.map(node => {
               const name = sessionNames.get(node.id);
@@ -906,7 +991,101 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             }),
             defaultLevel: 'resource',
             ...(scopeNodes ? { scopeNodes } : {}),
+            ...(scopesTruncated ? { truncated: true as const } : {}),
           } satisfies KnowledgeScopeTreePayload);
+        },
+      }),
+      registerApiRoute('/web/factory/projects/:id/knowledge/search', {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const view = await this.#resolveView(loose(c));
+          if ('response' in view) return view.response;
+
+          const query = (loose(c).req.query('q') ?? '').trim().slice(0, SEARCH_QUERY_LIMIT).toLocaleLowerCase();
+          if (query.length < 2) {
+            return loose(c).json({ results: [], truncated: false } satisfies KnowledgeSearchPayload);
+          }
+
+          const scanLimit = Math.min(SEARCH_SCAN_CAP, this.#limits.maxNodes);
+          const [prefixNodes, scannedNodes] = await Promise.all([
+            view.store.listNodes({
+              scopeIds: view.scopeIds,
+              isScope: false,
+              namePrefix: query,
+              limit: SEARCH_RESULT_LIMIT + 1,
+            }),
+            view.store.listNodes({ scopeIds: view.scopeIds, isScope: false, limit: scanLimit }),
+          ]);
+          const contentById = new Map<string, KnowledgeNode>();
+          for (const node of [...prefixNodes, ...scannedNodes]) {
+            if (!node.isScope && node.name.toLocaleLowerCase().includes(query)) contentById.set(node.id, node);
+          }
+
+          let structuralScopes: KnowledgeScopeNodeSummary[] = [];
+          let scopesTruncated = false;
+          try {
+            const orgScopes = await listOrgScopeNodes(view.store, view.orgId, this.#limits.maxOrgScopePages);
+            scopesTruncated = orgScopes.truncated;
+            // Search lists only the open session; others are reached from the tree.
+            structuralScopes = orgScopes.scopes.filter(scope => {
+              const threadId = sessionThreadId(scope.address);
+              return (!threadId || threadId === view.threadId) && scope.name.toLocaleLowerCase().includes(query);
+            });
+          } catch (error) {
+            if (!(error instanceof KnowledgeUnsupportedError)) throw error;
+          }
+
+          const sessionNames = await this.#sessionNames(structuralScopes);
+          const contentResults = await Promise.all(
+            [...contentById.values()].map(async node => {
+              const rung = rungForScopeIds(await view.store.getNodeScopeIds(node.id), view);
+              return {
+                id: node.id,
+                name: node.name,
+                kind: node.kind ?? 'concept',
+                type: 'node' as const,
+                rung,
+                ...(rung === 'thread' && view.threadId ? { threadId: view.threadId } : {}),
+              } satisfies KnowledgeSearchResult;
+            }),
+          );
+          const results: KnowledgeSearchResult[] = [
+            ...structuralScopes.map(scope => {
+              const projectScope = scope.address === `resource:${view.projectId}`;
+              return {
+                id: scope.id,
+                name: projectScope ? view.projectName : (sessionNames.get(scope.id) ?? scope.name),
+                kind: scopeKindLabel(scope.address, scope.kind),
+                type: 'scope' as const,
+                rung:
+                  scope.id === view.orgScopeId
+                    ? ('org' as const)
+                    : scope.id === view.resourceScopeId
+                      ? ('resource' as const)
+                      : scope.id === view.threadScopeId
+                        ? ('thread' as const)
+                        : null,
+                address: scope.address,
+                ...(scope.description ? { description: scope.description } : {}),
+              } satisfies KnowledgeSearchResult;
+            }),
+            ...contentResults,
+          ].sort(
+            (a, b) =>
+              knowledgeSearchRank(a.name, query) - knowledgeSearchRank(b.name, query) ||
+              a.name.localeCompare(b.name) ||
+              a.id.localeCompare(b.id),
+          );
+
+          return loose(c).json({
+            results: results.slice(0, SEARCH_RESULT_LIMIT),
+            truncated:
+              scopesTruncated ||
+              results.length > SEARCH_RESULT_LIMIT ||
+              prefixNodes.length > SEARCH_RESULT_LIMIT ||
+              scannedNodes.length >= scanLimit,
+          } satisfies KnowledgeSearchPayload);
         },
       }),
       registerApiRoute('/web/factory/projects/:id/knowledge/subgraph', {
@@ -1041,7 +1220,23 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               }
             }
           }
-          const addresses = await scopeAddressIndex(store, await store.listScopeAddresses({ limit: 1000 }));
+          const memberScopeIds = await Promise.all(
+            [...directMembers, ...boundaryNodes.values()].map(node => store.getNodeScopeIds(node.id)),
+          );
+          const addresses = await scopeAddressIndex(store, [
+            selected.id,
+            ...directMembers.filter(node => node.isScope).map(node => node.id),
+            ...memberScopeIds.flat(),
+          ]);
+          if (scopeNodeId) {
+            // Child scopes come from the org's scope read, which may be capped.
+            try {
+              if ((await listOrgScopeNodes(store, view.orgId, this.#limits.maxOrgScopePages)).truncated)
+                truncated = true;
+            } catch (error) {
+              if (!(error instanceof KnowledgeUnsupportedError)) throw error;
+            }
+          }
           const sessionNames = await this.#sessionNames(
             [...directMembers.filter(node => node.isScope), selected].map(node => ({
               id: node.id,
@@ -1153,7 +1348,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           };
           const pinnedNodeIds = await this.#pinnedNodeIds(selectedView);
           const pinnedNodeIdSet = new Set(pinnedNodeIds.map(value => value.id));
-          const [owned, mentioning, listedAddresses] = await Promise.all([
+          const [owned, mentioning] = await Promise.all([
             view.store.listRecords({
               node,
               scopeIds: visibilityScopeIds,
@@ -1166,23 +1361,32 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               membershipScopeIds: [selected.id],
               limit: 200,
             }),
-            view.store.listScopeAddresses({ limit: 1000 }),
           ]);
-          const addresses = await scopeAddressIndex(view.store, listedAddresses);
+          const recordScopeIds = new Map(
+            await Promise.all(
+              [...owned.records, ...mentioning.records].map(
+                async record => [record.id, await view.store.getRecordScopeIds(record.id)] as const,
+              ),
+            ),
+          );
+          const addresses = await scopeAddressIndex(view.store, [
+            ...nodeScopeIds,
+            ...[...recordScopeIds.values()].flat(),
+          ]);
           const seen = new Set<string>();
           const records: KnowledgeNodeRecordPayload[] = [];
           const push = async (record: KnowledgeRecord, relation: 'owned' | 'mentions') => {
             if (seen.has(record.id)) return;
             seen.add(record.id);
-            const recordScopeIds = await view.store.getRecordScopeIds(record.id);
+            const scopeIds = recordScopeIds.get(record.id) ?? (await view.store.getRecordScopeIds(record.id));
             const when = recordWhen(record);
             records.push({
               id: record.id,
               node: record.nodeId,
               relation,
               text: record.text,
-              scope: addressPath(recordScopeIds, addresses),
-              rung: rungForScopeIds(recordScopeIds, view),
+              scope: addressPath(scopeIds, addresses),
+              rung: rungForScopeIds(scopeIds, view),
               sourceThreadId: recordSourceThreadId(record),
               capturedAt: record.createdAt.toISOString(),
               ...(when ? { when } : {}),
@@ -1242,11 +1446,11 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           ) {
             return c.json({ error: 'invalid_activity_filters' }, 400);
           }
-          const [events, listedAddresses] = await Promise.all([
-            view.store.listActivity({ scopeIds: [selected.id], limit: 100 }),
-            view.store.listScopeAddresses({ limit: 1000 }),
+          const events = await view.store.listActivity({ scopeIds: [selected.id], limit: 100 });
+          const addresses = await scopeAddressIndex(view.store, [
+            selected.id,
+            ...events.flatMap(event => (event.contextScopeId ? [event.contextScopeId] : [])),
           ]);
-          const addresses = await scopeAddressIndex(view.store, listedAddresses);
           const projected = await Promise.all(
             events
               .filter(event => !action || event.action === action)
