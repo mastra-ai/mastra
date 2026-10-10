@@ -1,5 +1,8 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { describe, expect, it, beforeEach } from 'vitest';
 import type { MastraDBMessage } from '../../../memory/types';
+import { setRunFenceContext } from '../../run-fencing';
+import type { RunFence, RunFenceScope } from '../../run-fencing';
 import { InMemoryDB } from '../inmemory-db';
 import { InMemoryMemory } from './inmemory';
 
@@ -226,5 +229,42 @@ describe('InMemoryMemory updateThread partial updates', () => {
 
     expect(updated.title).toBe('Generated title');
     expect(updated.metadata).toEqual({ a: 1, b: 2 });
+  });
+});
+
+describe('InMemoryMemory swapBufferedReflectionToActive under a takeover', () => {
+  const scopes = new AsyncLocalStorage<RunFenceScope | undefined>();
+  const context = setRunFenceContext({ current: () => scopes.getStore(), run: (s, f) => scopes.run(s, f) });
+  const inFence = <T>(fence: RunFence, fn: () => T): T => context.run({ fenceFor: () => fence }, fn);
+  const bufferReflection = (memory: InMemoryMemory, id: string, reflection: string) =>
+    memory.updateBufferedReflection({
+      id,
+      reflection,
+      tokenCount: 1,
+      inputTokenCount: 1,
+      reflectedObservationLineCount: 0,
+    });
+
+  it('keeps a reflection the new owner buffers while a superseded swap is in flight', async () => {
+    const memory = new InMemoryMemory({ db: new InMemoryDB() });
+    const fenceA = { runId: 'run-1', generation: 1, ownerId: 'owner-a' };
+    const fenceB = { runId: 'run-1', generation: 2, ownerId: 'owner-b' };
+    await memory.raiseRunFence(fenceA);
+    const record = await memory.initializeObservationalMemory({
+      threadId: null,
+      resourceId: 'resource-1',
+      scope: 'resource',
+      config: { observationThreshold: 5000, reflectionThreshold: 40000 },
+    });
+    await inFence(fenceA, () => bufferReflection(memory, record.id, 'a reflection'));
+
+    // Start A's swap, then take over and buffer as B before the swap settles.
+    const swap = inFence(fenceA, () => memory.swapBufferedReflectionToActive({ currentRecord: record, tokenCount: 1 }));
+    const takeover = memory.raiseRunFence(fenceB);
+    const write = inFence(fenceB, () => bufferReflection(memory, record.id, 'b reflection'));
+    await Promise.all([swap, takeover, write]);
+
+    const history = await memory.getObservationalMemoryHistory(null, 'resource-1');
+    expect(history.find(r => r.id === record.id)?.bufferedReflection).toBe('b reflection');
   });
 });

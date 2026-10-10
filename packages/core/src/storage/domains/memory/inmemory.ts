@@ -81,6 +81,12 @@ export class InMemoryMemory extends MemoryStorage {
     return matchesRunFence(current, fence);
   }
 
+  // This store has no retention, so there is no `retiredAt` to set; retiring
+  // only reports whether `fence` is still current.
+  async retireRunFence(fence: RunFence): Promise<boolean> {
+    return matchesRunFence(this.db.runFences.get(fence.runId), fence);
+  }
+
   async getThreadById({
     threadId,
     resourceId,
@@ -1152,6 +1158,10 @@ export class InMemoryMemory extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     this.assertFence(undefined, 'createReflectionGeneration');
+    return this.insertReflectionGeneration(input);
+  }
+
+  private insertReflectionGeneration(input: CreateReflectionGenerationInput): ObservationalMemoryRecord {
     const { currentRecord, reflection, tokenCount } = input;
     const key = this.getObservationalMemoryKey(currentRecord.threadId, currentRecord.resourceId);
     const now = new Date();
@@ -1235,7 +1245,9 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Create a new generation with the merged content.
     // tokenCount is computed by the processor using its token counter on the combined content.
-    const newRecord = await this.createReflectionGeneration({
+    // No await between the fence check above and these writes, so a newer owner's
+    // buffered reflection can't land in between and be cleared below.
+    const newRecord = this.insertReflectionGeneration({
       currentRecord: record,
       reflection: newObservations,
       tokenCount: input.tokenCount,
