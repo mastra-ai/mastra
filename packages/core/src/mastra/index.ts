@@ -714,7 +714,7 @@ export interface MastraRecoveryConfig {
   workflows?: 'auto' | 'off';
   /**
    * Maximum number of workflow runs restarted at the same time by
-   * {@link Mastra.restartAllActiveWorkflowRuns}.
+   * {@link Mastra.restartAllActiveWorkflowRuns}. Use `Infinity` for no limit.
    * @default 5
    */
   workflowConcurrency?: number;
