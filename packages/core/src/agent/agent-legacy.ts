@@ -836,6 +836,7 @@ export class AgentLegacyHandler {
       memory: args.memory as { resource?: string; thread?: string | { id: string } } | undefined,
       resourceId: resourceIdFromArgs,
       threadId: args.threadId,
+      mastra: this.capabilities.mastra,
     });
     const requestContext = deriveAgentRunRequestContext(callerRequestContext, resolvedScopes.scopes);
     const hasResourceScope = resolvedScopes.scopes.some(scope => parseAgentScope(scope)?.type === 'resource');

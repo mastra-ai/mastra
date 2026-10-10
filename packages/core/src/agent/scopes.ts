@@ -29,6 +29,11 @@ export type ResolveAgentScopesInput = {
   resourceId?: string;
   threadId?: string;
   snapshot?: AgentScopesSnapshot;
+  /**
+   * The Mastra instance running the agent. When it has a registered server that does not keep
+   * request bodies from supplying scopes, scopes from the call and the request context are refused.
+   */
+  mastra?: { getMastraServer?(): unknown };
 };
 
 export type ResolvedAgentScopes = {
@@ -37,6 +42,50 @@ export type ResolvedAgentScopes = {
   resourceId?: string;
   threadId?: string;
 };
+
+/**
+ * `mastra__scopes` values Core wrote onto a run's derived context. Nested runs (sub-agents,
+ * Subconscious, tools calling agents) receive these, and they stay trusted behind an older server
+ * because a request body cannot produce an object in this set.
+ */
+const runScopeValues = new WeakSet<object>();
+
+function markRunScopes(scopes: string[]): string[] {
+  runScopeValues.add(scopes);
+  return scopes;
+}
+
+/** Sets `mastra__scopes` to scopes a run derived, marking them as written by Core. */
+export function setRunAgentScopes(requestContext: RequestContext<any>, scopes: readonly string[]): void {
+  requestContext.set(MASTRA_SCOPES_KEY, markRunScopes([...scopes]));
+}
+
+/**
+ * True when Mastra has a registered server that does not mark itself as reserving agent scopes.
+ * Such a server (released before agent scopes) passes a request body's `scopes` option and
+ * `requestContext.mastra__scopes` through to the agent.
+ */
+function hasOutdatedScopesServer(mastra: ResolveAgentScopesInput['mastra']): boolean {
+  const server = mastra?.getMastraServer?.() as { reservesAgentScopes?: boolean } | undefined;
+  return !!server && server.reservesAgentScopes !== true;
+}
+
+function assertCallerScopesAllowed(input: ResolveAgentScopesInput): void {
+  if (!hasOutdatedScopesServer(input.mastra)) return;
+  const fromContext = input.requestContext?.get(MASTRA_SCOPES_KEY);
+  const contextSupplied =
+    Array.isArray(fromContext) && fromContext.length > 0 && !runScopeValues.has(fromContext as object);
+  if (!contextSupplied && !input.callScopes?.length) return;
+  throw new MastraError({
+    id: 'AGENT_SCOPES_SERVER_OUTDATED',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+    text:
+      `Agent scopes from the call or the "${MASTRA_SCOPES_KEY}" request context key need a @mastra/server release ` +
+      'that keeps request bodies from setting them. The registered server is older, so a client could supply them. ' +
+      "Upgrade @mastra/server, or set scopes with the Agent's `scopes` option.",
+  });
+}
 
 function scopesError(id: 'AGENT_SCOPES_INVALID' | 'AGENT_SCOPES_CONFLICT', text: string): MastraError {
   return new MastraError({
@@ -137,6 +186,7 @@ function memoryThreadId(memory: ResolveAgentScopesInput['memory']): string | und
  */
 export function resolveAgentScopes(input: ResolveAgentScopesInput): ResolvedAgentScopes {
   const { requestContext, memory, snapshot } = input;
+  assertCallerScopesAllowed(input);
   const agentScopes = validateScopes('config "scopes"', input.agentScopes);
   const supplied = new Set<string>([
     ...validateScopes(`request context "${MASTRA_SCOPES_KEY}"`, requestContext?.get(MASTRA_SCOPES_KEY)),
@@ -227,7 +277,7 @@ export function deriveAgentRunRequestContext<T extends RequestContext<any>>(
   const derived = new RequestContext(Array.from(requestContext.entries()) as [string, unknown][]) as T;
   const downstream = withoutIdentityAgentScopes(scopes);
   if (downstream.length > 0) {
-    derived.set(MASTRA_SCOPES_KEY, downstream);
+    setRunAgentScopes(derived, downstream);
   } else {
     derived.delete(MASTRA_SCOPES_KEY);
   }

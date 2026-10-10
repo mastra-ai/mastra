@@ -380,6 +380,9 @@ export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<
  * @template TResponse - The type of the response object
  */
 export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServerBase<TApp> {
+  /** Request bodies cannot set agent scopes: handlers strip `scopes`, and `mastra__scopes` is a reserved key. */
+  readonly reservesAgentScopes = true;
+
   protected mastra: Mastra;
   protected bodyLimitOptions?: BodyLimitOptions;
   protected tools?: ToolsInput;

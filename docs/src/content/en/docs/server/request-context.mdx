@@ -307,6 +307,8 @@ requestContext.set(MASTRA_SCOPES_KEY, [`org:${user.orgId}`, `resource:${user.id}
 requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
 ```
 
+Scopes from the request context and per-call `scopes` need a `@mastra/server` release that reserves them. Older servers pass these values from request bodies through to the agent, so while one is registered, agents throw an `AGENT_SCOPES_SERVER_OUTDATED` error instead of using them. The agent's own `scopes` option still applies.
+
 These keys are used to implement user isolation in multi-tenant applications. See [Authorization middleware](/docs/server/middleware#authorization-user-isolation) for usage examples.
 
 ## TypeScript support

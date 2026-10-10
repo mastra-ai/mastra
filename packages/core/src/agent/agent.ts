@@ -195,7 +195,13 @@ import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
-import { applyResolvedAgentScopes, parseAgentScope, resolveAgentScopes, withoutIdentityAgentScopes } from './scopes';
+import {
+  applyResolvedAgentScopes,
+  parseAgentScope,
+  resolveAgentScopes,
+  setRunAgentScopes,
+  withoutIdentityAgentScopes,
+} from './scopes';
 import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
@@ -5487,7 +5493,7 @@ export class Agent<
             const parentScopes = subAgentRequestContext.get(MASTRA_SCOPES_KEY);
             if (Array.isArray(parentScopes)) {
               const inheritedScopes = withoutIdentityAgentScopes(parentScopes);
-              if (inheritedScopes.length > 0) subAgentRequestContext.set(MASTRA_SCOPES_KEY, inheritedScopes);
+              if (inheritedScopes.length > 0) setRunAgentScopes(subAgentRequestContext, inheritedScopes);
               else subAgentRequestContext.delete(MASTRA_SCOPES_KEY);
             }
 
@@ -7823,6 +7829,7 @@ export class Agent<
       callScopes,
       memory: options.memory,
       snapshot: resumeSnapshot,
+      mastra: this.#mastra,
     });
 
     return { options: applyResolvedAgentScopes(options, resolved, requestContext), resolved };

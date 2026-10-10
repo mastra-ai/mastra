@@ -7,6 +7,7 @@ import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import type { Processor } from '../../../processors';
 import { MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../../request-context';
+import { MastraServerBase } from '../../../server/base';
 import { InMemoryStore } from '../../../storage';
 import { MockStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
@@ -17,6 +18,9 @@ import { prepareForDurableExecution } from '../preparation';
 import { globalRunRegistry } from '../run-registry';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
+
+/** A server released before agent scopes: it does not set `reservesAgentScopes`. */
+class OutdatedServer extends MastraServerBase {}
 
 function textModel() {
   return new MockLanguageModelV2({
@@ -100,6 +104,23 @@ describe.each([
     cleanup();
     expect(seen).toEqual([['org:acme', 'team:core']]);
     expect((await memory.getThreadById({ threadId: 't1' }))?.resourceId).toBe('u1');
+  });
+
+  it('stream refuses caller scopes behind an outdated server but keeps the Agent scopes', async () => {
+    const { agent, seen } = build({ scopes: ['team:core'] });
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), agents: { scopedAgent: agent } });
+    mastra.setMastraServer(new OutdatedServer({ app: {} }));
+    await expect(agent.stream('hello', { scopes: ['org:victim'] })).rejects.toMatchObject({
+      id: 'AGENT_SCOPES_SERVER_OUTDATED',
+    });
+    const requestContext = new RequestContext([[MASTRA_SCOPES_KEY, ['org:victim']]]);
+    await expect(agent.stream('hello', { requestContext })).rejects.toMatchObject({
+      id: 'AGENT_SCOPES_SERVER_OUTDATED',
+    });
+    const { output, cleanup } = await agent.stream('hello');
+    await output.consumeStream();
+    cleanup();
+    expect(seen).toEqual([['team:core']]);
   });
 
   it('stream throws a 400 conflict when scopes and memory disagree', async () => {
@@ -278,6 +299,20 @@ describe('prepareForDurableExecution scopes', () => {
     expect(preparation.resourceId).toBe('u1');
     expect(preparation.workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY]).toEqual(['org:acme', 'team:core']);
     expect(callerContext.get(MASTRA_SCOPES_KEY)).toEqual(['org:acme']);
+  });
+
+  it('refuses caller scopes behind an outdated server', async () => {
+    const mastra = new Mastra({ logger: false });
+    mastra.setMastraServer(new OutdatedServer({ app: {} }));
+    await expect(
+      prepareForDurableExecution({
+        agent: baseAgent(),
+        messages: 'hi',
+        options: { scopes: ['org:victim'] },
+        optionsAreResolved: true,
+        mastra,
+      }),
+    ).rejects.toMatchObject({ id: 'AGENT_SCOPES_SERVER_OUTDATED' });
   });
 
   it('throws on conflicting identity and leaves options unchanged without scopes', async () => {

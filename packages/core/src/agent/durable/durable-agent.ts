@@ -1648,7 +1648,14 @@ export class DurableAgent<
     if (!agentScopes.length && !callScopes?.length && !requestContext.has(MASTRA_SCOPES_KEY) && !snapshot?.scopes) {
       return options;
     }
-    const resolved = resolveAgentScopes({ requestContext, agentScopes, callScopes, memory: options.memory, snapshot });
+    const resolved = resolveAgentScopes({
+      requestContext,
+      agentScopes,
+      callScopes,
+      memory: options.memory,
+      snapshot,
+      mastra: this.#mastra,
+    });
     return applyResolvedAgentScopes(options, resolved, requestContext);
   }
 

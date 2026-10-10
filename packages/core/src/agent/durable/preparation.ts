@@ -356,6 +356,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         agentScopes,
         callScopes: execOptions.scopes,
         memory: execOptions.memory,
+        mastra,
       });
       execOptions = applyResolvedAgentScopes({ ...execOptions, requestContext }, resolved, requestContext);
       requestContext = execOptions.requestContext ?? requestContext;
