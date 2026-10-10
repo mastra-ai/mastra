@@ -69,6 +69,7 @@
   },
   "license": "Apache-2.0",
   "devDependencies": {
+    "@ai-sdk/openai": "^3.0.90",
     "@ai-sdk/provider": "3.0.14",
     "@earendil-works/pi-agent-core": "1.1.0",
     "@earendil-works/pi-ai": "1.1.0",
@@ -77,6 +78,7 @@
     "@internal/types-builder": "workspace:*",
     "@langchain/core": "^1.0.0",
     "@langchain/langgraph": "1.4.21",
+    "@langchain/openai": "^1.6.2",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@types/node": "22.20.1",
