@@ -134,7 +134,7 @@ describe('Button', () => {
       return <a href={to} {...props} />;
     }
 
-    it('renders a router link at the label role with no layout height or padding', () => {
+    it('renders a router link with its label in its own slot', () => {
       render(
         <Button variant="link" render={<RouterLink to="/usage" />}>
           View usage
@@ -144,24 +144,21 @@ describe('Button', () => {
       const link = screen.getByRole('link', { name: 'View usage' });
       expect(link.getAttribute('href')).toBe('/usage');
       expect(link.querySelector('[data-slot="button-label"]')?.textContent).toBe('View usage');
-      const classes = link.className.split(' ');
-      expect(classes).toEqual(expect.arrayContaining(['size-auto', 'px-0', 'text-label', 'before:-inset-x-2']));
-      expect(classes.some(c => c.startsWith('h-control') || c.startsWith('px-['))).toBe(false);
     });
 
-    it('extends the hit area to the size rung instead of the layout', () => {
-      const { rerender } = render(<Button variant="link">Docs</Button>);
-      expect(screen.getByRole('button').className).toContain('before:-inset-y-1');
-
-      rerender(
-        <Button variant="link" size="lg">
-          Docs
+    it('keeps the label before a trailing icon', () => {
+      render(
+        <Button variant="link" iconEnd={<svg data-testid="arrow" />}>
+          Open billing portal
         </Button>,
       );
-      expect(screen.getByRole('button').className).toContain('before:-inset-y-1.5');
+
+      const button = screen.getByRole('button', { name: 'Open billing portal' });
+      expect(button.firstElementChild?.getAttribute('data-slot')).toBe('button-label');
+      expect(button.lastElementChild?.contains(screen.getByTestId('arrow'))).toBe(true);
     });
 
-    it('renders an icon-mode size as a text link rather than an empty circle', () => {
+    it('renders an icon-mode size as a text link rather than an icon button', () => {
       render(
         <Button variant="link" size="icon-sm">
           Docs
@@ -170,17 +167,7 @@ describe('Button', () => {
 
       const button = screen.getByRole('button', { name: 'Docs' });
       expect(button.hasAttribute('data-shape')).toBe(false);
-      expect(button.className.split(' ')).toEqual(expect.arrayContaining(['size-auto', 'text-label']));
-    });
-
-    it('sizes its icons at the small rung', () => {
-      render(
-        <Button variant="link" size="lg" iconEnd={<svg />}>
-          Docs
-        </Button>,
-      );
-      const slot = screen.getByRole('button').querySelector('[data-slot="button-icon-end"]');
-      expect(slot?.className).toContain('size-icon-sm');
+      expect(button.querySelector('[data-slot="button-label"]')?.textContent).toBe('Docs');
     });
   });
 

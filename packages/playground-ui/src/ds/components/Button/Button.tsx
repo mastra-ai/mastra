@@ -24,13 +24,13 @@ import { cn } from '@/lib/utils';
 const TEXT_MODE_ADORNMENTS = cn(
   'gap-[.75em] rounded-full',
   '[&>[data-slot=button-icon]]:-ml-[.3em]',
-  '[&>[data-slot=button-icon-end]]:-mr-[.3em]',
+  '[&>[data-slot=button-icon-end]]:-mr-1',
   '[&>svg]:mx-[-.3em]',
 );
 
 const LINK_LAYOUT = cn(
   'relative size-auto gap-1 rounded-xs px-0 text-label',
-  'before:absolute before:-inset-x-2 before:content-[""]',
+  'before:absolute before:-inset-x-2',
   '[&>[data-slot=button-icon-end]]:mr-0 [&>[data-slot=button-icon]]:ml-0 [&>svg]:mx-0',
 );
 
@@ -188,6 +188,29 @@ const iconSizeMap: Record<ButtonSize, IconSize> = {
   'icon-lg': 'lg',
 };
 
+function adornmentIconSize(variant: ButtonVariant, size: ButtonSize): IconSize {
+  if (variant === 'link') return 'sm';
+  return iconSizeMap[size];
+}
+
+function ButtonAdornment({ slot, size, children }: { slot: string; size: IconSize; children: React.ReactNode }) {
+  if (!children) return undefined;
+  return (
+    <Icon data-slot={slot} size={size}>
+      {children}
+    </Icon>
+  );
+}
+
+function ButtonLabel({ variant, children }: { variant: ButtonVariant; children: React.ReactNode }) {
+  if (variant !== 'link') return children;
+  return (
+    <span data-slot="button-label" className={LINK_LABEL}>
+      {children}
+    </span>
+  );
+}
+
 // Walks React children, expanding `<></>` fragments so `isIconOnly` can inspect the real
 // elements inside. `<Button><><Icon/></></Button>` should still count as icon-only.
 function flattenChildren(children: React.ReactNode): React.ReactNode[] {
@@ -242,8 +265,9 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
   ) => {
     const iconMode = variant !== 'link' && isIconButtonSize(size);
     const resolvedSize: ButtonSize = size ?? 'md';
+    const resolvedVariant: ButtonVariant = variant ?? 'default';
     const isLabelless = !iconMode && isIconOnly(children);
-    const adornmentSize: IconSize = variant === 'link' ? 'sm' : iconSizeMap[resolvedSize];
+    const adornmentSize = adornmentIconSize(resolvedVariant, resolvedSize);
 
     // Icon-only buttons need an a11y label. If a string tooltip is provided, reuse it.
     const ariaLabel = ariaLabelProp ?? ((iconMode || isLabelless) && typeof tooltip === 'string' ? tooltip : undefined);
@@ -252,23 +276,13 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       <Icon size={iconSizeMap[resolvedSize]}>{children}</Icon>
     ) : (
       <>
-        {icon ? (
-          <Icon data-slot="button-icon" size={adornmentSize}>
-            {icon}
-          </Icon>
-        ) : null}
-        {variant === 'link' ? (
-          <span data-slot="button-label" className={LINK_LABEL}>
-            {children}
-          </span>
-        ) : (
-          children
-        )}
-        {iconEnd ? (
-          <Icon data-slot="button-icon-end" size={adornmentSize}>
-            {iconEnd}
-          </Icon>
-        ) : null}
+        <ButtonAdornment slot="button-icon" size={adornmentSize}>
+          {icon}
+        </ButtonAdornment>
+        <ButtonLabel variant={resolvedVariant}>{children}</ButtonLabel>
+        <ButtonAdornment slot="button-icon-end" size={adornmentSize}>
+          {iconEnd}
+        </ButtonAdornment>
       </>
     );
 
