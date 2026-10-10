@@ -2839,7 +2839,10 @@ describe('GithubRules label routes', () => {
     };
   }
 
-  async function setupRoutes(route: string | undefined) {
+  async function setupRoutes(
+    route: string | undefined,
+    binding?: { board: string | null; sourceId?: 'id' | 'slug'; factoryProjectId?: string },
+  ) {
     const base = await setup('write');
     const intake = base.intake;
     if (route) {
@@ -2852,13 +2855,23 @@ describe('GithubRules label routes', () => {
         userId: 'user-1',
       });
     }
+    if (binding) {
+      await intake.setBinding({
+        orgId: 'org-1',
+        integrationId: 'github',
+        sourceId: binding.sourceId === 'slug' ? 'acme/repo' : base.projectRepository.repositoryId,
+        factoryProjectId: binding.factoryProjectId ?? base.project.id,
+        board: binding.board,
+        userId: 'user-1',
+      });
+    }
     const service = new GithubRules({
       github: base.github,
       sourceControl: base.sourceControl,
       integrationStorage: base.integrationStorage,
       projects: base.projects,
       storage: base.workItems,
-      boards: createBoardRegistry({ boards: [createTestBoard()] }),
+      boards: createBoardRegistry({ boards: [createTestBoard(), createTestBoard({ id: 'triage' })] }),
       configVersion: 'factory-config-v1',
       intake,
     });
@@ -2906,6 +2919,57 @@ describe('GithubRules label routes', () => {
       board: 'work',
       stages: ['intake'],
       metadata: { labels: [] },
+    });
+  });
+
+  it.each(['id', 'slug'] as const)(
+    'lands an unlabelled issue on the board its repository binding names (bound by %s)',
+    async sourceId => {
+      const { service, workItems, project } = await setupRoutes(undefined, { board: 'release', sourceId });
+      await expect(service.ingest(issueOpened('bound-open'))).resolves.toEqual({ status: 'committed' });
+      const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+      expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'release', stage: 'queued' });
+    },
+  );
+
+  it('prefers a matching label route over the repository binding', async () => {
+    const { service, workItems, project } = await setupRoutes('release', { board: 'triage' });
+    const routed = issueOpened('routed-over-binding');
+    (routed.payload.issue as Record<string, unknown>).labels = [{ name: 'release' }];
+    await expect(service.ingest(routed)).resolves.toEqual({ status: 'committed' });
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision?.decision).toMatchObject({ board: 'release', stage: 'queued' });
+  });
+
+  it('falls back to the repository binding when no label route matches', async () => {
+    const { service, workItems, project } = await setupRoutes('release', { board: 'triage' });
+    const unrouted = issueOpened('unrouted-bound');
+    (unrouted.payload.issue as Record<string, unknown>).labels = [{ name: 'bug' }];
+    await expect(service.ingest(unrouted)).resolves.toEqual({ status: 'committed' });
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision?.decision).toMatchObject({ board: 'triage', stage: 'queued' });
+  });
+
+  it.each([
+    ['has no board', { board: null }],
+    ['names a board that is not installed', { board: 'missing' }],
+    ['belongs to another project', { board: 'release', factoryProjectId: 'other-project' }],
+  ])('keeps the issue on Work › Intake when the binding %s', async (_, binding) => {
+    const { service, workItems, project } = await setupRoutes(undefined, binding);
+    await expect(service.ingest(issueOpened('binding-fallback'))).resolves.toEqual({ status: 'committed' });
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' });
+  });
+
+  it('moves a card to the binding board when its last routed label is removed', async () => {
+    const { service, workItems, project } = await setupRoutes('release', { board: 'triage' });
+    const item = await createLinkedIssue(workItems, project.id);
+    await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'committed' });
+    expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({ board: 'release' });
+    await expect(service.ingest(issueLabels('unlabeled', []))).resolves.toEqual({ status: 'committed' });
+    expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      board: 'triage',
+      stages: ['queued'],
     });
   });
 

@@ -277,8 +277,11 @@ export interface GithubRulesOptions {
   storage: WorkItemsStorage;
   configVersion: string;
   boards: BoardRegistry;
-  /** Label routes decide which installed board a labelled issue lands on. Absent means Work. */
-  intake?: Pick<IntakeStorage, 'listLabelRoutes'>;
+  /**
+   * Decides which installed board an issue lands on: a label route first, then the repository's
+   * intake source binding. Absent means Work.
+   */
+  intake?: Pick<IntakeStorage, 'listLabelRoutes' | 'listBindings'>;
 }
 
 /** Identity under which label-driven relocations are recorded. */
@@ -324,18 +327,33 @@ export class GithubRules {
   }
 
   /**
-   * Board an issue's labels select under the project's label routes, when that board is installed.
-   * Undefined leaves built-in routing (Work) in charge.
+   * Board an issue lands on: the one its labels select under the project's label routes, else the
+   * board the repository's intake source binding names. Only installed boards count. Undefined
+   * leaves built-in routing (Work) in charge.
    */
-  async #labelRouteTarget(
-    orgId: string,
-    factoryProjectId: string,
+  async #intakeTarget(
+    project: ExternalRepositoryProjectTarget,
+    repositoryName: string,
     labels: readonly string[],
   ): Promise<{ board: string; initialPhase: string } | undefined> {
-    if (!this.options.intake || labels.length === 0) return undefined;
-    const routes = await this.options.intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
-    const route = resolveIntakeLabelRoute(routes, labels);
-    const board = route ? this.options.boards.get(route.board) : undefined;
+    const intake = this.options.intake;
+    if (!intake) return undefined;
+    const { orgId, factoryProjectId } = project;
+    if (labels.length > 0) {
+      const routes = await intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
+      const route = resolveIntakeLabelRoute(routes, labels);
+      const board = route ? this.options.boards.get(route.board) : undefined;
+      if (board) return { board: board.id, initialPhase: board.initialPhase };
+    }
+    // GitHub bindings are keyed by the internal repository id; the slug is accepted too since the
+    // bindings API stores whatever source id it is given.
+    const slug = repositoryName.toLowerCase();
+    const binding = (await intake.listBindings({ orgId, integrationId: 'github' })).find(
+      candidate =>
+        candidate.factoryProjectId === factoryProjectId &&
+        (candidate.sourceId === project.projectRepository.repositoryId || candidate.sourceId.toLowerCase() === slug),
+    );
+    const board = binding?.board ? this.options.boards.get(binding.board) : undefined;
     return board ? { board: board.id, initialPhase: board.initialPhase } : undefined;
   }
 
@@ -387,7 +405,7 @@ export class GithubRules {
       item = updated.item;
       changed = true;
     }
-    const target = await this.#labelRouteTarget(project.orgId, project.factoryProjectId, labels);
+    const target = await this.#intakeTarget(project, repositoryName, labels);
     const outcome = await moveCardToBoard({
       workItems: this.options.storage,
       boardRegistry: this.options.boards,
@@ -504,7 +522,7 @@ export class GithubRules {
     const relatedItem =
       reviewEntryRequested && resolvedItem?.externalSource?.type !== 'pull-request' ? undefined : resolvedItem;
     const intake = issueNumber
-      ? await this.#labelRouteTarget(project.orgId, project.factoryProjectId, labelNames(issue?.labels))
+      ? await this.#intakeTarget(project, repositoryName, labelNames(issue?.labels))
       : undefined;
     const actor = await githubActor(this.options.github, {
       installationId,
