@@ -288,7 +288,9 @@ export async function runFactoryHealthCheck(
 ): Promise<FactoryHealthReport> {
   const [items, decisions, bindings, pendingStarts] = await Promise.all([
     workItems.list(scope),
-    workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId),
+    workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
+      statuses: [...IN_FLIGHT_DECISION_STATUSES],
+    }),
     workItems.listRunBindings(scope.orgId, scope.factoryProjectId),
     workItems.listPendingStarts(scope.orgId, scope.factoryProjectId),
   ]);

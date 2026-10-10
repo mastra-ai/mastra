@@ -551,6 +551,12 @@ describe('WorkItemsStorage', () => {
     const all = await storage.listDeferredDecisions('org1', 'p1');
     expect(all.filter(d => d.status === 'leased')).toHaveLength(4);
     expect(all.filter(d => d.status === 'pending')).toHaveLength(697);
+
+    const leased = await storage.listDeferredDecisions('org1', 'p1', { statuses: ['leased'] });
+    expect(leased).toHaveLength(4);
+    expect(leased.every(d => d.status === 'leased')).toBe(true);
+    expect(await storage.listDeferredDecisions('org1', 'p1', { statuses: ['failed'] })).toEqual([]);
+    expect(await storage.listDeferredDecisions('org1', 'p1', { workItemId: 'some-other-card' })).toEqual([]);
   });
 
   it('lists newest-first within the org/project scope and updates atomically', async () => {

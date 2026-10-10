@@ -976,6 +976,10 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
         name: 'factory_deferred_decisions_tenant_status_failed_idx',
         columns: ['org_id', 'factory_project_id', 'status', 'updated_at', 'id'],
       },
+      {
+        name: 'factory_deferred_decisions_tenant_evaluation_idx',
+        columns: ['org_id', 'factory_project_id', 'evaluation_id'],
+      },
     ],
   },
   {
@@ -2083,11 +2087,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     });
   }
 
-  async listDeferredDecisions(orgId: string, factoryProjectId: string): Promise<FactoryDeferredDecisionRecord[]> {
+  async listDeferredDecisions(
+    orgId: string,
+    factoryProjectId: string,
+    filter: { statuses?: readonly string[]; workItemId?: string } = {},
+  ): Promise<FactoryDeferredDecisionRecord[]> {
     return (
       await this.#db.findMany<GovernanceDbRow>(
         'factory_deferred_decisions',
-        { org_id: orgId, factory_project_id: factoryProjectId },
+        {
+          org_id: orgId,
+          factory_project_id: factoryProjectId,
+          ...(filter.statuses ? { status: { in: [...filter.statuses] } } : {}),
+          ...(filter.workItemId ? { work_item_id: filter.workItemId } : {}),
+        },
         { orderBy: [['created_at', 'asc']] },
       )
     ).map(toDeferredDecision);
