@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry } from '../../boards/index.js';
+import { createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
@@ -486,6 +486,62 @@ describe('GithubRules', () => {
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions).toHaveLength(1);
     expect(decisions[0]?.decision).toMatchObject({ type: 'transition', board: 'work', stage: 'canceled' });
+  });
+
+  it('closes a custom-board card into the terminal phase its board declares for closed sources', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        board: 'release',
+        stages: ['queued'],
+        title: 'Release issue',
+        sessions: {},
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+      },
+    });
+    const release = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      sourceClosed: { completed: 'shipped', canceled: 'dropped' },
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+        dropped: { title: 'Dropped', kind: 'terminal' },
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry({ boards: [release] }),
+      configVersion: 'factory-config-v1',
+    });
+
+    await expect(service.ingest(issueClosed('delivery-release-np', 'not_planned'))).resolves.toEqual({
+      status: 'committed',
+    });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      {
+        decision: {
+          type: 'transition',
+          board: 'release',
+          stage: 'dropped',
+          message: { text: 'GitHub issue #42 was closed (not_planned); this Release card was moved to Dropped.' },
+        },
+      },
+    ]);
   });
 
   it('never binds a close to another linked repository card with the same issue number', async () => {

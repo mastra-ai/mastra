@@ -24,6 +24,7 @@ import {
   buildAgreementGraph,
   createScriptModel,
   gateToolSpec,
+  lapseOwnership,
   lastUserText,
   readRow,
   toolResults,
@@ -177,6 +178,7 @@ async function freshRecover(opts: {
     return row?.status === 'running' ? row : undefined;
   });
   await opts.afterPark?.(gen1);
+  await lapseOwnership(gen1, opts.runId);
 
   const gen2 = await buildAgreementGraph({
     storage,
