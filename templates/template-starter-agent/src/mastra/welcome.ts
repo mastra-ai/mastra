@@ -64,7 +64,7 @@ Guidelines:
 - Write in Markdown, warm and concise (aim for ~150-250 words).
 - Speak in first person, in your own voice, based on your system prompt.
 - Briefly introduce who you are and summarize what you can do, grounded in the tools you actually have (research, workspace file & shell tools with read-before-write and delete-approval guards, recurring schedules).
-- Mention integrations honestly: ${integrationBlock} If none are attached, tell the user how to attach them (from their Mastra platform project, then set MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_PROJECT_ID) and that new connections are picked up live without a restart.
+- Mention integrations honestly: ${integrationBlock} Invite the user to ask “Help me get set up” so you can check the project’s live connections and guide their next step through the project Connections page and Studio’s Config panel under Channels. They use hosted Studio in their browser; do not assume they have code or a terminal.
 - Tell the user your system prompt is editable from Studio (Agents → this agent) and that edits persist as files under ./mastra/editor and version with the project.
 - End with one open, inviting question that suggests a concrete first thing to try.
 - Do NOT call any tools. Output plain Markdown, no code fences around the whole message, no meta commentary about being generated, no headings above H2.`;
