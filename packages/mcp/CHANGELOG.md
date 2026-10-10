@@ -1,5 +1,27 @@
 # @mastra/mcp
 
+## 2.3.0-alpha.1
+
+### Minor Changes
+
+- Added a `clientInfo` option to `MCPClient` so you can set the client name and version that MCP servers receive on connect and with each request, instead of the server key and `1.0.0`. Set it once for all servers or override it per server. Tool name prefixes are unchanged. Fixes #25473. ([#26328](https://github.com/mastra-ai/mastra/pull/26328))
+
+  Also fixed disconnecting a replaced `MCPClient` preventing reuse of the client that replaced it when both share an `id`.
+
+  ```typescript
+  const mcp = new MCPClient({
+    clientInfo: { name: 'my-app', version: '2.3.4' },
+    servers: {
+      weather: { url: new URL('http://localhost:8080/mcp') },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`b196f30`](https://github.com/mastra-ai/mastra/commit/b196f30602005325e95bde29a9b7676aeea14c42), [`cca0f8a`](https://github.com/mastra-ai/mastra/commit/cca0f8a543eca15c24be21c8ee43dc46fb7aefae), [`06e428d`](https://github.com/mastra-ai/mastra/commit/06e428d80ccbc54bb74eb6bd6f01a7fd4eddc45f), [`b875985`](https://github.com/mastra-ai/mastra/commit/b87598584f0f2b008242ed1f458b7f72ba6d42d1), [`85cfc88`](https://github.com/mastra-ai/mastra/commit/85cfc88fc5f196ef97cd2334441cd30cac99bce1), [`f2073f6`](https://github.com/mastra-ai/mastra/commit/f2073f6f2fff59ffca7eeac67579093454a0e761), [`a1c0020`](https://github.com/mastra-ai/mastra/commit/a1c002066736e54a4b07c03968b0df19cf1afb03), [`5068168`](https://github.com/mastra-ai/mastra/commit/50681683948fd55928d029a63f0de7e56976e1f4), [`6c9ad80`](https://github.com/mastra-ai/mastra/commit/6c9ad808c8503e812a72a48827ce425b9e78970f), [`a3269cd`](https://github.com/mastra-ai/mastra/commit/a3269cd4b92683780591ca782be491834787b861), [`152679c`](https://github.com/mastra-ai/mastra/commit/152679c4b74de8be29e5d932f6c4b35e79397516), [`7cb014d`](https://github.com/mastra-ai/mastra/commit/7cb014d3bdd96739c4bd7ad968af34c6a88ced7e), [`9f4ab32`](https://github.com/mastra-ai/mastra/commit/9f4ab3242bd686ff43c871fedeede1ed21260dbf)]:
+  - @mastra/core@1.76.0-alpha.6
+
 ## 2.2.1-alpha.0
 
 ### Patch Changes

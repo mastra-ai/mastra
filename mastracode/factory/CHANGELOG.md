@@ -1,5 +1,17 @@
 # @mastra/factory
 
+## 0.21.0-alpha.6
+
+### Patch Changes
+
+- Added the ability for one organization's admins to edit deployment thinking defaults from Settings when authentication is enabled. Set `MASTRACODE_DEPLOYMENT_ORGANIZATION_ID` to the organization the deployment serves. Only admins of that organization can save the defaults; everyone else sees them read-only. Without the variable, the defaults stay read-only while authentication is enabled. ([#25199](https://github.com/mastra-ai/mastra/pull/25199))
+
+- Fixed webhook events being silently lost when a work item changed while a rule was being evaluated. Losing that race no longer records the event as a rejected, decision-less ingress. Factory now re-reads the work item and re-runs the rule (up to three attempts). If the item keeps changing, the delivery fails visibly so a redelivery is processed instead of being ignored as a duplicate. ([#26547](https://github.com/mastra-ai/mastra/pull/26547))
+
+- Updated dependencies [[`b196f30`](https://github.com/mastra-ai/mastra/commit/b196f30602005325e95bde29a9b7676aeea14c42), [`cca0f8a`](https://github.com/mastra-ai/mastra/commit/cca0f8a543eca15c24be21c8ee43dc46fb7aefae), [`918704f`](https://github.com/mastra-ai/mastra/commit/918704fd4608aa4d9d90d4d92c0a3429de2b880a), [`06e428d`](https://github.com/mastra-ai/mastra/commit/06e428d80ccbc54bb74eb6bd6f01a7fd4eddc45f), [`b875985`](https://github.com/mastra-ai/mastra/commit/b87598584f0f2b008242ed1f458b7f72ba6d42d1), [`85cfc88`](https://github.com/mastra-ai/mastra/commit/85cfc88fc5f196ef97cd2334441cd30cac99bce1), [`f2073f6`](https://github.com/mastra-ai/mastra/commit/f2073f6f2fff59ffca7eeac67579093454a0e761), [`a1c0020`](https://github.com/mastra-ai/mastra/commit/a1c002066736e54a4b07c03968b0df19cf1afb03), [`5068168`](https://github.com/mastra-ai/mastra/commit/50681683948fd55928d029a63f0de7e56976e1f4), [`6c9ad80`](https://github.com/mastra-ai/mastra/commit/6c9ad808c8503e812a72a48827ce425b9e78970f), [`a3269cd`](https://github.com/mastra-ai/mastra/commit/a3269cd4b92683780591ca782be491834787b861), [`152679c`](https://github.com/mastra-ai/mastra/commit/152679c4b74de8be29e5d932f6c4b35e79397516), [`7cb014d`](https://github.com/mastra-ai/mastra/commit/7cb014d3bdd96739c4bd7ad968af34c6a88ced7e), [`9f4ab32`](https://github.com/mastra-ai/mastra/commit/9f4ab3242bd686ff43c871fedeede1ed21260dbf), [`918704f`](https://github.com/mastra-ai/mastra/commit/918704fd4608aa4d9d90d4d92c0a3429de2b880a)]:
+  - @mastra/core@1.76.0-alpha.6
+  - @mastra/code-sdk@1.12.0-alpha.6
+
 ## 0.21.0-alpha.5
 
 ### Patch Changes

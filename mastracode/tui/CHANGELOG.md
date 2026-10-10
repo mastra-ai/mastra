@@ -1,5 +1,29 @@
 # mastracode
 
+## 0.46.0-alpha.6
+
+### Patch Changes
+
+- Fixed the update check treating a prerelease, such as `1.2.0-alpha.1`, as already up to date when its stable release (`1.2.0`) is out. `/update`, `mastracode update`, and the startup update notice now offer the stable release. ([#26455](https://github.com/mastra-ai/mastra/pull/26455))
+
+- Fixed `mastracode update` and `mastracode upgrade` starting a chat with that word as the prompt. They now install the latest version of Mastra Code and exit, printing the command to run manually if the update fails or doesn't change the running install. Added `/upgrade` as an alias for `/update` in the TUI. ([#26455](https://github.com/mastra-ai/mastra/pull/26455))
+
+  ```sh
+  mastracode update
+  ```
+
+  Refreshed how updates look, in the shell and in `/update`:
+
+  - A spinner with elapsed time while checking and installing, instead of a static "Updating…" line.
+  - A short header with the version change, then a single ✓, ✗ or ! result line.
+  - Failures show the package manager's error in muted text and the exact command to run yourself, instead of one red error block.
+
+- Updated dependencies [[`b196f30`](https://github.com/mastra-ai/mastra/commit/b196f30602005325e95bde29a9b7676aeea14c42), [`cca0f8a`](https://github.com/mastra-ai/mastra/commit/cca0f8a543eca15c24be21c8ee43dc46fb7aefae), [`918704f`](https://github.com/mastra-ai/mastra/commit/918704fd4608aa4d9d90d4d92c0a3429de2b880a), [`06e428d`](https://github.com/mastra-ai/mastra/commit/06e428d80ccbc54bb74eb6bd6f01a7fd4eddc45f), [`b875985`](https://github.com/mastra-ai/mastra/commit/b87598584f0f2b008242ed1f458b7f72ba6d42d1), [`85cfc88`](https://github.com/mastra-ai/mastra/commit/85cfc88fc5f196ef97cd2334441cd30cac99bce1), [`f2073f6`](https://github.com/mastra-ai/mastra/commit/f2073f6f2fff59ffca7eeac67579093454a0e761), [`a1c0020`](https://github.com/mastra-ai/mastra/commit/a1c002066736e54a4b07c03968b0df19cf1afb03), [`5068168`](https://github.com/mastra-ai/mastra/commit/50681683948fd55928d029a63f0de7e56976e1f4), [`6c9ad80`](https://github.com/mastra-ai/mastra/commit/6c9ad808c8503e812a72a48827ce425b9e78970f), [`6c9ad80`](https://github.com/mastra-ai/mastra/commit/6c9ad808c8503e812a72a48827ce425b9e78970f), [`a3269cd`](https://github.com/mastra-ai/mastra/commit/a3269cd4b92683780591ca782be491834787b861), [`152679c`](https://github.com/mastra-ai/mastra/commit/152679c4b74de8be29e5d932f6c4b35e79397516), [`7cb014d`](https://github.com/mastra-ai/mastra/commit/7cb014d3bdd96739c4bd7ad968af34c6a88ced7e), [`9f4ab32`](https://github.com/mastra-ai/mastra/commit/9f4ab3242bd686ff43c871fedeede1ed21260dbf), [`918704f`](https://github.com/mastra-ai/mastra/commit/918704fd4608aa4d9d90d4d92c0a3429de2b880a), [`a831a8b`](https://github.com/mastra-ai/mastra/commit/a831a8be6b92cf7a549e7b9d851f3c4295d4431b)]:
+  - @mastra/core@1.76.0-alpha.6
+  - @mastra/code-sdk@1.12.0-alpha.6
+  - @mastra/observability@1.19.0-alpha.3
+  - @mastra/mcp@2.3.0-alpha.1
+
 ## 0.46.0-alpha.5
 
 ### Patch Changes

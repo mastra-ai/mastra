@@ -1,5 +1,68 @@
 # @mastra/core
 
+## 1.76.0-alpha.6
+
+### Minor Changes
+
+- Added `threadMetadata` to the `onDelegationStart` return value so delegated sub-agent threads can carry metadata such as a tenant ID. The metadata is applied when the sub-agent thread is created, which makes those threads findable with metadata-filtered queries. ([#25200](https://github.com/mastra-ai/mastra/pull/25200))
+
+  ```ts
+  await supervisor.generate('Summarize the report', {
+    memory: { thread: 'parent-thread', resource: 'user-1' },
+    delegation: {
+      onDelegationStart: () => ({ threadMetadata: { tenantId: 'acme' } }),
+    },
+  });
+
+  await memory.listThreads({ filter: { metadata: { tenantId: 'acme' } } });
+  ```
+
+### Patch Changes
+
+- AgentController sessions now forward the agent's `isTaskComplete` verdict as a live `task_complete_evaluation` event, so web clients can show "the check failed, the agent is fixing it" right away. `@mastra/client-js` recognizes the new event type. ([#26185](https://github.com/mastra-ai/mastra/pull/26185))
+
+  The session stream also sends the current display state, including the message being streamed, as its first event. A page that opens or reloads mid-run now sees the in-flight assistant text instead of waiting until it is stored. `currentMessage` can hold a message that is already stored (for example between steps or after a run), so clients should merge it by message id rather than append it.
+
+- Fixed DurableAgent streams with `closeOnSuspend: true` closing before the suspended run was saved. Approving a tool call right after the stream ends now works from any process, instead of sometimes failing with "This workflow run was not suspended". Fixes #26454. ([#26556](https://github.com/mastra-ai/mastra/pull/26556))
+
+- Fixed `sendSignal(..., { ifIdle: { behavior: 'wake' } })` on a DurableAgent so the accepted result's `output.text` now resolves to the generated text, the same as with a regular Agent. Previously it resolved to `undefined`. ([#26564](https://github.com/mastra-ai/mastra/pull/26564))
+
+  ```ts
+  const { accepted } = durableAgent.sendSignal(signal, { resourceId, threadId, ifIdle: { behavior: 'wake' } });
+  const result = await accepted;
+  await result.output?.text; // now the generated text
+  ```
+
+- Fixed durable agents saving raw model output after `processOutputStream` changed or removed streamed text. Stored text now matches the stream, as it does for regular agents. Redacted values no longer reappear on reload or reach the model on a later turn. ([#26559](https://github.com/mastra-ai/mastra/pull/26559))
+
+- Fixed `DurableAgent.recover()` dropping the agent's tools when a run was interrupted during a model request. The recovered model call now gets the same tools as the original run, so it can still call them instead of only replying with text. Fixes #25890. ([#26535](https://github.com/mastra-ai/mastra/pull/26535))
+
+- Fixed MCP App tools not being detectable by AI SDK UI hosts. For tools whose MCP server exposes an app UI (`mcp._meta.ui.resourceUri`), `toAISdkStream` now sets `toolMetadata.app` (`resourceUri`, `mimeType: 'text/html;profile=mcp-app'`, and `serverId` when available) on `tool-input-start` and `tool-input-available` chunks, so hosts can render MCP Apps without a custom stream transform. Fixes #25892. ([#26352](https://github.com/mastra-ai/mastra/pull/26352))
+
+- Durable and evented agents now include `runId` in `onStepFinish` and `onFinish`, matching the regular Agent. Use `runId` to tell which run an event came from when callbacks are shared across runs. ([#26531](https://github.com/mastra-ai/mastra/pull/26531))
+
+  `onFinish` also now includes `model`, `messages`, `object`, `error` and `usedFallbackValue`. You can read the structured output and response messages directly in the callback. Fixes #26524.
+
+- Fixed queued messages and signals arriving too late during reasoning in the default agent loop. Reasoning-only model requests are cancelled and restarted with pending input in the same run, without keeping discarded reasoning in model history or interrupting text and tool output. Interrupted requests reuse the same logical step without consuming maxSteps, advancing stepNumber, or contributing token usage. The run's `reasoning`, `reasoningText` and `getFullOutput()` exclude discarded reasoning, and tracers can close the cancelled request's inference span through the optional `interruptInference()` tracker method. ([#25861](https://github.com/mastra-ai/mastra/pull/25861))
+
+- Added `closeOnSuspend` to `DurableAgent.recover()`, matching `stream()` and `resume()`. When a recovered run suspends (for example, waiting on tool approval), the returned `fullStream` now ends, so callers can hand off to `resume()` instead of hanging. ([#26555](https://github.com/mastra-ai/mastra/pull/26555))
+
+  ```ts
+  const recovered = await agent.recover(runId, { closeOnSuspend: true });
+  for await (const chunk of recovered.fullStream) {
+    // ends after `tool-call-approval`
+  }
+  ```
+
+- Fixed thread subscribers missing approval requests and completion events after a durable agent run recovers from a crash. Recovered runs that pause for tool approval can now be approved and finish normally, including when multiple server instances share Redis. ([#26554](https://github.com/mastra-ai/mastra/pull/26554))
+
+- Fixed durable and evented step-finish events to report whether the agent loop actually continued. ([#26348](https://github.com/mastra-ai/mastra/pull/26348))
+
+- Fixed two thread ownership bugs in durable agents running across multiple instances: ([#25080](https://github.com/mastra-ai/mastra/pull/25080))
+
+  - A replayed `run-registered` event from a finished run no longer takes over as the thread's active run, whether or not its record is still cached locally (for example when Redis redelivers the event after the run finished).
+  - `sendSignal` now recognizes an active run owned by another instance while the thread is observed, so `ifActive` behavior (for example `discard`) applies instead of waking a new run.
+
 ## 1.76.0-alpha.5
 
 ### Patch Changes
