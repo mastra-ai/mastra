@@ -450,7 +450,7 @@ export class LibSQLFactoryStorage extends FactoryStorage {
     this.#client = isSingleConnectionDatabase(config)
       ? gateSingleConnectionClient(client)
       : isLocalDb
-        ? resetConnectionsAfterBusy(client)
+        ? resetConnectionsAfterBusy(client, { maxWaitMs: DEFAULT_CONNECTION_TIMEOUT_MS })
         : client;
     this.ops = new LibSQLFactoryStorageOps(this.#client, this.#schemas, fn => withClientWriteLock(this.#client, fn));
   }

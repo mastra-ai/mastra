@@ -232,7 +232,10 @@ export class LibSQLStore extends MastraCompositeStore {
       this.client = isSingleConnectionDatabase(config)
         ? gateSingleConnectionClient(client)
         : this.isLocalDb
-          ? resetConnectionsAfterBusy(client, { afterReset: () => this.applyLocalPragmas(client) })
+          ? resetConnectionsAfterBusy(client, {
+              afterReset: () => this.applyLocalPragmas(client),
+              maxWaitMs: this.connectionTimeoutMs,
+            })
           : client;
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
     } else {

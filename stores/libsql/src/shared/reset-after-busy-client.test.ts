@@ -11,7 +11,7 @@ describe('resetConnectionsAfterBusy', () => {
   let dir: string;
   const opened: Client[] = [];
 
-  const setup = async () => {
+  const setup = async ({ maxWaitMs }: { maxWaitMs?: number } = {}) => {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'libsql-reset-after-busy-'));
     const url = `file:${path.join(dir, 'db.sqlite')}`;
     const open = (timeout?: number) => {
@@ -19,9 +19,9 @@ describe('resetConnectionsAfterBusy', () => {
       opened.push(client);
       return client;
     };
-    await open().executeMultiple('PRAGMA journal_mode=WAL; CREATE TABLE t (v TEXT);');
+    await open().executeMultiple('PRAGMA journal_mode=WAL; CREATE TABLE t (v TEXT); CREATE TABLE u (v TEXT UNIQUE);');
     // A 1ms busy timeout turns a held lock into an immediate refusal.
-    const client = resetConnectionsAfterBusy(open(1));
+    const client = resetConnectionsAfterBusy(open(1), { maxWaitMs });
     const holdWriteLock = async () => {
       const holder = open();
       const held = await holder.transaction('write');
@@ -130,6 +130,55 @@ describe('resetConnectionsAfterBusy', () => {
 
     await insert(client, 'after');
     expect(await visible()).toEqual(['after']);
+  });
+
+  const within = async <T>(ms: number, call: Promise<T>) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const outcome = await Promise.race([
+      call.then(() => 'ran'),
+      new Promise(resolve => (timer = setTimeout(resolve, ms, 'blocked'))),
+    ]);
+    clearTimeout(timer);
+    return outcome;
+  };
+
+  it('releases a transaction SQLite rolled back on its own, so it does not block the reset', async () => {
+    const { client, holdWriteLock, visible } = await setup();
+    await elsewhere(async () => {
+      const tx = await client.transaction('write');
+      await tx.execute({ sql: 'INSERT INTO u VALUES (?)', args: ['dup'] });
+      await expect(tx.execute({ sql: 'INSERT OR ROLLBACK INTO u VALUES (?)', args: ['dup'] })).rejects.toThrow();
+      // The usual caller pattern: the driver already closed the transaction, so nothing ends it here.
+      if (!tx.closed) await tx.rollback();
+    });
+
+    const release = await holdWriteLock();
+    await expect(elsewhere(() => insert(client, 'refused'))).rejects.toMatchObject({ code: 'SQLITE_BUSY' });
+    await release();
+
+    expect(
+      await within(
+        1_000,
+        elsewhere(() => insert(client, 'after')),
+      ),
+    ).toBe('ran');
+    expect(await visible()).toEqual(['after']);
+  });
+
+  it('lets an unrelated call go ahead once a pending reset has waited maxWaitMs on a long transaction', async () => {
+    const { client, holdWriteLock } = await setup({ maxWaitMs: 100 });
+    const reading = await elsewhere(() => client.transaction('read'));
+    const release = await holdWriteLock();
+    await expect(elsewhere(() => insert(client, 'refused'))).rejects.toMatchObject({ code: 'SQLITE_BUSY' });
+    await release();
+
+    expect(
+      await within(
+        1_000,
+        elsewhere(() => client.execute('SELECT count(*) FROM t')),
+      ),
+    ).toBe('ran');
+    await reading.commit();
   });
 
   it('lets a replaced method delegate to the previous one after a reset became pending', async () => {

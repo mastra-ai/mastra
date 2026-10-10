@@ -93,7 +93,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     this.turso = isSingleConnectionDatabase({ url, syncUrl })
       ? gateSingleConnectionClient(client)
       : isLocalDb
-        ? resetConnectionsAfterBusy(client)
+        ? resetConnectionsAfterBusy(client, { maxWaitMs: 5000 })
         : client;
     this.maxRetries = maxRetries;
     this.initialBackoffMs = initialBackoffMs;

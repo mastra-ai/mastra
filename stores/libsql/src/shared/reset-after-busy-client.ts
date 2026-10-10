@@ -40,13 +40,16 @@ function firstOpen(hold: Hold | undefined): Hold | undefined {
  * deadlock. Reopened connections start from the pool's connection options,
  * so `afterReset` runs right after to restore any per-connection settings
  * applied after opening, and calls that waited for the reset go on once it
- * settles, even if it fails. It must use the client it was given, not the
+ * settles, even if it fails. A call waits at most `maxWaitMs` (default 5s, the
+ * busy timeout) so a long-held transaction can't stall every later call; after
+ * that it goes ahead on the current pool. A transaction SQLite rolled back on its
+ * own is released as soon as the failing call returns. It must use the client it was given, not the
  * wrapper: calls through the wrapper would wait for the reset it is part of.
  * Every other member passes through untouched.
  */
 export function resetConnectionsAfterBusy(
   client: Client,
-  { afterReset }: { afterReset?: () => void | Promise<void> } = {},
+  { afterReset, maxWaitMs = 5_000 }: { afterReset?: () => void | Promise<void>; maxWaitMs?: number } = {},
 ): Client {
   let inFlight = 0;
   // Set from a busy failure until the reset it calls for has run.
@@ -89,8 +92,18 @@ export function resetConnectionsAfterBusy(
       inFlight++;
       return;
     }
+    // A hold that outlives its reset (a long transaction, say) must not park every later call,
+    // so after maxWaitMs the call goes ahead on the current pool and the reset runs once the hold ends.
     return (async () => {
-      while (pendingReset && !client.closed) await pendingReset.done;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const gaveUp = new Promise<'timeout'>(resolve => (timer = setTimeout(resolve, maxWaitMs, 'timeout')));
+      try {
+        while (pendingReset && !client.closed) {
+          if ((await Promise.race([pendingReset.done, gaveUp])) === 'timeout') break;
+        }
+      } finally {
+        clearTimeout(timer);
+      }
       inFlight++;
     })();
   };
@@ -157,6 +170,15 @@ export function resetConnectionsAfterBusy(
                 return await method.apply(target, args);
               } catch (error) {
                 noteBusy(error);
+                // SQLite rolled the transaction back on its own (e.g. INSERT OR ROLLBACK). The caller
+                // may never call rollback or close, so return the connection and release the hold now.
+                if (target.closed) {
+                  try {
+                    target.close();
+                  } finally {
+                    end();
+                  }
+                }
                 throw error;
               }
             };
