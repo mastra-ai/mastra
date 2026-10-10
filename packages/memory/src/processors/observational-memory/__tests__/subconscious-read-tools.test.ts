@@ -176,19 +176,20 @@ describe('Subconscious knowledge read tools', () => {
   it('searches every visible scope with one vector query', async () => {
     const memory = await createMemory();
     const store = (await memory.storage.getStore('knowledge'))!;
+    const scopeIds = await scopeIdsFor(memory);
     await store.createNode({
       name: 'Deployment runbook',
       kind: 'document',
-      content: 'The cobalt rollout procedure.',
-      scope: ['org:acme', 'resource:user-42'],
+      metadata: { description: 'The cobalt rollout procedure.' },
+      scopeIds: [scopeIds[1]!],
     });
     await store.createNode({
       name: 'Alpha notes',
       kind: 'document',
-      content: 'Cobalt rollout notes for this session.',
-      scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
+      metadata: { description: 'Cobalt rollout notes for this session.' },
+      scopeIds: [scopeIds[2]!],
     });
-    await memory.drainKnowledgeSemanticIndex();
+    await memory.drainKnowledgeSemanticIndex(scopeIds);
     const vector = memory.vector!;
 
     const result = await memory.listTools().knowledge_search!.execute?.({ query: 'cobalt rollout' }, toolContext());
