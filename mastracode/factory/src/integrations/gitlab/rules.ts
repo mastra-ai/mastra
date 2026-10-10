@@ -641,7 +641,13 @@ export class GitLabRules {
     };
     const rule = selectEventRule(
       this.options.gitlab.rules,
-      boardEventHandlers(this.options.boards, eventBoardId(context), 'gitlab'),
+      // Opening a merge request files its own Review card, so like GitHub pull
+      // request intake it never runs the authoring card's board handler.
+      boardEventHandlers(
+        this.options.boards,
+        input.event === 'mergeRequestOpened' ? undefined : eventBoardId(context),
+        'gitlab',
+      ),
       input.event,
     );
     let decision: FactoryRuleDecision | void;
