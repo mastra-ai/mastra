@@ -499,13 +499,13 @@ function pruneRunningHistory(
  * authoritative. `pruneRunningHistory` therefore keeps exactly what a restart
  * reads (`getRestartReads`), including the declared `stepResultReads`.
  *
- * `retainRunningHistory` disables that strip altogether. The **evented**
- * engine needs it: at every step boundary it replaces the in-flight
- * `stepResults` with the merged context returned by `updateWorkflowResults`
- * (cross-worker truth), so persisted copies are live data during normal
- * execution, not just on restart. Retention stays bounded on evented: loop
- * records are keyed by step id and overwritten every iteration, so the
- * snapshot holds at most one conversation copy per distinct step.
+ * `retainRunningHistory` disables that strip. It predates `stepResultReads`:
+ * the **evented** engine reads persisted step results during normal execution
+ * (not just on restart), so it originally retained every terminal step to be
+ * safe. Declared `stepResultReads` already keep the only same-iteration reads,
+ * so this is needed only by callers that read undeclared results back.
+ * Retaining all terminal history copied every completed step and ballooned
+ * evented snapshots into a heap OOM (COR-1431).
  */
 export function pruneAgentLoopSnapshot({
   snapshot,
