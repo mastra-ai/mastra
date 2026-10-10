@@ -13,7 +13,11 @@ const usage = {
 };
 const stop = { unified: 'stop' as const, raw: 'stop' };
 
-function fakeClient(context: { system: string | null; continuation?: string; messages: { role: 'user' | 'assistant'; content: string }[] }) {
+function fakeClient(context: {
+  system: string | null;
+  continuation?: string;
+  messages: { role: 'user' | 'assistant'; content: string }[];
+}) {
   const saved: unknown[] = [];
   const client = {
     getContext: async () => ({ ...context, observedAt: null }),
@@ -228,9 +232,18 @@ describe('platformMemoryMiddleware', () => {
           parts: [
             {
               type: 'tool-invocation',
-              toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 'weather', args: { city: 'Kyoto' }, result: 'sunny' },
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'c1',
+                toolName: 'weather',
+                args: { city: 'Kyoto' },
+                result: 'sunny',
+              },
             },
-            { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'c2', toolName: 'weather', args: {} } },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'c2', toolName: 'weather', args: {} },
+            },
             { type: 'text', text: 'Sunny.' },
           ],
         },
@@ -244,7 +257,10 @@ describe('platformMemoryMiddleware', () => {
       },
     });
     await generateText({
-      model: wrapLanguageModel({ model, middleware: platformMemoryMiddleware({ client, threadId: 't1', readOnly: true }) }),
+      model: wrapLanguageModel({
+        model,
+        middleware: platformMemoryMiddleware({ client, threadId: 't1', readOnly: true }),
+      }),
       prompt: 'And tomorrow?',
     });
 

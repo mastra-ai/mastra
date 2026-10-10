@@ -54,6 +54,11 @@ export interface MemoryContext {
   continuation?: string | null;
   /** Messages not yet folded into observations, oldest first. */
   messages: MemoryMessage[];
+  /**
+   * Ready-to-send prefix in `@mastra/memory` order: system (`om-system`), continuation
+   * (`om-continuation`), then `messages`. Older servers omit it; use `promptOf`.
+   */
+  prompt?: MemoryMessage[];
   observedAt: string | null;
 }
 

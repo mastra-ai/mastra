@@ -21,6 +21,7 @@ import {
   textPart,
   toolInvocationsOf,
   toolPart,
+  promptOf,
 } from './parts';
 
 export type PlatformMemoryMiddlewareOptions = PlatformMemoryClientOptions & {
@@ -102,11 +103,13 @@ function turnMessages(prompt: LanguageModelV3Message[], reply: MemoryMessagePart
 
 /** Replays a recalled message, including tool calls and their results, as AI SDK prompt messages. */
 function fromMemory(message: MemoryMessage): LanguageModelV3Message[] {
+  if (message.role === 'system') return [{ role: 'system', content: message.content }];
   const parts = partsOf(message);
   if (message.role !== 'assistant') {
     const content: UserContent = parts.flatMap((part): UserContent => {
       if (part.type === 'text') return [{ type: 'text', text: part.text as string }];
-      if (part.type === 'file') return [{ type: 'file', data: part.data as string, mediaType: part.mimeType as string }];
+      if (part.type === 'file')
+        return [{ type: 'file', data: part.data as string, mediaType: part.mimeType as string }];
       return [];
     });
     return content.length ? [{ role: 'user', content }] : [];
@@ -121,7 +124,12 @@ function fromMemory(message: MemoryMessage): LanguageModelV3Message[] {
   const results = toolInvocationsOf(parts).filter(t => t.state === 'result');
   // A tool call is only valid in a prompt alongside its result.
   content.push(
-    ...results.map(t => ({ type: 'tool-call' as const, toolCallId: t.toolCallId, toolName: t.toolName, input: t.args })),
+    ...results.map(t => ({
+      type: 'tool-call' as const,
+      toolCallId: t.toolCallId,
+      toolName: t.toolName,
+      input: t.args,
+    })),
   );
   const replay: LanguageModelV3Message[] = content.length ? [{ role: 'assistant', content }] : [];
   if (results.length) {
@@ -179,15 +187,7 @@ export function platformMemoryMiddleware(options: PlatformMemoryMiddlewareOption
       const rest = params.prompt.filter(m => m.role !== 'system');
       const next: LanguageModelV3CallOptions = {
         ...params,
-        prompt: [
-          ...system,
-          ...(context.system ? [{ role: 'system' as const, content: context.system }] : []),
-          ...(context.continuation
-            ? [{ role: 'user' as const, content: [{ type: 'text' as const, text: context.continuation }] }]
-            : []),
-          ...context.messages.flatMap(fromMemory),
-          ...rest,
-        ],
+        prompt: [...system, ...promptOf(context).flatMap(fromMemory), ...rest],
       };
       originalPrompts.set(next, params.prompt);
       return next;

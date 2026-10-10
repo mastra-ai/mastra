@@ -1,4 +1,4 @@
-import type { MemoryMessage, MemoryMessageInput, MemoryMessagePart } from './client';
+import type { MemoryContext, MemoryMessage, MemoryMessageInput, MemoryMessagePart } from './client';
 
 /** Helpers for building and reading the Mastra V2 parts Platform Memory stores. */
 
@@ -64,4 +64,22 @@ export function reasoningOf(parts: readonly MemoryMessagePart[]): string {
     .filter(part => part.type === 'reasoning')
     .map(part => (typeof part.reasoning === 'string' ? part.reasoning : ''))
     .join('');
+}
+
+const synthetic = (id: string, role: string, text: string): MemoryMessage => ({
+  id,
+  role,
+  content: text,
+  parts: [textPart(text)],
+  createdAt: new Date(0).toISOString(),
+});
+
+/** The server-ordered prompt prefix, rebuilt the same way for servers that predate `prompt`. */
+export function promptOf(context: MemoryContext): MemoryMessage[] {
+  if (context.prompt) return context.prompt;
+  return [
+    ...(context.system ? [synthetic('om-system', 'system', context.system)] : []),
+    ...(context.continuation ? [synthetic('om-continuation', 'user', context.continuation)] : []),
+    ...context.messages,
+  ];
 }

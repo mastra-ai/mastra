@@ -99,7 +99,13 @@ describe('PlatformChatMessageHistory', () => {
           { type: 'reasoning', reasoning: 'Look it up.', details: [{ type: 'text', text: 'Look it up.' }] },
           {
             type: 'tool-invocation',
-            toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 'weather', args: { city: 'Kyoto' }, result: 'sunny' },
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'c1',
+              toolName: 'weather',
+              args: { city: 'Kyoto' },
+              result: 'sunny',
+            },
           },
         ],
       },
@@ -120,7 +126,13 @@ describe('PlatformChatMessageHistory', () => {
             parts: [
               {
                 type: 'tool-invocation',
-                toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 'weather', args: { city: 'Kyoto' }, result: 'sunny' },
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'c1',
+                  toolName: 'weather',
+                  args: { city: 'Kyoto' },
+                  result: 'sunny',
+                },
               },
               { type: 'text', text: 'Sunny.' },
             ],

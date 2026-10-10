@@ -15,6 +15,7 @@ import {
   textPart,
   toolInvocationsOf,
   toolPart,
+  promptOf,
 } from './parts';
 
 export type PlatformChatMessageHistoryOptions = PlatformMemoryClientOptions & {
@@ -61,6 +62,7 @@ function toInputs(messages: BaseMessage[]): MemoryMessageInput[] {
 
 /** Replays a recalled message, including tool calls and their results, as LangChain messages. */
 function fromMemory(message: MemoryMessage): BaseMessage[] {
+  if (message.role === 'system') return [new SystemMessage(message.content)];
   const parts = partsOf(message);
   if (message.role !== 'assistant') {
     const files = parts.filter(p => p.type === 'file');
@@ -129,11 +131,7 @@ export class PlatformChatMessageHistory extends BaseListChatMessageHistory {
 
   async getMessages(): Promise<BaseMessage[]> {
     const context = await this.#client.getContext(this.#threadId, this.#resourceId);
-    return [
-      ...(context.system ? [new SystemMessage(context.system)] : []),
-      ...(context.continuation ? [new HumanMessage(context.continuation)] : []),
-      ...context.messages.flatMap(fromMemory),
-    ];
+    return promptOf(context).flatMap(fromMemory);
   }
 
   async addMessage(message: BaseMessage): Promise<void> {

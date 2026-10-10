@@ -1,7 +1,12 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { MastraMemory, parseMemoryRequestContext } from '@mastra/core/memory';
 import type { MemoryConfig, MemoryConfigInternal, StorageThreadType, WorkingMemoryTemplate } from '@mastra/core/memory';
-import type { InputProcessor, OutputProcessor, ProcessInputArgs, ProcessOutputResultArgs } from '@mastra/core/processors';
+import type {
+  InputProcessor,
+  OutputProcessor,
+  ProcessInputArgs,
+  ProcessOutputResultArgs,
+} from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
   StorageCloneThreadInput,
@@ -13,6 +18,7 @@ import type {
 
 import { PlatformMemoryClient } from './client';
 import type { MemoryMessage, MemoryMessageInput, MemoryThread, PlatformMemoryClientOptions } from './client';
+import { promptOf } from './parts';
 
 export type PlatformMemoryOptions = PlatformMemoryClientOptions & {
   id?: string;
@@ -73,7 +79,11 @@ function toApiMessages(messages: MastraDBMessage[]): MemoryMessageInput[] {
 function memoryContext(requestContext: RequestContext | undefined, messageList: MessageListLike) {
   const ctx = parseMemoryRequestContext(requestContext);
   if (ctx?.thread?.id) {
-    return { threadId: ctx.thread.id, resourceId: ctx.resourceId ?? ctx.thread.id, readOnly: ctx.memoryConfig?.readOnly };
+    return {
+      threadId: ctx.thread.id,
+      resourceId: ctx.resourceId ?? ctx.thread.id,
+      readOnly: ctx.memoryConfig?.readOnly,
+    };
   }
   const info = messageList.serialize().memoryInfo;
   if (info?.threadId) return { threadId: info.threadId, resourceId: info.resourceId ?? info.threadId, readOnly: false };
@@ -105,23 +115,10 @@ export class PlatformMemory extends MastraMemory {
           const ctx = memoryContext(requestContext, messageList);
           if (!ctx) return messageList;
           const context = await client.getContext(ctx.threadId, ctx.resourceId);
-          if (context.system) messageList.addSystem(context.system, 'memory');
-          if (context.continuation) {
-            // Same id/position @mastra/memory uses, so it is never persisted.
-            messageList.add(
-              {
-                id: 'om-continuation',
-                role: 'user',
-                createdAt: new Date(0),
-                threadId: ctx.threadId,
-                resourceId: ctx.resourceId,
-                content: { format: 2, parts: [{ type: 'text', text: context.continuation }] },
-              },
-              'memory',
-            );
-          }
-          for (const message of context.messages) {
-            messageList.add(messageFromApi(message, ctx.threadId, ctx.resourceId), 'memory');
+          for (const message of promptOf(context)) {
+            if (message.role === 'system') messageList.addSystem(message.content, 'memory');
+            // Keeps ids like `om-continuation`, which @mastra/memory never persists.
+            else messageList.add(messageFromApi(message, ctx.threadId, ctx.resourceId), 'memory');
           }
           return messageList;
         },
