@@ -749,7 +749,7 @@ export class SessionThread {
    * actually running it).
    */
   detachFromCurrent(): void {
-    this.#owner.abort({ localOnly: true });
+    this.#owner.abort({ localOnly: true, keepParked: true });
     this.cleanupSubscription();
   }
 
@@ -3815,7 +3815,7 @@ export class Session<TState = unknown> {
    * awaiting `approval.arm()` is not streaming, so we resolve it as a decline so
    * the gated tool is rejected and the run can finalize rather than hang.
    */
-  abortRun(options: { localOnly?: boolean } = {}): void {
+  abortRun(options: { localOnly?: boolean; keepParked?: boolean } = {}): void {
     this.#abortGeneration++;
     // Aborting twice while a gate is parked would tear the stream down before
     // the deferred decline lands (the second call sees the gate already
@@ -3866,7 +3866,9 @@ export class Session<TState = unknown> {
       return;
     }
 
-    if (suspendedToolCalls.length > 0) {
+    // Detaching leaves parked runs alone: their snapshots are durable and
+    // another session or process may resume them.
+    if (suspendedToolCalls.length > 0 && !options.keepParked) {
       this.run.requestAbort({ deferSignal: true });
       // Settlement is async; a thread switch / `/new` can tear down the binding
       // and start a successor run before it lands. Bind the teardown to this
@@ -3936,7 +3938,7 @@ export class Session<TState = unknown> {
    * additionally clears the display-state mirror of those suspensions and
    * notifies subscribers so stale suspension UI doesn't linger.
    */
-  abort(options: { localOnly?: boolean } = {}): void {
+  abort(options: { localOnly?: boolean; keepParked?: boolean } = {}): void {
     const hadPendingSuspensions = this.displayState.get().pendingSuspensions.size > 0;
     this.displayState.clearPendingSuspensions();
     this.abortRun(options);

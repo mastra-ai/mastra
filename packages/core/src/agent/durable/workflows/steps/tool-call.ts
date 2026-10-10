@@ -638,6 +638,13 @@ export function createDurableToolCallStep() {
 
       const toolsForTransform = globalRunRegistry.get(runId)?.tools ?? rebuiltTools;
       const messageList: MessageList | undefined = globalRunRegistry.get(runId)?.messageList;
+      // Hold suspension chunks/events until the engine has saved the suspended
+      // snapshot, when the running engine supports that (#26435).
+      const publishAfterPersist = async (publish: () => Promise<void>) => {
+        const pending = globalRunRegistry.get(runId)?.pendingSuspensionEvents;
+        if (pending) pending.push(publish);
+        else await publish();
+      };
       let resumeMessageList = messageList;
       // A durable engine can replay the completed LLM step on a cold resume,
       // so its runtime rehydration never runs before this suspended tool step.
@@ -933,18 +940,20 @@ export function createDurableToolCallStep() {
               logger: logger as any,
             },
           );
-          await emitChunkEvent(pubsub, runId, approvalChunk);
+          await publishAfterPersist(() => emitChunkEvent(pubsub, runId, approvalChunk));
         }
 
         // Emit suspended event for the stream adapter
         if (pubsub) {
-          await emitSuspendedEvent(pubsub, runId, {
-            toolCallId,
-            toolName,
-            args,
-            type: 'approval',
-            resumeSchema: approvalResumeSchema,
-          });
+          await publishAfterPersist(() =>
+            emitSuspendedEvent(pubsub, runId, {
+              toolCallId,
+              toolName,
+              args,
+              type: 'approval',
+              resumeSchema: approvalResumeSchema,
+            }),
+          );
         }
 
         // Add approval metadata to message before persisting
@@ -1255,17 +1264,19 @@ export function createDurableToolCallStep() {
                   logger: logger as any,
                 },
               );
-              await emitChunkEvent(pubsub, runId, approvalChunk);
+              await publishAfterPersist(() => emitChunkEvent(pubsub, runId, approvalChunk));
             }
 
             if (pubsub) {
-              await emitSuspendedEvent(pubsub, runId, {
-                toolCallId,
-                toolName: approvalToolName,
-                args: approvalArgs,
-                type: 'approval',
-                resumeSchema: approvalResumeSchema,
-              });
+              await publishAfterPersist(() =>
+                emitSuspendedEvent(pubsub, runId, {
+                  toolCallId,
+                  toolName: approvalToolName,
+                  args: approvalArgs,
+                  type: 'approval',
+                  resumeSchema: approvalResumeSchema,
+                }),
+              );
             }
 
             // Add approval metadata to message before persisting
@@ -1322,9 +1333,8 @@ export function createDurableToolCallStep() {
                   logger: logger as any,
                 },
               );
-              await emitChunkEvent(pubsub, runId, suspensionChunk);
-
-              await emitSuspendedEvent(pubsub, runId, suspendedEventData);
+              await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
+              await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
             }
 
             // Add suspension metadata to message before persisting

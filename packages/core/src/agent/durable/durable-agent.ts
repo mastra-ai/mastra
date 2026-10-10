@@ -2041,12 +2041,14 @@ export class DurableAgent<
 
     const run = await workflow.createRun({ runId, resourceId, pubsub: this.pubsub });
     // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
-    const result = await run.start({
-      inputData: workflowInput,
-      requestContext,
-      actor: workflowInput.options?.actor,
-      ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
-    });
+    const result = await this.withSuspensionAfterPersist(runId, () =>
+      run.start({
+        inputData: workflowInput,
+        requestContext,
+        actor: workflowInput.options?.actor,
+        ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
+      }),
+    );
     if (result?.status === 'failed') {
       const error = new Error((result as any).error?.message || 'Workflow execution failed');
       await this.emitError(runId, error);
@@ -2059,6 +2061,25 @@ export class DurableAgent<
       await this.deleteRunSnapshots(runId);
     }
     return result;
+  }
+
+  /**
+   * Run a workflow leg with suspension chunks/events held back until the leg
+   * returns, i.e. until the engine has saved the suspended snapshot. Without
+   * this a crash between publishing the question and saving the snapshot
+   * leaves a run that `resume()` rejects (#26435).
+   */
+  private async withSuspensionAfterPersist<T>(runId: string, execute: () => Promise<T>): Promise<T> {
+    const entry = this.suspendPersistedOnReturn ? globalRunRegistry.get(runId) : undefined;
+    if (!entry) return execute();
+    const pending: Array<() => Promise<void>> = [];
+    entry.pendingSuspensionEvents = pending;
+    try {
+      return await execute();
+    } finally {
+      if (entry.pendingSuspensionEvents === pending) delete entry.pendingSuspensionEvents;
+      for (const publish of pending) await publish();
+    }
   }
 
   /**
@@ -3003,13 +3024,15 @@ export class DurableAgent<
         }
         let result;
         try {
-          result = await run.resume({
-            resumeData,
-            label: resolvedOptions.toolCallId,
-            requestContext,
-            actor: resolvedOptions.actor,
-            ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
-          });
+          result = await this.withSuspensionAfterPersist(runId, () =>
+            run.resume({
+              resumeData,
+              label: resolvedOptions.toolCallId,
+              requestContext,
+              actor: resolvedOptions.actor,
+              ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
+            }),
+          );
         } finally {
           await stopGoalActivity({ agentId: this.id, runId });
         }
