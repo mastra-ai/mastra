@@ -507,6 +507,10 @@ describe('WorkItemsStorage', () => {
     expect(fresh.status).toBe('committed');
     expect(fresh.status === 'committed' && fresh.result).toMatchObject({ status: 'accepted' });
     expect((await storage.listDeferredDecisions('org1', 'p1')).map(d => d.idempotencyKey)).toEqual(['decision-1']);
+    expect(
+      (await storage.listDeferredDecisions('org1', 'p1', { workItemId: created.item.id })).map(d => d.idempotencyKey),
+    ).toEqual(['decision-1']);
+    expect(await storage.listDeferredDecisions('org1', 'p1', { workItemId: 'some-other-card' })).toEqual([]);
   });
 
   it('claims deferred decisions by payload filter, paging past any backlog of filtered-out rows', async () => {
@@ -556,7 +560,6 @@ describe('WorkItemsStorage', () => {
     expect(leased).toHaveLength(4);
     expect(leased.every(d => d.status === 'leased')).toBe(true);
     expect(await storage.listDeferredDecisions('org1', 'p1', { statuses: ['failed'] })).toEqual([]);
-    expect(await storage.listDeferredDecisions('org1', 'p1', { workItemId: 'some-other-card' })).toEqual([]);
   });
 
   it('lists newest-first within the org/project scope and updates atomically', async () => {

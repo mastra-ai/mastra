@@ -318,7 +318,9 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
       inputSchema: z.object({ limit: z.number().int().min(1).max(MAX_LIST).default(25) }).strict(),
       execute: async ({ limit }) => {
         const [decisions, items] = await Promise.all([
-          deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, { statuses: ['failed'] }),
+          deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
+            statuses: ['failed', 'proposed'],
+          }),
           deps.workItems.list(scope),
         ]);
         const itemsById = new Map(items.map(item => [item.id, item]));
