@@ -248,7 +248,7 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
         const item = await findItem(deps, ref);
         if (!item) throw new Error(`No work item matches ${ref.id ?? `#${ref.number}`} in this Factory.`);
         const [decisions, bindings, audit, feed, all] = await Promise.all([
-          deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId),
+          deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, { workItemId: item.id }),
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId, item.id),
           deps.audit.list({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId, limit: 200 }),
           deps.comments.listRecent({ ...scope, workItemId: item.id, limit: 10 }),
@@ -318,7 +318,9 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
       inputSchema: z.object({ limit: z.number().int().min(1).max(MAX_LIST).default(25) }).strict(),
       execute: async ({ limit }) => {
         const [decisions, items] = await Promise.all([
-          deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId),
+          deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
+            statuses: ['failed', 'proposed'],
+          }),
           deps.workItems.list(scope),
         ]);
         const itemsById = new Map(items.map(item => [item.id, item]));
