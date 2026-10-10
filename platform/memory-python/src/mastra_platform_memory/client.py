@@ -25,10 +25,13 @@ class Context:
     system: str | None
     messages: list[Message]
     observed_at: str | None
+    continuation: str | None = None
 
     def as_chat_messages(self) -> list[dict[str, str]]:
         """OpenAI-style chat messages: the system block (if any) followed by the tail."""
         head = [{"role": "system", "content": self.system}] if self.system else []
+        if self.continuation:
+            head.append({"role": "user", "content": self.continuation})
         return head + [{"role": m["role"], "content": m["content"]} for m in self.messages]
 
 
@@ -90,7 +93,12 @@ class PlatformMemory:
 
     def get_context(self, thread_id: str, *, resource_id: str) -> Context:
         res = self._request("GET", f"/threads/{_q(thread_id)}/context", query={"resourceId": resource_id})
-        return Context(system=res["system"], messages=res["messages"], observed_at=res.get("observedAt"))
+        return Context(
+            system=res["system"],
+            messages=res["messages"],
+            observed_at=res.get("observedAt"),
+            continuation=res.get("continuation"),
+        )
 
     def save_messages(self, thread_id: str, *, resource_id: str, messages: list[Message]) -> list[dict[str, Any]]:
         """Saves messages and schedules observation in the background. Creates the thread if needed."""

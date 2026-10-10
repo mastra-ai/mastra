@@ -182,6 +182,9 @@ export function platformMemoryMiddleware(options: PlatformMemoryMiddlewareOption
         prompt: [
           ...system,
           ...(context.system ? [{ role: 'system' as const, content: context.system }] : []),
+          ...(context.continuation
+            ? [{ role: 'user' as const, content: [{ type: 'text' as const, text: context.continuation }] }]
+            : []),
           ...context.messages.flatMap(fromMemory),
           ...rest,
         ],

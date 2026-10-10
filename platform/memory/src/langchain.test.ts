@@ -9,6 +9,7 @@ function fakeClient() {
   const client = {
     getContext: async () => ({
       system: '<observations>Ada lives in Kyoto.</observations>',
+      continuation: '<system-reminder>continue</system-reminder>',
       messages: [
         { id: '1', role: 'user', content: 'I like tea', createdAt: '' },
         { id: '2', role: 'assistant', content: 'Noted.', createdAt: '' },
@@ -32,6 +33,7 @@ describe('PlatformChatMessageHistory', () => {
     const messages = await new PlatformChatMessageHistory({ client, threadId: 't1' }).getMessages();
     expect(messages.map(m => [m.getType(), m.text])).toEqual([
       ['system', '<observations>Ada lives in Kyoto.</observations>'],
+      ['human', '<system-reminder>continue</system-reminder>'],
       ['human', 'I like tea'],
       ['ai', 'Noted.'],
     ]);

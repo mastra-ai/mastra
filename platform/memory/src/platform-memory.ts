@@ -106,6 +106,20 @@ export class PlatformMemory extends MastraMemory {
           if (!ctx) return messageList;
           const context = await client.getContext(ctx.threadId, ctx.resourceId);
           if (context.system) messageList.addSystem(context.system, 'memory');
+          if (context.continuation) {
+            // Same id/position @mastra/memory uses, so it is never persisted.
+            messageList.add(
+              {
+                id: 'om-continuation',
+                role: 'user',
+                createdAt: new Date(0),
+                threadId: ctx.threadId,
+                resourceId: ctx.resourceId,
+                content: { format: 2, parts: [{ type: 'text', text: context.continuation }] },
+              },
+              'memory',
+            );
+          }
           for (const message of context.messages) {
             messageList.add(messageFromApi(message, ctx.threadId, ctx.resourceId), 'memory');
           }

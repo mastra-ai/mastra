@@ -131,6 +131,7 @@ export class PlatformChatMessageHistory extends BaseListChatMessageHistory {
     const context = await this.#client.getContext(this.#threadId, this.#resourceId);
     return [
       ...(context.system ? [new SystemMessage(context.system)] : []),
+      ...(context.continuation ? [new HumanMessage(context.continuation)] : []),
       ...context.messages.flatMap(fromMemory),
     ];
   }

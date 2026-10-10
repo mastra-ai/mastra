@@ -13,7 +13,7 @@ const usage = {
 };
 const stop = { unified: 'stop' as const, raw: 'stop' };
 
-function fakeClient(context: { system: string | null; messages: { role: 'user' | 'assistant'; content: string }[] }) {
+function fakeClient(context: { system: string | null; continuation?: string; messages: { role: 'user' | 'assistant'; content: string }[] }) {
   const saved: unknown[] = [];
   const client = {
     getContext: async () => ({ ...context, observedAt: null }),
@@ -27,6 +27,7 @@ function fakeClient(context: { system: string | null; messages: { role: 'user' |
 
 const recalled = {
   system: '<observations>Ada lives in Kyoto.</observations>',
+  continuation: '<system-reminder>continue</system-reminder>',
   messages: [
     { role: 'user' as const, content: 'I like tea' },
     { role: 'assistant' as const, content: 'Noted.' },
@@ -57,6 +58,7 @@ describe('platformMemoryMiddleware', () => {
     expect(calls[0]!.prompt).toEqual([
       { role: 'system', content: 'Be brief.' },
       { role: 'system', content: recalled.system },
+      { role: 'user', content: [{ type: 'text', text: recalled.continuation }] },
       { role: 'user', content: [{ type: 'text', text: 'I like tea' }] },
       { role: 'assistant', content: [{ type: 'text', text: 'Noted.' }] },
       { role: 'user', content: [{ type: 'text', text: 'Where do I live?' }] },

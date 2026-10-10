@@ -46,6 +46,12 @@ export interface MemoryMessageInput {
 export interface MemoryContext {
   /** Rendered observations, ready to use as a system message. */
   system: string | null;
+  /**
+   * User-role reminder that goes before `messages` once observations exist, so the model
+   * continues the conversation instead of treating the observations as a new prompt.
+   * Older servers omit it.
+   */
+  continuation?: string | null;
   /** Messages not yet folded into observations, oldest first. */
   messages: MemoryMessage[];
   observedAt: string | null;
