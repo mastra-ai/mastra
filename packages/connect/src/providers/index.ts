@@ -17,6 +17,7 @@ import { hubspotProvider } from './hubspot/index.js';
 import { incidentIoProvider } from './incident-io/index.js';
 import { jiraProvider } from './jira/index.js';
 import { linearProvider } from './linear/index.js';
+import { microsoftPowerpointProvider } from './microsoft-powerpoint/index.js';
 import { microsoftTeamsProvider } from './microsoft-teams/index.js';
 import { notionProvider } from './notion/index.js';
 import { openaiProvider } from './openai/index.js';
@@ -45,6 +46,7 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   incidentIoProvider,
   jiraProvider,
   linearProvider,
+  microsoftPowerpointProvider,
   microsoftTeamsProvider,
   notionProvider,
   openaiProvider,
