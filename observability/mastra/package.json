@@ -27,7 +27,8 @@
     "test": "vitest run",
     "test:watch": "vitest watch",
     "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "generate:pricing": "tsx scripts/generate-pricing.ts"
   },
   "license": "Apache-2.0",
   "devDependencies": {
@@ -41,6 +42,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^10.7.0",
     "tsdown": "0.22.9",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

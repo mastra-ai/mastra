@@ -68,14 +68,27 @@ jobs:
       - name: Generate provider registry and model documentation
         run: pnpm --filter @mastra/core generate:model-router
 
+      - name: Generate model pricing
+        # The pricing snapshot bundled in @mastra/observability comes from the same models.dev
+        # catalog. If this fails, the committed snapshot stays and the registry update still runs.
+        continue-on-error: true
+        run: pnpm --filter @mastra/observability generate:pricing
+
       - name: Check for changes
         id: git-check
         run: |
           git add --intent-to-add packages/core/src/llm/model/capabilities/
-          git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts packages/core/src/llm/model/capabilities/ docs/src/content/en/models/ || echo "changed=true" >> $GITHUB_OUTPUT
+          if ! git diff --exit-code packages/core/src/llm/model/provider-registry.json packages/core/src/llm/model/provider-types.generated.d.ts packages/core/src/llm/model/capabilities/ docs/src/content/en/models/; then
+            echo "providers_changed=true" >> $GITHUB_OUTPUT
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+          if ! git diff --quiet observability/mastra/src/metrics/pricing-data.jsonl; then
+            echo "pricing_changed=true" >> $GITHUB_OUTPUT
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Create changeset
-        if: steps.git-check.outputs.changed == 'true'
+        if: steps.git-check.outputs.providers_changed == 'true'
         run: |
           # Check if an automated provider registry changeset already exists
           if [ -d .changeset ]; then
@@ -106,6 +119,25 @@ jobs:
             echo "CHANGESET_FILE=${CHANGESET_FILE}" >> $GITHUB_ENV
           fi
 
+      - name: Create pricing changeset
+        if: steps.git-check.outputs.pricing_changed == 'true'
+        run: |
+          if ls .changeset/automated-model-pricing-*.md >/dev/null 2>&1; then
+            echo "Automated pricing changeset already exists, skipping"
+          else
+            PRICING_CHANGESET_FILE=".changeset/automated-model-pricing-$(date +%Y%m%d-%H%M%S).md"
+            cat > "${PRICING_CHANGESET_FILE}" << 'EOF'
+          ---
+          '@mastra/observability': patch
+          ---
+
+          Update bundled model pricing with the latest prices from models.dev
+          EOF
+
+            echo "Created changeset: ${PRICING_CHANGESET_FILE}"
+            echo "PRICING_CHANGESET_FILE=${PRICING_CHANGESET_FILE}" >> $GITHUB_ENV
+          fi
+
       - name: Commit and push changes
         if: steps.git-check.outputs.changed == 'true'
         run: |
@@ -116,10 +148,14 @@ jobs:
           # changes that abort the rebase below and never make it onto main.
           git add packages/core/src/llm/model/capabilities/
           git add docs/src/content/en/models/
+          git add observability/mastra/src/metrics/pricing-data.jsonl
           if [ -n "${CHANGESET_FILE}" ]; then
             git add "${CHANGESET_FILE}"
           fi
-          git commit -m "chore: regenerate providers and docs [skip ci]"
+          if [ -n "${PRICING_CHANGESET_FILE}" ]; then
+            git add "${PRICING_CHANGESET_FILE}"
+          fi
+          git commit -m "chore: regenerate providers, docs and pricing [skip ci]"
           # Use --autostash as a safeguard so any unexpected leftover unstaged
           # changes don't abort the rebase with "cannot pull with rebase: You
           # have unstaged changes." Autostash safely stashes and restores them.

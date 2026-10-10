@@ -69,9 +69,17 @@ The detailed breakdown metrics (everything except `total_input` and `total_outpu
 
 ### When cost context is attached
 
-Cost context is attached to token metrics when the provider reports a valid cost for every completed model step or when the embedded pricing registry has a matching entry for the provider and model. Mastra sums the per-step provider costs into one query total. If any completed step lacks a valid reported cost, Mastra uses the pricing registry instead of reporting a partial total. If neither source is available, token metrics are still emitted without cost fields.
+Cost context is attached to token metrics when the provider reports a valid cost for every completed model step or when the pricing registry has a matching entry for the provider and model. Mastra sums the per-step provider costs into one query total. If any completed step lacks a valid reported cost, Mastra uses the pricing registry instead of reporting a partial total. If neither source is available, token metrics are still emitted without cost fields.
 
 A caller-supplied `costContext` takes precedence over provider-reported costs and pricing registry estimates. Provider-reported totals use `costMetadata.source: 'provider_reported'`, `costMetadata.scope: 'query_total'`, and `costMetadata.reportedStepCount` to identify the source, scope, and number of completed steps included in the total.
+
+### Where prices come from
+
+The pricing registry uses model prices from [models.dev](https://models.dev). `@mastra/observability` includes a snapshot of these prices and refreshes it from models.dev in the background once a day, and when a model has no price. Cost estimates don't wait for a refresh, so the first call to a newly released model can still have no cost.
+
+Refreshed prices are cached in `~/.cache/mastra/pricing-data.json` and reused by later processes. If a refresh fails, Mastra keeps the prices it already has. Stored cost estimates aren't recalculated when prices change.
+
+To use only the bundled snapshot, set `MASTRA_AUTO_REFRESH_PRICING=false`. Setting `MASTRA_OFFLINE=true` also turns off the refresh.
 
 ### What cost fields may be included
 
