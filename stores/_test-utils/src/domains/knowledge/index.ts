@@ -866,6 +866,35 @@ export function createKnowledgeStorageTests(
       expect(await store.listScopeNodes({ ids: [] })).toEqual({ scopes: [], nextCursor: null });
     });
 
+    it('orders scope nodes by character code, not locale', async () => {
+      try {
+        await store.reconcileStructure({
+          scopes: [
+            { address: 'org:case', name: 'Case' },
+            { address: 'topic:lower', name: 'apple', parentAddresses: ['org:case'] },
+            { address: 'topic:upper', name: 'Banana', parentAddresses: ['org:case'] },
+          ],
+        });
+      } catch (error) {
+        const unsupported =
+          error instanceof Error &&
+          (error.name === 'KnowledgeUnsupportedError' ||
+            /does not support structured reconciliation/.test(error.message));
+        if (unsupported) return;
+        throw error;
+      }
+      let page;
+      try {
+        page = await store.listScopeNodes({ withinAddress: 'org:case', limit: 2 });
+      } catch (error) {
+        if (error instanceof Error && error.name === 'KnowledgeUnsupportedError') return;
+        throw error;
+      }
+      expect(page.scopes.map(scope => scope.name)).toEqual(['Banana', 'Case']);
+      const rest = await store.listScopeNodes({ withinAddress: 'org:case', limit: 2, cursor: page.nextCursor! });
+      expect(rest.scopes.map(scope => scope.name)).toEqual(['apple']);
+    });
+
     it('leaves existing scopes untouched when a plan does not retrofit', async () => {
       const created = await store.reconcileStructure({
         retrofit: false,
