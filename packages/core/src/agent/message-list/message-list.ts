@@ -1865,7 +1865,11 @@ export class MessageList {
     // the result and the (possibly reconciled) toolCallId, matching the entry by
     // the id it held before reconciliation. Spread the legacy entry first to
     // preserve its type, then override only the fields that change here.
-    if (Array.isArray(msg.content.toolInvocations) && inputPart.toolInvocation.state === 'result') {
+    // A provider-flagged error (`output-error`) is mirrored as a result: v4 has no error state.
+    if (
+      Array.isArray(msg.content.toolInvocations) &&
+      (inputPart.toolInvocation.state === 'result' || inputPart.toolInvocation.state === 'output-error')
+    ) {
       const resultInvocation = inputPart.toolInvocation;
       msg.content.toolInvocations = msg.content.toolInvocations.map(invocation =>
         invocation.toolCallId === priorToolCallId

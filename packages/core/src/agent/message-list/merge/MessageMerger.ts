@@ -166,6 +166,9 @@ export class MessageMerger {
               state: part.toolInvocation.state,
               approval: part.toolInvocation.approval,
               errorText: part.toolInvocation.errorText,
+              ...(part.toolInvocation.state === 'output-error' && part.toolInvocation.result !== undefined
+                ? { result: part.toolInvocation.result }
+                : {}),
               rawInput: part.toolInvocation.rawInput,
               args: {
                 ...existingCallPart.toolInvocation.args,

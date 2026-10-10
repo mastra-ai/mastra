@@ -586,6 +586,50 @@ function applyMcpContentToolResultOutputs(
   });
 }
 
+function collectProviderToolErrorResults(dbMessages: MastraDBMessage[]): Map<string, unknown> {
+  const errors = new Map<string, unknown>();
+  for (const message of dbMessages) {
+    if (message.content?.format !== 2 || !message.content.parts) continue;
+
+    for (const part of message.content.parts) {
+      if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'output-error') continue;
+      if (!part.providerExecuted || part.toolInvocation.result === undefined) continue;
+      errors.set(part.toolInvocation.toolCallId, part.toolInvocation.result);
+    }
+  }
+  return errors;
+}
+
+/**
+ * The vendored AI SDK v5 `convertToModelMessages` builds a provider-executed
+ * tool error's `error-json` value from the `errorText` string. Providers expect
+ * the original structured error (e.g. Anthropic `tool_search_tool_result_error`),
+ * so restore the object stored in the tool invocation's `result`.
+ */
+function applyProviderToolErrorOutputs(
+  modelMessages: AIV5Type.ModelMessage[],
+  dbMessages: MastraDBMessage[],
+): AIV5Type.ModelMessage[] {
+  const errorResults = collectProviderToolErrorResults(dbMessages);
+  if (errorResults.size === 0) return modelMessages;
+
+  return modelMessages.map(message => {
+    if (message.role !== 'assistant' || !Array.isArray(message.content)) return message;
+
+    let modified = false;
+    const content = message.content.map(part => {
+      if (part.type !== 'tool-result' || part.output?.type !== 'error-json') return part;
+      if (!errorResults.has(part.toolCallId)) return part;
+      const value = errorResults.get(part.toolCallId);
+      if (typeof value === 'string') return part;
+      modified = true;
+      return { ...part, output: { type: 'error-json', value: value ?? null } } as typeof part;
+    });
+
+    return modified ? ({ ...message, content } as AIV5Type.ModelMessage) : message;
+  });
+}
+
 /**
  * Restores `providerOptions` on assistant file parts after `convertToModelMessages`.
  *
@@ -726,7 +770,8 @@ export function aiV5UIMessagesToAIV5ModelMessages(
 
   const withSplitItemReferences = splitResponsesToolItemReferences(converted);
   const withFileMetadata = restoreAssistantFileProviderMetadata(withSplitItemReferences, preprocessed);
-  const withMcpContentOutputs = applyMcpContentToolResultOutputs(withFileMetadata, dbMessages);
+  const withProviderToolErrors = applyProviderToolErrorOutputs(withFileMetadata, dbMessages);
+  const withMcpContentOutputs = applyMcpContentToolResultOutputs(withProviderToolErrors, dbMessages);
 
   // Add input field to tool-result parts for Anthropic API compatibility (fixes issue #11376)
   const anthropicCompat = ensureAnthropicCompatibleMessages(withMcpContentOutputs, dbMessages);
