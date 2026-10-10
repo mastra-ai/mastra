@@ -7,12 +7,12 @@
         "hasToolResult": true
       },
       "response": {
-        "content": "Quiet preview height e2e complete."
+        "content": "Compact preview height e2e complete."
       }
     },
     {
       "match": {
-        "userMessage": "Replace the quiet preview fixture content.",
+        "userMessage": "Replace the compact preview fixture content.",
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
         "hasToolResult": false
@@ -20,10 +20,10 @@
       "response": {
         "toolCalls": [
           {
-            "id": "call_quiet_streaming_preview_height",
+            "id": "call_streaming_preview_height",
             "name": "string_replace_lsp",
             "arguments": {
-              "path": "src/quiet-preview.ts",
+              "path": "src/compact-preview.ts",
               "old_string": "OLD_PREVIEW_ONE\nOLD_PREVIEW_TWO\nOLD_PREVIEW_THREE\nOLD_PREVIEW_FOUR",
               "new_string": "NEW_PREVIEW_ONE\nNEW_PREVIEW_TWO\nNEW_PREVIEW_THREE\nNEW_PREVIEW_FOUR"
             }

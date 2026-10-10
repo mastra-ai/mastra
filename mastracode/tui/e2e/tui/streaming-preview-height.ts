@@ -12,8 +12,8 @@ const CHECKPOINT_SAMPLE_INTERVAL_MS = 100;
 
 function readPreviewGeometry(terminal: McE2eTerminal): PreviewGeometry {
   const rows = terminal.serialize().view.split('\n');
-  const headerRow = rows.findIndex(row => row.includes('▐edit▌') && row.includes('src/quiet-preview.ts'));
-  if (headerRow < 0) throw new Error('Expected quiet edit header while sampling preview geometry');
+  const headerRow = rows.findIndex(row => row.includes('▐edit▌') && row.includes('src/compact-preview.ts'));
+  if (headerRow < 0) throw new Error('Expected compact edit header while sampling preview geometry');
 
   let detailRows = 0;
   for (let row = headerRow + 1; row < rows.length && /^\s*│(?:\s|$)/.test(rows[row]!); row += 1) {
@@ -47,27 +47,25 @@ async function sampleCheckpoint(
   return samples;
 }
 
-export const quietStreamingPreviewHeightScenario: McE2eScenario = {
-  name: 'quiet-streaming-preview-height',
-  description: 'Keep quiet preview and editor geometry stable while deterministic edit arguments stream.',
-  testName: 'keeps quiet preview detail rows monotonic through streamed argument checkpoints',
+export const streamingPreviewHeightScenario: McE2eScenario = {
+  name: 'streaming-preview-height',
+  description: 'Keep compact preview and editor geometry stable while deterministic edit arguments stream.',
+  testName: 'keeps compact preview detail rows monotonic through streamed argument checkpoints',
   projectFixture: 'long-branch',
   useOpenAIModel: true,
-  aimockFixture: 'quiet-streaming-preview-height.json',
+  aimockFixture: 'streaming-preview-height.json',
   prepare({ appDataDir, projectDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as any;
-    settings.onboarding = { ...settings.onboarding, quietModePreferenceSelected: true };
     settings.preferences = {
       ...settings.preferences,
-      quietMode: true,
-      quietModeMaxToolPreviewLines: 4,
+      previewLines: 4,
     };
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 
     mkdirSync(join(projectDir, 'src'), { recursive: true });
     writeFileSync(
-      join(projectDir, 'src', 'quiet-preview.ts'),
+      join(projectDir, 'src', 'compact-preview.ts'),
       'OLD_PREVIEW_ONE\nOLD_PREVIEW_TWO\nOLD_PREVIEW_THREE\nOLD_PREVIEW_FOUR',
     );
   },
@@ -76,7 +74,7 @@ export const quietStreamingPreviewHeightScenario: McE2eScenario = {
     terminal.resize(120, 30);
     await runtime.waitForScreenText(/Project:/i, terminal);
 
-    terminal.submit('Replace the quiet preview fixture content.');
+    terminal.submit('Replace the compact preview fixture content.');
 
     // JSON.stringify(arguments) is 201 characters. With chunkSize 61 and tps 1:
     // chunk 2 ends at prefix 122 with four old_string rows, chunk 3 ends at
@@ -91,30 +89,32 @@ export const quietStreamingPreviewHeightScenario: McE2eScenario = {
     );
     const regrown = await sampleCheckpoint('regrown new_string', /NEW_PREVIEW_FOUR/, undefined, terminal, runtime);
 
-    await runtime.waitForScreenText(/Quiet preview height e2e complete\./i, terminal, 8_000);
+    await runtime.waitForScreenText(/Compact preview height e2e complete\./i, terminal, 8_000);
     const complete = [readPreviewGeometry(terminal)];
     const checkpoints = { full, shorter, regrown, complete };
     const allSamples = Object.values(checkpoints).flat();
     if (Object.values(checkpoints).some(samples => samples.length === 0)) {
-      throw new Error('Expected every quiet preview checkpoint to be observed');
+      throw new Error('Expected every compact preview checkpoint to be observed');
     }
     if (allSamples.some(sample => sample.detailRows !== 4)) {
-      throw new Error(`Expected stable four-row quiet preview geometry, received ${JSON.stringify(checkpoints)}`);
+      throw new Error(`Expected stable four-row compact preview geometry, received ${JSON.stringify(checkpoints)}`);
     }
     const firstEditorRow = full[0]!.editorRow;
     if (allSamples.some(sample => sample.editorRow < firstEditorRow)) {
       throw new Error(`Expected the editor row not to move upward, received ${JSON.stringify(checkpoints)}`);
     }
 
-    runtime.printScreen('quiet streaming preview height', terminal);
+    runtime.printScreen('compact streaming preview height', terminal);
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
     if (requests.length !== 2) {
-      throw new Error(`Expected quiet preview height scenario to make 2 AIMock requests, received ${requests.length}`);
+      throw new Error(
+        `Expected compact preview height scenario to make 2 AIMock requests, received ${requests.length}`,
+      );
     }
     const second = JSON.stringify(requests[1]);
-    for (const needle of ['call_quiet_streaming_preview_height', 'NEW_PREVIEW_FOUR', 'Replaced 1 occurrence']) {
+    for (const needle of ['call_streaming_preview_height', 'NEW_PREVIEW_FOUR', 'Replaced 1 occurrence']) {
       if (!second.includes(needle)) throw new Error(`Expected second AIMock request to include ${needle}`);
     }
   },

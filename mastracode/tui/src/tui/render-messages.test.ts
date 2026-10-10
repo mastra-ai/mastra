@@ -85,7 +85,6 @@ function createState(): TUIState {
     messageComponentsById: new Map(),
     pendingSignalMessageComponentsById: new Map(),
     followUpComponents: [],
-    quietMode: false,
     session,
     controller: {
       session,
@@ -533,7 +532,6 @@ describe('renderExistingMessages startup history loading', () => {
       assistant('assistant-2', [exitPart('call-2', { exitCode: -1, success: false, executionTimeMs: 1_605 })]),
     ];
     const state = createState();
-    state.quietMode = true;
     const listActiveMessages = vi.fn().mockResolvedValue(messages);
     state.session = {
       ...(state.session as any),
@@ -583,7 +581,6 @@ describe('renderExistingMessages startup history loading', () => {
       } as unknown as MastraDBMessage,
     ];
     const state = createState();
-    state.quietMode = true;
     const listActiveMessages = vi.fn().mockResolvedValue(messages);
     state.session = {
       ...(state.session as any),

@@ -144,7 +144,7 @@ function createMockSettings() {
       yolo: null,
       theme: 'auto',
       thinkingLevel: 'off',
-      quietMode: false,
+      previewLines: 2,
     },
     storage: {
       backend: 'libsql',
