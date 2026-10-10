@@ -127,6 +127,15 @@ export async function runDurableFinishSideEffects({
   }
 
   const effectiveRequestContext = restoreRequestContext(initData.requestContextEntries, requestContext);
+  // Snapshots drop MastraMemory (it holds a live instance), but memory processors read
+  // memoryConfig (e.g. readOnly) from it. Restore it from durable state when it's missing.
+  if (!effectiveRequestContext.has('MastraMemory') && durableState?.threadId) {
+    effectiveRequestContext.set('MastraMemory', {
+      thread: { id: durableState.threadId },
+      resourceId: durableState.resourceId,
+      memoryConfig: durableState.memoryConfig,
+    });
+  }
   // Deserialize into the run's existing MessageList when there is one. MastraModelOutput
   // holds that instance and reads it during final processing, so swapping in a new one
   // would leave the stream reporting pre-processor messages.

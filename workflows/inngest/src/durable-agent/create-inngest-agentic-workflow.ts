@@ -10,6 +10,7 @@ import {
   emitFinishEvent,
   runDurableFinishSideEffects,
   modelConfigSchema,
+  modelListEntrySchema,
   durableAgenticOutputSchema,
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
@@ -61,6 +62,7 @@ const durableAgenticInputSchema = z.object({
   initialUntaggedSystemMessages: z.array(z.any()).optional(),
   toolsMetadata: z.array(z.any()),
   modelConfig: modelConfigSchema,
+  modelList: z.array(modelListEntrySchema).optional(),
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
@@ -92,6 +94,8 @@ export interface InngestDurableAgenticWorkflowOptions {
  * Iteration state schema - extends base with observability fields.
  */
 const iterationStateSchema = baseIterationStateSchema.extend({
+  // Fallback model list; the shared base state update does not carry it
+  modelList: z.array(modelListEntrySchema).optional(),
   // Observability - exported span data for agent run
   agentSpanData: z.any().optional(),
   // Observability - exported span data for model generation (ONE span for entire run)
@@ -179,6 +183,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
           toolsMetadata: state.toolsMetadata,
           modelConfig: state.modelConfig,
+          modelList: state.modelList,
           options: state.options,
           state: state.state,
           messageId: state.messageId,
@@ -267,6 +272,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // Extend with Inngest-specific observability fields
         const newIterationState: IterationState = {
           ...baseUpdate,
+          modelList: initData.modelList,
           // Preserve agent span data for observability
           agentSpanData: initData.agentSpanData,
           // Preserve model span data (ONE span for entire agent run)
