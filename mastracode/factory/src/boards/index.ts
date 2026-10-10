@@ -3,6 +3,7 @@ export type {
   BoardDefinition,
   BoardPhaseDefinition,
   BoardPhaseKind,
+  BoardSourceClosed,
   BoardToolResultRuleHandler,
   BoardToolRule,
   BoardToolRules,
@@ -11,8 +12,10 @@ export type {
 export {
   boardForWorkItem,
   isTerminalWorkItem,
+  resolveBoardClosure,
   resolveBoardToolRule,
   resolvePhaseSemantics,
+  withBoardClosure,
   workItemPhaseSemantics,
 } from './semantics.js';
 export type { PhaseSemantics } from './semantics.js';

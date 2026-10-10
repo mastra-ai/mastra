@@ -68,15 +68,19 @@ function retriageIssue(context: FactoryGitLabRuleContext) {
 }
 
 function issueClosed(context: FactoryGitLabRuleContext) {
-  if (!context.item || context.item.source !== 'gitlab-issue' || context.board !== 'work') return;
-  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  if (!context.item || context.item.source !== 'gitlab-issue') return;
+  // The card's board decides where a closed source sends it; boards that declare no
+  // `sourceClosed` mapping keep the card where it is, as do cards already finished.
+  const closure = context.boardClosure;
+  if (!context.board || !closure || closure.itemTerminal) return;
+  // GitLab reports no close reason, so every closure counts as completed.
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:issue-closed`,
-    board: 'work',
-    stage: 'done',
+    board: context.board,
+    stage: closure.completed.phase,
     message: {
-      text: `GitLab issue #${context.issue?.number ?? ''} was closed; this Work card was moved to Done.`,
+      text: `GitLab issue #${context.issue?.number ?? ''} was closed; this ${closure.boardTitle} card was moved to ${closure.completed.title}.`,
     },
   } as const;
 }

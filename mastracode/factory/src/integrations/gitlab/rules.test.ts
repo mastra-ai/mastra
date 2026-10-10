@@ -484,6 +484,128 @@ describe('GitLabRules', () => {
     ]);
   });
 
+  describe('recording the pushed head against a review verdict', () => {
+    const reviewedHeadSha = 'be10bfa000000000000000000000000000000000';
+    const pushedHeadSha = '8fa258d000000000000000000000000000000000';
+    const reviewKey = `gitlab-pr:${Buffer.from(
+      JSON.stringify({ version: 1, host: 'gitlab.example.com', projectId: 101, mergeRequestIid: 17 }),
+      'utf8',
+    ).toString('base64url')}`;
+
+    function mergeRequestUpdated(
+      deliveryId: string,
+      lastCommit: string,
+      oldrev?: string,
+      updatedAt: string | undefined = '2030-01-01 01:00:00 UTC',
+    ) {
+      const base = mergeRequestOpened(deliveryId);
+      return {
+        ...base,
+        payload: {
+          ...base.payload,
+          object_attributes: {
+            ...base.payload.object_attributes,
+            action: 'update',
+            last_commit: { id: lastCommit },
+            ...(oldrev ? { oldrev } : {}),
+            ...(updatedAt ? { updated_at: updatedAt } : {}),
+          },
+        },
+      };
+    }
+
+    async function seed(workMetadata: Record<string, unknown>) {
+      const { seeded, project, service } = await setup();
+      const verdict = { reviewVerdict: 'approve', reviewedHeadSha };
+      const work = (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:authoring' },
+            title: 'Authoring work',
+            board: 'work',
+            stages: ['execute'],
+            sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
+            metadata: { authorTrusted: true, ...verdict, ...workMetadata },
+          },
+        })
+      ).item;
+      const review = (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: reviewKey },
+            parentWorkItemId: work.id,
+            title: 'MR 17',
+            board: 'review',
+            stages: ['done'],
+            sessions: {},
+            metadata: { authorTrusted: true, ...verdict },
+          },
+        })
+      ).item;
+      const metadataOf = async (id: string) => (await seeded.workItems.get({ orgId: 'org-1', id }))?.metadata;
+      return { seeded, service, workId: work.id, reviewId: review.id, metadataOf };
+    }
+
+    it('ignores a push delivered after a newer one', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
+
+      await service.ingest(
+        mergeRequestUpdated('d-push-new', pushedHeadSha, reviewedHeadSha, '2030-01-01 02:00:00 UTC'),
+      );
+      await service.ingest(mergeRequestUpdated('d-push-late', reviewedHeadSha, 'aaaa', '2030-01-01 01:00:00 UTC'));
+
+      for (const id of [reviewId, workId]) {
+        expect(await metadataOf(id)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      }
+    });
+
+    it('stamps the new head on the Review card and its authoring Work item without clearing the verdict', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
+
+      await service.ingest(mergeRequestUpdated('delivery-mr-push', pushedHeadSha.toUpperCase(), reviewedHeadSha));
+
+      for (const id of [reviewId, workId]) {
+        expect(await metadataOf(id)).toMatchObject({
+          reviewVerdict: 'approve',
+          reviewedHeadSha,
+          pullRequestHeadSha: pushedHeadSha,
+        });
+      }
+    });
+
+    it('leaves a Work item alone when it has a different merge request out', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 18 });
+
+      await service.ingest(mergeRequestUpdated('delivery-mr-push-other', pushedHeadSha, reviewedHeadSha));
+
+      expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      expect(await metadataOf(workId)).not.toHaveProperty('pullRequestHeadSha');
+    });
+
+    it('keeps a head that returned to an earlier commit when the push in between arrives late', async () => {
+      const { service, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
+      await service.ingest(mergeRequestUpdated('d-a', reviewedHeadSha, 'aaaa', '2030-01-01 01:00:00 UTC'));
+      await service.ingest(mergeRequestUpdated('d-a-again', reviewedHeadSha, 'bbbb', '2030-01-01 03:00:00 UTC'));
+      await service.ingest(mergeRequestUpdated('d-b-late', pushedHeadSha, 'aaaa', '2030-01-01 02:00:00 UTC'));
+
+      expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: reviewedHeadSha });
+    });
+
+    it('ignores an update that carries no time to order it by', async () => {
+      const { service, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
+      await service.ingest(mergeRequestUpdated('d-timed', pushedHeadSha, 'aaaa'));
+      await service.ingest(mergeRequestUpdated('d-untimed', reviewedHeadSha, 'bbbb', ''));
+
+      expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+    });
+  });
+
   describe('open merge request tracking on the authoring Work card', () => {
     async function seedWork(
       seeded: Awaited<ReturnType<typeof setup>>['seeded'],
@@ -535,6 +657,60 @@ describe('GitLabRules', () => {
 
       await service.ingest(mergeRequestEvent('d-close', 'close', '2030-01-01T01:00:00Z'));
       expect((await read())?.openPullRequestNumber).toBeNull();
+    });
+
+    it('keeps the pushed head when an untimed opening of the recorded merge request is replayed', async () => {
+      const { seeded, project, service } = await setup();
+      const work = await seedWork(seeded, project.id, {
+        openPullRequestNumber: 17,
+        pullRequestHeadSha: '8fa258d000000000000000000000000000000000',
+        pullRequestHeadAt: Date.parse('2030-01-01T02:00:00Z'),
+      });
+      const opened = mergeRequestOpened('d-open-replay');
+      const event = {
+        ...opened,
+        payload: {
+          ...opened.payload,
+          object_attributes: {
+            ...opened.payload.object_attributes,
+            last_commit: { id: 'be10bfa000000000000000000000000000000000' },
+          },
+        },
+      };
+
+      await service.ingest(event);
+
+      expect((await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata).toMatchObject({
+        openPullRequestNumber: 17,
+        pullRequestHeadSha: '8fa258d000000000000000000000000000000000',
+      });
+    });
+
+    it('replaces a head left by an earlier merge request when the next one opens', async () => {
+      const { seeded, project, service } = await setup();
+      // Merge request 16 was pushed to and closed; its head is still on the card.
+      const work = await seedWork(seeded, project.id, {
+        pullRequestHeadSha: 'be10bfa000000000000000000000000000000000',
+      });
+      const opened = mergeRequestEvent('d-open-next', 'open', '2030-01-01T00:00:00Z');
+      const event = {
+        ...opened,
+        payload: {
+          ...opened.payload,
+          object_attributes: {
+            ...opened.payload.object_attributes,
+            last_commit: { id: '8FA258D000000000000000000000000000000000' },
+          },
+        },
+      };
+
+      await service.ingest(event);
+
+      // A verdict recorded on the new merge request's head now reads as current.
+      expect((await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata).toMatchObject({
+        openPullRequestNumber: 17,
+        pullRequestHeadSha: '8fa258d000000000000000000000000000000000',
+      });
     });
 
     it('records a genuine reopen again but ignores an opening older than the close', async () => {

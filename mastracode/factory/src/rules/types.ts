@@ -277,6 +277,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
+  /** Where the card's board sends it when its tracked source closes. */
+  boardClosure?: FactoryRuleBoardClosure;
   /**
    * Board an issue's labels route it to, when the project has a matching label route and that board
    * is installed. Absent for pull requests and for issues whose labels select nothing.
@@ -352,10 +354,32 @@ export interface FactoryRuleIntakeTarget {
   initialPhase: string;
 }
 
+/**
+ * Where a source-closed rule moves the card, from the `sourceClosed` mapping its installed board
+ * declares. Absent when the card's board is not installed or declares no mapping.
+ */
+export interface FactoryRuleBoardClosure {
+  /** Title of the card's board, for messages. */
+  boardTitle: string;
+  /** Terminal phase for a source that was completed. */
+  completed: FactoryRuleBoardClosurePhase;
+  /** Terminal phase for a source that was canceled or not planned. */
+  canceled: FactoryRuleBoardClosurePhase;
+  /** Whether the card already sits in a terminal phase of its board. */
+  itemTerminal: boolean;
+}
+
+export interface FactoryRuleBoardClosurePhase {
+  phase: string;
+  title: string;
+}
+
 export interface FactoryGitLabRuleContext extends FactoryRuleContextBase {
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
+  /** Where the card's board sends it when its tracked source closes. */
+  boardClosure?: FactoryRuleBoardClosure;
   intake?: FactoryRuleIntakeTarget;
   event: FactoryGitLabEventName;
   deliveryId: string;
@@ -408,6 +432,8 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
+  /** Where the card's board sends it when its tracked source closes. */
+  boardClosure?: FactoryRuleBoardClosure;
   /** Bound board for the source this issue came from, when one is configured and installed. */
   intake?: FactoryRuleIntakeTarget;
   event: FactoryLinearEventName;
@@ -434,6 +460,8 @@ export interface FactoryJiraRuleContext extends FactoryRuleContextBase {
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
+  /** Where the card's board sends it when its tracked source closes. */
+  boardClosure?: FactoryRuleBoardClosure;
   /** Bound board for the source this issue came from, when one is configured and installed. */
   intake?: FactoryRuleIntakeTarget;
   event: FactoryJiraEventName;
@@ -460,6 +488,8 @@ export interface FactoryIncidentioRuleContext extends FactoryRuleContextBase {
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
+  /** Where the card's board sends it when its tracked source closes. */
+  boardClosure?: FactoryRuleBoardClosure;
   /** Bound board for the source this follow-up came from, when one is configured and installed. */
   intake?: FactoryRuleIntakeTarget;
   event: FactoryIncidentioEventName;

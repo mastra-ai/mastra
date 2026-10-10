@@ -1,3 +1,4 @@
+import type { FactoryRuleBoardClosure } from '../rules/types.js';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
 import type { BoardPhaseKind, BoardToolResultRuleHandler } from './define-board.js';
 import type { BoardRegistry } from './registry.js';
@@ -72,4 +73,33 @@ export function workItemPhaseSemantics(
   const stage = item.stages.length === 1 ? item.stages[0] : undefined;
   if (!stage) return undefined;
   return resolvePhaseSemantics(boards, boardForWorkItem(item), stage);
+}
+
+/**
+ * Where source-closed rules send a persisted card: the `sourceClosed` mapping its installed
+ * board declares, plus whether the card already sits in a terminal phase. Undefined when the
+ * board is not installed or declares no mapping, so closing the source leaves the card alone.
+ */
+export function resolveBoardClosure(
+  boards: BoardRegistry,
+  item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
+): FactoryRuleBoardClosure | undefined {
+  const board = boards.get(boardForWorkItem(item));
+  if (!board?.sourceClosed) return undefined;
+  const { completed, canceled } = board.sourceClosed;
+  return {
+    boardTitle: board.title,
+    completed: { phase: completed, title: board.phases[completed]!.title },
+    canceled: { phase: canceled, title: board.phases[canceled]!.title },
+    itemTerminal: item.stages.some(stage => board.isTerminal(stage)),
+  };
+}
+
+/** Rule-context fragment carrying the card's `boardClosure`, empty when the board declares none. */
+export function withBoardClosure(
+  boards: BoardRegistry,
+  item: Pick<WorkItemRow, 'board' | 'externalSource' | 'stages'>,
+): { boardClosure?: FactoryRuleBoardClosure } {
+  const boardClosure = resolveBoardClosure(boards, item);
+  return boardClosure ? { boardClosure } : {};
 }
