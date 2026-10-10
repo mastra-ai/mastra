@@ -147,6 +147,28 @@ describe('OpenAIRealtimeVoice', () => {
       expect(sent.filter((ev: any) => ev.type === 'response.create')).toHaveLength(1);
     });
 
+    it('should send a string output when a tool returns undefined', async () => {
+      (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
+      (voice as any).sessionReady = true;
+      voice.addTools({
+        notify: {
+          description: 'Fire and forget',
+          inputSchema: undefined,
+          execute: vi.fn().mockResolvedValue(undefined),
+        },
+      } as any);
+
+      await (voice as any).handleFunctionCalls({
+        response: { output: [{ type: 'function_call', name: 'notify', call_id: 'c1', arguments: '{}' }] },
+      });
+
+      const items = ((voice as any).ws.send as ReturnType<typeof vi.fn>).mock.calls
+        .map(([raw]: [string]) => JSON.parse(raw))
+        .filter((ev: any) => ev.type === 'conversation.item.create');
+      expect(items).toHaveLength(1);
+      expect(items[0].item).toMatchObject({ type: 'function_call_output', call_id: 'c1', output: 'null' });
+    });
+
     it('should ignore function_calls for tools that were not added', async () => {
       (voice as any).ws = { on: vi.fn(), send: vi.fn(), close: vi.fn() };
 

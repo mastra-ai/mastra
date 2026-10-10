@@ -471,6 +471,77 @@ describe('E2BSandbox', () => {
     });
   });
 
+  describe('Named template fail-closed (fallbackTemplate: false)', () => {
+    const failClosedSpec = async (repo: string): Promise<NamedTemplateSpec> => {
+      mockHead('e'.repeat(40));
+      const spec = await resolveRepoTemplate({
+        getRepositoryAccess: repoAccess(`https://github.com/octocat/${repo}.git`),
+        setupCommand: 'pnpm install',
+      });
+      return { ...spec, fallbackTemplate: false };
+    };
+
+    it('rejects start() with the build error instead of falling back', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const spec = await failClosedSpec('fail-closed-build');
+      (Template.exists as any).mockResolvedValue(false);
+      (Template.build as any).mockRejectedValue(new Error('BuildError: setup failed'));
+
+      const sandbox = new E2BSandbox({ id: 'fail-closed-1', template: spec });
+
+      await expect(sandbox.start()).rejects.toThrow(/setup failed/);
+      expect(Template.build as any).toHaveBeenCalledTimes(1);
+      expect((Template.build as any).mock.calls[0]![1]).toBe(spec.ref);
+      expect(Sandbox.create as any).not.toHaveBeenCalled();
+      expect((sandbox as any)._resolvedTemplateId).toBeUndefined();
+    });
+
+    it('retries the named build on the next start after rejecting', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const spec = await failClosedSpec('fail-closed-retry');
+      (Template.exists as any).mockResolvedValue(false);
+      (Template.build as any)
+        .mockRejectedValueOnce(new Error('BuildError: setup failed'))
+        .mockResolvedValueOnce({ templateId: 'named-template-id' });
+
+      const sandbox = new E2BSandbox({ id: 'fail-closed-2', template: spec });
+      await expect(sandbox.start()).rejects.toThrow(/setup failed/);
+
+      await sandbox.start();
+      expect(Template.build as any).toHaveBeenCalledTimes(2);
+      expect((Template.build as any).mock.calls[1]![1]).toBe(spec.ref);
+      expect((Sandbox.create as any).mock.calls[0]![0]).toBe(spec.ref);
+    });
+
+    it('rejects start() when creating from a registered-but-broken ref 404s', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const spec = await failClosedSpec('fail-closed-404');
+      (Template.exists as any).mockResolvedValue(true);
+      (Sandbox.create as any).mockRejectedValueOnce(new Error("404: tag 'default' does not exist for template"));
+
+      const sandbox = new E2BSandbox({ id: 'fail-closed-3', template: spec });
+
+      await expect(sandbox.start()).rejects.toThrow(/404/);
+      expect(Sandbox.create as any).toHaveBeenCalledTimes(1);
+      expect((Sandbox.create as any).mock.calls[0]![0]).toBe(spec.ref);
+      expect(Template.build as any).not.toHaveBeenCalled();
+      expect((sandbox as any)._resolvedTemplateId).toBeUndefined();
+    });
+
+    it('applies to a deferred spec whose resolved spec disables fallback', async () => {
+      const { Sandbox, Template } = await import('e2b');
+      const spec = await failClosedSpec('fail-closed-deferred');
+      (Template.exists as any).mockResolvedValue(true);
+      (Sandbox.create as any).mockRejectedValueOnce(new Error('404: template not found'));
+
+      const sandbox = new E2BSandbox({ id: 'fail-closed-4', template: { resolveSpec: async () => spec } });
+
+      await expect(sandbox.start()).rejects.toThrow(/404/);
+      expect(Sandbox.create as any).toHaveBeenCalledTimes(1);
+      expect(Template.build as any).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Start - Race Condition Prevention', () => {
     it('concurrent start() calls return same promise', async () => {
       const { Sandbox } = await import('e2b');

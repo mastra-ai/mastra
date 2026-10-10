@@ -846,6 +846,17 @@ export class MastraFactory {
             },
           }
         : {}),
+      ...(typeof githubIntegration?.ingestLinkedRepositoryBacklog === 'function'
+        ? {
+            onProjectRepositoryLinked: ({ orgId, projectRepository }) => {
+              void githubIntegration
+                .ingestLinkedRepositoryBacklog({ orgId, projectRepositoryId: projectRepository.id })
+                .catch(error => {
+                  console.warn('[factory] Failed to import a linked repository backlog:', error);
+                });
+            },
+          }
+        : {}),
       ...(sessionRetirement ? { sessionRetirement } : {}),
       ...(workItemsReady
         ? {

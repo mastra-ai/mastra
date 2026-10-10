@@ -499,6 +499,21 @@ Failure handling is designed so a broken template never wedges a session:
   named ref fails, the cached resolution is dropped and creation retries
   down the fallback ladder.
 
+If a sandbox without the template's toolchain is worse than a failed start, set `fallbackTemplate: false` on the resolved spec. A failed build, or a ref that can't create a sandbox, then rejects `start()` with the original error instead of falling back:
+
+```typescript title="src/mastra/workspaces.ts"
+const repoTemplate = createRepoTemplate({
+  getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/app.git' }),
+  setupCommand: 'pnpm install',
+})!
+
+const sandbox = new E2BSandbox({
+  template: {
+    resolveSpec: async () => ({ ...(await repoTemplate.resolveSpec()), fallbackTemplate: false }),
+  },
+})
+```
+
 Private repositories build warm templates when `getRepositoryAccess` returns
 an `authorization` alongside the clone URL — a fresh, short-lived credential
 (such as a GitHub App installation token) minted per template resolution.
