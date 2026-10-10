@@ -14,6 +14,7 @@ import { ScoresInMemory } from '../../../storage/domains/scores/inmemory';
 import { createStep, createWorkflow } from '../../../workflows';
 import type { ExperimentEvent } from '../index';
 import { EXPERIMENT_ITEM_SCORER_NOT_FOUND, runExperiment } from '../index';
+import { experimentScoreId, experimentStepScoreId } from '../scorer';
 import { scriptedModel } from './scenarios/scenario-helpers';
 
 // Mock agent that returns predictable output
@@ -473,6 +474,22 @@ describe('runExperiment', () => {
   });
 
   describe('scorer source precedence', () => {
+    it('persists categorized scorer IDs uniquely in first-seen order', async () => {
+      const first = createMockScorer('first', 'First');
+      const second = createMockScorer('second', 'Second');
+      const third = createMockScorer('third', 'Third');
+
+      const result = await runExperiment(mastra, {
+        data: [{ input: { prompt: 'test' } }],
+        task: async () => 'output',
+        scorers: { agent: [first, second], trajectory: [first, third] },
+      });
+
+      const experiment = await experimentsStorage.getExperimentById({ id: result.experimentId });
+      expect(experiment?.scorerIds).toEqual(['first', 'second', 'third']);
+      expect(result.results[0].scores.map(score => score.scorerId)).toEqual(['first', 'second', 'first', 'third']);
+    });
+
     it('uses run-level scorers instead of item and dataset scorer IDs', async () => {
       const runScorer = createMockScorer('run', 'Run');
       const lowerScorer = createMockScorer('lower', 'Lower');
@@ -494,6 +511,17 @@ describe('runExperiment', () => {
       expect(runScorer.run).toHaveBeenCalledTimes(2);
       expect(lowerScorer.run).not.toHaveBeenCalled();
       expect(mastra.getScorerById).not.toHaveBeenCalled();
+
+      const experiment = await experimentsStorage.getExperimentById({ id: result.experimentId });
+      expect(experiment?.scorerIds).toEqual(['run']);
+      const { scores } = await scoresStorage.listScoresByRunId({
+        runId: result.experimentId,
+        pagination: { page: 0, perPage: 10 },
+      });
+      const baseScoreId = experimentScoreId(result.experimentId, result.results[0].itemId, 0, 'run');
+      expect(scores.map(score => score.id).sort()).toEqual(
+        [`${baseScoreId}:occurrence:0`, `${baseScoreId}:occurrence:1`].sort(),
+      );
     });
 
     it('treats an explicit run-level empty array as an override', async () => {
@@ -515,6 +543,8 @@ describe('runExperiment', () => {
       expect(result.results[0].scores).toEqual([]);
       expect(lowerScorer.run).not.toHaveBeenCalled();
       expect(mastra.getScorerById).not.toHaveBeenCalled();
+      const experiment = await experimentsStorage.getExperimentById({ id: result.experimentId });
+      expect(experiment?.scorerIds).toEqual([]);
     });
 
     it('treats an empty categorized run-level config as an override', async () => {
@@ -579,6 +609,8 @@ describe('runExperiment', () => {
       expect(itemScorer.run).toHaveBeenCalledTimes(1);
       expect(datasetScorer.run).toHaveBeenCalledTimes(1);
       expect(sharedScorer.run).toHaveBeenCalledTimes(2);
+      const experiment = await experimentsStorage.getExperimentById({ id: result.experimentId });
+      expect(experiment?.scorerIds).toBeNull();
     });
 
     it('does not resolve dataset scorer IDs when every item has an override', async () => {
@@ -747,6 +779,15 @@ describe('runExperiment', () => {
       expect(db.experiments.size).toBe(1);
       expect(db.experimentResults.size).toBe(2);
       expect(db.scores.size).toBe(2);
+      const experiment = await experimentsStorage.getExperimentById({ id: result.experimentId });
+      expect(experiment?.scorerIds).toEqual(['default-scorer']);
+      const { scores } = await scoresStorage.listScoresByRunId({
+        runId: result.experimentId,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(scores.map(score => score.id).sort()).toEqual(
+        result.results.map(item => experimentScoreId(result.experimentId, item.itemId, 0, 'default-scorer')).sort(),
+      );
     });
 
     it('suppresses experiment writes independently while still persisting scores', async () => {
@@ -1002,12 +1043,19 @@ describe('runExperiment', () => {
         outputSchema,
         execute: async ({ inputData }) => ({ text: `echo:${inputData.prompt}` }),
       });
+      const repeatStep = createStep({
+        id: 'repeat',
+        inputSchema: outputSchema,
+        outputSchema,
+        execute: async ({ inputData }) => ({ text: `repeat:${inputData.text}` }),
+      });
       const workflow = createWorkflow({
         id: 'categorized-wf',
         inputSchema,
         outputSchema,
       })
         .then(echoStep)
+        .then(repeatStep)
         .commit();
       (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
       (mastra.getWorkflow as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
@@ -1029,15 +1077,33 @@ describe('runExperiment', () => {
         targetId: 'categorized-wf',
         scorers: {
           workflow: [workflowScorer],
-          steps: { echo: [stepScorer] },
+          steps: { echo: [stepScorer], repeat: [stepScorer] },
         },
       });
 
-      expect(result.results[0].scores.map(score => score.scorerId)).toEqual(['workflow-run', 'workflow-step']);
-      expect(result.results[0].scores[1]?.stepId).toBe('echo');
+      expect(result.results[0].scores.map(score => score.scorerId)).toEqual([
+        'workflow-run',
+        'workflow-step',
+        'workflow-step',
+      ]);
+      expect(result.results[0].scores.slice(1).map(score => score.stepId)).toEqual(['echo', 'repeat']);
       expect(workflowScorer.run).toHaveBeenCalledTimes(1);
-      expect(stepScorer.run).toHaveBeenCalledTimes(1);
+      expect(stepScorer.run).toHaveBeenCalledTimes(2);
       expect(lowerScorer.run).not.toHaveBeenCalled();
+
+      const experiment = await experimentsStorage.getExperimentById({ id: result.experimentId });
+      expect(experiment?.scorerIds).toEqual(['workflow-run']);
+      const { scores } = await scoresStorage.listScoresByRunId({
+        runId: result.experimentId,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(scores.map(score => score.id).sort()).toEqual(
+        [
+          experimentScoreId(result.experimentId, result.results[0].itemId, 0, 'workflow-run'),
+          experimentStepScoreId(result.experimentId, result.results[0].itemId, 0, 'echo', 'workflow-step'),
+          experimentStepScoreId(result.experimentId, result.results[0].itemId, 0, 'repeat', 'workflow-step'),
+        ].sort(),
+      );
     });
   });
 
