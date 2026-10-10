@@ -449,6 +449,7 @@ type ProcessorLoadedToolsProvider = {
     requestContext: RequestContext;
     tools?: Record<string, unknown>;
     getMessages?: () => Promise<MastraDBMessage[]>;
+    runMessages?: MastraDBMessage[];
   }) => Record<string, ToolToConvert> | Promise<Record<string, ToolToConvert>>;
 };
 
@@ -4622,10 +4623,13 @@ export class Agent<
     tools,
     getModel,
     memoryConfig,
+    runMessages,
     ...rest
   }: {
     processors: InputProcessorOrWorkflow[];
     memoryConfig?: MemoryConfigInternal;
+    /** In-flight messages of the run, not yet in memory (durable recovery). */
+    runMessages?: MastraDBMessage[];
     /**
      * Tools already resolved for this request. A processor that made a
      * request-scoped tool searchable needs them to rebuild its executor here,
@@ -4650,14 +4654,18 @@ export class Agent<
     // the persisted thread here. Loaded lazily and at most once.
     let messagesPromise: Promise<MastraDBMessage[]> | undefined;
     const getMessages = (): Promise<MastraDBMessage[]> => {
-      if (!threadId) return Promise.resolve([]);
+      if (!threadId) return Promise.resolve(runMessages ?? []);
       messagesPromise ??= this.getMemoryMessages({
         threadId,
         resourceId,
         vectorMessageSearch: '',
         memoryConfig,
         requestContext,
-      }).then(result => result.messages);
+      }).then(result => {
+        if (!runMessages?.length) return result.messages;
+        const seen = new Set(result.messages.map(m => m.id));
+        return [...result.messages, ...runMessages.filter(m => !seen.has(m.id))];
+      });
       return messagesPromise;
     };
 
@@ -4674,7 +4682,12 @@ export class Agent<
         return;
       }
 
-      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({ requestContext, tools, getMessages });
+      const loadedTools = await toolProvider.getLoadedToolsForRequestContext({
+        requestContext,
+        tools,
+        getMessages,
+        runMessages,
+      });
       if (!loadedTools || Object.keys(loadedTools).length === 0) {
         return;
       }
@@ -6835,6 +6848,8 @@ export class Agent<
     backgroundTaskEnabled?: boolean;
     backgroundTaskPolicy?: AgentExecutionOptionsBase<any>['backgroundTaskPolicy'];
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
+    /** @internal In-flight run messages, so recovery can restore processor-loaded tools. */
+    runMessages?: MastraDBMessage[];
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     const defaultOptions = await this.getDefaultOptions({ requestContext });
@@ -6873,6 +6888,7 @@ export class Agent<
       backgroundTaskEnabled: options.backgroundTaskEnabled,
       backgroundTaskPolicy: mergedOptions.backgroundTaskPolicy,
       model: options.model,
+      runMessages: options.runMessages,
     });
   }
 
@@ -6897,6 +6913,7 @@ export class Agent<
     inputProcessors,
     hooks,
     model,
+    runMessages,
     ...rest
   }: {
     toolsets?: ToolsetsInput;
@@ -6918,6 +6935,7 @@ export class Agent<
     inputProcessors?: InputProcessorOrWorkflow[];
     hooks?: ToolHooks;
     model?: MastraLanguageModel | MastraLegacyLanguageModel;
+    runMessages?: MastraDBMessage[];
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
     const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
@@ -7090,6 +7108,7 @@ export class Agent<
       processors: configuredInputProcessors,
       tools: requestResolvedTools,
       memoryConfig,
+      runMessages,
       runId,
       resourceId,
       threadId,
