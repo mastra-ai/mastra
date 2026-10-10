@@ -40,6 +40,7 @@ function fakeMemoryApi() {
       messages.set(id, list);
       return json({ messages: body.messages }, 201);
     }
+    if (path === '/working-memory' && method === 'PUT') return json({ ok: true });
     if ((m = path.match(/^\/threads\/([^/]+)\/context$/))) {
       const id = decodeURIComponent(m[1]!);
       return json({ system: observations, messages: messages.get(id) ?? [], observedAt: null });
@@ -133,6 +134,19 @@ describe('PlatformMemory', () => {
     expect((await memory.getThreadById({ threadId: 'thread_3' }))?.resourceId).toBe('user_9');
     const recalled = await memory.recall({ threadId: 'thread_3' });
     expect(recalled.messages.map(m => m.role)).toEqual(['user', 'assistant']);
+  });
+
+  it('lets the agent update working memory in tool mode', async () => {
+    const opts = { accessToken: 'tok_1', instanceId: 'mem_1', apiUrl: 'https://platform.test', fetch: api.fetchImpl };
+    expect(Object.keys(new PlatformMemory(opts).listTools())).toEqual([]);
+    const memory = new PlatformMemory({ ...opts, workingMemory: 'tool' });
+    expect(Object.keys(memory.listTools({ readOnly: true }))).toEqual([]);
+
+    const tool = memory.listTools().updateWorkingMemory!;
+    await tool.execute!({ memory: '# User\n- Name: Ada' }, { agent: { threadId: 't', resourceId: 'user_1' } } as never);
+
+    const put = api.requests.find(r => r.path === '/working-memory')!;
+    expect(put.body).toEqual({ resourceId: 'user_1', workingMemory: '# User\n- Name: Ada' });
   });
 });
 

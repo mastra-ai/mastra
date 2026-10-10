@@ -16,6 +16,10 @@ import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
 } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
+import type { ToolAction } from '@mastra/core/tools';
+
+import { z } from 'zod';
 
 import { PlatformMemoryClient } from './client';
 import type { MemoryMessage, MemoryMessageInput, MemoryThread, PlatformMemoryClientOptions } from './client';
@@ -27,9 +31,9 @@ export type PlatformMemoryOptions = PlatformMemoryClientOptions & {
   client?: PlatformMemoryClient;
   /**
    * How working memory is shown to the model. Defaults to `readonly`;
-   * `off` omits it. Tool-driven updates are not supported yet.
+   * `tool` also gives the agent an `updateWorkingMemory` tool; `off` omits it.
    */
-  workingMemory?: 'readonly' | 'off';
+  workingMemory?: 'readonly' | 'tool' | 'off';
 };
 
 type MessageListLike = ProcessInputArgs['messageList'];
@@ -105,12 +109,31 @@ function memoryContext(requestContext: RequestContext | undefined, messageList: 
  */
 export class PlatformMemory extends MastraMemory {
   readonly client: PlatformMemoryClient;
-  private readonly workingMemoryMode: 'readonly' | 'off';
+  private readonly workingMemoryMode: 'readonly' | 'tool' | 'off';
 
   constructor(options: PlatformMemoryOptions = {}) {
     super({ id: options.id ?? 'platform-memory', name: 'PlatformMemory' });
     this.client = options.client ?? new PlatformMemoryClient(options);
     this.workingMemoryMode = options.workingMemory ?? 'readonly';
+  }
+
+  listTools(config?: MemoryConfig): Record<string, ToolAction<any, any, any, any, any>> {
+    if (this.workingMemoryMode !== 'tool' || config?.readOnly) return {};
+    const client = this.client;
+    return {
+      updateWorkingMemory: createTool({
+        id: 'update-working-memory',
+        description:
+          'Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.',
+        inputSchema: z.object({ memory: z.string().describe('The Markdown formatted working memory content to store.') }),
+        execute: async ({ memory }, context) => {
+          const resourceId = context?.agent?.resourceId ?? context?.agent?.threadId;
+          if (!resourceId) throw new Error('updateWorkingMemory needs a thread or resource');
+          await client.updateWorkingMemory(resourceId, memory);
+          return { success: true };
+        },
+      }),
+    };
   }
 
   async getInputProcessors(): Promise<InputProcessor[]> {
