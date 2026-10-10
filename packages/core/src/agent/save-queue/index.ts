@@ -161,7 +161,14 @@ export class SaveQueueManager {
         messages: newMessages,
         memoryConfig,
       });
-      if (saved?.messages?.length) this.onSaved?.(saved.messages);
+      if (saved?.messages?.length) {
+        // Bookkeeping only: a failure here must not turn a successful save into an error.
+        try {
+          this.onSaved?.(saved.messages);
+        } catch (error) {
+          this.logger?.warn?.('onSaved callback failed', { error });
+        }
+      }
       noteThreadMessagesSaved({ threadId, resourceId: newMessages.find(m => m.resourceId)?.resourceId, savedAt });
     }
   }

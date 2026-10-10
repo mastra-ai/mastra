@@ -357,7 +357,7 @@ await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 
 `recoverAllDurableAgents()` returns counts and re-checks skipped runs itself. `recoverActiveRuns()` returns each run's outcome as `success`, `failed`, or `skipped`, and doesn't re-check skipped runs. A run skipped because another process drives it carries `retryAt`, the time after which its claim lapses unless renewed.
 
-Manual recovery reads the same `running` checkpoints as automatic recovery. If `recovery.durableAgents` is `'off'` and you haven't set a custom `shouldPersistSnapshot` that includes `running`, in-flight runs are only checkpointed at step boundaries reached after `mastra.shutdown()` starts. A run that crashes before then, or doesn't reach a step boundary during the drain, has no checkpoint, so `listActiveRuns()` and `recoverActiveRuns()` don't find it. See [snapshot persistence](#snapshot-persistence).
+Manual recovery reads the same `running` checkpoints as automatic recovery. For a `DurableAgent` using the default snapshot policy with `recovery.durableAgents` set to `'off'`, in-flight runs are only checkpointed at step boundaries reached after `mastra.shutdown()` starts. A run that crashes before then, or doesn't reach a step boundary during the drain, has no checkpoint, so `listActiveRuns()` and `recoverActiveRuns()` don't find it. See [snapshot persistence](#snapshot-persistence).
 
 To take over a run that's still live, such as one held by a hung execution, call `recover()` with `force: true`:
 

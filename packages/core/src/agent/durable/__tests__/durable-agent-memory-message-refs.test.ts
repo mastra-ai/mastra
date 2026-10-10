@@ -95,6 +95,7 @@ async function startProcess(
     { createEventedAgent },
     { EventEmitterPubSub },
     transcripts,
+    { globalRunRegistry },
   ] = await Promise.all([
     import('../../../mastra'),
     import('../../../storage'),
@@ -104,6 +105,7 @@ async function startProcess(
     import('../create-evented-agent'),
     import('../../../events/event-emitter'),
     import('../workflows/shared/message-list-state'),
+    import('../run-registry'),
   ]);
   transcripts.__setMidRunLoadRetryDelaysForTests([1, 1, 1]);
 
@@ -150,7 +152,16 @@ async function startProcess(
     });
   }
   const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
-  return { mastra, durableAgent, workflows, prompts, storage, transcripts, toolExecutions: () => toolExecutions };
+  return {
+    mastra,
+    durableAgent,
+    workflows,
+    prompts,
+    storage,
+    transcripts,
+    globalRunRegistry,
+    toolExecutions: () => toolExecutions,
+  };
 }
 
 // Starts a run whose tool drops this process's loaded rows and then makes
@@ -311,7 +322,10 @@ describe('memory-recalled messages in durable runs', () => {
   it.each(engines)(
     'keeps at most one inline copy of a saved message in each running checkpoint (%s engine)',
     async engine => {
-      const { durableAgent, workflows, storage } = await startProcess(history(), { engine, toolRounds: 5 });
+      const { durableAgent, workflows, storage, globalRunRegistry } = await startProcess(history(), {
+        engine,
+        toolRounds: 5,
+      });
       const marker = 'saved-input-marker';
       const persisted: SnapshotRow[] = [];
       const persist = workflows.persistWorkflowSnapshot.bind(workflows);
@@ -325,9 +339,11 @@ describe('memory-recalled messages in durable runs', () => {
         savePerStep: true,
         maxSteps: 10,
       });
+      const execution = globalRunRegistry.get(result.runId)?.workflowExecution;
+      expect(execution).toBeDefined();
       expect(await collectText(result)).toBe('done');
       // The closing steps (final output, scorers) persist after FINISH is emitted.
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await execution;
 
       // A message holds its text in more than one field; count each message once.
       const copies = (row: SnapshotRow) => [

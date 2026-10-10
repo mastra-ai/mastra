@@ -7673,7 +7673,8 @@ export class Mastra<
    * window are abandoned with a warning. Durable agent runs using the default
    * snapshot policy persist a `running` checkpoint at each step boundary they
    * reach during the drain. An abandoned durable agent run then stops without
-   * writing and is released, so it can be recovered from its last checkpoint.
+   * writing and is released. It can be recovered only if a checkpoint was
+   * persisted.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
     const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
