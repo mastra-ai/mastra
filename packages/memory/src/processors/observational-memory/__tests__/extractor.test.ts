@@ -18,6 +18,7 @@ import {
   parseExtractedValues,
   parseExtractorValue,
   resolveExtractors,
+  withoutRequiredSections,
   slugifyExtractorName,
   stripExtractorSections,
   validateExtractorList,
@@ -273,6 +274,92 @@ describe('Extractor', () => {
     });
     expect(result.values).toEqual({ 'working-memory': '# User\n- Existing fact\n- New fact' });
     expect(buildThreadMetadataFromExtractedValues([resolved!], result.values)).toEqual({});
+  });
+
+  describe('markdown working memory section (#25350)', () => {
+    const markdownMemory = () =>
+      ({
+        getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true } })),
+        getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'markdown', content: '# User\n' })),
+        getWorkingMemory: vi.fn(async () => '- Existing fact'),
+        updateWorkingMemory: vi.fn(async () => undefined),
+      }) as any;
+    const resolveMarkdown = async (memory: any) =>
+      (
+        await resolveExtractors([new WorkingMemoryExtractor()], {
+          source: 'observer',
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          memory,
+        })
+      )[0]!;
+
+    it('lists the section as required with an UNCHANGED instruction', async () => {
+      const resolved = await resolveMarkdown(markdownMemory());
+      const sections = buildExtractorOutputSections([resolved]);
+
+      expect(sections).toContain('This section is REQUIRED: always output <working-memory>');
+      expect(sections).toContain('write exactly UNCHANGED inside the tag');
+      expect(sections).not.toContain(
+        'Include this section when the observations contain relevant information for <working-memory>',
+      );
+    });
+
+    it('records an extraction failure when the required section is missing', async () => {
+      const resolved = await resolveMarkdown(markdownMemory());
+      const result = parseExtractedValues('<observations>\n- User now prefers USD\n</observations>', [resolved]);
+
+      expect(result.values).toEqual({});
+      expect(result.failures).toEqual([
+        { slug: 'working-memory', error: 'Observer output did not include the required <working-memory> section' },
+      ]);
+    });
+
+    it('does not write working memory when the section is UNCHANGED', async () => {
+      const memory = markdownMemory();
+      const resolved = await resolveMarkdown(memory);
+      const parsed = parseExtractedValues(
+        '<observations>\n- x\n</observations>\n<working-memory>\nUNCHANGED\n</working-memory>',
+        [resolved],
+      );
+      expect(parsed.failures).toEqual([]);
+      expect(parsed.values).toEqual({});
+      for (const variant of ['Unchanged.', '`UNCHANGED`', '"unchanged"']) {
+        expect(parseExtractedValues(`<working-memory>${variant}</working-memory>`, [resolved]).values).toEqual({});
+      }
+
+      await applyExtractorHooks({
+        source: 'observer',
+        extractors: [resolved],
+        values: parsed.values,
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        memory,
+      });
+
+      expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    });
+
+    it('does not call the sections optional when one is required', async () => {
+      const sections = buildExtractorOutputSections([await resolveMarkdown(markdownMemory())]);
+      expect(sections).not.toContain('optional');
+    });
+
+    it('treats the section as optional in batched multi-thread calls', async () => {
+      const [batched] = withoutRequiredSections([await resolveMarkdown(markdownMemory())]);
+      expect(batched!.required).toBe(false);
+      expect(batched).toBeInstanceOf(Extractor);
+      expect(buildExtractorOutputSections([batched!])).not.toContain('REQUIRED');
+      expect(parseExtractedValues('<observations>\n- x\n</observations>', [batched!]).failures).toEqual([]);
+    });
+
+    it('keeps sibling inline sections optional', () => {
+      const optional = new Extractor({ name: 'Mood', instructions: 'Extract mood.' });
+      expect(buildExtractorOutputSections([optional])).toContain(
+        'Include this section when the observations contain relevant information for <mood>',
+      );
+      expect(parseExtractedValues('<observations>\n- x\n</observations>', [optional]).failures).toEqual([]);
+    });
   });
 
   it('replaces JSON working memory from the working memory extractor', async () => {
