@@ -230,6 +230,94 @@ describe('output-format-handlers', () => {
     });
   });
 
+  describe('multi-step runs (#25038)', () => {
+    const schema = z.object({ answer: z.string() });
+    type Out = z.infer<typeof schema>;
+
+    const stepStart = (): ChunkType<Out> =>
+      ({ type: 'step-start', runId: 'test-run', from: ChunkFrom.AGENT, payload: {} }) as unknown as ChunkType<Out>;
+    const textDelta = (text: string): ChunkType<Out> => ({
+      type: 'text-delta',
+      runId: 'test-run',
+      from: ChunkFrom.AGENT,
+      payload: { id: 'text-1', text },
+    });
+    const finish = (reason: 'stop' | 'tool-calls'): ChunkType<Out> =>
+      ({
+        ...finishChunk('stop'),
+        payload: { ...finishChunk('stop').payload, stepResult: { reason } },
+      }) as ChunkType<Out>;
+
+    const toolCall = (providerExecuted?: boolean): ChunkType<Out> =>
+      ({
+        type: 'tool-call',
+        runId: 'test-run',
+        from: ChunkFrom.AGENT,
+        payload: { toolCallId: 'call-1', toolName: 'lookup', args: {}, providerExecuted },
+      }) as unknown as ChunkType<Out>;
+
+    async function run(chunks: ChunkType<Out>[]) {
+      return convertAsyncIterableToArray(
+        convertArrayToReadableStream(chunks).pipeThrough(
+          createObjectStreamTransformer({ structuredOutput: { schema } }),
+        ),
+      );
+    }
+
+    it('does not validate text from a step that calls tools', async () => {
+      const chunks = await run([textDelta('Let me look that up.'), toolCall(), finish('tool-calls')]);
+
+      expect(chunks.filter(chunk => chunk.type === 'error' || chunk.type === 'object-result')).toEqual([]);
+    });
+
+    it('finalizes a tool-calls finish that carries no client tool calls', async () => {
+      const noTools = await run([textDelta('{"answer":"bedrock"}'), finish('tool-calls')]);
+      const providerTool = await run([textDelta('{"answer":"search"}'), toolCall(true), finish('stop')]);
+
+      expect(noTools.filter(chunk => chunk.type === 'object-result').map(chunk => chunk.object)).toEqual([
+        { answer: 'bedrock' },
+      ]);
+      expect(providerTool.filter(chunk => chunk.type === 'object-result').map(chunk => chunk.object)).toEqual([
+        { answer: 'search' },
+      ]);
+    });
+
+    it.each(['Let me look that up.', '{"answer":"draft"}'])(
+      'finalizes only the terminal step after %s',
+      async intermediate => {
+        const chunks = await run([
+          stepStart(),
+          textDelta(intermediate),
+          toolCall(),
+          finish('tool-calls'),
+          stepStart(),
+          textDelta('{"answer":"final"}'),
+          finish('stop'),
+        ]);
+
+        expect(chunks.filter(chunk => chunk.type === 'error')).toEqual([]);
+        expect(chunks.filter(chunk => chunk.type === 'object-result').map(chunk => chunk.object)).toEqual([
+          { answer: 'final' },
+        ]);
+      },
+    );
+
+    it('still reports an invalid terminal answer', async () => {
+      const chunks = await run([
+        stepStart(),
+        textDelta('{"answer":"draft"}'),
+        toolCall(),
+        finish('tool-calls'),
+        stepStart(),
+        textDelta('not json'),
+        finish('stop'),
+      ]);
+
+      expect(chunks.filter(chunk => chunk.type === 'object-result')).toEqual([]);
+      expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
+    });
+  });
+
   describe.each([true, false])('recovery with text-end: %s', includeTextEnd => {
     it.each(['warn', 'fallback'] as const)(
       'handles %s validation once through the configured logger',
