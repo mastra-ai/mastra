@@ -242,7 +242,7 @@ describe('output-format-handlers', () => {
       from: ChunkFrom.AGENT,
       payload: { id: 'text-1', text },
     });
-    const finish = (reason: 'stop' | 'tool-calls' | 'length' | 'content-filter'): ChunkType<Out> =>
+    const finish = (reason: 'stop' | 'tool-calls' | 'length' | 'content-filter' | 'error'): ChunkType<Out> =>
       ({
         ...finishChunk('stop'),
         payload: { ...finishChunk('stop').payload, stepResult: { reason } },
@@ -315,6 +315,12 @@ describe('output-format-handlers', () => {
 
       expect(chunks.filter(chunk => chunk.type === 'object-result')).toEqual([]);
       expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
+    });
+
+    it('does not turn narration from an errored tool-calling step into a result', async () => {
+      const chunks = await run([textDelta('{"answer":"draft"}'), toolCall(), finish('error')]);
+
+      expect(chunks.filter(chunk => chunk.type === 'error' || chunk.type === 'object-result')).toEqual([]);
     });
 
     it.each(['length', 'content-filter'] as const)(

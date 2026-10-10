@@ -720,14 +720,9 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
     }
 
     // Text from a step that calls client-executed tools is narration before the tools run, not the
-    // final answer: the loop continues and a later step produces the structured output. This mirrors
-    // the loop's own continuation check, which stops on truncation and errors even with tool calls.
-    if (
-      hasPendingToolCalls &&
-      finishReason !== 'length' &&
-      finishReason !== 'content-filter' &&
-      finishReason !== 'error'
-    ) {
+    // final answer. Truncated steps still fall through so the truncation is reported; an error finish
+    // already surfaces its own error, so its narration must not become an object result.
+    if (hasPendingToolCalls && finishReason !== 'length' && finishReason !== 'content-filter') {
       return;
     }
 
