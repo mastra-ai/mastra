@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Durable agents now store a multi-step turn as one assistant message with `step-start` parts between steps, the same as `Agent`. Before, each step was saved as its own assistant message, which used up extra `lastMessages` slots and made the streamed `messageId` match only the first stored message (#26332).
+Fixed durable agents saving each step of a turn as a separate message. A multi-step turn is now saved as one message, as with `Agent`. Conversation history now holds more turns, and the streamed message ID matches the saved message.
