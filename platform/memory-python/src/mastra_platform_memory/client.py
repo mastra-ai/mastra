@@ -160,6 +160,11 @@ class PlatformMemory:
     def observe(self, thread_id: str) -> dict[str, Any]:
         return self._request("POST", f"/threads/{_q(thread_id)}/observe")
 
+    def list_observation_runs(
+        self, *, thread_id: str | None = None, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        return self._request("GET", "/runs", query={"threadId": thread_id, "limit": limit})["runs"]
+
     def clone_thread(
         self,
         thread_id: str,

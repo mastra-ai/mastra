@@ -24,6 +24,8 @@ def api():
                 self._json(404, {"error": "not found"})
             elif self.path == "/v1/memory/mem_1/search":
                 self._json(200, {"matches": [{"text": "Kyoto"}]})
+            elif self.path.startswith("/v1/memory/mem_1/runs"):
+                self._json(200, {"runs": [{"id": "run1", "observed": True}]})
             else:
                 self._json(500, {"error": self.path})
 
@@ -73,6 +75,13 @@ def test_search_omits_unset_fields_and_missing_thread_is_none(api):
     with pytest.raises(PlatformMemoryApiError) as error:
         memory.delete_thread("other")
     assert error.value.status == 500
+
+
+def test_lists_observation_runs(api):
+    url, requests = api
+    memory = PlatformMemory(access_token="tok", instance_id="mem_1", api_url=url)
+    assert memory.list_observation_runs(thread_id="t1", limit=5) == [{"id": "run1", "observed": True}]
+    assert requests[0]["path"] == "/v1/memory/mem_1/runs?threadId=t1&limit=5"
 
 
 def test_reads_env_fallbacks(monkeypatch):
