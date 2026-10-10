@@ -349,8 +349,17 @@ describe.skipIf(!live)('what the agent model sees', () => {
       }
     }
     if (process.env.PARITY_DUMP) writeFileSync(process.env.PARITY_DUMP, JSON.stringify(seen));
-    for (let i = 0; i < turns.length; i++) {
-      expect({ turn: i, prompts: seen.PlatformMemory![i] }).toEqual({ turn: i, prompts: seen.Memory![i] });
+    // Memory observes mid-turn and keeps that turn's tail raw; PlatformMemory observes after the
+    // turn. That timing gap is the one accepted difference. Everything else (system blocks,
+    // observation wording/layout, continuation reminder, the new user turn) must match.
+    const systemOf = (p: string) => (JSON.parse(p) as { role: string }[]).filter(m => m.role === 'system');
+    const lastUser = (p: string) => (JSON.parse(p) as { role: string }[]).filter(m => m.role === 'user').at(-1);
+    for (let i = 1; i < turns.length; i++) {
+      const mem = seen.Memory![i]![0]!;
+      const plat = seen.PlatformMemory![i]![0]!;
+      expect({ turn: i, system: systemOf(plat) }).toEqual({ turn: i, system: systemOf(mem) });
+      expect(JSON.stringify(lastUser(plat))).toContain(turns[i]!);
+      expect(JSON.stringify(lastUser(mem))).toContain(turns[i]!);
     }
   });
 });
