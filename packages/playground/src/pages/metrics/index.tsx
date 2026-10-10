@@ -258,7 +258,7 @@ function MetricsCards() {
   const agent = EntityType.AGENT;
 
   return (
-    <div className="grid content-start gap-4 pb-6">
+    <div className="grid content-start gap-4">
       <MetricsKpis />
       <TokenUsageCard onViewTraces={() => openTraces()} onTimeRangeClick={range => openTraces({ window: range })} />
       <MetricsGrid columns={3}>

@@ -12,6 +12,8 @@ export type ShareListRowProps = {
   /** The row's share, formatted. */
   share: string;
   highlighted: boolean;
+  /** The row the list is filtered or narrowed to: announced to screen readers, not just shaded. */
+  active?: boolean;
   dimmed: boolean;
   onHover: () => void;
   LinkComponent?: ElementType;
@@ -24,6 +26,7 @@ export function ShareListRow({
   valueWidth,
   share,
   highlighted,
+  active = false,
   dimmed,
   onHover,
   LinkComponent,
@@ -42,6 +45,7 @@ export function ShareListRow({
         className={className}
         style={{ opacity: dimmed ? 0.5 : 1 }}
         onMouseEnter={onHover}
+        aria-current={active || undefined}
       >
         <span
           className="size-2 shrink-0 rounded-[2px]"
@@ -71,6 +75,7 @@ function RowShell({
   className: string;
   style: CSSProperties;
   onMouseEnter: () => void;
+  'aria-current'?: boolean;
   children: ReactNode;
 }) {
   if (row.href) {
