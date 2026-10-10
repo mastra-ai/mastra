@@ -1,21 +1,24 @@
 # Account menu composition
 
-Use `AvatarRail` for organization shortcuts and `CompositeAvatar` for a person's avatar with an organization badge. The account-menu Storybook stories show both themes, keyboard navigation, many organizations, and the optional copy action.
+Use `AvatarRail` for organization shortcuts and `Avatar.Badge` to put an organization's logo on a person's avatar. The account-menu Storybook stories show both themes, keyboard navigation, many organizations, and the optional copy action.
 
 ## Compose the menu
 
 `layout="account"` makes the popup a dialog containing a toolbar and named menus. Declare the trigger's popup type, label the content, and put action items inside `DropdownMenu.Group`. Leave out `rail` to keep the same layout without the rail column when only one organization applies.
 
 ```tsx
-import { Avatar, CompositeAvatar } from '@mastra/playground-ui/components/Avatar'
+import { Avatar } from '@mastra/playground-ui/components/Avatar'
 import { AvatarRail } from '@mastra/playground-ui/components/AvatarRail'
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu'
 
 export function AccountMenu({ switchOrganization }: { switchOrganization: () => void }) {
   const identity = (
-    <CompositeAvatar badge={<Avatar name="Acme" size="xs" />}>
-      <Avatar name="Alex Morgan" size="md" />
-    </CompositeAvatar>
+    <Avatar size="md">
+      <Avatar.Fallback>AM</Avatar.Fallback>
+      <Avatar.Badge>
+        <Avatar name="Acme" />
+      </Avatar.Badge>
+    </Avatar>
   )
 
   return (
@@ -49,4 +52,4 @@ Up and down arrows move focus through enabled rail items without selecting an or
 
 ## Sizes and colors
 
-Use the existing `md` avatar for the profile and `xs` for its badge. The `control` avatar size uses the existing medium-control token. Rail items keep a stable circular target and a separate current-organization ring. Popup surfaces, borders, hover and focus fills, focus outlines, and text colors use semantic design-system tokens.
+Use the `md` avatar for the profile. An avatar inside `Avatar.Badge` takes the `xs` size and drops its own stroke. The rail uses the `control` avatar size. Rail items keep a stable circular target and a separate current-organization ring. Popup surfaces, borders, hover and focus fills, focus outlines, and text colors use semantic design-system tokens.

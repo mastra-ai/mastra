@@ -12,7 +12,6 @@ import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 
 import { Avatar } from '../Avatar/Avatar';
-import { CompositeAvatar } from '../Avatar/composite-avatar';
 import { AvatarRail } from '../AvatarRail/index';
 import { Status } from '../StatusIndicators/status';
 import { ThemeToggle } from '../ThemeToggle/theme-toggle';
@@ -63,9 +62,13 @@ function AccountMenuExample({
           aria-haspopup="dialog"
           description={current.name}
           avatar={
-            <CompositeAvatar badge={<Avatar name={current.name} src={current.logo} size="xs" />}>
-              <Avatar name="Justin Levine" src={portrait} size="md" />
-            </CompositeAvatar>
+            <Avatar size="md">
+              <Avatar.Image src={portrait} alt="Justin Levine" />
+              <Avatar.Fallback>JL</Avatar.Fallback>
+              <Avatar.Badge>
+                <Avatar name={current.name} src={current.logo} />
+              </Avatar.Badge>
+            </Avatar>
           }
         >
           Justin Levine
