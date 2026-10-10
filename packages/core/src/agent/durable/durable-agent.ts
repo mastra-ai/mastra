@@ -2437,6 +2437,7 @@ export class DurableAgent<
       agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
       streamCleanup?.();
       this.#runRegistry.cleanup(runId);
+      // A deferred cleanup must not remove a newer run registered under the same id.
       globalRunRegistry.delete(runId);
       this.#clearPubsubTopic(runId);
       cleanedUp = true;
@@ -2565,7 +2566,21 @@ export class DurableAgent<
 
     // 5. Cleanup function — routes through the shared performCleanup() so the
     // explicit call and the auto-cleanup timer release the same resources.
-    const cleanup = performCleanup;
+    // A cleanup() that arrives while the workflow is still running waits for
+    // for the run's terminal event: tearing down the reader first would drop the terminal event, leaving
+    // the output unsettled and the thread busy forever (#25974).
+    let workflowSettled = false;
+    void workflowExecution.finally(() => {
+      workflowSettled = true;
+    });
+    const cleanup = () => {
+      if (cleanedUp || workflowSettled || output.status !== 'running') return performCleanup();
+      void workflowExecution
+        .then(() => this.pubsub.flush())
+        .then(() => waitForEventDelivery())
+        .catch(() => {})
+        .finally(performCleanup);
+    };
 
     const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {
