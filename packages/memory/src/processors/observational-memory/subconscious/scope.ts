@@ -36,7 +36,8 @@ export function getAgentScopes(requestContext: ScopeRequestContext): string[] {
  *
  * An `org:<id>` agent scope wins. Without one, the legacy `organizationId` request-context key is
  * used. Returns undefined when neither is present: Knowledge needs an org for now, so Subconscious
- * skips that run. Throws when the run holds more than one distinct org scope.
+ * skips that run. Throws when the run holds more than one distinct org scope, or an org value
+ * containing `:`.
  */
 export function resolveSubconsciousOrgId(
   requestContext: ScopeRequestContext,
@@ -50,6 +51,10 @@ export function resolveSubconsciousOrgId(
         .filter(Boolean),
     ),
   ];
+  const nested = orgIds.find(id => id.includes(':'));
+  if (nested) {
+    throw new Error(`Subconscious org scope "org:${nested}" must not contain ":".`);
+  }
   if (orgIds.length > 1) {
     throw new Error(
       `Subconscious needs one org scope, but the run holds ${orgIds.length}: ${orgIds.map(id => `org:${id}`).join(', ')}.`,

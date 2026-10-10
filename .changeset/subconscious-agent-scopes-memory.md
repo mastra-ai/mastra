@@ -9,3 +9,5 @@ await agent.stream('Plan the launch', {
   scopes: ['org:acme', 'resource:user-123', 'thread:conversation-123'],
 });
 ```
+
+Org scopes need a `@mastra/core` release that supports agent scopes and a `@mastra/server` release that reserves `MASTRA_SCOPES_KEY`. Older servers let a request body set that key, so upgrade them together.

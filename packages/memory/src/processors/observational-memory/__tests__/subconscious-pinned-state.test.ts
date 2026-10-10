@@ -124,9 +124,10 @@ describe('PinnedStateProcessor', () => {
     );
     expect(scoped!.contents).toContain(pinned.id);
     expect(await processor.computeStateSignal(makeArgs({}, [['mastra__scopes', ['team:core']]]))).toBeUndefined();
-    await expect(
-      processor.computeStateSignal(makeArgs({}, [['mastra__scopes', ['org:acme', 'org:beta']]])),
-    ).rejects.toThrow(/needs one org scope/);
+    // Two org scopes skip pins rather than failing the parent turn.
+    expect(
+      await processor.computeStateSignal(makeArgs({}, [['mastra__scopes', ['org:acme', 'org:beta']]])),
+    ).toBeUndefined();
   });
 
   it('emits a delta carrying only the change when a snapshot is in the window', async () => {

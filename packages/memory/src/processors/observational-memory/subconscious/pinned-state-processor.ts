@@ -142,7 +142,15 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
   // visible context (visibility is subset containment), never a level-narrowed
   // write scope.
   private resolveScope(args: ComputeStateSignalArgs): KnowledgeScope | undefined {
-    const organizationId = resolveSubconsciousOrgId(args.requestContext, omDebug);
+    // This runs on every parent step, so an unusable org skips pins instead of failing the turn.
+    // Curate reports the same condition.
+    let organizationId: string | undefined;
+    try {
+      organizationId = resolveSubconsciousOrgId(args.requestContext, omDebug);
+    } catch (error) {
+      omDebug(`[Subconscious] pinned state skipped: ${error instanceof Error ? error.message : String(error)}`);
+      return undefined;
+    }
     if (!organizationId) return undefined;
     const resourceId = resolveKnowledgeResourceId(args.requestContext, args.resourceId);
     if (!resourceId) return undefined;
