@@ -608,20 +608,22 @@ export interface ObservationalMemoryObservationConfig {
   activateOnProviderChange?: boolean;
 
   /**
-   * Token threshold above which buffered activation is allowed to overshoot the
-   * retention target. Above `blockAfter`, activation uses the smallest set of buffered
-   * chunks that reaches the retention target, even when that overshoots the target by
-   * more than the usual safeguard allows. It never activates more chunks than are needed
-   * to reach the retention target, and it changes the result only when the retention
-   * floor is above roughly 20,000 tokens — with the default settings it has no
-   * observable effect.
+   * Token threshold at which a synchronous (blocking) observation is allowed.
+   * Between `messageTokens` and `blockAfter`, only async buffering and activation run:
+   * reaching `messageTokens` without a buffered chunk to activate starts background
+   * buffering, and the resulting chunk activates on a later step. A synchronous
+   * observation runs if pending tokens still reach `blockAfter` after buffered activation.
+   * Unobserved messages can therefore grow up to `blockAfter` before an agent step blocks
+   * on the Observer. Set `blockAfter: 1` to observe synchronously at `messageTokens`.
    *
-   * Crossing `blockAfter` does not trigger a blocking observation. A synchronous
-   * (blocking) observation runs when the `messageTokens` threshold is reached and
-   * activating buffered chunks does not bring pending tokens back under it.
+   * Above `blockAfter`, activation may also overshoot the retention target: it uses the
+   * smallest set of buffered chunks that reaches the target, even when that overshoots it
+   * by more than the usual safeguard allows. This changes the result only when the
+   * retention floor is above roughly 20,000 tokens.
    *
    * Accepts either:
-   * - A **multiplier** (1 ≤ value < 100): multiplied by `messageTokens`.
+   * - A **multiplier** (1 ≤ value < 100): multiplied by `messageTokens` (including a
+   *   per-thread `messageTokens` override).
    *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → resolves to 30,000 tokens.
    * - An **absolute token count** (≥ 100): must be greater than `messageTokens`.
    *   e.g. `blockAfter: 80_000` → resolves to 80,000 tokens.

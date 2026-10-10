@@ -20,6 +20,7 @@ const REPORT_ONLY = process.env.OM_FUZZ_REPORT_ONLY === '1';
 function clearCoordinator() {
   BufferingCoordinator.asyncBufferingOps.clear();
   BufferingCoordinator.lastBufferedBoundary.clear();
+  BufferingCoordinator.observationBoundaryOwners.clear();
   BufferingCoordinator.lastBufferedAtTime.clear();
   BufferingCoordinator.reflectionBufferCycleIds.clear();
 }
