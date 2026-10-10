@@ -2734,6 +2734,11 @@ export class WorkflowEventProcessor extends EventProcessor {
             resumePayload: (prevResult as any).resumePayload ?? existingStepResult?.resumePayload,
             resumedAt: (prevResult as any).resumedAt ?? existingStepResult?.resumedAt,
           } as any;
+          // A sibling finishing after another iteration failed must not flip the foreach back to success.
+          const failedIteration = foreachOutput.find((r: any) => r?.status === 'failed');
+          if (prevResult.status !== 'failed' && failedIteration) {
+            newResult = { ...newResult, status: 'failed', error: failedIteration.error } as any;
+          }
         } else {
           newResult = { ...prevResult, output: [iterationResult], payload: originalPayload, suspendPayload } as any;
         }

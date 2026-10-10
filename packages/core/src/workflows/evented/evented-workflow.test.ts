@@ -1376,12 +1376,23 @@ describe('Workflow (Evented Engine Specific)', () => {
         expect(result.status).toBe('failed');
         expect(result.error?.message).toBe('iteration failed');
 
-        // Let the slow siblings finish; they must not end or advance the run.
-        await new Promise(r => setTimeout(r, 300));
-        expect(afterRuns).toBe(0);
+        // Wait until every iteration, including the slow siblings, has been recorded by step-end
+        // processing; they must not end or advance the run, or flip the foreach back to success.
         const workflowsStore = await testStorage.getStore('workflows');
-        const record = await workflowsStore?.getWorkflowRunById({ runId, workflowName: id });
-        expect((record?.snapshot as any)?.status).toBe('failed');
+        const loadSnapshot = async () =>
+          (await workflowsStore?.getWorkflowRunById({ runId, workflowName: id }))?.snapshot as any;
+        await vi.waitFor(
+          async () => {
+            const foreachOutput = (await loadSnapshot())?.context?.[`${id}-boom`]?.suspendPayload?.__workflow_meta
+              ?.foreachOutput;
+            expect(foreachOutput?.filter(Boolean)).toHaveLength(items.length);
+          },
+          { timeout: 2000 },
+        );
+        const snapshot = await loadSnapshot();
+        expect(afterRuns).toBe(0);
+        expect(snapshot?.status).toBe('failed');
+        expect(snapshot?.context?.[`${id}-boom`]?.status).toBe('failed');
       } finally {
         await mastra.stopWorkers();
       }
