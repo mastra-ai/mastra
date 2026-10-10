@@ -33,7 +33,7 @@ import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopesSnapshot } from '../scopes';
-import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
+import { applyResolvedAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
@@ -59,6 +59,8 @@ import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
+/** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
+const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
 const RECOVERY_LEASE_TTL_MS = 30_000;
 const RECOVERY_LEASE_RENEW_INTERVAL_MS = 10_000;
 const localRecoveryClaims = new Map<string, string>();
@@ -1202,6 +1204,7 @@ export class DurableAgent<
     const requestContext: RequestContext = workflowInput.requestContextEntries
       ? new RequestContext(Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>)
       : new RequestContext();
+    restoreRunAgentScopes(requestContext);
 
     const messageListMemoryInfo = (
       workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
@@ -2645,6 +2648,9 @@ export class DurableAgent<
     options?: DurableAgentResumeOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
     let entry = this.#runRegistry.get(runId);
+    // Scopes persisted with a run rebuilt from storage. They are the suspended run's set even when
+    // the caller passes its own request context.
+    let rehydratedScopes: unknown;
     if (!entry) {
       // A persisted durable run can outlive this process (or the registry TTL).
       // Rebuild the non-serializable runtime state before resuming the stored
@@ -2733,6 +2739,8 @@ export class DurableAgent<
       const snapshotRequestContext = workflowInput.requestContextEntries
         ? new RequestContext<unknown>(Object.entries(workflowInput.requestContextEntries))
         : undefined;
+      if (snapshotRequestContext) restoreRunAgentScopes(snapshotRequestContext);
+      rehydratedScopes = workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY] ?? [];
       const memory = threadId
         ? {
             ...options?.memory,
@@ -2741,7 +2749,9 @@ export class DurableAgent<
           }
         : options?.memory;
 
+      // The resume below applies the suspended run's scopes, so preparation does not resolve them again.
       await this.prepare([], {
+        [SCOPES_ALREADY_APPLIED]: true,
         ...(options as AgentExecutionOptions<TOutput>),
         runId,
         requestContext: options?.requestContext ?? snapshotRequestContext,
@@ -2753,7 +2763,7 @@ export class DurableAgent<
         // entry re-arms the run-level timeout budget (#21724); caller
         // override wins.
         modelSettings: options?.modelSettings ?? (workflowInput.options?.modelSettings as any),
-      });
+      } as AgentExecutionOptions<TOutput>);
       entry = this.#runRegistry.get(runId);
     }
     if (!entry) {
@@ -2772,7 +2782,7 @@ export class DurableAgent<
     // The suspended run's non-identity scopes live on its persisted request context;
     // its identity is the registered memory. A resume keeps that set (rule: re-supplied
     // scopes may only be a subset of it).
-    const snapshotScopes = entry.requestContext?.get(MASTRA_SCOPES_KEY);
+    const snapshotScopes = rehydratedScopes ?? entry.requestContext?.get(MASTRA_SCOPES_KEY);
     // A run without recorded scopes held none, so a resume may not add any.
     const resumeScopesSnapshot: AgentScopesSnapshot = {
       resourceId: memoryInfo?.resourceId,
@@ -4478,6 +4488,7 @@ export class DurableAgent<
       // its registry entry.
       runId: options?.runId,
       requestContext: options?.requestContext,
+      scopesResolved: !!(options as { [SCOPES_ALREADY_APPLIED]?: boolean } | undefined)?.[SCOPES_ALREADY_APPLIED],
       mastra: this.#mastra,
     });
 

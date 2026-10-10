@@ -12,10 +12,12 @@ import { InMemoryStore } from '../../../storage';
 import { MockStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { resolveAgentScopes } from '../../scopes';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 import { prepareForDurableExecution } from '../preparation';
 import { globalRunRegistry } from '../run-registry';
+import { restoreRequestContext } from '../utils/resolve-runtime';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
@@ -130,8 +132,9 @@ describe.each([
     ).rejects.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT', details: { status: 400 } });
   });
 
-  async function suspendForApproval(scopes: string[], config: Partial<ConstructorParameters<typeof Agent>[0]> = {}) {
-    let calls = 0;
+  /** An agent whose first model call asks for an approved tool. A resumed process skips that call. */
+  function approvalAgent(config: Partial<ConstructorParameters<typeof Agent>[0]> = {}, resumedProcess = false) {
+    let calls = resumedProcess ? 1 : 0;
     const model = new MockLanguageModelV2({
       doStream: async () => {
         calls++;
@@ -166,7 +169,16 @@ describe.each([
       },
     });
     const { agent } = build({ model: model as LanguageModelV2, tools: { approve }, ...config });
-    new Mastra({ logger: false, storage: new MockStore(), agents: { scopedAgent: agent } });
+    return { agent, toolSeen };
+  }
+
+  async function suspendForApproval(
+    scopes: string[],
+    config: Partial<ConstructorParameters<typeof Agent>[0]> = {},
+    storage = new MockStore(),
+  ) {
+    const { agent, toolSeen } = approvalAgent(config);
+    new Mastra({ logger: false, storage, agents: { scopedAgent: agent } });
     let suspended: unknown;
     const initial = await agent.stream('go', { scopes, onSuspended: data => (suspended = data) });
     await vi.waitFor(() => expect(suspended).toBeDefined());
@@ -272,6 +284,89 @@ describe.each([
     ).rejects.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
     initial.cleanup();
   });
+
+  /** Suspends a run, drops process-local state, and resumes it from storage with a new agent instance. */
+  async function resumeOnFreshProcess(
+    scopes: string[],
+    {
+      first = {},
+      second = {},
+      outdatedServer = false,
+      requestContext,
+    }: {
+      first?: Partial<ConstructorParameters<typeof Agent>[0]>;
+      second?: Partial<ConstructorParameters<typeof Agent>[0]>;
+      outdatedServer?: boolean;
+      requestContext?: RequestContext;
+    } = {},
+  ) {
+    const storage = new MockStore();
+    const memory = new MockMemory({ storage: new InMemoryStore() });
+    const { initial } = await suspendForApproval(scopes, { ...first, memory }, storage);
+    initial.cleanup();
+    globalRunRegistry.clear();
+
+    const { agent, toolSeen } = approvalAgent({ ...second, memory }, true);
+    const mastra = new Mastra({ logger: false, storage, agents: { scopedAgent: agent } });
+    if (outdatedServer) mastra.setMastraServer(new OutdatedServer({ app: {} }));
+    let finished = false;
+    const resumed = await agent.resume(
+      initial.runId,
+      { approved: true },
+      {
+        requestContext,
+        onFinish: () => {
+          finished = true;
+        },
+      },
+    );
+    await vi.waitFor(() => expect(finished).toBe(true));
+    resumed.cleanup();
+    return toolSeen;
+  }
+
+  it('resume on a fresh process keeps the persisted scopes', async () => {
+    expect(await resumeOnFreshProcess(['org:a', 'resource:u1', 'thread:t1', 'team:core'])).toEqual([
+      ['org:a', 'team:core'],
+    ]);
+  });
+
+  it('resume on a fresh process keeps the persisted scopes when the caller passes its own context', async () => {
+    const requestContext = new RequestContext();
+    expect(await resumeOnFreshProcess(['org:a', 'resource:u1', 'thread:t1'], { requestContext })).toEqual([['org:a']]);
+    expect(requestContext.has(MASTRA_SCOPES_KEY)).toBe(false);
+  });
+
+  it('resume on a fresh process does not consult a changed Agent resolver', async () => {
+    const toolSeen = await resumeOnFreshProcess(['resource:u1', 'thread:t1'], {
+      first: { scopes: ['org:a'] },
+      second: { scopes: ['org:b'] },
+    });
+    expect(toolSeen).toEqual([['org:a']]);
+  });
+
+  it('resume on a fresh process behind an outdated server keeps the Agent scopes the run started with', async () => {
+    const toolSeen = await resumeOnFreshProcess(['resource:u1', 'thread:t1'], {
+      first: { scopes: ['org:a'] },
+      second: { scopes: ['org:a'] },
+      outdatedServer: true,
+    });
+    expect(toolSeen).toEqual([['org:a']]);
+  });
+});
+
+describe('restoreRequestContext', () => {
+  const outdated = { getMastraServer: () => new OutdatedServer({ app: {} }) };
+
+  it('restores persisted run scopes as Core-written, unlike a context built from the same JSON', () => {
+    const entries = JSON.parse(JSON.stringify({ [MASTRA_SCOPES_KEY]: ['org:a'] })) as Record<string, unknown>;
+    const restored = restoreRequestContext(entries);
+    expect(restored.get(MASTRA_SCOPES_KEY)).toEqual(['org:a']);
+    expect(() => resolveAgentScopes({ requestContext: restored, mastra: outdated })).not.toThrow();
+    expect(() =>
+      resolveAgentScopes({ requestContext: new RequestContext(Object.entries(entries)), mastra: outdated }),
+    ).toThrow(expect.objectContaining({ id: 'AGENT_SCOPES_SERVER_OUTDATED' }));
+  });
 });
 
 describe('prepareForDurableExecution scopes', () => {
@@ -313,6 +408,21 @@ describe('prepareForDurableExecution scopes', () => {
         mastra,
       }),
     ).rejects.toMatchObject({ id: 'AGENT_SCOPES_SERVER_OUTDATED' });
+  });
+
+  it('does not treat Agent default scopes merged into the options as caller scopes', async () => {
+    const mastra = new Mastra({ logger: false });
+    mastra.setMastraServer(new OutdatedServer({ app: {} }));
+    const preparation = await prepareForDurableExecution({
+      agent: baseAgent({ defaultOptions: { scopes: ['team:core'] } }),
+      messages: 'hi',
+      // As the Inngest agent passes them: the call options with the Agent defaults merged in.
+      options: { scopes: ['team:core'] },
+      optionsAreResolved: true,
+      callScopes: undefined,
+      mastra,
+    });
+    expect(preparation.workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY]).toEqual(['team:core']);
   });
 
   it('throws on conflicting identity and leaves options unchanged without scopes', async () => {

@@ -61,6 +61,18 @@ export function setRunAgentScopes(requestContext: RequestContext<any>, scopes: r
 }
 
 /**
+ * Re-marks `mastra__scopes` on a context Core rebuilt from its own persisted run state (durable
+ * snapshots, durable step input). The mark does not survive JSON, and these scopes already passed
+ * resolution when the run started.
+ */
+export function restoreRunAgentScopes(requestContext: RequestContext<any>): void {
+  const scopes = requestContext.get(MASTRA_SCOPES_KEY);
+  if (Array.isArray(scopes) && scopes.every(scope => typeof scope === 'string')) {
+    setRunAgentScopes(requestContext, scopes);
+  }
+}
+
+/**
  * True when Mastra has a registered server that does not mark itself as reserving agent scopes.
  * Such a server (released before agent scopes) passes a request body's `scopes` option and
  * `requestContext.mastra__scopes` through to the agent.
@@ -84,6 +96,8 @@ function assertCallerScopesAllowed(input: ResolveAgentScopesInput): void {
       `Agent scopes from the call or the "${MASTRA_SCOPES_KEY}" request context key need a @mastra/server release ` +
       'that keeps request bodies from setting them. The registered server is older, so a client could supply them. ' +
       "Upgrade @mastra/server, or set scopes with the Agent's `scopes` option.",
+    // Usually triggered by a request body, so it is a client error rather than a 500.
+    details: { status: 400 },
   });
 }
 

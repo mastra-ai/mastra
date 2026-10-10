@@ -230,6 +230,12 @@ export interface PreparationOptions<OUTPUT = undefined> {
    * When false, preparation resolves scopes so wrappers that call it directly honor them.
    */
   scopesResolved?: boolean;
+  /**
+   * Scopes the caller passed. When the property is absent, `options.scopes`; set it (even to
+   * undefined) when `options` already include the agent defaults, so the Agent's own
+   * `defaultOptions.scopes` are not treated as caller input.
+   */
+  callScopes?: string[];
   /** Run ID (will be generated if not provided) */
   runId?: string;
   /** Request context */
@@ -344,17 +350,20 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         (rawExecOptions ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT>);
 
+  // An explicit `callScopes`, even undefined, means `options` already carry the Agent defaults.
+  const callScopes = 'callScopes' in options ? options.callScopes : rawExecOptions?.scopes;
+
   // 2b. Resolve agent scopes for callers that did not (DurableAgent resolves its own).
   // Durable runs read identity from `memory` only, so nothing changes without scopes.
   if (!scopesResolved) {
     const configuredScopes = (await typedAgent.getScopes?.({ requestContext })) ?? [];
     const defaultScopes = (await loadDefaultOptions()).scopes ?? [];
     const agentScopes = [...configuredScopes, ...defaultScopes];
-    if (agentScopes.length || execOptions.scopes?.length || requestContext.has(MASTRA_SCOPES_KEY)) {
+    if (agentScopes.length || callScopes?.length || requestContext.has(MASTRA_SCOPES_KEY)) {
       const resolved = resolveAgentScopes({
         requestContext,
         agentScopes,
-        callScopes: execOptions.scopes,
+        callScopes,
         memory: execOptions.memory,
         mastra,
       });

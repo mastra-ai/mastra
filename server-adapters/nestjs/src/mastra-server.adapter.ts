@@ -9,6 +9,9 @@ import type { RouteHandlerService } from './services/route-handler.service';
  * Provides app access and delegates dynamic route registration to the catch-all controller.
  */
 export class NestMastraServer extends MastraServerBase<Application> {
+  /** Requests go through `@mastra/server` handlers, which strip `scopes` and reserve `mastra__scopes`. */
+  readonly reservesAgentScopes = true;
+
   constructor(
     app: Application,
     private readonly routeHandler: RouteHandlerService,

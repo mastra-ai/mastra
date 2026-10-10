@@ -126,6 +126,8 @@ describe('agent scopes behind a registered server', () => {
     );
     const requestContext = new RequestContext([[MASTRA_SCOPES_KEY, ['org:victim']]]);
     await expect(errorIdOf(agent.generate('x', { requestContext }))).resolves.toBe('AGENT_SCOPES_SERVER_OUTDATED');
+    // Server handlers map `details.status`, so a request body cannot turn this into a 500.
+    await expect(agent.generate('x', { scopes: ['org:victim'] })).rejects.toMatchObject({ details: { status: 400 } });
     expect(seen).toEqual([]);
 
     // Runs without caller scopes are unaffected.

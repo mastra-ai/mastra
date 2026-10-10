@@ -5,6 +5,7 @@ import { RequestContext } from '../../../../request-context';
 import type { ChunkType } from '../../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
+import { restoreRunAgentScopes } from '../../../scopes';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';
 import { createRunMessageList } from '../../utils/run-message-list';
@@ -67,6 +68,7 @@ export function createDurableGoalStep() {
         for (const [key, value] of Object.entries(initData.requestContextEntries)) {
           requestContext.set(key, value);
         }
+        restoreRunAgentScopes(requestContext);
       }
 
       // Rehydrate the message list lazily — only when the core actually judges

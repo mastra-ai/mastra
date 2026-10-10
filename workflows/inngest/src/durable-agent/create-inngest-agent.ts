@@ -999,6 +999,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         messages,
         options: callbackOptions as AgentExecutionOptions<TOutput>,
         optionsAreResolved: true,
+        // `callbackOptions` include the Agent's defaults; only the call's own scopes are caller input.
+        // `scopes` is not part of the typed stream options, but callers can still pass it through.
+        callScopes: (streamOptions as { scopes?: string[] } | undefined)?.scopes,
         runId: streamOptions?.runId,
         requestContext: streamOptions?.requestContext,
         methodType: (streamOptions as any)?.__methodType ?? 'stream',
