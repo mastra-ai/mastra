@@ -38,6 +38,7 @@ import {
   STREAM_UNTIL_IDLE_GENERATE_ROUTE,
   RESUME_STREAM_UNTIL_IDLE_ROUTE,
 } from '../../handlers/agents';
+import { GET_AGENT_AVATAR_ROUTE } from '../../handlers/avatars';
 import { READ_AGENT_PLAN_ROUTE } from '../../handlers/plans';
 import { GET_AGENT_TOOL_ROUTE, EXECUTE_AGENT_TOOL_ROUTE } from '../../handlers/tools';
 import {
@@ -58,6 +59,7 @@ export const AGENTS_ROUTES: readonly ServerRoute[] = [
   LIST_AGENTS_ROUTE,
   GET_PROVIDERS_ROUTE,
   GET_AGENT_BY_ID_ROUTE,
+  GET_AGENT_AVATAR_ROUTE,
   CLONE_AGENT_ROUTE,
 
   // ============================================================================
@@ -156,6 +158,7 @@ export type AgentRoutes = readonly [
   typeof LIST_AGENTS_ROUTE,
   typeof GET_PROVIDERS_ROUTE,
   typeof GET_AGENT_BY_ID_ROUTE,
+  typeof GET_AGENT_AVATAR_ROUTE,
   typeof CLONE_AGENT_ROUTE,
   typeof GET_SPEAKERS_ROUTE,
   typeof GET_SPEAKERS_DEPRECATED_ROUTE,

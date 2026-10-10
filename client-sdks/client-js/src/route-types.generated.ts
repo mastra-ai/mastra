@@ -4681,6 +4681,26 @@ export interface GetAgentsAgentId_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /agents/:agentId/avatar
+// ============================================================================
+export type GetAgentsAgentIdAvatar_PathParams = GetAgentsAgentId_PathParams;
+
+export type GetAgentsAgentIdAvatar_Request = Simplify<
+  (GetAgentsAgentIdAvatar_PathParams extends never ? {} : { params: GetAgentsAgentIdAvatar_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdAvatar_RouteContract {
+  pathParams: GetAgentsAgentIdAvatar_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAgentsAgentIdAvatar_Request;
+  response: unknown;
+  responseType: 'datastream-response';
+}
+
+// ============================================================================
 // Route: POST /agents/:agentId/clone
 // ============================================================================
 export type PostAgentsAgentIdClone_PathParams = GetAgentsAgentId_PathParams;
@@ -23943,6 +23963,7 @@ export interface RouteTypes {
   'GET /agents': GetAgents_RouteContract;
   'GET /agents/providers': GetAgentsProviders_RouteContract;
   'GET /agents/:agentId': GetAgentsAgentId_RouteContract;
+  'GET /agents/:agentId/avatar': GetAgentsAgentIdAvatar_RouteContract;
   'POST /agents/:agentId/clone': PostAgentsAgentIdClone_RouteContract;
   'GET /agents/:agentId/voice/speakers': GetAgentsAgentIdVoiceSpeakers_RouteContract;
   'GET /agents/:agentId/speakers': GetAgentsAgentIdSpeakers_RouteContract;
@@ -24538,6 +24559,9 @@ export interface Client {
   };
   '/agents/:agentId/approve-tool-call-generate': {
     POST: PostAgentsAgentIdApproveToolCallGenerate_RouteContract;
+  };
+  '/agents/:agentId/avatar': {
+    GET: GetAgentsAgentIdAvatar_RouteContract;
   };
   '/agents/:agentId/clone': {
     POST: PostAgentsAgentIdClone_RouteContract;

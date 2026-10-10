@@ -1,5 +1,6 @@
 import { MastraCompositeStore } from './base';
 import type { StorageDomains } from './base';
+import { InMemoryAgentAvatarsStorage } from './domains/agent-avatars/inmemory';
 import { InMemoryAgentsStorage } from './domains/agents/inmemory';
 import { BackgroundTasksInMemory } from './domains/background-tasks/inmemory';
 import { InMemoryBlobStore } from './domains/blobs/inmemory';
@@ -74,6 +75,7 @@ export class InMemoryStore extends MastraCompositeStore {
       scores: new ScoresInMemory({ db: this.#db }),
       observability: new ObservabilityInMemory({ db: this.#db }),
       agents: new InMemoryAgentsStorage({ db: this.#db }),
+      agentAvatars: new InMemoryAgentAvatarsStorage({ db: this.#db }),
       channels: new InMemoryChannelsStorage(),
       notifications: new InMemoryNotificationsStorage(),
       datasets: new DatasetsInMemory({ db: this.#db }),

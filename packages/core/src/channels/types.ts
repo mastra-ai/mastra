@@ -35,6 +35,24 @@ export type { InlineLinkEntry } from './inline-media';
  */
 export type PostableMessage = string | CardElement | { markdown: string };
 
+/**
+ * Optional capability adapters implement when the underlying platform supports
+ * programmatic bot-avatar updates. When an agent's avatar changes (via
+ * `agent.setAvatar`), Mastra iterates over the agent's channel adapters and
+ * invokes `setAvatar` on any adapter that exposes this method.
+ *
+ * Adapters where avatar update isn't possible (Teams bot, Telegram bot) simply
+ * don't implement this — the fan-out silently skips them.
+ */
+export interface AvatarSyncCapableAdapter {
+  setAvatar(bytes: Buffer, mime: string): Promise<void>;
+}
+
+/** Structural check for {@link AvatarSyncCapableAdapter}. */
+export function isAvatarSyncCapable(adapter: unknown): adapter is AvatarSyncCapableAdapter {
+  return typeof (adapter as { setAvatar?: unknown } | null)?.setAvatar === 'function';
+}
+
 /** Per-adapter configuration shared across all `toolDisplay` modes. */
 export interface ChannelAdapterBaseConfig {
   adapter: Adapter<any, any>;
