@@ -32,6 +32,9 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
   TABLE_NAMES,
+  ListScoresArgs,
+  ListScoresResponse,
+  ScoreRecord,
 } from '@mastra/core/storage';
 import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL, generateTimestampTriggerSQL } from '../../db';
@@ -39,6 +42,7 @@ import type { PgDomainConfig } from '../../db';
 import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
 import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
+import * as scoresOps from './scores-bridge';
 
 export class ObservabilityPG extends ObservabilityStorage {
   /**
@@ -291,6 +295,16 @@ export class ObservabilityPG extends ObservabilityStorage {
       order: ['spans'],
     });
     return runPrune({ db: this.#db, domain: 'observability', targets, options });
+  }
+
+  /** List existing legacy scores without enabling a second score persistence path. */
+  async listScores(args: ListScoresArgs): Promise<ListScoresResponse> {
+    return scoresOps.listScores(this.#db, this.#schema, args);
+  }
+
+  /** Look up an existing legacy score through the observability API. */
+  async getScoreById(scoreId: string): Promise<ScoreRecord | null> {
+    return scoresOps.getScoreById(this.#db, this.#schema, scoreId);
   }
 
   public override get tracingStrategy(): {
