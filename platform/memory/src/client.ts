@@ -178,9 +178,9 @@ export class PlatformMemoryClient {
     });
   }
 
-  getContext(threadId: string, resourceId: string) {
+  getContext(threadId: string, resourceId: string, opts: { workingMemory?: 'readonly' | 'tool' | 'off' } = {}) {
     return this.request<MemoryContext>('GET', `/threads/${encodeURIComponent(threadId)}/context`, {
-      query: { resourceId },
+      query: { resourceId, ...(opts.workingMemory ? { workingMemory: opts.workingMemory } : {}) },
     });
   }
 

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 
@@ -190,7 +190,7 @@ function platformBackend(): Backend {
   const { instanceId, token } = JSON.parse(readFileSync(live!, 'utf8'));
   const client = new PlatformMemoryClient({ apiUrl: API, accessToken: token, instanceId });
   return {
-    memory: new PlatformMemory({ client }),
+    memory: new PlatformMemory({ client, workingMemory: 'off' }),
     settle: async threadId => {
       await client.observe(threadId);
     },
@@ -301,5 +301,56 @@ describe.skipIf(!live).each([
     expect(cloned.length).toBe(source.length);
     expect(cloned.map(m => m.role)).toEqual(source.map(m => m.role));
     expect(await backend.observations(copy, resource)).toContain('lives in Kyoto');
+  });
+});
+
+/** Strips ids and timestamps so prompts from both backends can be compared verbatim. */
+function normalize(prompt: string, run: string): string {
+  return prompt
+    .replaceAll(run, 'RUN')
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, 'UUID')
+    .replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, 'ISO')
+    .replace(/\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*,? [A-Z][a-z]+ \d{1,2},? \d{4}\b/g, 'DATE')
+    .replace(/\b[A-Z][a-z]{2} \d{1,2}, \d{4}\b/g, 'DATE')
+    .replace(/\b\d{1,2}:\d{2}( ?[AP]M)?\b/g, 'TIME');
+}
+
+describe.skipIf(!live)('what the agent model sees', () => {
+  it('is the same on every turn for Memory and PlatformMemory', async () => {
+    const run = `eq${Date.now()}`;
+    const turns = [
+      'Hi, my name is Ada and I live in Kyoto.',
+      'I work as a ceramicist and I love tea ceremonies.',
+      'What should I cook tonight?',
+      'Remind me what you know about me.',
+      'Thanks, talk soon.',
+    ];
+    const seen: Record<string, string[][]> = {};
+    for (const [name, make] of [
+      ['Memory', localBackend],
+      ['PlatformMemory', platformBackend],
+    ] as const) {
+      const backend = make();
+      const prompts: string[] = [];
+      const agent = new Agent({
+        id: 'parity',
+        name: 'parity',
+        instructions: 'You are a helpful assistant. Always use the test tool first.',
+        model: agentModel(prompts) as never,
+        tools: { test: testTool },
+        memory: backend.memory,
+      });
+      seen[name] = [];
+      for (const turn of turns) {
+        prompts.length = 0;
+        await agent.generate(turn, { memory: { thread: `eq-${run}`, resource: `res-eq-${run}` } });
+        await backend.settle(`eq-${run}`);
+        seen[name].push(prompts.map(p => normalize(p, run)));
+      }
+    }
+    if (process.env.PARITY_DUMP) writeFileSync(process.env.PARITY_DUMP, JSON.stringify(seen));
+    for (let i = 0; i < turns.length; i++) {
+      expect({ turn: i, prompts: seen.PlatformMemory![i] }).toEqual({ turn: i, prompts: seen.Memory![i] });
+    }
   });
 });

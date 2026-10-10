@@ -24,6 +24,11 @@ export type PlatformMemoryOptions = PlatformMemoryClientOptions & {
   id?: string;
   /** Use a preconfigured client instead of building one from the options above. */
   client?: PlatformMemoryClient;
+  /**
+   * How working memory is shown to the model. Defaults to `readonly`;
+   * `off` omits it. Tool-driven updates are not supported yet.
+   */
+  workingMemory?: 'readonly' | 'off';
 };
 
 type MessageListLike = ProcessInputArgs['messageList'];
@@ -99,14 +104,17 @@ function memoryContext(requestContext: RequestContext | undefined, messageList: 
  */
 export class PlatformMemory extends MastraMemory {
   readonly client: PlatformMemoryClient;
+  private readonly workingMemoryMode: 'readonly' | 'off';
 
   constructor(options: PlatformMemoryOptions = {}) {
     super({ id: options.id ?? 'platform-memory', name: 'PlatformMemory' });
     this.client = options.client ?? new PlatformMemoryClient(options);
+    this.workingMemoryMode = options.workingMemory ?? 'readonly';
   }
 
   async getInputProcessors(): Promise<InputProcessor[]> {
     const client = this.client;
+    const workingMemory = this.workingMemoryMode;
     return [
       {
         id: 'platform-memory-context',
@@ -114,7 +122,7 @@ export class PlatformMemory extends MastraMemory {
         async processInput({ messageList, requestContext }: ProcessInputArgs) {
           const ctx = memoryContext(requestContext, messageList);
           if (!ctx) return messageList;
-          const context = await client.getContext(ctx.threadId, ctx.resourceId);
+          const context = await client.getContext(ctx.threadId, ctx.resourceId, { workingMemory });
           for (const message of promptOf(context)) {
             if (message.role === 'system') messageList.addSystem(message.content, 'memory');
             // Keeps ids like `om-continuation`, which @mastra/memory never persists.
