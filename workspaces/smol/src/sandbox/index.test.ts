@@ -111,6 +111,30 @@ describe('SmolSandbox', () => {
     await expect(sandbox.writeFiles([{ path: '../etc/passwd', content: 'bad' }])).rejects.toThrow('escapes');
   });
 
+  it('preflights Cloud file batches before any guest directory or upload', async () => {
+    const sandbox = new SmolSandbox({ target: 'cloud' });
+    await sandbox.start();
+    for (const suffix of ['#draft', '?v=2', '%20draft', '\nname', '\0name']) {
+      await expect(
+        sandbox.writeFiles([
+          { path: 'safe.txt', content: 'would write first' },
+          { path: `nested/report${suffix}.txt`, content: 'unsafe' },
+        ]),
+      ).rejects.toThrow('Smol Cloud file path');
+    }
+    expect(sdk.machine.exec).not.toHaveBeenCalled();
+    expect(sdk.machine.writeFile).not.toHaveBeenCalled();
+    await sandbox.writeFiles([{ path: 'a normal file.txt', content: 'works' }]);
+    expect(sdk.machine.writeFile).toHaveBeenCalledWith('/workspace/a normal file.txt', 'works', undefined);
+  });
+
+  it('keeps local file names with URL delimiters usable', async () => {
+    const sandbox = new SmolSandbox();
+    await sandbox.start();
+    await sandbox.writeFiles([{ path: 'report#draft%20.txt', content: 'local' }]);
+    expect(sdk.machine.writeFile).toHaveBeenCalledWith('/workspace/report#draft%20.txt', 'local', undefined);
+  });
+
   it('uses disk-preserving stop for host mounts instead of unsupported RAM pause', async () => {
     const sandbox = new SmolSandbox({ mounts: [{ source: '/host', target: '/workspace' }] });
     await sandbox.start();

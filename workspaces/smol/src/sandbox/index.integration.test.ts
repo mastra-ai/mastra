@@ -68,3 +68,32 @@ live('SmolSandbox with a real local VM', () => {
     }
   }, 180_000);
 });
+
+const realCloud = process.env.MASTRA_SMOL_REAL_CLOUD === '1' ? describe : describe.skip;
+
+realCloud('SmolSandbox with a real Cloud VM', () => {
+  it('rejects unsafe file batches before writing any guest file', async () => {
+    const sandbox = new SmolSandbox({
+      id: `mastra-smol-cloud-path-${Date.now()}`,
+      target: 'cloud',
+      image: 'alpine:3.20',
+      resources: { cpus: 1, memoryMb: 512 },
+      network: false,
+    });
+    try {
+      await sandbox._start();
+      await expect(
+        sandbox.writeFiles([
+          { path: '/workspace/early-safe.txt', content: 'must stay absent' },
+          { path: '/workspace/odd#name.txt', content: 'must stay absent' },
+        ]),
+      ).rejects.toThrow('Smol Cloud file path');
+      expect((await sandbox.executeCommand('test', ['!', '-e', '/workspace/early-safe.txt'])).success).toBe(true);
+      expect((await sandbox.executeCommand('test', ['!', '-e', '/workspace/odd'])).success).toBe(true);
+      await sandbox.writeFiles([{ path: '/workspace/normal name.txt', content: 'cloud roundtrip' }]);
+      expect((await sandbox.executeCommand('cat', ['/workspace/normal name.txt'])).stdout).toBe('cloud roundtrip');
+    } finally {
+      await sandbox._destroy();
+    }
+  }, 180_000);
+});

@@ -309,6 +309,18 @@ export class SmolSandbox extends MastraSandbox {
 
   async writeFiles(files: SandboxFileInput[], options: WriteFilesOptions = {}): Promise<void> {
     await this.ensureRunning();
+    if (files.length && options.abortSignal?.aborted) throw new SandboxAbortError('writeFiles', options.abortSignal.reason);
+    // Preflight the entire Cloud batch before any mkdir or upload: the current
+    // Cloud file route can reinterpret URL delimiters in guest paths.
+    if (this.target === 'cloud') {
+      const base = posix.resolve('/', this.workingDirectory ?? DEFAULT_WORKDIR);
+      for (const file of files) {
+        const path = file.path && (posix.isAbsolute(file.path) ? posix.normalize(file.path) : posix.resolve(base, file.path));
+        if (path && /[?#%\x00-\x1f\x7f]/.test(path)) {
+          throw new Error(`Smol Cloud file path cannot contain ?, #, %, or control characters: ${JSON.stringify(file.path)}`);
+        }
+      }
+    }
     for (const file of files) {
       if (options.abortSignal?.aborted) throw new SandboxAbortError('writeFiles', options.abortSignal.reason);
       if (file.mode !== undefined && (!Number.isInteger(file.mode) || file.mode < 1 || file.mode > 0o777)) {
