@@ -2,20 +2,33 @@ import type { IMastraLogger } from '../../logger';
 import type { MemoryConfigInternal } from '../../memory';
 import type { MastraMemory } from '../../memory/memory';
 import { filterMessagesForPersistence } from '../filter-messages-for-persistence';
-import type { MessageList } from '../message-list';
+import type { MastraDBMessage, MessageList } from '../message-list';
 import { noteThreadMessagesSaved } from '../thread-saves';
 
 export class SaveQueueManager {
   private logger?: IMastraLogger;
   private debounceMs: number;
   private memory?: MastraMemory;
+  private onSaved?: (messages: MastraDBMessage[]) => void;
 
   private static MAX_STALENESS_MS = 1000;
 
-  constructor({ logger, debounceMs, memory }: { logger?: IMastraLogger; debounceMs?: number; memory?: MastraMemory }) {
+  constructor({
+    logger,
+    debounceMs,
+    memory,
+    onSaved,
+  }: {
+    logger?: IMastraLogger;
+    debounceMs?: number;
+    memory?: MastraMemory;
+    /** Called with the rows memory stored after each successful save. */
+    onSaved?: (messages: MastraDBMessage[]) => void;
+  }) {
     this.logger = logger;
     this.debounceMs = debounceMs || 100;
     this.memory = memory;
+    this.onSaved = onSaved;
   }
   private saveQueues = new Map<string, Promise<void>>();
   private saveDebounceTimers = new Map<string, NodeJS.Timeout>();
@@ -102,10 +115,11 @@ export class SaveQueueManager {
     const newMessages = filterMessagesForPersistence(messageList.drainUnsavedMessages());
     if (newMessages.length > 0 && this.memory) {
       const savedAt = Date.now();
-      await this.memory.saveMessages({
+      const saved = await this.memory.saveMessages({
         messages: newMessages,
         memoryConfig,
       });
+      if (saved?.messages?.length) this.onSaved?.(saved.messages);
       noteThreadMessagesSaved({ threadId, resourceId: newMessages.find(m => m.resourceId)?.resourceId, savedAt });
     }
   }

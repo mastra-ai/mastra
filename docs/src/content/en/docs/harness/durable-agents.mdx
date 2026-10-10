@@ -300,6 +300,9 @@ The `shouldPersistSnapshot` option on `createDurableAgent()` (also accepted in t
 
 - Always persists `pending`, `paused`, and `suspended` snapshots. These are what `resume()` and tool approval read, so human-in-the-loop flows work without configuration.
 - Persists `running` checkpoints only when `recovery.durableAgents` is `'auto'`. These per-step writes exist solely to make in-flight runs recoverable after a crash, so they're skipped when nothing consumes them.
+- Persists a `running` checkpoint at each step boundary a run reaches after `mastra.shutdown()` starts, even with recovery off. A run that is still in flight when the drain window ends can then be resumed later with `recover()` or `recoverActiveRuns()`.
+
+When the agent has memory, a `running` checkpoint doesn't repeat messages memory already stores. Messages recalled from memory and messages the run saved itself (for example with `savePerStep: true`) are stored as references to their memory rows, so a long run's checkpoints don't grow with every saved message.
 
 To keep crash-recovery checkpoints without enabling automatic recovery (for example, when you call `recoverActiveRuns()` yourself behind a leader election), pass a predicate that includes `running`:
 
@@ -345,7 +348,7 @@ const agentResult = await durableAgent.recoverActiveRuns()
 await durableAgent.recoverActiveRuns({ runId: 'run-abc-123' })
 ```
 
-Manual recovery reads the same `running` checkpoints as automatic recovery. If `recovery.durableAgents` is `'off'` and you haven't set a custom `shouldPersistSnapshot` that includes `running`, in-flight runs are never checkpointed, so `listActiveRuns()` and `recoverActiveRuns()` find nothing after a crash. See [snapshot persistence](#snapshot-persistence).
+Manual recovery reads the same `running` checkpoints as automatic recovery. If `recovery.durableAgents` is `'off'` and you haven't set a custom `shouldPersistSnapshot` that includes `running`, in-flight runs are only checkpointed during `mastra.shutdown()`, so after a crash `listActiveRuns()` and `recoverActiveRuns()` find nothing. See [snapshot persistence](#snapshot-persistence).
 
 ### Multi-instance deployments
 

@@ -55,6 +55,7 @@ import {
   fireClientToolOutputHooks,
 } from '../workflows/prepare-stream/client-tool-output-hooks';
 import { authorizeDurableMemory } from './memory-fga';
+import { recordRunSavedMessages } from './run-message-refs';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import {
   createWorkflowInput,
@@ -697,6 +698,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     ? new SaveQueueManager({
         logger,
         memory,
+        onSaved: recordRunSavedMessages(runId),
       })
     : undefined;
 

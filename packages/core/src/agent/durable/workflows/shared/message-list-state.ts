@@ -1,12 +1,12 @@
-import { TTLCache } from '@isaacs/ttlcache';
 import { MastraError } from '../../../../error';
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { RequestContext } from '../../../../request-context';
 import { delay } from '../../../../utils';
-import { createStoredMessageLoader, MemoryMessageRefs } from '../../../message-list/memory-message-refs';
+import { createStoredMessageLoader } from '../../../message-list/memory-message-refs';
 import type { DehydratedMessageListState, StoredMessageLoader } from '../../../message-list/memory-message-refs';
 import type { SerializedMessageListState } from '../../../message-list/state';
+import { getRunMessageRefs, releaseRunMessageRefs } from '../../run-message-refs';
 import { globalRunRegistry } from '../../run-registry';
 import type { SerializableDurableState } from '../../types';
 import { restoreRequestContext } from '../../utils/resolve-runtime';
@@ -34,8 +34,8 @@ type WritableTranscriptParams = TranscriptParams & { setState(state: unknown): P
  * move, or workflows composing these steps without seeding — keep threading
  * it through step input/output unchanged.
  *
- * In workflow state, memory-recalled messages are kept as refs to their
- * memory rows (see {@link MemoryMessageRefs}): reads restore them, writes
+ * In workflow state, messages memory already stores (recalled, or saved by
+ * this run) are kept as refs to their memory rows (see {@link MemoryMessageRefs}): reads restore them, writes
  * re-create them. Step payloads always carry the full transcript.
  */
 export async function readMessageListState(
@@ -96,14 +96,15 @@ export async function openMessageListState(
     };
   }
   const run = runTranscriptRefs(params);
+  const { state } = (params.getInitData() ?? {}) as RunIdentity;
   let current = await hydrateMidRun(run, workflowState.messageListState, params.abortSignal);
   return {
     read: () => current,
     write: next => {
       current = next;
       // The messages the run recalled were restored (or verified) on the way
-      // in, so storing needs no further reads.
-      workflowState.messageListState = run.refs.dehydrate(next);
+      // in, and saved ones were recorded when saved, so storing needs no reads.
+      workflowState.messageListState = state?.fixedMemory ? run.refs.dehydrate(next) : next;
     },
   };
 }
@@ -152,7 +153,7 @@ async function hydrateMidRun(
 
 async function dehydrate(params: TranscriptParams, messageListState: SerializedMessageListState) {
   // Function or inherited memory can resolve to another store on resume, where refs would not
-  // resolve, so only fixed memory gets refs. With no refs stored, `write` above has none to make.
+  // resolve, so only fixed memory gets refs.
   const { state } = (params.getInitData() ?? {}) as RunIdentity;
   if (!state?.fixedMemory) return messageListState;
   const run = runTranscriptRefs(params);
@@ -178,18 +179,8 @@ export async function loadMessageListStateForResume(params: TranscriptParams): P
 /** Frees this process's verified rows once the run has read its transcript for the last time. */
 export function releaseMessageListState(params: TranscriptParams): void {
   const { runId } = (params.getInitData() ?? {}) as RunIdentity;
-  if (runId) runMessageRefs.delete(runId);
+  releaseRunMessageRefs(runId);
 }
-
-/**
- * Recalled messages verified against memory storage, per run, shared by every
- * step this process runs for it. Losing an entry only costs a storage read.
- */
-const runMessageRefs = new TTLCache<string, MemoryMessageRefs>({
-  max: 1000,
-  ttl: 10 * 60 * 1000,
-  updateAgeOnGet: true,
-});
 
 type RunIdentity = {
   runId?: string;
@@ -202,11 +193,7 @@ function runTranscriptRefs(params: TranscriptParams) {
   // Both the outer loop's and the iteration workflow's init data carry the
   // run identity.
   const run = (params.getInitData() ?? {}) as RunIdentity;
-  let refs = run.runId ? runMessageRefs.get(run.runId) : undefined;
-  if (!refs) {
-    refs = new MemoryMessageRefs();
-    if (run.runId) runMessageRefs.set(run.runId, refs);
-  }
+  const refs = getRunMessageRefs(run.runId);
   let memory: Promise<MastraMemory | undefined> | undefined;
   const load: StoredMessageLoader = async ids =>
     createStoredMessageLoader(await (memory ??= runMemory(params, run)))(ids);

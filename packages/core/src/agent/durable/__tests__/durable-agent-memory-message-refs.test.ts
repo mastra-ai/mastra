@@ -33,12 +33,12 @@ type Engine = 'default' | 'evented';
 const engines: Engine[] = ['default', 'evented'];
 
 // Decides from the transcript, so a recovering process makes the same call
-// the original one made: one tool round, then text.
-function createModel(prompts: string[]) {
+// the original one made: `toolRounds` tool rounds, then text.
+function createModel(prompts: string[], toolRounds = 1) {
   return new MockLanguageModelV2({
     doStream: async ({ prompt }: { prompt: LanguageModelV2Prompt }) => {
       prompts.push(JSON.stringify(prompt));
-      const answered = prompt.some(message => message.role === 'tool');
+      const answered = prompt.filter(message => message.role === 'tool').length >= toolRounds;
       const parts = answered
         ? [
             { type: 'text-start', id: 't' },
@@ -47,7 +47,7 @@ function createModel(prompts: string[]) {
             { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
           ]
         : [
-            { type: 'tool-call', toolCallId: 'call-1', toolName: 'lookup', input: '{"query":"a"}' },
+            { type: 'tool-call', toolCallId: `call-${prompts.length}`, toolName: 'lookup', input: '{"query":"a"}' },
             { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
           ];
       return {
@@ -75,7 +75,15 @@ async function startProcess(
     requireApproval = false,
     engine = 'default',
     onLookup,
-  }: { requireApproval?: boolean; engine?: Engine; onLookup?: () => Promise<void> } = {},
+    toolRounds,
+    recovery = 'auto',
+  }: {
+    requireApproval?: boolean;
+    engine?: Engine;
+    onLookup?: () => Promise<void>;
+    toolRounds?: number;
+    recovery?: 'auto' | 'off';
+  } = {},
 ) {
   vi.resetModules();
   const [
@@ -110,7 +118,7 @@ async function startProcess(
     id: 'refs-agent',
     name: 'refs-agent',
     instructions: 'Use your tools.',
-    model: createModel(prompts),
+    model: createModel(prompts, toolRounds),
     memory,
     tools: {
       lookup: {
@@ -133,7 +141,7 @@ async function startProcess(
     storage,
     ...(pubsub ? { pubsub } : {}),
     logger: false,
-    recovery: { durableAgents: 'auto' },
+    recovery: { durableAgents: recovery },
   });
   if (pubsub) {
     stopProcesses.push(async () => {
@@ -142,7 +150,7 @@ async function startProcess(
     });
   }
   const workflows = (await mastra.getStorage()!.getStore('workflows'))!;
-  return { durableAgent, workflows, prompts, storage, transcripts, toolExecutions: () => toolExecutions };
+  return { mastra, durableAgent, workflows, prompts, storage, transcripts, toolExecutions: () => toolExecutions };
 }
 
 // Starts a run whose tool drops this process's loaded rows and then makes
@@ -260,6 +268,80 @@ describe('memory-recalled messages in durable runs', () => {
       for (let i = 0; i < 4; i++) expect(prompt).toContain(historyText(i));
     }
   });
+
+  it.each(engines)(
+    'persists messages the run saved to memory with savePerStep as refs in later checkpoints (%s engine)',
+    async engine => {
+      const { durableAgent, workflows, prompts, storage } = await startProcess(history(), { engine, toolRounds: 3 });
+      const persisted: SnapshotRow[] = [];
+      const persist = workflows.persistWorkflowSnapshot.bind(workflows);
+      workflows.persistWorkflowSnapshot = async args => {
+        persisted.push(structuredClone(args));
+        return persist(args);
+      };
+
+      const result = await durableAgent.stream('Look it up', { memory: memoryOption, savePerStep: true });
+      expect(await collectText(result)).toBe('done');
+
+      const memoryStore = (await storage.getStore('memory'))!;
+      const { messages: stored } = await memoryStore.listMessages({ threadId, perPage: false });
+      const inputId = stored.find(m => m.role === 'user' && JSON.stringify(m.content).includes('Look it up'))?.id;
+      expect(inputId).toBeDefined();
+
+      const transcripts = persisted.map(row => workflowState(row.snapshot, engine)?.messageListState).filter(Boolean);
+      const savedAsRef = transcripts.filter(state =>
+        state.messages.some((m: any) => m.__ref === 'memory' && m.id === inputId),
+      );
+      expect(savedAsRef.length).toBeGreaterThan(0);
+      for (const state of savedAsRef) expect(JSON.stringify(state.messages)).not.toContain('Look it up');
+
+      // The model still sees the saved input after it became a ref.
+      expect(prompts).toHaveLength(4);
+      expect(prompts[3]).toContain('Look it up');
+    },
+  );
+
+  it('checkpoints a run still in flight at shutdown so another process can recover it', async () => {
+    let releaseLookup!: () => void;
+    let lookupStarted!: () => void;
+    const started = new Promise<void>(resolve => (lookupStarted = resolve));
+    const original = await startProcess(history(), {
+      recovery: 'off',
+      onLookup: () => {
+        lookupStarted();
+        return new Promise<void>(resolve => (releaseLookup = resolve));
+      },
+    });
+    const rows = new Map<string, SnapshotRow>();
+    let checkpoint: SnapshotRow[] | undefined;
+    const persist = original.workflows.persistWorkflowSnapshot.bind(original.workflows);
+    original.workflows.persistWorkflowSnapshot = async args => {
+      rows.set(`${args.workflowName}:${args.runId}`, structuredClone(args));
+      const loop = [...rows.values()].find(row => row.workflowName === DurableStepIds.AGENTIC_LOOP);
+      if (loop?.snapshot.status === 'running') checkpoint = [...rows.values()].map(row => structuredClone(row));
+      return persist(args);
+    };
+
+    const result = await original.durableAgent.stream('Look it up', { memory: memoryOption });
+    void collectText(result).catch(() => {});
+    await started;
+    // Recovery is off, so the run has not written a `running` checkpoint yet.
+    expect([...rows.values()].some(row => row.snapshot.status === 'running')).toBe(false);
+
+    // The tool finishes during the drain; the next step boundary checkpoints the run.
+    const shutdown = original.mastra.shutdown({ drainTimeout: 200 });
+    releaseLookup();
+    await shutdown;
+    expect(checkpoint).toBeDefined();
+
+    // Recover the run in a fresh process from the storage as it was at the last
+    // checkpoint, as if this process had exited right after writing it.
+    const recovering = await startProcess(history());
+    for (const row of checkpoint!) await recovering.workflows.persistWorkflowSnapshot(row);
+    const recovered = await recovering.durableAgent.recover(result.runId);
+    expect(await collectText(recovered)).toBe('done');
+    expect(recovering.toolExecutions()).toBe(0);
+  }, 30_000);
 
   it('recovers in a fresh process with the stored version of recalled messages edited or deleted meanwhile', async () => {
     // Recover from every checkpoint after history-0 was edited and history-1 deleted.

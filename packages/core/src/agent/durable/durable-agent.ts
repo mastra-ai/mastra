@@ -40,6 +40,7 @@ import { publishAbortRequest } from './abort-transport';
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { prepareForDurableExecution } from './preparation';
+import { recordRunSavedMessages } from './run-message-refs';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent, emitFinishEvent } from './stream-adapter';
 import type { DurableAgentStreamResult as DurableStreamAdapterResult } from './stream-adapter';
@@ -1369,7 +1370,11 @@ export class DurableAgent<
     recoveryLease.assertOwned();
 
     const saveQueueManager = memory
-      ? new SaveQueueManager({ logger: this.#mastra?.getLogger?.() as any, memory })
+      ? new SaveQueueManager({
+          logger: this.#mastra?.getLogger?.() as any,
+          memory,
+          onSaved: recordRunSavedMessages(runId),
+        })
       : undefined;
     const backgroundTasksConfig = this.getBackgroundTasksConfig?.();
     const backgroundTaskManager = this.#mastra?.backgroundTaskManager;
@@ -2220,7 +2225,9 @@ export class DurableAgent<
    * only when crash recovery is enabled (`recovery.durableAgents: 'auto'`):
    * `running` checkpoints exist solely to feed `listActiveRuns()` /
    * `recover()` / `recoverActiveRuns()`, and are pure write amplification
-   * when nothing consumes them (issue #23915).
+   * when nothing consumes them (issue #23915). Also persists `running` once
+   * `mastra.shutdown()` has started, so a run still in flight when the process
+   * exits leaves a checkpoint to recover from (issue #26600).
    *
    * Reads the recovery config lazily (per persist call, via the Mastra
    * reference) so the policy stays correct regardless of whether the
@@ -2231,7 +2238,8 @@ export class DurableAgent<
       workflowStatus === 'pending' ||
       workflowStatus === 'paused' ||
       workflowStatus === 'suspended' ||
-      (workflowStatus === 'running' && this.#mastra?.recoveryConfig?.durableAgents === 'auto')
+      (workflowStatus === 'running' &&
+        (this.#mastra?.recoveryConfig?.durableAgents === 'auto' || this.#mastra?.__shuttingDown === true))
     );
   };
 

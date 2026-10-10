@@ -35,9 +35,11 @@ export function createStoredMessageLoader(memory: MastraMemory | undefined): Sto
 }
 
 /**
- * Keeps memory-recalled messages out of persisted run transcripts.
+ * Keeps messages memory already stores out of persisted run transcripts: the
+ * ones the run recalled, and the ones it saved itself (`recordSaved`), so a
+ * long run stops rewriting its whole conversation on every checkpoint.
  *
- * `dehydrate` swaps a recalled message for a {@link MemoryMessageRef} only
+ * `dehydrate` swaps such a message for a {@link MemoryMessageRef} only
  * when it is byte-for-byte the stored row as a recall adds it — anything a
  * processor changed after recall stays inline, so resuming never trades the
  * run's view of a message for the stored one. `hydrate` restores refs, from
@@ -83,13 +85,27 @@ export class MemoryMessageRefs {
     }
   }
 
-  /** Replaces verified, unchanged recalled messages with refs. Never reads storage. */
+  /**
+   * Records rows this run just saved to memory, so `dehydrate` can reference
+   * them without a storage read. A message the run changes after saving no
+   * longer matches its row and stays inline until it is saved again.
+   */
+  recordSaved(rows: MastraDBMessage[], memoryInfo: MemoryInfo | null) {
+    for (const row of rows) {
+      const normalized = normalizeStoredMessage(row, memoryInfo);
+      if (!normalized) continue;
+      const canonical = stableStringify(normalized);
+      this.#stored.set(row.id, { canonical, fingerprint: fingerprint(canonical) });
+      this.#unavailable.delete(row.id);
+      this.#deleted.delete(row.id);
+    }
+  }
+
+  /** Replaces verified or saved messages that match their stored row with refs. Never reads storage. */
   dehydrate(state: SerializedMessageListState): DehydratedMessageListState {
-    if (this.#stored.size === 0 || !state?.memoryMessages?.length) return state;
-    const recalled = new Set(state.memoryMessages);
+    if (this.#stored.size === 0 || !state?.messages?.length) return state;
     let replaced = false;
     const messages = state.messages.map(message => {
-      if (!recalled.has(message.id)) return message;
       const stored = this.#stored.get(message.id);
       if (!stored || stableStringify(message) !== stored.canonical) return message;
       replaced = true;
@@ -152,15 +168,10 @@ export class MemoryMessageRefs {
     if (!rows) return undefined;
     const wanted = new Set(ids);
     const found = new Set<string>();
-    for (const row of rows) {
-      if (!wanted.has(row.id)) continue;
-      const normalized = normalizeStoredMessage(row, memoryInfo);
-      if (!normalized) continue;
-      const canonical = stableStringify(normalized);
-      this.#stored.set(row.id, { canonical, fingerprint: fingerprint(canonical) });
-      this.#unavailable.delete(row.id);
-      this.#deleted.delete(row.id);
-      found.add(row.id);
+    const loaded = rows.filter(row => wanted.has(row.id));
+    this.recordSaved(loaded, memoryInfo);
+    for (const row of loaded) {
+      if (this.#stored.has(row.id)) found.add(row.id);
     }
     for (const id of ids) {
       if (!found.has(id)) this.#deleted.add(id);

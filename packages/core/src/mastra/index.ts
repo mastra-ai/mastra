@@ -4248,6 +4248,17 @@ export class Mastra<
     return this.#recoveryConfig;
   }
 
+  #shuttingDown = false;
+
+  /**
+   * True once `shutdown()` has started. Durable agents use it to checkpoint
+   * in-flight runs so they can be recovered after the process exits.
+   * @internal
+   */
+  get __shuttingDown(): boolean {
+    return this.#shuttingDown;
+  }
+
   /**
    * Re-drive every orphaned RUNNING durable-agent run across every registered
    * `DurableAgent`. Delegates to `DurableAgent.recoverActiveRuns()` on each
@@ -7586,7 +7597,10 @@ export class Mastra<
    * through this instance are given up to `drainTimeout` milliseconds
    * (default 5000) to reach a terminal or suspended state before workers and
    * pubsub subscriptions are torn down. Runs that do not settle within the
-   * window are abandoned with a warning.
+   * window are abandoned with a warning. Durable agent runs using the default
+   * snapshot policy persist a `running` checkpoint at each step boundary they
+   * reach during the drain, so a run abandoned here can be resumed later with
+   * `recoverActiveRuns()` or `recover()`.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
     const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
@@ -7597,6 +7611,7 @@ export class Mastra<
     // stuck step must only be charged once — the deployer's shutdown deadline
     // is sized as `drainTimeout + fixed teardown`, and stacking would break it.
     const deadline = Date.now() + drainTimeout;
+    this.#shuttingDown = true;
 
     // The scorer hook lives on a process-global emitter. Release it before any
     // awaited teardown so even a later cleanup failure cannot retain this
