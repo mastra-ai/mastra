@@ -28,7 +28,7 @@ describe('ClickHouse trace aggregate compiler', () => {
       plan({ where: { op: 'eq', left: { path: 'environment' }, right: { literal: 'prod' } } }),
     );
 
-    expect(compiled.query).toContain('LIMIT 1 BY dedupeKey');
+    expect(compiled.query).toContain('ORDER BY traceId, dedupeKey');
     expect(compiled.query).toContain('LIMIT 1 BY traceId');
     expect(compiled.query).toContain('candidates AS (');
     expect(compiled.query).toContain('FROM candidates r');

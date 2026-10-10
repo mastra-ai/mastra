@@ -1,4 +1,4 @@
-import type { ClickHouseClient } from '@clickhouse/client';
+import type { ClickHouseClient, ClickHouseSettings } from '@clickhouse/client';
 import { createClient } from '@clickhouse/client';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -45,6 +45,8 @@ export interface ClickhouseDomainRestConfig {
   url: string;
   username: string;
   password: string;
+  /** ClickHouse settings applied to every query the domain runs. */
+  clickhouse_settings?: ClickHouseSettings;
   ttl?: ClickhouseConfig['ttl'];
   replication?: ClickhouseConfig['replication'];
 }
@@ -71,6 +73,7 @@ export function resolveClickhouseConfig(config: ClickhouseDomainConfig): {
     username: config.username,
     password: config.password,
     clickhouse_settings: {
+      ...config.clickhouse_settings,
       date_time_input_format: 'best_effort',
       date_time_output_format: 'iso',
       use_client_time_zone: 1,
