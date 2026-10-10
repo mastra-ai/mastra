@@ -1,4 +1,21 @@
+import {
+  FACTORY_GITHUB_EVENTS,
+  FACTORY_GITLAB_EVENTS,
+  FACTORY_INCIDENTIO_EVENTS,
+  FACTORY_JIRA_EVENTS,
+  FACTORY_LINEAR_EVENTS,
+} from '../rules/types.js';
 import type {
+  FactoryGithubEventName,
+  FactoryGithubRuleContext,
+  FactoryGitLabEventName,
+  FactoryGitLabRuleContext,
+  FactoryIncidentioEventName,
+  FactoryIncidentioRuleContext,
+  FactoryJiraEventName,
+  FactoryJiraRuleContext,
+  FactoryLinearEventName,
+  FactoryLinearRuleContext,
   FactoryRuleHandler,
   FactoryRuleSource,
   FactoryStageRuleContext,
@@ -14,6 +31,36 @@ type ReadonlyBoardPhaseHandlers = Readonly<BoardPhaseHandlers>;
 export type BoardToolResultRuleHandler = FactoryRuleHandler<FactoryToolResultRuleContext>;
 export type BoardToolRule = { readonly onResult: BoardToolResultRuleHandler };
 export type BoardToolRules = Readonly<Record<string, BoardToolRule>>;
+
+/**
+ * A board's handler for one integration event. `null` switches the integration default off
+ * for cards on this board only.
+ */
+type BoardEventHandlerMap<EventName extends string, Context> = Readonly<
+  Partial<Record<EventName, FactoryRuleHandler<Context> | null>>
+>;
+
+/**
+ * How cards on this board react to integration events, keyed by integration then event.
+ * Consulted for events bound to a card on this board, after any handler the deployment set
+ * explicitly on the integration and before the integration default.
+ */
+export interface BoardEventRules {
+  readonly github?: BoardEventHandlerMap<FactoryGithubEventName, FactoryGithubRuleContext>;
+  readonly gitlab?: BoardEventHandlerMap<FactoryGitLabEventName, FactoryGitLabRuleContext>;
+  readonly linear?: BoardEventHandlerMap<FactoryLinearEventName, FactoryLinearRuleContext>;
+  readonly jira?: BoardEventHandlerMap<FactoryJiraEventName, FactoryJiraRuleContext>;
+  readonly incidentio?: BoardEventHandlerMap<FactoryIncidentioEventName, FactoryIncidentioRuleContext>;
+}
+export type BoardEventIntegration = keyof BoardEventRules;
+
+const BOARD_EVENT_NAMES: Readonly<Record<BoardEventIntegration, readonly string[]>> = {
+  github: FACTORY_GITHUB_EVENTS,
+  gitlab: FACTORY_GITLAB_EVENTS,
+  linear: FACTORY_LINEAR_EVENTS,
+  jira: FACTORY_JIRA_EVENTS,
+  incidentio: FACTORY_INCIDENTIO_EVENTS,
+};
 
 type ReadonlyFactoryBoardRules = Readonly<
   Record<
@@ -73,6 +120,8 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   readonly rules: ReadonlyFactoryBoardRules;
   /** Tool-result rules keyed by tool name; empty when the board declares none. */
   readonly tools: BoardToolRules;
+  /** Integration event handlers for cards on this board; empty when the board declares none. */
+  readonly events: BoardEventRules;
   readonly transitionPolicy?: BoardTransitionPolicy;
   /** Where source-closed rules move a card; absent when the board opts out of auto-closing. */
   readonly sourceClosed?: BoardSourceClosed<PhaseId>;
@@ -93,6 +142,7 @@ type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhas
   initialPhase: keyof Phases & string;
   phases: Phases;
   tools?: Record<string, BoardToolRule>;
+  events?: BoardEventRules;
   transitionPolicy?: BoardTransitionPolicy;
   sourceClosed?: { completed: keyof Phases & string; canceled: keyof Phases & string };
 };
@@ -167,6 +217,35 @@ function validateSourceClosed(
   return Object.freeze({ completed: sourceClosed.completed as string, canceled: sourceClosed.canceled as string });
 }
 
+function validateEventRules(events: unknown): BoardEventRules {
+  if (events === undefined) return Object.freeze({});
+  if (!isPlainObject(events)) throw new BoardDefinitionError('Board events must be a plain object.');
+  const frozen: Record<string, Readonly<Record<string, unknown>>> = {};
+  for (const [integration, handlers] of Object.entries(events)) {
+    const known = Object.hasOwn(BOARD_EVENT_NAMES, integration)
+      ? BOARD_EVENT_NAMES[integration as BoardEventIntegration]
+      : undefined;
+    if (!known) throw new BoardDefinitionError(`Board events name unknown integration "${integration}".`);
+    if (handlers === undefined) continue;
+    if (!isPlainObject(handlers)) {
+      throw new BoardDefinitionError(`Board events for "${integration}" must be a plain object.`);
+    }
+    const entries: Record<string, unknown> = {};
+    for (const [event, handler] of Object.entries(handlers)) {
+      if (!known.includes(event)) {
+        throw new BoardDefinitionError(`Board events for "${integration}" name unknown event "${event}".`);
+      }
+      if (handler === undefined) continue;
+      if (handler !== null && typeof handler !== 'function') {
+        throw new BoardDefinitionError(`Board event handler "${integration}.${event}" must be a function or null.`);
+      }
+      entries[event] = handler;
+    }
+    frozen[integration] = Object.freeze(entries);
+  }
+  return Object.freeze(frozen) as BoardEventRules;
+}
+
 export function defineBoard<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
@@ -177,6 +256,7 @@ export function defineBoard<
     throw new BoardDefinitionError('Board transitionPolicy must be a function.');
   }
   const tools = validateToolRules(config.tools);
+  const events = validateEventRules(config.events);
   const phaseIds = new Set(Object.keys(config.phases));
   if (phaseIds.size === 0) throw new BoardDefinitionError('A board must define at least one phase.');
   if (!phaseIds.has(config.initialPhase)) {
@@ -274,6 +354,7 @@ export function defineBoard<
     transitions: Object.freeze(transitions),
     rules: Object.freeze(rules),
     tools,
+    events,
     ...(config.transitionPolicy ? { transitionPolicy: config.transitionPolicy } : {}),
     ...(sourceClosed ? { sourceClosed } : {}),
     allowsTransition(from: PhaseId, to: PhaseId) {

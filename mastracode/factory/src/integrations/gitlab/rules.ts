@@ -1,5 +1,12 @@
-import { boardForWorkItem, withBoardClosure } from '../../boards/index.js';
+import {
+  boardEventHandlers,
+  boardForWorkItem,
+  eventBoardId,
+  rulePhaseField,
+  withBoardClosure,
+} from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { hasExplicitRuleOverride, selectEventRule } from '../../rules/event-rules.js';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
@@ -339,7 +346,7 @@ export class GitLabRules {
         : event === 'mergeRequestCommented'
           ? [authoringItem ?? reviewItem]
           : event === 'mergeRequestOpened'
-            ? [authoringItem]
+            ? [authoringItem, ...(authoringItem ? [authoringItem] : [])]
             : event.startsWith('mergeRequest')
               ? [reviewItem ?? authoringItem]
               : [issueItem];
@@ -370,6 +377,12 @@ export class GitLabRules {
           factoryAuthored: Boolean(authoringItem),
           item,
           ingressIdentity: `gitlab:${projectId}:${parsed.deliveryId}${index ? `:${item?.id ?? index}` : ''}`,
+          // A merge request opening concerns two cards: its own Review card,
+          // which the integration handler files against the authoring item,
+          // and that authoring item, which its board may react to. The second
+          // evaluation runs only the board handler, under an id-suffixed
+          // identity so it is not dropped as a replay of the first.
+          ...(event === 'mergeRequestOpened' ? { mergeRequestOpenedScope: index ? ('board' as const) : ('intake' as const) } : {}),
         }),
       );
     }
@@ -524,6 +537,7 @@ export class GitLabRules {
       factoryAuthored: boolean;
       item: WorkItemRow | undefined;
       ingressIdentity: string;
+      mergeRequestOpenedScope?: 'intake' | 'board';
     },
     attempt = 1,
   ): Promise<{ status: IngressStatus }> {
@@ -559,6 +573,7 @@ export class GitLabRules {
             board: boardForWorkItem(input.item),
             itemRevision: input.item.revision,
             ...withBoardClosure(this.options.boards, input.item),
+            ...rulePhaseField(this.options.boards, input.item),
           }
         : {}),
       intake: input.board,
@@ -631,7 +646,20 @@ export class GitLabRules {
           }
         : {}),
     };
-    const rule = this.options.gitlab.rules[input.event];
+    const boardRules = boardEventHandlers(
+      this.options.boards,
+      input.mergeRequestOpenedScope === 'intake' ? undefined : eventBoardId(context),
+      'gitlab',
+    );
+    const rule =
+      input.mergeRequestOpenedScope === 'board'
+        ? hasExplicitRuleOverride(this.options.gitlab.rules, input.event)
+          ? undefined
+          : boardRules?.mergeRequestOpened
+        : selectEventRule(this.options.gitlab.rules, boardRules, input.event);
+    // Without a board handler the authoring card has nothing to answer; skip
+    // recording an empty evaluation for it.
+    if (input.mergeRequestOpenedScope === 'board' && !rule) return { status: 'ignored' };
     let decision: FactoryRuleDecision | void;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };

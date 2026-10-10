@@ -1,6 +1,8 @@
 export { BoardDefinitionError, defineBoard } from './define-board.js';
 export type {
   BoardDefinition,
+  BoardEventIntegration,
+  BoardEventRules,
   BoardPhaseDefinition,
   BoardPhaseKind,
   BoardSourceClosed,
@@ -10,10 +12,14 @@ export type {
   BoardTransition,
 } from './define-board.js';
 export {
+  boardEventHandlers,
   boardForWorkItem,
+  eventBoardId,
   isTerminalWorkItem,
   resolveBoardClosure,
   resolveBoardToolRule,
+  rulePhaseContext,
+  rulePhaseField,
   resolvePhaseSemantics,
   withBoardClosure,
   workItemPhaseSemantics,

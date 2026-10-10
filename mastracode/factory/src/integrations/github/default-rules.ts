@@ -1,5 +1,6 @@
 import { hasRecordedVerdict } from '../../boards/review.js';
 import { normalizedVerdictLine } from '../../review-verdict.js';
+import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 import { isFactoryApproveVerdict } from './stale-reviews.js';
@@ -457,5 +458,5 @@ export function resolveGithubRules(overrides?: GithubRuleOverrides): GithubEvent
     }
     if (handler !== undefined) rules[key] = handler;
   }
-  return Object.freeze(rules) as GithubEventRules;
+  return recordExplicitRuleOverrides(Object.freeze(rules) as GithubEventRules, overrides);
 }

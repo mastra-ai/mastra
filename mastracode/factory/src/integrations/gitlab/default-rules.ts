@@ -1,3 +1,4 @@
+import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 
 export type GitLabRuleOverrides = Partial<
@@ -218,5 +219,5 @@ export function resolveGitLabRules(overrides?: GitLabRuleOverrides): GitLabEvent
     }
     if (handler !== undefined) rules[key] = handler;
   }
-  return Object.freeze(rules) as GitLabEventRules;
+  return recordExplicitRuleOverrides(Object.freeze(rules) as GitLabEventRules, overrides);
 }

@@ -240,6 +240,16 @@ export interface FactoryRuleCausalEntry {
   decisionType: FactoryCommitDecision['type'];
 }
 
+/** The phase a card sits in, as its board declares it. */
+export interface FactoryRulePhaseContext {
+  id: string;
+  kind: 'resting' | 'working' | 'terminal';
+  /** Seat carrying a working phase; absent for resting and terminal phases. */
+  role?: string;
+  /** Outcome names the phase declares, e.g. `approved` or `canceled`; empty when it declares none. */
+  outcomes: readonly string[];
+}
+
 export interface FactoryRuleContextBase {
   tenant: { orgId: string; projectId: string };
   actor: FactoryRuleActor;
@@ -279,6 +289,8 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   itemRevision?: number;
   /** Where the card's board sends it when its tracked source closes. */
   boardClosure?: FactoryRuleBoardClosure;
+  /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
+  phase?: FactoryRulePhaseContext;
   /**
    * Board an issue's labels route it to, when the project has a matching label route and that board
    * is installed. Absent for pull requests and for issues whose labels select nothing.
@@ -380,6 +392,8 @@ export interface FactoryGitLabRuleContext extends FactoryRuleContextBase {
   itemRevision?: number;
   /** Where the card's board sends it when its tracked source closes. */
   boardClosure?: FactoryRuleBoardClosure;
+  /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
+  phase?: FactoryRulePhaseContext;
   intake?: FactoryRuleIntakeTarget;
   event: FactoryGitLabEventName;
   deliveryId: string;
@@ -434,6 +448,8 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
   itemRevision?: number;
   /** Where the card's board sends it when its tracked source closes. */
   boardClosure?: FactoryRuleBoardClosure;
+  /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
+  phase?: FactoryRulePhaseContext;
   /** Bound board for the source this issue came from, when one is configured and installed. */
   intake?: FactoryRuleIntakeTarget;
   event: FactoryLinearEventName;
@@ -462,6 +478,8 @@ export interface FactoryJiraRuleContext extends FactoryRuleContextBase {
   itemRevision?: number;
   /** Where the card's board sends it when its tracked source closes. */
   boardClosure?: FactoryRuleBoardClosure;
+  /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
+  phase?: FactoryRulePhaseContext;
   /** Bound board for the source this issue came from, when one is configured and installed. */
   intake?: FactoryRuleIntakeTarget;
   event: FactoryJiraEventName;
@@ -490,6 +508,8 @@ export interface FactoryIncidentioRuleContext extends FactoryRuleContextBase {
   itemRevision?: number;
   /** Where the card's board sends it when its tracked source closes. */
   boardClosure?: FactoryRuleBoardClosure;
+  /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
+  phase?: FactoryRulePhaseContext;
   /** Bound board for the source this follow-up came from, when one is configured and installed. */
   intake?: FactoryRuleIntakeTarget;
   event: FactoryIncidentioEventName;

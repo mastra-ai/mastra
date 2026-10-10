@@ -8,6 +8,8 @@ export {
 } from './boards/index.js';
 export type {
   BoardDefinition,
+  BoardEventIntegration,
+  BoardEventRules,
   BoardPhaseDefinition,
   BoardRegistry,
   BoardSourceClosed,
