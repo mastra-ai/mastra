@@ -41,7 +41,7 @@ export type ReplayOptions = {
 function requestContextWithOrg(organizationId: string, knowledgeResourceId?: string): RequestContext {
   if (!organizationId.trim()) throw new Error('Replay requires a non-empty organizationId.');
   const requestContext = new RequestContext();
-  requestContext.set('organizationId', organizationId);
+  requestContext.set('mastra__scopes', [`org:${organizationId}`]);
   if (knowledgeResourceId?.trim()) requestContext.set('knowledgeResourceId', knowledgeResourceId);
   return requestContext;
 }
@@ -66,6 +66,7 @@ export async function replayCycles(options: ReplayOptions): Promise<ReplayResult
     mainAgent: options.mainAgent,
   };
   const scope = resolveCuratorScope(context);
+  if (!scope) throw new Error('Replay requires an org scope.');
   const curatorOutcomes: ReplayOutcome[] = [];
   const warnings: string[] = [];
 

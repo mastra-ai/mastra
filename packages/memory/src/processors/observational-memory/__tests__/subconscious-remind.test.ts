@@ -69,7 +69,7 @@ function createModel(response: string, prompts?: string[], repeatToolCall = fals
 
 function createContext(response: string, storage = new InMemoryStore()) {
   const requestContext = new RequestContext();
-  requestContext.set('organizationId', 'acme');
+  requestContext.set('mastra__scopes', ['org:acme']);
   const memory = new Memory({ storage });
   const sendSignal = vi.fn(async () => undefined) as any;
   return {
@@ -229,6 +229,42 @@ describe('Subconscious remind', () => {
     });
 
     expect(context.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it('skips quietly when the run has no org', async () => {
+    const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
+    const context = createContext('Project Atlas launches January 15.');
+    context.requestContext = new RequestContext([['mastra__scopes', ['team:core']]]);
+    const getStore = vi.spyOn(context.memory, 'getKnowledgeStore');
+    const consoleError = vi.spyOn(console, 'error');
+
+    await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling Project Atlas.',
+      ...context,
+    });
+
+    expect(getStore).not.toHaveBeenCalled();
+    expect(context.mainAgent.getModel).not.toHaveBeenCalled();
+    expect(context.sendSignal).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('reads the org from the legacy organizationId key when the run has no org scope', async () => {
+    const extractor = new SubconsciousRemindExtractor({ name: 'remind', maxSteps: 3, builtIn: true });
+    const context = createContext('<no-reminder />');
+    context.requestContext = new RequestContext([['organizationId', 'acme']]);
+    const getStore = vi.spyOn(context.memory, 'getKnowledgeStore');
+
+    await applyExtractorHooks({
+      source: 'observer',
+      extractors: [extractor],
+      rawObservations: 'The user is scheduling Project Atlas.',
+      ...context,
+    });
+
+    expect(getStore).toHaveBeenCalled();
   });
 
   it('runs on the observational memory model when no main agent is available', async () => {

@@ -39,7 +39,7 @@ function createSemanticDependencies(ignoreFilters = false) {
 
 function toolContext(threadId = 'alpha') {
   const requestContext = new RequestContext();
-  requestContext.set('organizationId', 'acme');
+  requestContext.set('mastra__scopes', ['org:acme']);
   return { agent: { threadId, resourceId: 'user-42' }, requestContext } as any;
 }
 
@@ -202,10 +202,21 @@ describe('Subconscious knowledge read tools', () => {
     );
   });
 
+  it('reads the org from the legacy organizationId key when the run has no org scope', async () => {
+    const tools = (await createMemory()).listTools();
+    const requestContext = new RequestContext([['organizationId', 'acme']]);
+    await expect(
+      tools.knowledge_browse!.execute?.({}, {
+        agent: { threadId: 'alpha', resourceId: 'user-42' },
+        requestContext,
+      } as any),
+    ).resolves.toBeDefined();
+  });
+
   it('fails closed when trusted scope context is missing', async () => {
     const tools = (await createMemory()).listTools();
     await expect(
       tools.knowledge_browse!.execute?.({}, { agent: { threadId: 'alpha', resourceId: 'user-42' } } as any),
-    ).rejects.toThrow(/organizationId/);
+    ).rejects.toThrow(/org:<id> agent scope/);
   });
 });

@@ -1,6 +1,7 @@
 import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
+import { omDebug } from '../debug';
 import { Extractor } from '../extractor';
 import { withOmInternalThreadId } from '../internal-request-context';
 import type { ObservationalMemoryModel } from '../types';
@@ -9,7 +10,7 @@ import { resolveSubconsciousAgentModel } from './model';
 import { createReminderAgent } from './remind-agent';
 import { ensureOwnedRemindThread, getRemindThreadId, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
 import { createReplyToMemoryQuestionTool } from './remind-questions';
-import { resolveKnowledgeResourceId } from './scope';
+import { resolveKnowledgeResourceId, resolveSubconsciousOrgId } from './scope';
 import type { ResolvedSubconsciousAgent } from './types';
 
 /** Own-thread records younger than this are treated as still-in-context and excluded from reminder candidates. */
@@ -20,10 +21,8 @@ function resolveScope(context: {
   resourceId?: string;
   threadId: string;
 }) {
-  const organizationId = context.requestContext?.get('organizationId');
-  if (typeof organizationId !== 'string' || !organizationId.trim()) {
-    throw new Error('Subconscious remind requires organizationId in the request context.');
-  }
+  const organizationId = resolveSubconsciousOrgId(context.requestContext, omDebug);
+  if (!organizationId) return undefined;
   const resourceId = resolveKnowledgeResourceId(context.requestContext, context.resourceId);
   if (!resourceId) {
     throw new Error('Subconscious remind requires a resourceId.');
@@ -109,6 +108,8 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
         let store: KnowledgeStorage | undefined;
         try {
           scope = resolveScope(context);
+          // Without an org, Knowledge has nowhere to read from yet; skip quietly.
+          if (!scope) return;
           // The knowledgeResourceId override moves only the knowledge scope; the sidekick thread stays owned by the agent resource.
           const resourceId = context.resourceId;
           if (!resourceId) throw new Error('Subconscious remind requires a resourceId.');

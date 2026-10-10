@@ -27,7 +27,7 @@ const semanticInfrastructure = {
 
 function requestContextWith(overrides: Record<string, unknown> = {}) {
   const requestContext = new RequestContext();
-  requestContext.set('organizationId', 'acme');
+  requestContext.set('mastra__scopes', ['org:acme']);
   for (const [key, value] of Object.entries(overrides)) requestContext.set(key, value);
   return requestContext;
 }

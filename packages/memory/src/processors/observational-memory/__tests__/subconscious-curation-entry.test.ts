@@ -59,7 +59,7 @@ function createMemory(options?: { omModel?: ObservationalMemoryModel | false }) 
 
 function requestContext() {
   const context = new RequestContext();
-  context.set('organizationId', 'acme');
+  context.set('mastra__scopes', ['org:acme']);
   return context;
 }
 

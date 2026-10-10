@@ -32,7 +32,7 @@ function createParentAgent() {
 
 function toolContext(messages: unknown[] = []) {
   const requestContext = new RequestContext();
-  requestContext.set('organizationId', 'org-1');
+  requestContext.set('mastra__scopes', ['org:org-1']);
   return {
     agent: { agentId: parentAgentId, threadId: parentThreadId, resourceId, messages },
     requestContext,
