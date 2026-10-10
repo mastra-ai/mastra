@@ -65,6 +65,21 @@ function warnUnrecognizedTopic(topic: string): void {
  */
 const REALTIME_MAX_BYTES = 480 * 1024;
 const TERMINAL_AGENT_EVENTS = new Set(['finish', 'error', 'abort']);
+const OVERSIZED_ERROR_MESSAGE = 'Agent error event exceeded the Inngest Realtime size limit';
+
+/** Stream consumers read `data.error.name` and `data.error.message`; keep those, shortened to fit. */
+function fitErrorEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id' | 'createdAt'> {
+  const error = (event.data as { error?: { name?: unknown; message?: unknown } } | undefined)?.error;
+  const name = typeof error?.name === 'string' ? error.name.slice(0, 200) : 'Error';
+  const message = typeof error?.message === 'string' ? error.message : OVERSIZED_ERROR_MESSAGE;
+  const reduced = { type: event.type, runId: event.runId, data: { error: { name, message } } };
+  const excess = byteSize(reduced) - REALTIME_MAX_BYTES;
+  if (excess > 0)
+    reduced.data.error.message = message.slice(0, Math.max(0, message.length - excess - 64)) + '… [truncated]';
+  return byteSize(reduced) <= REALTIME_MAX_BYTES
+    ? reduced
+    : { ...reduced, data: { error: { name, message: OVERSIZED_ERROR_MESSAGE } } };
+}
 
 /** Chunk type streamed in place of an agent event that exceeded the Realtime cap. */
 export const OVERSIZED_EVENT_CHUNK_TYPE = 'data-oversized-event';
@@ -104,6 +119,7 @@ function fitAgentEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id'
   const bytes = byteSize(event);
   if (bytes <= REALTIME_MAX_BYTES) return event;
   if (event.type !== 'finish') {
+    if (event.type === 'error') return fitErrorEvent(event);
     if (TERMINAL_AGENT_EVENTS.has(event.type)) return { type: event.type, runId: event.runId, data: {} };
     return oversizedPlaceholder(event.runId, event.type, (event.data as { type?: string } | undefined)?.type, bytes);
   }
@@ -155,7 +171,12 @@ function salvageTruncatedAgentEvent(raw: string, runId: string): { type: string;
   return {
     type,
     runId,
-    data: type === 'finish' ? { output: { steps: [] }, stepResult: reason ? { reason } : undefined } : {},
+    data:
+      type === 'finish'
+        ? { output: { steps: [] }, stepResult: reason ? { reason } : undefined }
+        : type === 'error'
+          ? { error: { name: 'Error', message: OVERSIZED_ERROR_MESSAGE } }
+          : {},
   };
 }
 

@@ -1,3 +1,4 @@
+import { createDurableAgentStream } from '@mastra/core/agent/durable';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const subscribeMock = vi.hoisted(() => vi.fn());
@@ -123,5 +124,65 @@ describe('InngestPubSub Realtime size cap (#20671)', () => {
       runId: 'r1',
       data: { output: { steps: [] }, stepResult: { reason: 'stop' } },
     });
+  });
+
+  it('keeps an oversized error readable so the stream can close with onError', async () => {
+    const { pubsub, published } = setup();
+    await pubsub.publish('agent.stream.r1', {
+      type: 'error',
+      runId: 'r1',
+      data: { error: { name: 'ProviderError', message: huge, stack: huge } },
+    });
+    const sent = published[0] as any;
+    expect(sent.data.error.name).toBe('ProviderError');
+    expect(typeof sent.data.error.message).toBe('string');
+    expect(sent.data.error.stack).toBeUndefined();
+    expect(Buffer.byteLength(JSON.stringify(sent))).toBeLessThan(480 * 1024);
+  });
+
+  it('salvages a truncated error into an envelope with error.message', async () => {
+    let onMessage: (m: unknown) => void = () => {};
+    subscribeMock.mockImplementation(async (opts: { onMessage: (m: unknown) => void }) => {
+      onMessage = opts.onMessage;
+      return { close: vi.fn() };
+    });
+    const { pubsub } = setup();
+    const received: any[] = [];
+    await pubsub.subscribe('agent.stream.r1', event => received.push(event));
+    onMessage({ data: '{"type":"error","runId":"r1","data":{"error":{"name":"E","message":"xxxx' });
+    expect(received[0]).toMatchObject({ type: 'error', runId: 'r1', data: { error: { name: 'Error' } } });
+    expect(typeof received[0].data.error.message).toBe('string');
+  });
+
+  it.each([
+    ['oversized', (sent: unknown) => sent],
+    ['truncated by Realtime', (sent: unknown) => JSON.stringify(sent).slice(0, 200)],
+  ])('closes an attached stream and fires onError for an %s error', async (_label, deliver) => {
+    let onMessage: (m: unknown) => void = () => {};
+    subscribeMock.mockImplementation(async (opts: { onMessage: (m: unknown) => void }) => {
+      onMessage = opts.onMessage;
+      return { close: vi.fn() };
+    });
+    const { pubsub, published } = setup();
+    const onError = vi.fn();
+    const { output, ready, cleanup } = createDurableAgentStream({
+      pubsub,
+      runId: 'r1',
+      messageId: 'm1',
+      model: { modelId: 'm', provider: 'p', version: 'v3' },
+      onError,
+    });
+    await ready;
+
+    const event = { type: 'error', runId: 'r1', data: { error: { name: 'ProviderError', message: huge } } };
+    await pubsub.publish('agent.stream.r1', event);
+    // Without a reduced envelope Realtime would deliver the full event cut off as a string.
+    onMessage({ data: deliver(published[0]) });
+
+    const chunks: any[] = [];
+    for await (const chunk of output.fullStream) chunks.push(chunk);
+    cleanup();
+    expect(chunks.some(c => c.type === 'error')).toBe(true);
+    expect(onError).toHaveBeenCalledTimes(1);
   });
 });
