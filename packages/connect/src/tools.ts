@@ -1,8 +1,17 @@
 import type { ToolsInput } from '@mastra/core/agent';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import type { ApiRoute } from '@mastra/core/server';
 import { MCPClient } from '@mastra/mcp';
 
 import type { ConnectClientOptions, IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import { listIntegrations, listProjectConnections, platformMcpTransport, resolveClient } from './client.js';
+import {
+  buildConnectIntegrationTool,
+  CONNECT_INTEGRATION_TOOL,
+  connectRoutes,
+  ConnectSignalProvider,
+} from './connect-requests.js';
+import type { ConnectRequestHost, RequestConnectionsOptions } from './connect-requests.js';
 import { MastraConnectConfigError, MastraConnectError } from './errors.js';
 import {
   buildMcpMultiConnectionTools,
@@ -10,7 +19,7 @@ import {
   listConnectionsToolKey,
 } from './multi-connection.js';
 import type { McpProviderRegistration, ProviderRegistration, ProxyProviderRegistration } from './registry.js';
-import { PROVIDERS } from './registry.js';
+import { CHANNELS, PROVIDERS } from './registry.js';
 import {
   connectionIdEnvVar,
   groupByIntegrationId,
@@ -109,6 +118,7 @@ export interface ToolsOptions {
   client?: ConnectClientOptions;
   /** How long a resolved snapshot stays fresh, in milliseconds. Default 30_000. `0` revalidates every resolution. */
   ttlMs?: number;
+  requestConnections?: RequestConnectionsOptions;
 }
 
 // Keep the public resolver type structural so linked/local package builds do not
@@ -152,6 +162,8 @@ export interface ToolsResolver {
    * `disconnect`) delegate to the base resolver, and `.with()` calls chain.
    */
   with(extra: ToolsWithInput): ToolsResolver;
+  signalProvider(): ConnectSignalProvider;
+  routes(): ApiRoute[];
 }
 
 interface NormalizedRequest {
@@ -223,7 +235,14 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
     );
   }
 
-  let cache: { snapshot: ResolvedToolsRecord; fetchedAt: number } | undefined;
+  let cache:
+    | {
+        snapshot: ResolvedToolsRecord;
+        fetchedAt: number;
+        connections: ProjectConnection[];
+        catalog: IntegrationCatalogEntry[];
+      }
+    | undefined;
   let inflight: Promise<ResolvedToolsRecord> | undefined;
   let closing: Promise<void> | undefined;
   let lastFailureAt: number | undefined;
@@ -276,7 +295,7 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
           const { connections, catalog, catalogAvailable } = await loadSnapshotInputs();
           const requests = buildRequests(normalizedProviders, catalog, catalogAvailable);
           const snapshot = await mapTools(connections, requests, options, client, mcpClients, resolverId);
-          cache = { snapshot, fetchedAt: Date.now() };
+          cache = { snapshot, fetchedAt: Date.now(), connections, catalog };
           lastFailureAt = undefined;
           return snapshot;
         } catch (error) {
@@ -316,7 +335,34 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
     return refresh();
   };
 
-  const resolver: ToolsResolver = Object.assign(resolve, {
+  const requestHost = createRequestHost(options, client, projectId, {
+    refresh,
+    catalog: () => cache?.catalog ?? [],
+  });
+
+  const resolveForRun = async (ctx?: ToolsResolverContext): Promise<ResolvedToolsRecord> => {
+    if (!requestHost) return resolve();
+    assertCompletionSource(requestHost);
+    const given = ctx?.requestContext as RequestContext | undefined;
+    const requestContext = typeof given?.get === 'function' ? given : new RequestContext();
+    const snapshot = await resolve();
+    const allowed = await requestHost.allow({
+      requestContext,
+      threadId: requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined,
+      resourceId: requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined,
+    });
+    const metaTool = allowed && cache ? buildConnectIntegrationTool(requestHost, cache.connections) : undefined;
+    return metaTool ? { ...snapshot, [CONNECT_INTEGRATION_TOOL]: metaTool } : snapshot;
+  };
+
+  const requireRequestHost = (method: string): ConnectRequestHost => {
+    if (!requestHost) {
+      throw new MastraConnectError('invalid_options', `${method}() needs the requestConnections option.`);
+    }
+    return requestHost;
+  };
+
+  const resolver: ToolsResolver = Object.assign(resolveForRun, {
     refresh,
     disconnect: (): Promise<void> => {
       // Let the refresh in progress settle first so it cannot repopulate the
@@ -326,6 +372,9 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
         try {
           while (inflight) await inflight.catch(() => undefined);
           cache = undefined;
+          for (const dispose of requestHost?.disposers ?? []) dispose();
+          requestHost?.disposers.clear();
+          requestHost?.pendingInstalls.clear();
           const clients = Array.from(mcpClients.values(), entry => entry.client);
           mcpClients.clear();
           await Promise.allSettled(clients.map(mcp => mcp.disconnect()));
@@ -336,8 +385,76 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
       return closing;
     },
     with: (extra: ToolsWithInput): ToolsResolver => withExtraTools(resolver, extra),
+    signalProvider: (): ConnectSignalProvider => new ConnectSignalProvider(requireRequestHost('signalProvider')),
+    routes: (): ApiRoute[] => connectRoutes(requireRequestHost('routes').webhookSecret),
   });
   return resolver;
+}
+
+function createRequestHost(
+  options: ToolsOptions,
+  client: ResolvedClient,
+  projectId: string,
+  snapshot: Pick<ConnectRequestHost, 'refresh' | 'catalog'>,
+): ConnectRequestHost | undefined {
+  const requestConnections = options.requestConnections;
+  if (!requestConnections) return undefined;
+  if (typeof requestConnections.allow !== 'function') {
+    throw new MastraConnectError('invalid_options', 'requestConnections.allow must be a function.');
+  }
+  const integrations = Array.isArray(options.providers)
+    ? options.providers
+    : Object.entries(options.providers ?? {}).flatMap(([id, value]) => (value === true ? [id] : []));
+  const channels = requestConnections.channels ?? [];
+  const knownChannels = new Set(CHANNELS.map(registration => registration.integrationId));
+  const unknownChannels = channels.filter(id => !knownChannels.has(id));
+  if (unknownChannels.length > 0) {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Unknown channel(s) in requestConnections.channels: ${unknownChannels.join(', ')}. Known channels: ${[...knownChannels].join(', ')}.`,
+    );
+  }
+  if (integrations.length + channels.length === 0) {
+    throw new MastraConnectError(
+      'invalid_options',
+      'requestConnections needs a providers allowlist (an array of ids, or `true` entries in the record form) or requestConnections.channels.',
+    );
+  }
+  if (integrations.length + channels.length > 25) {
+    console.warn(
+      `[@mastra/connect] requestConnections offers ${integrations.length + channels.length} providers; connect_integration lists each one, so narrow the allowlist to keep its description short.`,
+    );
+  }
+  const webhookUrl = process.env.MASTRA_CONNECT_WEBHOOK_URL?.trim() || undefined;
+  const webhookSecret = process.env.MASTRA_CONNECT_WEBHOOK_SECRET?.trim() || undefined;
+  return {
+    client,
+    projectId,
+    allow: requestConnections.allow,
+    webhookUrl,
+    webhookSecret,
+    integrations,
+    channels,
+    pendingInstalls: new Map(),
+    reconciling: new Set(),
+    disposers: new Set(),
+    ...snapshot,
+  };
+}
+
+function assertCompletionSource({ webhookUrl, webhookSecret }: ConnectRequestHost): void {
+  if (!webhookUrl && process.env.MASTRA_DEV !== 'true') {
+    throw new MastraConnectError(
+      'invalid_options',
+      'requestConnections needs MASTRA_CONNECT_WEBHOOK_URL outside `mastra dev`, so Platform can report finished connections.',
+    );
+  }
+  if (webhookUrl && !webhookSecret) {
+    throw new MastraConnectError(
+      'invalid_options',
+      'MASTRA_CONNECT_WEBHOOK_URL is set without MASTRA_CONNECT_WEBHOOK_SECRET, so Platform webhooks could not be verified.',
+    );
+  }
 }
 
 /**
@@ -358,6 +475,8 @@ function withExtraTools(base: ToolsResolver, extra: ToolsWithInput): ToolsResolv
     },
     disconnect: (): Promise<void> => base.disconnect(),
     with: (more: ToolsWithInput): ToolsResolver => withExtraTools(resolver, more),
+    signalProvider: (): ConnectSignalProvider => base.signalProvider(),
+    routes: (): ApiRoute[] => base.routes(),
   });
   return resolver;
 }

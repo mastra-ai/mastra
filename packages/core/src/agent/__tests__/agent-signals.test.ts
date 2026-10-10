@@ -3157,6 +3157,28 @@ describe('Agent signals', () => {
     claim.unsubscribe();
   });
 
+  it('discards an ifActive discard signal when another process holds the thread lease', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    pubsub.denyLeaseAcquisition = true;
+    const agent = new Agent({
+      id: 'busy',
+      name: 'busy',
+      instructions: 'Test',
+      model: createTextStreamModel('ok'),
+      pubsub,
+    });
+    const target = { resourceId: 'u', threadId: 't', ifActive: { behavior: 'discard' as const } };
+    const result = new AgentThreadStreamRuntime().sendSignal(
+      agent,
+      { type: 'user-message', contents: 'x' },
+      target,
+      pubsub,
+    );
+    await expect(result.accepted).resolves.toEqual({ action: 'discard' });
+    await pubsub.flush();
+    expect(pubsub.publishedData.filter(data => data?.type === 'signal-enqueued')).toEqual([]);
+  });
+
   it('does not start a claimed-owner run when lease acquisition completes after the admission deadline', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
     try {
