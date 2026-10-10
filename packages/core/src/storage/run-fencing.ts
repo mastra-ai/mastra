@@ -17,7 +17,10 @@ export interface RunFence {
    * the engine stores under its own runId carries its parent run's fence.
    */
   runId: string;
-  /** Monotonic claim counter for the run. Every claim increments it. */
+  /**
+   * Orders the run's claims: a newer claim always has a higher generation. Not
+   * a timestamp; see `WorkflowsStorage.claimRunOwnership`.
+   */
   generation: number;
   /** Id of the execution that made the claim. */
   ownerId: string;
@@ -26,6 +29,10 @@ export interface RunFence {
 /** Current ownership of a durable run, as held by the workflows domain. */
 export interface RunOwnershipRecord {
   runId: string;
+  /**
+   * Orders the run's claims: a newer claim always has a higher generation. Not
+   * a timestamp; see `WorkflowsStorage.claimRunOwnership`.
+   */
   generation: number;
   /** Id of the execution that made the latest claim. Kept after release. */
   ownerId: string;
