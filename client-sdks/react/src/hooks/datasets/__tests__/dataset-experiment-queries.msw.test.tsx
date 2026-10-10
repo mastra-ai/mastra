@@ -10,12 +10,13 @@ import { useExperimentTrace } from '../../experiments/use-experiment-trace';
 import { useCompareExperiments } from '../use-compare-experiments';
 import { useDatasetItemVersions } from '../use-dataset-item-versions';
 import { useDatasetVersions } from '../use-dataset-versions';
-import { useExperiments } from '../use-experiments';
+import { useExperiment, useExperiments } from '../use-experiments';
 import { useWorkflowSchema } from '../use-workflow-schema';
 
 type ItemHistoryResponse = Awaited<ReturnType<MastraClient['getItemHistory']>>;
 type DatasetVersionsResponse = Awaited<ReturnType<MastraClient['listDatasetVersions']>>;
 type ExperimentsResponse = Awaited<ReturnType<MastraClient['listExperiments']>>;
+type ExperimentResponse = Awaited<ReturnType<MastraClient['getExperiment']>>;
 type CompareExperimentsResponse = Awaited<ReturnType<MastraClient['compareExperiments']>>;
 type TraceLightResponse = Awaited<ReturnType<MastraClient['getTraceLight']>>;
 
@@ -54,6 +55,23 @@ const datasetVersions: DatasetVersionsResponse = {
 const experiments: ExperimentsResponse = {
   experiments: [],
   pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+};
+
+const experiment: ExperimentResponse = {
+  id: 'exp-old',
+  datasetId: 'ds-1',
+  datasetVersion: 1,
+  targetType: 'agent',
+  targetId: 'agent-1',
+  status: 'completed',
+  totalItems: 1,
+  succeededCount: 1,
+  failedCount: 0,
+  skippedCount: 0,
+  startedAt: NOW,
+  completedAt: NOW,
+  createdAt: NOW,
+  updatedAt: NOW,
 };
 
 const comparison: CompareExperimentsResponse = {
@@ -108,6 +126,32 @@ describe('useExperiments', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(url?.searchParams.get('page')).toBe('2');
+    });
+  });
+});
+
+describe('useExperiment', () => {
+  describe('when the experiment exists', () => {
+    it('resolves it by id, including its dataset', async () => {
+      server.use(http.get('*/api/experiments/exp-old', () => HttpResponse.json(experiment)));
+
+      const { wrapper } = makeWrapper();
+      const { result } = renderHook(() => useExperiment({ experimentId: 'exp-old' }), { wrapper });
+
+      await waitFor(() => expect(result.current.data?.datasetId).toBe('ds-1'));
+    });
+  });
+
+  describe('when the experiment does not exist', () => {
+    it('surfaces the 404 as an error', async () => {
+      server.use(
+        http.get('*/api/experiments/missing', () => HttpResponse.json({ error: 'not found' }, { status: 404 })),
+      );
+
+      const { wrapper } = makeWrapper();
+      const { result } = renderHook(() => useExperiment({ experimentId: 'missing' }), { wrapper });
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
     });
   });
 });
