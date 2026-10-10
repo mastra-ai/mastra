@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry } from '../../boards/index.js';
+import { createBoardRegistry, defineBoard } from '../../boards/index.js';
+import type { FactoryGitLabRuleContext } from '../../rules/types.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { resolveGitLabRules } from './default-rules.js';
 import { encodeSourceId } from './integration.js';
@@ -107,6 +108,7 @@ async function setup(
     duplicateInstallation?: boolean;
     installationHost?: string;
     platformOnly?: boolean;
+    boards?: ReturnType<typeof createBoardRegistry>;
   } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
@@ -186,7 +188,7 @@ async function setup(
     storage: seeded.workItems,
     intake: seeded.intake,
     configVersion: 'gitlab-test-v1',
-    boards: createBoardRegistry(),
+    boards: options.boards ?? createBoardRegistry(),
   });
   return { seeded, project, gitlab, service };
 }
@@ -452,6 +454,87 @@ describe('GitLabRules', () => {
         },
       },
     ]);
+  });
+
+  it('files the Review card even when the authoring card board switches mergeRequestOpened off', async () => {
+    const delivery = defineBoard({
+      id: 'delivery',
+      title: 'Delivery',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'building' },
+        building: { title: 'Building', kind: 'working', role: 'work', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      events: { gitlab: { mergeRequestOpened: null } },
+    });
+    const { seeded, project, service } = await setup({
+      boards: createBoardRegistry({ boards: [delivery] }),
+    });
+    await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:authoring' },
+        title: 'Authoring delivery',
+        board: 'delivery',
+        stages: ['building'],
+        sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
+      },
+    });
+    await expect(service.ingest(mergeRequestOpened())).resolves.toEqual({ status: 'committed' });
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { decision: { type: 'upsertLinkedWorkItem', source: 'gitlab-pr', board: 'review' } },
+    ]);
+  });
+
+  it('runs the authoring card board mergeRequestOpened handler alongside Review card intake', async () => {
+    const handler = vi.fn((context: FactoryGitLabRuleContext) => ({
+      type: 'sendMessage' as const,
+      idempotencyKey: `${context.ingress.id}:delivery-out`,
+      role: 'work',
+      message: `Merge request ${context.mergeRequest?.iid} is out.`,
+    }));
+    const delivery = defineBoard({
+      id: 'delivery',
+      title: 'Delivery',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'building' },
+        building: { title: 'Building', kind: 'working', role: 'work', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      events: { gitlab: { mergeRequestOpened: handler } },
+    });
+    const { seeded, project, service } = await setup({
+      boards: createBoardRegistry({ boards: [delivery] }),
+    });
+    await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'gitlab', type: 'issue', externalId: 'gitlab-issue:authoring' },
+        title: 'Authoring delivery',
+        board: 'delivery',
+        stages: ['building'],
+        sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
+      },
+    });
+    await expect(service.ingest(mergeRequestOpened())).resolves.toEqual({ status: 'committed' });
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler.mock.calls[0]![0]).toMatchObject({
+      board: 'delivery',
+      phase: { id: 'building', kind: 'working', role: 'work' },
+    });
+    const deferred = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(deferred.map(entry => entry.decision)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-pr', board: 'review' }),
+        expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+      ]),
+    );
   });
 
   it('routes an MR note only to the Work card authoring its head branch', async () => {

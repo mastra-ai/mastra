@@ -169,7 +169,11 @@ export function useWorkspacesQuery(projectRepositoryId: string | undefined) {
 export function useFactoryWorkspacesQueries(projectRepositoryIds: string[]) {
   const { baseUrl } = useApiConfig();
   return useQueries({
-    queries: projectRepositoryIds.map(projectRepositoryId => workspacesQueryOptions(baseUrl, projectRepositoryId)),
+    queries: projectRepositoryIds.map(projectRepositoryId => ({
+      ...workspacesQueryOptions(baseUrl, projectRepositoryId),
+      refetchInterval: (query: { state: { data: WorkspacesData | undefined } }) =>
+        sessionsRefetchInterval(query.state.data),
+    })),
   });
 }
 

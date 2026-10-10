@@ -1,8 +1,16 @@
 import { createHash } from 'node:crypto';
 
-import { boardForWorkItem, workItemPhaseSemantics } from '../../boards/index.js';
+import {
+  boardEventHandlers,
+  boardForWorkItem,
+  eventBoardId,
+  rulePhaseField,
+  withBoardClosure,
+  workItemPhaseSemantics,
+} from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
+import { selectEventRule } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -583,6 +591,8 @@ export class GithubRules {
               },
               board: boardForWorkItem(item),
               itemRevision: item.revision,
+              ...withBoardClosure(this.options.boards, item),
+              ...rulePhaseField(this.options.boards, item),
             }
           : {}),
         ...(intake ? { intake } : {}),
@@ -674,7 +684,11 @@ export class GithubRules {
           : {}),
       };
 
-      const rule = this.options.github.rules[event];
+      const rule = selectEventRule(
+        this.options.github.rules,
+        boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
+        event,
+      );
       let decision: FactoryRuleDecision | void;
       let decisions: Record<string, unknown>[] = [];
       let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
