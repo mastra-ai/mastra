@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 4e61bff484f0 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -50,7 +50,9 @@ export const listProjectsOutputSchema = z.object({
   nextCursor: z.string().optional(),
 });
 
-const RawLeadSchema = LeadSchema.nullable();
+const RawLeadSchema = LeadSchema.extend({
+  email: z.string().nullable().optional(),
+}).nullable();
 
 const RawProjectSchema = z.object({
   id: z.string(),
@@ -131,20 +133,51 @@ export function listProjectsTool(proxy: PlatformProxy) {
 
       const responseData = z
         .object({
-          data: z.object({
-            projects: z.object({
-              nodes: z.array(z.unknown()),
-              pageInfo: z.object({
-                hasNextPage: z.boolean(),
-                endCursor: z.string().nullable(),
+          data: z
+            .object({
+              projects: z
+                .object({
+                  nodes: z.array(z.unknown()),
+                  pageInfo: z.object({
+                    hasNextPage: z.boolean(),
+                    endCursor: z.string().nullable(),
+                  }),
+                })
+                .nullable()
+                .optional(),
+            })
+            .nullable()
+            .optional(),
+          errors: z
+            .array(
+              z.object({
+                message: z.string(),
+                extensions: z.record(z.string(), z.unknown()).optional(),
               }),
-            }),
-          }),
+            )
+            .optional(),
         })
         .parse(response.data);
 
-      const nodes = responseData.data.projects.nodes;
-      const pageInfo = responseData.data.projects.pageInfo;
+      const firstError = responseData.errors?.[0];
+      if (firstError) {
+        throw new platformProxy.ActionError({
+          type: 'graphql_error',
+          message: firstError.message,
+          errors: responseData.errors,
+        });
+      }
+
+      const projectsData = responseData.data?.projects;
+      if (!projectsData) {
+        throw new platformProxy.ActionError({
+          type: 'invalid_response',
+          message: 'Linear API returned no projects data.',
+        });
+      }
+
+      const nodes = projectsData.nodes;
+      const pageInfo = projectsData.pageInfo;
 
       const projects: z.infer<typeof ProjectSchema>[] = [];
 
@@ -161,7 +194,13 @@ export function listProjectsTool(proxy: PlatformProxy) {
           ...(raw.createdAt !== null && { createdAt: raw.createdAt }),
           ...(raw.updatedAt !== null && { updatedAt: raw.updatedAt }),
           ...(raw.url !== null && { url: raw.url }),
-          ...(raw.lead !== null && { lead: raw.lead }),
+          ...(raw.lead !== null && {
+            lead: {
+              id: raw.lead.id,
+              ...(raw.lead.name !== undefined && { name: raw.lead.name }),
+              ...(raw.lead.email != null && { email: raw.lead.email }),
+            },
+          }),
           ...(raw.teams !== null && { teams: raw.teams }),
         };
         projects.push(project);
