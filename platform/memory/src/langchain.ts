@@ -25,7 +25,7 @@ export type PlatformChatMessageHistoryOptions = PlatformMemoryClientOptions & {
   client?: PlatformMemoryClient;
 };
 
-function toParts(message: BaseMessage): MemoryMessagePart[] {
+export function toParts(message: BaseMessage): MemoryMessagePart[] {
   const parts: MemoryMessagePart[] = [];
   for (const block of message.contentBlocks) {
     if (block.type === 'text' && block.text) parts.push(textPart(block.text));
@@ -61,7 +61,7 @@ function toInputs(messages: BaseMessage[]): MemoryMessageInput[] {
 }
 
 /** Replays a recalled message, including tool calls and their results, as LangChain messages. */
-function fromMemory(message: MemoryMessage): BaseMessage[] {
+export function fromMemory(message: MemoryMessage): BaseMessage[] {
   if (message.role === 'system') return [new SystemMessage(message.content)];
   const parts = partsOf(message);
   if (message.role !== 'assistant') {

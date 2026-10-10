@@ -11,11 +11,10 @@ import type {
 } from '@ai-sdk/provider';
 
 import { PlatformMemoryClient } from './client';
-import type { MemoryMessage, MemoryMessageInput, MemoryMessagePart, PlatformMemoryClientOptions } from './client';
+import type { MemoryMessage, MemoryMessagePart, PlatformMemoryClientOptions } from './client';
 import {
   attachToolResult,
   filePart,
-  messageInput,
   partsOf,
   reasoningPart,
   textPart,
@@ -23,6 +22,8 @@ import {
   toolPart,
   promptOf,
 } from './parts';
+import { createTurnMemory } from './turn';
+import type { TurnItem } from './turn';
 
 export type PlatformMemoryMiddlewareOptions = PlatformMemoryClientOptions & {
   threadId: string;
@@ -74,40 +75,17 @@ function toParts(content: ReadonlyArray<LanguageModelV3Content | UserContent[num
   return parts;
 }
 
-/**
- * What this turn adds: the last run of user messages, then one assistant message holding
- * every tool-loop step (tool calls with their results) and the final reply.
- */
-function turnMessages(
-  prompt: LanguageModelV3Message[],
-  reply: MemoryMessagePart[],
-  idOf: (key: string) => string,
-  /** Prompt index where unobserved steps start; earlier steps of this turn were already observed. */
-  from = 0,
-): MemoryMessageInput[] {
-  const last = prompt.findLastIndex(m => m.role === 'user');
-  let first = last;
-  while (first > 0 && prompt[first - 1]!.role === 'user') first--;
-
-  const messages = (from ? [] : prompt.slice(first, last + 1)).map(m =>
-    m.role === 'user' ? messageInput('user', toParts(m.content)) : null,
-  );
-
-  const assistant: MemoryMessagePart[] = [];
-  for (const m of prompt.slice(Math.max(last + 1, from))) {
-    if (m.role === 'assistant') assistant.push(...toParts(m.content));
+function toItems(prompt: LanguageModelV3Message[]): TurnItem[] {
+  return prompt.flatMap((m): TurnItem[] => {
+    if (m.role === 'user' || m.role === 'assistant') return [{ role: m.role, parts: toParts(m.content) }];
     if (m.role === 'tool') {
-      for (const part of m.content) {
-        if (part.type === 'tool-result') attachToolResult(assistant, part.toolCallId, outputValue(part.output));
-      }
+      const results = m.content.flatMap(p =>
+        p.type === 'tool-result' ? [{ toolCallId: p.toolCallId, result: outputValue(p.output) }] : [],
+      );
+      return [{ role: 'tool', results }];
     }
-  }
-  assistant.push(...reply);
-  messages.push(messageInput('assistant', assistant));
-  // Stable ids so a turn saved mid-loop is updated, not duplicated, by later saves.
-  return messages
-    .filter(m => m !== null)
-    .map((m, i, all) => ({ ...m, id: idOf(i === all.length - 1 && m.role === 'assistant' ? 'a' : `u${i}`) }));
+    return [];
+  });
 }
 
 /** Replays a recalled message, including tool calls and their results, as AI SDK prompt messages. */
@@ -179,45 +157,16 @@ export function platformMemoryMiddleware(options: PlatformMemoryMiddlewareOption
   const { threadId, readOnly } = options;
   const resourceId = options.resourceId ?? threadId;
   const originalPrompts = new WeakMap<LanguageModelV3CallOptions, LanguageModelV3Message[]>();
-  // The turn in flight. After a mid-turn observation, later steps go into a new assistant
-  // message so re-saving doesn't pull already-observed steps back into the unobserved tail.
-  let turn = { key: '', base: '', from: 0, seq: 0 };
-
-  function currentTurn(prompt: LanguageModelV3Message[]) {
-    const key = JSON.stringify(prompt.findLast(m => m.role === 'user') ?? null);
-    if (turn.key !== key) turn = { key, base: crypto.randomUUID(), from: 0, seq: 0 };
-    return turn;
-  }
-
-  async function remember(prompt: LanguageModelV3Message[] | undefined, reply: MemoryMessagePart[]) {
-    if (readOnly || !prompt) return;
-    const { base, from, seq } = currentTurn(prompt);
-    const messages = turnMessages(prompt, reply, suffix => `${base}-${suffix}${seq}`, from);
-    if (messages.length) await client.saveMessages(threadId, { resourceId, messages });
-  }
-
-  /**
-   * Mid tool loop: saves the turn so far and, once it crosses the observation threshold,
-   * observes now so the loop continues from compressed context, like @mastra/memory does.
-   */
-  async function saveMidTurn(prompt: LanguageModelV3Message[]): Promise<boolean> {
-    const lastUser = prompt.findLastIndex(m => m.role === 'user');
-    if (readOnly || !prompt.slice(lastUser + 1).some(m => m.role === 'tool')) return false;
-    await remember(prompt, []);
-    if ((await client.getObservationStatus(threadId)).shouldObserve) {
-      await client.observe(threadId);
-      const t = currentTurn(prompt);
-      t.from = prompt.length;
-      t.seq++;
-    }
-    return true;
-  }
+  const turns = createTurnMemory(client, readOnly);
+  const remember = async (prompt: LanguageModelV3Message[] | undefined, reply: MemoryMessagePart[]) => {
+    if (prompt) await turns.save(threadId, resourceId, toItems(prompt), reply);
+  };
 
   return {
     specificationVersion: 'v3',
 
     async transformParams({ params }) {
-      const saved = await saveMidTurn(params.prompt);
+      const saved = await turns.beforeStep(threadId, resourceId, toItems(params.prompt));
       const context = await client.getContext(threadId, resourceId);
       const system = params.prompt.filter(m => m.role === 'system');
       // Mid tool loop the turn so far is already saved, so memory returns it (observed or as the tail).

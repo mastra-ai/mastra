@@ -1,3 +1,16 @@
+import { Agent as PiAgent } from '@earendil-works/pi-agent-core';
+import type { AgentTool } from '@earendil-works/pi-agent-core';
+import { Type } from '@earendil-works/pi-ai';
+import type { TranscriptContext } from '@earendil-works/pi-ai';
+import { createFauxCore, fauxAssistantMessage, fauxToolCall } from '@earendil-works/pi-ai/providers/faux';
+import { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { AIMessage } from '@langchain/core/messages';
+import type { BaseMessage } from '@langchain/core/messages';
+import type { ChatResult } from '@langchain/core/outputs';
+import { tool as lcTool } from '@langchain/core/tools';
+import { createAgent } from 'langchain';
+import { platformMemoryAgentMiddleware } from './langgraph';
+import { withPlatformMemory } from './pi-agent';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
@@ -473,5 +486,88 @@ describe.skipIf(!live)('long tool loop (AI SDK middleware)', () => {
     expect(callIds).toHaveLength(6);
     expect(new Set(callIds).size).toBe(6);
     expect(messages.filter(m => m.role === 'user')).toHaveLength(1);
+  });
+});
+
+async function expectLoopStored(client: PlatformMemoryClient, threadId: string, prompts: string[]) {
+  expect(prompts.at(-1)).toContain('lives in Kyoto');
+  expect(prompts.at(-1)!.split('lorem ipsum').length).toBeLessThan(6 * 40);
+  const { messages } = await client.listMessages(threadId, { perPage: 100 });
+  const callIds = [...JSON.stringify(messages).matchAll(/"toolCallId":"([^"]+)"/g)].map(m => m[1]);
+  expect(callIds).toHaveLength(6);
+  expect(new Set(callIds).size).toBe(6);
+  expect(messages.filter(m => m.role === 'user')).toHaveLength(1);
+}
+
+const liveClient = () => {
+  const { instanceId, token } = JSON.parse(readFileSync(live!, 'utf8'));
+  return new PlatformMemoryClient({ apiUrl: API, accessToken: token, instanceId });
+};
+const rows = 'lorem ipsum dolor sit amet '.repeat(40);
+
+describe.skipIf(!live)('long tool loop (pi agent)', () => {
+  it('observes mid-turn so the prompt stays bounded', async () => {
+    const client = liveClient();
+    const threadId = `pi-loop-${Date.now()}`;
+    const faux = createFauxCore({});
+    const prompts: string[] = [];
+    faux.setResponses(
+      Array.from({ length: 7 }, (_, i) => (context: TranscriptContext) => {
+        prompts.push(JSON.stringify(context.messages));
+        return i < 6
+          ? fauxAssistantMessage(fauxToolCall('bulk', {}, { id: `call-${i + 1}` }), { stopReason: 'toolUse' })
+          : fauxAssistantMessage(reply);
+      }),
+    );
+    const bulk: AgentTool = {
+      name: 'bulk',
+      label: 'bulk',
+      description: 'Bulk rows',
+      parameters: Type.Object({}),
+      execute: async () => ({ content: [{ type: 'text', text: rows }], details: {} }),
+    };
+    const agent = new PiAgent({
+      streamFn: faux.streamSimple,
+      initialState: { systemPrompt: 'Use the bulk tool repeatedly.', model: faux.getModel(), tools: [bulk] },
+    });
+    withPlatformMemory(agent, { client, threadId });
+    await agent.prompt('Collect all the rows.');
+    await expectLoopStored(client, threadId, prompts);
+  });
+});
+
+describe.skipIf(!live)('long tool loop (LangGraph)', () => {
+  it('observes mid-turn so the prompt stays bounded', async () => {
+    const client = liveClient();
+    const threadId = `lg-loop-${Date.now()}`;
+    const prompts: string[] = [];
+    class LoopModel extends BaseChatModel {
+      _llmType() {
+        return 'loop';
+      }
+      bindTools() {
+        return this;
+      }
+      async _generate(messages: BaseMessage[]): Promise<ChatResult> {
+        prompts.push(JSON.stringify(messages.map(m => m.content)));
+        const step = prompts.length;
+        const message =
+          step <= 6
+            ? new AIMessage({ content: '', tool_calls: [{ id: `call-${step}`, name: 'bulk', args: {} }] })
+            : new AIMessage(reply);
+        return { generations: [{ message, text: message.text }] };
+      }
+    }
+    const agent = createAgent({
+      model: new LoopModel({}),
+      tools: [lcTool(async () => rows, { name: 'bulk', description: 'Bulk rows', schema: z.object({}) })],
+      systemPrompt: 'Use the bulk tool repeatedly.',
+      middleware: [platformMemoryAgentMiddleware({ client })],
+    });
+    await agent.invoke(
+      { messages: [{ role: 'user', content: 'Collect all the rows.' }] },
+      { configurable: { thread_id: threadId } },
+    );
+    await expectLoopStored(client, threadId, prompts);
   });
 });
