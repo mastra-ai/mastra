@@ -2,7 +2,7 @@
 '@mastra/loggers': patch
 ---
 
-Fixed `UpstashTransport` using unlimited memory while Upstash is down.
+`UpstashTransport` now keeps a limited number of records in memory while Upstash is unreachable, instead of growing without limit.
 
 - The new `maxBufferSize` option limits how many unsent records are kept in memory. It must be a positive integer. It defaults to `maxListLength`, or 10000 when `maxListLength` turns off trimming.
 - When the buffer is full, the oldest records are dropped. The new `droppedRecords` field counts them.
