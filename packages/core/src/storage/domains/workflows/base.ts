@@ -45,12 +45,21 @@ export abstract class WorkflowsStorage extends StorageDomain {
 
   /**
    * Claim a run for an execution. Succeeds when the run has no live owner, or
-   * when `force` is set, and increments the run's generation. A run with no
-   * record starts at the store's clock in epoch milliseconds (at least 1)
-   * rather than 1, so a run claimed again after `workflows.runOwnership`
-   * retention pruned its record still gets a higher generation than any fence
-   * or event left from before. Lease expiry is computed on the store's clock.
-   * Every claim, renewal and release sets `updatedAt` from the store's clock.
+   * when `force` is set, and increments the run's generation. Lease expiry is
+   * computed on the store's clock. Every claim, renewal and release sets
+   * `updatedAt` from the store's clock.
+   *
+   * A run with no record starts at the store's clock in epoch milliseconds (at
+   * least 1) rather than 1. Retention prunes ownership records and memory
+   * fences independently, so a run claimed again after `workflows.runOwnership`
+   * retention pruned its record must still outrank any fence or stream event
+   * left from before. This relies on the store's clock not moving backward
+   * between the two claims.
+   *
+   * Later claims increment by 1 rather than reading the clock again. A takeover
+   * then depends only on the stored generation, which the atomic claim already
+   * reads, so clock skew cannot affect it. The generation orders claims; it is
+   * not a timestamp.
    */
   async claimRunOwnership(_args: ClaimRunOwnershipInput): Promise<ClaimRunOwnershipResult> {
     throw runFencingNotSupportedError('workflows', this.constructor.name);
