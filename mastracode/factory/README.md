@@ -119,6 +119,26 @@ const intakeRule = context =>
 
 There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, and tool-result rules; integrations own their event handlers. The runtime only executes rules.
 
+### Closing cards when their source closes
+
+When a tracked GitHub, GitLab, Linear, or Jira issue or incident.io follow-up is closed, the stock integration rules move its card to a terminal phase of the board the card is on. The board declares which phases with `sourceClosed`: `completed` receives sources that were completed, and `canceled` receives sources that were canceled, not planned, or closed as duplicates. GitLab reports no close reason, so its closures always use `completed`. Both entries must name terminal phases.
+
+```typescript
+const releaseBoard = defineBoard({
+  id: 'release',
+  title: 'Release',
+  initialPhase: 'queued',
+  sourceClosed: { completed: 'shipped', canceled: 'dropped' },
+  phases: {
+    queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+    dropped: { title: 'Dropped', kind: 'terminal' },
+  },
+});
+```
+
+Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `sourceClosed` leaves its cards where they are, and cards already in a terminal phase are never moved. The move is an ordinary transition, so the board must allow it from the card's current phase. Integration rule overrides receive the same targets as `context.boardClosure`.
+
 ### Board tool-result rules
 
 A board may react to a tool result produced inside one of its seats. Declare handlers under `tools`, keyed by tool name:

@@ -1,4 +1,4 @@
-import { boardForWorkItem, isTerminalWorkItem } from '../../boards/index.js';
+import { boardForWorkItem, isTerminalWorkItem, withBoardClosure } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import type { FactoryJiraRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
@@ -152,6 +152,7 @@ export class JiraRules {
             },
             board: boardForWorkItem(relatedItem),
             itemRevision: relatedItem.revision,
+            ...withBoardClosure(this.options.boards, relatedItem),
           }
         : {}),
       ...(boundBoard ? { intake: { board: boundBoard.id, initialPhase: boundBoard.initialPhase } } : {}),
