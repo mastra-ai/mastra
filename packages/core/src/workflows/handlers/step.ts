@@ -225,6 +225,13 @@ export async function executeStep(
     skipEmits,
   });
 
+  // Keep the foreach's per-item progress checkpoint when an iteration starts,
+  // otherwise this write would drop the record of items that already finished.
+  const foreachProgress =
+    executionContext.foreachIndex !== undefined
+      ? stepResults[step.id]?.suspendPayload?.__workflow_meta?.foreachOutput
+      : undefined;
+
   await engine.persistStepUpdate({
     workflowId,
     runId,
@@ -232,7 +239,9 @@ export async function executeStep(
     serializedStepGraph,
     stepResults: {
       ...stepResults,
-      [step.id]: stepInfo,
+      [step.id]: foreachProgress
+        ? { ...stepInfo, suspendPayload: { __workflow_meta: { foreachOutput: foreachProgress } } }
+        : stepInfo,
     } as Record<string, StepResult<any, any, any, any>>,
     executionContext,
     workflowStatus: 'running',

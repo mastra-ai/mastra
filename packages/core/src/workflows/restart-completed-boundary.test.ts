@@ -312,50 +312,6 @@ describe('restart after a checkpoint that shows the entry finished (issue #24615
       expect(restarted.status).toBe('success');
     });
 
-    it('re-runs the unfinished branch when the crash was inside a parallel block', async () => {
-      const build = (): Built => {
-        const start = step('start', async ({ inputData }) => ({ n: inputData.n }));
-        const p1 = step('p1', async ({ inputData }) => ({ p1: inputData.n + 1 }));
-        const p2 = step('p2', async ({ inputData }) => ({ p2: inputData.n + 2 }));
-        const join = step('join', async ({ inputData }) => ({ sum: inputData.p1.p1 + inputData.p2.p2 }));
-        const workflow = createWorkflow({ id: 'restart-parallel-mid', inputSchema: anySchema, outputSchema: anySchema })
-          .then(start.step)
-          .parallel([p1.step, p2.step])
-          .then(join.step)
-          .commit();
-        return { workflow, fns: { start: start.fn, p1: p1.fn, p2: p2.fn, join: join.fn } };
-      };
-      const runId = 'restart-parallel-mid-run';
-      const startedAt = Date.now();
-
-      // p1 finished; p2 was still running when the process died.
-      const { restarted, fns } = await restartFromSnapshot(build, runId, {
-        runId,
-        status: 'running',
-        activePaths: [1],
-        activeStepsPath: { p2: [1, 1] },
-        value: {},
-        context: {
-          input: { n: 1 },
-          start: { status: 'success', payload: { n: 1 }, output: { n: 1 }, startedAt, endedAt: startedAt },
-          p1: { status: 'success', payload: { n: 1 }, output: { p1: 2 }, startedAt, endedAt: startedAt },
-          p2: { status: 'running', payload: { n: 1 }, startedAt },
-        } as any,
-        serializedStepGraph: build().workflow.serializedStepGraph,
-        suspendedPaths: {},
-        waitingPaths: {},
-        resumeLabels: {},
-        timestamp: Date.now(),
-      });
-
-      expect(fns.start).not.toHaveBeenCalled();
-      expect(fns.p1).not.toHaveBeenCalled();
-      expect(fns.p2).toHaveBeenCalledTimes(1);
-      expect(fns.join).toHaveBeenCalledTimes(1);
-      expect(fns.join.mock.calls[0]![0].inputData).toEqual({ p1: { p1: 2 }, p2: { p2: 3 } });
-      expect(restarted.status).toBe('success');
-    });
-
     it('re-runs a step whose saved result is a failure', async () => {
       const runId = 'restart-failed-step-run';
       const startedAt = Date.now();
@@ -423,6 +379,164 @@ describe('restart after a checkpoint that shows the entry finished (issue #24615
     expect(fns.prepare).not.toHaveBeenCalled();
     expect(fns.callModel).toHaveBeenCalledTimes(1);
     expect(fns.callModel.mock.calls[0]![0].inputData.messageListState).toEqual(conversation);
+    expect(restarted.status).toBe('success');
+    expect(restarted.result).toEqual(original.result);
+  });
+});
+
+/**
+ * Regression for https://github.com/mastra-ai/mastra/issues/26214
+ *
+ * A crash while a parallel block or foreach is still running must not make
+ * `restart()` re-run arms or items that already finished. The process is
+ * "killed" by copying the stored snapshot while one arm/item is still blocked,
+ * then that snapshot is restarted in a fresh process.
+ */
+describe('restart after a crash inside a parallel or foreach block (issue #26214)', () => {
+  async function crashMidBlock(build: (gate: Promise<void>) => Built, inputData: unknown, crashed: () => boolean) {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    const first = build(gate);
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { wf: first.workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    const run = await first.workflow.createRun();
+    const done = run.start({ inputData });
+
+    await vi.waitFor(() => expect(crashed()).toBe(true));
+    // Let the checkpoint for the finished arms/items land before the "crash".
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const snapshot = JSON.parse(
+      JSON.stringify(await store.loadWorkflowSnapshot({ workflowName: first.workflow.id, runId: run.runId })),
+    );
+    release();
+    await done;
+
+    return { snapshot, ...(await restartFromSnapshot(() => build(Promise.resolve()), run.runId, snapshot)) };
+  }
+
+  it('does not re-run a parallel arm that finished while a sibling was still running', async () => {
+    const calls: string[] = [];
+    const build = (gate: Promise<void>): Built => {
+      const start = step('start', async ({ inputData }) => ({ n: inputData.n }));
+      const p1 = step('p1', async ({ inputData }) => {
+        calls.push('p1');
+        return { p1: inputData.n + 1 };
+      });
+      const p2 = step('p2', async ({ inputData }) => {
+        calls.push('p2');
+        await gate;
+        return { p2: inputData.n + 2 };
+      });
+      const join = step('join', async ({ inputData }) => ({ sum: inputData.p1.p1 + inputData.p2.p2 }));
+      const workflow = createWorkflow({ id: 'restart-parallel-crash', inputSchema: anySchema, outputSchema: anySchema })
+        .then(start.step)
+        .parallel([p1.step, p2.step])
+        .then(join.step)
+        .commit();
+      return { workflow, fns: { start: start.fn, p1: p1.fn, p2: p2.fn, join: join.fn } };
+    };
+
+    const { snapshot, restarted, fns } = await crashMidBlock(build, { n: 1 }, () => calls.includes('p2'));
+
+    expect(snapshot.status).toBe('running');
+    expect(snapshot.context.p1.status).toBe('success');
+    expect(snapshot.context.p2.status).toBe('running');
+    expect(fns.start).not.toHaveBeenCalled();
+    expect(fns.p1).not.toHaveBeenCalled();
+    expect(fns.p2).toHaveBeenCalledTimes(1);
+    expect(fns.join).toHaveBeenCalledTimes(1);
+    expect(fns.join.mock.calls[0]![0].inputData).toEqual({ p1: { p1: 2 }, p2: { p2: 3 } });
+    expect(restarted.status).toBe('success');
+  });
+
+  it('re-runs a later arm whose sibling earlier in the block was still running', async () => {
+    const calls: string[] = [];
+    const build = (gate: Promise<void>): Built => {
+      const p1 = step('p1', async () => {
+        calls.push('p1');
+        await gate;
+        return { p1: 1 };
+      });
+      const p2 = step('p2', async () => {
+        calls.push('p2');
+        await gate;
+        return { p2: 2 };
+      });
+      const workflow = createWorkflow({ id: 'restart-parallel-both', inputSchema: anySchema, outputSchema: anySchema })
+        .parallel([p1.step, p2.step])
+        .commit();
+      return { workflow, fns: { p1: p1.fn, p2: p2.fn } };
+    };
+
+    const { restarted, fns } = await crashMidBlock(build, {}, () => calls.length === 2);
+
+    expect(fns.p1).toHaveBeenCalledTimes(1);
+    expect(fns.p2).toHaveBeenCalledTimes(1);
+    expect(restarted.status).toBe('success');
+    expect(restarted.result).toEqual({ p1: { p1: 1 }, p2: { p2: 2 } });
+  });
+
+  it('continues a foreach from the items that had not finished', async () => {
+    const calls: number[] = [];
+    const build = (gate: Promise<void>): Built => {
+      const list = step('list', async () => [0, 1, 2, 3, 4]);
+      const charge = step('charge', async ({ inputData }) => {
+        calls.push(inputData);
+        if (inputData >= 2) await gate;
+        return { charged: inputData };
+      });
+      const total = step('total', async ({ inputData }) => ({ count: inputData.length }));
+      const workflow = createWorkflow({ id: 'restart-foreach-crash', inputSchema: anySchema, outputSchema: anySchema })
+        .then(list.step)
+        .foreach(charge.step)
+        .then(total.step)
+        .commit();
+      return { workflow, fns: { list: list.fn, charge: charge.fn, total: total.fn } };
+    };
+
+    const { restarted, fns } = await crashMidBlock(build, {}, () => calls.includes(2));
+
+    expect(fns.list).not.toHaveBeenCalled();
+    expect(fns.charge.mock.calls.map(c => c[0].inputData)).toEqual([2, 3, 4]);
+    expect(fns.total).toHaveBeenCalledTimes(1);
+    expect(restarted.status).toBe('success');
+    expect(restarted.steps.charge.output).toEqual([0, 1, 2, 3, 4].map(n => ({ charged: n })));
+    expect(restarted.steps.charge.suspendPayload?.__workflow_meta).toBeUndefined();
+  });
+
+  it('continues a foreach from a real checkpoint taken between items', async () => {
+    const build = (): Built => {
+      const list = step('list', async () => [0, 1, 2, 3]);
+      const charge = step('charge', async ({ inputData }) => ({ charged: inputData }));
+      const total = step('total', async ({ inputData }) => ({ count: inputData.length }));
+      const workflow = createWorkflow({
+        id: 'restart-foreach-between',
+        inputSchema: anySchema,
+        outputSchema: anySchema,
+      })
+        .then(list.step)
+        .foreach(charge.step)
+        .then(total.step)
+        .commit();
+      return { workflow, fns: { list: list.fn, charge: charge.fn, total: total.fn } };
+    };
+
+    // The last checkpoint written while only items 0 and 1 had finished.
+    const { original, restarted, fns } = await restartFrom(build, {}, cps => {
+      const checkpoint = cps.findLast(
+        s =>
+          s.status === 'running' &&
+          (s.context.charge as any)?.suspendPayload?.__workflow_meta?.foreachOutput?.length === 2,
+      );
+      expect(checkpoint).toBeDefined();
+      expect((checkpoint!.context.charge as any).status).toBe('running');
+      return checkpoint!;
+    });
+
+    expect(fns.list).not.toHaveBeenCalled();
+    expect(fns.charge.mock.calls.map(c => c[0].inputData)).toEqual([2, 3]);
+    expect(fns.total).toHaveBeenCalledTimes(1);
     expect(restarted.status).toBe('success');
     expect(restarted.result).toEqual(original.result);
   });

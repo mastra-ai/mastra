@@ -188,14 +188,12 @@ export async function executeParallel(
   const prevOutput = engine.getStepOutput(stepResults, prevStep);
   for (const [stepIndex, step] of steps.entries()) {
     const stepId = getSingleStepEntryId(step);
-    let makeStepRunning = true;
-    if (restart) {
-      makeStepRunning = !!restart.activeStepsPath[stepId];
+    // On restart, an arm whose success was checkpointed before the crash keeps its result;
+    // every other arm runs (again).
+    if (restart && stepResults[stepId]?.status === 'success') {
+      continue;
     }
-    if (timeTravel && timeTravel.executionPath.length > 0) {
-      makeStepRunning = timeTravel.steps[0] === stepId;
-    }
-    if (!makeStepRunning) {
+    if (timeTravel && timeTravel.executionPath.length > 0 && timeTravel.steps[0] !== stepId) {
       break;
     }
     const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
@@ -262,6 +260,21 @@ export async function executeParallel(
       // Apply context changes from parallel step execution
       engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
       Object.assign(stepResults, stepExecResult.stepResults);
+      if (stepExecResult.result.status === 'success') {
+        // Checkpoint each finished arm so a crash while siblings are still running
+        // doesn't make restart run this arm's side effects again (#26214).
+        await engine.persistStepUpdate({
+          workflowId,
+          runId,
+          resourceId,
+          serializedStepGraph,
+          stepResults,
+          executionContext,
+          workflowStatus: 'running',
+          requestContext,
+          phase: `parallel-arm-end.${i}`,
+        });
+      }
       return stepExecResult.result;
     }),
   );
@@ -1061,6 +1074,7 @@ export async function executeForeach(
   let canceledResult: ForeachStepResult | null = null;
   let inFlight = 0;
   let resolveCompletion: (() => void) | undefined;
+  let itemCheckpoints: Promise<void> = Promise.resolve();
 
   /** Publish a workflow-step-progress event for a single foreach iteration. */
   const emitIterationProgress = (
@@ -1199,6 +1213,40 @@ export async function executeForeach(
       // round-trip through the workflow snapshot. For non-suspended results we
       // clear it to keep the snapshot small.
       prevForeachOutput[k] = result.status === 'suspended' ? result : { ...result, suspendPayload: {} };
+
+      if (result.status === 'success') {
+        // Checkpoint per-item progress in the same `__workflow_meta.foreachOutput` channel
+        // suspend/resume uses, so restart after a crash skips items that already finished (#26214).
+        // Keep it in memory too, so the next iteration's start checkpoint carries it forward.
+        // Stays `suspended` during a resume: sibling iterations still read their resume context from it.
+        // Otherwise `running`, never the iteration's own `success`, so restart can't mistake the
+        // whole foreach for finished.
+        const prevSuspendPayload = stepResults[stepId]?.suspendPayload;
+        stepResults[stepId] = {
+          ...stepInfo,
+          status: stepResults[stepId]?.status === 'suspended' ? 'suspended' : 'running',
+          suspendPayload: {
+            ...prevSuspendPayload,
+            __workflow_meta: { ...prevSuspendPayload?.__workflow_meta, foreachOutput: prevForeachOutput },
+          },
+        } as StepResult<any, any, any, any>;
+        // Chained rather than awaited so the checkpoint doesn't delay freeing this worker's slot
+        // (which would change which items start before a sibling's suspend stops the queue).
+        // The chain is drained before the foreach returns.
+        itemCheckpoints = itemCheckpoints.then(() =>
+          engine.persistStepUpdate({
+            workflowId,
+            runId,
+            resourceId,
+            serializedStepGraph,
+            stepResults,
+            executionContext,
+            workflowStatus: 'running',
+            requestContext,
+            phase: `foreach-item-end.${k}`,
+          }),
+        );
+      }
     } catch (err) {
       const errorObj = err instanceof Error ? err : new Error(String(err));
       const thrownResult: PersistedForeachStepResult = {
@@ -1279,6 +1327,7 @@ export async function executeForeach(
       resolveCompletion = resolve;
     });
   }
+  await itemCheckpoints;
 
   // Handle cancellation
   if (canceledResult) {
