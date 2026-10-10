@@ -593,7 +593,7 @@ describe('Create Factory wizard', () => {
     { integrationId: 'linear', project: /Mobile App/, sourceId: 'lin-1' },
     { integrationId: 'jira', project: /Engineering/, sourceId: 'jira-source-1' },
   ])(
-    'routes the picked $integrationId project to an installed board when Work is not installed',
+    'routes the picked $integrationId project without a board when Work is not installed',
     async ({ integrationId, project, sourceId }) => {
       const calls: string[] = [];
       seedDraft('project-management');
@@ -627,7 +627,7 @@ describe('Create Factory wizard', () => {
       await user.click(await screen.findByRole('option', { name: /anthropic\/claude-sonnet-4-5/ }));
 
       await waitForMutationsIdle(client);
-      expect(bindings).toEqual([{ integrationId, sourceId, factoryProjectId: 'fp-1', board: 'release' }]);
+      expect(bindings).toEqual([{ integrationId, sourceId, factoryProjectId: 'fp-1', board: null }]);
       expect(intakeConfigs.at(-1)).toMatchObject({ [integrationId]: { enabled: true, sourceIds: [sourceId] } });
       await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent('/factories/fp-1'));
     },
