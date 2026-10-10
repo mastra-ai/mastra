@@ -1329,6 +1329,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.ops.deleteMany('work_items', {});
+    // A project with no version row is never served from cache, so this invalidates every replica.
+    await super.ops.deleteMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, {});
+    this.#listCache.clear();
   }
 
   get #db(): FactoryStorageOps {

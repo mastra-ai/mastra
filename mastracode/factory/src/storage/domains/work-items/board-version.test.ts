@@ -59,6 +59,28 @@ describe('board list cache', () => {
     expect(third.map(item => item.title).sort()).toEqual(['One', 'Two']);
   });
 
+  it('stops serving cards once every card is cleared', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seedCard(seed.workItems);
+    expect(await poll(seed.workItems)).toHaveLength(1);
+
+    await seed.workItems.dangerouslyClearAll();
+
+    expect(await poll(seed.workItems)).toEqual([]);
+  });
+
+  it('keeps the board cached when an atomic update decides not to write', async () => {
+    const seed = await createFactoryStorageForTests();
+    const card = await seedCard(seed.workItems);
+    await poll(seed.workItems);
+    const cardReads = countCardReads(seed);
+
+    await seed.workItems['ops'].updateAtomic('work_items', { id: card.id }, () => null);
+    await poll(seed.workItems);
+
+    expect(cardReads()).toBe(0);
+  });
+
   it('shows a card edit on the next poll', async () => {
     const seed = await createFactoryStorageForTests();
     const card = await seedCard(seed.workItems);

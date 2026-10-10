@@ -56,9 +56,25 @@ export function trackBoardWrites(
       const value = Reflect.get(target, property, receiver);
       if (typeof value !== 'function') return value;
       switch (property) {
+        case 'updateAtomic':
+          return async (collection: string, where: unknown, updater: (row: unknown) => unknown, ...args: unknown[]) => {
+            let patched = false;
+            const row = await value.call(
+              target,
+              collection,
+              where,
+              async (current: unknown) => {
+                const patch = await updater(current);
+                patched = patch != null;
+                return patch;
+              },
+              ...args,
+            );
+            if (collection === 'work_items' && patched) await report(scopeOfRow(row));
+            return row;
+          };
         case 'insertOne':
         case 'upsertOne':
-        case 'updateAtomic':
           return async (collection: string, ...args: unknown[]) => {
             const row = await value.call(target, collection, ...args);
             if (collection === 'work_items') await report(scopeOfRow(row));
