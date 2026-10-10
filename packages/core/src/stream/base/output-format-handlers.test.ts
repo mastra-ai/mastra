@@ -15,6 +15,14 @@ import {
   escapeUnescapedControlCharsInJsonStrings,
 } from './output-format-handlers';
 
+const { parsePartialJsonSpy } = vi.hoisted(() => ({ parsePartialJsonSpy: vi.fn() }));
+
+vi.mock('@internal/ai-sdk-v5', async importOriginal => {
+  const actual = await importOriginal<typeof import('@internal/ai-sdk-v5')>();
+  parsePartialJsonSpy.mockImplementation(actual.parsePartialJson);
+  return { ...actual, parsePartialJson: parsePartialJsonSpy };
+});
+
 function finishChunk(reason: 'stop' | 'length' | 'content-filter'): ChunkType<unknown> {
   return {
     type: 'finish',
@@ -1636,5 +1644,70 @@ Want to work on challenging problems"}`;
 
       expect(JSON.parse(text)).toEqual([{ a: 1 }, { a: 2, b: 3 }]);
     });
+  });
+});
+
+describe('partial parse throttling (#26575)', () => {
+  const schema = z.object({ answer: z.string() });
+  type Output = z.infer<typeof schema>;
+
+  function textDelta(text: string): ChunkType<Output> {
+    return { type: 'text-delta', runId: 'test-run', from: ChunkFrom.AGENT, payload: { id: 'text-1', text } };
+  }
+
+  async function run(deltas: string[]) {
+    parsePartialJsonSpy.mockClear();
+    const chunks = await convertAsyncIterableToArray(
+      convertArrayToReadableStream<ChunkType<Output>>([
+        ...deltas.map(textDelta),
+        { type: 'text-end', runId: 'test-run', from: ChunkFrom.AGENT, payload: { id: 'text-1' } },
+        finishChunk('stop') as ChunkType<Output>,
+      ]).pipeThrough(createObjectStreamTransformer<Output>({ structuredOutput: { schema } })),
+    );
+    return { chunks, parseCount: parsePartialJsonSpy.mock.calls.length };
+  }
+
+  it('does not re-parse on whitespace-only deltas', async () => {
+    const deltas = ['{"answer":"ok"', ...Array.from({ length: 5000 }, () => ' '.repeat(128)), '}'];
+    const { chunks, parseCount } = await run(deltas);
+
+    // One parse for the prefix, one for the closing brace, plus finalization.
+    expect(parseCount).toBeLessThanOrEqual(3);
+    const result = chunks.find(c => c.type === 'object-result');
+    expect(result?.object).toEqual({ answer: 'ok' });
+  });
+
+  it('keeps partial parsing amortized linear for long non-whitespace output', async () => {
+    const deltaCount = 20_000;
+    const deltas = ['{"answer":"', ...Array.from({ length: deltaCount }, () => 'abcd'), '"}'];
+    const { chunks, parseCount } = await run(deltas);
+
+    expect(parseCount).toBeLessThan(deltaCount / 10);
+    const objects = chunks.filter(c => c.type === 'object');
+    expect(objects.at(-1)?.object).toEqual({ answer: 'abcd'.repeat(deltaCount) });
+    const result = chunks.find(c => c.type === 'object-result');
+    expect(result?.object).toEqual({ answer: 'abcd'.repeat(deltaCount) });
+  });
+
+  it('emits a partial object for every structural change in small outputs', async () => {
+    const { chunks } = await run(['{"answer":"', 'a', 'b', 'c', '"}']);
+
+    expect(chunks.filter(c => c.type === 'object').map(c => c.object)).toEqual([
+      { answer: '' },
+      { answer: 'a' },
+      { answer: 'ab' },
+      { answer: 'abc' },
+    ]);
+  });
+
+  it('flushes skipped text into a final partial object before object-result', async () => {
+    const { chunks } = await run(['{"answer":"ok', '   ']);
+    // Whitespace inside a string changes the value, so finalization must emit it.
+    const types = chunks.map(c => c.type);
+    const lastObjectIndex = types.lastIndexOf('object');
+    expect(chunks[lastObjectIndex]?.object).toEqual({ answer: 'ok   ' });
+    const terminalIndex = types.findIndex(t => t === 'object-result' || t === 'error');
+    expect(terminalIndex).toBeGreaterThan(-1);
+    expect(lastObjectIndex).toBeLessThan(terminalIndex);
   });
 });
