@@ -92,16 +92,17 @@ describe('DurableAgent multi-step turn storage (#26332)', () => {
       const result: any = await runner.stream('Weather in Toronto?', {
         memory: { thread: `thread-${engine}`, resource: 'resource' },
       });
-      for await (const _chunk of result.fullStream) {
-        // Drain
+      const startIds: string[] = [];
+      for await (const chunk of result.fullStream) {
+        if (chunk.type === 'start' && chunk.payload?.messageId) startIds.push(chunk.payload.messageId);
       }
       await (result.output ?? result).getFullOutput();
       result.cleanup?.();
 
       const { messages } = await memory.recall({ threadId: `thread-${engine}`, resourceId: 'resource' });
-      shapes[engine] = messages
-        .filter(m => m.role === 'assistant')
-        .map(m => (m.content as any).parts.map((p: { type: string }) => p.type));
+      const assistantMessages = messages.filter(m => m.role === 'assistant');
+      expect(startIds).toEqual([assistantMessages[0]!.id]);
+      shapes[engine] = assistantMessages.map(m => (m.content as any).parts.map((p: { type: string }) => p.type));
     }
 
     expect(shapes.durable).toHaveLength(1);
