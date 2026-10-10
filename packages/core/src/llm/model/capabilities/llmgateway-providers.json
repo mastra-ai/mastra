@@ -222,6 +222,9 @@
     "openai/o3",
     "openai/o4-mini",
     "quartz/gemini-3.1-pro-preview",
+    "reka-ai/glm-5.3-flash",
+    "reka-ai/qwen3.8-27b",
+    "reka-ai/reka-edge-2603",
     "runpod/kimi-k3",
     "runware/deepseek-v4.1-flash",
     "runware/gemma-4-31b-it",
@@ -536,6 +539,12 @@
     "perplexity/sonar",
     "quartz/gemini-3.1-pro-preview",
     "ranoai/deepseek-v4-flash",
+    "reka-ai/deepseek-v4-flash",
+    "reka-ai/deepseek-v4-pro",
+    "reka-ai/glm-5.3",
+    "reka-ai/glm-5.3-flash",
+    "reka-ai/qwen3.8-27b",
+    "reka-ai/reka-edge-2603",
     "runware/deepseek-v4-flash",
     "runware/deepseek-v4-pro",
     "runware/deepseek-v4.1-flash",
@@ -777,6 +786,12 @@
     "perplexity/sonar",
     "quartz/gemini-3.1-pro-preview",
     "ranoai/deepseek-v4-flash",
+    "reka-ai/deepseek-v4-flash",
+    "reka-ai/deepseek-v4-pro",
+    "reka-ai/glm-5.3",
+    "reka-ai/glm-5.3-flash",
+    "reka-ai/qwen3.8-27b",
+    "reka-ai/reka-edge-2603",
     "runpod/kimi-k3",
     "runware/deepseek-v4-flash",
     "runware/deepseek-v4-pro",
@@ -2159,6 +2174,36 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "reka-ai/qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "reka-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "reka-ai/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "reka-ai/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "reka-ai/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "bytedance/seed-1-6-flash-250715": [

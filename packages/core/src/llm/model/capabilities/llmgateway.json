@@ -137,6 +137,7 @@
     "qwen3.8-flash",
     "qwen3.8-max",
     "qwen35-397b-a17b",
+    "reka-edge-2603",
     "seed-1-6-250615",
     "seed-1-6-250915",
     "seed-1-6-flash-250715",
@@ -318,6 +319,7 @@
     "qwen3.8-2.4t-a95b",
     "qwen3.8-max",
     "qwen35-397b-a17b",
+    "reka-edge-2603",
     "seed-1-6-250615",
     "seed-1-6-250915",
     "seed-1-6-flash-250715",
@@ -448,6 +450,7 @@
     "qwen3.8-2.4t-a95b",
     "qwen3.8-flash",
     "qwen35-397b-a17b",
+    "reka-edge-2603",
     "seed-1-6-250615",
     "seed-1-6-250915",
     "seed-1-6-flash-250715",
@@ -1296,7 +1299,7 @@
     "glm-5.3": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "claude-opus-4-7": [

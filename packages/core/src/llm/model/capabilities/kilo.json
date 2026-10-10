@@ -176,12 +176,9 @@
     "prism-ml/ternary-bonsai-2-27b",
     "qwen/qwen2.5-vl-72b-instruct",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3-vl-30b-a3b-thinking",
-    "qwen/qwen3-vl-32b-instruct",
     "qwen/qwen3-vl-8b-instruct",
-    "qwen/qwen3-vl-8b-thinking",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -459,33 +456,23 @@
     "qwen/qwen-2.5-7b-instruct",
     "qwen/qwen-2.5-coder-32b-instruct",
     "qwen/qwen-plus",
-    "qwen/qwen-plus-2025-07-28",
     "qwen/qwen2.5-vl-72b-instruct",
     "qwen/qwen3-14b",
-    "qwen/qwen3-235b-a22b",
     "qwen/qwen3-235b-a22b-2507",
     "qwen/qwen3-235b-a22b-thinking-2507",
     "qwen/qwen3-30b-a3b",
     "qwen/qwen3-30b-a3b-instruct-2507",
-    "qwen/qwen3-30b-a3b-thinking-2507",
     "qwen/qwen3-32b",
-    "qwen/qwen3-8b",
     "qwen/qwen3-coder",
     "qwen/qwen3-coder-30b-a3b-instruct",
     "qwen/qwen3-coder-flash",
     "qwen/qwen3-coder-next",
-    "qwen/qwen3-coder-plus",
-    "qwen/qwen3-max",
-    "qwen/qwen3-max-thinking",
     "qwen/qwen3-next-80b-a3b-instruct",
     "qwen/qwen3-next-80b-a3b-thinking",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3-vl-30b-a3b-thinking",
-    "qwen/qwen3-vl-32b-instruct",
     "qwen/qwen3-vl-8b-instruct",
-    "qwen/qwen3-vl-8b-thinking",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -497,7 +484,6 @@
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.6-flash",
-    "qwen/qwen3.6-max-preview",
     "qwen/qwen3.6-plus",
     "qwen/qwen3.7-flash",
     "qwen/qwen3.7-max",
@@ -784,7 +770,6 @@
     "qwen/qwen-2.5-72b-instruct",
     "qwen/qwen-2.5-7b-instruct",
     "qwen/qwen-plus",
-    "qwen/qwen-plus-2025-07-28",
     "qwen/qwen2.5-vl-72b-instruct",
     "qwen/qwen3-14b",
     "qwen/qwen3-235b-a22b-2507",
@@ -794,18 +779,12 @@
     "qwen/qwen3-coder",
     "qwen/qwen3-coder-30b-a3b-instruct",
     "qwen/qwen3-coder-next",
-    "qwen/qwen3-coder-plus",
-    "qwen/qwen3-max",
-    "qwen/qwen3-max-thinking",
     "qwen/qwen3-next-80b-a3b-instruct",
     "qwen/qwen3-next-80b-a3b-thinking",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3-vl-30b-a3b-thinking",
-    "qwen/qwen3-vl-32b-instruct",
     "qwen/qwen3-vl-8b-instruct",
-    "qwen/qwen3-vl-8b-thinking",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -817,7 +796,6 @@
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.6-flash",
-    "qwen/qwen3.6-max-preview",
     "qwen/qwen3.6-plus",
     "qwen/qwen3.7-max",
     "qwen/qwen3.7-plus",
@@ -2048,12 +2026,6 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "qwen/qwen3-vl-235b-a22b-thinking": [
-      {
-        "type": "effort",
-        "values": ["high"]
-      }
-    ],
     "qwen/qwen3.8-2.4t-a95b": [
       {
         "type": "effort",
@@ -2096,12 +2068,6 @@
         "values": ["high"]
       }
     ],
-    "qwen/qwen3-235b-a22b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "qwen/qwen3.5-122b-a10b": [
       {
         "type": "effort",
@@ -2127,12 +2093,6 @@
       }
     ],
     "qwen/qwen3.5-flash-02-23": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "qwen/qwen3-max-thinking": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -2168,12 +2128,6 @@
         "values": ["none", "high"]
       }
     ],
-    "qwen/qwen3.6-max-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "qwen/qwen3-30b-a3b": [
       {
         "type": "effort",
@@ -2186,22 +2140,10 @@
         "values": ["none", "high"]
       }
     ],
-    "qwen/qwen3-8b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "qwen/qwen3.5-plus-02-15": [
       {
         "type": "effort",
         "values": ["none", "high"]
-      }
-    ],
-    "qwen/qwen3-30b-a3b-thinking-2507": [
-      {
-        "type": "effort",
-        "values": ["high"]
       }
     ],
     "qwen/qwen3.6-27b": [
@@ -2220,12 +2162,6 @@
       {
         "type": "effort",
         "values": ["none", "high"]
-      }
-    ],
-    "qwen/qwen3-vl-8b-thinking": [
-      {
-        "type": "effort",
-        "values": ["high"]
       }
     ],
     "qwen/qwen3.7-plus": [
