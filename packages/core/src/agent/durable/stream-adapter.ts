@@ -44,6 +44,49 @@ const STREAM_ENDING_EVENT_TYPES = new Set<string>([
 ]);
 
 /**
+ * Decides which run-stream events a reader keeps once another execution may
+ * have taken the run over. Events tagged with a generation older than the
+ * newest one seen come from an execution that lost the run and are dropped;
+ * untagged events, from runs fenced by a pubsub lease, are always kept.
+ *
+ * `minGeneration` and `rereadMinGeneration` work as on
+ * {@link DurableAgentStreamOptions}. The result is a boolean, so event order is
+ * kept, except while a failed claim read must be retried before a stream-ending
+ * event, which is the only time it is a promise.
+ */
+export function createRunGenerationFilter({
+  minGeneration,
+  rereadMinGeneration,
+}: Pick<DurableAgentStreamOptions, 'minGeneration' | 'rereadMinGeneration'>): (
+  event: AgentStreamEvent,
+) => boolean | Promise<boolean> {
+  let newestGeneration = minGeneration;
+  let pendingRead = rereadMinGeneration;
+
+  const accept = (generation: number) => {
+    if (newestGeneration !== undefined && generation < newestGeneration) return false;
+    newestGeneration = generation;
+    return true;
+  };
+
+  return event => {
+    const generation = event.generation;
+    if (generation === undefined) return true;
+    if (!pendingRead || !STREAM_ENDING_EVENT_TYPES.has(event.type)) return accept(generation);
+
+    return pendingRead()
+      .catch(() => undefined)
+      .then(claimed => {
+        if (claimed !== undefined) {
+          pendingRead = undefined;
+          newestGeneration = Math.max(newestGeneration ?? claimed, claimed);
+        }
+        return accept(generation);
+      });
+  };
+}
+
+/**
  * Map workflow usage (which may use legacy promptTokens/completionTokens) to
  * the canonical LanguageModelUsage shape (inputTokens/outputTokens).
  */
@@ -395,8 +438,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     }, idleTimeoutMs);
   };
 
-  let newestGeneration = minGeneration;
-  let pendingMinGenerationRead = rereadMinGeneration;
+  const keepGeneration = createRunGenerationFilter({ minGeneration, rereadMinGeneration });
 
   const handleEvent = async (event: Event) => {
     // After a terminal event the stream is closed and its callbacks have fired.
@@ -409,19 +451,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
     // Another execution took the run over: what the superseded one still
     // publishes is stale, and doesn't prove the run's producer is alive.
-    const generation = streamEvent.generation;
-    if (generation !== undefined) {
-      if (pendingMinGenerationRead && STREAM_ENDING_EVENT_TYPES.has(streamEvent.type)) {
-        const claimed = await pendingMinGenerationRead().catch(() => undefined);
-        if (!controller || terminated) return;
-        if (claimed !== undefined) {
-          pendingMinGenerationRead = undefined;
-          newestGeneration = Math.max(newestGeneration ?? claimed, claimed);
-        }
-      }
-      if (newestGeneration !== undefined && generation < newestGeneration) return;
-      newestGeneration = generation;
+    let keep = keepGeneration(streamEvent);
+    if (typeof keep !== 'boolean') {
+      keep = await keep;
+      if (!controller || terminated) return;
     }
+    if (!keep) return;
 
     // Any event proves the producer is alive — restart the idle countdown.
     armIdleTimer();

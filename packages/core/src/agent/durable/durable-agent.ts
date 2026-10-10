@@ -1,6 +1,7 @@
 import type { MastraServerCache } from '../../cache/base';
 import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import { withAck } from '../../events/acking-callback';
 import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
@@ -36,7 +37,7 @@ import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
 
 import { publishAbortRequest } from './abort-transport';
-import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import {
   ExecutionFence,
@@ -54,14 +55,19 @@ import type { PreparationResult } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import {
   createDurableAgentStream,
+  createRunGenerationFilter,
   emitChunkEvent,
   emitErrorEvent,
   emitFinishEvent,
   emitOwnershipClaimedEvent,
 } from './stream-adapter';
-import type { DurableAgentStreamResult as DurableStreamAdapterResult } from './stream-adapter';
+import type {
+  DurableAgentStreamOptions as DurableStreamAdapterOptions,
+  DurableAgentStreamResult as DurableStreamAdapterResult,
+} from './stream-adapter';
 import type {
   AgentAbortEventData,
+  AgentStreamEvent,
   AgentStepFinishEventData,
   AgentSuspendedEventData,
   DurableAgenticWorkflowInput,
@@ -4168,6 +4174,74 @@ export class DurableAgent<
   }
 
   /**
+   * A replay from an offset can start past the marker of the execution that
+   * took the run over, and would then accept what the lost execution still
+   * publishes, its finish included. Follow the run's current claim instead.
+   * Runs fenced by a pubsub lease have no generation and are unaffected.
+   * The floor only adds protection, so a failed read must not fail the reconnect;
+   * the reader reads the claim again before an event can end its stream.
+   */
+  async #readReplayFloor(
+    runId: string,
+    offset: number | undefined,
+  ): Promise<Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration'>> {
+    if (!offset) return {};
+    try {
+      return { minGeneration: await readRunGeneration(this.#mastra, runId) };
+    } catch (error) {
+      this.logger.warn(`[DurableAgent] Couldn't read the claim of run ${runId}; observing it without a floor`, {
+        error,
+      });
+      return { rereadMinGeneration: () => readRunGeneration(this.#mastra, runId) };
+    }
+  }
+
+  /**
+   * Subscribe to the raw events of a run's stream, for servers that forward
+   * them as they are. Unlike a plain subscription to the run's topic, it drops
+   * what an execution that lost the run still publishes and the marker
+   * announcing the takeover, so a client never sees either. Resolves once
+   * subscribed, with a function that unsubscribes.
+   *
+   * @internal
+   */
+  async __subscribeToRunStream(
+    runId: string,
+    options: { offset?: number },
+    onEvent: (event: AgentStreamEvent) => void,
+  ): Promise<() => Promise<void>> {
+    const keepGeneration = createRunGenerationFilter(await this.#readReplayFloor(runId, options.offset));
+    const topic = AGENT_STREAM_TOPIC(runId);
+    let subscribed = true;
+
+    const deliver = (event: AgentStreamEvent) => {
+      if (subscribed && event.type !== AgentStreamEventTypes.OWNERSHIP_CLAIMED) onEvent(event);
+    };
+    // Acks every delivery, dropped ones included, so a durable backend doesn't
+    // keep them pending.
+    const callback = withAck(event => {
+      const streamEvent = event as unknown as AgentStreamEvent;
+      const keep = keepGeneration(streamEvent);
+      if (typeof keep === 'boolean') {
+        if (keep) deliver(streamEvent);
+        return;
+      }
+      return keep.then(kept => {
+        if (kept) deliver(streamEvent);
+      });
+    });
+
+    await (options.offset !== undefined
+      ? this.pubsub.subscribeFromOffset(topic, options.offset, callback)
+      : this.pubsub.subscribeWithReplay(topic, callback));
+
+    return async () => {
+      subscribed = false;
+      await this.pubsub.unsubscribe(topic, callback);
+    };
+  }
+
+  /**
    * Observe an existing stream.
    * Use this to reconnect to a stream after a network disconnection.
    *
@@ -4299,22 +4373,7 @@ export class DurableAgent<
       }
     }
 
-    // A replay from an offset can start past the marker of the execution that
-    // took the run over, and would then accept what the lost execution still
-    // publishes, its finish included. Follow the run's current claim instead.
-    // Runs fenced by a pubsub lease have no generation and are unaffected.
-    // The floor only adds protection, so a failed read must not fail the reconnect;
-    // the stream reads the claim again before an event can end it.
-    let minGenerationUnread = false;
-    const minGeneration = options?.offset
-      ? await readRunGeneration(this.#mastra, runId).catch(error => {
-          this.logger.warn(`[DurableAgent] Couldn't read the claim of run ${runId}; observing it without a floor`, {
-            error,
-          });
-          minGenerationUnread = true;
-          return undefined;
-        })
-      : undefined;
+    const replayFloor = await this.#readReplayFloor(runId, options?.offset);
 
     const stream = createDurableAgentStream<TOutput>({
       pubsub: this.pubsub,
@@ -4328,8 +4387,7 @@ export class DurableAgent<
       threadId: memoryInfo?.threadId,
       resourceId: memoryInfo?.resourceId,
       offset: options?.offset,
-      minGeneration,
-      rereadMinGeneration: minGenerationUnread ? () => readRunGeneration(this.#mastra, runId) : undefined,
+      ...replayFloor,
       idleTimeoutMs: options?.idleTimeoutMs,
       isAlive: options?.isAlive,
       onChunk: options?.onChunk,

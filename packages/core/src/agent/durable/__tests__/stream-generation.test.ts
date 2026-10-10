@@ -180,23 +180,28 @@ describe('durable run stream claim generations', () => {
   });
 });
 
+/** A registered durable agent, so it can read run claims from `storage`. */
+async function observedAgent() {
+  const storage = new InMemoryStore();
+  const agent = new Agent({
+    id: 'observed-agent',
+    name: 'Observed Agent',
+    instructions: 'You are a helpful agent.',
+    model: new MockLanguageModelV2({}) as LanguageModelV2,
+  });
+  const transport = new EventEmitterPubSub();
+  const durable = createDurableAgent({ agent, pubsub: transport });
+  new Mastra({ agents: { 'observed-agent': durable as any }, logger: false, storage });
+  const workflows = (await storage.getStore('workflows'))!;
+  return { durable, pubsub: durable.pubsub, transport, workflows };
+}
+
 describe('observe() from an offset', () => {
   it("follows the run's current claim when the takeover marker lies before the offset", async () => {
-    const storage = new InMemoryStore();
-    const agent = new Agent({
-      id: 'observed-agent',
-      name: 'Observed Agent',
-      instructions: 'You are a helpful agent.',
-      model: new MockLanguageModelV2({}) as LanguageModelV2,
-    });
-    const transport = new EventEmitterPubSub();
-    const durable = createDurableAgent({ agent, pubsub: transport });
-    new Mastra({ agents: { 'observed-agent': durable as any }, logger: false, storage });
-    const pubsub = durable.pubsub;
+    const { durable, pubsub, transport, workflows } = await observedAgent();
     const runId = 'observed-run';
 
     // The lost execution claimed generation 1; the successor took the run over at 2.
-    const workflows = (await storage.getStore('workflows'))!;
     await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
     await workflows.claimRunOwnership({ runId, ownerId: 'successor', leaseMs: 30_000, force: true });
 
@@ -225,20 +230,9 @@ describe('observe() from an offset', () => {
   });
 
   it("still reconnects when the run's claim can't be read", async () => {
-    const storage = new InMemoryStore();
-    const agent = new Agent({
-      id: 'observed-agent',
-      name: 'Observed Agent',
-      instructions: 'You are a helpful agent.',
-      model: new MockLanguageModelV2({}) as LanguageModelV2,
-    });
-    const transport = new EventEmitterPubSub();
-    const durable = createDurableAgent({ agent, pubsub: transport });
-    new Mastra({ agents: { 'observed-agent': durable as any }, logger: false, storage });
-    const pubsub = durable.pubsub;
+    const { durable, pubsub, transport, workflows } = await observedAgent();
     const runId = 'observed-run';
 
-    const workflows = (await storage.getStore('workflows'))!;
     await workflows.claimRunOwnership({ runId, ownerId: 'owner', leaseMs: 30_000 });
     await runInRunFenceScope(scopeAt(runId, 1), () => emitChunkEvent(pubsub, runId, textChunk('before ')));
     vi.spyOn(workflows, 'getRunOwnership').mockRejectedValue(new Error('storage unavailable'));
@@ -257,20 +251,9 @@ describe('observe() from an offset', () => {
   });
 
   it("reads the run's claim again before a finish when the first read failed", async () => {
-    const storage = new InMemoryStore();
-    const agent = new Agent({
-      id: 'observed-agent',
-      name: 'Observed Agent',
-      instructions: 'You are a helpful agent.',
-      model: new MockLanguageModelV2({}) as LanguageModelV2,
-    });
-    const transport = new EventEmitterPubSub();
-    const durable = createDurableAgent({ agent, pubsub: transport });
-    new Mastra({ agents: { 'observed-agent': durable as any }, logger: false, storage });
-    const pubsub = durable.pubsub;
+    const { durable, pubsub, transport, workflows } = await observedAgent();
     const runId = 'observed-run';
 
-    const workflows = (await storage.getStore('workflows'))!;
     await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
     await workflows.claimRunOwnership({ runId, ownerId: 'successor', leaseMs: 30_000, force: true });
 
@@ -296,6 +279,105 @@ describe('observe() from an offset', () => {
     expect(texts(reader.chunks)).toEqual(['recovered']);
     expect(reader.chunks.filter(c => c.type === 'finish')).toHaveLength(1);
     observed.cleanup();
+    await transport.close();
+  });
+});
+
+describe('__subscribeToRunStream()', () => {
+  const summarize = (events: any[]) => events.map(event => [event.type, event.data?.payload?.text, event.generation]);
+
+  it('drops what a superseded execution publishes after the takeover, and does not deliver the marker', async () => {
+    const { durable, pubsub, transport } = await observedAgent();
+    const runId = 'subscribed-run';
+
+    await runInRunFenceScope(scopeAt(runId, 1), () => emitChunkEvent(pubsub, runId, textChunk('before takeover')));
+    await emitOwnershipClaimedEvent(pubsub, runId, 2);
+    await runInRunFenceScope(scopeAt(runId, 1), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('stale'));
+      await emitFinishEvent(pubsub, runId, finishData);
+    });
+    await runInRunFenceScope(scopeAt(runId, 2), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('recovered'));
+      await emitFinishEvent(pubsub, runId, finishData);
+    });
+
+    const events: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, {}, event => events.push(event));
+
+    expect(summarize(events)).toEqual([
+      [AgentStreamEventTypes.CHUNK, 'before takeover', 1],
+      [AgentStreamEventTypes.CHUNK, 'recovered', 2],
+      [AgentStreamEventTypes.FINISH, undefined, 2],
+    ]);
+    await unsubscribe();
+    await transport.close();
+  });
+
+  it("follows the run's current claim when the takeover marker lies before the offset", async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'subscribed-run';
+
+    await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
+    await workflows.claimRunOwnership({ runId, ownerId: 'successor', leaseMs: 30_000, force: true });
+    await runInRunFenceScope(scopeAt(runId, 1), () => emitChunkEvent(pubsub, runId, textChunk('before takeover')));
+    await emitOwnershipClaimedEvent(pubsub, runId, 2);
+    await runInRunFenceScope(scopeAt(runId, 2), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
+
+    const events: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset: 3 }, event => events.push(event));
+    await runInRunFenceScope(scopeAt(runId, 1), () => emitFinishEvent(pubsub, runId, finishData));
+    await runInRunFenceScope(scopeAt(runId, 2), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('recovered'));
+      await emitFinishEvent(pubsub, runId, finishData);
+    });
+
+    expect(summarize(events)).toEqual([
+      [AgentStreamEventTypes.CHUNK, 'recovered', 2],
+      [AgentStreamEventTypes.FINISH, undefined, 2],
+    ]);
+    await unsubscribe();
+    await transport.close();
+  });
+
+  it("subscribes when the run's claim can't be read, and reads it again before a finish", async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'subscribed-run';
+
+    await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
+    await workflows.claimRunOwnership({ runId, ownerId: 'successor', leaseMs: 30_000, force: true });
+    await runInRunFenceScope(scopeAt(runId, 1), () => emitChunkEvent(pubsub, runId, textChunk('before takeover')));
+    await emitOwnershipClaimedEvent(pubsub, runId, 2);
+    await runInRunFenceScope(scopeAt(runId, 2), () => emitChunkEvent(pubsub, runId, textChunk('seen ')));
+    vi.spyOn(workflows, 'getRunOwnership').mockRejectedValueOnce(new Error('storage unavailable'));
+
+    const events: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset: 3 }, event => events.push(event));
+    await runInRunFenceScope(scopeAt(runId, 1), () => emitFinishEvent(pubsub, runId, finishData));
+    await runInRunFenceScope(scopeAt(runId, 2), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('recovered'));
+      await emitFinishEvent(pubsub, runId, finishData);
+    });
+    await delay(10);
+
+    expect(summarize(events)).toEqual([
+      [AgentStreamEventTypes.CHUNK, 'recovered', 2],
+      [AgentStreamEventTypes.FINISH, undefined, 2],
+    ]);
+    await unsubscribe();
+    await transport.close();
+  });
+
+  it('stops delivering once unsubscribed', async () => {
+    const { durable, pubsub, transport } = await observedAgent();
+    const runId = 'subscribed-run';
+
+    const events: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, {}, event => events.push(event));
+    await emitChunkEvent(pubsub, runId, textChunk('delivered'));
+    await unsubscribe();
+    await emitChunkEvent(pubsub, runId, textChunk('after unsubscribe'));
+
+    expect(summarize(events)).toEqual([[AgentStreamEventTypes.CHUNK, 'delivered', undefined]]);
     await transport.close();
   });
 });

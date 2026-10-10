@@ -6,14 +6,13 @@ import type {
   AgentSignalInput,
   DurableAgentLike,
 } from '@mastra/core/agent';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '@mastra/core/agent/durable';
+import { AGENT_STREAM_TOPIC, DurableStepIds } from '@mastra/core/agent/durable';
 import type { AIV5Type } from '@mastra/core/agent/message-list';
 import type { VersionOverrides } from '@mastra/core/di';
 import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY, parseModelString, defaultGateways, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
-import type { Mastra } from '@mastra/core/mastra';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -2593,19 +2592,6 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   handler: STREAM_GENERATE_ROUTE.handler,
 });
 
-/**
- * Generation of the latest storage claim on a run, which is what the claiming
- * execution tags its stream events with. Undefined when the store doesn't fence
- * runs, including with a @mastra/core release that predates run fencing.
- */
-async function readRunClaimGeneration(mastra: Mastra, runId: string): Promise<number | undefined> {
-  const workflows = await mastra.getStorage()?.getStore('workflows');
-  if (typeof workflows?.supportsRunFencing !== 'function' || !(await workflows.supportsRunFencing())) {
-    return undefined;
-  }
-  return (await workflows.getRunOwnership({ runId }))?.generation;
-}
-
 export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/observe',
@@ -2625,45 +2611,46 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
       // so we must subscribe to the agent's pubsub to receive the correct stream events.
       const agent = await getAgentFromSystem({ mastra, agentId });
-      const agentPubsub = isDurableAgentLike(agent) ? (agent as DurableAgentLike).pubsub : undefined;
-      const pubsub = agentPubsub ?? mastra.pubsub;
-
-      // Create a ReadableStream that subscribes to the agent stream topic
-      // The stream adapter handles replay logic via subscribeWithReplay or subscribeFromOffset
+      const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
+      const pubsub = durableAgent?.pubsub ?? mastra.pubsub;
       const topic = AGENT_STREAM_TOPIC(runId);
-      let handleEvent: ((event: any) => void) | null = null;
-      let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
-      // A replay from an offset can start past the marker of the execution that
-      // took the run over, and would then accept what the lost execution still
-      // publishes, its finish included. Follow the run's current claim instead.
-      // Runs fenced by a pubsub lease have no generation and are unaffected.
-      // The floor only adds protection, so a failed read must not fail the reconnect;
-      // the claim is read again before a terminal event can end the stream.
-      let claimUnread = false;
-      let newestGeneration = offset
-        ? await readRunClaimGeneration(mastra, runId).catch(error => {
-            mastra
-              .getLogger()
-              ?.warn(`Couldn't read the claim of run ${runId}; observing it without a floor`, { error });
-            claimUnread = true;
-            return undefined;
-          })
-        : undefined;
+      // A durable agent subscribes for us so the client never sees what an
+      // execution that lost the run still publishes. Agents without it, such as
+      // those from an older @mastra/core, are observed through the topic directly.
+      const subscribe = (onEvent: (event: any) => void): Promise<() => Promise<void>> => {
+        if (typeof durableAgent?.__subscribeToRunStream === 'function') {
+          return durableAgent.__subscribeToRunStream(runId, { offset }, onEvent);
+        }
+        const subscribed =
+          offset !== undefined
+            ? pubsub.subscribeFromOffset(topic, offset, onEvent)
+            : pubsub.subscribeWithReplay(topic, onEvent);
+        return subscribed.then(() => () => pubsub.unsubscribe(topic, onEvent));
+      };
+
+      let closed = false;
+      let unsubscribe: (() => Promise<void>) | undefined;
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
 
       // Idle timeout: close the stream if no events are received within 5 minutes.
       // This prevents subscription leaks when an agent crashes without emitting a terminal event.
       const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 
-      function cleanup(controller: ReadableStreamDefaultController) {
+      function stop() {
+        closed = true;
         if (idleTimer) {
           clearTimeout(idleTimer);
           idleTimer = null;
         }
-        if (handleEvent) {
-          void pubsub.unsubscribe(topic, handleEvent);
-          handleEvent = null;
+        if (unsubscribe) {
+          void unsubscribe();
+          unsubscribe = undefined;
         }
+      }
+
+      function cleanup(controller: ReadableStreamDefaultController) {
+        stop();
         try {
           controller.close();
         } catch {
@@ -2689,17 +2676,8 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
 
           resetIdleTimer(controller);
 
-          const acceptEvent = (event: any) => {
-            // Another execution took the run over: drop what the superseded one
-            // still publishes. The takeover marker itself is not a stream event.
-            if (typeof event.generation === 'number') {
-              if (newestGeneration !== undefined && event.generation < newestGeneration) return;
-              newestGeneration = event.generation;
-            }
-            if (event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) {
-              resetIdleTimer(controller);
-              return;
-            }
+          subscribe(event => {
+            if (closed) return;
             const isTerminal = event.type === 'finish' || event.type === 'error';
             try {
               controller.enqueue(event);
@@ -2711,50 +2689,21 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
             } else {
               resetIdleTimer(controller);
             }
-          };
-
-          handleEvent = (event: any) => {
-            const endsStream = event.type === 'finish' || event.type === 'error';
-            if (!claimUnread || !endsStream || typeof event.generation !== 'number') {
-              acceptEvent(event);
-              return;
-            }
-            void readRunClaimGeneration(mastra, runId)
-              .catch(() => undefined)
-              .then(claimed => {
-                if (!handleEvent) return;
-                if (claimed !== undefined) {
-                  claimUnread = false;
-                  newestGeneration = Math.max(newestGeneration ?? claimed, claimed);
-                }
-                acceptEvent(event);
-              });
-          };
-
-          // Subscribe with replay support
-          const subscribePromise =
-            offset !== undefined
-              ? pubsub.subscribeFromOffset(topic, offset, handleEvent)
-              : pubsub.subscribeWithReplay(topic, handleEvent);
-
-          subscribePromise.catch((error: any) => {
-            console.error(`[ObserveAgentStream] Failed to subscribe to ${topic}:`, error);
-            if (idleTimer) {
-              clearTimeout(idleTimer);
-              idleTimer = null;
-            }
-            controller.error(error);
-          });
+          }).then(
+            unsubscribeFromRun => {
+              // The stream may have ended while subscribing.
+              if (closed) void unsubscribeFromRun();
+              else unsubscribe = unsubscribeFromRun;
+            },
+            (error: any) => {
+              console.error(`[ObserveAgentStream] Failed to subscribe to ${topic}:`, error);
+              stop();
+              controller.error(error);
+            },
+          );
         },
         cancel() {
-          if (idleTimer) {
-            clearTimeout(idleTimer);
-            idleTimer = null;
-          }
-          if (handleEvent) {
-            void pubsub.unsubscribe(topic, handleEvent);
-            handleEvent = null;
-          }
+          stop();
         },
       });
 
