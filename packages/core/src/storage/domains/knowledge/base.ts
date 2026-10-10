@@ -34,6 +34,102 @@ export interface KnowledgeScopeAddress {
   address: string;
   scopeNodeId: string;
 }
+
+/** A structural scope node with its address and containing scope nodes. @experimental */
+export interface KnowledgeScopeNodeSummary {
+  /** UUID of the `isScope` node. */
+  id: string;
+  /** Canonical structural address of the scope (for example `org:acme` or `features:memory`). */
+  address: string;
+  name: string;
+  kind?: string;
+  description?: string;
+  /** UUIDs of the scope nodes that contain this scope (membership edges), sorted ascending. */
+  parentIds: string[];
+}
+
+/** Hard cap on scope nodes returned by one `listScopeNodes` read. */
+export const MAX_KNOWLEDGE_SCOPE_NODES = 1000;
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeScopeNodesInput {
+  /** Only the scope at this address and the scopes beneath it, following membership edges transitively. */
+  withinAddress?: string;
+  /** Only the scopes at these exact addresses. */
+  addresses?: string[];
+  /** Only the scope nodes with these UUIDs. Combines with the other filters, so `{ withinAddress, ids: [id] }` checks one scope's membership in a subtree. */
+  ids?: string[];
+  /** `nextCursor` from the previous page of the same query. */
+  cursor?: string;
+  /** Page size, from 1 to `MAX_KNOWLEDGE_SCOPE_NODES` (the default). */
+  limit?: number;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeScopeNodesOutput {
+  /** Scope nodes ordered by name, then id (code-unit order). */
+  scopes: KnowledgeScopeNodeSummary[];
+  /** Pass back as `cursor` for the next page; `null` when this is the last page. */
+  nextCursor: string | null;
+}
+
+function knowledgeScopeNodeFilterKey(input: ListKnowledgeScopeNodesInput): string {
+  return JSON.stringify([
+    input.withinAddress ?? null,
+    input.addresses ? [...input.addresses].sort() : null,
+    input.ids ? [...input.ids].sort() : null,
+  ]);
+}
+
+/** Validates the page size and cursor of a `listScopeNodes` query; throws on a cursor from a different query. */
+export function parseListKnowledgeScopeNodesInput(input: ListKnowledgeScopeNodesInput = {}): {
+  limit: number;
+  after: { name: string; id: string } | null;
+} {
+  const requested = Number.isFinite(input.limit) ? Math.trunc(input.limit!) : MAX_KNOWLEDGE_SCOPE_NODES;
+  const limit = Math.min(Math.max(requested, 1), MAX_KNOWLEDGE_SCOPE_NODES);
+  if (!input.cursor) return { limit, after: null };
+  let value: unknown;
+  try {
+    value = JSON.parse(decodeURIComponent(input.cursor));
+  } catch {
+    throw new Error('Invalid Knowledge scope node cursor.');
+  }
+  const parsed = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+  if (
+    parsed.version !== 1 ||
+    parsed.type !== 'scope' ||
+    typeof parsed.name !== 'string' ||
+    typeof parsed.id !== 'string' ||
+    parsed.filter !== knowledgeScopeNodeFilterKey(input)
+  ) {
+    throw new Error('Knowledge scope node cursor does not match this query.');
+  }
+  return { limit, after: { name: parsed.name, id: parsed.id } };
+}
+
+/** Builds a page from up to `limit + 1` name/id-ordered scope nodes. */
+export function pageKnowledgeScopeNodes(
+  rows: KnowledgeScopeNodeSummary[],
+  limit: number,
+  input: ListKnowledgeScopeNodesInput,
+): ListKnowledgeScopeNodesOutput {
+  const scopes = rows.slice(0, limit);
+  const last = scopes.at(-1);
+  const nextCursor =
+    rows.length > limit && last
+      ? encodeURIComponent(
+          JSON.stringify({
+            version: 1,
+            type: 'scope',
+            name: last.name,
+            id: last.id,
+            filter: knowledgeScopeNodeFilterKey(input),
+          }),
+        )
+      : null;
+  return { scopes, nextCursor };
+}
 export interface KnowledgeNodeAddress {
   source: string;
   address: string;
@@ -646,6 +742,10 @@ export abstract class KnowledgeStorage extends StorageDomain {
     throw new KnowledgeUnsupportedError();
   }
   async listScopeAddresses(_input: { after?: string; limit?: number } = {}): Promise<KnowledgeScopeAddress[]> {
+    throw new KnowledgeUnsupportedError();
+  }
+  /** Scope nodes with their addresses, filtered and paged in storage. Use `withinAddress` to stay inside one tenant's subtree. */
+  async listScopeNodes(_input?: ListKnowledgeScopeNodesInput): Promise<ListKnowledgeScopeNodesOutput> {
     throw new KnowledgeUnsupportedError();
   }
   async getNodeAddress(_input: { source: string; address: string }): Promise<KnowledgeNodeAddress | null> {
