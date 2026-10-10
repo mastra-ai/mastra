@@ -497,7 +497,14 @@ Discovers runs stuck in `running` status for this agent and re-drives them from 
 
 ```typescript
 const result = await durableAgent.recoverActiveRuns()
-// { recovered: [{ runId, status }], succeeded: 2, failed: 0 }
+// {
+//   recovered: [
+//     { runId: 'run-1', status: 'success' },
+//     { runId: 'run-2', status: 'skipped', reason: 'run-active', retryAt: 1760123456789 },
+//   ],
+//   succeeded: 1,
+//   failed: 0,
+// }
 ```
 
 Pass a `runId` to recover a single known run:

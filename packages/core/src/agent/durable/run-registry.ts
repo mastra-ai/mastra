@@ -130,7 +130,7 @@ export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<voi
   const fences = registryEntries().flatMap(entry =>
     entry.mastra === mastra && entry.executionFence ? [entry.executionFence] : [],
   );
-  await Promise.all(fences.map(fence => fence.abandon()));
+  await Promise.allSettled(fences.map(fence => fence.abandon()));
 }
 
 /**
