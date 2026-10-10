@@ -16,6 +16,7 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import sql from 'mssql';
+import type { Queryable } from './run-fencing';
 import { getSchemaName, getTableName } from './utils';
 
 // Re-export the types for convenience
@@ -313,7 +314,7 @@ export class MssqlDB extends MastraBase {
   }: {
     tableName: TABLE_NAMES;
     record: Record<string, any>;
-    transaction?: sql.Transaction;
+    transaction?: Queryable;
   }): Promise<void> {
     try {
       // Filter out columns that don't exist in the actual database table

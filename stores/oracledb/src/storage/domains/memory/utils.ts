@@ -2,8 +2,10 @@ import type { MastraError } from '@mastra/core/error';
 import { ErrorCategory } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import { TABLE_MEMORY_RUN_FENCES } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
+  RunFence,
   StorageResourceType,
   ThreadOrderBy,
   ThreadSortDirection,
@@ -13,6 +15,7 @@ import type {
 import { clobBind, isOracleErrorCode } from '../../../shared/connection';
 import { qualifyName } from '../../../vector/identifiers';
 import type { OracleDB, OracleCreateIndexOptions, OracleTxClient } from '../../db';
+import { assertRunFence } from '../../db/run-fencing';
 import { createOracleStorageError, parseJsonValue, toDate } from '../../domain-utils';
 
 // Shared helpers used across the memory domain modules (schema, threads, messages,
@@ -58,6 +61,20 @@ export interface MemoryContext {
 
 export function table(ctx: Pick<MemoryContext, 'schemaName'>, tableName: string): string {
   return qualifyName(tableName, ctx.schemaName);
+}
+
+/**
+ * The fence check for a memory write; call it first inside the write's
+ * transaction. `fence` is the one `MemoryOracle` already resolved against the
+ * run fence scope, so an unfenced write skips the check.
+ */
+export async function assertMemoryFence(
+  ctx: Pick<MemoryContext, 'schemaName'>,
+  client: OracleTxClient,
+  fence: RunFence | undefined,
+  operation: string,
+): Promise<void> {
+  if (fence) await assertRunFence(client, table(ctx, TABLE_MEMORY_RUN_FENCES), fence, operation);
 }
 
 export function storageError(

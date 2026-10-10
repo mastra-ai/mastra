@@ -5,6 +5,7 @@ import type {
   CreateReflectionGenerationInput,
   ObservationalMemoryHistoryOptions,
   ObservationalMemoryRecord,
+  RunFence,
   UpdateActiveObservationsInput,
   UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
@@ -54,6 +55,7 @@ import {
   OM_UPDATED_AT,
 } from './schema';
 import {
+  assertMemoryFence,
   assertRowsAffected,
   boolToNumber,
   emptyToUndefined,
@@ -279,9 +281,11 @@ export async function insertObservationalMemoryRecord(
 export async function updateActiveObservations(
   ctx: MemoryContext,
   input: UpdateActiveObservationsInput,
+  fence?: RunFence,
 ): Promise<void> {
   try {
-    await ctx.db.tx(async (_client, connection) => {
+    await ctx.db.tx(async (client, connection) => {
+      await assertMemoryFence(ctx, client, fence, 'updateActiveObservations');
       const result = await connection.execute(
         `
           UPDATE ${table(ctx, TABLE_OBSERVATIONAL_MEMORY)}
@@ -317,6 +321,7 @@ export async function updateActiveObservations(
 export async function createReflectionGeneration(
   ctx: MemoryContext,
   input: CreateReflectionGenerationInput,
+  fence?: RunFence,
 ): Promise<ObservationalMemoryRecord> {
   const now = new Date();
   const record: ObservationalMemoryRecord = {
@@ -345,11 +350,13 @@ export async function createReflectionGeneration(
   };
 
   try {
-    await ctx.db.tx(async (_client, connection) => {
+    await ctx.db.tx(async (client, connection) => {
+      await assertMemoryFence(ctx, client, fence, 'createReflectionGeneration');
       await insertOMRecord(ctx, connection, record, now);
     });
     return record;
   } catch (error) {
+    if (error instanceof MastraError) throw error;
     throw storageError('CREATE_REFLECTION_GENERATION', 'FAILED', { id: input.currentRecord.id }, error);
   }
 }
