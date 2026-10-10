@@ -929,6 +929,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       causal_chain: { type: 'json' },
       created_at: { type: 'timestamp' },
     },
+    indexes: [{ name: 'factory_rule_evaluations_ingress_idx', columns: ['ingress_id'] }],
   },
   {
     name: 'factory_deferred_decisions',
