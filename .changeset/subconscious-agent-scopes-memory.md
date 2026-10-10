@@ -10,4 +10,4 @@ await agent.stream('Plan the launch', {
 });
 ```
 
-Org scopes need a `@mastra/core` release that supports agent scopes and a `@mastra/server` release that reserves `MASTRA_SCOPES_KEY`. Older servers let a request body set that key, so upgrade them together.
+Org scopes need a `@mastra/core` release that supports agent scopes and a `@mastra/server` release that reserves `MASTRA_SCOPES_KEY`. While an older server is registered, agents refuse scopes from calls and the request context, so upgrade them together; scopes set with the agent's own `scopes` option still apply.
