@@ -117,12 +117,21 @@ function fitAgentEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id'
     },
   };
   if (byteSize(reduced) <= REALTIME_MAX_BYTES) return reduced;
+  // stepResult is too large: keep only its reason, then add back each output field that still fits.
   const reason = (data.stepResult as { reason?: unknown } | undefined)?.reason;
-  // Last resort: the bare terminal envelope always fits, so the stream still closes.
-  return {
+  const fallback = {
     ...event,
-    data: { stepResult: typeof reason === 'string' ? { reason } : undefined, output: { steps: [] } },
+    data: {
+      stepResult: typeof reason === 'string' ? { reason } : undefined,
+      output: { steps: [] } as Record<string, unknown>,
+    },
   };
+  for (const key of ['text', 'usage'] as const) {
+    if (output[key] === undefined) continue;
+    fallback.data.output[key] = output[key];
+    if (byteSize(fallback) > REALTIME_MAX_BYTES) delete fallback.data.output[key];
+  }
+  return fallback;
 }
 
 /**

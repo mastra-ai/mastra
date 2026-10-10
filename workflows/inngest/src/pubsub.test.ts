@@ -50,7 +50,7 @@ describe('InngestPubSub Realtime size cap (#20671)', () => {
     ]);
   });
 
-  it('keeps a finish under the cap even when stepResult alone is oversized', async () => {
+  it('keeps the final text when stepResult alone is oversized', async () => {
     const { pubsub, published } = setup();
     await pubsub.publish('agent.stream.r1', {
       type: 'finish',
@@ -58,7 +58,7 @@ describe('InngestPubSub Realtime size cap (#20671)', () => {
       data: { stepResult: { reason: 'stop', blob: huge }, output: { text: 'done', steps: [] } },
     });
     expect(published).toEqual([
-      { type: 'finish', runId: 'r1', data: { stepResult: { reason: 'stop' }, output: { steps: [] } } },
+      { type: 'finish', runId: 'r1', data: { stepResult: { reason: 'stop' }, output: { steps: [], text: 'done' } } },
     ]);
   });
 
