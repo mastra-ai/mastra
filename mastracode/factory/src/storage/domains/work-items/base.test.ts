@@ -507,10 +507,31 @@ describe('WorkItemsStorage', () => {
     expect(fresh.status).toBe('committed');
     expect(fresh.status === 'committed' && fresh.result).toMatchObject({ status: 'accepted' });
     expect((await storage.listDeferredDecisions('org1', 'p1')).map(d => d.idempotencyKey)).toEqual(['decision-1']);
-    expect(
-      (await storage.listDeferredDecisions('org1', 'p1', { workItemId: created.item.id })).map(d => d.idempotencyKey),
-    ).toEqual(['decision-1']);
-    expect(await storage.listDeferredDecisions('org1', 'p1', { workItemId: 'some-other-card' })).toEqual([]);
+
+    const other = await storage.upsert({
+      orgId: 'org1',
+      userId: 'u',
+      factoryProjectId: 'p1',
+      input: { ...input, externalSource: { integrationId: 'github', type: 'issue', externalId: 'other-card' } },
+    });
+    await storage.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: 'p1',
+      workItemId: other.item.id,
+      ingress: { identity: 'github:delivery-2', triggerType: 'github.issueComment' },
+      configVersion: 'v1',
+      expectedRevision: other.item.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'transition', stage: 'done', idempotencyKey: 'decision-2' }] as never,
+      causalChain: [],
+      now: new Date(),
+    });
+    const forCard = async (workItemId: string) =>
+      (await storage.listDeferredDecisions('org1', 'p1', { workItemId })).map(d => d.idempotencyKey);
+    expect(await forCard(created.item.id)).toEqual(['decision-1']);
+    expect(await forCard(other.item.id)).toEqual(['decision-2']);
+    expect(await forCard('some-other-card')).toEqual([]);
   });
 
   it('claims deferred decisions by payload filter, paging past any backlog of filtered-out rows', async () => {
