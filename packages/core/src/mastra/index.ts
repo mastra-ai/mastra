@@ -4167,7 +4167,12 @@ export class Mastra<
     }
 
     const restartableWorkflows = Object.values(this.#workflows).filter(
-      workflow => workflow.engineType === 'default' || workflow.engineType === 'evented',
+      workflow =>
+        (workflow.engineType === 'default' || workflow.engineType === 'evented') &&
+        // Skip before listing: opted-out workflows shouldn't cost storage queries, and processor
+        // workflows only run inside an agent call, so a lone restart has nothing to resume.
+        workflow.options?.autoRestartActiveRuns !== false &&
+        workflow.type !== 'processor',
     );
 
     const activeRunsByWorkflow = await Promise.all(
