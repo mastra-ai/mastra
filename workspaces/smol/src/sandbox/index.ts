@@ -58,8 +58,10 @@ export interface SmolSandboxOptions extends Omit<MastraSandboxOptions, 'processe
   ports?: PortSpec[];
   /** Local host directories mounted in the VM; use with LocalFilesystem to share agent files. */
   mounts?: MountSpec[];
-  /** Local path for durable checkpoints; cloud checkpoints live in the account. */
+  /** Local path for durable checkpoints. */
   checkpointPath?: string;
+  /** Cloud only: enable RAM pause/resume and durable snapshots (requires a checkpointable VM). */
+  checkpointable?: boolean;
   /** Override the instructions provided to agents. */
   instructions?: string;
 }
@@ -82,10 +84,13 @@ export class SmolSandbox extends MastraSandbox {
     this.id = options.id ?? randomUUID();
     this.config = options;
     this.target = options.target ?? 'local';
-    this.supportsCheckpoints = this.target === 'cloud' || !!options.checkpointPath;
+    this.supportsCheckpoints = this.target === 'cloud' ? !!options.checkpointable : !!options.checkpointPath;
     if (this.target === 'local' && options.cloud) throw new Error('Smol cloud credentials require target: "cloud".');
     if (this.target === 'cloud' && options.image === null) throw new Error('Smol cloud machines require an image.');
     if (options.mounts && this.target !== 'local') throw new Error('Host directory mounts are local-only.');
+    if (options.checkpointPath && this.target === 'cloud') throw new Error('checkpointPath is local-only.');
+    if (options.checkpointable !== undefined && this.target !== 'cloud')
+      throw new Error('checkpointable is cloud-only.');
     if (options.mounts?.length && options.checkpointPath)
       throw new Error('Local portable checkpoints cannot capture host mounts.');
     if (options.machineId && this.target !== 'cloud')
@@ -125,6 +130,7 @@ export class SmolSandbox extends MastraSandbox {
           allowHosts: config.allowHosts,
           mounts: config.mounts,
           ports: config.ports,
+          ...(this.target === 'cloud' ? { checkpointable: config.checkpointable ?? false } : {}),
         }),
       )
       .digest('hex');
@@ -190,6 +196,7 @@ export class SmolSandbox extends MastraSandbox {
       env,
       resources,
       ...(this.config.ports ? { ports: this.config.ports } : {}),
+      ...(this.target === 'cloud' && this.config.checkpointable ? { forkable: true } : {}),
       ...(this.target === 'local'
         ? { labels: this.labels, detach: true, waitForPorts: false, mounts: this.config.mounts }
         : {}),
@@ -202,7 +209,8 @@ export class SmolSandbox extends MastraSandbox {
     if (this.machine) {
       // Portable RAM checkpoints cannot include host mounts. A normal stop
       // preserves the guest disk and syncs staged mounts for those VMs.
-      if (this.target === 'local' && this.config.mounts?.length) await this.machine.stop();
+      if ((this.target === 'local' && this.config.mounts?.length) || (this.target === 'cloud' && !this.config.checkpointable))
+        await this.machine.stop();
       else await this.machine.pause();
     }
   }
@@ -216,7 +224,11 @@ export class SmolSandbox extends MastraSandbox {
 
   async snapshot(): Promise<void> {
     if (!this.supportsCheckpoints) {
-      throw new Error('Set checkpointPath to enable local Smol checkpoints.');
+      throw new Error(
+        this.target === 'cloud'
+          ? 'Set checkpointable: true to enable Cloud Smol checkpoints.'
+          : 'Set checkpointPath to enable local Smol checkpoints.',
+      );
     }
     await this.ensureRunning();
     this.lastCheckpoint = await this.machine!.checkpoint(

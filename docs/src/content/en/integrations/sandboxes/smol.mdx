@@ -72,10 +72,12 @@ console.log((await sandbox.executeCommand('node', ['--version'])).stdout)
 await workspace.destroy()
 ```
 
+Cloud VMs stop with their disk preserved by default. Set `checkpointable: true` to enable RAM pause/resume and Cloud snapshots; checkpointable VMs use supported node placement and memory.
+
 A stable `id` reconnects to a machine with the same configuration after a process restart. Changing the image, resources, egress policy, ports, or mounts with that `id` reports a configuration mismatch; destroy the earlier VM or use a new `id`. Pass `machineId` to select an existing cloud VM explicitly when you have verified its configuration. `allowHosts` restricts guest outbound traffic. Without it, cloud egress follows the Smol Cloud default.
 
 Host mounts aren't available on cloud. `sandbox.writeFiles()` uploads files to the VM. Configure a filesystem that shares the VM's files if an agent also needs Mastra file tools; a host `LocalFilesystem` alone accesses different files. This package doesn't provide the optional Mastra process manager or public networking interface.
 
 ## Capture a checkpoint
 
-On cloud, call `await sandbox.snapshot()` and read `sandbox.checkpointInfo` for the created checkpoint. For local VMs, supply `checkpointPath` and call the same method. Host mounts cannot be captured in portable checkpoints, so `checkpointPath` and `mounts` cannot be used together.
+On cloud, set `checkpointable: true` when constructing `SmolSandbox`, then call `await sandbox.snapshot()` and read `sandbox.checkpointInfo` for the created checkpoint. For local VMs, supply `checkpointPath` and call the same method. Host mounts cannot be captured in portable checkpoints, so `checkpointPath` and `mounts` cannot be used together.

@@ -105,6 +105,7 @@ bridge('Smol Cloud transport through a real VM', () => {
     const options = {
       id: `mastra-smol-bridge-${Date.now()}`,
       target: 'cloud' as const,
+      checkpointable: true,
       image: 'node:24-alpine',
       cloud: { apiKey: 'test-token', baseUrl: `http://127.0.0.1:${address.port}` },
       allowHosts: ['registry.npmjs.org'],
@@ -113,6 +114,7 @@ bridge('Smol Cloud transport through a real VM', () => {
     try {
       expect(await sandbox._start()).toMatchObject({ outcome: 'created' });
       expect(createBody?.source).toEqual({ type: 'image', reference: 'node:24-alpine' });
+      expect(createBody?.forkable).toBe(true);
       expect(createBody?.network).toMatchObject({ hosts: ['registry.npmjs.org'] });
       const seen: string[] = [];
       const output = await sandbox.executeCommand('printf cloud; printf stderr >&2', [], {
