@@ -14,6 +14,7 @@ import { createChannelsTests } from './domains/channels';
 import { createToolProviderConnectionsTests } from './domains/tool-provider-connections';
 import { createSkillsTests } from './domains/skills';
 import { createWorkflowDefinitionsTests } from './domains/workflow-definitions';
+import { createRunFencingTests } from './domains/run-fencing';
 export * from './domains/memory/data';
 export * from './domains/workflows/data';
 export * from './domains/scores/data';
@@ -149,5 +150,6 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createChannelsTests({ storage });
     createToolProviderConnectionsTests({ storage });
     createWorkflowDefinitionsTests({ storage });
+    createRunFencingTests({ storage });
   });
 }

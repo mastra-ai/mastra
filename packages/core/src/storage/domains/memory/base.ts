@@ -1,5 +1,7 @@
 import type { MastraMessageContentV2 } from '../../../agent';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
+import type { RunFence } from '../../run-fencing';
+import { runFencingNotSupportedError } from '../../run-fencing';
 import type {
   StorageResourceType,
   ThreadOrderBy,
@@ -81,7 +83,59 @@ export abstract class MemoryStorage extends StorageDomain {
     resourceId?: string;
   }): Promise<StorageThreadType | null>;
 
-  abstract saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType>;
+  /**
+   * Whether this adapter implements run fencing: `raiseRunFence`,
+   * `retireRunFence`, and rejecting the writes listed below when their fence is no longer the run's
+   * current fence, atomically with the write. A write's fence is its `fence`
+   * argument, otherwise the one `resolveRunFence()` returns.
+   *
+   * Fenced: `saveThread`, `updateThread`, `patchThread`,
+   * `updateThreadMetadata`, `saveMessages`, `updateMessages`,
+   * `deleteMessages` and `updateResource`. Observational memory writes that
+   * change observations or reflections, and `mergeResourceWorkingMemory` on
+   * adapters that set `supportsAtomicWorkingMemoryMerge`, are fenced through
+   * `resolveRunFence()` only.
+   *
+   * Not fenced: `deleteThread`, `copyThread`, `cloneThread`,
+   * `updateThreadResourceId`, `saveResource`, and observational memory flags,
+   * pending token counts and record initialization.
+   *
+   * Memory fences are raised only for runs claimed in a workflows store that
+   * supports run fencing, so supporting it here has no effect on its own.
+   *
+   * Adapters that return true must pass the run-fencing conformance suite.
+   * An adapter that has to probe its backend to know returns a promise, and
+   * rejects when the probe fails: it must never answer false and later true.
+   */
+  supportsRunFencing(): boolean | Promise<boolean> {
+    return false;
+  }
+
+  /**
+   * Make `fence` the run's current fence in this domain, unless the domain
+   * already holds a newer generation for the run. Returns whether `fence` is
+   * current afterwards. Called once a run is claimed in the workflows domain,
+   * so that writes from older claims are rejected here too. Clears the
+   * fence's `retiredAt` whenever it writes, so a fence raised again is not
+   * pruned while its execution runs.
+   */
+  async raiseRunFence(_fence: RunFence): Promise<boolean> {
+    throw runFencingNotSupportedError('memory', this.constructor.name);
+  }
+
+  /**
+   * Mark `fence` as retired once the execution holding it has settled, by
+   * setting `retiredAt` from the store's clock. Only takes effect while
+   * `fence` is still the run's current fence, so a late retire cannot mark a
+   * newer execution's fence. Returns whether it took effect. Retiring does not
+   * change which writes are accepted; it only makes the fence eligible for
+   * `memory.runFences` retention.
+   */
+  async retireRunFence(_fence: RunFence): Promise<boolean> {
+    throw runFencingNotSupportedError('memory', this.constructor.name);
+  }
+
+  abstract saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType>;
 
   /**
    * Update a thread's title and/or metadata.
@@ -96,10 +150,12 @@ export abstract class MemoryStorage extends StorageDomain {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType>;
 
   /**
@@ -120,10 +176,12 @@ export abstract class MemoryStorage extends StorageDomain {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
     if (!this.supportsPartialThreadUpdate && (title === undefined || metadata === undefined)) {
       const existing = await this.getThreadById({ threadId: id });
@@ -136,6 +194,7 @@ export abstract class MemoryStorage extends StorageDomain {
       id,
       ...(title !== undefined ? { title } : {}),
       ...(metadata !== undefined ? { metadata } : {}),
+      ...(fence ? { fence } : {}),
     });
   }
 
@@ -147,10 +206,12 @@ export abstract class MemoryStorage extends StorageDomain {
     id,
     resourceId,
     update,
+    fence,
   }: {
     id: string;
     resourceId?: string;
     update: (thread: StorageThreadType) => Record<string, unknown> | undefined;
+    fence?: RunFence;
   }): Promise<StorageThreadType | null> {
     const previous = this.threadMetadataUpdateQueues.get(id) ?? Promise.resolve();
     let release!: () => void;
@@ -164,7 +225,7 @@ export abstract class MemoryStorage extends StorageDomain {
       const thread = await this.getThreadById({ threadId: id, resourceId });
       if (!thread) return null;
       const metadata = update(thread);
-      return metadata ? await this.patchThread({ id, metadata }) : thread;
+      return metadata ? await this.patchThread({ id, metadata, ...(fence ? { fence } : {}) }) : thread;
     } finally {
       release();
       if (this.threadMetadataUpdateQueues.get(id) === current) this.threadMetadataUpdateQueues.delete(id);
@@ -191,16 +252,20 @@ export abstract class MemoryStorage extends StorageDomain {
 
   abstract listMessagesById({ messageIds }: { messageIds: string[] }): Promise<{ messages: MastraDBMessage[] }>;
 
-  abstract saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }>;
+  abstract saveMessages(args: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }>;
 
   abstract updateMessages(args: {
     messages: (Partial<Omit<MastraDBMessage, 'createdAt'>> & {
       id: string;
       content?: { metadata?: MastraMessageContentV2['metadata']; content?: MastraMessageContentV2['content'] };
     })[];
+    fence?: RunFence;
   }): Promise<MastraDBMessage[]>;
 
-  async deleteMessages(_messageIds: string[]): Promise<void> {
+  async deleteMessages(_messageIds: string[], _options?: { fence?: RunFence }): Promise<void> {
     throw new Error(
       `Message deletion is not supported by this storage adapter (${this.constructor.name}). ` +
         `The deleteMessages method needs to be implemented in the storage adapter.`,
@@ -421,6 +486,7 @@ export abstract class MemoryStorage extends StorageDomain {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
     throw new Error(
       `Resource working memory is not implemented by this storage adapter (${this.constructor.name}). ` +
