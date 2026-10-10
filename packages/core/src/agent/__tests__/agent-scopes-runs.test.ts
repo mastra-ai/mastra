@@ -40,6 +40,19 @@ function textModel(text = 'ok') {
 function toolCallingModel(toolName: string, input: Record<string, unknown> = {}) {
   let calls = 0;
   return new MockLanguageModelV2({
+    doGenerate: async () => {
+      calls++;
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        usage,
+        finishReason: calls === 1 ? 'tool-calls' : 'stop',
+        content:
+          calls === 1
+            ? [{ type: 'tool-call', toolCallId: `call-${calls}`, toolName, input: JSON.stringify(input) }]
+            : [{ type: 'text', text: 'done' }],
+      } as any;
+    },
     doStream: async () => {
       calls++;
       const parts =
@@ -338,6 +351,71 @@ describe('agent scopes on runs', () => {
     await expect(
       conflictOf(agent.approveToolCall({ runId: stream.runId, toolCallId: toolCallId!, requestContext })),
     ).resolves.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
+  });
+
+  it('rejects a resume that adds scopes to a run that started without any', async () => {
+    const approve = createTool({
+      id: 'approve',
+      description: 'needs approval',
+      inputSchema: z.object({}),
+      requireApproval: true,
+      execute: async () => ({ ok: true }),
+    });
+    const { agent } = setup({ model: toolCallingModel('approve'), tools: { approve } });
+    new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
+    const stream = await agent.stream('go', { memory: { resource: 'u1', thread: 't1' } });
+    let toolCallId: string | undefined;
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') toolCallId = chunk.payload.toolCallId;
+    }
+    await expect(
+      conflictOf(
+        agent.approveToolCall({
+          runId: stream.runId,
+          toolCallId: toolCallId!,
+          requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['org:x']]]),
+        }),
+      ),
+    ).resolves.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
+
+    // Naming the run's own resource and thread is not a new scope.
+    const resumed = await agent.approveToolCall({
+      runId: stream.runId,
+      toolCallId: toolCallId!,
+      requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['resource:u1', 'thread:t1']]]),
+    });
+    await resumed.consumeStream();
+  });
+
+  it('restores the suspended run scopes on generate approval resume', async () => {
+    const approve = createTool({
+      id: 'approve',
+      description: 'needs approval',
+      inputSchema: z.object({}),
+      requireApproval: true,
+      execute: async (_input, context) => ({ scopes: context.requestContext?.get(MASTRA_SCOPES_KEY) }),
+    });
+    const { agent } = setup({ model: toolCallingModel('approve'), tools: { approve } });
+    new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
+    const first = await agent.generate('go', { scopes: ['org:a', 'resource:u1', 'thread:t1', 'team:core'] });
+    const toolCallId = (first.suspendPayload as any)?.toolCallId;
+    expect(toolCallId).toBeDefined();
+    await expect(
+      conflictOf(
+        agent.approveToolCallGenerate({
+          runId: first.runId!,
+          toolCallId,
+          requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['org:b']]]),
+        }),
+      ),
+    ).resolves.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
+    const resumed = await agent.approveToolCallGenerate({
+      runId: first.runId!,
+      toolCallId,
+      requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['org:a']]]),
+    });
+    const result = resumed.toolResults.find(r => r.payload.toolName === 'approve')?.payload.result as any;
+    expect(result?.scopes).toEqual(['org:a', 'team:core']);
   });
 });
 

@@ -13,6 +13,7 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
+import { prepareForDurableExecution } from '../preparation';
 import { globalRunRegistry } from '../run-registry';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -180,5 +181,67 @@ describe.each([
       ),
     ).rejects.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
     initial.cleanup();
+  });
+
+  it('resume rejects scopes added to a run that started without any', async () => {
+    const { agent, initial } = await suspendForApproval([]);
+    await expect(
+      agent.resume(
+        initial.runId,
+        { approved: true },
+        { requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['org:x']]]) },
+      ),
+    ).rejects.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
+    initial.cleanup();
+  });
+});
+
+describe('prepareForDurableExecution scopes', () => {
+  function baseAgent(config: Partial<ConstructorParameters<typeof Agent>[0]> = {}) {
+    return new Agent({
+      id: 'prep-agent',
+      name: 'Prep Agent',
+      instructions: 'Test',
+      model: textModel() as LanguageModelV2,
+      memory: new MockMemory({ storage: new InMemoryStore() }),
+      ...config,
+    } as ConstructorParameters<typeof Agent>[0]);
+  }
+
+  it('resolves scopes for callers that did not, such as the Inngest agent', async () => {
+    const callerContext = new RequestContext([[MASTRA_SCOPES_KEY, ['org:acme']]]);
+    const preparation = await prepareForDurableExecution({
+      agent: baseAgent({ scopes: ['team:core'] }),
+      messages: 'hi',
+      options: { scopes: ['resource:u1', 'thread:t1'] },
+      optionsAreResolved: true,
+      requestContext: callerContext,
+    });
+    expect(preparation.threadId).toBe('t1');
+    expect(preparation.resourceId).toBe('u1');
+    expect(preparation.workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY]).toEqual(['org:acme', 'team:core']);
+    expect(callerContext.get(MASTRA_SCOPES_KEY)).toEqual(['org:acme']);
+  });
+
+  it('throws on conflicting identity and leaves options unchanged without scopes', async () => {
+    await expect(
+      prepareForDurableExecution({
+        agent: baseAgent(),
+        messages: 'hi',
+        options: { scopes: ['thread:a'], memory: { thread: 'b', resource: 'u1' } },
+        optionsAreResolved: true,
+      }),
+    ).rejects.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
+
+    const requestContext = new RequestContext([[MASTRA_THREAD_ID_KEY, 'ignored']]);
+    const preparation = await prepareForDurableExecution({
+      agent: baseAgent(),
+      messages: 'hi',
+      options: { memory: { thread: 't2', resource: 'u2' } },
+      optionsAreResolved: true,
+      requestContext,
+    });
+    expect(preparation.threadId).toBe('t2');
+    expect(preparation.workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY]).toBeUndefined();
   });
 });

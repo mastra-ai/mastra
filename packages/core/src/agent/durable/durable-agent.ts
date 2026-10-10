@@ -2416,6 +2416,7 @@ export class DurableAgent<
       runId: options?.runId,
       requestContext: options?.requestContext,
       optionsAreResolved: true,
+      scopesResolved: true,
       mastra: this.#mastra,
       durableAgentId: this.id,
       durableAgentName: this.name,
@@ -2763,9 +2764,12 @@ export class DurableAgent<
     // its identity is the registered memory. A resume keeps that set (rule: re-supplied
     // scopes may only be a subset of it).
     const snapshotScopes = entry.requestContext?.get(MASTRA_SCOPES_KEY);
-    const resumeScopesSnapshot: AgentScopesSnapshot | undefined = Array.isArray(snapshotScopes)
-      ? { resourceId: memoryInfo?.resourceId, threadId: memoryInfo?.threadId, scopes: snapshotScopes }
-      : undefined;
+    // A run without recorded scopes held none, so a resume may not add any.
+    const resumeScopesSnapshot: AgentScopesSnapshot = {
+      resourceId: memoryInfo?.resourceId,
+      threadId: memoryInfo?.threadId,
+      scopes: Array.isArray(snapshotScopes) ? snapshotScopes : [],
+    };
 
     let resumeRequestContext = entry.requestContext;
     if (options?.requestContext) {
@@ -3571,6 +3575,7 @@ export class DurableAgent<
       runId: options?.runId,
       requestContext: options?.requestContext,
       optionsAreResolved: true,
+      scopesResolved: true,
       mastra: this.#mastra,
       methodType: 'generate',
       durableAgentId: this.id,
@@ -4467,6 +4472,7 @@ export class DurableAgent<
       // its registry entry.
       runId: options?.runId,
       requestContext: options?.requestContext,
+      scopesResolved: true,
       mastra: this.#mastra,
     });
 

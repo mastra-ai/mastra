@@ -196,7 +196,7 @@ import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMes
 import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
 import { applyResolvedAgentScopes, resolveAgentScopes, withoutIdentityAgentScopes } from './scopes';
-import type { ResolvedAgentScopes } from './scopes';
+import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
@@ -3153,6 +3153,7 @@ export class Agent<
         getDefaultGenerateOptionsLegacy: this.getDefaultGenerateOptionsLegacy.bind(this),
         getDefaultStreamOptionsLegacy: this.getDefaultStreamOptionsLegacy.bind(this),
         hasOwnMemory: this.hasOwnMemory.bind(this),
+        getScopes: this.getScopes.bind(this),
         getInstructions: async (options: { requestContext: RequestContext }) => {
           const result = await this.getInstructions(options);
           return result;
@@ -7750,6 +7751,24 @@ export class Agent<
     return info ? { toolCallId: info.toolCallId, toolName: info.toolName } : undefined;
   }
 
+  /**
+   * The scopes a suspended network run held. Its run-scoped request context (persisted with the
+   * network workflow snapshot) carries the non-identity scopes; its input carries the thread and
+   * resource. Returns undefined when no snapshot is stored.
+   */
+  async #getNetworkSnapshotScopes(runId: string): Promise<AgentScopesSnapshot | undefined> {
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: 'agent-loop-main-workflow', runId });
+    if (!snapshot) return undefined;
+    const scopes = snapshot.requestContext?.[MASTRA_SCOPES_KEY];
+    const input = snapshot.context?.input as { threadId?: string; threadResourceId?: string } | undefined;
+    return {
+      resourceId: input?.threadResourceId,
+      threadId: input?.threadId,
+      scopes: Array.isArray(scopes) ? scopes : [],
+    };
+  }
+
   /** The full scope set a suspended run resolved, persisted beside its stream state. */
   #getSnapshotScopes(existingSnapshot: WorkflowRunState | null | undefined): string[] | undefined {
     for (const key in existingSnapshot?.context) {
@@ -7774,10 +7793,12 @@ export class Agent<
       callScopes,
       defaultScopes,
       existingSnapshot,
+      snapshot,
     }: {
       callScopes?: string[];
       defaultScopes?: string[];
       existingSnapshot?: WorkflowRunState | null;
+      snapshot?: AgentScopesSnapshot;
     },
   ): Promise<{ options: T; resolved: ResolvedAgentScopes }> {
     const requestContext = options.requestContext ?? new RequestContext();
@@ -7788,13 +7809,16 @@ export class Agent<
       agentScopes: [...(configuredScopes ?? []), ...(defaultScopes ?? [])],
       callScopes,
       memory: options.memory,
-      snapshot: existingSnapshot
-        ? {
-            resourceId: snapshotMemoryInfo?.resourceId,
-            threadId: snapshotMemoryInfo?.threadId,
-            scopes: this.#getSnapshotScopes(existingSnapshot),
-          }
-        : undefined,
+      snapshot:
+        snapshot ??
+        (existingSnapshot
+          ? {
+              resourceId: snapshotMemoryInfo?.resourceId,
+              threadId: snapshotMemoryInfo?.threadId,
+              // A run suspended without recorded scopes held none, so a resume may not add any.
+              scopes: this.#getSnapshotScopes(existingSnapshot) ?? [],
+            }
+          : undefined),
     });
 
     return { options: applyResolvedAgentScopes(options, resolved, requestContext), resolved };
@@ -8775,7 +8799,11 @@ export class Agent<
         routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
         completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
       },
-      { callScopes: options?.scopes, defaultScopes: defaultNetworkOptions?.scopes },
+      {
+        callScopes: options?.scopes,
+        defaultScopes: defaultNetworkOptions?.scopes,
+        snapshot: await this.#getNetworkSnapshotScopes(runId),
+      },
     );
     const requestContextToUse = mergedOptions.requestContext;
 

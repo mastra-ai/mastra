@@ -39,7 +39,7 @@ import type { OutputWriter } from '../workflows';
 import { assertThreadOwnedByResource } from './memory-thread-ownership';
 import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
-import { deriveAgentRunRequestContext, resolveAgentScopes } from './scopes';
+import { deriveAgentRunRequestContext, parseAgentScope, resolveAgentScopes } from './scopes';
 import type {
   ZodSchema,
   AgentGenerateOptions,
@@ -87,6 +87,8 @@ export interface AgentLegacyCapabilities {
   }): AgentStreamOptions | Promise<AgentStreamOptions>;
   /** Check if agent has own memory */
   hasOwnMemory(): boolean;
+  /** Get the agent's configured scopes */
+  getScopes(options: { requestContext: RequestContext }): Promise<string[] | undefined>;
   /** Get instructions */
   getInstructions(options: { requestContext: RequestContext }): Promise<AgentInstructions>;
   /** Get the agent's LLM instance, optionally using a request-scoped model override */
@@ -830,13 +832,14 @@ export class AgentLegacyHandler {
     const threadIdFromContext = callerRequestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
     const resolvedScopes = resolveAgentScopes({
       requestContext: callerRequestContext,
+      agentScopes: await this.capabilities.getScopes({ requestContext: callerRequestContext }),
       memory: args.memory as { resource?: string; thread?: string | { id: string } } | undefined,
       resourceId: resourceIdFromArgs,
       threadId: args.threadId,
     });
     const requestContext = deriveAgentRunRequestContext(callerRequestContext, resolvedScopes.scopes);
-    const hasResourceScope = resolvedScopes.scopes.some(scope => scope.startsWith('resource:'));
-    const hasThreadScope = resolvedScopes.scopes.some(scope => scope.startsWith('thread:'));
+    const hasResourceScope = resolvedScopes.scopes.some(scope => parseAgentScope(scope)?.type === 'resource');
+    const hasThreadScope = resolvedScopes.scopes.some(scope => parseAgentScope(scope)?.type === 'thread');
 
     const threadFromArgs = resolveThreadIdFromArgs({
       threadId: args.threadId,

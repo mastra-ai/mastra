@@ -73,6 +73,7 @@ import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
+import { keepSuspendedRunScopes } from './resume-scopes';
 
 class InngestAgentPubSubRouter extends PubSub {
   constructor(
@@ -1386,6 +1387,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }
 
         const requestContext = mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext);
+        keepSuspendedRunScopes(snapshot, requestContext, resumeOptions);
         const tracingOptions = snapshot?.tracingContext
           ? {
               traceId: snapshot.tracingContext.traceId,
