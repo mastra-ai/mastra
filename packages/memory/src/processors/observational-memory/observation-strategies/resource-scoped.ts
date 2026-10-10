@@ -207,7 +207,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     const existingObservations = freshRecord?.activeObservations ?? record.activeObservations ?? '';
 
     const allMessages = Array.from(this.threadsWithMessages.values()).flat();
-    return { messages: allMessages, existingObservations };
+    return { messages: allMessages, existingObservations, contextRecord: freshRecord };
   }
 
   async emitStartMarkers(cycleId: string) {
@@ -234,7 +234,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     }
   }
 
-  async observe(_existingObservations: string, _messages: MastraDBMessage[]) {
+  async observe(observerContext: string, _messages: MastraDBMessage[], wasTruncated: boolean) {
     const maxTokensPerBatch =
       this.observationConfig.maxTokensPerBatch ?? OBSERVATIONAL_MEMORY_DEFAULTS.observation.maxTokensPerBatch;
     const orderedThreadIds = this.threadOrder.filter(tid => this.threadsWithMessages.has(tid));
@@ -268,7 +268,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
     const batchResults = await Promise.all(
       batches.map(async batch => {
         return this.deps.observer.callMultiThread(
-          _existingObservations,
+          observerContext,
           batch.threadMap,
           batch.threadIds,
           this.opts.abortSignal,
@@ -280,6 +280,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           this.opts.record.observedTimezone,
           this.opts.agent,
           this.opts.currentModel,
+          wasTruncated,
         );
       }),
     );
