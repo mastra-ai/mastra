@@ -4166,11 +4166,17 @@ export class Mastra<
       return { runs: [], total: 0 };
     }
 
-    // Get all workflows with default engine type
-    const defaultEngineWorkflows = Object.values(this.#workflows).filter(workflow => workflow.engineType === 'default');
+    const restartableWorkflows = Object.values(this.#workflows).filter(
+      workflow =>
+        (workflow.engineType === 'default' || workflow.engineType === 'evented') &&
+        // Skip before listing: opted-out workflows shouldn't cost storage queries, and processor
+        // workflows only run inside an agent call, so a lone restart has nothing to resume.
+        workflow.options?.autoRestartActiveRuns !== false &&
+        workflow.type !== 'processor',
+    );
 
     const activeRunsByWorkflow = await Promise.all(
-      defaultEngineWorkflows.map(workflow => workflow.listActiveWorkflowRuns()),
+      restartableWorkflows.map(workflow => workflow.listActiveWorkflowRuns()),
     );
 
     const allRuns = activeRunsByWorkflow.flatMap(activeRuns => activeRuns.runs);
@@ -7654,6 +7660,17 @@ export class Mastra<
         });
       }
     });
+
+    // Workers and runs are stopped, so nothing publishes anymore. Close transports
+    // that hold connections (e.g. Redis) so they don't keep the process alive.
+    const pubsub = this.#pubsub as PubSub & { close?: () => Promise<void> };
+    if (typeof pubsub.close === 'function') {
+      try {
+        await pubsub.close();
+      } catch (error) {
+        this.#logger?.error('Failed to close pubsub during shutdown', { error });
+      }
+    }
 
     // Close storage to release OS file handles (critical on Windows: open WAL/shm
     // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).

@@ -13,7 +13,7 @@ export const taskPromptContextNextTurnScenario: McE2eScenario = {
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
     terminal.submit('Create a prompt-context e2e task.');
 
-    await runtime.waitForScreenText(/Tasks \[0\/1 completed\]/i, terminal, 10_000);
+    await runtime.waitForScreenText(/0\/1\s+▶ Verifying current task list prompt context/, terminal, 10_000);
     await runtime.waitForScreenText(/Verifying current task list prompt context/i, terminal, 10_000);
     await runtime.waitForScreenText(/Task state seeded for prompt-context verification\./i, terminal, 15_000);
 

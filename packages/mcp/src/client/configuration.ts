@@ -16,7 +16,12 @@ import { createOAuthCallbackServer } from './oauth-callback-server';
 import type { OAuthCallbackServer } from './oauth-callback-server';
 import { MCPOAuthClientProvider } from './oauth-provider';
 import { MCPClientServerProxy } from './server-proxy';
-import type { MCPServerImplementation, SerializableMCPToolCatalog, SerializableMCPToolDefinition } from './types';
+import type {
+  MCPClientInfo,
+  MCPServerImplementation,
+  SerializableMCPToolCatalog,
+  SerializableMCPToolDefinition,
+} from './types';
 
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
@@ -59,6 +64,11 @@ export interface MCPClientOptions {
   servers: Record<string, MastraMCPServerDefinition>;
   /** Optional global timeout in milliseconds for all servers (default: 60000ms) */
   timeout?: number;
+  /**
+   * Default `clientInfo` every server receives on connect and with each request.
+   * Per-server `clientInfo` overrides it field-wise. Defaults to the server key and `'1.0.0'`.
+   */
+  clientInfo?: MCPClientInfo;
 }
 
 /**
@@ -91,6 +101,7 @@ export class MCPClient extends MastraBase {
   private serverConfigs: Record<string, MastraMCPServerDefinition> = {};
   private id: string;
   private defaultTimeout: number;
+  private defaultClientInfo?: MCPClientInfo;
   private mcpClientsById = new Map<string, InternalMastraMCPClient>();
   private disconnectPromise: Promise<void> | null = null;
   private authFlowsByServer = new Map<string, Promise<void>>();
@@ -134,6 +145,7 @@ export class MCPClient extends MastraBase {
   constructor(args: MCPClientOptions) {
     super({ name: 'MCPClient' });
     this.defaultTimeout = args.timeout ?? DEFAULT_REQUEST_TIMEOUT_MSEC;
+    this.defaultClientInfo = args.clientInfo && { ...args.clientInfo };
     this.serverConfigs = args.servers;
     this.id = args.id ?? this.makeId();
 
@@ -141,7 +153,7 @@ export class MCPClient extends MastraBase {
       this.id = args.id;
       const cached = mcpClientInstances.get(this.id);
 
-      if (cached && !equal(cached.serverConfigs, args.servers)) {
+      if (cached && (!equal(cached.serverConfigs, args.servers) || !equal(cached.defaultClientInfo, args.clientInfo))) {
         const existingInstance = mcpClientInstances.get(this.id);
         if (existingInstance) {
           void existingInstance.disconnect();
@@ -256,7 +268,7 @@ To fix this you have three different options:
        * const resources = await mcp.resources.list();
        * console.log(resources.weatherServer); // Array of resources
        * ```
-      */
+       */
       list: async (): Promise<Record<string, Resource[]>> => (await this.listResourcesWithErrors()).resources,
       /**
        * Lists resources while preserving per-server discovery failures.
@@ -623,7 +635,11 @@ To fix this you have three different options:
   }
 
   private makeId() {
-    const text = JSON.stringify(this.serverConfigs).normalize('NFKC');
+    const text = JSON.stringify(
+      this.defaultClientInfo === undefined
+        ? this.serverConfigs
+        : { servers: this.serverConfigs, clientInfo: this.defaultClientInfo },
+    ).normalize('NFKC');
     return createHash('sha256').update('MCPClient').update(text).digest('hex');
   }
 
@@ -651,7 +667,9 @@ To fix this you have three different options:
 
     this.disconnectPromise = (async () => {
       try {
-        mcpClientInstances.delete(this.id);
+        if (mcpClientInstances.get(this.id) === this) {
+          mcpClientInstances.delete(this.id);
+        }
 
         // Tear down any in-flight authorization: each callback server owns a live
         // loopback HTTP port, and closing it rejects the flow's waitForCode. Await
@@ -1475,6 +1493,10 @@ To fix this you have three different options:
       name,
       server: config,
       timeout: config.timeout ?? this.defaultTimeout,
+      clientInfo: {
+        name: config.clientInfo?.name ?? this.defaultClientInfo?.name,
+        version: config.clientInfo?.version ?? this.defaultClientInfo?.version,
+      },
     });
 
     mcpClient.__setLogger(this.logger);

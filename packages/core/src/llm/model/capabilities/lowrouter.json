@@ -1,0 +1,49 @@
+{
+  "attachment": [
+    "auto/mistralai/ministral-14b-2512",
+    "auto/mistralai/ministral-3b-2512",
+    "auto/mistralai/ministral-8b-2512",
+    "auto/mistralai/mistral-large-2512",
+    "auto/mistralai/mistral-large-4",
+    "auto/mistralai/mistral-medium-3.5",
+    "auto/mistralai/mistral-small-2603"
+  ],
+  "temperature": [
+    "auto/mistralai/codestral-2508",
+    "auto/mistralai/ministral-14b-2512",
+    "auto/mistralai/ministral-3b-2512",
+    "auto/mistralai/ministral-8b-2512",
+    "auto/mistralai/mistral-large-2512",
+    "auto/mistralai/mistral-large-4",
+    "auto/mistralai/mistral-medium-3.5",
+    "auto/mistralai/mistral-small-2603"
+  ],
+  "structuredOutput": [
+    "auto/mistralai/codestral-2508",
+    "auto/mistralai/ministral-14b-2512",
+    "auto/mistralai/ministral-3b-2512",
+    "auto/mistralai/ministral-8b-2512",
+    "auto/mistralai/mistral-large-4",
+    "auto/mistralai/mistral-medium-3.5"
+  ],
+  "reasoning": {
+    "auto/mistralai/mistral-large-4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "auto/mistralai/mistral-medium-3.5": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "auto/mistralai/mistral-small-2603": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ]
+  }
+}

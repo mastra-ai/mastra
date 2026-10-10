@@ -31,7 +31,7 @@ export class IdleCounterComponent extends Container {
     this.update(now);
   }
 
-  /** Quiet mode's live thinking state; status-line.ts swaps the Working row's label while it is set. */
+  /** Live thinking state; status-line.ts swaps the Working row's label while it is set. */
   setThinking(thinking: boolean): void {
     this.thinking = thinking;
   }

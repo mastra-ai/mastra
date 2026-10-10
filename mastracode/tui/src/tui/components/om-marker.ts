@@ -50,23 +50,6 @@ export type OMMarkerData =
       operationType?: 'observation' | 'reflection';
     }
   | {
-      type: 'om_buffering_start';
-      operationType: 'observation' | 'reflection';
-      tokensToBuffer: number;
-    }
-  | {
-      type: 'om_buffering_end';
-      operationType: 'observation' | 'reflection';
-      tokensBuffered: number;
-      bufferedTokens: number;
-      observations?: string;
-    }
-  | {
-      type: 'om_buffering_failed';
-      operationType: 'observation' | 'reflection';
-      error: string;
-    }
-  | {
       type: 'om_activation';
       operationType: 'observation' | 'reflection';
       tokensActivated: number;
@@ -78,11 +61,6 @@ export type OMMarkerData =
       type: 'om_activation_provider_change';
       previousModel: string;
       currentModel: string;
-    }
-  | {
-      type: 'om_thread_title_updated';
-      oldTitle?: string;
-      newTitle: string;
     };
 
 /**
@@ -133,27 +111,6 @@ function formatMarker(data: OMMarkerData): string {
       const tokens = data.tokensAttempted ? ` (${formatTokens(data.tokensAttempted)} tokens)` : '';
       return theme.fg('error', `  ✗ ${label} failed${tokens}: ${data.error}`);
     }
-    case 'om_buffering_start': {
-      const tokens = data.tokensToBuffer > 0 ? ` ~${formatTokens(data.tokensToBuffer)} tokens` : '';
-      return theme.fg('muted', `  ⟳ Buffering ${label.toLowerCase()}${tokens}...`);
-    }
-    case 'om_buffering_end': {
-      const input = formatTokens(data.tokensBuffered);
-      // For observations: bufferedTokens is cumulative total, not this cycle's output.
-      // Estimate output from observations string (~4 chars/token).
-      // For reflections: bufferedTokens IS the output token count.
-      const outputTokens =
-        data.operationType === 'observation' && data.observations
-          ? Math.round(data.observations.length / 4)
-          : data.bufferedTokens;
-      const output = formatTokens(outputTokens);
-      const ratio =
-        data.tokensBuffered > 0 && outputTokens > 0 ? ` (${Math.round(data.tokensBuffered / outputTokens)}x)` : '';
-      return theme.fg('success', `  ✓ Buffered ${label.toLowerCase()}: ${input} → ${output} tokens${ratio}`);
-    }
-    case 'om_buffering_failed': {
-      return theme.fg('error', `  ✗ Buffering ${label.toLowerCase()} failed: ${data.error}`);
-    }
     case 'om_activation': {
       if (data.operationType === 'reflection') {
         // For reflection, tokensActivated = obs tokens before, observationTokens = obs tokens after.
@@ -177,9 +134,6 @@ function formatMarker(data: OMMarkerData): string {
     }
     case 'om_activation_provider_change': {
       return theme.fg('muted', `  Model changed ${data.previousModel} → ${data.currentModel}, activating observations`);
-    }
-    case 'om_thread_title_updated': {
-      return theme.fg('muted', `  thread title updated: ${data.newTitle}`);
     }
   }
 }

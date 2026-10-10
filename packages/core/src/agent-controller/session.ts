@@ -393,6 +393,12 @@ export interface SessionMachinery {
   getAgent(): Agent;
   /** Get the ephemeral state associated with an active or suspended run. */
   getRunScope(runId: string): RunScope | undefined;
+  /**
+   * Release a suspended run that was aborted instead of resumed: drop its
+   * run-scoped workflow registration and delete its snapshot rows, so it is no
+   * longer listed as suspended.
+   */
+  releaseSuspendedRun(runId: string): Promise<void>;
   /** Open a fresh subscription to a thread's agent event stream. */
   subscribeToThread(input: {
     agent?: Agent;
@@ -743,7 +749,7 @@ export class SessionThread {
    * actually running it).
    */
   detachFromCurrent(): void {
-    this.#owner.abort({ localOnly: true });
+    this.#owner.abort({ localOnly: true, keepParked: true });
     this.cleanupSubscription();
   }
 
@@ -3809,7 +3815,7 @@ export class Session<TState = unknown> {
    * awaiting `approval.arm()` is not streaming, so we resolve it as a decline so
    * the gated tool is rejected and the run can finalize rather than hang.
    */
-  abortRun(options: { localOnly?: boolean } = {}): void {
+  abortRun(options: { localOnly?: boolean; keepParked?: boolean } = {}): void {
     this.#abortGeneration++;
     // Aborting twice while a gate is parked would tear the stream down before
     // the deferred decline lands (the second call sees the gate already
@@ -3841,6 +3847,7 @@ export class Session<TState = unknown> {
     const abortThreadId = this.thread.getId() ?? undefined;
     const wasGated = this.approval.isArmed({ threadId: abortThreadId });
     if (wasGated) {
+      const gatedRunId = this.run.getRunId();
       this.run.requestAbort({ deferSignal: true });
       // The engine completes this teardown after its decline await; a rebind can
       // start a successor run in that window, so bind it to this binding too.
@@ -3852,11 +3859,16 @@ export class Session<TState = unknown> {
       void this.runEngine
         .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
         .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
-        .finally(() => this.#releaseApprovalGates({ threadId: abortThreadId }));
+        .finally(() => {
+          this.#releaseApprovalGates({ threadId: abortThreadId });
+          void this.#releaseSuspendedRuns(suspendedToolCalls, gatedRunId);
+        });
       return;
     }
 
-    if (suspendedToolCalls.length > 0) {
+    // Detaching leaves parked runs alone: their snapshots are durable and
+    // another session or process may resume them.
+    if (suspendedToolCalls.length > 0 && !options.keepParked) {
       this.run.requestAbort({ deferSignal: true });
       // Settlement is async; a thread switch / `/new` can tear down the binding
       // and start a successor run before it lands. Bind the teardown to this
@@ -3865,12 +3877,30 @@ export class Session<TState = unknown> {
       void this.runEngine
         .settleSuspendedToolCallsAsDenied(suspendedToolCalls)
         .catch(error => this.emit({ type: 'error', error: getErrorFromUnknown(error) }))
-        .finally(() => this.completeDeferredAbort(origin));
+        .finally(() => {
+          this.completeDeferredAbort(origin);
+          // Release only after the teardown: a parked run's snapshot is kept so a
+          // later resume can find it, and this abort makes the run terminal.
+          void this.#releaseSuspendedRuns(suspendedToolCalls);
+        });
       return;
     }
 
     this.stream.abort({ localOnly: this.#localOnlyAbort });
     this.run.requestAbort();
+  }
+
+  async #releaseSuspendedRuns(suspendedToolCalls: Array<{ runId: string }>, liveRunId?: string | null): Promise<void> {
+    const runIds = new Set(suspendedToolCalls.map(({ runId }) => runId));
+    for (const runId of runIds) {
+      // A live gated run finalizes (and cleans up) itself.
+      if (runId === liveRunId) continue;
+      try {
+        await this.machinery.releaseSuspendedRun(runId);
+      } catch (error) {
+        this.emit({ type: 'error', error: getErrorFromUnknown(error) });
+      }
+    }
   }
 
   /**
@@ -3908,7 +3938,7 @@ export class Session<TState = unknown> {
    * additionally clears the display-state mirror of those suspensions and
    * notifies subscribers so stale suspension UI doesn't linger.
    */
-  abort(options: { localOnly?: boolean } = {}): void {
+  abort(options: { localOnly?: boolean; keepParked?: boolean } = {}): void {
     const hadPendingSuspensions = this.displayState.get().pendingSuspensions.size > 0;
     this.displayState.clearPendingSuspensions();
     this.abortRun(options);

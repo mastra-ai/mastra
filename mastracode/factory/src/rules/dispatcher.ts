@@ -837,8 +837,8 @@ export class FactoryDecisionDispatcher {
         const moved = await this.#storage.get({ orgId: record.orgId, id: item.id });
         if (!moved) return;
         const messageKey = `${record.idempotencyKey}:message`;
-        // Keyed by revision too: a stale commit is recorded as rejected under
-        // its identity, so the retry needs a fresh one to queue the message.
+        // Keyed by revision so a retry after a concurrent write commits under a
+        // fresh identity at the item's new revision.
         const queued = await this.#storage.commitRuleEvaluation({
           orgId: record.orgId,
           factoryProjectId: record.factoryProjectId,
@@ -862,6 +862,9 @@ export class FactoryDecisionDispatcher {
           now: new Date(),
         });
         if (queued.status === 'missing') return;
+        if (queued.status === 'stale') {
+          throw new Error('Factory transition message was not queued: the work item changed concurrently.');
+        }
         const queuedStatus = (queued.result as { status?: string }).status;
         if (queuedStatus !== 'accepted') {
           throw new Error(`Factory transition message was not queued: ${queuedStatus ?? 'unknown'}.`);

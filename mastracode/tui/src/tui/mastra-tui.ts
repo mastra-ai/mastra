@@ -28,8 +28,9 @@ import {
   fetchChangelog,
   fetchLatestVersion,
   isNewerVersion,
-  performUpdate,
+  planUpdate,
 } from '@mastra/code-sdk/utils/update-check';
+import type { UpdatePlan } from '@mastra/code-sdk/utils/update-check';
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
 import type { Workspace } from '@mastra/core/workspace';
 import { disposeAssistantRenderState } from './assistant-render-registry.js';
@@ -58,14 +59,12 @@ import { renderStatusAnimationFrame } from './footer-animation-renderer.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import { drainQueuedActionIfIdle } from './handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from './handlers/types.js';
-import { askModalQuestion } from './modal-question.js';
 import { applyCurrentThreadPack, listResolvableModePacks } from './model-packs/apply.js';
 import type { OnboardingResult } from './onboarding-inline.js';
 import { OnboardingInlineComponent } from './onboarding-inline.js';
 import { showModalOverlay } from './overlay.js';
 import { promptForApiKeyIfNeeded } from './prompt-api-key.js';
 
-import { applyQuietModeToRenderedComponents } from './quiet-mode.js';
 import {
   addPendingUserMessage,
   addUserMessage,
@@ -93,6 +92,7 @@ import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js
 import { updateStatusLine } from './status-line.js';
 import { resumeThreadOnStartup } from './thread-startup.js';
 import { setCurrentThreadTitle } from './thread-title.js';
+import { offerUpdate } from './update-flow.js';
 
 // =============================================================================
 // Types
@@ -261,8 +261,7 @@ export class MastraTUI {
 
     // Load user preferences
     const savedSettings = loadSettings();
-    this.state.quietMode = savedSettings.preferences.quietMode;
-    this.state.quietModeMaxToolPreviewLines = savedSettings.preferences.quietModeMaxToolPreviewLines;
+    this.state.previewLines = savedSettings.preferences.previewLines;
 
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
@@ -861,8 +860,6 @@ export class MastraTUI {
     if (this.shouldShowOnboarding()) {
       await this.showOnboarding();
     }
-
-    await this.showQuietModePreferencePromptIfNeeded();
 
     if (startupResumeIssue?.kind === 'missing') {
       showError(
@@ -1724,67 +1721,6 @@ export class MastraTUI {
     return true;
   }
 
-  private applyQuietModePreference(enabled: boolean, previewLineLimit = this.state.quietModeMaxToolPreviewLines): void {
-    const settings = loadSettings();
-    settings.preferences.quietMode = enabled;
-    settings.preferences.quietModeMaxToolPreviewLines = previewLineLimit;
-    settings.onboarding.quietModePreferenceSelected = true;
-    saveSettings(settings);
-
-    this.state.quietMode = enabled;
-    this.state.quietModeMaxToolPreviewLines = previewLineLimit;
-    this.state.taskProgress?.setQuietMode(enabled);
-
-    const color = this.state.session?.mode.resolve().metadata?.color;
-    const modeColor = typeof color === 'string' ? color : undefined;
-    applyQuietModeToRenderedComponents(this.state, enabled, previewLineLimit, modeColor);
-    flushRender(this.state);
-  }
-
-  private parseQuietPreviewLineAnswer(answer: string | null): number {
-    if (answer === 'None') return 0;
-    const match = answer?.match(/^(\d+)/);
-    return match ? Number(match[1]) : this.state.quietModeMaxToolPreviewLines;
-  }
-
-  async showQuietModePreferencePromptIfNeeded(): Promise<void> {
-    const settings = loadSettings();
-    if (settings.onboarding.quietModePreferenceSelected) return;
-
-    const answer = await askModalQuestion(this.state.ui, {
-      question:
-        'Try compact quiet mode?\n\nQuiet mode keeps tool calls and task progress compact so long sessions are easier to scan.',
-      options: [
-        { label: 'Enable quiet mode', description: 'Use compact rendering by default' },
-        { label: 'Keep classic mode', description: 'Keep the current full rendering' },
-      ],
-      allowCustomResponse: false,
-      selectedOptionLabel: 'Enable quiet mode',
-      overlay: { maxHeight: '50%' },
-    });
-
-    if (answer !== 'Enable quiet mode') {
-      this.applyQuietModePreference(false);
-      return;
-    }
-
-    const previewLineAnswer = await askModalQuestion(this.state.ui, {
-      question: 'How many quiet-mode tool preview lines should be shown?\n\nYou can change this later in /settings.',
-      options: [
-        { label: 'None', description: 'Hide tool previews and shell output' },
-        { label: '1 line', description: 'Show the latest preview line' },
-        { label: '2 lines', description: 'Default' },
-        { label: '4 lines', description: 'Show more streaming detail' },
-        { label: '8 lines', description: 'Show the most detail' },
-      ],
-      allowCustomResponse: false,
-      selectedOptionLabel: '2 lines',
-      overlay: { maxHeight: '50%' },
-    });
-
-    this.applyQuietModePreference(true, this.parseQuietPreviewLineAnswer(previewLineAnswer));
-  }
-
   // ===========================================================================
   // Auto-Update
   // ===========================================================================
@@ -1830,74 +1766,29 @@ export class MastraTUI {
       return;
     }
 
-    const [pm, changelog] = await Promise.all([detectPackageManager(), fetchChangelog(latestVersion)]);
+    const pm = await detectPackageManager();
+    const [plan, changelog] = await Promise.all([planUpdate(pm, latestVersion), fetchChangelog(latestVersion)]);
 
     // Prompt the user (and mark banner as shown so periodic checks don't repeat it)
     this.hasShownUpdateBanner = true;
-    await this.showUpdatePrompt(currentVersion, latestVersion, pm, changelog);
+    await this.showUpdatePrompt(currentVersion, latestVersion, pm, changelog, plan);
   }
 
   /**
-   * Show a Y/N prompt offering to auto-update (inline in the chat flow).
+   * Offer the update inline in the chat, or show the command to run when it
+   * can't be installed for the user.
    */
   private async showUpdatePrompt(
     currentVersion: string,
     latestVersion: string,
     pm: Awaited<ReturnType<typeof detectPackageManager>>,
     changelog: string | null,
+    plan: UpdatePlan,
   ): Promise<void> {
-    let question = `A new version of Mastra Code is available: v${latestVersion} (current: v${currentVersion}).`;
-    if (changelog) {
-      question += `\n\nWhat's new:\n${changelog}`;
-    }
-    question += `\n\nWould you like to update now?`;
-
-    const answer = await new Promise<string | null>(resolve => {
-      const component = new AskQuestionInlineComponent(
-        {
-          question,
-          options: [
-            { label: 'Yes', description: 'Update and restart' },
-            { label: 'No', description: 'Skip this version' },
-          ],
-          allowCustomResponse: false,
-          onSubmit: answer => {
-            this.state.activeInlineQuestion = undefined;
-            resolve(answer);
-          },
-          onCancel: () => {
-            this.state.activeInlineQuestion = undefined;
-            resolve(null);
-          },
-        },
-        this.state.ui,
-      );
-
-      insertChatComponentWithBoundarySpacing(this.state.chatContainer, component);
-      this.state.activeInlineQuestion = component;
-      component.focused = true;
-      flushRender(this.state);
-    });
-
-    if (answer === 'Yes') {
-      showInfo(this.state, `Updating to v${latestVersion}…`);
-      const outcome = await performUpdate(pm, latestVersion);
-      if (outcome.status === 'updated') {
-        // Printed after TUI teardown — a message rendered inside it is lost in the exit race.
-        this.stop();
-        console.info(outcome.message);
-        this.exit(0);
-      } else {
-        showError(this.state, outcome.message);
-      }
-    } else {
-      // User declined — save the dismissed version
-      const settings = loadSettings();
-      settings.updateDismissedVersion = latestVersion;
-      saveSettings(settings);
-      if (answer === 'No') {
-        showInfo(this.state, `Update skipped. Run /update to update later.`);
-      }
-    }
+    await offerUpdate(
+      { state: this.state, stop: () => this.stop(), exit: code => this.exit(code) },
+      { currentVersion, latestVersion, pm, changelog, plan },
+      { startup: true },
+    );
   }
 }

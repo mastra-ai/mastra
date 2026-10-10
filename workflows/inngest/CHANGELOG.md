@@ -1,5 +1,26 @@
 # @mastra/inngest
 
+## 1.10.4-alpha.3
+
+### Patch Changes
+
+- Fixed Inngest durable agents to emit step-finish events after resolving whether the loop continues. ([#26348](https://github.com/mastra-ai/mastra/pull/26348))
+
+- Fixed `createInngestAgent` ignoring lifecycle callbacks set in the agent's `defaultOptions` (such as `onStepFinish` and `onFinish`). Inngest agents now fire these defaults from `stream()`, `generate()`, `resume()`, and `resumeGenerate()` just like plain and durable agents, and callbacks passed at call time still take precedence. Fixes [#26527](https://github.com/mastra-ai/mastra/issues/26527). ([#26533](https://github.com/mastra-ai/mastra/pull/26533))
+
+- Fixed `createInngestAgent` ignoring an external `abortSignal` when the Inngest function runs in a different process. Aborting the signal passed to `stream()` or `resumeStream()` now stops the run on the step worker, the same as `result.abort()`, so the stream ends with `finishReason: 'aborted'` and `onAbort` fires. ([#26548](https://github.com/mastra-ai/mastra/pull/26548))
+
+  ```ts
+  const controller = new AbortController();
+  const result = await agent.stream('...', { abortSignal: controller.signal });
+  controller.abort(); // now stops the run on the remote worker
+  ```
+
+- Typed `runId` on the `onStepFinish` payload for `createInngestAgent` stream, resume and observe calls. You can now read `payload.runId` without a cast. Fixes #26524. ([#26531](https://github.com/mastra-ai/mastra/pull/26531))
+
+- Updated dependencies [[`b196f30`](https://github.com/mastra-ai/mastra/commit/b196f30602005325e95bde29a9b7676aeea14c42), [`cca0f8a`](https://github.com/mastra-ai/mastra/commit/cca0f8a543eca15c24be21c8ee43dc46fb7aefae), [`06e428d`](https://github.com/mastra-ai/mastra/commit/06e428d80ccbc54bb74eb6bd6f01a7fd4eddc45f), [`b875985`](https://github.com/mastra-ai/mastra/commit/b87598584f0f2b008242ed1f458b7f72ba6d42d1), [`85cfc88`](https://github.com/mastra-ai/mastra/commit/85cfc88fc5f196ef97cd2334441cd30cac99bce1), [`f2073f6`](https://github.com/mastra-ai/mastra/commit/f2073f6f2fff59ffca7eeac67579093454a0e761), [`a1c0020`](https://github.com/mastra-ai/mastra/commit/a1c002066736e54a4b07c03968b0df19cf1afb03), [`5068168`](https://github.com/mastra-ai/mastra/commit/50681683948fd55928d029a63f0de7e56976e1f4), [`6c9ad80`](https://github.com/mastra-ai/mastra/commit/6c9ad808c8503e812a72a48827ce425b9e78970f), [`a3269cd`](https://github.com/mastra-ai/mastra/commit/a3269cd4b92683780591ca782be491834787b861), [`152679c`](https://github.com/mastra-ai/mastra/commit/152679c4b74de8be29e5d932f6c4b35e79397516), [`7cb014d`](https://github.com/mastra-ai/mastra/commit/7cb014d3bdd96739c4bd7ad968af34c6a88ced7e), [`9f4ab32`](https://github.com/mastra-ai/mastra/commit/9f4ab3242bd686ff43c871fedeede1ed21260dbf)]:
+  - @mastra/core@1.76.0-alpha.6
+
 ## 1.10.4-alpha.2
 
 ### Patch Changes
