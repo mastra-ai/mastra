@@ -2,8 +2,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
+import type { BoardCatalogResponse } from '../../../../api/types';
 import { useCreateFactoryMutation, useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSaveIntakeBindingMutation, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
+import { orderedBoards } from '../../factory/boardCatalog';
 import { fetchIntakeConfig, selectIntakeSource } from '../../factory/services/intake';
 import { updateFactoryDefaultModel } from '../services/github';
 import type { FactoryProjectPayload } from '../services/github';
@@ -29,24 +31,36 @@ export function useCreateFactoryFromDraft({
   onRepositoryLinked,
   onCreated,
 }: CreateFactoryFromDraftOptions) {
-  const { baseUrl } = useApiConfig();
+  const { baseUrl, client } = useApiConfig();
   const queryClient = useQueryClient();
   const createFactory = useCreateFactoryMutation();
   const linkRepository = useLinkRepositoryMutation();
   const saveIntakeBinding = useSaveIntakeBindingMutation();
   const saveIntakeConfig = useSaveIntakeConfigMutation();
 
+  // Issues belong on Work when it is installed; an app that replaced the
+  // built-in boards gets its first installed board instead.
+  const resolveIntakeBoard = async (factoryProjectId: string) => {
+    const { boards } = await queryClient.fetchQuery({
+      queryKey: queryKeys.boardCatalog(factoryProjectId),
+      queryFn: () => client.get<BoardCatalogResponse>(`/web/factory/projects/${factoryProjectId}/boards`),
+    });
+    const board = orderedBoards(boards)[0];
+    if (!board) throw new Error('No boards are installed for this Factory.');
+    return board.id;
+  };
+
   const feedProject = async (input: {
     integrationId: 'linear' | 'jira';
     sourceId: string;
     factoryProjectId: string;
+    board: string;
   }) => {
     await saveIntakeBinding.mutateAsync({
       integrationId: input.integrationId,
       sourceId: input.sourceId,
       factoryProjectId: input.factoryProjectId,
-      // A fresh Factory only has its built-in boards; issues belong on Work.
-      board: 'work',
+      board: input.board,
     });
     const config = await fetchIntakeConfig(baseUrl);
     const selection = selectIntakeSource(config[input.integrationId], input.sourceId);
@@ -68,13 +82,19 @@ export function useCreateFactoryFromDraft({
         await onRepositoryLinked(linked.projectRepositoryId);
       }
 
+      const board = draft.linearProjectId || draft.jiraProjectId ? await resolveIntakeBoard(factory.id) : undefined;
       await Promise.all([
         updateFactoryDefaultModel(baseUrl, factory.id, modelId),
-        draft.linearProjectId
-          ? feedProject({ integrationId: 'linear', sourceId: draft.linearProjectId, factoryProjectId: factory.id })
+        draft.linearProjectId && board
+          ? feedProject({
+              integrationId: 'linear',
+              sourceId: draft.linearProjectId,
+              factoryProjectId: factory.id,
+              board,
+            })
           : undefined,
-        draft.jiraProjectId
-          ? feedProject({ integrationId: 'jira', sourceId: draft.jiraProjectId, factoryProjectId: factory.id })
+        draft.jiraProjectId && board
+          ? feedProject({ integrationId: 'jira', sourceId: draft.jiraProjectId, factoryProjectId: factory.id, board })
           : undefined,
       ]);
       await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
