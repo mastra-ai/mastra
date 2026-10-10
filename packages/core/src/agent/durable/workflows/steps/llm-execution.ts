@@ -705,7 +705,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // is allowed to replace `structuredOutput` for this iteration.
             const structuredOutputConfig = execOptions.structuredOutput;
             let structuredOutput =
-              structuredOutputConfig?.schema && !structuredOutputConfig?.structuringModelConfig
+              structuredOutputConfig?.schema &&
+              !structuredOutputConfig?.structuringModelConfig &&
+              !structuredOutputConfig?.hasStructuringModel
                 ? {
                     schema: structuredOutputConfig.schema,
                     jsonPromptInjection: structuredOutputConfig.jsonPromptInjection,

@@ -56,7 +56,12 @@ import {
 } from '../workflows/prepare-stream/client-tool-output-hooks';
 import { authorizeDurableMemory } from './memory-fga';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
-import { createWorkflowInput, serializeClientTools, serializeToolsetToolNames } from './utils/serialize-state';
+import {
+  createWorkflowInput,
+  serializeClientTools,
+  serializeModelConfig,
+  serializeToolsetToolNames,
+} from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 import { isJsonSafe } from './workflows/shared/schemas';
 
@@ -705,15 +710,19 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     if (structuredOutputSchema) {
       serializedStructuredOutput = {
         jsonPromptInjection: so.jsonPromptInjection,
-        // `instructions` means two different things depending on `model`: structuring-agent
-        // instructions when a separate structuring pass runs, injected prompt text when it
-        // does not. The durable path has no structuring pass (`structuringModelConfig` is
-        // never populated, so `llm-execution.ts` always takes the direct branch), so carrying
-        // the field when `model` is set would inject structuring-agent prose as the model's
-        // only output guidance. Withhold it there and let the generated schema instruction stand.
-        instructions: so.model ? undefined : so.instructions,
+        // With `model` set these are structuring-agent instructions for the finish-time
+        // structuring pass; otherwise they are injected into the main model's prompt.
+        instructions: so.instructions,
         useAgent: so.useAgent,
         hasStructuringModel: so.model ? true : undefined,
+        // Workers without the live config (remote/recovered runs) resolve the structuring
+        // model from this. Model instances persist as `provider/modelId`, like the main model.
+        structuringModelConfig:
+          typeof so.model === 'string'
+            ? { provider: so.model.split('/')[0] ?? '', modelId: so.model, originalConfig: so.model }
+            : so.model && typeof so.model.provider === 'string' && typeof so.model.modelId === 'string'
+              ? serializeModelConfig(so.model)
+              : undefined,
         errorStrategy: so.errorStrategy,
         // A non-JSON-safe fallback would fail options validation; in-process runs still
         // have it through the run registry's live config.
