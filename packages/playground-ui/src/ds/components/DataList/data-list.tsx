@@ -11,6 +11,7 @@ import {
   DataListDateCell,
   DataListCreatedCell,
   DataListTimeCell,
+  DataListStackedCell,
 } from './data-list-cells';
 import { DataListGroup } from './data-list-group';
 import { DataListNextPageLoading } from './data-list-next-page-loading';
@@ -25,6 +26,7 @@ import { DataListSortableTopCell } from './data-list-sortable-top-cell';
 import { DataListSpacer } from './data-list-spacer';
 import { DataListSubheader } from './data-list-subheader';
 import { DataListSubHeading } from './data-list-subheading';
+import { DataListToolbar, DataListToolbarEnd, DataListToolbarStart } from './data-list-toolbar';
 import { DataListTop } from './data-list-top';
 import {
   DataListTopCell,
@@ -34,7 +36,14 @@ import {
 } from './data-list-top-cell';
 import { DataListTopCells } from './data-list-top-cells';
 
-export type { DataListRootProps, DataListVariant } from './data-list-root';
+export type { DataListRootProps, DataListSize, DataListVariant } from './data-list-root';
+export type {
+  DataListCellAlign,
+  DataListCellProps,
+  DataListCellTone,
+  DataListStackedCellProps,
+} from './data-list-cells';
+export type { DataListToolbarProps } from './data-list-toolbar';
 export type { DataListSortableTopCellProps, DataListSort } from './data-list-sortable-top-cell';
 
 export const DataList = Object.assign(DataListRoot, {
@@ -59,6 +68,7 @@ export const DataList = Object.assign(DataListRoot, {
   DateCell: DataListDateCell,
   CreatedCell: DataListCreatedCell,
   TimeCell: DataListTimeCell,
+  StackedCell: DataListStackedCell,
   SelectCell: DataListSelectCell,
   TopSelectCell: DataListTopSelectCell,
   NoMatch: DataListNoMatch,
@@ -68,4 +78,7 @@ export const DataList = Object.assign(DataListRoot, {
   Spacer: DataListSpacer,
   NextPageLoading: DataListNextPageLoading,
   Pagination: DataListPagination,
+  Toolbar: DataListToolbar,
+  ToolbarStart: DataListToolbarStart,
+  ToolbarEnd: DataListToolbarEnd,
 });
