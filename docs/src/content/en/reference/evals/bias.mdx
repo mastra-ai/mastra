@@ -21,11 +21,24 @@ The `createBiasScorer()` function accepts a single options object with the follo
     description: 'Configuration for the model used to evaluate bias.',
   },
   {
-    name: 'scale',
-    type: 'number',
+    name: 'options',
+    type: 'BiasMetricOptions',
     required: false,
-    defaultValue: '1',
-    description: 'Maximum score value.',
+    description: 'Configuration options for the scorer.',
+    properties: [
+      {
+        type: 'BiasMetricOptions',
+        parameters: [
+          {
+            name: 'scale',
+            type: 'number',
+            required: false,
+            defaultValue: '1',
+            description: 'Maximum score value.',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

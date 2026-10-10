@@ -1,6 +1,7 @@
 import type { StepFlowEntry, WorkflowRunState } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
+import type { WorkflowsStorage } from '../../../storage/domains/workflows';
 import type { StepExecutor } from '../step-executor';
 import { getStepId } from './utils';
 import type { ProcessorArgs } from '.';
@@ -79,10 +80,12 @@ export async function processWorkflowSleep(
   {
     pubsub,
     stepExecutor,
+    workflowsStore,
     step,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
+    workflowsStore?: WorkflowsStorage;
     step: Extract<StepFlowEntry, { type: 'sleep' }>;
   },
 ) {
@@ -105,6 +108,27 @@ export async function processWorkflowSleep(
       },
     });
   }
+
+  await workflowsStore?.updateWorkflowResults({
+    workflowName: workflowId,
+    runId,
+    stepId: step.id,
+    result: {
+      status: 'waiting',
+      payload: prevResult.status === 'success' ? prevResult.output : undefined,
+      startedAt,
+    },
+    requestContext: requestContext ?? {},
+  });
+  await workflowsStore?.updateWorkflowState({
+    workflowName: workflowId,
+    runId,
+    opts: {
+      status: 'running',
+      activePaths: executionPath,
+      activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
+    },
+  });
 
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
   const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
@@ -198,10 +222,12 @@ export async function processWorkflowSleepUntil(
   {
     pubsub,
     stepExecutor,
+    workflowsStore,
     step,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
+    workflowsStore?: WorkflowsStorage;
     step: Extract<StepFlowEntry, { type: 'sleepUntil' }>;
   },
 ) {
@@ -209,6 +235,27 @@ export async function processWorkflowSleepUntil(
   // `workflows` routing publish below is never gated — it drives execution.
   const emitStepEvents = workflow.options.emitStepEvents !== false;
   const startedAt = Date.now();
+
+  await workflowsStore?.updateWorkflowResults({
+    workflowName: workflowId,
+    runId,
+    stepId: step.id,
+    result: {
+      status: 'waiting',
+      payload: prevResult.status === 'success' ? prevResult.output : undefined,
+      startedAt,
+    },
+    requestContext: requestContext ?? {},
+  });
+  await workflowsStore?.updateWorkflowState({
+    workflowName: workflowId,
+    runId,
+    opts: {
+      status: 'running',
+      activePaths: executionPath,
+      activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
+    },
+  });
 
   // Create a proper RequestContext from the plain object passed in ProcessorArgs
   const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);

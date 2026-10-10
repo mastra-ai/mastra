@@ -1,5 +1,32 @@
 # @mastra/loggers
 
+## 1.3.6-alpha.3
+
+### Patch Changes
+
+- `FileTransport.listLogs` and `listLogsByRunId` now reject with a `MastraError` when the log file cannot be read (for example, it was deleted or is unreadable), instead of logging to the console and returning an empty result that looked like "no logs". Individual malformed lines are still skipped. ([#26371](https://github.com/mastra-ai/mastra/pull/26371))
+
+- Updated dependencies [[`b196f30`](https://github.com/mastra-ai/mastra/commit/b196f30602005325e95bde29a9b7676aeea14c42), [`cca0f8a`](https://github.com/mastra-ai/mastra/commit/cca0f8a543eca15c24be21c8ee43dc46fb7aefae), [`06e428d`](https://github.com/mastra-ai/mastra/commit/06e428d80ccbc54bb74eb6bd6f01a7fd4eddc45f), [`b875985`](https://github.com/mastra-ai/mastra/commit/b87598584f0f2b008242ed1f458b7f72ba6d42d1), [`85cfc88`](https://github.com/mastra-ai/mastra/commit/85cfc88fc5f196ef97cd2334441cd30cac99bce1), [`f2073f6`](https://github.com/mastra-ai/mastra/commit/f2073f6f2fff59ffca7eeac67579093454a0e761), [`a1c0020`](https://github.com/mastra-ai/mastra/commit/a1c002066736e54a4b07c03968b0df19cf1afb03), [`5068168`](https://github.com/mastra-ai/mastra/commit/50681683948fd55928d029a63f0de7e56976e1f4), [`6c9ad80`](https://github.com/mastra-ai/mastra/commit/6c9ad808c8503e812a72a48827ce425b9e78970f), [`a3269cd`](https://github.com/mastra-ai/mastra/commit/a3269cd4b92683780591ca782be491834787b861), [`152679c`](https://github.com/mastra-ai/mastra/commit/152679c4b74de8be29e5d932f6c4b35e79397516), [`7cb014d`](https://github.com/mastra-ai/mastra/commit/7cb014d3bdd96739c4bd7ad968af34c6a88ced7e), [`9f4ab32`](https://github.com/mastra-ai/mastra/commit/9f4ab3242bd686ff43c871fedeede1ed21260dbf)]:
+  - @mastra/core@1.76.0-alpha.6
+
+## 1.3.6-alpha.2
+
+### Patch Changes
+
+- Fixed `FileTransport` silently treating failed log writes as successful. Write errors (for example, a full disk) are now reported instead of logs being lost without notice. ([#26331](https://github.com/mastra-ai/mastra/pull/26331))
+
+- Updated dependencies [[`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`1211fcf`](https://github.com/mastra-ai/mastra/commit/1211fcf499acbda22ca8d399ae820789c69609f2), [`e995603`](https://github.com/mastra-ai/mastra/commit/e995603f64d4f03d234e7f53cc3ab03d9dfea502), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`eec3388`](https://github.com/mastra-ai/mastra/commit/eec3388f29248ecb71724e8ca0a9afef7a522629), [`cfaeff3`](https://github.com/mastra-ai/mastra/commit/cfaeff3e03d6743682a8db0c1c30c2dab11b3171)]:
+  - @mastra/core@1.76.0-alpha.2
+
+## 1.3.6-alpha.1
+
+### Patch Changes
+
+- Fixed `FileTransport` accepting a directory as its log path. It now throws a clear error at construction instead of failing later with an `EISDIR` stream error. ([#26330](https://github.com/mastra-ai/mastra/pull/26330))
+
+- Updated dependencies [[`4b8f1d7`](https://github.com/mastra-ai/mastra/commit/4b8f1d74adb2b1742fd10ebb1d24e863329075aa), [`d4e6c7f`](https://github.com/mastra-ai/mastra/commit/d4e6c7fffdef836fc44276509596e78d7d785729), [`b801545`](https://github.com/mastra-ai/mastra/commit/b80154540bf557de296bcb6f068b5117b5d84ef9), [`ddb53f2`](https://github.com/mastra-ai/mastra/commit/ddb53f26142ccf6177dec5392b6dc867ce177d15), [`42a3c74`](https://github.com/mastra-ai/mastra/commit/42a3c748085fee95d4e38e42a4ccbce891ce3e3f), [`b801545`](https://github.com/mastra-ai/mastra/commit/b80154540bf557de296bcb6f068b5117b5d84ef9), [`a9c8af5`](https://github.com/mastra-ai/mastra/commit/a9c8af5b6b2449e4127ab30b662e79ac025cc4f0), [`028dc61`](https://github.com/mastra-ai/mastra/commit/028dc61f4802fad472603df1538c4ca126f8680f), [`2ef4283`](https://github.com/mastra-ai/mastra/commit/2ef428340d1eda6c6c8cfba4b90a43b88739f098), [`d45b854`](https://github.com/mastra-ai/mastra/commit/d45b854640e9b3d7fe7434061be988359ac2f470), [`b801545`](https://github.com/mastra-ai/mastra/commit/b80154540bf557de296bcb6f068b5117b5d84ef9), [`92004fd`](https://github.com/mastra-ai/mastra/commit/92004fd001edd2a0647f2531e0daf76a5825fc00), [`b389368`](https://github.com/mastra-ai/mastra/commit/b389368b0574a6a575a5835a11fc41437b78b842), [`835e2cd`](https://github.com/mastra-ai/mastra/commit/835e2cdba8dbef6848f18bb73bbb8aa9dad6dddf), [`0fca057`](https://github.com/mastra-ai/mastra/commit/0fca05756ac8409494d54c70106db2ef7dfc81fc), [`9db8229`](https://github.com/mastra-ai/mastra/commit/9db8229bc7c30133fb1c085f710f1fbf94e5d335), [`3a7e3d0`](https://github.com/mastra-ai/mastra/commit/3a7e3d01211a7ad5696b242f033cd1a30b06912e), [`005161a`](https://github.com/mastra-ai/mastra/commit/005161a90ac9a8d25a4f9b1edc95c139e5d295d9), [`c7283d7`](https://github.com/mastra-ai/mastra/commit/c7283d715d9c8a7f3d3afd904f402ea0d4d843c4), [`2f14b26`](https://github.com/mastra-ai/mastra/commit/2f14b267b06da7255ef7c131f1138993c39bd733), [`ea7ca75`](https://github.com/mastra-ai/mastra/commit/ea7ca755a470f026606949567da32e69969ef16c)]:
+  - @mastra/core@1.76.0-alpha.1
+
 ## 1.3.6-alpha.0
 
 ### Patch Changes

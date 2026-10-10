@@ -23,6 +23,7 @@ import type { ChunkType } from '../stream';
 import type { DataChunkType, LanguageModelUsage, LLMStepResult, ProviderMetadata } from '../stream/types';
 import type { Workflow } from '../workflows';
 import type { OutputWriter } from '../workflows/types';
+import type { AnyWorkspace } from '../workspace/workspace';
 import type { StructuredOutputOptions } from './processors';
 import type { ProcessorStepOutput } from './step-schema';
 
@@ -361,6 +362,8 @@ export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends Proc
   model: MastraLanguageModel;
   /** The message list the prompt was built from, for provenance that the converted prompt no longer carries (e.g. per-message metadata stamps). */
   messageList?: MessageList;
+  /** The workspace of this step, the one the agent's tools use. Undefined when the agent has none. */
+  workspace?: AnyWorkspace;
   /** The current step number (0-indexed) within the agentic loop. */
   stepNumber: number;
   /** All completed steps so far. */
@@ -1013,6 +1016,7 @@ export { defaultStabilityErrorProcessors, STABILITY_ERROR_PROCESSOR_IDS } from '
 export * from './processors';
 export { CyberRefusalHandler } from './cyber-refusal-handler';
 export { PrefillErrorHandler } from './prefill-error-handler';
+export { UnsupportedFileHandler } from './unsupported-file-handler';
 export {
   ProviderHistoryCompat,
   anthropicToolIdFormat,

@@ -1,6 +1,6 @@
 /**
  * One-line transcript notice for persisted `data-mastracode-account-switch`
- * parts: account rotations, pool exhaustion, and starting-on-account notices.
+ * parts: account rotations and pool exhaustion.
  * Modeled on OMMarkerComponent (single themed Text row). The copy comes from
  * the SDK's shared formatter so live `info`-event lines and history-reloaded
  * part lines read identically.

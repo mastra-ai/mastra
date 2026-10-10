@@ -39,6 +39,7 @@ import { resolveTuiSubagents } from './subagent-settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
+import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
 import { getCurrentVersion } from './version.js';
 
 let controller: Awaited<ReturnType<typeof createMastraCode>>['controller'];
@@ -50,6 +51,7 @@ let storageMaintenance: Awaited<ReturnType<typeof createMastraCode>>['storageMai
 let stopPluginSignalProviders: Awaited<ReturnType<typeof createMastraCode>>['stopPluginSignalProviders'] | undefined;
 let threadScheduler: Awaited<ReturnType<typeof createMastraCode>>['threadScheduler'] | undefined;
 let stopNotificationDispatch: Awaited<ReturnType<typeof createMastraCode>>['stopNotificationDispatch'] | undefined;
+let releaseThreadClaims: Awaited<ReturnType<typeof createMastraCode>>['releaseThreadClaims'] | undefined;
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 let tui: MastraTUI | undefined;
 let processMemoryDiagnostics: ProcessMemoryDiagnostics | undefined;
@@ -114,6 +116,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
   stopPluginSignalProviders = result.stopPluginSignalProviders;
   threadScheduler = result.threadScheduler;
   stopNotificationDispatch = result.stopNotificationDispatch;
+  releaseThreadClaims = result.releaseThreadClaims;
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
@@ -173,6 +176,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
     storageMaintenance: result.storageMaintenance,
     processMemoryDiagnostics,
     knowledgeInspector: result.knowledgeInspector,
+    knowledgeInspectorUnavailableReason: result.knowledgeInspectorUnavailableReason,
     threadScheduler: result.threadScheduler,
     appName: 'Mastra Code',
     version: getCurrentVersion(),
@@ -210,6 +214,13 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
 const asyncCleanup = (): Promise<void> => {
   cleanupPromise ??= (async () => {
     releaseAllThreadLocks();
+    // Release thread claims before the slow teardown below, so a restarted
+    // session can claim its thread (and peers can reach it) right away.
+    try {
+      releaseThreadClaims?.();
+    } catch {
+      // Best-effort — the process is exiting.
+    }
     // Stop plugin-contributed signal providers (and the plugin reload listener)
     // before quiescing workers: a provider that keeps polling past this point
     // could dispatch into a controller that is shutting down.
@@ -405,6 +416,16 @@ async function main() {
   if (process.argv[2] === 'prune') {
     const { runPruneCommand } = await import('@mastra/code-sdk/utils/prune-cli');
     return process.exit(await runPruneCommand(process.argv.slice(3)));
+  }
+
+  // Also checked before the headless branch, which would send the bare word as a prompt.
+  const updateArgs = getUpdateCommandArgs(process.argv);
+  if (updateArgs) {
+    const code = await runUpdateCommand({ args: updateArgs, currentVersion: getCurrentVersion() });
+    await Promise.all(
+      [process.stdout, process.stderr].map(stream => new Promise(resolve => stream.write('', resolve))),
+    );
+    return process.exit(code);
   }
 
   const loginIndex = process.argv.findIndex(

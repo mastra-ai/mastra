@@ -128,7 +128,9 @@ export interface CommitFactoryRuleEvaluationInput {
 export type CommitFactoryRuleEvaluationResult =
   | { status: 'committed'; result: Record<string, unknown> }
   | { status: 'replayed'; result: Record<string, unknown> }
-  | { status: 'missing' };
+  | { status: 'missing' }
+  /** The work item's revision moved; nothing was persisted, so the caller may re-read and retry. */
+  | { status: 'stale' };
 
 export interface FactoryToolResultCursorRecord {
   bindingId: string;
@@ -1976,12 +1978,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           : null;
         if (input.workItemId !== null && !itemRow) return { status: 'missing' as const };
         const item = itemRow ? toRow(itemRow) : null;
-        const stale = item !== null && item.revision !== input.expectedRevision;
-        const outcome = stale ? 'rejected' : input.outcome.status;
-        const code = stale ? 'stale' : (input.outcome.code ?? null);
-        const reason = stale
-          ? 'The work item changed before this rule evaluation committed.'
-          : (input.outcome.reason ?? null);
+        // A lost revision race is not a verdict on the event: persisting it would
+        // make every redelivery replay an empty result, so record nothing.
+        if (item !== null && item.revision !== input.expectedRevision) return { status: 'stale' as const };
+        const outcome = input.outcome.status;
+        const code = input.outcome.code ?? null;
+        const reason = input.outcome.reason ?? null;
         const decisions = outcome === 'accepted' ? input.decisions : [];
         const result = {
           status: outcome,

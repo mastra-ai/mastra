@@ -385,6 +385,58 @@ name.
 step. `workingDirectory` sets the cwd for the build and the sandbox, and the
 repository is cloned to `<workingDirectory>/<repo>`.
 
+#### Several repositories in one template
+
+Pass `repos` instead of `getRepositoryAccess` to clone several repositories
+into one template, each with its own credential resolver and setup command (a string or an
+array, each entry its own build step):
+
+```typescript
+const sandbox = new E2BSandbox({
+  id: sessionId,
+  template: createRepoTemplate({
+    repos: [
+      {
+        getRepositoryAccess: async () => ({
+          cloneUrl: 'https://github.com/mastra-ai/mastra.git',
+        }),
+        setupCommand: 'pnpm install --frozen-lockfile',
+      },
+      {
+        getRepositoryAccess: async () => ({
+          cloneUrl: 'https://github.com/mastra-ai/template-docs-expert.git',
+        }),
+        setupCommand: 'npm install',
+      },
+    ],
+    workspaceSetupCommand: 'npm install --global @mastra/mcp-docs-server',
+    continueOnSetupFailure: true,
+    workingDirectory: '/home/user/repos',
+  }),
+})
+```
+
+Every repository is cloned to `<workingDirectory>/<repo>`. Public repositories
+are built before private ones, keeping the caller's order within each group.
+Private credentials are build envs visible to every build step, so any
+repository's setup command can read every other repository's token: only list
+repositories whose setup commands you trust together.
+
+`workspaceSetupCommand` runs at the working directory after every repository
+is set up. `continueOnSetupFailure` (default `false`) lets a failing setup
+command record its repository in `.mastra-sandbox/setup-failed` and continue
+instead of failing the build.
+
+Markers tell a session what the image already ran: `.mastra-sandbox/repos/<repo>`
+per repository and `.mastra-sandbox/workspace-setup` after the workspace
+commands, all under the working directory. With `continueOnSetupFailure`,
+check `.mastra-sandbox/setup-failed` first.
+
+Adding or removing a repository starts a new template, as does editing a
+setup command, while a rotated credential reuses the existing one. If any entry's access can't be resolved the sandbox falls
+back to its default template. A repository whose head can't be resolved is
+cloned unpinned while the others keep their pins.
+
 Templates build at E2B's default machine size (2 vCPU, 1024 MB) unless the
 spec asks for more. Pass `cpuCount` and `memoryMB` to size the machine the
 template's sandboxes run on:

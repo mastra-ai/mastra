@@ -13,6 +13,7 @@ import {
   STABILITY_ERROR_PROCESSOR_IDS,
 } from './stability-defaults';
 import { StreamErrorRetryProcessor } from './stream-error-retry-processor';
+import { UnsupportedFileHandler } from './unsupported-file-handler';
 import type { ProcessAPIErrorArgs } from './index';
 
 /**
@@ -51,24 +52,26 @@ function makeApiError(statusCode: number, isRetryable = false): APICallError {
 }
 
 describe('STABILITY_ERROR_PROCESSOR_IDS', () => {
-  it('matches the ids declared by the three default processor classes, in order', () => {
+  it('matches the ids declared by the four default processor classes, in order', () => {
     expect([...STABILITY_ERROR_PROCESSOR_IDS]).toEqual([
       new ProviderHistoryCompat().id,
       new PrefillErrorHandler().id,
+      new UnsupportedFileHandler().id,
       new StreamErrorRetryProcessor().id,
     ]);
   });
 });
 
 describe('defaultStabilityErrorProcessors', () => {
-  it('returns the three stability processors in order', () => {
+  it('returns the four stability processors in order', () => {
     const processors = defaultStabilityErrorProcessors();
 
-    expect(processors).toHaveLength(3);
+    expect(processors).toHaveLength(4);
     expect(processors.map(p => p.id)).toEqual([...STABILITY_ERROR_PROCESSOR_IDS]);
     expect(processors[0]).toBeInstanceOf(ProviderHistoryCompat);
     expect(processors[1]).toBeInstanceOf(PrefillErrorHandler);
-    expect(processors[2]).toBeInstanceOf(StreamErrorRetryProcessor);
+    expect(processors[2]).toBeInstanceOf(UnsupportedFileHandler);
+    expect(processors[3]).toBeInstanceOf(StreamErrorRetryProcessor);
   });
 
   it('returns distinct arrays and distinct instances on each call', () => {
@@ -79,6 +82,7 @@ describe('defaultStabilityErrorProcessors', () => {
     expect(first[0]).not.toBe(second[0]);
     expect(first[1]).not.toBe(second[1]);
     expect(first[2]).not.toBe(second[2]);
+    expect(first[3]).not.toBe(second[3]);
   });
 
   it('returns processors with `processAPIError`, as the error lane requires', () => {
@@ -90,10 +94,12 @@ describe('defaultStabilityErrorProcessors', () => {
   });
 });
 
+const retryProcessorOf = (processors: ReturnType<typeof defaultStabilityErrorProcessors>) =>
+  processors.find(processor => processor.id === 'stream-error-retry-processor') as StreamErrorRetryProcessor;
+
 describe('default stability StreamErrorRetryProcessor policy', () => {
   function retryProcessor() {
-    // The defaults order is [provider-history-compat, prefill-error-handler, stream-error-retry-processor].
-    return defaultStabilityErrorProcessors()[2];
+    return retryProcessorOf(defaultStabilityErrorProcessors());
   }
 
   it('does not retry a bad-request (400) error by default', async () => {
@@ -108,7 +114,7 @@ describe('default stability StreamErrorRetryProcessor policy', () => {
   });
 
   it('retries a bad-request (400) error exactly once when the caller opts into `retryBadRequests`', async () => {
-    const processor = defaultStabilityErrorProcessors({ retryBadRequests: true })[2];
+    const processor = retryProcessorOf(defaultStabilityErrorProcessors({ retryBadRequests: true }));
     const error = makeApiError(400);
 
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 0 }))).resolves.toEqual({ retry: true });
@@ -141,7 +147,7 @@ describe('default stability StreamErrorRetryProcessor policy', () => {
   });
 
   it('retries an unknown error when the caller opts into `retryUnknownErrors`', async () => {
-    const processor = defaultStabilityErrorProcessors({ retryUnknownErrors: true })[2];
+    const processor = retryProcessorOf(defaultStabilityErrorProcessors({ retryUnknownErrors: true }));
     const error = new Error('completely unknown failure');
 
     await expect(

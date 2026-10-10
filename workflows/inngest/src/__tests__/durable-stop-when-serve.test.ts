@@ -2,9 +2,9 @@
  * Regression test for #25851: the Inngest agentic loop never evaluated `stopWhen`.
  *
  * The mock model calls a tool on every turn, so without `stopWhen` the loop would
- * run until `maxSteps`. The predicate stops after the second step, so the first (false) evaluation is replayed on later requests. The predicate is
- * evaluated inside a memoized Inngest step, so serve-mode replays must not call it
- * again — it should run exactly once per evaluated iteration.
+ * run until `maxSteps`. The predicate stops after the second step, so the first (false) evaluation is replayed on later requests. The predicate and
+ * step-finish emission use memoized Inngest steps, so serve-mode replays must not
+ * repeat either side effect — each should run exactly once per evaluated iteration.
  */
 import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
@@ -95,12 +95,16 @@ describe('Inngest agent stopWhen (#25851)', () => {
     });
 
     let finishReceived = false;
+    const stepFinishes: Array<{ reason?: string; isContinued?: boolean }> = [];
     let timedOut = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
         (async () => {
           for await (const chunk of result.output.fullStream) {
+            if ((chunk as any)?.type === 'step-finish') {
+              stepFinishes.push((chunk as any).payload?.stepResult ?? {});
+            }
             if ((chunk as any)?.type === 'finish') finishReceived = true;
           }
         })(),
@@ -120,5 +124,9 @@ describe('Inngest agent stopWhen (#25851)', () => {
     expect(finishReceived).toBe(true);
     expect(modelCalls).toBe(2);
     expect(predicateStepCounts).toEqual([1, 2]);
+    expect(stepFinishes).toMatchObject([
+      { reason: 'tool-calls', isContinued: true },
+      { reason: 'tool-calls', isContinued: false },
+    ]);
   });
 });

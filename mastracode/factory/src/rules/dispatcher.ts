@@ -337,16 +337,6 @@ export interface FactoryDecisionDispatcherOptions {
   autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
-  /**
-   * Re-applies the factory project's current observational-memory settings to a
-   * reused session before it runs. Fresh preparation hydrates these settings,
-   * but a reused binding keeps the models it was created with; without this a
-   * project whose OM models changed keeps observing with the stale ones.
-   */
-  refreshManagedMemorySettings?: (input: {
-    binding: FactoryRunBindingRecord;
-    session: BoundDispatcherSession;
-  }) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   /** Injects the work item's recent comments into skill-invocation kickoffs. */
   feedReader?: FactoryFeedReader;
@@ -507,10 +497,6 @@ export class FactoryDecisionDispatcher {
   readonly #autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
-  readonly #refreshManagedMemorySettings?: (input: {
-    binding: FactoryRunBindingRecord;
-    session: BoundDispatcherSession;
-  }) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #feedReader?: FactoryFeedReader;
   readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
@@ -544,7 +530,6 @@ export class FactoryDecisionDispatcher {
     this.#autoApprovePlans = options.autoApprovePlans;
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
-    this.#refreshManagedMemorySettings = options.refreshManagedMemorySettings;
     this.#primeCredentials = options.primeCredentials;
     this.#feedReader = options.feedReader;
     this.#dismissStaleReviews = options.dismissStaleReviews;
@@ -852,8 +837,8 @@ export class FactoryDecisionDispatcher {
         const moved = await this.#storage.get({ orgId: record.orgId, id: item.id });
         if (!moved) return;
         const messageKey = `${record.idempotencyKey}:message`;
-        // Keyed by revision too: a stale commit is recorded as rejected under
-        // its identity, so the retry needs a fresh one to queue the message.
+        // Keyed by revision so a retry after a concurrent write commits under a
+        // fresh identity at the item's new revision.
         const queued = await this.#storage.commitRuleEvaluation({
           orgId: record.orgId,
           factoryProjectId: record.factoryProjectId,
@@ -877,6 +862,9 @@ export class FactoryDecisionDispatcher {
           now: new Date(),
         });
         if (queued.status === 'missing') return;
+        if (queued.status === 'stale') {
+          throw new Error('Factory transition message was not queued: the work item changed concurrently.');
+        }
         const queuedStatus = (queued.result as { status?: string }).status;
         if (queuedStatus !== 'accepted') {
           throw new Error(`Factory transition message was not queued: ${queuedStatus ?? 'unknown'}.`);
@@ -1462,10 +1450,6 @@ export class FactoryDecisionDispatcher {
     const session = await this.#controller.getSessionByResource(binding.resourceId);
     if (!session) return undefined;
     await this.#switchThread(session, binding);
-    // A reused session keeps the OM models it was created with; refresh them
-    // from the project's current settings so a managed run never observes with
-    // models the project has since changed away from.
-    await this.#refreshManagedMemorySettings?.({ binding, session });
     return session;
   }
 

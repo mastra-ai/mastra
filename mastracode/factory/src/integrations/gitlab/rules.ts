@@ -133,6 +133,8 @@ async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
   }
 }
 
+const MAX_STALE_RULE_ATTEMPTS = 3;
+
 export interface GitLabRulesIntegration {
   readonly rules: GitLabEventRules;
   resolveActiveConnectionForHost?(storedConnectionId: string, host: string): Promise<string>;
@@ -461,31 +463,34 @@ export class GitLabRules {
     return false;
   }
 
-  async #evaluate(input: {
-    parsed: ParsedGitLabWebhook;
-    event: FactoryGitLabEventName;
-    projectId: number;
-    projectPath: string;
-    host: string;
-    actor: FactoryRuleActor;
-    orgId: string;
-    factoryProjectId: string;
-    factoryProject: { createdAt: Date };
-    board: { board: string; initialPhase: string };
-    issue: Record<string, unknown> | undefined;
-    issueAuthor: string | undefined;
-    issueAuthorTrusted: boolean;
-    issueIid: number | undefined;
-    issueSourceKey: string | undefined;
-    mergeRequest: Record<string, unknown> | undefined;
-    mergeRequestAuthor: string | undefined;
-    mergeRequestAuthorTrusted: boolean;
-    mergeRequestIid: number | undefined;
-    mergeRequestKey: string | undefined;
-    factoryAuthored: boolean;
-    item: WorkItemRow | undefined;
-    ingressIdentity: string;
-  }): Promise<{ status: IngressStatus }> {
+  async #evaluate(
+    input: {
+      parsed: ParsedGitLabWebhook;
+      event: FactoryGitLabEventName;
+      projectId: number;
+      projectPath: string;
+      host: string;
+      actor: FactoryRuleActor;
+      orgId: string;
+      factoryProjectId: string;
+      factoryProject: { createdAt: Date };
+      board: { board: string; initialPhase: string };
+      issue: Record<string, unknown> | undefined;
+      issueAuthor: string | undefined;
+      issueAuthorTrusted: boolean;
+      issueIid: number | undefined;
+      issueSourceKey: string | undefined;
+      mergeRequest: Record<string, unknown> | undefined;
+      mergeRequestAuthor: string | undefined;
+      mergeRequestAuthorTrusted: boolean;
+      mergeRequestIid: number | undefined;
+      mergeRequestKey: string | undefined;
+      factoryAuthored: boolean;
+      item: WorkItemRow | undefined;
+      ingressIdentity: string;
+    },
+    attempt = 1,
+  ): Promise<{ status: IngressStatus }> {
     const note = object(input.parsed.payload.object_attributes);
     const issueAuthor = input.issueAuthor;
     const mergeRequestAuthor = input.mergeRequestAuthor;
@@ -633,6 +638,15 @@ export class GitLabRules {
       causalChain: [],
       now: new Date(),
     });
+    if (committed.status === 'stale') {
+      // Nothing was persisted: re-read the item and evaluate again at its fresh revision.
+      if (attempt >= MAX_STALE_RULE_ATTEMPTS) {
+        throw new Error(`Factory GitLab rule evaluation for ${input.ingressIdentity} kept losing revision races.`);
+      }
+      const fresh = input.item ? await this.options.storage.get({ orgId: input.orgId, id: input.item.id }) : null;
+      if (input.item && !fresh) return { status: 'missing' };
+      return this.#evaluate({ ...input, item: fresh ?? undefined }, attempt + 1);
+    }
     return { status: committed.status };
   }
 }

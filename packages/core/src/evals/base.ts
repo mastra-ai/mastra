@@ -980,8 +980,9 @@ class MastraScorer<
    * Projects the run's RequestContext down to the keys that should be persisted
    * on the scorer-run span input for repeatability.
    *
-   * `serializeForSpan()` provides the safe base projection — the framework auth
-   * token is redacted and values are shaped for the trace serializer to bound.
+   * `serializeForSpan()` provides the safe base projection — reserved Mastra keys
+   * (auth token, internal plumbing) are omitted and values are shaped for the
+   * trace serializer to bound.
    * `requestContextKeys` then selects from it:
    * - omitted / empty → nothing is persisted (secure default)
    * - `['*']`         → the full (safe) context

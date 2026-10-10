@@ -262,6 +262,7 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
         },
         stopNotificationDispatch: vi.fn(async () => void lifecycleMocks.order.push('dispatch-stop')),
         stopPluginSignalProviders: vi.fn(() => lifecycleMocks.order.push('providers-stop')),
+        releaseThreadClaims: vi.fn(() => lifecycleMocks.order.push('claims-release')),
       };
     });
     lifecycleMocks.runMC.mockReturnValue({
@@ -301,6 +302,10 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     expect(at('dispatch-stop')).toBeGreaterThan(-1);
     expect(at('dispatch-stop')).toBeLessThan(at('workers-stop'));
     expect(at('signals-stop')).toBeGreaterThan(at('workers-stop'));
+    // Thread claims are released before any slow teardown step.
+    expect(at('claims-release')).toBeGreaterThan(-1);
+    expect(at('claims-release')).toBeLessThan(at('providers-stop'));
+    expect(at('claims-release')).toBeLessThan(at('dispatch-stop'));
   });
 
   it('exits even when notification dispatch never finishes stopping', async () => {
@@ -316,6 +321,7 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
       signalsPubSub: pubsub,
       stopNotificationDispatch: vi.fn(() => new Promise<void>(() => {})),
       stopPluginSignalProviders: vi.fn(),
+      releaseThreadClaims: vi.fn(),
     }));
     lifecycleMocks.runMC.mockReturnValue({
       async *[Symbol.asyncIterator]() {},

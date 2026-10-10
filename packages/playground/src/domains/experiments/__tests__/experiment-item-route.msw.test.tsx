@@ -520,7 +520,7 @@ describe('experiment item sub-route', () => {
 
       const traceSection = screen.getByText('Experiment agent run').closest('section');
       if (!traceSection) throw new Error('Expected trace section');
-      fireEvent.click(within(traceSection).getByLabelText('Close Panel'));
+      fireEvent.click(within(traceSection).getByLabelText('Close trace'));
 
       await waitFor(() => expect(screen.queryByText('Experiment agent run')).toBeNull());
       expect(dialog.isConnected).toBe(true);

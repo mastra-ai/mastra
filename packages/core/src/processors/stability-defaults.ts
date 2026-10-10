@@ -1,6 +1,7 @@
 import { PrefillErrorHandler } from './prefill-error-handler';
 import { ProviderHistoryCompat } from './provider-history-compat';
 import { isBadRequestError, StreamErrorRetryProcessor } from './stream-error-retry-processor';
+import { UnsupportedFileHandler } from './unsupported-file-handler';
 import type { ErrorProcessorOrWorkflow } from './index';
 
 /**
@@ -38,7 +39,7 @@ export function isECONNRESETError(error: unknown): boolean {
  * The ids of the default stability error processors, in their default order.
  *
  * The order is load-bearing: error processors short-circuit on the first
- * `{ retry: true }`, so the two processors that repair a request must run
+ * `{ retry: true }`, so the three processors that repair a request must run
  * **before** `stream-error-retry-processor`, whose retry matchers resend the
  * request unchanged.
  *
@@ -49,6 +50,7 @@ export function isECONNRESETError(error: unknown): boolean {
 export const STABILITY_ERROR_PROCESSOR_IDS = [
   'provider-history-compat',
   'prefill-error-handler',
+  'unsupported-file-handler',
   'stream-error-retry-processor',
 ] as const;
 
@@ -56,18 +58,19 @@ export const STABILITY_ERROR_PROCESSOR_IDS = [
  * Builds the default stability error processors every agent gets when the
  * caller supplies no `errorProcessors`.
  *
- * Turning these on means a plain `new Agent({...})` recovers from three
+ * Turning these on means a plain `new Agent({...})` recovers from four
  * provider-side failure classes without any caller wiring:
  *
  * - provider history incompatibilities (e.g. another provider's tool calls or
  *   reasoning content in the history);
  * - assistant-prefill rejections from Anthropic/Qwen-style models;
+ * - files the provider SDK refuses because the model doesn't read their type;
  * - transient stream/connection failures — including a bare `500`/`isRetryable`
  *   error that would otherwise surface as an empty response.
  *
  * The retry processor keeps `retryUnknownErrors` off by default and carries no
  * bad-request matcher. Transient failures carry provider `isRetryable`
- * metadata or match the connection-reset matcher, so the three classes above
+ * metadata or match the connection-reset matcher, so the four classes above
  * still recover, while a deterministic failure — a rejected structured-output
  * attempt, an invalid request, a validation error — surfaces immediately
  * instead of being replayed unchanged. Most `400`s are deterministic, so the
@@ -105,6 +108,7 @@ export function defaultStabilityErrorProcessors(
   return [
     new ProviderHistoryCompat(),
     new PrefillErrorHandler(),
+    new UnsupportedFileHandler(),
     new StreamErrorRetryProcessor({
       retryUnknownErrors: options.retryUnknownErrors ?? false,
       maxRetries: 2,

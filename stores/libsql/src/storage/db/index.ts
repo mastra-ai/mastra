@@ -8,7 +8,7 @@ import {
   TABLE_SPANS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
+import type { KNOWLEDGE_TABLE_NAME, TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import type { SqliteClient as Client, SqliteInValue as InValue } from './client';
 import {
@@ -24,6 +24,8 @@ import { withClientWriteLock } from './write-lock';
  * Base configuration options shared across LibSQL domain configurations
  */
 export type LibSQLDomainBaseConfig = {
+  /** @internal Identifies the physical backend and namespace for keyed Knowledge isolation. */
+  storageIsolationKey?: unknown;
   /**
    * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
    * @default 5
@@ -667,10 +669,12 @@ export class LibSQLDB extends MastraBase {
     tableName,
     schema,
     compositePrimaryKey,
+    executor = this.client,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
     schema: Record<string, StorageColumn>;
     compositePrimaryKey?: string[];
+    executor?: Pick<Client, 'execute'>;
   }): Promise<void> {
     try {
       const parsedTableName = parseSqlIdentifier(tableName, 'table name');
@@ -714,7 +718,7 @@ export class LibSQLDB extends MastraBase {
 
       const sql = `CREATE TABLE IF NOT EXISTS ${parsedTableName} (\n  ${allDefinitions}\n)`;
 
-      await this.client.execute(sql);
+      await executor.execute(sql);
       this.logger.debug(`LibSQLDB: Created table ${tableName}`);
 
       // Run migrations for Spans table to add any new columns
@@ -1071,7 +1075,7 @@ export class LibSQLDB extends MastraBase {
     schema,
     ifNotExists,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {

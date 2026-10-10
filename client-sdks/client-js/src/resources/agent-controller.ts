@@ -204,6 +204,7 @@ const KNOWN_AGENT_CONTROLLER_EVENT_TYPES = new Set<string>(
     workspace_ready: true,
     workspace_error: true,
     workspace_status_changed: true,
+    task_complete_evaluation: true,
     info: true,
     error: true,
   } satisfies Record<KnownAgentControllerEvent['type'], true>),

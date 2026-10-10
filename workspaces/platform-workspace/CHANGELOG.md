@@ -1,5 +1,63 @@
 # @mastra/platform
 
+## 1.7.0-alpha.1
+
+### Patch Changes
+
+- Fixed `PlatformSandbox.getInfo()` asking the workspace proxy about a `sandboxId` hint before `start()` had confirmed it, which failed the first tool call of a resumed session with `404 not_found`. `getInfo()` now answers from local state until the sandbox has started in the current process. `start()` also treats a `410 sandbox_destroyed` answer for the reattach id like a 404 and provisions a fresh sandbox instead of failing the resumed session. ([#26488](https://github.com/mastra-ai/mastra/pull/26488))
+
+  Fixed `PlatformSandbox.stop()` releasing the sandbox through the proxy's `DELETE /sandbox/:id`, which kills the VM on E2B. `Mastra.shutdown()` stops every registered workspace, so a host restart destroyed every live session. `stop()` now sends nothing and keeps the sandbox id, so the next `start()` reattaches; `destroy()` is the only call that releases the VM and its checkpoint.
+
+  Added a `sandboxId` property that exposes the platform's id for the running sandbox, so callers persist an id the proxy recognises and reattach to the same sandbox later:
+
+  ```ts
+  const sandbox = new PlatformSandbox({ id: 'session-1', environmentId: 'env_123' });
+  await sandbox.start();
+  const persisted = sandbox.sandboxId; // the platform's id, undefined before start()
+
+  const resumed = new PlatformSandbox({ id: 'session-1', environmentId: 'env_123', sandboxId: persisted });
+  await resumed.start(); // { outcome: 'connected' }
+  ```
+
+- Updated dependencies [[`65b62c0`](https://github.com/mastra-ai/mastra/commit/65b62c04c28267ab81f7d6b92ed29ce0ef46671b), [`68fa51c`](https://github.com/mastra-ai/mastra/commit/68fa51cf57ee7a3b0914d5381870b60e81f0647e), [`297e55e`](https://github.com/mastra-ai/mastra/commit/297e55ea3d0eef280c3776bec401584ce3c2bff2), [`65b62c0`](https://github.com/mastra-ai/mastra/commit/65b62c04c28267ab81f7d6b92ed29ce0ef46671b), [`57c3117`](https://github.com/mastra-ai/mastra/commit/57c3117dd4d0dd0ad0835edb1bf410b6ec76fba0), [`7a96951`](https://github.com/mastra-ai/mastra/commit/7a96951771a6aab850ceafefc73afe684ef24b21), [`436ea9d`](https://github.com/mastra-ai/mastra/commit/436ea9d4fb8146250bb106fd0f0200ea1cfd47d5), [`65b62c0`](https://github.com/mastra-ai/mastra/commit/65b62c04c28267ab81f7d6b92ed29ce0ef46671b), [`14f9341`](https://github.com/mastra-ai/mastra/commit/14f934145150a2531abfc1c36d03909fd05b5c56), [`2558c00`](https://github.com/mastra-ai/mastra/commit/2558c00b338025de29f778ca72b6bd05e5726349), [`436ea9d`](https://github.com/mastra-ai/mastra/commit/436ea9d4fb8146250bb106fd0f0200ea1cfd47d5), [`38643be`](https://github.com/mastra-ai/mastra/commit/38643beb41ab0d1f67b8754f057781022448a618)]:
+  - @mastra/core@1.76.0-alpha.4
+
+## 1.7.0-alpha.0
+
+### Minor Changes
+
+- Added a `repos` option to `createRepoTemplate` to build one template from several repositories. ([#26039](https://github.com/mastra-ai/mastra/pull/26039))
+
+  - Each entry has its own `getRepositoryAccess` and `setupCommand`, and is cloned to `<workingDirectory>/<repo>`.
+  - `workspaceSetupCommand` runs once at the working directory after every repository.
+  - `continueOnSetupFailure` records a failing repository setup in `.mastra-sandbox/setup-failed` instead of failing the build.
+  - Writes a marker at `.mastra-sandbox/repos/<repo>` after each repository setup and `.mastra-sandbox/workspace-setup` after the workspace step.
+
+  ```ts
+  const template = createRepoTemplate({
+    repos: [
+      {
+        getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/app.git' }),
+        setupCommand: 'pnpm install --frozen-lockfile',
+      },
+      {
+        getRepositoryAccess: async () => ({
+          cloneUrl: 'https://github.com/acme/shared-ui.git',
+          authorization: { scheme: 'bearer', token: process.env.GITHUB_TOKEN! },
+        }),
+        setupCommand: 'pnpm install --frozen-lockfile',
+      },
+    ],
+    workspaceSetupCommand: 'cd app && pnpm link ../shared-ui',
+    workingDirectory: '/home/user/repos',
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`9a511a4`](https://github.com/mastra-ai/mastra/commit/9a511a4ff5ac8349f4d4b64b0f432576fa3c8656), [`ed0e355`](https://github.com/mastra-ai/mastra/commit/ed0e355205da51bac4d11b7a9553c95ef1f505f4), [`b93ce2e`](https://github.com/mastra-ai/mastra/commit/b93ce2ee034c6a0be511b717e1e043e875dca677), [`21eaa20`](https://github.com/mastra-ai/mastra/commit/21eaa208834ae36721324700023f88cec7cf5c01), [`4580309`](https://github.com/mastra-ai/mastra/commit/45803095e2aed7bf58d878eb206a767b9b0e2489), [`dc28dbd`](https://github.com/mastra-ai/mastra/commit/dc28dbd89f7afa455a1985c7909adf42ddd6bd48), [`a3f884c`](https://github.com/mastra-ai/mastra/commit/a3f884c6fa230f9c75049f7105df5f1429fa406e), [`a7a34bf`](https://github.com/mastra-ai/mastra/commit/a7a34bfcc2235daa6229d6783b3ad1a2eaa25c56), [`70d59a9`](https://github.com/mastra-ai/mastra/commit/70d59a97fb2a5953c5853bf5f5fdfdc02d2337e7), [`f431c23`](https://github.com/mastra-ai/mastra/commit/f431c2321cf186f09565c42ddba33ee40cb96b6d), [`70d59a9`](https://github.com/mastra-ai/mastra/commit/70d59a97fb2a5953c5853bf5f5fdfdc02d2337e7), [`33a206d`](https://github.com/mastra-ai/mastra/commit/33a206d7d0a52d17ebab8db5224c5091c086c86d)]:
+  - @mastra/core@1.76.0-alpha.3
+
 ## 1.6.2
 
 ### Patch Changes

@@ -219,9 +219,11 @@ export function BoardContent({
 
   if (items.error !== undefined) {
     return (
-      <Notice variant="destructive">
-        {items.error instanceof Error ? items.error.message : 'Failed to load the board'}
-      </Notice>
+      <div className="p-4">
+        <Notice variant="destructive" className="max-w-xl">
+          {items.error instanceof Error ? items.error.message : 'Failed to load the board'}
+        </Notice>
+      </div>
     );
   }
 

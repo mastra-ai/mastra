@@ -530,6 +530,59 @@ describe('pruneAgentLoopSnapshot stepResult.request strip', () => {
   });
 });
 
+describe('pruneAgentLoopSnapshot foreach step-level stream state', () => {
+  function suspendedForeach(stepLevelStreamState: unknown, entryStreamState: unknown) {
+    const entryPayload = { __streamState: entryStreamState, approval: { toolCallId: 'tool-1' } };
+    return snapshotWith({
+      toolCallStep: {
+        status: 'suspended',
+        suspendPayload: {
+          ...entryPayload,
+          __streamState: stepLevelStreamState,
+          __workflow_meta: {
+            foreachIndex: 1,
+            foreachOutput: [
+              { status: 'success', output: { ok: true }, suspendPayload: {} },
+              { status: 'suspended', suspendPayload: entryPayload },
+            ],
+          },
+        },
+      },
+    });
+  }
+
+  it("drops the foreach step's mirror of its suspended entry's stream state", () => {
+    const streamState = { messageList: 'live' };
+    const original = suspendedForeach(streamState, streamState);
+
+    const step = (pruneAgentLoopSnapshot({ snapshot: original }).context as Record<string, any>).toolCallStep;
+
+    expect(step.suspendPayload).not.toHaveProperty('__streamState');
+    expect(step.suspendPayload.approval).toEqual({ toolCallId: 'tool-1' });
+    expect(step.suspendPayload.__workflow_meta.foreachOutput[1].suspendPayload.__streamState).toBe(streamState);
+    expect((original.context as Record<string, any>).toolCallStep.suspendPayload.__streamState).toBe(streamState);
+  });
+
+  it("keeps a step-level stream state that is not the suspended entry's own object", () => {
+    const step = (
+      pruneAgentLoopSnapshot({
+        snapshot: suspendedForeach({ messageList: 'live' }, { messageList: 'live' }),
+      }).context as Record<string, any>
+    ).toolCallStep;
+
+    expect(step.suspendPayload.__streamState).toEqual({ messageList: 'live' });
+  });
+
+  it('keeps the parent row copy, whose propagated foreach entries carry no stream state', () => {
+    const streamState = { messageList: 'live' };
+    const step = (
+      pruneAgentLoopSnapshot({ snapshot: suspendedForeach(streamState, undefined) }).context as Record<string, any>
+    ).toolCallStep;
+
+    expect(step.suspendPayload.__streamState).toBe(streamState);
+  });
+});
+
 /**
  * The durable agent loop threads its iteration state through every step as
  * that step's input, so each completed step's `payload` pins another copy of

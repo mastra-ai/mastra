@@ -22,6 +22,7 @@ import type { Event } from '../events/types';
 import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../mastra/run-with-concurrency';
 import type { ObservabilityContext, Span, TracingOptions, TracingPolicy } from '../observability';
 import {
   EntityType,
@@ -1834,7 +1835,8 @@ export class Workflow<
   /** Where this workflow came from: 'code' for statically registered workflows, 'dynamic' for workflows rehydrated from storage. Set by rehydrateWorkflow; defaults to 'code'. */
   public origin: 'code' | 'dynamic' = 'code';
   public isInternal = false;
-  #nestedWorkflowInput?: TInput;
+  /** Handed from execute() to the createRun() call right after it; see createRun. */
+  #nestedRunStart?: { input: TInput; state: TState };
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
@@ -2891,6 +2893,10 @@ export class Workflow<
     tracingPolicy?: TracingPolicy;
     parentWorkflow?: NestedWorkflowParent;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
+    // Taken before the first await: concurrent parent runs share this workflow
+    // instance, so a later execute() would otherwise swap in its own input and state.
+    const nestedRunStart = this.#nestedRunStart;
+    this.#nestedRunStart = undefined;
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -2976,9 +2982,11 @@ export class Workflow<
         runId: runIdToUse,
         status: 'pending',
         parentWorkflow: options?.parentWorkflow,
-        value: {},
+        // A nested run restarted before its first step only has this snapshot to rebuild from,
+        // so it must carry the parent's state alongside the input.
+        value: nestedRunStart?.state ?? {},
         // @ts-expect-error - context type mismatch
-        context: this.#nestedWorkflowInput ? { input: this.#nestedWorkflowInput } : {},
+        context: nestedRunStart?.input ? { input: nestedRunStart.input } : {},
         activePaths: [],
         activeStepsPath: {},
         serializedStepGraph: this.serializedStepGraph,
@@ -3137,10 +3145,6 @@ export class Workflow<
     // this check is for cases where you suspend/resume a nested workflow.
     // retryCount helps us know the step has been run at least once, which means it's running in a loop and should not be calling resume.
 
-    if (!restart && !isResume) {
-      this.#nestedWorkflowInput = inputData;
-    }
-
     const isTimeTravel = !!(timeTravel && timeTravel.steps.length > 0);
 
     // Forward the parent run's resourceId into the nested run so that
@@ -3151,6 +3155,8 @@ export class Workflow<
     // and relaying with the same runId would cause an infinite event loop.
     const useSharedPubsub = !!this.#options?.sharePubsub;
     const nestedPubsub = useSharedPubsub ? pubsub : undefined;
+    // Nothing may await between this and createRun(), which takes it synchronously.
+    this.#nestedRunStart = !restart && !isResume ? { input: inputData, state } : undefined;
     const run = isResume
       ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub, parentWorkflow })
       : await this.createRun({ runId, resourceId, pubsub: nestedPubsub, parentWorkflow });
@@ -3239,7 +3245,13 @@ export class Workflow<
           perStep,
         });
       } else if (restartNested) {
-        res = await run.restart({ requestContext, actor, ...observabilityContext, outputWriter });
+        res = await run.restart({
+          requestContext,
+          actor,
+          ...observabilityContext,
+          outputWriter,
+          outputOptions: { includeState: true, includeResumeLabels: true },
+        });
       } else if (resumeNested) {
         res = await run.resumeNestedByParent({
           resumeData,
@@ -3377,7 +3389,8 @@ export class Workflow<
     if (activeRuns.runs.length > 0) {
       this.logger.debug('Restarting active workflow runs', { count: activeRuns.runs.length });
     }
-    for (const runSnapshot of activeRuns.runs) {
+    const concurrency = this.#mastra?.recoveryConfig?.workflowConcurrency ?? DEFAULT_RESTART_CONCURRENCY;
+    await runWithConcurrency(activeRuns.runs, concurrency, async runSnapshot => {
       try {
         const run = await this.createRun({ runId: runSnapshot.runId });
         await run.restart();
@@ -3385,7 +3398,7 @@ export class Workflow<
       } catch (error) {
         this.logger.error('Failed to restart workflow run', { workflowId: this.id, runId: runSnapshot.runId, error });
       }
-    }
+    });
   }
 
   async deleteWorkflowRunById(runId: string) {
@@ -4846,6 +4859,10 @@ export class Run<
       requestContext?: RequestContext<TRequestContext>;
       outputWriter?: OutputWriter;
       tracingOptions?: TracingOptions;
+      outputOptions?: {
+        includeState?: boolean;
+        includeResumeLabels?: boolean;
+      };
       actor?: ActorSignal;
     } & Partial<ObservabilityContext> = {},
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
@@ -5348,12 +5365,17 @@ export class Run<
     requestContext,
     outputWriter,
     tracingOptions,
+    outputOptions,
     actor,
     ...rest
   }: {
     requestContext?: RequestContext<TRequestContext>;
     outputWriter?: OutputWriter;
     tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
     actor?: ActorSignal;
   } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
@@ -5467,6 +5489,7 @@ export class Run<
       actor,
       abortController: this.abortController,
       outputWriter,
+      outputOptions,
       workflowSpan,
     });
 

@@ -13,7 +13,7 @@ import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
 import { FavoritesLibSQL } from './domains/favorites';
 import { HarnessLibSQL } from './domains/harness';
-import { KnowledgeLibSQL } from './domains/knowledge';
+import { getLibSQLKnowledgeIsolationKey, KnowledgeLibSQL } from './domains/knowledge';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
 import { MCPServersLibSQL } from './domains/mcp-servers';
 import { MemoryLibSQL } from './domains/memory';
@@ -94,6 +94,12 @@ export type LibSQLLocalPragmaOptions = {
  */
 export type LibSQLBaseConfig = {
   id: string;
+  /**
+   * Identifies the database this store's Knowledge tables live in. `Mastra` rejects two Knowledge
+   * runtimes with the same key. Set it when two stores reach different databases that Mastra
+   * cannot tell apart, or the same database through different connection settings.
+   */
+  storageIsolationKey?: string;
   /**
    * Maximum number of retries for write operations if an SQLITE_BUSY error occurs.
    * @default 5
@@ -246,7 +252,10 @@ export class LibSQLStore extends MastraCompositeStore {
     const workflows = new WorkflowsLibSQL(domainConfig);
     const workflowDefinitions = new WorkflowDefinitionsLibSQL(domainConfig);
     const memory = new MemoryLibSQL(domainConfig);
-    const knowledge = new KnowledgeLibSQL(domainConfig);
+    const knowledge = new KnowledgeLibSQL({
+      ...domainConfig,
+      storageIsolationKey: config.storageIsolationKey ?? getLibSQLKnowledgeIsolationKey(config, this.client),
+    });
     const observability = new ObservabilityLibSQL(domainConfig);
     const agents = new AgentsLibSQL(domainConfig);
     const channels = new ChannelsLibSQL(domainConfig);
@@ -318,7 +327,10 @@ export class LibSQLStore extends MastraCompositeStore {
   }
 
   private getStoresToInit() {
-    return Object.values(this.stores).filter(Boolean);
+    return Object.entries(this.stores)
+      .filter(([name]) => name !== 'knowledge')
+      .map(([, store]) => store)
+      .filter(Boolean);
   }
 
   private async initDomainsSequentially(): Promise<boolean> {

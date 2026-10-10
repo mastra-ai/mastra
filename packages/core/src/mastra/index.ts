@@ -24,6 +24,7 @@ import { isRunLocalTopic } from '../events/topics';
 import type { Event, EventCallback } from '../events/types';
 import type { Harness } from '../harness';
 import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
+import { Knowledge } from '../knowledge';
 import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
@@ -72,7 +73,7 @@ import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inm
 import { InMemoryDB } from '../storage/domains/inmemory-db';
 import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
 import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
-import { augmentWithInit } from '../storage/storageWithInit';
+import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import { trackFeatureUsage } from '../telemetry/feature-telemetry';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
@@ -111,6 +112,7 @@ import { createOnScorerHook } from './hooks';
 import { __registerMastraCtor } from './mastra-ctor-holder';
 import type { RunScope } from './run-scope';
 import { createRunScope } from './run-scope';
+import { DEFAULT_RESTART_CONCURRENCY, normalizeConcurrency, runWithConcurrency } from './run-with-concurrency';
 import type { VersionOverrides, VersionSelector } from './types';
 
 /**
@@ -130,6 +132,7 @@ function createUndefinedPrimitiveError(
     | 'mcp-server'
     | 'gateway'
     | 'memory'
+    | 'knowledge'
     | 'workspace',
   value: null | undefined,
   key?: string,
@@ -289,6 +292,7 @@ export interface Config<
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
   TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>,
   TClassifiers extends Record<string, Classifier<any>> = Record<string, Classifier<any>>,
+  TKnowledge extends Record<string, Knowledge> = Record<string, Knowledge>,
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
@@ -492,6 +496,11 @@ export interface Config<
   memory?: TMemory;
 
   /**
+   * Knowledge instances registered by stable application key.
+   */
+  knowledge?: TKnowledge;
+
+  /**
    * Global workspace for file storage, skills, and code execution.
    * Agents inherit this workspace unless they have their own configured.
    * Skills are accessed via workspace.skills when skills is configured.
@@ -651,9 +660,15 @@ export interface Config<
   /**
    * Boot-time recovery behavior for orphaned agent/workflow runs.
    *
+   * `workflows` controls whether the server calls
+   * {@link Mastra.restartAllActiveWorkflowRuns} on boot. Set it to `'off'` to
+   * skip the workflow sweep entirely (no storage queries), for example when
+   * several replicas share one database and you recover runs another way.
+   * `workflowConcurrency` caps how many runs that sweep restarts at once.
+   *
    * `durableAgents` controls whether the deployer will automatically call
    * {@link Mastra.recoverAllDurableAgents} for every registered `DurableAgent`
-   * when the server starts (right after `restartAllActiveWorkflowRuns`).
+   * when the server starts (concurrently with `restartAllActiveWorkflowRuns`).
    *
    * - `'off'` (default): the deployer never auto-recovers durable agent runs.
    *   Operators can still call `mastra.recoverAllDurableAgents()` or
@@ -666,7 +681,7 @@ export interface Config<
    * (must be idempotent). In multi-instance deploys every replica will race to
    * recover the same runs, since there is no lease/lock yet.
    *
-   * @default { durableAgents: 'off' }
+   * @default { workflows: 'auto', workflowConcurrency: 5, durableAgents: 'off' }
    */
   recovery?: MastraRecoveryConfig;
 
@@ -692,6 +707,17 @@ export interface Config<
  * Boot-time recovery configuration. See {@link Mastra['recoveryConfig']}.
  */
 export interface MastraRecoveryConfig {
+  /**
+   * Restart RUNNING/WAITING workflow runs found in storage on server boot.
+   * @default 'auto'
+   */
+  workflows?: 'auto' | 'off';
+  /**
+   * Maximum number of workflow runs restarted at the same time by
+   * {@link Mastra.restartAllActiveWorkflowRuns}. Use `Infinity` for no limit.
+   * @default 5
+   */
+  workflowConcurrency?: number;
   /**
    * Auto-recover orphaned RUNNING durable agent runs on server boot.
    * @default 'off'
@@ -808,6 +834,7 @@ export class Mastra<
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
   TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>,
   TClassifiers extends Record<string, Classifier<any>> = Record<string, Classifier<any>>,
+  TKnowledge extends Record<string, Knowledge> = Record<string, Knowledge>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -830,9 +857,14 @@ export class Mastra<
   }> = [];
 
   #storage?: MastraCompositeStore;
+  #storageSource?: MastraCompositeStore;
   #storageExplicit = false;
   #storageFallbackWarningPending = false;
-  #recoveryConfig: MastraRecoveryConfig = { durableAgents: 'off' };
+  #recoveryConfig: MastraRecoveryConfig = {
+    workflows: 'auto',
+    workflowConcurrency: DEFAULT_RESTART_CONCURRENCY,
+    durableAgents: 'off',
+  };
   #scorers?: TScorers;
   #classifiers?: TClassifiers;
   #tools?: TTools;
@@ -840,6 +872,7 @@ export class Mastra<
   #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
     new Map();
   #memory?: TMemory;
+  #knowledge: TKnowledge;
   #workspace?: Workspace;
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
@@ -1547,7 +1580,8 @@ export class Mastra<
       TProcessors,
       TMemory,
       TChannels,
-      TClassifiers
+      TClassifiers,
+      TKnowledge
     >,
   ) {
     // Register AsyncLocalStorage-backed context resolvers so that DualLogger
@@ -1562,6 +1596,8 @@ export class Mastra<
     // via `recovery: { durableAgents: 'auto' }` matches the existing
     // `restartAllActiveWorkflowRuns` boot hook.
     this.#recoveryConfig = {
+      workflows: config?.recovery?.workflows ?? 'auto',
+      workflowConcurrency: normalizeConcurrency(config?.recovery?.workflowConcurrency),
       durableAgents: config?.recovery?.durableAgents ?? 'off',
     };
 
@@ -1702,6 +1738,7 @@ export class Mastra<
         );
       });
     }
+    this.#storageSource = getStorageSource(storage);
     storage = augmentWithInit(storage);
 
     // The evented workflow engine (used internally by the agentic loop) requires
@@ -1753,6 +1790,22 @@ export class Mastra<
     };
     this.#logger = this.#wireLoggerObservability(this.#logger);
 
+    // Initialize primitive registries before registering storage or editor integrations.
+    // Those integrations can call back into Mastra during construction (for example,
+    // an editor can replace storage), so registry-dependent methods must already be safe.
+    this.#vectors = {} as TVectors;
+    this.#mcpServers = {} as TMCPServers;
+    this.#tts = {} as TTTS;
+    this.#agents = {} as TAgents;
+    this.#scorers = {} as TScorers;
+    this.#classifiers = {} as TClassifiers;
+    this.#tools = {} as TTools;
+    this.#processors = {} as TProcessors;
+    this.#memory = {} as TMemory;
+    this.#knowledge = {} as TKnowledge;
+    this.#workflows = {} as TWorkflows;
+    this.#gateways = {} as Record<string, MastraModelGatewayInterface>;
+
     this.#storage = storage;
 
     // Give storage adapters a back-pointer to this Mastra instance so they
@@ -1793,19 +1846,6 @@ export class Mastra<
     this.#notificationDispatchConfig = config?.notifications?.dispatch;
     this.#schedulesConfig = config?.schedules;
 
-    // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
-    this.#vectors = {} as TVectors;
-    this.#mcpServers = {} as TMCPServers;
-    this.#tts = {} as TTTS;
-    this.#agents = {} as TAgents;
-    this.#scorers = {} as TScorers;
-    this.#classifiers = {} as TClassifiers;
-    this.#tools = {} as TTools;
-    this.#processors = {} as TProcessors;
-    this.#memory = {} as TMemory;
-    this.#workflows = {} as TWorkflows;
-    this.#gateways = {} as Record<string, MastraModelGatewayInterface>;
-
     // Now add primitives - order matters for auto-registration
     // Tools and processors should be added before agents and MCP servers that might use them
     // Note: We validate each entry to handle cases where config was spread ({ ...config })
@@ -1838,6 +1878,14 @@ export class Mastra<
       Object.entries(config.memory).forEach(([key, memory]) => {
         if (memory != null) {
           this.addMemory(memory, key);
+        }
+      });
+    }
+
+    if (config?.knowledge) {
+      Object.entries(config.knowledge).forEach(([key, knowledge]) => {
+        if (knowledge != null) {
+          this.addKnowledge(knowledge, key);
         }
       });
     }
@@ -4142,11 +4190,17 @@ export class Mastra<
       return { runs: [], total: 0 };
     }
 
-    // Get all workflows with default engine type
-    const defaultEngineWorkflows = Object.values(this.#workflows).filter(workflow => workflow.engineType === 'default');
+    const restartableWorkflows = Object.values(this.#workflows).filter(
+      workflow =>
+        (workflow.engineType === 'default' || workflow.engineType === 'evented') &&
+        // Skip before listing: opted-out workflows shouldn't cost storage queries, and processor
+        // workflows only run inside an agent call, so a lone restart has nothing to resume.
+        workflow.options?.autoRestartActiveRuns !== false &&
+        workflow.type !== 'processor',
+    );
 
     const activeRunsByWorkflow = await Promise.all(
-      defaultEngineWorkflows.map(workflow => workflow.listActiveWorkflowRuns()),
+      restartableWorkflows.map(workflow => workflow.listActiveWorkflowRuns()),
     );
 
     const allRuns = activeRunsByWorkflow.flatMap(activeRuns => activeRuns.runs);
@@ -4158,23 +4212,21 @@ export class Mastra<
     };
   }
 
+  /**
+   * Restart every RUNNING/WAITING run of the registered default-engine
+   * workflows. Runs are restarted `recovery.workflowConcurrency` at a time
+   * (default 5) and the promise resolves once all of them have settled.
+   * Failures are logged per run and never reject the sweep.
+   */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
     const activeRuns = await this.listActiveWorkflowRuns();
-    if (activeRuns.runs.length > 0) {
-      this.#logger.debug(
-        `Restarting ${activeRuns.runs.length} active workflow run${activeRuns.runs.length > 1 ? 's' : ''}`,
-      );
+    const runs = activeRuns.runs;
+    if (runs.length > 0) {
+      this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
     }
-    for (const runSnapshot of activeRuns.runs) {
-      const workflow = this.getWorkflowById(runSnapshot.workflowName);
-      if (workflow?.options?.autoRestartActiveRuns === false) {
-        this.#logger.debug('Skipping workflow run auto-restart; workflow opts out of generic recovery', {
-          workflow: runSnapshot.workflowName,
-          runId: runSnapshot.runId,
-        });
-        continue;
-      }
+    await runWithConcurrency(runs, this.#recoveryConfig.workflowConcurrency, async runSnapshot => {
       try {
+        const workflow = this.getWorkflowById(runSnapshot.workflowName);
         const run = await workflow.createRun({ runId: runSnapshot.runId });
         await run.restart();
         this.#logger.debug('Restarted workflow run', { workflow: runSnapshot.workflowName, runId: runSnapshot.runId });
@@ -4185,7 +4237,7 @@ export class Mastra<
           error,
         });
       }
-    }
+    });
   }
 
   /**
@@ -4202,7 +4254,7 @@ export class Mastra<
    * agent that supports it (default-engine durable agents only — Inngest and
    * other externally-executed durable wrappers run their own recovery).
    *
-   * Intended to be called once on server boot, after
+   * Intended to be called once on server boot, concurrently with
    * `restartAllActiveWorkflowRuns()`. The deployer wires this up automatically
    * when `recovery.durableAgents` is set to `'auto'` in the Mastra config; you
    * can also call it directly if you need finer control (e.g. running it in a
@@ -5030,6 +5082,77 @@ export class Mastra<
     Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>
   > {
     return this.#processorConfigurations;
+  }
+
+  /** Retrieves a registered Knowledge instance by its application key. */
+  public getKnowledge<TKnowledgeKey extends keyof TKnowledge>(key: TKnowledgeKey): TKnowledge[TKnowledgeKey] {
+    const knowledge = this.#knowledge[key];
+    if (!knowledge) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_KNOWLEDGE_BY_KEY_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Knowledge with key ${String(key)} not found`,
+        details: {
+          status: 404,
+          knowledgeKey: String(key),
+          availableKeys: Object.keys(this.#knowledge).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+    return knowledge;
+  }
+
+  /** Returns all registered Knowledge instances keyed by application key. */
+  public listKnowledge(): TKnowledge {
+    // A copy, so callers cannot swap an entry past addKnowledge()'s shared-backend check.
+    return { ...this.#knowledge };
+  }
+
+  /** Registers a Knowledge instance without initializing its storage. */
+  public addKnowledge<K extends Knowledge>(knowledge: K, key?: string): void {
+    if (!knowledge) {
+      throw createUndefinedPrimitiveError('knowledge', knowledge, key);
+    }
+
+    const knowledgeKey = key ?? knowledge.id;
+    const registry = this.#knowledge as Record<string, Knowledge>;
+    if (registry[knowledgeKey]) {
+      throw new MastraError({
+        id: 'MASTRA_ADD_KNOWLEDGE_DUPLICATE_KEY',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Knowledge with key ${knowledgeKey} is already registered`,
+        details: { status: 409, knowledgeKey },
+      });
+    }
+    if (
+      Object.values(registry).some(
+        instance =>
+          (!knowledge.hasOwnStorage && !instance.hasOwnStorage) ||
+          knowledge.__sharesStorageWith(instance) ||
+          (!knowledge.hasOwnStorage &&
+            this.#storageSource !== undefined &&
+            instance.__usesStorage(this.#storageSource)),
+      )
+    ) {
+      throw new MastraError({
+        id: 'MASTRA_ADD_KNOWLEDGE_SHARED_STORAGE',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Knowledge instances cannot share a storage backend. Configure separate storage on named instances to preserve isolation.',
+        details: { status: 409, knowledgeKey },
+      });
+    }
+
+    knowledge.__setLogger(this.#logger);
+    knowledge.__registerMastra(this);
+    if (!knowledge.hasOwnStorage && this.#storage) {
+      knowledge.setStorage(this.#storage, this.#storageSource);
+    }
+    registry[knowledgeKey] = knowledge;
   }
 
   /**
@@ -5992,9 +6115,29 @@ export class Mastra<
    * ```
    */
   public setStorage(storage: MastraCompositeStore) {
+    const knowledgeInstances = Object.values(this.#knowledge);
+    if (
+      knowledgeInstances.some(instance => !instance.hasOwnStorage) &&
+      knowledgeInstances.some(instance => instance.hasOwnStorage && instance.__usesStorage(storage))
+    ) {
+      throw new MastraError({
+        id: 'MASTRA_SET_STORAGE_KNOWLEDGE_CONFLICT',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: 'Cannot set Mastra storage because a named Knowledge instance already uses that backend.',
+        details: { status: 409 },
+      });
+    }
+
     this.#storageFallbackWarningPending = false;
+    this.#storageSource = getStorageSource(storage);
     this.#storage = augmentWithInit(storage);
     this.#storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
+    for (const knowledge of Object.values(this.#knowledge)) {
+      if (!knowledge.hasOwnStorage) {
+        knowledge.setStorage(this.#storage, this.#storageSource);
+      }
+    }
     this.#ensureBackgroundTaskManager();
     // If storage was attached after construction, the SchedulerWorker
     // will pick it up when startWorkers() is called.
@@ -6131,6 +6274,8 @@ export class Mastra<
         this.#workflows?.[key]?.__setLogger(this.#logger);
       });
     }
+
+    Object.values(this.#knowledge).forEach(knowledge => knowledge.__setLogger(this.#logger));
 
     if (this.#serverAdapter) {
       this.#serverAdapter.__setLogger(this.#logger);
@@ -7537,6 +7682,17 @@ export class Mastra<
         });
       }
     });
+
+    // Workers and runs are stopped, so nothing publishes anymore. Close transports
+    // that hold connections (e.g. Redis) so they don't keep the process alive.
+    const pubsub = this.#pubsub as PubSub & { close?: () => Promise<void> };
+    if (typeof pubsub.close === 'function') {
+      try {
+        await pubsub.close();
+      } catch (error) {
+        this.#logger?.error('Failed to close pubsub during shutdown', { error });
+      }
+    }
 
     // Close storage to release OS file handles (critical on Windows: open WAL/shm
     // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).

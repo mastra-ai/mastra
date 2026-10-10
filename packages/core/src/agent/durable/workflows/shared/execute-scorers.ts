@@ -4,13 +4,13 @@ import type { Mastra } from '../../../../mastra';
 import { createObservabilityContext } from '../../../../observability';
 import { RequestContext } from '../../../../request-context';
 import { MessageList } from '../../../message-list';
-import type { DurableAgenticExecutionOutput, DurableAgenticWorkflowInput } from '../../types';
+import type { DurableAgenticLoopOutput, DurableAgenticWorkflowInput } from '../../types';
 
 export interface ExecuteDurableAgentScorersParams {
   /** Workflow init data, carrying the serialized scorer config and run identity. */
   initData: DurableAgenticWorkflowInput;
   /** The run's final output, carrying the response messages to score. */
-  finalOutput: DurableAgenticExecutionOutput;
+  finalOutput: Pick<DurableAgenticLoopOutput, 'messageListState'>;
   mastra?: Mastra;
   requestContext?: RequestContext;
   tracingContext?: Parameters<typeof createObservabilityContext>[0];

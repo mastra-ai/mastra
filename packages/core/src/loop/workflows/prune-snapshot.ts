@@ -29,7 +29,9 @@ import { isEntryFinished } from '../../workflows/utils';
  *    from it; resume rebuilds messages from `__streamState.messageList`.
  *  - foreach aggregation entries (`__workflow_meta.foreachOutput`) get the
  *    same per-entry treatment so still-suspended parallel tool calls keep
- *    their resume state (see foreach-suspend-payload.test.ts).
+ *    their resume state (see foreach-suspend-payload.test.ts). The foreach
+ *    step's own `__streamState`, a mirror of its first suspended entry's, is
+ *    dropped (see `isForeachStreamStateMirror`).
  *  - `context.input` is the loop's initial iteration data (another full
  *    conversation copy): heavy fields are stripped.
  *  - on a **`running`** snapshot only, completed steps additionally give up
@@ -261,11 +263,32 @@ function pruneStepResult(
           ...pruned.suspendPayload,
           __workflow_meta: { ...meta, foreachOutput },
         };
+        if (isForeachStreamStateMirror(pruned.suspendPayload.__streamState, meta)) {
+          delete pruned.suspendPayload.__streamState;
+        }
       }
     }
   }
 
   return pruned;
+}
+
+/**
+ * A suspended default-engine foreach step spreads its first suspended
+ * iteration's `suspendPayload` into the step-level one, so the step-level
+ * `__streamState` is the very same object as
+ * `foreachOutput[foreachIndex].suspendPayload.__streamState`. Resume reads the
+ * per-iteration copy (handlers/step.ts, and control-flow when rebuilding a
+ * partially resumed foreach), never the step-level one, so persisting both
+ * writes the conversation twice. The identity check confines this to that
+ * exact mirror: the parent agentic-loop row, whose step-level copy is what
+ * `loop.ts` and thread filtering read, propagates foreach entries without
+ * `__streamState` and so never matches.
+ */
+function isForeachStreamStateMirror(streamState: unknown, meta: Record<string, any>): boolean {
+  if (streamState === undefined || typeof meta.foreachIndex !== 'number') return false;
+  const entry = (meta.foreachOutput as Record<number, unknown> | undefined)?.[meta.foreachIndex];
+  return isPlainObject(entry) && entry.status === 'suspended' && entry.suspendPayload?.__streamState === streamState;
 }
 
 /** Drops the heavy `__streamState` from a suspend payload, keeping routing

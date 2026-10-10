@@ -616,6 +616,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/lowrouter',
+          label: 'LowRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/lucidquery',
           label: 'LucidQuery',
         },
@@ -742,7 +747,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/novita-ai',
-          label: 'NovitaAI',
+          label: 'Novita AI',
         },
         {
           type: 'doc',
