@@ -1,5 +1,6 @@
 import { PubSub } from '@mastra/core/events';
 import type { Event } from '@mastra/core/events';
+import type { IMastraLogger } from '@mastra/core/logger';
 import type { Inngest } from 'inngest';
 import { subscribe } from 'inngest/realtime';
 
@@ -65,6 +66,26 @@ function warnUnrecognizedTopic(topic: string): void {
 const REALTIME_MAX_BYTES = 480 * 1024;
 const TERMINAL_AGENT_EVENTS = new Set(['finish', 'error', 'abort']);
 
+/** Chunk type streamed in place of an agent event that exceeded the Realtime cap. */
+export const OVERSIZED_EVENT_CHUNK_TYPE = 'data-oversized-event';
+
+function oversizedPlaceholder(
+  runId: string,
+  eventType: string,
+  chunkType: string | undefined,
+  bytes: number | undefined,
+) {
+  return {
+    type: 'chunk',
+    runId,
+    data: {
+      type: OVERSIZED_EVENT_CHUNK_TYPE,
+      transient: true,
+      data: { eventType, chunkType, bytes, limit: REALTIME_MAX_BYTES },
+    },
+  };
+}
+
 function byteSize(value: unknown): number {
   try {
     return Buffer.byteLength(JSON.stringify(value) ?? '', 'utf8');
@@ -76,13 +97,15 @@ function byteSize(value: unknown): number {
 /**
  * Reduce an agent event that would exceed the Realtime cap. `finish` keeps the
  * fields stream consumers read (text, usage, stepResult) and drops the
- * per-step record; other oversized events are skipped (returns null) rather
- * than delivered truncated. Full fidelity stays in the CachingPubSub replay.
+ * per-step record; other oversized events are replaced by a small
+ * `data-oversized-event` chunk rather than delivered truncated.
  */
-function fitAgentEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id' | 'createdAt'> | null {
-  if (byteSize(event) <= REALTIME_MAX_BYTES) return event;
+function fitAgentEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id' | 'createdAt'> {
+  const bytes = byteSize(event);
+  if (bytes <= REALTIME_MAX_BYTES) return event;
   if (event.type !== 'finish') {
-    return TERMINAL_AGENT_EVENTS.has(event.type) ? { type: event.type, runId: event.runId, data: {} } : null;
+    if (TERMINAL_AGENT_EVENTS.has(event.type)) return { type: event.type, runId: event.runId, data: {} };
+    return oversizedPlaceholder(event.runId, event.type, (event.data as { type?: string } | undefined)?.type, bytes);
   }
   const data = (event.data ?? {}) as { output?: Record<string, unknown>; stepResult?: unknown };
   const output = data.output ?? {};
@@ -100,9 +123,10 @@ function fitAgentEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id'
 
 /**
  * Recover an agent event Realtime truncated into a raw string. Terminal events are
- * salvaged into a minimal envelope so attached streams close; anything else is dropped.
+ * salvaged into a minimal envelope so attached streams close; anything else becomes
+ * a `data-oversized-event` placeholder chunk.
  */
-function salvageTruncatedAgentEvent(raw: string, runId: string): { type: string; runId: string; data: unknown } | null {
+function salvageTruncatedAgentEvent(raw: string, runId: string): { type: string; runId: string; data: unknown } {
   try {
     const parsed = JSON.parse(raw);
     if (parsed?.type && parsed?.runId) return parsed;
@@ -110,7 +134,10 @@ function salvageTruncatedAgentEvent(raw: string, runId: string): { type: string;
     // truncated
   }
   const type = raw.slice(0, 256).match(/"type"\s*:\s*"([^"]+)"/)?.[1];
-  if (!type || !TERMINAL_AGENT_EVENTS.has(type)) return null;
+  if (!type || !TERMINAL_AGENT_EVENTS.has(type)) {
+    const chunkType = raw.match(/"data"\s*:\s*\{\s*"type"\s*:\s*"([^"]+)"/)?.[1];
+    return oversizedPlaceholder(runId, type ?? 'unknown', chunkType, undefined);
+  }
   const reason = raw.match(/"stepResult"\s*:\s*\{[^{}]*"reason"\s*:\s*"([^"]+)"/)?.[1];
   return {
     type,
@@ -139,6 +166,7 @@ function salvageTruncatedAgentEvent(raw: string, runId: string): { type: string;
 export class InngestPubSub extends PubSub {
   private inngest: Inngest;
   private workflowId: string;
+  private logger?: IMastraLogger;
   private subscriptions: Map<
     string,
     {
@@ -147,10 +175,11 @@ export class InngestPubSub extends PubSub {
     }
   > = new Map();
 
-  constructor(inngest: Inngest, workflowId: string) {
+  constructor(inngest: Inngest, workflowId: string, logger?: IMastraLogger) {
     super();
     this.inngest = inngest;
     this.workflowId = workflowId;
+    this.logger = logger;
   }
 
   async publishWorkflowWatchTo(workflowId: string, runId: string, data: unknown): Promise<void> {
@@ -191,9 +220,10 @@ export class InngestPubSub extends PubSub {
       let dataToSend: unknown = event.data;
       if (isAgentTopic) {
         const fitted = fitAgentEvent(event);
-        if (!fitted) {
-          console.warn(`InngestPubSub: skipping oversized "${event.type}" event for run ${runId} (Realtime size cap)`);
-          return;
+        if (fitted !== event) {
+          const message = `InngestPubSub: "${event.type}" event for run ${runId} exceeds the Inngest Realtime size limit (${REALTIME_MAX_BYTES} bytes); sending a reduced event instead`;
+          if (this.logger) this.logger.warn(message);
+          else console.warn(message);
         }
         dataToSend = fitted;
       }
@@ -267,7 +297,6 @@ export class InngestPubSub extends PubSub {
         let event: Event;
         if (isAgentTopic && typeof message.data === 'string') {
           const salvaged = salvageTruncatedAgentEvent(message.data, runId);
-          if (!salvaged) return;
           event = { id: crypto.randomUUID(), createdAt: new Date(), ...salvaged } as unknown as Event;
         } else if (isAgentTopic && message.data?.type && message.data?.runId) {
           // Agent stream event - spread the AgentStreamEvent data and add required Event fields

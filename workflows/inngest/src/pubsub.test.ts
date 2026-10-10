@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const subscribeMock = vi.hoisted(() => vi.fn());
 vi.mock('inngest/realtime', () => ({ subscribe: subscribeMock }));
 
-import { InngestPubSub } from './pubsub';
+import { InngestPubSub, OVERSIZED_EVENT_CHUNK_TYPE } from './pubsub';
 
 function setup() {
   const published: unknown[] = [];
@@ -50,15 +50,38 @@ describe('InngestPubSub Realtime size cap (#20671)', () => {
     ]);
   });
 
-  it('skips an oversized non-terminal event instead of sending it truncated', async () => {
+  it('replaces an oversized non-terminal event with a placeholder chunk and logs a warning', async () => {
     const { pubsub, published } = setup();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    await pubsub.publish('agent.stream.r1', { type: 'step-start', runId: 'r1', data: { request: huge } });
-    expect(published).toEqual([]);
+    await pubsub.publish('agent.stream.r1', {
+      type: 'chunk',
+      runId: 'r1',
+      data: { type: 'tool-result', payload: { result: huge } },
+    });
+    expect(published).toEqual([
+      {
+        type: 'chunk',
+        runId: 'r1',
+        data: {
+          type: OVERSIZED_EVENT_CHUNK_TYPE,
+          transient: true,
+          data: { eventType: 'chunk', chunkType: 'tool-result', bytes: expect.any(Number), limit: 480 * 1024 },
+        },
+      },
+    ]);
+    expect(warn).toHaveBeenCalledOnce();
     warn.mockRestore();
   });
 
-  it('salvages a truncated terminal message and drops a truncated non-terminal one', async () => {
+  it('uses the provided logger instead of the console', async () => {
+    const logger = { warn: vi.fn() };
+    const inngest = { realtime: { publish: vi.fn(async () => {}) } };
+    const pubsub = new InngestPubSub(inngest as any, 'wf', logger as any);
+    await pubsub.publish('agent.stream.r1', { type: 'step-start', runId: 'r1', data: { request: huge } });
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('step-start'));
+  });
+
+  it('salvages a truncated terminal message and turns a truncated non-terminal one into a placeholder', async () => {
     let onMessage: (m: unknown) => void = () => {};
     subscribeMock.mockImplementation(async (opts: { onMessage: (m: unknown) => void }) => {
       onMessage = opts.onMessage;
@@ -68,11 +91,15 @@ describe('InngestPubSub Realtime size cap (#20671)', () => {
     const received: any[] = [];
     await pubsub.subscribe('agent.stream.r1', event => received.push(event));
 
-    onMessage({ data: '{"type":"step-start","runId":"r1","data":{"request":"xxxx' });
+    onMessage({ data: '{"type":"chunk","runId":"r1","data":{"type":"tool-result","payload":{"result":"xxxx' });
     onMessage({ data: '{"type":"finish","runId":"r1","data":{"stepResult":{"reason":"stop"},"output":{"steps":[{"te' });
 
-    expect(received).toHaveLength(1);
+    expect(received).toHaveLength(2);
     expect(received[0]).toMatchObject({
+      type: 'chunk',
+      data: { type: OVERSIZED_EVENT_CHUNK_TYPE, data: { eventType: 'chunk', chunkType: 'tool-result' } },
+    });
+    expect(received[1]).toMatchObject({
       type: 'finish',
       runId: 'r1',
       data: { output: { steps: [] }, stepResult: { reason: 'stop' } },
