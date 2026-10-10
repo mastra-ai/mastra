@@ -11,6 +11,7 @@ import type {
 } from '@mastra/core/processors';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
 import type { ObservationTurn } from './observation-turn/index';
@@ -380,7 +381,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // prepare() already counted the current unobserved window and resource context.
         const finalTotalPending = ctx.status.pendingTokens;
         try {
-          await this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending);
+          await runOMCommit(this.engine.buffering.getLockKey(threadId, resourceId), () =>
+            this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+          );
           this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
         } catch {
           // Token persistence is intentionally non-fatal for streaming UX.

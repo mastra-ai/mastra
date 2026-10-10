@@ -168,33 +168,46 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
 
     const messageTokens = await this.tokenCounter.countMessagesAsync(messages);
     let appendAttempts = 0;
+    let targetId = record.id;
     const appendResult = await withRetry(
       () => {
         appendAttempts++;
-        const input = {
-          id: record.id,
-          chunk: {
-            cycleId: this.cycleId,
-            observations: processed.observations,
-            tokenCount: processed.observationTokens,
-            messageIds: processed.observedMessageIds,
-            messageTokens,
-            lastObservedAt: processed.lastObservedAt,
-            suggestedContinuation: processed.suggestedContinuation,
-            currentTask: processed.currentTask,
-            threadTitle: processed.threadTitle,
-            extractedValues: processed.extractedValues,
-            extractionFailures: processed.extractionFailures,
-          },
-          lastBufferedAtTime: processed.lastObservedAt,
-        };
-        // Cores older than appendBufferedObservations only offer the void-returning write.
-        return typeof this.storage.appendBufferedObservations === 'function'
-          ? this.storage.appendBufferedObservations(input)
-          : this.storage.updateBufferedObservations(input).then(() => ({ persisted: true, recordId: input.id }));
+        // Each attempt takes its own queue slot (no slot is held across retry backoff) and
+        // targets the head of this record's lineage as it is when the slot runs. If the record
+        // was cleared meanwhile, the thread's current record is unrelated: write nothing.
+        return this.runCommit(async () => {
+          const head = await getLineageHead(this.storage, record);
+          if (!head) return null;
+          targetId = head.id;
+          const input = {
+            id: targetId,
+            chunk: {
+              cycleId: this.cycleId,
+              observations: processed.observations,
+              tokenCount: processed.observationTokens,
+              messageIds: processed.observedMessageIds,
+              messageTokens,
+              lastObservedAt: processed.lastObservedAt,
+              suggestedContinuation: processed.suggestedContinuation,
+              currentTask: processed.currentTask,
+              threadTitle: processed.threadTitle,
+              extractedValues: processed.extractedValues,
+              extractionFailures: processed.extractionFailures,
+            },
+            lastBufferedAtTime: processed.lastObservedAt,
+          };
+          // Cores older than appendBufferedObservations only offer the void-returning write.
+          return typeof this.storage.appendBufferedObservations === 'function'
+            ? this.storage.appendBufferedObservations(input)
+            : this.storage.updateBufferedObservations(input).then(() => ({ persisted: true, recordId: input.id }));
+        });
       },
       { label: 'persist-buffered-observations', abortSignal: this.opts.abortSignal },
     );
+    if (appendResult === null) {
+      omDebug(`[OM:asyncBuffer] skipping persist for thread ${threadId}: observational memory record was cleared`);
+      return { status: 'not-committed', reason: 'the observational memory record was cleared' };
+    }
     // Storage skips a chunk it already holds (same cycle) or whose messages the cursor already
     // covers. A first-attempt skip is final: this cycle's chunk never landed. A skip after a
     // retried write can mean an earlier attempt landed (and may already be activated), so look

@@ -103,7 +103,8 @@ This section describes `main`. Behavior that exists only on the open #22078 bran
 | `operation-registry.ts`                                                                                | Process-wide, keyed by record ID                       | Tells live ops apart from stale durable flags.                                                                                       |
 | Durable `is*` flags                                                                                    | Cross-process                                          | Hints only; nothing waits on them as locks.                                                                                          |
 | Step 0 ordering                                                                                        | One turn                                               | Activation runs before reflection. Nothing orders operations **across** turns, instances, or processes.                              |
-| Adapter locking                                                                                        | Per adapter                                            | Not uniform; see below.                                                                                                              |
+| Adapter locking                                                                                        | Per adapter                                            | Not uniform on `main`; see below. PR 1 gives every adapter a per-row critical section and the `supersededBy` fence.                  |
+| OM commit queue (`commit-queue.ts`, PR 2)                                                              | Process-wide, keyed by `thread:<id>` / `resource:<id>` | Serializes OM storage commits per key, reflection first among waiters; model calls stay outside (D2).                                |
 
 Durable agents make the cross-process case ordinary: `MessageList` is serialized between durable steps, OM ends and starts a turn each iteration (`processor.ts`), and a step can run in a different process from the one that started a buffer op. Process-static coordination never sees the other process, so **storage has to carry correctness on its own**.
 
@@ -309,12 +310,43 @@ Per adapter, the shared lifecycle tests and two-store races fail on the `main` a
 
 ### D2. Per-thread/resource commit queue (PR 2)
 
-- **Where:** a process-wide queue keyed like the coordinator (`thread:<id>` / `resource:<id>`), static so that every `ObservationalMemory` and `Memory` instance in the process shares it. A queue per instance would **not** cover the P4 repro.
-- **Queued operations:** chunk appends, observation activation, sync-observation commits, and reflection activation (rollover).
-- **Not queued:** Observer and Reflector model calls, including buffered reflection generation, indexing, and title generation. Only the commits are queued.
-- **Ordering:** reflection activation goes to the **front** of the queue, so a due reflection isn't held behind chunk commits and the actor doesn't take two cache misses.
-- **Fresh head:** every queued operation looks up the head when it runs, never at enqueue time.
-- Verified with a seeded interleaving fuzz harness (base expected to fail, storage-only and full stack expected clean).
+`commit-queue.ts`: `runOMCommit(key, op, { priority })`.
+
+- **Where:** one process-wide queue keyed like the coordinator (`getOMLockKey`: `thread:<id>` / `resource:<id>`). Its state lives on `globalThis` (a `Symbol.for` key), so every `ObservationalMemory` and `Memory` instance in the process shares it, even when `@mastra/memory` is loaded twice (CJS and ESM, or duplicate installs). A queue per instance would not cover the P4 repro (two `Memory` instances on one thread).
+- **One commit at a time per key.** Different keys run in parallel. A failing op rejects only its caller; idle keys are removed.
+- **Priority:** a waiting reflection commit runs before waiting normal commits. It never preempts the running one. So a due reflection isn't held behind a run of chunk commits, and the actor doesn't take two cache misses (one for activation, one for the rollover). Cost: the actor's awaited flag and counter writes (`processor.ts` end of step, the pending-token write before activation) now wait behind any queued append or rollover for the thread, including LibSQL's guarded-write retries. Not measured.
+- **Queued:** chunk appends, observation activation (head read, pending-token write, swap), sync and resource-scoped observation commits, reflection rollover (sync `maybeReflect`, manual `reflect()`, buffered-reflection swap), `updateBufferedReflection`, every `setBufferingObservationFlag` / `setPendingMessageTokens`, and per-record config overrides (`updateRecordConfig`: head read and write in one slot).
+- **Not queued storage writes:** `setReflectingFlag`, `setBufferingReflectionFlag` (status flags, not lifecycle state), and `clearObservationalMemory` (deletes every generation). Across processes, a config override can still land on a record another process just retired; rollover copies config from the stored row, so the override is lost on the head. Open (see Open questions).
+- **Not queued:** Observer and Reflector model calls, buffered-reflection generation, indexing, and title generation. Only the storage commits wait in the queue.
+- **Head resolution inside the slot:** appends, activation, and sync commits read the head when their slot runs, never at enqueue time, so in-process writers don't conflict. Appends and sync commits take the head of their own record's lineage (`getLineageHead`): `clearObservationalMemory` isn't queued, so the thread can hold a new record by the time the slot runs, and they then write nothing. Sync commits still use the conditional write and bounded recompose, because other processes never see this queue. Two deliberate exceptions: flag/counter writes pass the id they hold, because contract item 5 redirects a retired id to the head inside the adapter's lock. Reflection commits pass the Reflector's snapshot, because the rollover text rule is defined against the text the Reflector read.
+- **Re-entrancy:** an op that enqueues on a key it holds is rejected instead of deadlocking (`AsyncLocalStorage` with a per-job token). Nesting across keys is allowed, and a nested op keeps its outer ops' keys, so A → B → A also rejects.
+- **Async context:** each op runs in the async context of the caller that enqueued it (`AsyncResource.bind`), so tracing spans and logger correlation stay with the request that made the commit rather than the op it waited behind.
+- **Guarded:** `commit-queue-integration.test.ts` wraps the nine queued write methods and fails if any call it drives runs outside the queue slot for its key. It drives thread scope through the public API (buffer, activate, observe, reflect, buffered reflection, config override). The processor's end-of-step write, the coordinator's stale-flag clear, the buffer path's flag writes, and the resource key are covered by source review (every call site sits inside `runOMCommit`), not by this test.
+- **What the queue adds over D1:** ordering and reflection priority within one process. Correctness doesn't depend on it: the fuzz holds its invariants on D1 alone (below), which is what multi-process and durable deployments rely on. That evidence is as narrow as the fuzz: thread scope, no live `MessageList`, messages that never gain parts, and strictly increasing timestamps.
+
+#### Seeded interleaving fuzz
+
+`__tests__/lifecycle-fuzz-runner.ts` drives two `ObservationalMemory` instances on one store and thread. Each seed launches 40 operations (save, buffer, activate, sync observe, reflect, `maybeReflect`), with seeded model latencies and random awaits between launches, then drains all work. Mocked Observer and Reflector outputs embed the ids they cover (`obs[<id>,…]`), so every message is traceable into the head text. `__tests__/lifecycle-invariants.ts` checks:
+
+1. coverage;
+2. no discarded work;
+3. chunk order (the list is not required to start right after the cursor: a sync commit may cover messages that are already buffered, leaving those chunks behind the cursor until activation);
+4. no chunk stranded on a retired record;
+5. a monotonic cursor;
+6. every saved message reaches the actor's view at least once, where the raw part of that view is built from the stored messages with `getUnobservedMessages` (markers, observed ids, and the cursor count exactly as they do for the actor);
+7. a wholly covered append is not stored.
+
+It also classifies every duplicate.
+
+- CI: 50 seeds on InMemory (`lifecycle-fuzz.test.ts`), 10 on a LibSQL file database (`integration-tests/src/om-lifecycle-fuzz-libsql.test.ts`, published build). `OM_FUZZ_SEEDS=<n>` / `OM_FUZZ_FIRST_SEED=<n>` run more seeds; `OM_FUZZ_REPORT_ONLY=1` reports without failing.
+- Results (`.mastracode/plans/om-lossless-lifecycle.proof/fuzz/`, summarized in `proof.md`), 500 InMemory seeds each: `main` fails 416 seeds, with 212 messages missing from the actor's view, 2056 coverage, 6909 stranded-chunk, 986 cursor-backward, 229 discarded-work, 690 covered-append-stored, and 187 unexplained-duplicate violations. D1 alone (no queue) and D1 + D2 each fail 0 seeds. LibSQL file database, 100 seeds: 0 on D1 alone and 0 on D1 + D2. PR 3 (#22078) is not fuzzed yet.
+- The fuzz found H4, H5, H6, and H8, which are fixed in PR 1.
+
+**Accepted duplication.** The fuzz requires every message at least once. It allows these duplicates and reports them separately:
+
+- A chunk stored before a sync observation covered the same messages (sync doesn't exclude buffered messages).
+- A chunk that was only partly covered when appended, for the messages in its covered part.
+- Two sync cycles whose Observer calls overlapped (other instances or processes; about 3 per 500 seeds). The later commit conflicts, recomposes, and appends. On `main` the later commit overwrote the earlier one (H2: loss). Dropping the later commit when the head cursor covers its messages is unsafe, because observation is part-level: an in-progress assistant message keeps its `createdAt` while gaining parts. Preventing the overlap would need cross-process ownership of a cycle. Within one process, `observe()`'s lock is per instance, so two instances can still overlap.
 
 ### D3. #22078 rebased on D1 and D2 (PR 3)
 
@@ -358,6 +390,8 @@ Related history:
 - `startAsyncBufferedObservation` (the `triggerAsyncBuffering` path) sets the stored `isBufferingObservation` flag at call time, before it waits on its predecessor, so the predecessor's later "flag off" write leaves the flag false while this op runs. Same-process activation then skips its buffering wait, and another process may buffer the same messages. Pre-existing; the stored flag is a hint, not a lock.
 
 - How much P1 actually costs in fidelity and question answerability (needs a source-aligned comparison, not provenance-window sizes), and whether fixing it measurably changes BEAM scores. Measure this on states created or replayed through the new code; rescanning old snapshots will still show the 620 historical strandings.
+- Config overrides across processes: `updateObservationalMemoryConfig` writes by id with no liveness check, so an override written while another process rolls the record over stays on the retired row. Fixing it needs the contract-item-5 redirect for config writes in every adapter.
+- H4 follow-up: the guard returns `observed: false` without correcting the stale `pendingMessageTokens`. The processor recounts it at the end of each step; on the `observe()` API path nothing does, so each call re-runs `prepare()` (in resource scope, a listing of every thread's messages) until something rewrites the count. Cost only, no context loss.
 
 ## Tests that cover this area
 
@@ -368,4 +402,6 @@ Related history:
 - `packages/memory/src/processors/observational-memory/__tests__/lineage-reset.test.ts`: buffer and observe cycles that span a clear (thread and resource scope, generations 0 and 1) don't commit into the recreated record.
 - `stores/_test-utils/src/domains/memory/observational-memory-concurrency.ts`: eight two-store races (25 iterations each, invariant-checked), run per networked adapter by `stores/<adapter>/src/storage/domains/memory/om-lifecycle-concurrency.test.ts` (LibSQL with the second store in a child process), next to each adapter's `supersededBy` upgrade, backfill-vs-rollover, and adapter-specific tests (MongoDB crash recovery and roll-forward, Oracle timestamp binds, LibSQL same-process writes).
 - `__tests__/lifecycle-safety.test.ts`: memory-layer behavior on retired and conflicting commits (P4, P6, H2–H8, reflection not applied, covered appends).
+- `__tests__/commit-queue.test.ts`, `__tests__/commit-queue-integration.test.ts`: queue semantics, reflection priority, every OM write inside the queue.
+- `__tests__/lifecycle-fuzz.test.ts` (InMemory) and `integration-tests/src/om-lifecycle-fuzz-libsql.test.ts` (LibSQL): seeded interleaving fuzz (D2).
 - The probes for P2 and P4 live outside the repo and are ported into the stack as regression tests: the ready+late rollover probe and the activation-vs-reflection probe matrix including the two-agent LibSQL repro.
