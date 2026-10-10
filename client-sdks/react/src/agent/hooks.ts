@@ -496,6 +496,11 @@ export const useChat = ({
     _threadSubscriptionPromiseRef.current = null;
   }, []);
 
+  const finishRun = useCallback(() => {
+    setMessages(finishStreamingAssistantMessage);
+    setIsRunning(false);
+  }, []);
+
   const processStreamChunk = useCallback(
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
       const isTerminal = chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error';
@@ -649,7 +654,7 @@ export const useChat = ({
             .catch(error => {
               if (!isAbortError(error)) {
                 console.error('[useChat] Thread subscription failed', error);
-                setIsRunning(false);
+                finishRun();
               }
             })
             .finally(() => {
@@ -672,7 +677,7 @@ export const useChat = ({
           }
           if (!isAbortError(error)) {
             console.error('[useChat] Thread subscription failed', error);
-            setIsRunning(false);
+            finishRun();
           }
           throw error;
         });
@@ -683,6 +688,7 @@ export const useChat = ({
       agentId,
       baseClient,
       closeThreadSubscription,
+      finishRun,
       markThreadSignalsUnsupported,
       processStreamChunk,
       streamPath,
@@ -915,7 +921,7 @@ export const useChat = ({
       if (_streamAbortRef.current === internalAbort) {
         _streamAbortRef.current = null;
       }
-      setIsRunning(false);
+      finishRun();
     };
 
     if (!threadId || _threadSignalsUnsupportedRef.current || threadSignalsDisabled) {
@@ -1083,8 +1089,7 @@ export const useChat = ({
       },
     });
 
-    setMessages(prev => finishStreamingAssistantMessage(prev));
-    setIsRunning(false);
+    finishRun();
   };
 
   const handleCancelRun = () => {
@@ -1095,11 +1100,10 @@ export const useChat = ({
       console.error('[useChat] Failed to abort thread subscription', error);
     });
     closeThreadSubscription();
-    setMessages(prev => finishStreamingAssistantMessage(prev));
+    finishRun();
     liveRunFinished.current = true;
     pendingToolApprovalIdsRef.current.clear();
     setIsAwaitingToolApproval(false);
-    setIsRunning(false);
     _currentRunId.current = undefined;
     _onChunk.current = undefined;
     _networkRunId.current = undefined;
@@ -1166,14 +1170,14 @@ export const useChat = ({
           await processStreamChunk(chunk, onChunk);
         },
       });
-      setIsRunning(false);
+      finishRun();
     } catch (error) {
       setToolCallApprovals(prev => {
         const next = { ...prev };
         delete next[toolCallId];
         return next;
       });
-      setIsRunning(false);
+      finishRun();
       throw error;
     }
   };
@@ -1227,7 +1231,7 @@ export const useChat = ({
         await processStreamChunk(chunk, onChunk);
       },
     });
-    setIsRunning(false);
+    finishRun();
   };
 
   const approveToolCallGenerate = async (toolCallId: string) => {
@@ -1316,8 +1320,7 @@ export const useChat = ({
       },
     });
 
-    setMessages(prev => finishStreamingAssistantMessage(prev));
-    setIsRunning(false);
+    finishRun();
   };
 
   const declineNetworkToolCall = async (toolName: string, runId?: string) => {
@@ -1352,8 +1355,7 @@ export const useChat = ({
       },
     });
 
-    setMessages(prev => finishStreamingAssistantMessage(prev));
-    setIsRunning(false);
+    finishRun();
   };
 
   const sendMessage = async ({ mode = 'stream', ...args }: SendMessageArgs) => {
@@ -1397,7 +1399,7 @@ export const useChat = ({
     } catch (error) {
       // A failed send (subscription setup, request, or stream) must not leave
       // the chat stranded in a "running" state until reload (issue #18768).
-      setIsRunning(false);
+      finishRun();
       throw error;
     }
   };

@@ -1,7 +1,7 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { queryKeys } from '../../../../api/keys';
 import type { FactorySessionState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
@@ -77,6 +77,9 @@ export function useAgentControllerConnection({
     liveState,
   });
   const observedRun = useRef<{ resourceId: string; running?: boolean }>({ resourceId });
+  const endRunTheStreamMissed = useEffectEvent(() => {
+    if (liveState.current?.running !== false) handleEvent({ type: 'agent_end' });
+  });
   useEffect(() => {
     const running = syncQuery.data?.running;
     const previous = observedRun.current;
@@ -88,6 +91,7 @@ export function useAgentControllerConnection({
     void queryClient.invalidateQueries({
       queryKey: queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
     });
+    endRunTheStreamMissed();
   }, [agentControllerId, queryClient, resourceId, syncQuery.data?.running]);
   const handleConnectedChange = (connected: boolean) => {
     // Ref mirrors the state so back-to-back events see the true previous value

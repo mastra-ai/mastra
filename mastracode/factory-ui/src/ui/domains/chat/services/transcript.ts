@@ -198,7 +198,13 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
   if (!isKnownAgentControllerEvent(event)) return state;
   switch (event.type) {
     case 'agent_end':
-      return { ...state, pending: false };
+      return {
+        ...state,
+        pending: false,
+        entries: state.entries.map(entry =>
+          entry.kind === 'message' && entry.streaming ? { ...entry, streaming: false } : entry,
+        ),
+      };
 
     case 'message_start':
       return upsertMessage(state, event.message, true, viewerId);

@@ -32,6 +32,8 @@ interface PreparingSession {
   finishWorkspace: () => void;
   /** Push an event down the session stream; resolves once the stream is open. */
   emit: (event: AgentControllerEvent) => Promise<void>;
+  /** Close the open session stream, as a network drop would; `missed` happen on the server meanwhile, never delivered. */
+  dropStream: (missed?: AgentControllerEvent[]) => Promise<void>;
   posted: string[];
   postedFiles: unknown[];
   delivered: string[];
@@ -75,15 +77,29 @@ export function stubPreparingSession({
     releaseWorkspace = resolve;
   });
   let attachSse = (_controller: ReadableStreamDefaultController<Uint8Array>) => {};
-  const sseOpen = new Promise<ReadableStreamDefaultController<Uint8Array>>(resolve => {
-    attachSse = resolve;
-  });
+  const openSse = () =>
+    new Promise<ReadableStreamDefaultController<Uint8Array>>(resolve => {
+      attachSse = resolve;
+    });
+  let sseOpen = openSse();
+  let running = false;
+  const track = (event: AgentControllerEvent) => {
+    if (event.type === 'agent_start') running = true;
+    if (event.type === 'agent_end') running = false;
+  };
   const encoder = new TextEncoder();
   const result: PreparingSession = {
     finishWorkspace: releaseWorkspace,
     emit: async event => {
       const controller = await sseOpen;
+      track(event);
       controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+    },
+    dropStream: async (missed = []) => {
+      const controller = await sseOpen;
+      missed.forEach(track);
+      sseOpen = openSse();
+      controller.close();
     },
     posted: [],
     postedFiles: [],
@@ -185,6 +201,7 @@ export function stubPreparingSession({
         modeId: 'build',
         modelId: 'openai/gpt-4o-mini',
         threadId: SESSION_ID,
+        running,
         tasks,
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
