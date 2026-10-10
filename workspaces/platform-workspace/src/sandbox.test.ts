@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
 import { PlatformSandbox, type SandboxAddressRegistry } from './sandbox.js';
@@ -3025,6 +3027,92 @@ describe('PlatformSandbox', () => {
           requestMs: expect.any(Number),
         }),
       );
+      const [, fields] = loggerInfoSpy.mock.calls.find(([message]) => message === 'platform-workspace start complete')!;
+      expect(fields).not.toHaveProperty('templateHash');
+    });
+
+    it('logs the template hash when a template was resolved for the provision', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const template = Template().setWorkdir('/workspace/repo').runCmd('pnpm build');
+      const expected = createHash('sha256')
+        .update(JSON.stringify(serializeSandboxTemplate(template)))
+        .digest('hex')
+        .slice(0, 16);
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_hash', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(json({ id: 'sbx_hash_2', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        template: async () => template,
+        fetch: fetchMock,
+      });
+      const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+
+      await sandbox._start();
+
+      expect(loggerInfoSpy).toHaveBeenCalledWith(
+        'platform-workspace start complete',
+        expect.objectContaining({
+          sandboxId: 'sbx_hash',
+          mode: 'provision',
+          templateHash: expected,
+          templateBoot: 'exact',
+        }),
+      );
+      expect(expected).toMatch(/^[0-9a-f]{16}$/);
+      const [, exactFields] = loggerInfoSpy.mock.calls.find(
+        ([message]) => message === 'platform-workspace start complete',
+      )!;
+      expect(exactFields).not.toHaveProperty('pendingTemplateId');
+
+      // The same definition hashes the same on a second provision.
+      const again = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        template,
+        fetch: fetchMock,
+      });
+      const againSpy = vi.spyOn((again as any).logger, 'info');
+      await again._start();
+      expect(againSpy).toHaveBeenCalledWith(
+        'platform-workspace start complete',
+        expect.objectContaining({ templateHash: expected }),
+      );
+    });
+
+    it('logs a pending template boot with the id the platform is still building', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockResolvedValueOnce(
+        json({
+          id: 'sbx_pending',
+          createdAt: '2026-06-26T00:00:00.000Z',
+          templatePending: { templateId: 'tpl_pending', retryAfterMs: 5_000 },
+        }),
+      );
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        template: Template().runCmd('pnpm build'),
+        fetch: fetchMock,
+      });
+      const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+
+      await sandbox._start();
+
+      expect(loggerInfoSpy).toHaveBeenCalledWith(
+        'platform-workspace start complete',
+        expect.objectContaining({
+          sandboxId: 'sbx_pending',
+          mode: 'provision',
+          templateBoot: 'pending',
+          pendingTemplateId: 'tpl_pending',
+        }),
+      );
     });
 
     it('logs one start-complete summary on reattach', async () => {
@@ -3052,6 +3140,33 @@ describe('PlatformSandbox', () => {
           requestMs: expect.any(Number),
         }),
       );
+      const [, fields] = loggerInfoSpy.mock.calls.find(([message]) => message === 'platform-workspace start complete')!;
+      expect(fields).not.toHaveProperty('templateHash');
+    });
+
+    it('omits templateHash when the same instance reattaches after provisioning', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_again', createdAt: '2026-06-26T00:00:00.000Z' }))
+        .mockResolvedValueOnce(json({ id: 'sbx_again', createdAt: '2026-06-26T00:00:00.000Z' }));
+      const sandbox = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        template: Template().runCmd('echo hi'),
+        fetch: fetchMock,
+      });
+      const loggerInfoSpy = vi.spyOn((sandbox as any).logger, 'info');
+
+      await sandbox._start();
+      await sandbox._stop();
+      await sandbox._start();
+
+      const starts = loggerInfoSpy.mock.calls.filter(([message]) => message === 'platform-workspace start complete');
+      expect(starts.map(([, fields]) => (fields as { mode: string }).mode)).toEqual(['provision', 'reattach']);
+      expect(starts[0]![1]).toHaveProperty('templateHash');
+      expect(starts[1]![1]).not.toHaveProperty('templateHash');
     });
   });
 

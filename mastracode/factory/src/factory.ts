@@ -33,7 +33,8 @@ import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
-import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
+import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from '@mastra/core/workspace';
 import {
   buildAuthRoutes,
   createFactoryAuthGate,
@@ -85,9 +86,10 @@ import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
+import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
 import { isValidGitRef } from './sandbox/git-ref.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
-import type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
+import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
@@ -199,8 +201,15 @@ export interface MastraFactoryConfig {
    * static host, so credentialed requests must be explicitly allowed.
    */
   allowedOrigins?: string[];
-  /** Sandbox configuration. Omitted → repository sandboxes are disabled. */
-  sandbox?: MastraFactorySandboxConfig;
+  /**
+   * The host's sandbox: a FactorySandbox instance such as
+   * `new PlatformFactorySandbox({ ... })`, which owns the session sandbox
+   * constructor, the repo template and the schema of environment settings.
+   * A bare callback is also accepted and wrapped as a `provider: 'custom'`
+   * sandbox with no settings. Omitted → repository sandboxes are
+   * disabled.
+   */
+  sandbox?: MastraFactorySandboxOption;
   /**
    * When a session's sandbox boots: on the agent's first command (`'lazy'`,
    * the default) or as soon as the session's workspace is first resolved
@@ -281,7 +290,7 @@ export interface MastraFactoryConfig {
   };
 }
 
-export type { MastraFactorySandboxConfig } from './sandbox/session-sandbox.js';
+export type { MastraFactorySandboxConfig, MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 export type { FactorySandboxStart } from './workspace.js';
 
 /**
@@ -374,8 +383,40 @@ function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'
   return liveSessions;
 }
 
+/**
+ * The fleet-era `sandbox` options and what replaced each one. Only the keys
+ * the host actually passed are explained, so a host that never used the fleet
+ * gets the short message.
+ */
+const RETIRED_SANDBOX_OPTIONS: Record<string, string> = {
+  machine:
+    "'machine' becomes the provider instance: one sandbox per session, constructed by the FactorySandbox, instead of one template machine cloned per repository",
+  workdir:
+    "'workdir' becomes the workingDirectory of the FactorySandboxContext, which every provider passes to its sandbox; when it is absent the provider uses its own default",
+  maxSandboxes: "'maxSandboxes' is gone with the sandbox fleet: there is one sandbox per session and no pool to cap",
+};
+
+function invalidSandboxOptionMessage(option: unknown): string {
+  const lines = [
+    `MastraFactory: 'sandbox' must be a FactorySandbox instance or a callback constructing a MastraSandbox from a FactorySandboxContext:`,
+    `  sandbox: new PlatformFactorySandbox()`,
+    `  sandbox: ctx => new PlatformSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId })`,
+  ];
+  if (typeof option === 'object' && option !== null) {
+    const retired = Object.keys(RETIRED_SANDBOX_OPTIONS).filter(key => key in option);
+    if (retired.length > 0) {
+      lines.push(`The object you passed is the retired alpha sandbox config. Its options map as follows:`);
+      for (const key of retired) lines.push(`  ${RETIRED_SANDBOX_OPTIONS[key]}.`);
+    }
+  }
+  return lines.join('\n');
+}
+
 export class MastraFactory {
   readonly #config: MastraFactoryConfig;
+  /** The normalized sandbox, set by `prepare()`. Undefined until then and when sandboxes are disabled. */
+  #sandbox: FactorySandbox | undefined;
+  #sandboxDescription: FactorySandboxDescription | undefined;
   readonly #boards: BoardRegistry;
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
@@ -403,6 +444,17 @@ export class MastraFactory {
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
     this.#config = config;
+  }
+
+  /**
+   * The host sandbox's provider, settings schema (JSON Schema) and
+   * capabilities, as the environment route reports them. Undefined before
+   * `prepare()` and when sandboxes are disabled.
+   */
+  get sandboxDescription(): FactorySandboxDescription | undefined {
+    if (!this.#sandbox) return undefined;
+    this.#sandboxDescription ??= describeFactorySandbox(this.#sandbox);
+    return this.#sandboxDescription;
   }
 
   /**
@@ -564,27 +616,16 @@ export class MastraFactory {
       pubsub: eventBus,
     });
 
-    // The sandbox config is a bare callback constructing a session's sandbox
-    // from intent. Shape-only validation: probing it with a synthetic ctx at
-    // boot would construct against a fake session, so only the type is
-    // checked.
-    const sandboxConfig = this.#config.sandbox;
-    if (sandboxConfig !== undefined && typeof sandboxConfig !== 'function') {
-      // An object here is almost certainly the pre-callback config, which
-      // described a fleet the factory managed itself. That fleet is gone:
-      // sandboxes are per session and the host constructs them, so say what to
-      // write instead rather than only naming the expected type.
-      if (typeof sandboxConfig === 'object' && sandboxConfig !== null) {
-        throw new Error(
-          `MastraFactory: 'sandbox' is now a callback, not an options object. It receives a FactorySandboxContext and returns a MastraSandbox, so the host chooses the provider per session:\n` +
-            `  sandbox: ctx => new E2BSandbox({ id: ctx.sessionId, sandboxId: ctx.sandboxId })\n` +
-            `The old options map three ways: 'machine' becomes the provider instance you construct inside the callback (one per session instead of one cloned template); 'workdir' is gone — remote providers clone into the VM's home directory and local providers check out under their own workingDirectory; 'maxSandboxes' is gone with the sandbox fleet — there is one sandbox per session and no pool to cap. Omit 'sandbox' entirely to disable sandboxes.`,
-        );
-      }
-      throw new Error(
-        `MastraFactory: 'sandbox' must be a function constructing a MastraSandbox from a FactorySandboxContext.`,
-      );
+    const sandboxOption = this.#config.sandbox;
+    let sandboxConfig: FactorySandbox | undefined;
+    if (sandboxOption === undefined || isFactorySandbox(sandboxOption)) {
+      sandboxConfig = sandboxOption;
+    } else if (typeof sandboxOption === 'function') {
+      sandboxConfig = new CallbackFactorySandbox(sandboxOption);
+    } else {
+      throw new Error(invalidSandboxOptionMessage(sandboxOption));
     }
+    this.#sandbox = sandboxConfig;
 
     const workspaceRegistry = new FactoryWorkspaceRegistry();
 

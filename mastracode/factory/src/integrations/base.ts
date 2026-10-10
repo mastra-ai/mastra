@@ -23,13 +23,13 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
+import type { FactorySandbox } from '@mastra/core/workspace';
 
 import type { BoardRegistry } from '../boards/index.js';
 import type { Intake } from '../capabilities/intake.js';
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { RouteAuth } from '../routes/route.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
-import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -78,7 +78,7 @@ export interface IntegrationContext {
    * sandboxes. Absent when no sandbox is configured — sandbox-backed
    * routes respond 503.
    */
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   /**
    * Root factory storage backend and source of the `appDbConfigured`
    * diagnostic. Absent when the host runs without an application database.

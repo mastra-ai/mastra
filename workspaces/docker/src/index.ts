@@ -7,3 +7,5 @@ export {
 export { DockerProcessManager } from './sandbox/process-manager';
 export { dockerSandboxProvider } from './provider';
 export * from './template';
+export { DockerFactorySandbox } from './factory-sandbox';
+export type { DockerFactorySandboxOptions, DockerFactorySandboxSettings } from './factory-sandbox';

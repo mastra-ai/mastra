@@ -404,7 +404,9 @@ export function createRepoTemplate(options: RepoTemplateOptions): DeferredNamedT
  * A failed access call leaves no clone URL and throws, which the sandbox
  * turns into its default-template fallback rather than a failed start.
  */
-async function resolveSpecAtHead(options: RepoTemplateOptions): Promise<{ spec: NamedTemplateSpec; sha?: string }> {
+export async function resolveSpecAtHead(
+  options: RepoTemplateOptions,
+): Promise<{ spec: NamedTemplateSpec; sha?: string }> {
   const isList = options.repos !== undefined;
   const entries: RepoTemplateRepository[] = options.repos
     ? options.repos

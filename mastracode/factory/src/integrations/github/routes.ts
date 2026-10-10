@@ -18,12 +18,12 @@ import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorage } from '@mastra/core/storage';
+import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
-import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
@@ -108,7 +108,7 @@ export interface MountGithubRoutesOptions {
    * `sandboxEnabled: false` and sandbox-backed routes respond 503. Sandboxes
    * themselves are constructed per session and started lazily elsewhere.
    */
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   /** Factory storage backend used for the `appDbConfigured` diagnostic. */
   storage?: FactoryStorage;
   /**
@@ -1081,7 +1081,7 @@ function gitErrorResponse(c: Context, err: unknown) {
 async function loadOwnedProject(options: {
   github: GithubIntegration;
   auth: RouteAuth;
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   c: RouteContext;
 }): Promise<{ orgId: string; userId: string; project: ResolvedProjectRepository } | { response: Response }> {
   const { github, auth, sandbox, c } = options;
@@ -1228,7 +1228,7 @@ function buildProjectGitRoutes({
 }: {
   github: GithubIntegration;
   auth: RouteAuth;
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   users?: SessionOwnerUserProvider;
   controller?: MountedMastraCode['controller'];
   memorySettings: MountGithubRoutesOptions['memorySettings'];

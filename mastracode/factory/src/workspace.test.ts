@@ -123,6 +123,7 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
 import { MaterializeError, SetupCommandError } from './integrations/github/sandbox.js';
 import { createGithubSubscriptionTools } from './integrations/github/session-subscriptions.js';
 import { requireGithubTokenInjector } from './integrations/github/token-refresh.js';
+import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
 import {
   __clearSessionSandboxesForTests,
   evictSessionSandbox,
@@ -991,7 +992,7 @@ describe('GitHub session workspace preparation', () => {
     mocks.localRoot = root;
     const github = fakeGithubIntegration();
     const resolver = createWorkspaceFactory({
-      sandbox: mocks.createSandbox as any,
+      sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
       github: github as any,
       workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
       ...(workspaceRegistry ? { workspaceRegistry } : {}),
@@ -1010,8 +1011,15 @@ describe('GitHub session workspace preparation', () => {
     addSession({ id: 'session-a', branch: 'feature-a' });
     addSession({ id: 'session-b', branch: 'feature-b' });
 
+    const create = vi.spyOn(CallbackFactorySandbox.prototype, 'create');
     const workspaceA = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     const workspaceB = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-b') });
+
+    // Boot goes through the FactorySandbox contract: the context plus the
+    // environment's settings document (empty on this surface).
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenNthCalledWith(1, expect.objectContaining({ sessionId: 'session-a' }), {});
+    create.mockRestore();
 
     const workdirA = path.join(root, 'session-a', 'hello');
     const workdirB = path.join(root, 'session-b', 'hello');
@@ -1062,7 +1070,7 @@ describe('GitHub session workspace preparation', () => {
     }));
     const workspace = eager(
       createWorkspaceFactory({
-        sandbox: mocks.createSandbox as any,
+        sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
         sourceControls: [
           {
             id: 'gitlab',
@@ -1943,7 +1951,7 @@ describe('GitHub session workspace preparation', () => {
     // No localRoot: the factory takes the remote path (in-VM workdirs).
     return eager(
       createWorkspaceFactory({
-        sandbox: mocks.createSandbox as any,
+        sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
         github: fakeGithubIntegration() as any,
         workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
       }),
@@ -2705,7 +2713,7 @@ describe('GitHub session workspace preparation', () => {
       tempDirs.push(root);
       mocks.localRoot = root;
       return createWorkspaceFactory({
-        sandbox: mocks.createSandbox as any,
+        sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
         github: fakeGithubIntegration() as any,
         workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
         ...(sandboxStart !== undefined ? { sandboxStart } : {}),

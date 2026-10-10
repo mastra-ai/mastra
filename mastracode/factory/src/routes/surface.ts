@@ -4,6 +4,7 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import type { ApiRoute, IUserProvider } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
+import type { FactorySandbox } from '@mastra/core/workspace';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
@@ -15,7 +16,6 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import type { MastraFactorySandboxConfig } from '../sandbox/session-sandbox.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
@@ -98,7 +98,7 @@ export interface FactoryApiRoutesDeps {
   publicOrigin: string;
   stateSigner?: StateSigner;
   /** Sandbox surface (enablement, provider label, create callback). */
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;

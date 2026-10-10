@@ -1,3 +1,4 @@
+import type { FactoryRepositoryAccess } from '@mastra/core/workspace';
 import type {
   SourceControlInstallation,
   SourceControlRepository,
@@ -19,10 +20,7 @@ export interface RepositoryInput {
   metadata?: Record<string, unknown>;
 }
 
-export interface RepositoryAccess {
-  cloneUrl: string;
-  authorization?: { scheme: 'bearer'; token: string; username?: string };
-}
+export type RepositoryAccess = FactoryRepositoryAccess;
 export interface RepositoryTarget {
   connection: IntegrationConnection;
   sourceId: string;

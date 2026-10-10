@@ -106,7 +106,7 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
    * @see createDefaultMountableTemplate
    */
   template?: TemplateSpec;
-  /** Execution timeout in milliseconds
+  /** Sandbox lifetime in milliseconds: how long E2B keeps the VM alive before stopping it
    *
    * @default 300_000 // 5 minutes
    */
