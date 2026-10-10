@@ -143,6 +143,7 @@ interface Backend {
   settle(threadId: string): Promise<void>;
   observations(threadId: string, resourceId: string): Promise<string | null>;
   messages(threadId: string): Promise<StoredMessage[]>;
+  clone(threadId: string, newThreadId: string): Promise<void>;
 }
 
 function localBackend(): Backend {
@@ -180,6 +181,9 @@ function localBackend(): Backend {
         text: JSON.stringify(m.content),
       }));
     },
+    clone: async (threadId, newThreadId) => {
+      await memory.cloneThread({ sourceThreadId: threadId, newThreadId });
+    },
   };
 }
 
@@ -195,6 +199,9 @@ function platformBackend(): Backend {
     messages: async threadId => {
       const { messages } = await client.listMessages(threadId, { perPage: 100 });
       return messages.map(m => ({ id: m.id, role: m.role, createdAt: m.createdAt, text: JSON.stringify(m) }));
+    },
+    clone: async (threadId, newThreadId) => {
+      await client.cloneThread(threadId, { newThreadId });
     },
   };
 }
@@ -282,6 +289,19 @@ describe.skipIf(!live).each([
     const secondTurn = prompts.find(p => p.includes('Second message'))!;
     expect(secondTurn).toContain('lives in Kyoto');
     expect(secondTurn).toContain('<system-reminder>');
+  });
+
+  it('clones a thread with its messages and observations', async () => {
+    const { agent, backend } = setup();
+    const { thread, resource } = ids('clone');
+    await agent.generate('Help me with this task.', { memory: { thread, resource } });
+    await backend.settle(thread);
+    const copy = `${thread}-copy`;
+    await backend.clone(thread, copy);
+    const [source, cloned] = [await backend.messages(thread), await backend.messages(copy)];
+    expect(cloned.length).toBe(source.length);
+    expect(cloned.map(m => m.role)).toEqual(source.map(m => m.role));
+    expect(await backend.observations(copy, resource)).toContain('lives in Kyoto');
   });
 
   it.skipIf(scope !== 'resource')('shares resource-scoped observations across threads without re-homing', async () => {
