@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * affected-tests — given changed source files, find which test files are
+ * affected-tests — given changed files, find which test files are
  * transitively affected.
  *
  * Usage:
@@ -11,8 +11,8 @@
  *   node scripts/affected-tests.mjs packages/core/src/storage/index.ts --verbose
  *
  * Builds a full module graph from all test files using madge, inverts it into
- * a reverse dependency index, then for each changed source file does a reverse
- * BFS to find all transitively-dependent test files.
+ * a reverse dependency index, including explicit filesystem inputs, then for
+ * each changed file does a reverse BFS to find all dependent test files.
  */
 
 import { execSync } from 'node:child_process';
@@ -26,6 +26,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, '..');
 const require = createRequire(import.meta.url);
 const { buildWorkspaceSourceAliases } = require('./workspace-source-aliases.cjs');
+const { getTestFileDependencies } = require('./test-file-dependencies.cjs');
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -34,6 +35,7 @@ const { buildWorkspaceSourceAliases } = require('./workspace-source-aliases.cjs'
 const args = process.argv.slice(2);
 const flags = {
   git: false,
+  changedFiles: null,
   json: false,
   verbose: false,
   fileLevel: false,
@@ -44,9 +46,16 @@ const flags = {
 };
 const positional = [];
 
-for (const arg of args) {
+for (let i = 0; i < args.length; i++) {
+  const arg = args[i];
   if (arg === '--git') flags.git = true;
-  else if (arg === '--json') flags.json = true;
+  else if (arg === '--changed-files') {
+    flags.changedFiles = args[++i];
+    if (!flags.changedFiles || flags.changedFiles.startsWith('--')) {
+      console.error('Error: --changed-files requires a newline-separated file list.');
+      process.exit(1);
+    }
+  } else if (arg === '--json') flags.json = true;
   else if (arg === '--verbose') flags.verbose = true;
   else if (arg === '--symbol-aware') flags.fileLevel = false;
   else if (arg === '--file-level') flags.fileLevel = true;
@@ -60,10 +69,11 @@ for (const arg of args) {
 
 if (flags.help) {
   console.log(`
-affected-tests — find test files transitively affected by source changes
+affected-tests — find test files affected by imports or explicit file inputs
 
 Usage:
-  node scripts/affected-tests.mjs <file> [file...]   Explicit changed source files
+  node scripts/affected-tests.mjs <file> [file...]   Explicit changed files
+  node scripts/affected-tests.mjs --changed-files <path>  Read a newline-separated list
   node scripts/affected-tests.mjs --git              Auto-detect from git diff
 
 Options:
@@ -90,8 +100,8 @@ Output (default):
   process.exit(0);
 }
 
-if (!flags.git && positional.length === 0) {
-  console.error('Error: provide at least one file path, or use --git to auto-detect changes.');
+if (!flags.git && !flags.changedFiles && positional.length === 0) {
+  console.error('Error: provide file paths, --changed-files, or --git to auto-detect changes.');
   console.error('Run with --help for usage information.');
   process.exit(1);
 }
@@ -135,7 +145,7 @@ function discoverTestFiles() {
         if (!line) continue;
         // Exclude fixtures and node_modules
         if (line.includes('__fixtures__') || line.includes('/fixtures/') || line.includes('node_modules')) continue;
-        files.add(line);
+        if (existsSync(resolve(ROOT, line))) files.add(line);
       }
     } catch {
       // git ls-files may fail silently for patterns with no matches
@@ -202,14 +212,8 @@ function getGitChangedFiles() {
     // No main branch or merge-base fails
   }
 
-  // Filter to source files only (under src/, with code extensions)
-  return [...files].filter(f => {
-    if (f.includes('__fixtures__') || f.includes('/fixtures/') || f.includes('node_modules')) return false;
-    if (!/\.(ts|tsx|js|jsx|mjs|cjs)$/.test(f)) return false;
-    // Must be a source-like file (not a test file itself, not a config)
-    if (f.includes('/src/') || f.match(/^[^/]+\/src\//)) return true;
-    return false;
-  });
+  // Keep assets and fixtures: tests can consume them through filesystem reads.
+  return [...files];
 }
 
 // ---------------------------------------------------------------------------
@@ -218,20 +222,14 @@ function getGitChangedFiles() {
 
 const startTime = Date.now();
 
-// Determine changed source files
+// Determine changed files, including non-module inputs such as CSS and JSON.
 let changedFiles;
-if (flags.git) {
+if (flags.changedFiles) {
+  changedFiles = readFileSync(resolve(flags.changedFiles), 'utf8').split(/\r?\n/).filter(Boolean);
+} else if (flags.git) {
   changedFiles = getGitChangedFiles();
-  if (changedFiles.length === 0) {
-    if (flags.json) {
-      console.log(JSON.stringify({ changedFiles: [], affectedTests: [], elapsed: 0 }));
-    } else {
-      console.error('No changed source files detected.');
-    }
-    process.exit(0);
-  }
   if (!flags.json) {
-    console.error(`Detected ${changedFiles.length} changed source file(s):`);
+    console.error(`Detected ${changedFiles.length} changed file(s):`);
     for (const f of changedFiles) {
       console.error(`  ${f}`);
     }
@@ -239,6 +237,15 @@ if (flags.git) {
   }
 } else {
   changedFiles = positional;
+}
+
+if (changedFiles.length === 0) {
+  if (flags.json) {
+    console.log(JSON.stringify({ changedFiles: [], affectedTests: [], count: 0, elapsed: 0 }));
+  } else {
+    console.error('No changed files detected.');
+  }
+  process.exit(0);
 }
 
 // Resolve to relative paths (relative to ROOT, matching madge's baseDir)
@@ -276,6 +283,10 @@ const res = await madge(testAbsolutePaths, {
 });
 
 const graph = await res.obj();
+const fileDependencies = getTestFileDependencies(changedRelative, testFiles);
+for (const [testFile, inputs] of Object.entries(fileDependencies)) {
+  graph[testFile] = [...new Set([...(graph[testFile] || []), ...inputs])];
+}
 
 if (!flags.json) {
   const graphSize = Object.keys(graph).length;
@@ -741,6 +752,13 @@ function collectSymbolAwareAffected(symbolIndex, getSymbolEdges, options = {}) {
 
 const fileLevelResult = collectFileLevelAffected();
 const symbolIndex = buildSymbolIndex({ graph, root: ROOT });
+// A raw file read depends on the whole file, even if the same test also has a
+// type-only or named import of it. Do not let symbol pruning hide that input.
+for (const [testFile, inputs] of Object.entries(fileDependencies)) {
+  for (const input of inputs) {
+    symbolIndex.edges.set(edgeKey(testFile, input), [{ kind: 'all', typeOnly: false }]);
+  }
+}
 const symbolAwareResult = collectSymbolAwareAffected(symbolIndex, getSymbolEdges, {
   ignoreTypeOnlySymbols: flags.ignoreTypeOnlySymbols,
 });
