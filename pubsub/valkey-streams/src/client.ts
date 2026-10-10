@@ -190,6 +190,9 @@ export class ValkeyStreamsClient {
           configuration.credentials ??
           (parsed?.password ? { username: parsed.username || 'default', password: parsed.password } : undefined),
         databaseId: configuration.databaseId ?? (parsed?.pathname ? Number(parsed.pathname.slice(1) || 0) : undefined),
+        useTLS:
+          configuration.useTLS ??
+          (parsed ? parsed.protocol === 'rediss:' || parsed.protocol === 'valkeys:' : undefined),
       });
     }
     return this.#client;
