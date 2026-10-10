@@ -492,7 +492,7 @@ describe('GitLabRules', () => {
       'utf8',
     ).toString('base64url')}`;
 
-    function mergeRequestUpdated(deliveryId: string, lastCommit: string, oldrev?: string) {
+    function mergeRequestUpdated(deliveryId: string, lastCommit: string, oldrev?: string, updatedAt?: string) {
       const base = mergeRequestOpened(deliveryId);
       return {
         ...base,
@@ -503,6 +503,7 @@ describe('GitLabRules', () => {
             action: 'update',
             last_commit: { id: lastCommit },
             ...(oldrev ? { oldrev } : {}),
+            ...(updatedAt ? { updated_at: updatedAt } : {}),
           },
         },
       };
@@ -545,6 +546,19 @@ describe('GitLabRules', () => {
       const metadataOf = async (id: string) => (await seeded.workItems.get({ orgId: 'org-1', id }))?.metadata;
       return { seeded, service, workId: work.id, reviewId: review.id, metadataOf };
     }
+
+    it('ignores a push delivered after a newer one', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
+
+      await service.ingest(
+        mergeRequestUpdated('d-push-new', pushedHeadSha, reviewedHeadSha, '2030-01-01 02:00:00 UTC'),
+      );
+      await service.ingest(mergeRequestUpdated('d-push-late', reviewedHeadSha, 'aaaa', '2030-01-01 01:00:00 UTC'));
+
+      for (const id of [reviewId, workId]) {
+        expect(await metadataOf(id)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      }
+    });
 
     it('stamps the new head on the Review card and its authoring Work item without clearing the verdict', async () => {
       const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });

@@ -399,6 +399,7 @@ export class GitLabRules {
     // verdict itself stays so the next pass still runs as a re-review. Updates
     // that only edit the merge request carry the same head and write nothing.
     const headSha = string(object(mergeRequest?.last_commit)?.id)?.toLowerCase();
+    const headAt = timestamp(mergeRequest?.updated_at);
     if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
       const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
       // The authoring Work item mirrors the verdict of the merge request it has
@@ -407,11 +408,14 @@ export class GitLabRules {
       const parentOwned = parent && (typeof recorded !== 'number' || recorded === mergeRequestIid);
       for (const card of [reviewItem, parentOwned ? parent : undefined]) {
         if (!card || card.metadata?.pullRequestHeadSha === headSha) continue;
+        // A late or redelivered push must not put back a head a newer push replaced.
+        const recordedAt = card.metadata?.pullRequestHeadAt;
+        if (headAt !== undefined && typeof recordedAt === 'number' && recordedAt >= headAt) continue;
         await this.options.storage.update({
           orgId: card.orgId,
           id: card.id,
           userId: 'factory-rule-dispatcher',
-          patch: { metadata: { pullRequestHeadSha: headSha } },
+          patch: { metadata: { pullRequestHeadSha: headSha, pullRequestHeadAt: headAt ?? null } },
         });
       }
     }
@@ -456,6 +460,7 @@ export class GitLabRules {
         patch.openPullRequestNumber = input.mergeRequestIid;
         // A head recorded for an earlier merge request must not mark this one's verdict outdated.
         patch.pullRequestHeadSha = input.headSha ?? null;
+        patch.pullRequestHeadAt = input.eventAt ?? null;
       } else if (recorded === input.mergeRequestIid) {
         patch.openPullRequestNumber = null;
         if (input.event === 'mergeRequestMerged' && typeof item.metadata?.reviewVerdict === 'string') {

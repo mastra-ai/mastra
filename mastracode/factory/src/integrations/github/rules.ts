@@ -52,6 +52,15 @@ function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
 
+function timestamp(value: unknown): number | undefined {
+  const parsed = typeof value === 'string' ? Date.parse(value) : NaN;
+  return Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function isNewerOrEqual(recorded: unknown, at: number): boolean {
+  return typeof recorded === 'number' && recorded >= at;
+}
+
 function string(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
@@ -758,13 +767,20 @@ export class GithubRules {
             : reviewCard?.metadata?.state !== 'closed';
         if (authoringItem && trusted && stillOpen) {
           // The head comes along so a head recorded for an earlier pull
-          // request cannot mark this one's verdict outdated.
-          const headSha = string(object(pullRequest?.head)?.sha)?.toLowerCase() ?? null;
+          // request cannot mark this one's verdict outdated. A replayed opening
+          // of the pull request already recorded keeps the head its pushes left.
+          const rebinding = authoringItem.metadata?.openPullRequestNumber !== pullRequestNumber;
+          const head = rebinding
+            ? {
+                pullRequestHeadSha: string(object(pullRequest?.head)?.sha)?.toLowerCase() ?? null,
+                pullRequestHeadAt: timestamp(pullRequest?.updated_at) ?? null,
+              }
+            : {};
           await this.options.storage.update({
             orgId: authoringItem.orgId,
             id: authoringItem.id,
             userId: 'factory-rule-dispatcher',
-            patch: { metadata: { openPullRequestNumber: pullRequestNumber, pullRequestHeadSha: headSha } },
+            patch: { metadata: { openPullRequestNumber: pullRequestNumber, ...head } },
           });
         }
         return;
@@ -816,6 +832,7 @@ export class GithubRules {
     const stampHead = async () => {
       const headSha = string(object(pullRequest?.head)?.sha)?.toLowerCase();
       if (event !== 'pullRequestUpdated' || !headSha || !pullRequestNumber) return;
+      const headAt = timestamp(pullRequest?.updated_at);
       if (relatedItem?.externalSource?.type !== 'pull-request') return;
       const parent = await this.#linkedClosureItem(
         project.orgId,
@@ -831,11 +848,13 @@ export class GithubRules {
       const parentOwned = parent && (typeof recorded !== 'number' || recorded === pullRequestNumber);
       for (const card of [relatedItem, parentOwned ? parent : undefined]) {
         if (!card || card.metadata?.pullRequestHeadSha === headSha) continue;
+        // A late or redelivered push must not put back a head a newer push replaced.
+        if (headAt !== undefined && isNewerOrEqual(card.metadata?.pullRequestHeadAt, headAt)) continue;
         await this.options.storage.update({
           orgId: card.orgId,
           id: card.id,
           userId: 'factory-rule-dispatcher',
-          patch: { metadata: { pullRequestHeadSha: headSha } },
+          patch: { metadata: { pullRequestHeadSha: headSha, pullRequestHeadAt: headAt ?? null } },
         });
       }
     };
