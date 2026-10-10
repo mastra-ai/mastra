@@ -662,6 +662,137 @@ describe('notification inbox', () => {
     });
   });
 
+  it('falls back to updateNotification when the runtime storage predates markNotificationDelivered', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    Object.defineProperty(storage, 'markNotificationDelivered', { value: undefined });
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sendSignal = vi.fn(signal => ({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
+      signal,
+    }));
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.failed).toEqual([]);
+    expect(result.delivered).toMatchObject([
+      { id: 'n1', status: 'delivered', deliveredSignalId: result.signals[0]?.id },
+    ]);
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'delivered',
+      deliveredSignalId: result.signals[0]?.id,
+      lastDeliveryAttemptAt: now,
+    });
+  });
+
+  it('does not downgrade a notification marked seen while its signal was in flight', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    let releaseSignal!: () => void;
+    const signalAccepted = new Promise<{ action: 'deliver'; runId: string }>(resolve => {
+      releaseSignal = () => resolve({ action: 'deliver', runId: 'run-1' });
+    });
+    const sendSignal = vi.fn(signal => ({ accepted: signalAccepted, signal }));
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+    });
+
+    const dispatching = dispatchDueNotifications({ mastra, storage, now });
+    await vi.waitFor(() => expect(sendSignal).toHaveBeenCalledTimes(1));
+    // The agent views the notification (e.g. via the inbox tool) before the
+    // dispatcher's post-send write lands.
+    await storage.updateNotification({ threadId: 'thread-1', id: 'n1', status: 'seen' });
+    releaseSignal();
+    const result = await dispatching;
+
+    expect(result.failed).toEqual([]);
+    expect(result.delivered).toMatchObject([{ id: 'n1', status: 'seen', deliveredSignalId: result.signals[0]?.id }]);
+    await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+      status: 'seen',
+      deliveredSignalId: result.signals[0]?.id,
+      lastDeliveryAttemptAt: now,
+      deliveredAt: undefined,
+    });
+
+    // The delivered signal id now blocks a re-send on the next dispatch.
+    await dispatchDueNotifications({ mastra, storage, now });
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it('promotes only pending notifications to delivered in the storage fallback', async () => {
+    // A legacy adapter that only implements the abstract methods inherits the
+    // read-then-write default for markNotificationDelivered.
+    const backing = new InMemoryNotificationsStorage();
+    class LegacyNotificationsStorage extends NotificationsStorage {
+      createNotification = backing.createNotification.bind(backing);
+      listNotifications = backing.listNotifications.bind(backing);
+      listDueNotifications = backing.listDueNotifications.bind(backing);
+      getNotification = backing.getNotification.bind(backing);
+      updateNotification = backing.updateNotification.bind(backing);
+    }
+    const storage = new LegacyNotificationsStorage();
+    const base = { agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1', source: 'github', kind: 'k' };
+    await storage.createNotification({ ...base, id: 'pending', summary: 'pending' });
+    await storage.createNotification({ ...base, id: 'seen', summary: 'seen' });
+    await storage.updateNotification({ threadId: 'thread-1', id: 'seen', status: 'seen' });
+    const lastDeliveryAttemptAt = new Date('2026-05-30T12:00:00Z');
+
+    await expect(
+      storage.markNotificationDelivered({
+        threadId: 'thread-1',
+        id: 'pending',
+        deliveredSignalId: 's1',
+        lastDeliveryAttemptAt,
+      }),
+    ).resolves.toMatchObject({
+      status: 'delivered',
+      deliveredSignalId: 's1',
+      lastDeliveryAttemptAt,
+      deliveredAt: expect.any(Date),
+    });
+    await expect(
+      storage.markNotificationDelivered({
+        threadId: 'thread-1',
+        id: 'seen',
+        deliveredSignalId: 's2',
+        lastDeliveryAttemptAt,
+      }),
+    ).resolves.toMatchObject({
+      status: 'seen',
+      deliveredSignalId: 's2',
+      lastDeliveryAttemptAt,
+      deliveredAt: undefined,
+    });
+    await expect(
+      storage.markNotificationDelivered({
+        threadId: 'thread-1',
+        id: 'missing',
+        deliveredSignalId: 's3',
+        lastDeliveryAttemptAt,
+      }),
+    ).resolves.toBeNull();
+  });
+
   it('resolves stream options for deferred deliveries so a woken idle thread has a request context', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');

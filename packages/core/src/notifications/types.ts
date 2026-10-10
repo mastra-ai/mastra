@@ -127,6 +127,13 @@ export type UpdateNotificationsStatusInput = {
   status: NotificationStatus;
 };
 
+export type MarkNotificationDeliveredInput = {
+  id: string;
+  threadId: string;
+  deliveredSignalId: string;
+  lastDeliveryAttemptAt: Date;
+};
+
 export type NotificationSummary = {
   threadId: string;
   resourceId?: string;

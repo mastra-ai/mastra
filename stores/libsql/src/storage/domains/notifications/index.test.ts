@@ -301,6 +301,58 @@ describe('NotificationsLibSQL', () => {
     );
   });
 
+  it('marks a notification delivered without downgrading a status set while the signal was in flight', async () => {
+    const base = { threadId: 'thread-1', source: 'mastracode', kind: 'manual' };
+    await store.createNotification({ ...base, id: 'pending', summary: 'still pending' });
+    await store.createNotification({ ...base, id: 'seen', summary: 'seen meanwhile' });
+    await store.updateNotification({ id: 'seen', threadId: 'thread-1', status: 'seen' });
+    const lastDeliveryAttemptAt = new Date('2026-01-01T00:15:00.000Z');
+
+    const promoted = await store.markNotificationDelivered({
+      id: 'pending',
+      threadId: 'thread-1',
+      deliveredSignalId: 'signal-1',
+      lastDeliveryAttemptAt,
+    });
+    expect(promoted?.status).toBe('delivered');
+    expect(promoted?.deliveredAt).toBeInstanceOf(Date);
+    expect(promoted?.deliveredSignalId).toBe('signal-1');
+    expect(promoted?.lastDeliveryAttemptAt?.toISOString()).toBe(lastDeliveryAttemptAt.toISOString());
+
+    const kept = await store.markNotificationDelivered({
+      id: 'seen',
+      threadId: 'thread-1',
+      deliveredSignalId: 'signal-2',
+      lastDeliveryAttemptAt,
+    });
+    expect(kept?.status).toBe('seen');
+    expect(kept?.seenAt).toBeInstanceOf(Date);
+    expect(kept?.deliveredAt).toBeUndefined();
+    expect(kept?.deliveredSignalId).toBe('signal-2');
+    expect(kept?.lastDeliveryAttemptAt?.toISOString()).toBe(lastDeliveryAttemptAt.toISOString());
+    await expect(store.getNotification({ id: 'seen', threadId: 'thread-1' })).resolves.toMatchObject({
+      status: 'seen',
+      deliveredSignalId: 'signal-2',
+    });
+
+    await expect(
+      store.markNotificationDelivered({
+        id: 'missing',
+        threadId: 'thread-1',
+        deliveredSignalId: 'signal-3',
+        lastDeliveryAttemptAt,
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      store.markNotificationDelivered({
+        id: 'pending',
+        threadId: 'other-thread',
+        deliveredSignalId: 'signal-4',
+        lastDeliveryAttemptAt,
+      }),
+    ).resolves.toBeNull();
+  });
+
   it('lists due pending notifications sorted by earliest due time with agent/resource filters and limit', async () => {
     const now = new Date('2026-01-01T12:00:00.000Z');
 
