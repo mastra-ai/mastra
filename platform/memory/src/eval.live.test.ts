@@ -11,7 +11,7 @@ import type { MastraMemory } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { Memory } from '@mastra/memory';
-import { generateText, stepCountIs, tool, wrapLanguageModel } from 'ai';
+import { generateText, Output, stepCountIs, tool, wrapLanguageModel } from 'ai';
 import { createDeepAgent } from 'deepagents';
 import { createAgent } from 'langchain';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -19,14 +19,19 @@ import { z } from 'zod';
 
 import { platformMemoryMiddleware } from './ai-sdk';
 import { PlatformMemoryClient } from './client';
+import { SCENARIOS } from './eval-scenarios';
+import type { Ability, Question, Scenario } from './eval-scenarios';
 import { platformMemoryAgentMiddleware } from './langgraph';
 import { withPlatformMemory } from './pi-agent';
 import { PlatformMemory } from './platform-memory';
 
 /**
- * Real-model memory quality eval. One realistic, single-thread scenario (Priya opening a second
- * bakery) is played through every framework adapter with a real agent model and the real
- * observer/reflector, then a quiz is graded by an LLM judge.
+ * Real-model memory quality eval, modelled on BEAM. Realistic single-thread scenarios are played
+ * through every framework adapter with a real agent model and the real observer/reflector. Each
+ * quiz question is then answered on its own clone of the thread, so answers can't leak into one
+ * another, and graded per rubric nugget (0 / 0.5 / 1) by a separate judge model. The judge is first
+ * checked against each question's reference answer. Results land in /tmp/memory-eval.json with
+ * per-ability accuracy, run-to-run spread, 95% bootstrap CIs and the delta against OSS Memory.
  *
  * Needs: OPENAI_API_KEY, PLATFORM_MEMORY_EVAL=<path to { instanceId, token }>, a local Platform API
  * on :3010 started with MEMORY_TEST_MODEL_URL=https://api.openai.com/v1 and MEMORY_TEST_MODEL_KEY, and
@@ -35,173 +40,25 @@ import { PlatformMemory } from './platform-memory';
 const evalFile = process.env.PLATFORM_MEMORY_EVAL;
 const API = 'http://127.0.0.1:3010';
 const MODEL = 'gpt-4.1-mini';
+// Grader is a different, stronger model than the answerer so it doesn't share its blind spots.
+const JUDGE_MODEL = process.env.PLATFORM_MEMORY_EVAL_JUDGE ?? 'gpt-4.1';
 export const OBSERVATION_TOKENS = 1500;
 export const REFLECTION_TOKENS = 4000;
-
-type Scenario = {
-  name: string;
-  system: string;
-  toolDescription: string;
-  search: (query: string) => string;
-  sessions: string[][];
-  quiz: { q: string; rubric: string }[];
-};
-
-const padding = (label: string, line: (i: number) => string) =>
-  Array.from({ length: 25 }, (_, i) => `${label}-${i}: ${line(i)}`).join('\n');
-
-const SHOPS: Record<string, string> = {
-  Alfama: 'Rua dos Remédios 41: 62m², €2,300/mo, ground floor, old oven, no extraction hood.',
-  'Campo de Ourique': 'Rua Ferreira Borges 88: 75m², €2,900/mo, corner unit, full kitchen, high foot traffic.',
-  Arroios: 'Rua Morais Soares 12: 70m², €2,100/mo, needs €15k refit, near metro.',
-};
-const LOGS: Record<string, string> = {
-  checkout: 'ERROR checkout-api: pool exhausted (max=20) waiting for pg connection, p99 9.8s.',
-  payments: 'WARN payments-worker: Stripe webhook retries 3x, all eventually 200.',
-  inventory: 'ERROR inventory-sync: N+1 query on sku_variants, 4,200 queries per request since deploy v2.31.',
-};
-const FLIGHTS: Record<string, string> = {
-  Tokyo: 'NH 203 SFO→HND dep 11:40 arr 15:25+1, $1,180 pp, 2 bags.',
-  Osaka: 'JL 61 SFO→KIX dep 13:05 arr 17:10+1, $1,040 pp, 2 bags.',
-  Sapporo: 'No direct; via HND, 19h total, $1,420 pp.',
-};
-
-const SCENARIOS: Scenario[] = [
-  {
-    name: 'bakery',
-    system:
-      'You are a concise business assistant for a baker. Use the search tool (query = neighborhood) when asked to search. Answer in 1-3 sentences.',
-    toolDescription: 'Search retail listings in a Lisbon neighborhood',
-    search: q =>
-      `${SHOPS[q] ?? 'No featured listing.'}\n${padding(q, i => `${40 + i}m², €${1800 + i * 40}/mo, residential conversion, not food-licensed.`)}`,
-    sessions: [
-      [
-        "Hi! I'm Priya. I run a small bakery called Forno Azul in Graça, Lisbon. I want to open a second shop this year.",
-        "Important: I'm severely allergic to almonds, so nothing I make or taste can contain them. My business partner is Tomás; he handles finances.",
-        'Our budget for the second shop is €180,000 total, including the refit.',
-      ],
-      [
-        'Can you search for shops in Alfama, Campo de Ourique and Arroios and tell me which looks best?',
-        'Let’s go with the Campo de Ourique one for now.',
-      ],
-      [
-        'Update: Tomás renegotiated with the bank, the budget is now €240,000.',
-        'We want to open on March 14, which is Pi Day — we’ll do a pastry pie special.',
-        'Actually scratch Campo de Ourique, the landlord refused food licensing. We picked the Arroios shop instead.',
-      ],
-      [
-        'Unrelated: what proofing temperature works best for a sourdough levain in winter?',
-        'And how long should I cold-retard pastéis de nata dough?',
-        'Any tips for keeping laminated dough from tearing?',
-      ],
-    ],
-    quiz: [
-      { q: 'What is our current budget for the second shop?', rubric: '€240,000 (not €180,000).' },
-      {
-        q: 'Which shop did we pick, and where?',
-        rubric: 'The Arroios shop (Rua Morais Soares), not Campo de Ourique.',
-      },
-      { q: 'Why did we drop the other shop?', rubric: 'Campo de Ourique landlord refused food licensing.' },
-      { q: 'When do we open, and what is special about it?', rubric: 'March 14, Pi Day, pie special.' },
-      {
-        q: 'Suggest a signature pastry for opening day.',
-        rubric:
-          'PASS if the suggested pastry does not use almonds, marzipan or frangipane as an ingredient. Words like "almond-free" mean it avoids almonds and are correct.',
-      },
-      { q: 'Who should I loop in about the refit costs?', rubric: 'Tomás, the business partner who handles finances.' },
-      { q: 'What is the name of my current bakery and its neighborhood?', rubric: 'Forno Azul in Graça.' },
-    ],
-  },
-  {
-    name: 'incident',
-    system:
-      'You are an on-call SRE assistant. Use the search tool (query = service name) to read logs when asked. Answer in 1-3 sentences.',
-    toolDescription: 'Fetch recent logs for a service (checkout, payments, inventory)',
-    search: q =>
-      `${LOGS[q] ?? 'No notable errors.'}\n${padding(q, i => `INFO request ${9000 + i} completed in ${120 + i}ms status=200`)}`,
-    sessions: [
-      [
-        "I'm Dev, on call for Kestrel Outfitters. Checkout is timing out for customers since about 14:05 UTC.",
-        'The customer escalating is Halvorsen Retail; their SLA is 99.9% monthly and they need an update every 30 minutes. My incident commander is Mei.',
-      ],
-      [
-        'Pull logs for checkout, payments and inventory and tell me what you see.',
-        'I think the payments webhook retries are the root cause. Let’s go with that.',
-      ],
-      [
-        'Correction: payments is a red herring. Root cause is the inventory-sync N+1 query from deploy v2.31 starving the shared Postgres pool.',
-        'We rolled back to v2.30 at 15:12 UTC and checkout recovered.',
-        'Mei wants the postmortem filed under INC-4471 by Friday.',
-      ],
-      [
-        'Unrelated: what is a sensible default for a pg pool size per Node pod?',
-        'And should readiness probes check the database?',
-        'How do I make p99 alerts less noisy?',
-      ],
-    ],
-    quiz: [
-      {
-        q: 'What was the root cause?',
-        rubric: 'inventory-sync N+1 query in v2.31 exhausting the Postgres pool; NOT payments webhooks.',
-      },
-      { q: 'How did we mitigate it and when?', rubric: 'Rolled back to v2.30 at 15:12 UTC.' },
-      {
-        q: 'Which customer escalated and how often do they need updates?',
-        rubric: 'Halvorsen Retail, every 30 minutes.',
-      },
-      { q: 'What ticket should the postmortem go under and when is it due?', rubric: 'INC-4471, by Friday.' },
-      { q: 'Who is my incident commander?', rubric: 'Mei.' },
-      { q: 'When did the incident start?', rubric: 'About 14:05 UTC.' },
-    ],
-  },
-  {
-    name: 'trip',
-    system:
-      'You are a family travel planner. Use the search tool (query = destination city) to find flights when asked. Answer in 1-3 sentences.',
-    toolDescription: 'Search flights from SFO to a Japanese city',
-    search: q =>
-      `${FLIGHTS[q] ?? 'No flights found.'}\n${padding(q, i => `codeshare ${i}: 2 stops, ${22 + (i % 5)}h, $${1500 + i * 25} pp`)}`,
-    sessions: [
-      [
-        "Hi, I'm Marcus. Planning a Japan trip for me, my wife Lena, and our kids Ada (9) and Theo (4).",
-        'Lena is vegetarian and Theo gets carsick on long drives. We fly from SFO.',
-        'Tentative dates are April 3 to April 17.',
-      ],
-      ['Search flights to Tokyo, Osaka and Sapporo and recommend one.', 'Let’s plan to fly into Tokyo.'],
-      [
-        'Change of plan: Lena’s conference moved, so the trip is now April 10 to April 24.',
-        'We’ll fly into Osaka instead, it’s cheaper, and take the train to Tokyo later.',
-        'Our hotel budget is $350 per night max.',
-      ],
-      [
-        'Unrelated: is a JR pass worth it in general?',
-        'What are good rainy-day activities for kids in cities?',
-        'Any tips for jet lag with young children?',
-      ],
-    ],
-    quiz: [
-      { q: 'What are our trip dates?', rubric: 'April 10 to April 24 (not April 3-17).' },
-      { q: 'Which city do we fly into?', rubric: 'Osaka (KIX), not Tokyo.' },
-      {
-        q: 'Suggest a dinner spot type for our first night.',
-        rubric: 'Must accommodate a vegetarian (Lena); PASS if it mentions vegetarian options.',
-      },
-      {
-        q: 'Should we do a long day trip by car from Osaka?',
-        rubric: 'Cautions against it or suggests train because Theo gets carsick.',
-      },
-      { q: 'What is our nightly hotel budget?', rubric: '$350 per night max.' },
-      { q: 'How old are the kids and what are their names?', rubric: 'Ada 9 and Theo 4.' },
-    ],
-  },
-];
 
 const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const creds = () => JSON.parse(readFileSync(evalFile!, 'utf8')) as { instanceId: string; token: string };
 const client = () =>
   new PlatformMemoryClient({ apiUrl: API, accessToken: creds().token, instanceId: creds().instanceId });
 
-type Runner = { ask(text: string): Promise<string>; settle(): Promise<void>; observations(): Promise<string> };
+type Runner = {
+  ask(text: string): Promise<string>;
+  settle(): Promise<void>;
+  observations(): Promise<string>;
+  /** Unobserved messages the server would send next turn; Platform-backed runners only. */
+  rawTail?(): Promise<string>;
+  /** Runner on a copy of this thread. Platform-backed runners are forked via the API instead. */
+  fork?(newThreadId: string): Promise<Runner>;
+};
 
 function mastraRunner(
   s: Scenario,
@@ -241,6 +98,7 @@ function platformSide(threadId: string) {
       await c.observe(threadId);
     },
     observations: async () => (await c.getObservations(threadId))?.activeObservations ?? '',
+    rawTail: async () => JSON.stringify((await c.getContext(threadId, 'user', { workingMemory: 'off' })).messages),
   };
 }
 
@@ -258,24 +116,32 @@ const RUNNERS: Record<string, (threadId: string, s: Scenario) => Runner> = {
         },
       },
     });
-    return mastraRunner(
-      s,
-      memory,
-      threadId,
-      async () => {},
-      async () =>
-        (await (await store.getStore('memory'))!.getObservationalMemory(threadId, 'user'))?.activeObservations ?? '',
-    );
+    const on = (id: string): Runner => ({
+      ...mastraRunner(
+        s,
+        memory,
+        id,
+        async () => {},
+        async () =>
+          (await (await store.getStore('memory'))!.getObservationalMemory(id, 'user'))?.activeObservations ?? '',
+      ),
+      fork: async newThreadId => {
+        await memory.cloneThread({ sourceThreadId: id, newThreadId });
+        return on(newThreadId);
+      },
+    });
+    return on(threadId);
   },
   PlatformMemory: (threadId, s) => {
     const p = platformSide(threadId);
-    return mastraRunner(
+    const runner = mastraRunner(
       s,
       new PlatformMemory({ client: p.c, workingMemory: 'off' }),
       threadId,
       p.settle,
       p.observations,
     );
+    return { ...runner, rawTail: p.rawTail };
   },
   'AI SDK': (threadId, s) => {
     const p = platformSide(threadId);
@@ -359,34 +225,134 @@ const RUNNERS: Record<string, (threadId: string, s: Scenario) => Runner> = {
   },
 };
 
-async function judge(q: string, rubric: string, answer: string) {
-  const { text } = await generateText({
-    model: openai(MODEL),
-    prompt: `Grade an assistant's answer against a rubric. Reply with PASS or FAIL then a short reason.\nQuestion: ${q}\nRubric: ${rubric}\nAnswer: ${answer}`,
+const NUGGET = { 0: 0, 0.5: 0.5, 1: 1 } as const;
+
+/** Scores each rubric nugget 0 (missing/wrong), 0.5 (partly) or 1 (fully); the question scores their mean. */
+async function judge(q: string, rubric: string[], answer: string) {
+  const { output } = await generateText({
+    model: openai(JUDGE_MODEL),
+    temperature: 0,
+    output: Output.object({
+      schema: z.object({
+        nuggets: z.array(
+          z.object({ reason: z.string(), score: z.union([z.literal(0), z.literal(0.5), z.literal(1)]) }),
+        ),
+      }),
+    }),
+    system:
+      'You grade answers from an assistant that should remember an earlier conversation. For each numbered rubric item, return one entry in order: 1 if the answer fully satisfies it, 0.5 if partly, 0 if missing or contradicted. Judge by meaning, not wording. Extra correct detail is fine.',
+    prompt: `Question: ${q}\nRubric:\n${rubric.map((r, i) => `${i + 1}. ${r}`).join('\n')}\nAnswer: ${answer}`,
   });
-  return text.trim().toUpperCase().startsWith('PASS');
+  const nuggets = rubric.map((_, i) => NUGGET[output.nuggets[i]?.score ?? 0]);
+  return {
+    score: nuggets.reduce((a, b) => a + b, 0) / nuggets.length,
+    reason: output.nuggets.map(n => n.reason).join(' | '),
+  };
 }
 
 const only = process.env.PLATFORM_MEMORY_EVAL_ONLY?.split(',');
 const scenarios = process.env.PLATFORM_MEMORY_EVAL_SCENARIOS?.split(',');
 const RUNS = Number(process.env.PLATFORM_MEMORY_EVAL_RUNS ?? 1);
-const results: { scenario: string; framework: string; run: number; score: number; of: number; graded: unknown[] }[] =
-  [];
+type Graded = { q: string; ability: Ability; answer: string; score: number; reason: string };
+const results: {
+  scenario: string;
+  framework: string;
+  run: number;
+  score: number;
+  of: number;
+  compressed: boolean | null;
+  graded: Graded[];
+}[] = [];
+const judgeCheck: { scenario: string; q: string; score: number; reason: string }[] = [];
+const BASELINE = 'OSS Memory';
+
+const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN);
+function stats(xs: number[]) {
+  const m = mean(xs);
+  return { mean: m, sd: Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / Math.max(1, xs.length - 1)) };
+}
+/** 95% percentile bootstrap CI over per-question scores. */
+function ci(xs: number[]) {
+  const means = Array.from({ length: 2000 }, () => mean(xs.map(() => xs[Math.floor(Math.random() * xs.length)]!)));
+  means.sort((a, b) => a - b);
+  return [means[50]!, means[1949]!] as const;
+}
+const p = (x: number) => (x * 100).toFixed(0);
 
 function summarize() {
-  const table: Record<string, Record<string, string>> = {};
-  for (const r of results) {
-    const scores = results.filter(x => x.scenario === r.scenario && x.framework === r.framework).map(x => x.score);
-    const mean = scores.reduce((a, b) => a + b, 0) / scores.length;
-    (table[r.framework] ??= {})[r.scenario] =
-      `${Math.min(...scores)}-${Math.max(...scores)}/${r.of} (mean ${mean.toFixed(1)}, n=${scores.length})`;
+  const frameworks = [...new Set(results.map(r => r.framework))];
+  const byScenario: Record<string, Record<string, string>> = {};
+  const byAbility: Record<string, Record<string, string>> = {};
+  const overall: Record<
+    string,
+    { accuracy: string; ci95: string; sdAcrossRuns: number; vsBaseline: string; n: number }
+  > = {};
+  const acc: Record<string, number> = {};
+  const sds: Record<string, number> = {};
+  for (const f of frameworks) {
+    const mine = results.filter(r => r.framework === f);
+    for (const s of new Set(mine.map(r => r.scenario))) {
+      const runs = mine.filter(r => r.scenario === s);
+      const st = stats(runs.map(r => r.score / r.of));
+      (byScenario[f] ??= {})[s] = `${p(st.mean)}% ±${p(st.sd)} (n=${runs.length})`;
+    }
+    const all = mine.flatMap(r => r.graded);
+    for (const a of new Set(all.map(g => g.ability))) {
+      const xs = all.filter(g => g.ability === a).map(g => g.score);
+      (byAbility[f] ??= {})[a] = `${p(mean(xs))}% (n=${xs.length})`;
+    }
+    // Per-run accuracy across every scenario, so sd reflects run-to-run noise.
+    const runAcc = [...new Set(mine.map(r => r.run))].map(run =>
+      mean(mine.filter(r => r.run === run).flatMap(r => r.graded.map(g => g.score))),
+    );
+    const scores = all.map(g => g.score);
+    const [lo, hi] = ci(scores);
+    acc[f] = mean(scores);
+    sds[f] = stats(runAcc).sd;
+    overall[f] = {
+      accuracy: `${p(acc[f])}%`,
+      ci95: `${p(lo)}–${p(hi)}%`,
+      sdAcrossRuns: sds[f],
+      vsBaseline: '',
+      n: all.length,
+    };
   }
-  writeFileSync('/tmp/memory-eval.json', JSON.stringify({ table, results }, null, 2));
+  for (const f of frameworks) {
+    if (acc[BASELINE] === undefined || f === BASELINE) continue;
+    const delta = acc[f]! - acc[BASELINE];
+    // Below baseline by more than the noise we see between runs is worth a look.
+    const noise = Math.max(sds[BASELINE]!, sds[f]!, 0.03);
+    overall[f]!.vsBaseline =
+      `${delta >= 0 ? '+' : ''}${(delta * 100).toFixed(1)}pt${delta < -noise ? ' BELOW BASELINE' : ''}`;
+  }
+  const failures = results.flatMap(r =>
+    r.graded.filter(g => g.score < 1).map(g => ({ framework: r.framework, scenario: r.scenario, run: r.run, ...g })),
+  );
+  writeFileSync(
+    '/tmp/memory-eval.json',
+    JSON.stringify(
+      { judge: JUDGE_MODEL, answerer: MODEL, overall, byScenario, byAbility, judgeCheck, failures, results },
+      null,
+      2,
+    ),
+  );
 }
+
+const selected = SCENARIOS.filter(x => !scenarios || scenarios.includes(x.name));
 
 describe.skipIf(!evalFile || !process.env.OPENAI_API_KEY)('memory quality eval (real models)', () => {
   afterAll(summarize);
-  for (const s of SCENARIOS.filter(x => !scenarios || scenarios.includes(x.name))) {
+
+  // A judge that can't give the reference answers full marks would make every score below meaningless.
+  it('judge gives reference answers full marks', async () => {
+    const qs = selected.flatMap(s => s.quiz.map((q: Question) => ({ s: s.name, ...q })));
+    await Promise.all(
+      qs.map(async q => judgeCheck.push({ scenario: q.s, q: q.q, ...(await judge(q.q, q.rubric, q.reference)) })),
+    );
+    expect(judgeCheck.filter(j => j.score < 1)).toEqual([]);
+  }, 300_000);
+
+  for (const s of selected) {
     for (const [name, make] of Object.entries(RUNNERS).filter(([n]) => !only || only.includes(n))) {
       for (let run = 1; run <= RUNS; run++) {
         it.concurrent(
@@ -399,15 +365,26 @@ describe.skipIf(!evalFile || !process.env.OPENAI_API_KEY)('memory quality eval (
               await runner.settle();
             }
             const observations = await runner.observations();
-            const graded = [];
-            for (const { q, rubric } of s.quiz) {
-              const answer = await runner.ask(q);
-              graded.push({ q, answer, pass: await judge(q, rubric, answer) });
-            }
-            const score = graded.filter(g => g.pass).length;
-            results.push({ scenario: s.name, framework: name, run, score, of: s.quiz.length, graded });
+            // Recall must come from observations: the first session's raw turns are no longer sent.
+            const tail = runner.rawTail ? await runner.rawTail() : null;
+            const compressed = tail === null ? null : !tail.includes(s.sessions[0]![0]!.slice(0, 40));
+            // Each question gets its own copy of the thread so earlier answers can't influence later ones.
+            const fork = async (id: string) => {
+              if (runner.fork) return runner.fork(id);
+              await client().cloneThread(threadId, { newThreadId: id });
+              return make(id, s);
+            };
+            const graded: Graded[] = await Promise.all(
+              s.quiz.map(async ({ q, rubric, ability }, i) => {
+                const answer = await (await fork(`${threadId}-q${i}`)).ask(q);
+                return { q, ability, answer, ...(await judge(q, rubric, answer)) };
+              }),
+            );
+            const score = graded.reduce((a, g) => a + g.score, 0);
+            results.push({ scenario: s.name, framework: name, run, score, of: s.quiz.length, compressed, graded });
             summarize();
             expect(observations.length).toBeGreaterThan(0);
+            if (compressed !== null) expect(compressed).toBe(true);
           },
           900_000,
         );
