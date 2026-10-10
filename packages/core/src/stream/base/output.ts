@@ -294,6 +294,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     finishReason: undefined,
   };
   #bufferedText: LLMStepResult<OUTPUT>['text'][] = [];
+  /** Length of `#bufferedText` when the current step began; a retried step is cut back to it. */
+  #bufferedTextAtStepStart = 0;
   #bufferedObject: OUTPUT | undefined;
   #usedFallbackValue = false;
   #bufferedTextChunks: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
@@ -917,8 +919,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               const currentPayloadStep = payloadSteps[payloadSteps.length - 1];
               const stepTripwire = currentPayloadStep?.tripwire;
 
+              // A retried attempt is thrown away (a processor rejected it, or an error processor
+              // answered its API error with a retry), so it contributes no text: neither to
+              // this step nor to the run's text, which would otherwise begin with the failed
+              // attempt's partial output (#26081).
+              const isRetriedStep = (chunk.payload.stepResult.reason as string) === 'retry';
+              if (isRetriedStep) {
+                self.#bufferedText.length = Math.min(self.#bufferedText.length, self.#bufferedTextAtStepStart);
+              }
+
               // If step has tripwire, text should be empty (rejected response)
-              const stepText = stepTripwire ? '' : self.#bufferedByStep.text;
+              const stepText = stepTripwire || isRetriedStep ? '' : self.#bufferedByStep.text;
 
               const stepResult: LLMStepResult<OUTPUT> = {
                 stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
@@ -1025,6 +1036,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               };
               self.#bufferedByStepReasoningDetails = {};
               self.#reasoningAtStepStart = undefined;
+              self.#bufferedTextAtStepStart = self.#bufferedText.length;
 
               // A continuing goal evaluation arrived while this step was still
               // in flight (in-process chunk ordering): this step-finish belongs
@@ -2251,6 +2263,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedChunks.length = 0;
     this.#bufferedSteps.length = 0;
     this.#bufferedText.length = 0;
+    this.#bufferedTextAtStepStart = 0;
     this.#bufferedTextChunks = {};
     this.#bufferedSources.length = 0;
     this.#bufferedReasoning.length = 0;
@@ -2347,6 +2360,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       bufferedByStepReasoningDetails: this.#bufferedByStepReasoningDetails,
       bufferedByStep: this.#bufferedByStep,
       bufferedText: this.#bufferedText,
+      bufferedTextAtStepStart: this.#bufferedTextAtStepStart,
       bufferedTextChunks: this.#bufferedTextChunks,
       bufferedSources: this.#bufferedSources,
       bufferedReasoning: this.#bufferedReasoning,
@@ -2374,6 +2388,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedByStepReasoningDetails = state.bufferedByStepReasoningDetails ?? {};
     this.#bufferedByStep = state.bufferedByStep;
     this.#bufferedText = state.bufferedText;
+    this.#bufferedTextAtStepStart = state.bufferedTextAtStepStart ?? state.bufferedText.length;
     this.#bufferedTextChunks = state.bufferedTextChunks;
     this.#bufferedSources = state.bufferedSources;
     this.#bufferedReasoning = state.bufferedReasoning;
