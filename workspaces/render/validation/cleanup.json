@@ -1,0 +1,41 @@
+{
+  "confirmedAt": "2026-10-09T21:31:26.445Z",
+  "source": "Render SDK 1.2.0 public sandboxes.list",
+  "resources": [
+    {
+      "id": "sbx-18p4gdb4jmk49v7es738bfug0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-09T19:07:20.97471Z"
+    },
+    {
+      "id": "sbx-18p4gdb4jj97f3r2c739op6ag",
+      "status": "terminated",
+      "terminatedAt": "2026-10-09T19:00:12.608815Z"
+    },
+    {
+      "id": "sbx-18p4gdb4jhrd9fdbs73fhcun0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-09T18:57:11.709974Z"
+    },
+    {
+      "id": "sbx-18p4gdb4jhjjncjis73fp9770",
+      "status": "terminated",
+      "terminatedAt": "2026-10-09T18:56:21.935534Z"
+    },
+    {
+      "id": "sbx-18p4gdb4lods9v7es73a9uibg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-09T21:27:52.06335Z"
+    },
+    {
+      "id": "sbx-18p4gdb4log7f3r2c73a087gg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-09T21:27:33.512666Z"
+    },
+    {
+      "id": "sbx-18p4gdb4lohij9qps73d1mas0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-09T21:27:35.819614Z"
+    }
+  ]
+}

@@ -1,0 +1,273 @@
+{
+  "checkedAt": "2026-10-10T00:45:42.628Z",
+  "sandboxes": [
+    {
+      "id": "sbx-18p4gdb4nuqjtqb8s73bg7dp0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-09T23:58:22.68152Z"
+    },
+    {
+      "id": "sbx-18p4gdb4nvht9fdbs73a91e4g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-09T23:59:09.153015Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o0c7lk1mc73fd4sag",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:00:55.764877Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o1co473hc738gb770",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:05:06.87309Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o1jad0e5s73csc23g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:03:30.264854Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o20qjnfac73ftgat0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:04:47.101257Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o2hvlot8c73cd2m7g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:07:47.315458Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o33t9fdbs73a9ejug",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:06:42.976903Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o3el9fdbs73a9ft70",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:07:27.90321Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o41nlk1mc73fdhf4g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:09:06.679297Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o46id0e5s73csl5p0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:09:04.205714Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o47d9fdbs73a9ij8g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:09:04.333081Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o2eo473hc738gehcg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:05:42.237867Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o7urbc2fs73b7c7fg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:17:27.548664Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o2tg473hc738ggdt0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:06:40.038348Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o7tnlk1mc73fdvtqg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:17:21.624832Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ocv0473hc738hjo4g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:28:06.212952Z"
+    },
+    {
+      "id": "sbx-18p4gdb4od4p42hec73ed8rs0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:28:05.648037Z"
+    },
+    {
+      "id": "sbx-18p4gdb4od60473hc738hkbhg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:28:33.623227Z"
+    },
+    {
+      "id": "sbx-18p4gdb4odb8473hc738hl0u0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:28:33.1054Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oie59fdbs73ab76cg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:40:40.056952Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oiknlot8c73cernc0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:39:50.932485Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oilo473hc738i881g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:39:54.892988Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oin142hec73edrlg0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:39:57.611679Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oinijnfac73fvecpg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:39:59.367897Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oino473hc738i8d80",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:40:01.335233Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oioajnfac73fvefcg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:40:03.579971Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oj08473hc738i9d10",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:40:35.687885Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oj0vlk1mc73ff5r80",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:40:38.46236Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oj7flot8c73cetjm0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:42:09.699563Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojdh42hec73edtqp0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:30.573226Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojerbc2fs73b8iglg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:34.121544Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojfo473hc738ib5s0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:36.788692Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojg8473hc738ib7t0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:38.509201Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojgh42hec73edu5lg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:40.436114Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojh2jnfac73fvh4og",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:42.583807Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojlh42hec73edusig",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:42:01.518524Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojm942hec73edv16g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:42:04.703736Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojnd9fdbs73abbl0g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:42:07.789925Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojonlk1mc73ff86u0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:42:36.518065Z"
+    },
+    {
+      "id": "sbx-18p4gdb4okrh42hec73ee32r0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:44:56.975122Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojho473hc738ibd90",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:42:21.464232Z"
+    }
+  ],
+  "snapshots": [
+    {
+      "id": "snp-db4o1f9hmtc000bn2lj0",
+      "deleted": true,
+      "confirmation": "SDK get returned 404"
+    },
+    {
+      "id": "snp-db4o1l937lj0009k0u70",
+      "deleted": true,
+      "confirmation": "SDK get returned 404"
+    },
+    {
+      "id": "snp-db4o28137lj0009k0ubg",
+      "deleted": true,
+      "confirmation": "SDK get returned 404"
+    },
+    {
+      "id": "snp-db4o2vphmtc000bn2mi0",
+      "deleted": true,
+      "confirmation": "SDK get returned 404"
+    },
+    {
+      "id": "snp-db4o35h37lj0009k0vdg",
+      "deleted": true,
+      "confirmation": "SDK get returned 404"
+    },
+    {
+      "id": "snp-db4o3g937lj0009k1040",
+      "deleted": true,
+      "confirmation": "SDK get returned 404"
+    },
+    {
+      "id": "snp-db4o42h37lj0009k11tg",
+      "deleted": true,
+      "confirmation": "SDK get returned 404"
+    },
+    {
+      "id": "snp-db4od1137lj0009k1850",
+      "deleted": true,
+      "confirmation": "SDK get returned 404"
+    },
+    {
+      "id": "snp-db4od7p37lj0009k18h0",
+      "deleted": true,
+      "confirmation": "SDK get returned 404"
+    },
+    {
+      "id": "snp-db4oigphmtc000bn33dg",
+      "deleted": true,
+      "confirmation": "SDK get returned 404"
+    },
+    {
+      "id": "snp-db4oja137lj0009k1fpg",
+      "deleted": true,
+      "confirmation": "SDK get returned 404"
+    }
+  ],
+  "result": "PASS"
+}

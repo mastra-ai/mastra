@@ -1,0 +1,48 @@
+{
+  "checkedAt": "2026-10-10T02:25:12.992Z",
+  "node": "v24.18.0",
+  "package": "@mastra/render",
+  "version": "0.0.0",
+  "archive": "validation/package-artifacts/eabb5967-94e9-4816-842a-0cb7c3e61ab5/mastra-render-0.0.0.tgz",
+  "sha256": "f5c118d4ceef652d8d751f8b432d7313ed5dc08b5c07b11937348c2828f013ec",
+  "files": [
+    "dist/control.d.ts",
+    "dist/control.d.ts.map",
+    "dist/errors.d.ts",
+    "dist/errors.d.ts.map",
+    "dist/index.cjs",
+    "dist/index.cjs.map",
+    "dist/index.d.ts",
+    "dist/index.d.ts.map",
+    "dist/index.js",
+    "dist/index.js.map",
+    "dist/network.d.ts",
+    "dist/network.d.ts.map",
+    "dist/provider.d.ts",
+    "dist/provider.d.ts.map",
+    "dist/sandbox.d.ts",
+    "dist/sandbox.d.ts.map",
+    "dist/snapshots.d.ts",
+    "dist/snapshots.d.ts.map",
+    "dist/utils.d.ts",
+    "dist/utils.d.ts.map",
+    "LICENSE",
+    "package.json",
+    "README.md"
+  ],
+  "consumers": [
+    {
+      "core": "1.67.0",
+      "esmImportAndLifecycle": "PASS",
+      "commonjsImport": "PASS",
+      "exportedTypes": "PASS"
+    },
+    {
+      "core": "1.75.0",
+      "esmImportAndLifecycle": "PASS",
+      "commonjsImport": "PASS",
+      "exportedTypes": "PASS"
+    }
+  ],
+  "result": "PASS"
+}

@@ -1,0 +1,141 @@
+{
+  "startedAt": "2026-10-10T00:02:59.404Z",
+  "sdk": "1.2.0",
+  "core": "1.75.0",
+  "cases": [
+    {
+      "name": "local file, tar directory and gzip archive uploads",
+      "startedAt": "2026-10-10T00:03:03.450Z",
+      "evidence": {
+        "localFile": true,
+        "directoryTar": true,
+        "gzip": true,
+        "binary": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "filesystem capture, lookup, pagination and restore",
+      "startedAt": "2026-10-10T00:03:09.748Z",
+      "evidence": {
+        "snapshot": {
+          "capturedAt": "2026-10-10T00:03:10.033105Z",
+          "expiresAt": "2026-10-13T00:03:09.83624Z",
+          "id": "snp-db4o1f9hmtc000bn2lj0",
+          "kind": "filesystem",
+          "name": "mastra-production-36abcf08-c74b-4a9b-bb00-80684a2cb013",
+          "plan": "starter",
+          "requestedAt": "2026-10-10T00:03:09.882347Z",
+          "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+          "sourceSandboxId": "sbx-18p4gdb4o1co473hc738gb770",
+          "status": "available"
+        },
+        "restoredId": "sbx-18p4gdb4o1jad0e5s73csc23g",
+        "bytesAndPermissionsPreserved": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "runtime capture and restore running process memory",
+      "startedAt": "2026-10-10T00:03:31.862Z",
+      "evidence": {
+        "snapshot": {
+          "capturedAt": "2026-10-10T00:03:50.529567Z",
+          "expiresAt": "2026-10-13T00:03:33.373278Z",
+          "id": "snp-db4o1l937lj0009k0u70",
+          "kind": "runtime",
+          "name": "mastra-runtime-36abcf08-c74b-4a9b-bb00-80684a2cb013",
+          "plan": "starter",
+          "requestedAt": "2026-10-10T00:03:33.423103Z",
+          "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+          "sourceSandboxId": "sbx-18p4gdb4o1co473hc738gb770",
+          "status": "available"
+        },
+        "restoredId": "sbx-18p4gdb4o20qjnfac73ftgat0",
+        "before": 107,
+        "after": 112,
+        "processMemoryResumed": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "Mastra checkpoint hook",
+      "startedAt": "2026-10-10T00:04:48.745Z",
+      "evidence": {
+        "snapshotId": "snp-db4o28137lj0009k0ubg",
+        "name": "render-13a5909c-857d-4054-9f7c-e572052e459a"
+      },
+      "result": "PASS"
+    }
+  ],
+  "resources": ["sbx-18p4gdb4o1co473hc738gb770", "sbx-18p4gdb4o1jad0e5s73csc23g", "sbx-18p4gdb4o20qjnfac73ftgat0"],
+  "snapshots": [
+    {
+      "capturedAt": "2026-10-10T00:03:10.033105Z",
+      "expiresAt": "2026-10-13T00:03:09.83624Z",
+      "id": "snp-db4o1f9hmtc000bn2lj0",
+      "kind": "filesystem",
+      "name": "mastra-production-36abcf08-c74b-4a9b-bb00-80684a2cb013",
+      "plan": "starter",
+      "requestedAt": "2026-10-10T00:03:09.882347Z",
+      "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+      "sourceSandboxId": "sbx-18p4gdb4o1co473hc738gb770",
+      "status": "available"
+    },
+    {
+      "capturedAt": "2026-10-10T00:03:50.529567Z",
+      "expiresAt": "2026-10-13T00:03:33.373278Z",
+      "id": "snp-db4o1l937lj0009k0u70",
+      "kind": "runtime",
+      "name": "mastra-runtime-36abcf08-c74b-4a9b-bb00-80684a2cb013",
+      "plan": "starter",
+      "requestedAt": "2026-10-10T00:03:33.423103Z",
+      "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+      "sourceSandboxId": "sbx-18p4gdb4o1co473hc738gb770",
+      "status": "available"
+    },
+    {
+      "capturedAt": "2026-10-10T00:04:49.024255Z",
+      "expiresAt": "2026-10-13T00:04:48.875033Z",
+      "id": "snp-db4o28137lj0009k0ubg",
+      "kind": "filesystem",
+      "name": "render-13a5909c-857d-4054-9f7c-e572052e459a",
+      "plan": "starter",
+      "requestedAt": "2026-10-10T00:04:48.920345Z",
+      "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+      "sourceSandboxId": "sbx-18p4gdb4o1co473hc738gb770",
+      "status": "available"
+    }
+  ],
+  "cleanup": [
+    {
+      "snapshotId": "snp-db4o1f9hmtc000bn2lj0",
+      "deleted": true
+    },
+    {
+      "snapshotId": "snp-db4o1l937lj0009k0u70",
+      "deleted": true
+    },
+    {
+      "snapshotId": "snp-db4o28137lj0009k0ubg",
+      "deleted": true
+    },
+    {
+      "id": "sbx-18p4gdb4o20qjnfac73ftgat0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:04:47.101257Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o1jad0e5s73csc23g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:03:30.264854Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o1co473hc738gb770",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:05:06.87309Z"
+    }
+  ],
+  "result": "PASS",
+  "finishedAt": "2026-10-10T00:05:07.166Z"
+}

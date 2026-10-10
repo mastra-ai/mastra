@@ -1,0 +1,320 @@
+{
+  "startedAt": "2026-10-10T00:39:20.129Z",
+  "sdk": "1.2.0",
+  "core": "1.75.0",
+  "cases": [
+    {
+      "name": "factory, cached info, instructions, client options and creation env",
+      "startedAt": "2026-10-10T00:39:22.904Z",
+      "evidence": {
+        "factory": true,
+        "clientOptions": true,
+        "sourcePreserved": true,
+        "env": "created"
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "native exec stdout, stderr, exit status and early iterator close",
+      "startedAt": "2026-10-10T00:39:24.112Z",
+      "evidence": {
+        "events": [
+          {
+            "type": "output",
+            "stream": "stderr",
+            "data": "err"
+          },
+          {
+            "type": "output",
+            "stream": "stdout",
+            "data": "out"
+          },
+          {
+            "type": "exit",
+            "exit_code": 7
+          }
+        ],
+        "remoteContinuesAfterIteratorClose": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "upload string, Uint8Array, Buffer and file limit failures",
+      "startedAt": "2026-10-10T00:39:27.154Z",
+      "evidence": {
+        "inputForms": ["string", "Uint8Array", "Buffer"],
+        "uploadAndDownloadLimits": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "bounded output retains tail while callbacks receive complete streams",
+      "startedAt": "2026-10-10T00:39:30.021Z",
+      "evidence": {
+        "result": {
+          "command": "printf 0123456789abcdef; printf fedcba9876543210 >&2",
+          "args": [],
+          "success": true,
+          "exitCode": 0,
+          "stdout": "89abcdef",
+          "stderr": "76543210",
+          "executionTimeMs": 437,
+          "killed": false,
+          "timedOut": false,
+          "stdoutTruncated": true,
+          "stderrTruncated": true,
+          "stdoutDroppedBytes": 8,
+          "stderrDroppedBytes": 8
+        },
+        "out": "0123456789abcdef",
+        "err": "fedcba9876543210"
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "snapshot create, wait, expiry, checkpoint priority and clone overrides",
+      "startedAt": "2026-10-10T00:39:30.958Z",
+      "evidence": {
+        "snapshot": {
+          "capturedAt": "2026-10-10T00:39:31.159535Z",
+          "expiresAt": "2026-10-10T01:39:30.958Z",
+          "id": "snp-db4oigphmtc000bn33dg",
+          "kind": "filesystem",
+          "name": "audit-6c727712-ec16-4026-95a3-1a05a31841ed",
+          "plan": "starter",
+          "requestedAt": "2026-10-10T00:39:31.050559Z",
+          "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+          "sourceSandboxId": "sbx-18p4gdb4oie59fdbs73ab76cg",
+          "status": "available"
+        },
+        "restoredId": "sbx-18p4gdb4oiknlot8c73cernc0",
+        "preservedAfterSnapshotDeletion": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "clone fresh base fallback and attached clone",
+      "startedAt": "2026-10-10T00:39:51.267Z",
+      "evidence": {
+        "freshId": "sbx-18p4gdb4oilo473hc738i881g",
+        "attachmentPreservesSource": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "owned terminate, attached terminate and direct SDK lifecycle",
+      "startedAt": "2026-10-10T00:39:56.053Z",
+      "evidence": {
+        "owned": "sbx-18p4gdb4oinijnfac73fvecpg",
+        "attached": "sbx-18p4gdb4oin142hec73edrlg0",
+        "direct": "sbx-18p4gdb4oino473hc738i8d80"
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "terminate cancellation mode and observe cancellation mode",
+      "startedAt": "2026-10-10T00:40:01.636Z",
+      "evidence": {
+        "terminatedId": "sbx-18p4gdb4oioajnfac73fvefcg",
+        "observationLeavesRemoteWork": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "released SDK legacy allow-list mismatch reproduction",
+      "startedAt": "2026-10-10T00:40:06.672Z",
+      "evidence": {
+        "diagnostic": "Expected failure reproduced in the unmodified SDK",
+        "failure": {
+          "statusCode": 400,
+          "message": "Failed to create sandbox: networkPolicy.rules must list at least one rule when networkPolicy.type is allow-list"
+        }
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "host positive controls and deny-all actual egress",
+      "startedAt": "2026-10-10T00:40:06.823Z",
+      "result": "FAIL",
+      "error": "AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n\n137 !== 0\n"
+    },
+    {
+      "name": "HTTPS allow-list enforcement using rules",
+      "startedAt": "2026-10-10T00:40:33.027Z",
+      "evidence": {
+        "sandboxId": "sbx-18p4gdb4oj08473hc738i9d10",
+        "effectivePolicy": {
+          "type": "allow-list",
+          "default": "allow-list",
+          "rules": [
+            {
+              "domain": "example.com",
+              "protocol": "https"
+            }
+          ]
+        },
+        "results": [
+          {
+            "url": "https://example.com",
+            "status": 200,
+            "example": true
+          },
+          {
+            "url": "https://example.org",
+            "error": "<urlopen error [Errno 104] Connection reset by peer>"
+          },
+          {
+            "url": "http://example.com",
+            "error": "[Errno 104] Connection reset by peer"
+          }
+        ]
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "HTTPS allow-list enforcement using allowedDomains",
+      "startedAt": "2026-10-10T00:40:35.896Z",
+      "evidence": {
+        "sandboxId": "sbx-18p4gdb4oj0vlk1mc73ff5r80",
+        "effectivePolicy": {
+          "type": "allow-list",
+          "default": "allow-list",
+          "rules": [
+            {
+              "domain": "example.com",
+              "protocol": "https"
+            }
+          ]
+        },
+        "results": [
+          {
+            "url": "https://example.com",
+            "status": 200,
+            "example": true
+          },
+          {
+            "url": "https://example.org",
+            "error": "<urlopen error [Errno 104] Connection reset by peer>"
+          },
+          {
+            "url": "http://example.com",
+            "error": "[Errno 104] Connection reset by peer"
+          }
+        ]
+      },
+      "result": "PASS"
+    }
+  ],
+  "resources": [
+    "sbx-18p4gdb4oie59fdbs73ab76cg",
+    "sbx-18p4gdb4oiknlot8c73cernc0",
+    "sbx-18p4gdb4oilo473hc738i881g",
+    "sbx-18p4gdb4oin142hec73edrlg0",
+    "sbx-18p4gdb4oinijnfac73fvecpg",
+    "sbx-18p4gdb4oino473hc738i8d80",
+    "sbx-18p4gdb4oioajnfac73fvefcg",
+    "sbx-18p4gdb4oj08473hc738i9d10",
+    "sbx-18p4gdb4oj0vlk1mc73ff5r80"
+  ],
+  "snapshots": [
+    {
+      "expiresAt": "2026-10-10T01:39:30.958Z",
+      "id": "snp-db4oigphmtc000bn33dg",
+      "kind": "filesystem",
+      "name": "audit-6c727712-ec16-4026-95a3-1a05a31841ed",
+      "plan": "starter",
+      "requestedAt": "2026-10-10T00:39:31.050559205Z",
+      "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+      "sourceSandboxId": "sbx-18p4gdb4oie59fdbs73ab76cg",
+      "status": "creating"
+    }
+  ],
+  "cleanup": [
+    {
+      "id": "sbx-18p4gdb4oiknlot8c73cernc0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:39:50.932485Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oilo473hc738i881g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:39:54.892988Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oin142hec73edrlg0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:39:57.611679Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oinijnfac73fvecpg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:39:59.367897Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oino473hc738i8d80",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:40:01.335233Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oioajnfac73fvefcg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:40:03.579971Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oj08473hc738i9d10",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:40:35.687885Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oj0vlk1mc73ff5r80",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:40:38.46236Z"
+    },
+    {
+      "snapshotId": "snp-db4oigphmtc000bn33dg",
+      "deleted": true
+    },
+    {
+      "id": "sbx-18p4gdb4oj0vlk1mc73ff5r80",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:40:38.46236Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oj08473hc738i9d10",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:40:35.687885Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oioajnfac73fvefcg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:40:03.579971Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oinijnfac73fvecpg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:39:59.367897Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oin142hec73edrlg0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:39:57.611679Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oilo473hc738i881g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:39:54.892988Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oiknlot8c73cernc0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:39:50.932485Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oie59fdbs73ab76cg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:40:40.056952Z"
+    }
+  ],
+  "finishedAt": "2026-10-10T00:40:40.369Z",
+  "result": "FAIL"
+}

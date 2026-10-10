@@ -1,0 +1,29 @@
+[
+  {
+    "core": "1.75.0",
+    "workflowsInstalled": false,
+    "sandboxImport": "PASS",
+    "workspaceLifecycle": "PASS",
+    "sdk": "1.2.0",
+    "name": "standalone-current",
+    "consumerTypes": "PASS"
+  },
+  {
+    "core": "1.67.0",
+    "workflowsInstalled": false,
+    "sandboxImport": "PASS",
+    "workspaceLifecycle": "PASS",
+    "sdk": "1.2.0",
+    "name": "standalone-minimum",
+    "consumerTypes": "PASS"
+  },
+  {
+    "core": "1.67.0",
+    "workflowsInstalled": true,
+    "sandboxImport": "PASS",
+    "workspaceLifecycle": "PASS",
+    "sdk": "1.2.0",
+    "name": "with-workflows",
+    "consumerTypes": "PASS"
+  }
+]

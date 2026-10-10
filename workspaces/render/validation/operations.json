@@ -1,0 +1,21 @@
+{
+  "startedAt": "2026-10-09T18:56:14.116Z",
+  "checks": [
+    "creation/readiness: running; configured lifetime 300s",
+    "native binary upload/download, parent creation and quoted path",
+    "literal argv and explicit per-command environment",
+    "files persist; shell exports and cwd do not persist",
+    "stdout/stderr/nonzero exit 7 retained",
+    "bounded output with truncation metadata",
+    "attached destroy leaves caller-owned sandbox running",
+    "owned command timeout disposes sandbox"
+  ],
+  "sandboxIds": ["sbx-18p4gdb4jhjjncjis73fp9770"],
+  "cleanup": [
+    {
+      "id": "sbx-18p4gdb4jhjjncjis73fp9770",
+      "status": "terminated",
+      "terminatedAt": "2026-10-09T18:56:21.935534Z"
+    }
+  ]
+}

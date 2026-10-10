@@ -1,0 +1,424 @@
+{
+  "verifiedAt": "2026-10-10T00:47:08.573005+00:00",
+  "sdk": "1.2.0",
+  "officialMain": "918704fd4608aa4d9d90d4d92c0a3429de2b880a",
+  "unitTests": {
+    "releasedCore": "1.75.0",
+    "sourceBuiltMainCore": "1.76.0-alpha.5",
+    "passedEach": 71,
+    "build": "PASS",
+    "typecheck": "PASS"
+  },
+  "live": "production-live.json",
+  "namedRestoration": "production-focused-live.json",
+  "agents": ["production-agent-released.json", "production-agent-main.json"],
+  "cleanup": "production-cleanup.json",
+  "compatibility": "compatibility.json",
+  "sourceSha256": {
+    "src/capabilities.test.ts": "51947cdac307ac9610493bb42fa484efaea6a697ac0af0e8c6656b7c49d865bc",
+    "src/control.ts": "732e12fbc2cd5504c35684973773f4e881938bcbb9d87195c4ace23238105679",
+    "src/errors.ts": "a3ebb1e847c16c23e8fff3e0c56cff220d2243efe1eca0942edea5d54fc3ecb7",
+    "src/index.ts": "0fd4c29082c471f88c7e62e18f51df7cf315c9ae8e394393651cc7e4c1582b32",
+    "src/network.ts": "11581ded0585f7a69b9182cde42f0a1b79e42d37e36bccca84757a5926a1be7a",
+    "src/provider.ts": "6210a06d4ff6182563df1d74b0a71dea4e8484f8f3f73ea3bd94a850dfd5ed77",
+    "src/sandbox.test.ts": "cc3b9688e3053246721fdd2cb842e465e7fe4ee8d2fd45c55b83daaec577d4a6",
+    "src/sandbox.ts": "51c3af7a73911f164771f377d380a6ad08c1344d837e84b42949154c936ccc2b",
+    "src/sdk-contract.test.ts": "5ac337081fa0994d93659049a5a1114eb714086ceb062222f3a5f97d6fe517f5",
+    "src/snapshots.ts": "1c452fe839e85678934f52de05710f333b905874f4a059b3c61d2efe446457c9",
+    "src/utils.ts": "20428c51198d2f8eb3c287a045b354ec50c9a129d16bea2f1c3195dabbad7775",
+    "src/workspace-tools.test.ts": "963ad3a1019c8bc423bd937e2b58e342e0bd12487773ce0cdc78f4aca3ed397a"
+  },
+  "packageSha256": "61d5af7352bc042126a33f738446c37b1c930e0915484cf3f5eedf4d4c386310",
+  "distributionSha256": {
+    "dist/control.d.ts": "0a68e2b497c672127fa1a6a26662cf2213fd5226403028fdda6aacf224b17830",
+    "dist/control.js": "03a889f7d5dd1cfd1a01177d4efaa02434a0a598aa5af6ee39eedfc8921ae04a",
+    "dist/errors.d.ts": "84a5a66b480e28355bac30190c37cd22683b60dc4cc7f793cbc96dcd154dc573",
+    "dist/errors.js": "77dc1503b1a046d8b3b7aa831c9b0a4ed4bb0d757757cd5c5601f2ac3c749518",
+    "dist/index.d.ts": "9fecbcc387facdc2c1444691bc9bac8e1b2002bb9c70dd61732bce7f3654bad4",
+    "dist/index.js": "554f2d1b62697db817249d4008bd550b2962e32623296fd10206a7a1120827fb",
+    "dist/network.d.ts": "6c28c26d0e87479995e275cac32b6a021e35d2455ac25d358d72ae9fa12af8a8",
+    "dist/network.js": "3f34e0477dc517285684128095a4a720159386759ba6f0424dd4a94dd65bbf74",
+    "dist/provider.d.ts": "d84d1a170e9ab7171f4da97f20d2844525918164cdb6f4a148c1384efdb91756",
+    "dist/provider.js": "48249b4ff9b35d9286d84c7a92d36f52af8a116fbfc0273a21d5ea7cb6d0e2de",
+    "dist/sandbox.d.ts": "f01d145a227c65981a44706518d1280075d11b88678b5b2e0a65b37c408e29f1",
+    "dist/sandbox.js": "b67186fbb3bfc8f6775d57357303f2e98b194253523776607f36419bda5ad552",
+    "dist/snapshots.d.ts": "09db18ea82ea21886cee7ee1adde8e30512a0407c4d274250a60053c2f79e9bf",
+    "dist/snapshots.js": "5f74b5abfca5357f2547228d59de2e11cacef11c16fd5bc376447a657486758c",
+    "dist/utils.d.ts": "6021b772964df6b2bec4c97877edc6379bec93171589c86bdd056889da1fa013",
+    "dist/utils.js": "8251a1de4615c5f2ffd98ebe2773988bbb94daacd00fa69633df1c2d7c486362"
+  },
+  "realModelRuns": [
+    {
+      "core": "1.75.0",
+      "model": "anthropic/claude-haiku-4-5-20251001",
+      "sandboxId": "sbx-18p4gdb4o2eo473hc738gehcg",
+      "workspaceToolCalls": 8,
+      "testsPassed": 4,
+      "taskPassed": true,
+      "cleanup": "terminated",
+      "evidence": "production-agent-released.json"
+    },
+    {
+      "core": "1.75.0",
+      "model": "anthropic/claude-sonnet-4-6",
+      "sandboxId": "sbx-18p4gdb4o7urbc2fs73b7c7fg",
+      "workspaceToolCalls": 6,
+      "testsPassed": 4,
+      "taskPassed": true,
+      "cleanup": "terminated",
+      "evidence": "production-agent-released.json"
+    },
+    {
+      "core": "1.76.0-alpha.5",
+      "model": "anthropic/claude-haiku-4-5-20251001",
+      "sandboxId": "sbx-18p4gdb4o2tg473hc738ggdt0",
+      "workspaceToolCalls": 7,
+      "testsPassed": 4,
+      "taskPassed": true,
+      "cleanup": "terminated",
+      "evidence": "production-agent-main.json"
+    },
+    {
+      "core": "1.76.0-alpha.5",
+      "model": "anthropic/claude-sonnet-4-6",
+      "sandboxId": "sbx-18p4gdb4o7tnlk1mc73fdvtqg",
+      "workspaceToolCalls": 4,
+      "testsPassed": 4,
+      "taskPassed": true,
+      "cleanup": "terminated",
+      "evidence": "production-agent-main.json"
+    },
+    {
+      "core": "1.75.0",
+      "model": "anthropic/claude-haiku-4-5-20251001",
+      "sandboxId": "sbx-18p4gdb4okrh42hec73ee32r0",
+      "workspaceToolCalls": 10,
+      "testsPassed": 4,
+      "taskPassed": true,
+      "cleanup": "terminated",
+      "evidence": "operation-agent-released.json"
+    },
+    {
+      "core": "1.76.0-alpha.5",
+      "model": "anthropic/claude-sonnet-4-6",
+      "sandboxId": "sbx-18p4gdb4ojho473hc738ibd90",
+      "workspaceToolCalls": 9,
+      "testsPassed": 4,
+      "taskPassed": true,
+      "cleanup": "terminated",
+      "evidence": "operation-agent-main.json"
+    }
+  ],
+  "realModelVerification": {
+    "provider": "Anthropic",
+    "modelCallsMocked": false,
+    "sandboxProviderMocked": false,
+    "providerResponseMetadata": "Recorded for Sonnet 4.6 follow-up runs",
+    "protectedVerification": "Restore host-owned input and four tests before independent execution; verify exact report and changed source",
+    "exampleSha256": "d36715ef303abaf604861d244eccfa0890e693ed42d84831ab9c4ea786a1045e",
+    "distributionMatchesTestedPackedPackage": true,
+    "sourceReconciliation": "Restored the native-stream timeout validation ordering already present in both tested distributions and the official-main fixture; existing regression failed before restoration and all 69 tests passed on both cores afterward.",
+    "distributionScope": "Current build packed and consumer-checked after the network policy fix. Fresh Haiku on released core and Sonnet on pinned official main pass; earlier four agent runs remain historical evidence for the preceding build."
+  },
+  "documentation": {
+    "checkedAt": "2026-10-10T00:30:50.425269+00:00",
+    "core": "1.75.0",
+    "model": "anthropic/claude-sonnet-4-6",
+    "method": "Extracted the agent and snapshot snippets from each document, resolved the guide model token, added independent output and cleanup assertions, and ran against an npm-installed archive. Model and Render calls were real.",
+    "examples": [
+      {
+        "document": "guide",
+        "startedAt": "2026-10-10T00:27:40.566Z",
+        "sandboxId": "sbx-18p4gdb4ocv0473hc738hjo4g",
+        "providerResponses": [
+          {
+            "id": "msg_011CfscGzjTbMP5H7tGzddwe",
+            "modelId": "claude-sonnet-4-6"
+          },
+          {
+            "id": "msg_011CfscHBtgMHJyH5m4CcS1A",
+            "modelId": "claude-sonnet-4-6"
+          }
+        ],
+        "toolCalls": [
+          {
+            "toolName": "mastra_workspace_execute_command"
+          }
+        ],
+        "verifiedStdout": "42\n",
+        "snapshot": {
+          "capturedAt": "2026-10-10T00:27:48.82361Z",
+          "expiresAt": "2026-10-13T00:27:48.667314Z",
+          "id": "snp-db4od1137lj0009k1850",
+          "kind": "filesystem",
+          "name": "prepared-project",
+          "plan": "starter",
+          "requestedAt": "2026-10-10T00:27:48.710834Z",
+          "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+          "sourceSandboxId": "sbx-18p4gdb4ocv0473hc738hjo4g",
+          "status": "available"
+        },
+        "restoredId": "sbx-18p4gdb4od4p42hec73ed8rs0",
+        "restoredCleanup": {
+          "id": "sbx-18p4gdb4od4p42hec73ed8rs0",
+          "status": "terminated",
+          "terminatedAt": "2026-10-10T00:28:05.648037Z"
+        },
+        "snapshotDeleted": true,
+        "taskPassed": true,
+        "cleanup": {
+          "id": "sbx-18p4gdb4ocv0473hc738hjo4g",
+          "status": "terminated",
+          "terminatedAt": "2026-10-10T00:28:06.212952Z"
+        }
+      },
+      {
+        "document": "readme",
+        "startedAt": "2026-10-10T00:28:07.919Z",
+        "sandboxId": "sbx-18p4gdb4od60473hc738hkbhg",
+        "providerResponses": [
+          {
+            "id": "msg_011CfscK1bcTC6X1KMeU2nQN",
+            "modelId": "claude-sonnet-4-6"
+          },
+          {
+            "id": "msg_011CfscKCDam5JGnAFHgBrZc",
+            "modelId": "claude-sonnet-4-6"
+          }
+        ],
+        "toolCalls": [
+          {
+            "toolName": "mastra_workspace_execute_command"
+          }
+        ],
+        "verifiedStdout": "42\n",
+        "snapshot": {
+          "capturedAt": "2026-10-10T00:28:15.332307Z",
+          "expiresAt": "2026-10-13T00:28:15.190814Z",
+          "id": "snp-db4od7p37lj0009k18h0",
+          "kind": "filesystem",
+          "name": "prepared-project",
+          "plan": "starter",
+          "requestedAt": "2026-10-10T00:28:15.239049Z",
+          "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+          "sourceSandboxId": "sbx-18p4gdb4od60473hc738hkbhg",
+          "status": "available"
+        },
+        "restoredId": "sbx-18p4gdb4odb8473hc738hl0u0",
+        "restoredCleanup": {
+          "id": "sbx-18p4gdb4odb8473hc738hl0u0",
+          "status": "terminated",
+          "terminatedAt": "2026-10-10T00:28:33.1054Z"
+        },
+        "snapshotDeleted": true,
+        "taskPassed": true,
+        "cleanup": {
+          "id": "sbx-18p4gdb4od60473hc738hkbhg",
+          "status": "terminated",
+          "terminatedAt": "2026-10-10T00:28:33.623227Z"
+        }
+      }
+    ],
+    "typecheck": "PASS",
+    "remark": "PASS",
+    "vale": "PASS",
+    "frontmatter": "PASS",
+    "build": "PASS with experimental_vcs disabled in a temporary config; two unrelated existing broken anchors remain",
+    "sourceSha256": {
+      "workspaces/render/README.md": "bbefa94034ee71925730dfcc78a7ee401911e189ee5278a65e8e3141d4ddd992",
+      "docs/src/content/en/integrations/sandboxes/render.mdx": "14d2821f09971b3111a94b5a51c0386d961edf382999e889534bdb3cd3ce319a"
+    },
+    "archiveSha256": "db58290fa9e0bb22d8d571ffaffd1296b872f2e12d62d52defc0123bed60212b",
+    "rendered": {
+      "viewports": [1365, 390],
+      "browserErrors": 0,
+      "horizontalPageOverflow": false,
+      "diagram": "Vertical layout visually inspected at both widths; labels and arrows readable without overlap",
+      "authoredLinks": "New tab with noopener noreferrer verified",
+      "modelTokens": "Resolved"
+    }
+  },
+  "previousVerifiedPackageSha256": "7ebdc700619fdc95a6779dc7056704ad7864ed8582cb2023b37bb501453f3e49",
+  "previousVerifiedDistributionSha256": {
+    "dist/control.d.ts": "0a68e2b497c672127fa1a6a26662cf2213fd5226403028fdda6aacf224b17830",
+    "dist/control.js": "03a889f7d5dd1cfd1a01177d4efaa02434a0a598aa5af6ee39eedfc8921ae04a",
+    "dist/errors.d.ts": "84a5a66b480e28355bac30190c37cd22683b60dc4cc7f793cbc96dcd154dc573",
+    "dist/errors.js": "77dc1503b1a046d8b3b7aa831c9b0a4ed4bb0d757757cd5c5601f2ac3c749518",
+    "dist/index.d.ts": "9ace9c4cc3915628a7b0fab6ff66758c298e7b1f5efbf3162f7b19fa20926e96",
+    "dist/index.js": "554f2d1b62697db817249d4008bd550b2962e32623296fd10206a7a1120827fb",
+    "dist/provider.d.ts": "d84d1a170e9ab7171f4da97f20d2844525918164cdb6f4a148c1384efdb91756",
+    "dist/provider.js": "48249b4ff9b35d9286d84c7a92d36f52af8a116fbfc0273a21d5ea7cb6d0e2de",
+    "dist/sandbox.d.ts": "e2e5a7e47f10ce0afe4a3bdd52409ecf1750e549145fdcc81179eaafb5b780ca",
+    "dist/sandbox.js": "ddb8598aed52af82551b4756a5ef6da3eab9e6e9928fda1cc5f43fada0eaf476",
+    "dist/snapshots.d.ts": "09db18ea82ea21886cee7ee1adde8e30512a0407c4d274250a60053c2f79e9bf",
+    "dist/snapshots.js": "5f74b5abfca5357f2547228d59de2e11cacef11c16fd5bc376447a657486758c",
+    "dist/utils.d.ts": "6021b772964df6b2bec4c97877edc6379bec93171589c86bdd056889da1fa013",
+    "dist/utils.js": "8251a1de4615c5f2ffd98ebe2773988bbb94daacd00fa69633df1c2d7c486362"
+  },
+  "operationAudit": {
+    "coverage": "operation-coverage.json",
+    "live": "operation-audit.json",
+    "failedNetworkProbe": "operation-audit-attempt1.json",
+    "sdkMethods": 12,
+    "adapterMethodsAndAccessor": 29,
+    "factory": 1,
+    "passedCases": 13,
+    "caseScope": "12 successful capability cases plus one passing diagnostic that reproduces the unmodified SDK HTTP 400 rejection.",
+    "models": [
+      {
+        "core": "1.75.0",
+        "model": "anthropic/claude-haiku-4-5-20251001",
+        "sandboxId": "sbx-18p4gdb4okrh42hec73ee32r0",
+        "workspaceToolCalls": 10,
+        "testsPassed": 4,
+        "taskPassed": true,
+        "cleanup": "terminated",
+        "evidence": "operation-agent-released.json"
+      },
+      {
+        "core": "1.76.0-alpha.5",
+        "model": "anthropic/claude-sonnet-4-6",
+        "sandboxId": "sbx-18p4gdb4ojho473hc738ibd90",
+        "workspaceToolCalls": 9,
+        "testsPassed": 4,
+        "taskPassed": true,
+        "cleanup": "terminated",
+        "evidence": "operation-agent-main.json"
+      }
+    ],
+    "failedModelAttempt": "operation-agent-released-attempt1.json",
+    "fix": "Typed HTTPS allow-list rules, including a documented HTTPS-only mapping from SDK 1.2.0 allowedDomains, through the public SDK client.",
+    "sourceAndDistributionMatchMainFixture": true,
+    "documentationChecks": {
+      "remark": "PASS",
+      "vale": "PASS",
+      "build": "PASS",
+      "buildConfig": "existing temporary config with Git-history metadata disabled",
+      "preexistingBrokenAnchors": 2
+    },
+    "documentSha256": {
+      "README.md": "1d5fbecc03bc33211ea78a0e3095de1176d5c3fbbb268a60f65535d50fe0fbe6",
+      "../../docs/src/content/en/integrations/sandboxes/render.mdx": "ff8651925449303038885777656ea4530deb90d8cc7bdeac5a16e3728fbcbace"
+    },
+    "finalArchive": "Distribution is byte-identical to the compatibility-tested archive; README wording was clarified afterward and the archive was repacked."
+  },
+  "compatibilityArchiveSha256": "94b9b035d279b525a576e6102a9bfcb0f9091896cd1cd9117e57e243cf273c7b",
+  "workspacePackaging": {
+    "checkedAt": "2026-10-10T02:30:45.850135+00:00",
+    "ownership": "Render-maintained integration inside Mastra; namespace and acceptance subject to Mastra review",
+    "package": "@mastra/render",
+    "version": "0.0.0",
+    "location": "workspaces/render",
+    "node": "24.18.0",
+    "pnpm": "11.21.0",
+    "workspaceCore": "1.74.0",
+    "sdk": "1.2.0",
+    "build": "PASS, 15 Turborepo tasks",
+    "unitTests": 71,
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "format": "PASS",
+    "lockfile": "PASS, frozen lockfile install leaves file unchanged",
+    "lockfileNote": "pnpm also registered the already tracked private workflows/render importer missing from the baseline lockfile. Sandbox dependencies do not include Workflows; its manifest and code are unchanged.",
+    "packageArchiveSha256": "f5c118d4ceef652d8d751f8b432d7313ed5dc08b5c07b11937348c2828f013ec",
+    "packageFiles": 23,
+    "archiveMatchesCurrentDist": true,
+    "consumers": [
+      {
+        "core": "1.67.0",
+        "esmImportAndLifecycle": "PASS",
+        "commonjsImport": "PASS",
+        "exportedTypes": "PASS"
+      },
+      {
+        "core": "1.75.0",
+        "esmImportAndLifecycle": "PASS",
+        "commonjsImport": "PASS",
+        "exportedTypes": "PASS"
+      }
+    ],
+    "workflowsCoexistence": "PASS at core 1.67.0, SDK 1.2.0",
+    "changeset": "tricky-dogs-hang",
+    "releasePlan": "0.1.0-alpha.0 under the current Mastra prerelease configuration",
+    "ciDiscovery": "PASS, existing workspace routing selects render",
+    "cloudTestWithoutCredentials": "SKIP, explicit Vitest skip",
+    "cloudTestWithCredentials": "PASS, real Render SDK smoke test",
+    "realModel": {
+      "model": "anthropic/claude-haiku-4-5-20251001",
+      "core": "1.75.0",
+      "result": "PASS",
+      "testsPassed": 4,
+      "report": {
+        "total": 42,
+        "row_count": 3
+      },
+      "record": "mastra-package-agent.json"
+    },
+    "cloudRecord": "mastra-package-cloud.json",
+    "additionalCleanup": [
+      {
+        "id": "sbx-18p4gdb4q4ih42hec73ejb6hg",
+        "status": "terminated",
+        "terminatedAt": "2026-10-10T02:26:55.740266Z"
+      },
+      {
+        "id": "sbx-18p4gdb4q5d5ckfvc73fruh5g",
+        "status": "terminated",
+        "terminatedAt": "2026-10-10T02:28:16.115016Z"
+      }
+    ],
+    "aggregateCleanup": {
+      "confirmedSandboxes": 44,
+      "deletedSnapshots": 11,
+      "previousAudit": "production-cleanup.json"
+    },
+    "documentation": {
+      "readmeConvention": "PASS",
+      "MDXFormat": "PASS",
+      "Remark": "PASS",
+      "Vale": "PASS, review config includes integrations",
+      "frontmatter": "662 PASS",
+      "sidebarRoutes": "PASS",
+      "productionBuild": "PASS, existing local configuration disables VCS metadata",
+      "warnings": "Two existing agent-controller broken anchors; three stale new-tags in unrelated docs remain."
+    },
+    "broaderPeerCheck": "Tracked-manifest-only check: @mastra/render valid; existing @renderinc/mastra exact core 1.67.0 pin fails against this checkout core 1.74.0. Ignored historical source fixtures also contaminate the unfiltered local check.",
+    "publication": "LOCAL; no package, integration issue or PR published; hosted CI and secrets not configured",
+    "filesSha256": {
+      "src/capabilities.test.ts": "cc4dff9e8624f171649e3cacf229ba4be0f98456f5dd70d9bfc372df004e118f",
+      "src/control.ts": "bbb84d81711871e2af71a63bfb3cf02efbe0f45c1ec20849b0fdd02fd1f4813d",
+      "src/errors.ts": "a3ebb1e847c16c23e8fff3e0c56cff220d2243efe1eca0942edea5d54fc3ecb7",
+      "src/index.ts": "0fd4c29082c471f88c7e62e18f51df7cf315c9ae8e394393651cc7e4c1582b32",
+      "src/network.ts": "11581ded0585f7a69b9182cde42f0a1b79e42d37e36bccca84757a5926a1be7a",
+      "src/provider.ts": "e04f65cab38d9247b55624c49b37b36eda6eef70f4c1645a884432f25e4b3e64",
+      "src/sandbox.integration.test.ts": "150d45f3f1f61c0e0e53ef79daac21b9d5863043a8e4cd23ce0550d1d2bc1e21",
+      "src/sandbox.test.ts": "f33db5c2b470231473c8c1ac3e451f89ecf5163e4db510516dda4f98a09de1af",
+      "src/sandbox.ts": "9bd2561ba66b4785502d17dcac8d76e45b4d9ce573c235544c20df4b9d706b7c",
+      "src/sdk-contract.test.ts": "cf8092ed8a6863e71a2f538b45737ddb97fd3f9202fb3430a9bd0269c70140ce",
+      "src/snapshots.ts": "5c775a3222330c440c18c894cee46d7803c60ca0eed190c0341d3fb5913fefc6",
+      "src/utils.ts": "20428c51198d2f8eb3c287a045b354ec50c9a129d16bea2f1c3195dabbad7775",
+      "src/workspace-tools.test.ts": "8ee7ca2906626ac01ec57a21671b0202c8db68f4e7f1e1fb64a146bc42cd1eee",
+      "dist/control.d.ts": "9d16ed0a6a7fa94e5dd77bdf07bb455546d85691cfd7c3adb34799c4dc1418e0",
+      "dist/control.d.ts.map": "506bf840ea676bd466f265e74cc571ed51ced8a886399950a01330573b41815c",
+      "dist/errors.d.ts": "0e6ab205ae2ecf07ff4cbf888dcd99f12080ca193e388082ec8de906d6136f2e",
+      "dist/errors.d.ts.map": "16119e97aca4c4cf5d433252e65047d661eee6be0b1d7aad77fde6c9d354a3f5",
+      "dist/index.cjs": "bdeb3f8ebf18d9fb75580ef07d0fe490663e7c77691b66355ed24cc971c6b573",
+      "dist/index.cjs.map": "a7f702193f7a0dc0125d239205f3bf549f24266b41178adf3347e9ae365e15ad",
+      "dist/index.d.ts": "f0de782997e09de233bf9d6092fab250a7cb2da4f4db9187b4a92e5fe3f1a53a",
+      "dist/index.d.ts.map": "f44a19f68fb2613cc46d9a05bed696624e7b548ab12801943cf8c65353eeb4ab",
+      "dist/index.js": "2efabd4deb9d586cf14d6cf6461cbe411ffda067e01435a9d4acf250d26be78a",
+      "dist/index.js.map": "166a5efc174c588f3c9e7a5bb0d076677f673155c46d7df43145ce71e2fcbc66",
+      "dist/network.d.ts": "aaeb0d2233f7cbfa48f93b4702443cf5460749a3a73c759b06f854363a1f4ada",
+      "dist/network.d.ts.map": "051f70d92a43f89daa15749973492bd0c3c632e24315b6b72c08501658d66def",
+      "dist/provider.d.ts": "d14a5f2c5f9760282222ee479e6f06f8a2017419573f39666cb7de6917ccb0f4",
+      "dist/provider.d.ts.map": "a3d15202a948a248e82b5cdaac3319725efb10a3e3c33738723186d57b66cee1",
+      "dist/sandbox.d.ts": "e47e560b0fa5334c4a190f48048ceb70305268fadaa2c4bc6d2de92fd9cfcda1",
+      "dist/sandbox.d.ts.map": "6a0a96a2fb445c6a9a70b5514edc83e4f34a1a50acfc49a17100a7fcf484b3c3",
+      "dist/snapshots.d.ts": "67fcaf6cfce35932dd9455e46cc898331bf13b8e73f8fcff40feac2d141c0ddb",
+      "dist/snapshots.d.ts.map": "207ed8415b786d8bf3ffd7666f74cfe1503bc6c5388ad4fbf7fbdf3bff016001",
+      "dist/utils.d.ts": "6a0e4f7a65471eda218aaf216b06fcdb82ed7d69f12424b69fc9ed9771a3f868",
+      "dist/utils.d.ts.map": "91ea51e2c0f445d85e4ac191efc4883264679125e7112c16c173c5a9f26fbdaf"
+    },
+    "pnpmLockSha256": "1852368c3eeeb1194b04162aecfc8bcf999a418523b4012519446415e2abdf57"
+  }
+}

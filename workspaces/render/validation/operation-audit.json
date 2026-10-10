@@ -1,0 +1,392 @@
+{
+  "startedAt": "2026-10-10T00:41:01.037Z",
+  "sdk": "1.2.0",
+  "core": "1.75.0",
+  "cases": [
+    {
+      "name": "factory, cached info, instructions, client options and creation env",
+      "startedAt": "2026-10-10T00:41:03.685Z",
+      "evidence": {
+        "factory": true,
+        "clientOptions": true,
+        "sourcePreserved": true,
+        "env": "created"
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "native exec stdout, stderr, exit status and early iterator close",
+      "startedAt": "2026-10-10T00:41:05.013Z",
+      "evidence": {
+        "events": [
+          {
+            "type": "output",
+            "stream": "stderr",
+            "data": "err"
+          },
+          {
+            "type": "output",
+            "stream": "stdout",
+            "data": "out"
+          },
+          {
+            "type": "exit",
+            "exit_code": 7
+          }
+        ],
+        "remoteContinuesAfterIteratorClose": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "upload string, Uint8Array, Buffer and file limit failures",
+      "startedAt": "2026-10-10T00:41:08.156Z",
+      "evidence": {
+        "inputForms": ["string", "Uint8Array", "Buffer"],
+        "uploadAndDownloadLimits": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "bounded output retains tail while callbacks receive complete streams",
+      "startedAt": "2026-10-10T00:41:11.019Z",
+      "evidence": {
+        "result": {
+          "command": "printf 0123456789abcdef; printf fedcba9876543210 >&2",
+          "args": [],
+          "success": true,
+          "exitCode": 0,
+          "stdout": "89abcdef",
+          "stderr": "76543210",
+          "executionTimeMs": 500,
+          "killed": false,
+          "timedOut": false,
+          "stdoutTruncated": true,
+          "stderrTruncated": true,
+          "stdoutDroppedBytes": 8,
+          "stderrDroppedBytes": 8
+        },
+        "out": "0123456789abcdef",
+        "err": "fedcba9876543210"
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "snapshot create, wait, expiry, checkpoint priority and clone overrides",
+      "startedAt": "2026-10-10T00:41:11.986Z",
+      "evidence": {
+        "snapshot": {
+          "capturedAt": "2026-10-10T00:41:12.189805Z",
+          "expiresAt": "2026-10-10T01:41:11.987Z",
+          "id": "snp-db4oja137lj0009k1fpg",
+          "kind": "filesystem",
+          "name": "audit-0a858741-1fd1-4458-a965-0cb9afaaace5",
+          "plan": "starter",
+          "requestedAt": "2026-10-10T00:41:12.069622Z",
+          "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+          "sourceSandboxId": "sbx-18p4gdb4oj7flot8c73cetjm0",
+          "status": "available"
+        },
+        "restoredId": "sbx-18p4gdb4ojdh42hec73edtqp0",
+        "preservedAfterSnapshotDeletion": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "clone fresh base fallback and attached clone",
+      "startedAt": "2026-10-10T00:41:30.854Z",
+      "evidence": {
+        "freshId": "sbx-18p4gdb4ojerbc2fs73b8iglg",
+        "attachmentPreservesSource": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "owned terminate, attached terminate and direct SDK lifecycle",
+      "startedAt": "2026-10-10T00:41:35.318Z",
+      "evidence": {
+        "owned": "sbx-18p4gdb4ojg8473hc738ib7t0",
+        "attached": "sbx-18p4gdb4ojfo473hc738ib5s0",
+        "direct": "sbx-18p4gdb4ojgh42hec73edu5lg"
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "terminate cancellation mode and observe cancellation mode",
+      "startedAt": "2026-10-10T00:41:40.665Z",
+      "evidence": {
+        "terminatedId": "sbx-18p4gdb4ojh2jnfac73fvh4og",
+        "observationLeavesRemoteWork": true
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "released SDK legacy allow-list mismatch reproduction",
+      "startedAt": "2026-10-10T00:41:45.701Z",
+      "evidence": {
+        "diagnostic": "Expected failure reproduced in the unmodified SDK",
+        "failure": {
+          "statusCode": 400,
+          "message": "Failed to create sandbox: networkPolicy.rules must list at least one rule when networkPolicy.type is allow-list"
+        }
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "host positive controls and deny-all actual egress",
+      "startedAt": "2026-10-10T00:41:45.746Z",
+      "evidence": {
+        "host": [
+          {
+            "url": "https://example.com",
+            "status": 200
+          },
+          {
+            "url": "https://example.org",
+            "status": 200
+          },
+          {
+            "url": "http://example.com",
+            "status": 200
+          }
+        ],
+        "denied": [
+          {
+            "url": "https://example.com",
+            "error": "curl: (28) Resolving timed out after 4000 milliseconds\n",
+            "exitCode": 28
+          },
+          {
+            "url": "https://example.org",
+            "error": "curl: (28) Resolving timed out after 4000 milliseconds\n",
+            "exitCode": 28
+          },
+          {
+            "url": "http://example.com",
+            "error": "curl: (28) Resolving timed out after 4000 milliseconds\n",
+            "exitCode": 28
+          }
+        ]
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "explicit allow-all actual egress",
+      "startedAt": "2026-10-10T00:41:58.808Z",
+      "evidence": {
+        "sandboxId": "sbx-18p4gdb4ojlh42hec73edusig",
+        "results": [
+          {
+            "url": "https://example.com",
+            "status": 200,
+            "example": true
+          },
+          {
+            "url": "https://example.org",
+            "status": 200,
+            "example": true
+          },
+          {
+            "url": "http://example.com",
+            "status": 200,
+            "example": true
+          }
+        ]
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "HTTPS allow-list enforcement using rules",
+      "startedAt": "2026-10-10T00:42:01.835Z",
+      "evidence": {
+        "sandboxId": "sbx-18p4gdb4ojm942hec73edv16g",
+        "effectivePolicy": {
+          "type": "allow-list",
+          "default": "allow-list",
+          "rules": [
+            {
+              "domain": "example.com",
+              "protocol": "https"
+            }
+          ]
+        },
+        "results": [
+          {
+            "url": "https://example.com",
+            "status": 200,
+            "example": true
+          },
+          {
+            "url": "https://example.org",
+            "error": "curl: (35) Recv failure: Connection reset by peer\n",
+            "exitCode": 35
+          },
+          {
+            "url": "http://example.com",
+            "error": "curl: (56) Recv failure: Connection reset by peer\n",
+            "exitCode": 56
+          }
+        ]
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "HTTPS allow-list enforcement using allowedDomains",
+      "startedAt": "2026-10-10T00:42:04.983Z",
+      "evidence": {
+        "sandboxId": "sbx-18p4gdb4ojnd9fdbs73abbl0g",
+        "effectivePolicy": {
+          "type": "allow-list",
+          "default": "allow-list",
+          "rules": [
+            {
+              "domain": "example.com",
+              "protocol": "https"
+            }
+          ]
+        },
+        "results": [
+          {
+            "url": "https://example.com",
+            "status": 200,
+            "example": true
+          },
+          {
+            "url": "https://example.org",
+            "error": "curl: (35) Recv failure: Connection reset by peer\n",
+            "exitCode": 35
+          },
+          {
+            "url": "http://example.com",
+            "error": "curl: (56) Recv failure: Connection reset by peer\n",
+            "exitCode": 56
+          }
+        ]
+      },
+      "result": "PASS"
+    }
+  ],
+  "resources": [
+    "sbx-18p4gdb4oj7flot8c73cetjm0",
+    "sbx-18p4gdb4ojdh42hec73edtqp0",
+    "sbx-18p4gdb4ojerbc2fs73b8iglg",
+    "sbx-18p4gdb4ojfo473hc738ib5s0",
+    "sbx-18p4gdb4ojg8473hc738ib7t0",
+    "sbx-18p4gdb4ojgh42hec73edu5lg",
+    "sbx-18p4gdb4ojh2jnfac73fvh4og",
+    "sbx-18p4gdb4ojlh42hec73edusig",
+    "sbx-18p4gdb4ojm942hec73edv16g",
+    "sbx-18p4gdb4ojnd9fdbs73abbl0g"
+  ],
+  "snapshots": [
+    {
+      "expiresAt": "2026-10-10T01:41:11.987Z",
+      "id": "snp-db4oja137lj0009k1fpg",
+      "kind": "filesystem",
+      "name": "audit-0a858741-1fd1-4458-a965-0cb9afaaace5",
+      "plan": "starter",
+      "requestedAt": "2026-10-10T00:41:12.069622248Z",
+      "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+      "sourceSandboxId": "sbx-18p4gdb4oj7flot8c73cetjm0",
+      "status": "creating"
+    }
+  ],
+  "cleanup": [
+    {
+      "id": "sbx-18p4gdb4ojdh42hec73edtqp0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:30.573226Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojerbc2fs73b8iglg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:34.121544Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojfo473hc738ib5s0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:36.788692Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojg8473hc738ib7t0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:38.509201Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojgh42hec73edu5lg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:40.436114Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojh2jnfac73fvh4og",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:42.583807Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojlh42hec73edusig",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:42:01.518524Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojm942hec73edv16g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:42:04.703736Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojnd9fdbs73abbl0g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:42:07.789925Z"
+    },
+    {
+      "snapshotId": "snp-db4oja137lj0009k1fpg",
+      "deleted": true
+    },
+    {
+      "id": "sbx-18p4gdb4ojnd9fdbs73abbl0g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:42:07.789925Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojm942hec73edv16g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:42:04.703736Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojlh42hec73edusig",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:42:01.518524Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojh2jnfac73fvh4og",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:42.583807Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojg8473hc738ib7t0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:38.509201Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojfo473hc738ib5s0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:36.788692Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojerbc2fs73b8iglg",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:34.121544Z"
+    },
+    {
+      "id": "sbx-18p4gdb4ojdh42hec73edtqp0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:41:30.573226Z"
+    },
+    {
+      "id": "sbx-18p4gdb4oj7flot8c73cetjm0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:42:09.699563Z"
+    }
+  ],
+  "finishedAt": "2026-10-10T00:42:10.025Z",
+  "result": "PASS"
+}

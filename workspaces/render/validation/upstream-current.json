@@ -1,0 +1,44 @@
+{
+  "repository": "https://github.com/mastra-ai/mastra",
+  "commit": "918704fd4608aa4d9d90d4d92c0a3429de2b880a",
+  "coreVersion": "1.76.0-alpha.5",
+  "archiveSha256": "0721c97842c8c3956e6aee1571e5f844fd660fd3bcac29f6b55981db56c66d82",
+  "coreTarballSha256": "c3a266bdf4f70d938e696b86a992cf71f468d65e7fc7853a61f4cad39af52449",
+  "build": "PASS: 14 tasks",
+  "adapterTypecheck": "PASS",
+  "adapterTests": {
+    "passed": 46,
+    "files": 3
+  },
+  "liveAgent": "upstream-agent-result.json",
+  "liveCancellation": "upstream-cancellation.json",
+  "cancellationReporting": {
+    "unmodifiedMain": "FAIL",
+    "publishedCore1.75.0": "FAIL",
+    "publishedCore1.67.0": "PASS",
+    "proposedPatch": "PASS"
+  },
+  "proposal": {
+    "path": "../docs/upstream-cancellation.patch",
+    "sha256": "1db5d9691b9bc6dfb17706b45a38e8e49e559ff5ebd4a0c1a4148fc51fc9829f",
+    "coreTestsPassed": 55,
+    "publicReproduction": "PASS",
+    "published": false,
+    "upstreamIssue": {
+      "url": "https://github.com/mastra-ai/mastra/issues/26580",
+      "number": 26580,
+      "stateAtSubmission": "open",
+      "createdAt": "2026-10-09T23:18:55Z",
+      "fixPullRequest": null,
+      "reproRecheck": {
+        "publishedCore1.75.0ExitCode": 1,
+        "unmodifiedMainExitCode": 1,
+        "patchedCoreExitCode": 0
+      }
+    }
+  },
+  "workflows": "Absent in current-main consumer. Coexistence verified separately on core 1.67.0, the Workflows package exact peer.",
+  "finalAdapterTarballSha256": "21c331542242469e343ac20386d366eebccf94e02696cbbdcc31eb38f8ea8a35",
+  "finalDistMatchesLiveTestedBuild": true,
+  "cleanupAudit": "cleanup.json"
+}

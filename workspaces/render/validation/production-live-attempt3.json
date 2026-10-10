@@ -1,0 +1,36 @@
+{
+  "startedAt": "2026-10-10T00:00:48.437Z",
+  "sdk": "1.2.0",
+  "core": "1.75.0",
+  "cases": [
+    {
+      "name": "local file, tar directory and gzip archive uploads",
+      "startedAt": "2026-10-10T00:00:52.106Z",
+      "result": "FAIL",
+      "error": "RenderSandboxError: Render sandbox stream failure",
+      "causes": [
+        {
+          "name": "RenderSandboxError",
+          "message": "Render sandbox stream failure",
+          "code": "STREAM"
+        },
+        {
+          "name": "ClientError",
+          "message": "Failed to upload sandbox file: {\"code\":\"unsupported_media_type\",\"message\":\"unsupported Content-Type \\\"application/gzip\\\"\"}\n"
+        }
+      ]
+    }
+  ],
+  "resources": ["sbx-18p4gdb4o0c7lk1mc73fd4sag"],
+  "snapshots": [],
+  "cleanup": [
+    {
+      "id": "sbx-18p4gdb4o0c7lk1mc73fd4sag",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:00:55.764877Z"
+    }
+  ],
+  "result": "FAIL",
+  "error": "RenderSandboxError: Render sandbox stream failure",
+  "finishedAt": "2026-10-10T00:00:56.079Z"
+}

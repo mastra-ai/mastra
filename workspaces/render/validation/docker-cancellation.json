@@ -1,0 +1,68 @@
+{
+  "core": "1.75.0",
+  "dockerProvider": "0.10.0-alpha.1",
+  "providerSource": "918704fd4608aa4d9d90d4d92c0a3429de2b880a",
+  "startedAt": "2026-10-09T22:23:41.751Z",
+  "evidence": "Live Docker container; no SDK or provider mocks",
+  "image": "sha256:dd9d21971ec4395903fa6143c2b9267d048ae01ca6d3ea96f16cb30df6187d94",
+  "id": "mastra-cancel-check-1791584621750",
+  "cases": [
+    {
+      "mode": "normal",
+      "pids": [20, 27],
+      "exitEvent": {
+        "exitCode": 0,
+        "success": true,
+        "executionTimeMs": 2112
+      },
+      "toolOutput": "started:20 child:27\n",
+      "markersWritten": true,
+      "containerStillRunning": true,
+      "result": "PASS"
+    },
+    {
+      "mode": "abort",
+      "pids": [84, 91],
+      "exitEvent": {
+        "exitCode": 137,
+        "success": false,
+        "executionTimeMs": 114,
+        "killed": true,
+        "timedOut": false
+      },
+      "toolOutput": "stdout:\nstarted:84 child:91\n\n\nstderr:\nsetsid: child 82 did not exit normally: Success\n\nCommand aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.\nExit code: 137",
+      "processesGone": true,
+      "markersWritten": false,
+      "containerStillRunning": true,
+      "result": "PASS"
+    },
+    {
+      "mode": "timeout",
+      "pids": [133, 140],
+      "exitEvent": {
+        "exitCode": 137,
+        "success": false,
+        "executionTimeMs": 397,
+        "killed": true,
+        "timedOut": true
+      },
+      "toolOutput": "stdout:\nstarted:133 child:140\n\n\nstderr:\nsetsid: child 131 did not exit normally: Success\n\nExit code: 137",
+      "processesGone": true,
+      "markersWritten": false,
+      "containerStillRunning": true,
+      "result": "PASS"
+    }
+  ],
+  "containerId": "08634f6235e6e92c19f7d90f365a17026f8bde84c511c3ab25c8b286d7e876dd",
+  "result": "PASS",
+  "cleanup": {
+    "containerId": "08634f6235e6e92c19f7d90f365a17026f8bde84c511c3ab25c8b286d7e876dd",
+    "removed": true,
+    "verification": "Docker inspect returned 404",
+    "independentCliCheck": "PASS: inspect reports no such object; no matching container remains"
+  },
+  "dockerEngine": "29.7.2",
+  "imageTagAtTest": "node:22.22.0-bookworm-slim",
+  "providerTarballSha256": "9188d64d6ec1583ba6c3b5bbe7e7a4d8bf68d901cdb57b0264ca8cf020e82f75",
+  "desktopState": "Docker Desktop was started for this test and remains running; only the task-owned container was removed."
+}

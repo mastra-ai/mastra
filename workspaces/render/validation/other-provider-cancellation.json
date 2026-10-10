@@ -1,0 +1,75 @@
+{
+  "commit": "918704fd4608aa4d9d90d4d92c0a3429de2b880a",
+  "core": "1.75.0",
+  "modal": "0.7.1",
+  "startedAt": "2026-10-09T21:59:45.550Z",
+  "cases": [
+    {
+      "provider": "Modal",
+      "mode": "normal",
+      "evidence": "Real source-built adapter and tool; Modal SDK substituted with a real local child process. Not a Modal cloud test.",
+      "toolOutput": "started:86080\n",
+      "exitEvent": {
+        "exitCode": 0,
+        "success": true,
+        "executionTimeMs": 581
+      },
+      "aliveWhenToolReturned": false,
+      "eventualProcessExit": {
+        "code": 0,
+        "signal": null
+      },
+      "markerWritten": true,
+      "readerCancels": 0,
+      "terminateCallsBeforeDestroy": 0,
+      "cancellationReporting": "PASS: normal command control",
+      "cleanup": "child process exited; workspace destroyed"
+    },
+    {
+      "provider": "Modal",
+      "mode": "cancel",
+      "evidence": "Real source-built adapter and tool; Modal SDK substituted with a real local child process. Not a Modal cloud test.",
+      "toolOutput": "started:86091\n\nCommand aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.\nExit code: 137",
+      "exitEvent": {
+        "exitCode": 137,
+        "success": false,
+        "executionTimeMs": 100,
+        "killed": true,
+        "timedOut": false
+      },
+      "aliveWhenToolReturned": true,
+      "eventualProcessExit": {
+        "code": 0,
+        "signal": null
+      },
+      "markerWritten": true,
+      "readerCancels": 2,
+      "terminateCallsBeforeDestroy": 0,
+      "cancellationReporting": "FAIL: adapter reports killed while the process continues",
+      "cleanup": "child process exited; workspace destroyed"
+    },
+    {
+      "provider": "LocalSandbox",
+      "evidence": "Live local process; no provider or process mocking",
+      "toolOutput": "started:86123\n\nCommand aborted: the run was cancelled (by the user or system) while this command was running, so it was killed before it finished.\nExit code: 128",
+      "exitEvent": {
+        "exitCode": 128,
+        "success": false,
+        "executionTimeMs": 81,
+        "killed": true,
+        "timedOut": false
+      },
+      "processStillExists": false,
+      "markerWritten": false,
+      "cancellationReporting": "PASS: actual process termination confirmed",
+      "cleanup": "process absent; workspace destroyed in finally"
+    }
+  ],
+  "modalSource": "https://github.com/mastra-ai/mastra/blob/918704fd4608aa4d9d90d4d92c0a3429de2b880a/workspaces/modal/src/sandbox/process-manager.ts",
+  "modalTarballSha256": "58d5f50641516d090ec61e4d42737f1750216b17590f0fc0d6c8923cc71dd066",
+  "modalSdkVersion": "0.10.1",
+  "diagnosticAssertionsPassed": 3,
+  "cloudModalTested": false,
+  "accessLimits": "No Modal credentials configured. Docker executable exists but its daemon is unavailable.",
+  "fixScope": "The shared-tool proposal fixes unconfirmed termination. Modal separately emits an incorrect killed:true result, which that proposal intentionally still trusts."
+}

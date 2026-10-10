@@ -1,0 +1,63 @@
+{
+  "startedAt": "2026-10-10T00:08:38.314Z",
+  "sdk": "1.2.0",
+  "core": "1.75.0",
+  "cases": [
+    {
+      "name": "Mastra checkpoint hook",
+      "startedAt": "2026-10-10T00:08:42.126Z",
+      "evidence": {
+        "snapshotId": "snp-db4o42h37lj0009k11tg",
+        "name": "render-fb8e41a7-d2ab-4a29-8259-a59ebde22ecb"
+      },
+      "result": "PASS"
+    },
+    {
+      "name": "named snapshot restore and clone seed fallback",
+      "startedAt": "2026-10-10T00:08:58.441Z",
+      "evidence": {
+        "namedRestore": "sbx-18p4gdb4o46id0e5s73csl5p0",
+        "seedFallback": "sbx-18p4gdb4o47d9fdbs73a9ij8g"
+      },
+      "result": "PASS"
+    }
+  ],
+  "resources": ["sbx-18p4gdb4o41nlk1mc73fdhf4g", "sbx-18p4gdb4o46id0e5s73csl5p0", "sbx-18p4gdb4o47d9fdbs73a9ij8g"],
+  "snapshots": [
+    {
+      "capturedAt": "2026-10-10T00:08:42.343001Z",
+      "expiresAt": "2026-10-13T00:08:42.185208Z",
+      "id": "snp-db4o42h37lj0009k11tg",
+      "kind": "filesystem",
+      "name": "render-fb8e41a7-d2ab-4a29-8259-a59ebde22ecb",
+      "plan": "starter",
+      "requestedAt": "2026-10-10T00:08:42.233977Z",
+      "sandboxGroupId": "sbg-dav967vlot8c73bg8650",
+      "sourceSandboxId": "sbx-18p4gdb4o41nlk1mc73fdhf4g",
+      "status": "available"
+    }
+  ],
+  "cleanup": [
+    {
+      "snapshotId": "snp-db4o42h37lj0009k11tg",
+      "deleted": true
+    },
+    {
+      "id": "sbx-18p4gdb4o47d9fdbs73a9ij8g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:09:04.333081Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o46id0e5s73csl5p0",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:09:04.205714Z"
+    },
+    {
+      "id": "sbx-18p4gdb4o41nlk1mc73fdhf4g",
+      "status": "terminated",
+      "terminatedAt": "2026-10-10T00:09:06.679297Z"
+    }
+  ],
+  "result": "PASS",
+  "finishedAt": "2026-10-10T00:09:06.931Z"
+}
