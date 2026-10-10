@@ -613,6 +613,24 @@ export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
   abortSignal?: AbortSignal;
 }
 
+/** The most recent transcript in a snapshot: workflow state, else the last step output carrying one. */
+function latestMessageListState(snapshot: {
+  value?: Record<string, any>;
+  state?: Record<string, any>;
+  context?: Record<string, any>;
+}): unknown {
+  // Workflow state (setState) is persisted under `value`.
+  if (snapshot.value?.messageListState) return snapshot.value.messageListState;
+  if (snapshot.state?.messageListState) return snapshot.state.messageListState;
+  let latest: { at: number; value: unknown } | undefined;
+  for (const step of Object.values(snapshot.context ?? {})) {
+    const value = step?.output?.messageListState;
+    const at = step?.endedAt ?? step?.startedAt ?? 0;
+    if (value && (!latest || at >= latest.at)) latest = { at, value };
+  }
+  return latest?.value;
+}
+
 export class DurableAgent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -878,6 +896,26 @@ export class DurableAgent<
         }
       },
     };
+  }
+
+  /**
+   * The transcript as of the crash. The loop snapshot's input only has the one the run
+   * started with; later steps keep it in the nested execution workflow's state.
+   */
+  async #loadLatestMessageListState(
+    workflowsStore: WorkflowsStorage,
+    runId: string,
+    loopSnapshot: WorkflowRunState,
+  ): Promise<unknown> {
+    try {
+      const nested = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_EXECUTION });
+      const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
+      const fromNested = snapshot && latestMessageListState(snapshot);
+      if (fromNested) return fromNested;
+    } catch {
+      // Fall back to the loop snapshot.
+    }
+    return latestMessageListState(loopSnapshot);
   }
 
   async #loadRecoverableSnapshot(
@@ -1188,12 +1226,15 @@ export class DurableAgent<
     abortController,
     recoveryLease,
     originalSpansEnded,
+    latestMessageListState,
   }: {
     runId: string;
     workflowInput: DurableAgenticWorkflowInput;
     abortController: AbortController;
     recoveryLease: RecoveryLease;
     originalSpansEnded: boolean;
+    /** The transcript as of the crash; `workflowInput` only has the one the run started with. */
+    latestMessageListState?: unknown;
   }): Promise<RehydratedRecoveryState> {
     const requestContext: RequestContext = workflowInput.requestContextEntries
       ? new RequestContext(Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>)
@@ -1287,6 +1328,12 @@ export class DurableAgent<
         memoryConfig: workflowInput.state?.memoryConfig,
         autoResumeSuspendedTools: workflowInput.options?.autoResumeSuspendedTools,
         clientTools: workflowInput.options?.clientTools as ToolsInput | undefined,
+        // Tools a processor (ToolSearch) loaded mid-run are only recorded in the run's transcript (#26437).
+        runMessages: latestMessageListState
+          ? new MessageList({ threadId, resourceId })
+              .deserialize(latestMessageListState as Parameters<MessageList['deserialize']>[0])
+              .get.all.db()
+          : undefined,
       });
       workspace = await wrapped.getWorkspace({ requestContext });
     } catch (error) {
@@ -3228,6 +3275,7 @@ export class DurableAgent<
         abortController,
         recoveryLease,
         originalSpansEnded: originalSpansEndedBeforeCrash(loaded.snapshot),
+        latestMessageListState: await this.#loadLatestMessageListState(workflowsStore, runId, loaded.snapshot),
       });
     } catch (error) {
       await recoveryLease.release();
