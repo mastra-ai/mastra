@@ -4,10 +4,13 @@
 
 export {
   createConfiguredWebTools,
+  createFirecrawlWebExtractTool,
+  createFirecrawlWebSearchTool,
   createParallelWebExtractTool,
   createParallelWebSearchTool,
   createWebExtractTool,
   createWebSearchTool,
+  hasFirecrawlKey,
   hasParallelKey,
   hasTavilyKey,
   resolveWebSearchProvider,

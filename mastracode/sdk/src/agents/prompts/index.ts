@@ -10,7 +10,7 @@ import { buildBasePrompt } from '@mastra/core/coding-agent';
 import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
 import { loadSettings, resolveLspSetting } from '../../onboarding/settings.js';
 import { MC_TOOLS } from '../../tool-names.js';
-import { hasParallelKey, hasTavilyKey } from '../../tools/index.js';
+import { hasFirecrawlKey, hasParallelKey, hasTavilyKey } from '../../tools/index.js';
 import { getLocalPlansRelativeDir } from '../../utils/plans.js';
 import {
   loadAgentInstructions,
@@ -87,6 +87,7 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   // Determine whether web search tools are available
   const modelId = ctx.modelId;
   const hasWebSearch =
+    hasFirecrawlKey() ||
     hasParallelKey() ||
     hasTavilyKey() ||
     (!!modelId && (modelId.startsWith('anthropic/') || modelId.startsWith('openai/')));
