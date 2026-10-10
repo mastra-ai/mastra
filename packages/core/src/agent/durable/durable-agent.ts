@@ -2887,12 +2887,25 @@ export class DurableAgent<
     await priorExecution?.catch(() => {
       /* errors already handled by the prior segment */
     });
-    const initialToolCalls = await this.#loadSuspendedToolCalls(runId);
-
-    // Skip events already broadcast by the original run (e.g. the SUSPENDED
-    // chunk that paused it). Without this, a resume that closes on suspend
-    // (resumeGenerate) would immediately close on the replayed SUSPENDED.
-    const resumeOffset = await this.#getPubsubOffset(runId);
+    let initialToolCalls: ToolCallChunk[];
+    let resumeOffset: number | 'latest';
+    try {
+      initialToolCalls = await this.#loadSuspendedToolCalls(runId);
+      // Skip events already broadcast by the original run (e.g. the SUSPENDED
+      // chunk that paused it). Without this, a resume that closes on suspend
+      // (resumeGenerate) would immediately close on the replayed SUSPENDED.
+      resumeOffset = await this.#getPubsubOffset(runId);
+    } catch (error) {
+      // The caller gets no cleanup handle and the prior segment no longer owns
+      // the run, so release what this segment claimed before rethrowing.
+      if (this.#segmentOwner.get(runId) === segment) {
+        this.#segmentOwner.delete(runId);
+        this.#runRegistry.cleanup(runId);
+        globalRunRegistry.delete(runId);
+        this.#clearPubsubTopic(runId);
+      }
+      throw error;
+    }
 
     // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
     // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume

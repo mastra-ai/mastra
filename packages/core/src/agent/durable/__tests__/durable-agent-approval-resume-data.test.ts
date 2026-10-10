@@ -358,4 +358,42 @@ describe('DurableAgent approval resume data', () => {
     resumed.cleanup();
     await vi.waitFor(() => expect(globalRunRegistry.get(initial.runId)).toBeUndefined());
   });
+
+  it('releases the run when resume setup fails', async () => {
+    const approvalTool = createTool({
+      id: 'approvalTool',
+      description: 'approval-gated tool',
+      inputSchema: z.object({ value: z.string() }),
+      requireApproval: true,
+      execute: async () => 'ok',
+    });
+    const baseAgent = new Agent({
+      id: 'approval-resume-fail-agent',
+      name: 'Approval Resume Fail Agent',
+      instructions: 'Use the approval tool.',
+      model: createToolCallThenTextModel({ name: 'approvalTool', args: { value: 'test' } }) as LanguageModelV2,
+      tools: { approvalTool },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, agents: { approvalResumeFailAgent: durableAgent } });
+
+    let suspendedData: unknown;
+    const initial = await durableAgent.stream('Run the approval tool', {
+      onSuspended: data => {
+        suspendedData = data;
+      },
+    });
+    await vi.waitFor(() => expect(suspendedData).toBeDefined());
+
+    const workflows = (await storage.getStore('workflows'))!;
+    vi.spyOn(workflows, 'getWorkflowRunById').mockRejectedValue(new Error('storage down'));
+    await expect(durableAgent.resume(initial.runId, { approved: true })).rejects.toThrow('storage down');
+
+    initial.cleanup();
+    await vi.waitFor(() => {
+      expect(globalRunRegistry.has(initial.runId)).toBe(false);
+      expect(durableAgent.runRegistry.has(initial.runId)).toBe(false);
+    });
+  });
 });

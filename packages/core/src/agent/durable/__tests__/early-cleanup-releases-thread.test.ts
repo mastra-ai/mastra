@@ -67,6 +67,6 @@ describe('DurableAgent cleanup() before the run ends (#25974)', () => {
     res.cleanup();
 
     await vi.waitFor(() => expect(agent.getActiveThreadRunId(thread)).toBeUndefined(), { timeout: 5000 });
-    expect(fired).toContain(expected);
+    await vi.waitFor(() => expect(fired).toContain(expected), { timeout: 5000 });
   });
 });
