@@ -121,6 +121,39 @@ describe('runEvals', () => {
       expect(result.summary.totalItems).toBe(2);
     });
 
+    it('should warn when the target is not registered with a Mastra instance', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        await runEvals({
+          data: testData,
+          scorers: [createMockScorer('toxicity', 0.9)],
+          target: mockAgent,
+        });
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('not registered with a Mastra instance'));
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('should not warn when the target is registered with a Mastra instance', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const mastra = new Mastra({ agents: { mockAgent }, logger: false });
+
+      try {
+        await runEvals({
+          data: testData,
+          scorers: [createMockScorer('toxicity', 0.9)],
+          target: mastra.getAgent('mockAgent'),
+        });
+
+        expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('not registered with a Mastra instance'));
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
     it('should run experiment with multiple scorers', async () => {
       const result = await runEvals({
         data: testData,
@@ -288,6 +321,90 @@ describe('runEvals', () => {
     });
   });
   describe('Error handling', () => {
+    it('should warn once per duplicate gate id', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        await runEvals({
+          data: testData,
+          scorers: [],
+          target: mockAgent,
+          gates: [
+            createMockScorer('check-called-tool', 1),
+            createMockScorer('check-called-tool', 1),
+            createMockScorer('check-called-tool', 1),
+          ],
+        });
+
+        const duplicateWarnings = warnSpy.mock.calls.filter(([msg]) =>
+          String(msg).includes('Duplicate scorer id "check-called-tool" in `gates`'),
+        );
+        expect(duplicateWarnings).toHaveLength(1);
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('should warn on duplicate scorer ids', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        await runEvals({
+          data: testData,
+          scorers: [createMockScorer('toxicity', 0.9), { scorer: createMockScorer('toxicity', 0.9), threshold: 0.5 }],
+          target: mockAgent,
+        });
+
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Duplicate scorer id "toxicity" in `scorers`'));
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('should warn on duplicate ids inside structured scorer configs', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        await runEvals({
+          data: testData,
+          scorers: {
+            agent: [createMockScorer('toxicity', 0.9), createMockScorer('toxicity', 0.9)],
+            trajectory: [
+              createMockScorer('code-trajectory-accuracy-scorer', 1),
+              createMockScorer('code-trajectory-accuracy-scorer', 1),
+            ],
+          },
+          target: mockAgent,
+        });
+
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Duplicate scorer id "toxicity" in `scorers.agent`'),
+        );
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Duplicate scorer id "code-trajectory-accuracy-scorer" in `scorers.trajectory`'),
+        );
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('should not warn when scorer ids are unique', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        await runEvals({
+          data: testData,
+          scorers: [createMockScorer('toxicity', 0.9)],
+          target: mockAgent,
+          gates: [createMockScorer('gate-a', 1), createMockScorer('gate-b', 1)],
+        });
+
+        expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('Duplicate scorer id'));
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
     it('should handle agent generate errors', async () => {
       mockAgent.generateLegacy = vi.fn().mockRejectedValue(new Error('Agent error'));
 
@@ -400,6 +517,48 @@ describe('runEvals', () => {
 
       expect(mockScorers[0].run).not.toHaveBeenCalled();
       expect(mockScorers[1].run).toHaveBeenCalled();
+    });
+
+    it('should run a trajectory-only scorer config against the workflow step trajectory', async () => {
+      const fetchStep = createStep({
+        id: 'fetch-weather',
+        inputSchema: z.object({ city: z.string() }),
+        outputSchema: z.object({ forecast: z.string() }),
+        execute: async ({ inputData }) => ({ forecast: `Sunny in ${inputData.city}` }),
+      });
+      const planStep = createStep({
+        id: 'plan-activities',
+        inputSchema: z.object({ forecast: z.string() }),
+        outputSchema: z.object({ activities: z.string() }),
+        execute: async ({ inputData }) => ({ activities: `Go outside: ${inputData.forecast}` }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'weather-workflow',
+        inputSchema: z.object({ city: z.string() }),
+        outputSchema: z.object({ activities: z.string() }),
+      })
+        .then(fetchStep)
+        .then(planStep)
+        .commit();
+
+      const trajectoryScorer = createScorer({
+        id: 'workflow-step-order',
+        name: 'Workflow step order',
+        description: 'Checks the workflow trajectory contains both steps in order',
+        type: 'trajectory',
+      }).generateScore(({ run }) => {
+        const names = run.output?.steps?.map((s: any) => s.name) ?? [];
+        return names[0] === 'fetch-weather' && names[1] === 'plan-activities' ? 1 : 0;
+      });
+
+      const result = await runEvals({
+        data: [{ input: { city: 'London' } }],
+        scorers: { trajectory: [trajectoryScorer] },
+        target: workflow,
+      });
+
+      expect(result.scores.trajectory['workflow-step-order']).toBe(1);
     });
 
     it('should run scorers on individual step results', async () => {

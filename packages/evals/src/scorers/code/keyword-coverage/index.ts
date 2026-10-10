@@ -1,11 +1,12 @@
 import { createScorer } from '@mastra/core/evals';
 import keyword_extractor from 'keyword-extractor';
 import { getTextContentFromMastraDBMessage } from '../../utils';
+import type { ScorerIdentityOptions } from '../../utils';
 
-export function createKeywordCoverageScorer() {
+export function createKeywordCoverageScorer(options: ScorerIdentityOptions = {}) {
   return createScorer({
-    id: 'keyword-coverage-scorer',
-    name: 'Keyword Coverage Scorer',
+    id: options.id ?? 'keyword-coverage-scorer',
+    name: options.name ?? 'Keyword Coverage Scorer',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
     type: 'agent',

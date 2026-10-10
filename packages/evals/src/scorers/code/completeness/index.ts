@@ -2,6 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
 import nlp from 'compromise';
 import { getTextContentFromMastraDBMessage } from '../../utils';
+import type { ScorerIdentityOptions } from '../../utils';
 
 function normalizeString(str: string): string {
   // Remove diacritics and convert to lowercase
@@ -74,10 +75,10 @@ function calculateCoverage({ original, simplified }: { original: string[]; simpl
   return covered.length / original.length;
 }
 
-export function createCompletenessScorer() {
+export function createCompletenessScorer(options: ScorerIdentityOptions = {}) {
   return createScorer({
-    id: 'completeness-scorer',
-    name: 'Completeness Scorer',
+    id: options.id ?? 'completeness-scorer',
+    name: options.name ?? 'Completeness Scorer',
     description:
       'Leverage the nlp method from "compromise" to extract elements from the input and output and calculate the coverage.',
     type: 'agent',

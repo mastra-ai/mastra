@@ -8,6 +8,7 @@ import type {
 } from '../../agent';
 import { isSupportedLanguageModel } from '../../agent';
 import { MastraError } from '../../error';
+import { ConsoleLogger, LogLevel } from '../../logger';
 import { validateAndSaveScore } from '../../mastra/hooks';
 import type { ObservabilityContext } from '../../observability';
 import { EntityType, resolveObservabilityContext } from '../../observability';
@@ -352,6 +353,14 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
   // Agent uses getMastraInstance(), Workflow uses .mastra getter
   const mastra = (target as any).getMastraInstance?.() || (target as any).mastra;
   const storage = mastra?.getStorage();
+
+  if (!mastra) {
+    runEvalsLogger.warn(
+      `Target "${target.id}" is not registered with a Mastra instance. ` +
+        'Registry lookups (mastra.getAgent(), mastra.getWorkflow(), .agent("id")), score persistence, and trace-based trajectories are unavailable. ' +
+        'Pass mastra.getAgent("id") or mastra.getWorkflow("id") as the target instead of importing it directly.',
+    );
+  }
 
   const pMap = (await import('p-map')).default;
   await pMap(
@@ -970,6 +979,42 @@ function validateEvalsInputs(
       text: 'Agent scorers must be an array of scorers or an AgentScorerConfig',
     });
   }
+
+  if (Array.isArray(scorers)) {
+    warnDuplicateScorerIds(scorers, 'scorers');
+  } else {
+    if (scorers.trajectory) warnDuplicateScorerIds(scorers.trajectory, 'scorers.trajectory');
+    if ('agent' in scorers && scorers.agent) warnDuplicateScorerIds(scorers.agent, 'scorers.agent');
+    if ('workflow' in scorers && scorers.workflow) warnDuplicateScorerIds(scorers.workflow, 'scorers.workflow');
+    if ('steps' in scorers && scorers.steps) {
+      for (const [stepId, stepScorers] of Object.entries(scorers.steps)) {
+        warnDuplicateScorerIds(stepScorers, `scorers.steps.${stepId}`);
+      }
+    }
+  }
+  if (gates) warnDuplicateScorerIds(gates, 'gates');
+}
+
+const runEvalsLogger = new ConsoleLogger({ name: 'runEvals', level: LogLevel.WARN });
+
+/**
+ * Results are keyed by scorer id, so entries sharing an id are combined into one
+ * result (a later scorer overwrites the earlier one's score for an item;
+ * gates pool their scores). Prebuilt factories accept `{ id }` to disambiguate.
+ */
+function warnDuplicateScorerIds(scorers: MastraScorer<any, any, any, any>[], field: string): void {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const scorer of scorers) {
+    if (seen.has(scorer.id)) duplicates.add(scorer.id);
+    seen.add(scorer.id);
+  }
+  for (const id of duplicates) {
+    runEvalsLogger.warn(
+      `Duplicate scorer id "${id}" in \`${field}\`. Results are keyed by id, so these entries are combined into a single result and a failure can't be attributed to one of them. ` +
+        `Pass a unique id to the factory, e.g. createTrajectoryAccuracyScorerCode({ id: 'fetch-weather-ran', ... }).`,
+    );
+  }
 }
 
 async function executeTarget(
@@ -1272,8 +1317,9 @@ async function runScorers(
         );
       }
     }
-  } else if (isAgentScorerConfig(scorers)) {
-    // Handle agent scorer config (agent-level + trajectory scorers)
+  } else if (targetEntityType !== EntityType.WORKFLOW_RUN && isAgentScorerConfig(scorers)) {
+    // Handle agent scorer config (agent-level + trajectory scorers).
+    // A trajectory-only config matches both agent and workflow shapes, so workflow targets always take the workflow path.
     if (scorers.agent) {
       const agentScorerResults: Record<string, any> = {};
       for (const scorer of scorers.agent) {
@@ -1358,9 +1404,10 @@ async function runScorers(
     }
   } else {
     // Handle workflow scorer config
-    if (scorers.workflow) {
+    const workflowScorers = scorers as WorkflowScorerConfig;
+    if (workflowScorers.workflow) {
       const workflowScorerResults: Record<string, any> = {};
-      for (const scorer of scorers.workflow) {
+      for (const scorer of workflowScorers.workflow) {
         const score = await scorer.run({
           input: targetResult.scoringData.input,
           output: targetResult.scoringData.output,
@@ -1379,9 +1426,9 @@ async function runScorers(
       }
     }
 
-    if (scorers.steps) {
+    if (workflowScorers.steps) {
       const stepScorerResults: Record<string, any> = {};
-      for (const [stepId, stepScorers] of Object.entries(scorers.steps)) {
+      for (const [stepId, stepScorers] of Object.entries(workflowScorers.steps)) {
         const stepResult = targetResult.scoringData.stepResults?.[stepId];
         // TODO : Ideally this would run on the trace.WORKFLOW_STEP span...
         // then we could directly add the score to that span

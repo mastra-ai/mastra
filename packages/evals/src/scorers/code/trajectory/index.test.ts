@@ -180,6 +180,18 @@ describe('createTrajectoryAccuracyScorerCode', () => {
     expect(scorer.name).toBe('Trajectory Accuracy Scorer');
   });
 
+  test('should allow overriding id and name so multiple instances can be distinguished', () => {
+    const scorer = createTrajectoryAccuracyScorerCode({
+      id: 'fetch-weather-ran',
+      name: 'fetch-weather ran',
+      expectedTrajectory,
+    });
+
+    expect(scorer.id).toBe('fetch-weather-ran');
+    expect(scorer.name).toBe('fetch-weather ran');
+    expect(scorer.description).toContain('[search → summarize]');
+  });
+
   describe('relaxed ordering (default)', () => {
     test('should return 1 when trajectory matches exactly', async () => {
       const scorer = createTrajectoryAccuracyScorerCode({ expectedTrajectory });
