@@ -1086,11 +1086,6 @@ describe('customProviders parsing/persistence', () => {
       );
     });
 
-    it("strips the mastracode/ gateway prefix for the gateway's built-in providers", () => {
-      expect(stripMastraCodeCustomProviderPrefix('mastracode/kimi-for-coding/k3', [])).toBe('kimi-for-coding/k3');
-      expect(stripMastraCodeCustomProviderPrefix('mastracode/github-copilot/gpt-5', [])).toBe('github-copilot/gpt-5');
-    });
-
     it('leaves legitimate mastracode gateway-routed ids unchanged', () => {
       expect(
         stripMastraCodeCustomProviderPrefix('mastracode/anthropic/claude-sonnet-4-20250514', customProviders),

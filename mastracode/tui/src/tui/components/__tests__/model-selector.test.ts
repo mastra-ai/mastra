@@ -89,12 +89,11 @@ describe('makeCustomModelItem', () => {
 });
 
 describe('MastraCode gateway catalog models', () => {
-  const kimiModels: ModelItem[] = ['k3', 'k3-256k'].map(modelName => ({
-    id: `mastracode/kimi-for-coding/${modelName}`,
-    provider: 'mastracode/kimi-for-coding',
+  const customProviderModels: ModelItem[] = ['gemma-4-31b', 'gemma-4-9b'].map(modelName => ({
+    id: `mastracode/acme-local/${modelName}`,
+    provider: 'mastracode/acme-local',
     modelName,
-    hasApiKey: false,
-    apiKeyEnvVar: 'KIMI_API_KEY',
+    hasApiKey: true,
   }));
 
   function createSelector(catalog: ModelItem[]) {
@@ -113,47 +112,42 @@ describe('MastraCode gateway catalog models', () => {
     return { selector, onSelect, screen };
   }
 
-  it('lists and selects a typed gateway model under its canonical id', () => {
-    const { selector, onSelect, screen } = createSelector([...models, ...kimiModels]);
+  it('lists and selects a typed custom provider model under its canonical id', () => {
+    const { selector, onSelect, screen } = createSelector([...models, ...customProviderModels]);
 
-    for (const character of 'kimi-for-coding/k3') selector.handleInput(character);
+    for (const character of 'acme-local/gemma-4-31b') selector.handleInput(character);
 
-    expect(screen()).not.toContain('Use: kimi-for-coding/k3');
+    expect(screen()).not.toContain('Use: acme-local/gemma-4-31b');
     expect(screen()).not.toContain('mastracode/');
-    expect(screen()).toContain('→ kimi-for-coding/k3');
+    expect(screen()).toContain('→ acme-local/gemma-4-31b');
     selector.handleInput('\r');
     expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'kimi-for-coding/k3', provider: 'kimi-for-coding', apiKeyEnvVar: 'KIMI_API_KEY' }),
+      expect.objectContaining({ id: 'acme-local/gemma-4-31b', provider: 'acme-local' }),
     );
   });
 
   it('keeps the authenticated entry when a canonical id is listed twice', () => {
     const { selector, onSelect } = createSelector([
-      { id: 'github-copilot/gpt-5', provider: 'github-copilot', modelName: 'gpt-5', hasApiKey: false },
-      {
-        id: 'mastracode/github-copilot/gpt-5',
-        provider: 'mastracode/github-copilot',
-        modelName: 'gpt-5',
-        hasApiKey: true,
-      },
+      { id: 'ollama/llama-4', provider: 'ollama', modelName: 'llama-4', hasApiKey: false },
+      { id: 'mastracode/ollama/llama-4', provider: 'mastracode/ollama', modelName: 'llama-4', hasApiKey: true },
     ]);
 
-    for (const character of 'github-copilot/gpt-5') selector.handleInput(character);
+    for (const character of 'ollama/llama-4') selector.handleInput(character);
     selector.handleInput('\r');
 
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'github-copilot/gpt-5', provider: 'github-copilot', hasApiKey: true }),
+      expect.objectContaining({ id: 'ollama/llama-4', provider: 'ollama', hasApiKey: true }),
     );
   });
 
   it('saves a typed id that matches no catalog row exactly as typed', () => {
-    const { selector, onSelect, screen } = createSelector([...models, ...kimiModels]);
+    const { selector, onSelect, screen } = createSelector([...models, ...customProviderModels]);
 
-    for (const character of 'kimi-for-coding/k4') selector.handleInput(character);
+    for (const character of 'acme-local/gemma-5') selector.handleInput(character);
 
-    expect(screen()).toContain('Use: kimi-for-coding/k4');
+    expect(screen()).toContain('Use: acme-local/gemma-5');
     selector.handleInput('\r');
-    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'kimi-for-coding/k4' }));
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ id: 'acme-local/gemma-5' }));
   });
 });

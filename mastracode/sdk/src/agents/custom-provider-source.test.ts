@@ -1,7 +1,6 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { MASTRACODE_GATEWAY_BUILTIN_PROVIDER_IDS } from '../onboarding/settings.js';
 import {
   hasCustomProvidersSource,
   resolveCustomProviders,
@@ -76,20 +75,5 @@ describe('gateway consumption', () => {
 
     const providers = await gateway.fetchProviders();
     expect(Object.values(providers).some(config => config.name === 'FromSource')).toBe(false);
-  });
-
-  it('only catalogs built-in providers that saved ids are normalized for', async () => {
-    const gateway = new MastraCodeGateway({
-      mastraGatewayBaseUrl: 'https://gateway.example.com',
-      routeThroughMastraGateway: false,
-      customProviders: [],
-      settingsPath: '/nonexistent/settings.json',
-    });
-
-    const providers = await gateway.fetchProviders();
-    expect(providers).toHaveProperty('kimi-for-coding');
-    for (const providerId of Object.keys(providers)) {
-      expect(MASTRACODE_GATEWAY_BUILTIN_PROVIDER_IDS).toContain(providerId);
-    }
   });
 });

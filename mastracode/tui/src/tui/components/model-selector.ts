@@ -74,9 +74,9 @@ export function makeCustomModelItem(id: string, models: ModelItem[]): ModelItem 
 const MASTRACODE_GATEWAY_PREFIX = 'mastracode/';
 
 /**
- * The shared catalog namespaces the MastraCode gateway's providers (custom
- * providers, Kimi For Coding, GitHub Copilot) as `mastracode/<provider>/<model>`,
- * but Mastra Code resolves and saves them as `<provider>/<model>`. Show and
+ * The shared catalog namespaces the MastraCode gateway's providers (the user's
+ * custom providers) as `mastracode/<provider>/<model>`, but Mastra Code
+ * resolves and saves them as `<provider>/<model>`. Show and
  * select them under that canonical id so typed ids match catalog rows and the
  * saved id resolves. When a canonical id is listed twice, keep the authenticated
  * entry.
