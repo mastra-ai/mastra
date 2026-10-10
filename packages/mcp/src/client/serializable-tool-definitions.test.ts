@@ -337,5 +337,27 @@ describe('serializable MCP tool definitions (issue #20527)', () => {
 
       expect(Object.keys(tools).sort()).toEqual(['weather_greet', 'weather_measure']);
     });
+
+    it('isolates a cached definition that fails to hydrate instead of aborting the catalog', async () => {
+      const definitions = await createClient().listToolDefinitions();
+      const cached = JSON.parse(JSON.stringify(definitions));
+      // A property value that is an array where a schema object is required: the shape
+      // strict function-calling providers reject up front. `toolFromDefinition` throws on
+      // it, which is exactly the case the per-tool try/catch has to absorb.
+      cached.weather.broken = {
+        ...cached.weather.greet,
+        name: 'broken',
+        inputSchema: { type: 'object', properties: { coin: ['not-a-schema'] } },
+      };
+      const warnSpy = vi.spyOn((mcp as any).logger, 'warn');
+
+      const tools = await mcp.toolsFromDefinitions({ definitions: cached });
+
+      // The valid siblings survive the one unhydratable definition.
+      expect(Object.keys(tools).sort()).toEqual(['weather_greet', 'weather_measure']);
+      const warnMessages = warnSpy.mock.calls.map(call => call[0]).join('\n');
+      expect(warnMessages).toContain('broken');
+      expect(warnMessages).toContain('weather');
+    });
   });
 });
