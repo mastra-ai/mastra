@@ -109,6 +109,12 @@ export function buildBwrapCommand(
     bwrapArgs.push('--bind', path, path);
   }
 
+  // Write-denied paths come after every write grant: in bwrap, later mounts win,
+  // so this shadows the workspace/readWritePaths binds even for nested paths.
+  for (const path of config.denyWritePaths ?? []) {
+    bwrapArgs.push('--ro-bind', path, path);
+  }
+
   // Mount a fresh /dev with the standard device nodes (null, zero, random,
   // urandom, tty, ...). Without it the namespace has no devices at all, so
   // git/ssh and ordinary shell redirections (`2>/dev/null`) fail with ENOENT.

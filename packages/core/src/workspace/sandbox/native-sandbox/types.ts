@@ -36,6 +36,15 @@ export interface NativeSandboxConfig {
   readWritePaths?: string[];
 
   /**
+   * Paths that are readable but never writable, even when nested inside the
+   * workspace or a `readWritePaths` entry. Applied after every write grant so
+   * it always wins — including when the same directory is also mounted
+   * read-write elsewhere. Mounted filesystems with `readOnly: true` are added
+   * here automatically.
+   */
+  denyWritePaths?: string[];
+
+  /**
    * Allow executing system binaries (node, python, etc.)
    * When false, only binaries within the workspace can be executed.
    * @default true
@@ -68,7 +77,8 @@ export interface NativeSandboxConfig {
    * Spawned processes can read but not write files in the working directory.
    * Enforced at the OS level (seatbelt profile / bwrap --ro-bind); ignored when isolation is 'none'.
    * Exceptions:
-   * - Paths listed in `readWritePaths` and mounted filesystem targets remain writable.
+   * - Paths listed in `readWritePaths` and mounted filesystem targets remain writable,
+   *   except mounts whose filesystem is `readOnly` (see `denyWritePaths`).
    * - Providing custom `bwrapArgs` or `seatbeltProfilePath` replaces the generated
    *   sandbox policy and may bypass this read-only restriction entirely.
    *
