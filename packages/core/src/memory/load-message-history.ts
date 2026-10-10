@@ -85,40 +85,61 @@ async function partitionMessages(
   limits: HistoryLimits,
   tokenCounter?: TokenCounter,
   initialTokens = 0,
-): Promise<LoadMessageHistoryResult & { overflowReason?: 'messages' | 'tokens' }> {
+): Promise<
+  LoadMessageHistoryResult & {
+    cutoff?: MastraDBMessage;
+    overflowReason?: 'messages' | 'tokens';
+  }
+> {
   const maxTokens = limits.maxTokens === undefined ? undefined : limits.maxTokens - (limits.atMaxRemoveTokens ?? 0);
   if (maxTokens !== undefined && !tokenCounter) {
     throw new Error('A token counter is required to load token-limited message history');
   }
 
+  const groups = groupLinkedToolMessages(messagesDescending);
+  const countWindowGroups: MastraDBMessage[][] = [];
+  const countWindowIds = new Set<string>();
   let messageCount = 0;
-  let tokenCount = initialTokens;
-  let reachedLimit = false;
-  let overflowReason: 'messages' | 'tokens' | undefined;
-  const retainedIds = new Set<string>();
+  let reachedMessageLimit = false;
 
-  for (const group of groupLinkedToolMessages(messagesDescending)) {
-    let groupTokens = 0;
-    if (tokenCounter) {
-      for (const message of group) groupTokens += await tokenCounter.countMessage(message);
-    }
+  for (const group of groups) {
     const exceedsMessageLimit = limits.maxMessages !== undefined && messageCount + group.length > limits.maxMessages;
-    const exceedsTokenLimit = maxTokens !== undefined && tokenCount + groupTokens > maxTokens;
-
-    if (reachedLimit || exceedsMessageLimit || exceedsTokenLimit) {
-      if (!reachedLimit) overflowReason = exceedsTokenLimit ? 'tokens' : 'messages';
-      reachedLimit = true;
+    if (reachedMessageLimit || exceedsMessageLimit) {
+      reachedMessageLimit = true;
       continue;
     }
 
     messageCount += group.length;
+    countWindowGroups.push(group);
+    group.forEach(message => countWindowIds.add(message.id));
+  }
+
+  const retainedIds = new Set<string>();
+  let tokenCount = initialTokens;
+  let reachedTokenLimit = false;
+
+  for (const group of countWindowGroups) {
+    let groupTokens = 0;
+    if (tokenCounter) {
+      for (const message of group) groupTokens += await tokenCounter.countMessage(message);
+    }
+    const exceedsTokenLimit = maxTokens !== undefined && tokenCount + groupTokens > maxTokens;
+    if (reachedTokenLimit || exceedsTokenLimit) {
+      reachedTokenLimit = true;
+      continue;
+    }
+
     tokenCount += groupTokens;
     group.forEach(message => retainedIds.add(message.id));
   }
 
   const messages = messagesDescending.filter(message => retainedIds.has(message.id)).reverse();
-  const overflow = messagesDescending.filter(message => !retainedIds.has(message.id)).reverse();
-  return { messages, overflow, overflowReason };
+  const overflow = messagesDescending
+    .filter(message => countWindowIds.has(message.id) && !retainedIds.has(message.id))
+    .reverse();
+  const cutoff = messagesDescending.find(message => !retainedIds.has(message.id));
+  const overflowReason = reachedTokenLimit ? 'tokens' : reachedMessageLimit ? 'messages' : undefined;
+  return { messages, overflow, cutoff, overflowReason };
 }
 
 function laterDate(left: Date | undefined, right: Date | undefined): Date | undefined {
@@ -191,8 +212,7 @@ export async function loadMessageHistory(args: LoadMessageHistoryArgs): Promise<
       return timeDifference || right.id.localeCompare(left.id);
     });
     const partitioned = await partitionMessages(sorted, args, args.tokenCounter, args.initialTokens);
-    const newestOverflow = partitioned.overflow.at(-1);
-    if (newestOverflow) cutoffTimestamp = newestOverflow.createdAt.getTime();
+    if (partitioned.cutoff) cutoffTimestamp = partitioned.cutoff.createdAt.getTime();
 
     const oldestPageMessage = result.messages.at(-1);
     const oldestTimestamp = oldestPageMessage?.createdAt.getTime();
