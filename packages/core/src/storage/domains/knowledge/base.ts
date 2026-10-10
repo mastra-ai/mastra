@@ -67,7 +67,7 @@ export interface ListKnowledgeScopeNodesInput {
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export interface ListKnowledgeScopeNodesOutput {
-  /** Scope nodes ordered by name, then id (code-unit order). */
+  /** Scope nodes ordered by name, then id, comparing characters by code (case-sensitive, not locale-aware). */
   scopes: KnowledgeScopeNodeSummary[];
   /** Pass back as `cursor` for the next page; `null` when this is the last page. */
   nextCursor: string | null;
