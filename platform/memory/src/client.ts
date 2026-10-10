@@ -23,17 +23,23 @@ export interface MemoryThread {
   updatedAt: string;
 }
 
+export type MemoryMessagePart = { type: string; [key: string]: unknown };
+
 export interface MemoryMessage {
   id: string;
   role: string;
   content: string;
+  /** Mastra V2 parts (text, tool-invocation, reasoning, file, …), stored verbatim. */
+  parts: MemoryMessagePart[];
   createdAt: string;
 }
 
 export interface MemoryMessageInput {
   id?: string;
   role: 'user' | 'assistant';
-  content: string;
+  /** Text content. Optional when `parts` is set. */
+  content?: string;
+  parts?: MemoryMessagePart[];
   createdAt?: string;
 }
 

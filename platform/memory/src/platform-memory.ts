@@ -40,7 +40,12 @@ function messageFromApi(message: MemoryMessage, threadId: string, resourceId?: s
     createdAt: new Date(message.createdAt),
     threadId,
     resourceId,
-    content: { format: 2, parts: [{ type: 'text', text: message.content }] },
+    content: {
+      format: 2,
+      parts: (message.parts?.length
+        ? message.parts
+        : [{ type: 'text', text: message.content }]) as MastraDBMessage['content']['parts'],
+    },
   };
 }
 
@@ -53,13 +58,15 @@ function textOf(message: MastraDBMessage): string {
   return text || message.content.content || '';
 }
 
-/** Messages the Memory API can store: user/assistant text. Tool-only and system messages are skipped. */
+/** User/assistant messages with all their parts (tool calls, reasoning, files). System messages are skipped. */
 function toApiMessages(messages: MastraDBMessage[]): MemoryMessageInput[] {
-  return messages.flatMap(message => {
+  return messages.flatMap((message): MemoryMessageInput[] => {
     if (message.role !== 'user' && message.role !== 'assistant') return [];
-    const content = textOf(message);
-    if (!content) return [];
-    return [{ id: message.id, role: message.role, content, createdAt: new Date(message.createdAt).toISOString() }];
+    const parts = message.content.parts ?? [];
+    const createdAt = new Date(message.createdAt).toISOString();
+    const content = textOf(message) || undefined;
+    if (!parts.length && !content) return [];
+    return [{ id: message.id, role: message.role, content, parts: parts.length ? parts : undefined, createdAt }];
   });
 }
 
