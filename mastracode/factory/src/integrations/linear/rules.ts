@@ -1,5 +1,6 @@
-import { boardForWorkItem, isTerminalWorkItem } from '../../boards/index.js';
+import { boardEventHandlers, boardForWorkItem, isTerminalWorkItem, eventBoardId, rulePhaseField } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { selectEventRule } from '../../rules/event-rules.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -153,6 +154,7 @@ export class LinearRules {
             },
             board: boardForWorkItem(relatedItem),
             itemRevision: relatedItem.revision,
+            ...rulePhaseField(this.options.boards, relatedItem),
           }
         : {}),
       ...(boundBoard ? { intake: { board: boundBoard.id, initialPhase: boundBoard.initialPhase } } : {}),
@@ -160,7 +162,11 @@ export class LinearRules {
       issue,
     };
 
-    const rule = this.options.linearRules[context.event];
+    const rule = selectEventRule(
+      this.options.linearRules,
+      boardEventHandlers(this.options.boards, eventBoardId(context), 'linear'),
+      context.event,
+    );
     let decision: FactoryRuleDecision | void;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };

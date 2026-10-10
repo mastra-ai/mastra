@@ -1,3 +1,4 @@
+import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type { FactoryJiraEventName, FactoryJiraRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 import { jiraClaimKey } from './claim.js';
 
@@ -86,5 +87,5 @@ export function resolveJiraRules(overrides?: JiraRuleOverrides): JiraEventRules 
     }
     if (handler !== undefined) rules[key] = handler;
   }
-  return Object.freeze(rules) as JiraEventRules;
+  return recordExplicitRuleOverrides(Object.freeze(rules) as JiraEventRules, overrides);
 }

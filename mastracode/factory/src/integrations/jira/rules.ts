@@ -1,5 +1,6 @@
-import { boardForWorkItem, isTerminalWorkItem } from '../../boards/index.js';
+import { boardEventHandlers, boardForWorkItem, isTerminalWorkItem, eventBoardId, rulePhaseField } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { selectEventRule } from '../../rules/event-rules.js';
 import type { FactoryJiraRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -152,6 +153,7 @@ export class JiraRules {
             },
             board: boardForWorkItem(relatedItem),
             itemRevision: relatedItem.revision,
+            ...rulePhaseField(this.options.boards, relatedItem),
           }
         : {}),
       ...(boundBoard ? { intake: { board: boundBoard.id, initialPhase: boundBoard.initialPhase } } : {}),
@@ -159,7 +161,11 @@ export class JiraRules {
       issue,
     };
 
-    const rule = this.options.jiraRules[context.event];
+    const rule = selectEventRule(
+      this.options.jiraRules,
+      boardEventHandlers(this.options.boards, eventBoardId(context), 'jira'),
+      context.event,
+    );
     let decision: FactoryRuleDecision | void;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };

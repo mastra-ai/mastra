@@ -1,3 +1,4 @@
+import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type {
   FactoryIncidentioEventName,
   FactoryIncidentioRuleContext,
@@ -93,5 +94,5 @@ export function resolveIncidentioRules(overrides?: IncidentioRuleOverrides): Inc
     }
     if (handler !== undefined) rules[key] = handler;
   }
-  return Object.freeze(rules) as IncidentioEventRules;
+  return recordExplicitRuleOverrides(Object.freeze(rules) as IncidentioEventRules, overrides);
 }

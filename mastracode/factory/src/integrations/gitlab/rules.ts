@@ -1,5 +1,6 @@
-import { boardForWorkItem } from '../../boards/index.js';
+import { boardEventHandlers, boardForWorkItem, eventBoardId, rulePhaseField } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { selectEventRule } from '../../rules/event-rules.js';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
@@ -522,6 +523,7 @@ export class GitLabRules {
             },
             board: boardForWorkItem(input.item),
             itemRevision: input.item.revision,
+            ...rulePhaseField(this.options.boards, input.item),
           }
         : {}),
       intake: input.board,
@@ -594,7 +596,11 @@ export class GitLabRules {
           }
         : {}),
     };
-    const rule = this.options.gitlab.rules[input.event];
+    const rule = selectEventRule(
+      this.options.gitlab.rules,
+      boardEventHandlers(this.options.boards, eventBoardId(context), 'gitlab'),
+      input.event,
+    );
     let decision: FactoryRuleDecision | void;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };

@@ -1,3 +1,4 @@
+import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type { FactoryLinearEventName, FactoryLinearRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 import { linearClaimKey } from './claim.js';
 
@@ -86,5 +87,5 @@ export function resolveLinearRules(overrides?: LinearRuleOverrides): LinearEvent
     }
     if (handler !== undefined) rules[key] = handler;
   }
-  return Object.freeze(rules) as LinearEventRules;
+  return recordExplicitRuleOverrides(Object.freeze(rules) as LinearEventRules, overrides);
 }
