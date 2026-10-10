@@ -1,2 +1,3 @@
 export * from './oauth-types';
-export * from './trace-context';
+export type { MCPTraceContext } from './trace-context';
+export { traceContextFromMeta, traceContextToMeta } from './trace-context';

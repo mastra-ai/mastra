@@ -1,9 +1,40 @@
 import { describe, expect, it } from 'vitest';
-import type { FeedbackEvent, LogEvent, MetricEvent, ScoreEvent } from '../../../observability';
-import { EntityType } from '../../../observability/types/tracing';
-import { buildFeedbackRecord, buildLogRecord, buildMetricRecord, buildScoreRecord } from './record-builders';
+import type { AnyExportedSpan, FeedbackEvent, LogEvent, MetricEvent, ScoreEvent } from '../../../observability';
+import { EntityType, SpanType } from '../../../observability/types/tracing';
+import {
+  buildCreateSpanRecord,
+  buildFeedbackRecord,
+  buildLogRecord,
+  buildMetricRecord,
+  buildScoreRecord,
+  buildUpdateSpanRecord,
+} from './record-builders';
 
 describe('record-builders', () => {
+  describe('span records', () => {
+    const span = (links?: AnyExportedSpan['links']): AnyExportedSpan => ({
+      id: 'span-1',
+      traceId: 'trace-1',
+      name: 'tools/call echo',
+      type: SpanType.MCP_SERVER_REQUEST,
+      startTime: new Date('2026-01-01T00:00:00.000Z'),
+      isEvent: false,
+      isRootSpan: true,
+      ...(links ? { links } : {}),
+    });
+    const link = { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' };
+
+    it('stores span links on create and update', () => {
+      expect(buildCreateSpanRecord(span([link])).links).toEqual([link]);
+      expect(buildUpdateSpanRecord(span([link])).links).toEqual([link]);
+    });
+
+    it('stores null links for a span without links', () => {
+      expect(buildCreateSpanRecord(span()).links).toBeNull();
+      expect(buildUpdateSpanRecord(span()).links).toBeNull();
+    });
+  });
+
   describe('buildMetricRecord', () => {
     it('maps shared correlation fields and canonical cost fields', () => {
       const timestamp = new Date('2026-01-01T00:00:00.000Z');

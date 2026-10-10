@@ -9,6 +9,7 @@
 export * from './types';
 export * from './no-op';
 export * from './utils';
+export * from './w3c';
 export * from './span-record';
 export { wrapMastra } from './context';
 export { createObservabilityContext, resolveObservabilityContext } from './context-factory';

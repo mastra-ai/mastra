@@ -510,6 +510,10 @@ export interface MCPServerRequestAttributes extends AIBaseAttributes {
   clientName?: string;
   /** Client implementation version, when the client reported one */
   clientVersion?: string;
+  /** W3C `traceparent` the caller sent, when it parses */
+  callerTraceparent?: string;
+  /** W3C `tracestate` the caller sent with a valid `traceparent`, capped at 512 characters */
+  callerTracestate?: string;
 }
 
 /**
@@ -1345,6 +1349,17 @@ export interface SpanErrorInfo {
 }
 
 /**
+ * A reference to a span in another trace. Unlike a parent, a link does not put
+ * the two spans in the same trace: each trace keeps its own root and summary.
+ */
+export interface SpanLink {
+  /** Trace ID of the linked span (1-32 hexadecimal characters) */
+  traceId: string;
+  /** Span ID of the linked span (1-16 hexadecimal characters) */
+  spanId: string;
+}
+
+/**
  * Base Span interface
  */
 interface BaseSpan<TType extends SpanType> {
@@ -1382,6 +1397,8 @@ interface BaseSpan<TType extends SpanType> {
   requestContext?: Record<string, any>;
   /** Is an event span? (point-in-time: endTime equals startTime) */
   isEvent: boolean;
+  /** Spans in other traces this span is related to, such as the span that sent a request this span serves */
+  links?: SpanLink[];
 }
 
 /**
@@ -1792,6 +1809,8 @@ interface CreateBaseOptions<TType extends SpanType> {
   tracingPolicy?: TracingPolicy;
   /** Request Context for metadata extraction */
   requestContext?: RequestContext;
+  /** Spans in other traces this span is related to. Links with invalid IDs are ignored. */
+  links?: SpanLink[];
 }
 
 /**
@@ -1936,6 +1955,8 @@ export interface GetOrCreateSpanOptions<TType extends SpanType> {
   tracingContext?: TracingContext;
   requestContext?: RequestContext;
   mastra?: Mastra;
+  /** Spans in other traces this span is related to. Links with invalid IDs are ignored. */
+  links?: SpanLink[];
   /**
    * Span id of the suspended span a resumed run links back to. It is a Mastra
    * span within the trace, so it becomes the new root span's parent.

@@ -170,6 +170,41 @@ describe('OtelBridge', () => {
         await bridge.shutdown();
       });
 
+      it('joins the trace an HTTP server span continued from the caller, and keeps the link to the caller', async () => {
+        // HTTP instrumentation continues the caller's `traceparent` header, so the
+        // request span starts under the HTTP server span, in the caller's trace.
+        const bridge = new OtelBridge();
+        const instance = new DefaultObservabilityInstance({
+          serviceName: 'served-request',
+          name: 'served-request-instance',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          bridge,
+        });
+        const caller = { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' };
+        const remote = trace.setSpanContext(context.active(), { ...caller, traceFlags: 1, isRemote: true });
+        const httpSpan = trace.getTracer('http').startSpan('POST /mcp', {}, remote);
+
+        const span = context.with(trace.setSpan(remote, httpSpan), () =>
+          instance.startSpan({
+            type: SpanType.MCP_SERVER_REQUEST,
+            name: 'tools/call weather',
+            links: [caller],
+          }),
+        )!;
+
+        const exported = span.exportSpan();
+        expect(exported.traceId).toBe(caller.traceId);
+        expect(exported.externalParentSpanId).toBe(httpSpan.spanContext().spanId);
+        expect(exported.links).toEqual([caller]);
+        const otelSpan = (bridge as any).otelSpanMap.get(span.id).otelSpan;
+        expect(otelSpan.links).toEqual([{ context: { ...caller, traceFlags: 1, isRemote: true } }]);
+
+        span.end();
+        httpSpan.end();
+        await instance.flush();
+        await bridge.shutdown();
+      });
+
       it('classifies a Mastra-created ambient span as an internal parent', async () => {
         // executeInContext runs code inside a Mastra span's OTel context. A
         // root created there inherits that span as its ambient parent — but
@@ -294,6 +329,63 @@ describe('OtelBridge', () => {
         expect(result?.parentSpanId).toBeUndefined();
 
         bridge.shutdown();
+      });
+    });
+
+    describe('with span links', () => {
+      const startLink = { traceId: 'a1b2c3d4e5f60718293a4b5c6d7e8f90', spanId: '1a2b3c4d5e6f7081' };
+      const lateLink = { traceId: 'b1b2c3d4e5f60718293a4b5c6d7e8f90', spanId: '2a2b3c4d5e6f7081' };
+
+      it('starts the OpenTelemetry span with links to valid linked spans, in a new trace when no context is active', () => {
+        const bridge = new OtelBridge();
+        const startSpan = vi.spyOn((bridge as any).otelTracer, 'startSpan');
+
+        const result = bridge.createSpan({
+          type: SpanType.MCP_SERVER_REQUEST,
+          name: 'tools/call weather',
+          attributes: {},
+          links: [startLink, { traceId: 'not-a-trace-id', spanId: 'nope' }],
+        });
+
+        const options = startSpan.mock.calls[0]![1] as { links?: Array<{ context: Record<string, unknown> }> };
+        expect(options.links).toEqual([{ context: { ...startLink, traceFlags: 1, isRemote: true } }]);
+        expect(result?.traceId).not.toBe(startLink.traceId);
+        expect(result?.externalParentSpanId).toBeUndefined();
+
+        startSpan.mockRestore();
+        bridge.shutdown();
+      });
+
+      it('adds links set after the span started when the span ends', async () => {
+        const bridge = new OtelBridge();
+        bridge.init({ config: { serviceName: 'late-links' } } as any);
+        const ids = bridge.createSpan({
+          type: SpanType.MCP_TOOL_CALL,
+          name: 'tool',
+          attributes: {},
+          links: [startLink],
+        })!;
+        const otelSpan = (bridge as any).otelSpanMap.get(ids.spanId).otelSpan;
+        const addLinks = vi.spyOn(otelSpan, 'addLinks');
+
+        await bridge.exportTracingEvent({
+          type: TracingEventType.SPAN_ENDED,
+          exportedSpan: {
+            id: ids.spanId,
+            traceId: ids.traceId,
+            name: 'tool',
+            type: SpanType.MCP_TOOL_CALL,
+            startTime: new Date(),
+            endTime: new Date(),
+            isEvent: false,
+            isRootSpan: true,
+            links: [startLink, lateLink],
+          },
+        } as any);
+
+        expect(addLinks).toHaveBeenCalledTimes(1);
+        expect(addLinks.mock.calls[0]![0]).toEqual([{ context: { ...lateLink, traceFlags: 1, isRemote: true } }]);
+        await bridge.shutdown();
       });
     });
 
