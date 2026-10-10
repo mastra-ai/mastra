@@ -1,0 +1,15 @@
+{
+  "name": "examples-platform-memory-ai-sdk",
+  "type": "module",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "start": "tsx --env-file-if-exists=.env index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.0",
+    "@mastra/platform-memory": "link:../../platform/memory",
+    "ai": "^6.0.0",
+    "tsx": "^4.20.0"
+  }
+}
