@@ -1,7 +1,98 @@
 import type { createNodeWebSocket as CreateNodeWebSocket } from '@hono/node-ws';
+import type { Mastra } from '@mastra/core/mastra';
 import { handleInputMessage, ViewerRegistry } from '@mastra/server/browser-stream';
 import type { BrowserStreamConfig, BrowserStreamResult } from '@mastra/server/browser-stream';
-import type { Env, Hono, Schema } from 'hono';
+import type { Context, Env, Hono, MiddlewareHandler, Schema } from 'hono';
+
+import { createAuthMiddleware } from '../auth-middleware';
+
+/**
+ * Allowed `Origin` values for browser WebSocket upgrades. Accepts the same shape
+ * as Hono's `cors.origin` option.
+ */
+export type BrowserStreamOrigin =
+  | string
+  | string[]
+  | ((origin: string, c: Context) => Promise<string | undefined | null> | string | undefined | null);
+
+/**
+ * Hono-specific browser stream configuration.
+ */
+export interface HonoBrowserStreamConfig extends BrowserStreamConfig {
+  /**
+   * Mastra instance used to authenticate requests to the browser stream routes.
+   *
+   * Every route registered by {@link setupBrowserStream} — the WebSocket upgrade,
+   * the session probe, and the close endpoint — is gated by the server auth
+   * middleware. Without this, an unauthenticated caller could watch and drive an
+   * agent's browser. When the instance has no `server.auth` configured the
+   * middleware is a no-op.
+   */
+  mastra: Mastra;
+
+  /**
+   * Origin allowlist for the browser WebSocket upgrade.
+   *
+   * Browsers always send an `Origin` header on a WebSocket handshake and attach
+   * the session cookie to it, so without an allowlist a page on any origin could
+   * open a cookie-authenticated stream and drive the agent's browser. When this is
+   * set, an upgrade from an origin that isn't allowed is rejected with `403`.
+   *
+   * Values are matched the way Hono's `cors.origin` matches them: array entries
+   * literally, and a callback only approves an origin when it returns that same
+   * origin (or `'*'`). The server's own origin always passes, because a CORS
+   * allowlist names the *other* origins and never includes the server itself.
+   *
+   * Requests without an `Origin` header (non-browser clients) are not affected,
+   * and the check is skipped entirely when this is unset. The deployer passes the
+   * explicitly configured `server.cors.origin` here; its permissive default is
+   * left as-is so cross-origin Studio deployments keep working.
+   */
+  allowedOrigins?: BrowserStreamOrigin;
+}
+
+/**
+ * Resolve an `allowedOrigins` value against the request's `Origin` header.
+ *
+ * Mirrors Hono's `cors.origin` semantics so the same config value means the same
+ * thing on the upgrade as it does on the HTTP routes: `'*'` allows everything,
+ * array entries match literally, and a callback is only an approval when it
+ * returns the request's own origin (the value Hono would echo back) or `'*'`.
+ */
+async function isOriginAllowed(allowedOrigins: BrowserStreamOrigin, origin: string, c: Context): Promise<boolean> {
+  if (Array.isArray(allowedOrigins)) {
+    return allowedOrigins.includes(origin);
+  }
+  if (typeof allowedOrigins === 'function') {
+    const allowed = await allowedOrigins(origin, c);
+    return allowed === origin || allowed === '*';
+  }
+  return allowedOrigins === '*' || allowedOrigins === origin;
+}
+
+/**
+ * Is the `Origin` header the server's own origin?
+ *
+ * A Studio served by this server connects back to the same host, and operators
+ * don't add their own origin to a CORS allowlist because same-origin requests
+ * never needed CORS. Comparing hosts (rather than scheme + host) keeps that
+ * working behind TLS-terminating proxies, where the server sees `http` while the
+ * browser sends `https`.
+ */
+function isSameOrigin(origin: string, requestHost: string | undefined): boolean {
+  if (!requestHost) {
+    return false;
+  }
+  let originHost: string;
+  try {
+    originHost = new URL(origin).host;
+  } catch {
+    return false;
+  }
+  // `x-forwarded-host` may list several hosts; the first is the client-facing one.
+  const host = (requestHost.split(',')[0] ?? '').trim();
+  return originHost !== '' && originHost.toLowerCase() === host.toLowerCase();
+}
 
 /**
  * Set up WebSocket-based browser stream endpoint for real-time screencast viewing.
@@ -11,6 +102,13 @@ import type { Env, Hono, Schema } from 'hono';
  * - Starts screencast when first viewer connects
  * - Broadcasts frames to all connected viewers
  * - Stops screencast when last viewer disconnects
+ *
+ * All routes are authenticated with the server's auth configuration. Browsers
+ * cannot attach an `Authorization` header to a WebSocket upgrade, so
+ * session-cookie providers authenticate from the upgrade request's cookies.
+ * Non-browser clients can pass the token as the `apiKey` query parameter — use a
+ * short-lived token, since a URL can be retained in proxy and access logs, and
+ * prefer the `Authorization` header on the HTTP routes where the client can set one.
  *
  * **Note**: Requires `ws` package to be installed. If not available, returns null
  * and logs a warning. Browser streaming will be disabled but everything else works.
@@ -27,6 +125,7 @@ import type { Env, Hono, Schema } from 'hono';
  *
  * const app = new Hono();
  * const browserStream = await setupBrowserStream(app, {
+ *   mastra,
  *   getToolset: (agentId) => browserToolsets.get(agentId),
  * });
  *
@@ -36,7 +135,7 @@ import type { Env, Hono, Schema } from 'hono';
  */
 export async function setupBrowserStream<E extends Env, S extends Schema, B extends string>(
   app: Hono<E, S, B>,
-  config: BrowserStreamConfig,
+  config: HonoBrowserStreamConfig,
 ): Promise<BrowserStreamResult | null> {
   // Dynamic import to avoid bundling ws into non-Node environments (e.g. Cloudflare Workers).
   // The variable-based specifier prevents bundlers from resolving the module at build time.
@@ -62,8 +161,49 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   const trimmed = rawPrefix.endsWith('/') ? rawPrefix.slice(0, -1) : rawPrefix;
   const apiPrefix = trimmed || '/api';
 
+  // Authenticate every browser stream route before it runs.
+  //
+  // These routes are registered as raw Hono handlers rather than ServerRoutes, so
+  // they never pass through the per-route `checkRouteAuth` middleware the adapter
+  // applies elsewhere. Without this gate an unauthenticated caller could open the
+  // screencast, inject input, and force-close an agent's browser.
+  //
+  // The middleware marks the request path as protected itself, which also covers
+  // the WebSocket upgrade path (`/browser/:agentId/stream`) that falls outside
+  // `apiPrefix`. Because browsers cannot set an `Authorization` header on a
+  // WebSocket upgrade, session-cookie providers authenticate from the upgrade
+  // request's cookies and token-based clients pass `?apiKey=`.
+  const authenticate = createAuthMiddleware({ mastra: config.mastra });
+
+  // Reject browser WebSocket upgrades from origins that aren't explicitly
+  // allow-listed. Browsers send `Origin` automatically and attach cookies to the
+  // handshake, so without this a page on any origin could open a
+  // cookie-authenticated stream and drive the agent's browser (CSWSH). Sessions
+  // that authenticate with a query token are unaffected in practice, but the
+  // check applies to the route rather than the credential. Non-browser clients
+  // send no `Origin` and are never blocked, and nothing is enforced unless the
+  // server configured an explicit origin.
+  const allowedOrigins = config.allowedOrigins;
+  const checkOrigin: MiddlewareHandler = async (c, next) => {
+    const origin = c.req.header('origin');
+    if (!allowedOrigins || !origin) {
+      return next();
+    }
+    // The server's own origin is always allowed, so an origin allowlist (which
+    // only ever lists *other* origins) can't lock out the Studio this server serves.
+    if (isSameOrigin(origin, c.req.header('x-forwarded-host') ?? c.req.header('host'))) {
+      return next();
+    }
+    if (!(await isOriginAllowed(allowedOrigins, origin, c))) {
+      return c.text('Forbidden', 403);
+    }
+    return next();
+  };
+
   app.get(
     '/browser/:agentId/stream',
+    checkOrigin,
+    authenticate,
     upgradeWebSocket(c => {
       const agentId = c.req.param('agentId')!;
       const threadId = c.req.query('threadId');
@@ -107,7 +247,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   // Returns:
   //   - screencastAvailable: true (this route only exists if setupBrowserStream succeeded)
   //   - hasSession: whether the agent has an active browser session for the given thread
-  app.get(`${apiPrefix}/agents/:agentId/browser/session`, async c => {
+  app.get(`${apiPrefix}/agents/:agentId/browser/session`, authenticate, async c => {
     const agentId = c.req.param('agentId');
     if (!agentId) {
       return c.json({ error: 'Agent ID is required' }, 400);
@@ -125,7 +265,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   });
 
   // Close browser session endpoint
-  app.post(`${apiPrefix}/agents/:agentId/browser/close`, async c => {
+  app.post(`${apiPrefix}/agents/:agentId/browser/close`, authenticate, async c => {
     const agentId = c.req.param('agentId');
     if (!agentId) {
       return c.json({ error: 'Agent ID is required' }, 400);

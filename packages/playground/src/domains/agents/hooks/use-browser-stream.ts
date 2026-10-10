@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { buildBrowserStreamUrl, readBrowserStreamToken } from '../utils/browser-stream-url';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
+
 /**
  * Connection status for the browser screencast stream
  */
@@ -42,6 +45,8 @@ interface UseBrowserStreamReturn {
  */
 export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserStreamReturn {
   const { agentId, threadId, enabled = true, onFrame, maxReconnectAttempts = 5 } = options;
+  const { headers } = useStudioConfig();
+  const token = readBrowserStreamToken(headers);
 
   const [status, setStatus] = useState<StreamStatus>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -94,9 +99,10 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
     setStatus('connecting');
     setError(null);
 
-    // Construct WebSocket URL based on current protocol
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/browser/${agentId}/stream?threadId=${encodeURIComponent(threadId)}`;
+    // Construct WebSocket URL based on current protocol. The WebSocket API
+    // can't set request headers, so a header-token deployment passes its
+    // credential as a query parameter instead.
+    const wsUrl = buildBrowserStreamUrl({ agentId, threadId, token });
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -197,7 +203,7 @@ export function useBrowserStream(options: UseBrowserStreamOptions): UseBrowserSt
       setStatus('error');
       setError(err instanceof Error ? err.message : 'Failed to create WebSocket');
     }
-  }, [agentId, threadId, enabled, maxReconnectAttempts, clearReconnectTimeout]);
+  }, [agentId, threadId, enabled, maxReconnectAttempts, clearReconnectTimeout, token]);
 
   // Handle tab visibility changes - reconnect when tab becomes visible
   useEffect(() => {

@@ -26,6 +26,7 @@ export { createAuthMiddleware } from './auth-middleware';
 export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 // Browser stream setup (Hono-specific WebSocket implementation)
 export { setupBrowserStream } from './browser-stream';
+export type { HonoBrowserStreamConfig } from './browser-stream';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
