@@ -260,8 +260,13 @@ describe.each(Object.entries(PROVIDERS))('T78 completion feedback — %s', (prov
       // The post-feedback reply must be persisted too, not just the first reply: the streamed text is
       // the pre-repair reply followed by the post-repair one, so the last stored assistant message
       // must be the tail of it. Otherwise the absence check below could pass on a history that stops
-      // before the repair ever ran.
-      expect(storedReplies.length).toBeGreaterThanOrEqual(2);
+      // before the repair ever ran. Both replies belong to one turn, so they may share one assistant
+      // message (as with plain Agent); count their text parts rather than messages.
+      const storedTextParts = recalled.messages
+        .filter(m => m.role === 'assistant')
+        .flatMap(m => (m.content as { parts?: { type: string; text?: string }[] } | undefined)?.parts ?? [])
+        .filter(p => p.type === 'text' && (p.text ?? '').length > 0);
+      expect(storedTextParts.length).toBeGreaterThanOrEqual(2);
       const lastStoredReply = storedReplies.at(-1) ?? '';
       expect(lastStoredReply.length).toBeGreaterThan(0);
       expect(finalText.trimEnd().endsWith(lastStoredReply.trimEnd())).toBe(true);

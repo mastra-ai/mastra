@@ -381,6 +381,7 @@ export interface DurableLLMStepOutput {
     reason: LanguageModelV2FinishReason | 'abort' | 'tripwire' | 'retry';
     warnings: LanguageModelV2CallWarning[];
     isContinued: boolean;
+    signalPreempted?: boolean;
     logprobs?: LanguageModelV1LogProbs;
     totalUsage?: LanguageModelUsage;
     headers?: Record<string, string>;
@@ -623,6 +624,11 @@ export interface AgentStepFinishEventData {
 }
 
 /**
+ * Payload passed to a durable agent's `onStepFinish` callback: the step-finish event data plus the run it belongs to.
+ */
+export type DurableAgentStepFinishResult = AgentStepFinishEventData & { runId: string };
+
+/**
  * Finish event data
  */
 export interface AgentFinishEventData {
@@ -859,6 +865,10 @@ export interface RunRegistryEntry {
    * signals sent to a restarted worker will not be drained.
    */
   drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  /** Owner-queue notifications, in-process only like the drain closure. */
+  subscribePendingSignals?: (listener: () => void) => () => void;
+  /** Releases the latest LLM step's pending-signal listener, whichever way that step exited. */
+  stopStepSignalListener?: () => void;
   /**
    * Thread title generation closure — mirrors the non-durable `#executeOnFinish`
    * title-generation branch, which was never ported to the durable finish step
@@ -934,6 +944,14 @@ export interface RunRegistryEntry {
    * surface — purely an internal coordination primitive.
    */
   workflowExecution?: Promise<unknown>;
+  /**
+   * Set while an engine that persists the suspended snapshot before returning
+   * is executing. The tool-call step queues suspension chunks/events here so
+   * they are published only after the snapshot is saved; otherwise a crash in
+   * between leaves a client holding a question that `resume()` rejects (#26435).
+   * @internal
+   */
+  pendingSuspensionEvents?: Array<() => Promise<void>>;
   /**
    * Mastra instance that owns this in-process run. Used during shutdown to
    * wait only for executions that may still need this instance's storage.

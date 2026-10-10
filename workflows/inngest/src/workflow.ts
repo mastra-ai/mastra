@@ -482,7 +482,7 @@ export class InngestWorkflow<
         // Hosts (e.g. `createInngestAgent`) can override via `__setPubsubFactory` to
         // wrap this default - typically with a `CachingPubSub` so `observe()` can replay
         // cached history - without disturbing per-workflow channel isolation.
-        const defaultPubsub = new InngestPubSub(this.inngest, this.id);
+        const defaultPubsub = new InngestPubSub(this.inngest, this.id, this.logger);
         const configuredPubsub: PubSub = this.#pubsubFactory?.(defaultPubsub) ?? defaultPubsub;
         const pubsub = new WorkflowEventPolicyPubSub(configuredPubsub, this.#emitWorkflowEvents);
 

@@ -4,7 +4,6 @@
 
 import type { ChatSpacingKind } from './chat-spacing.js';
 
-export type QuietToolDisplayMode = 'normal' | 'quiet';
 export type CompactToolLabelColor = 'toolTitle' | 'error';
 
 export interface ToolResult {
@@ -37,13 +36,12 @@ export interface IToolExecutionComponent {
   getBackgroundTaskId?(): string | undefined;
   cancelBackground?(): void;
   setExpanded(expanded: boolean): void;
-  setQuietModeDisplay?(mode: QuietToolDisplayMode): void;
-  setQuietPreviewLineLimit?(limit: number): void;
+  setPreviewLineLimit?(limit: number): void;
   setCompactToolModeColor?(color: string | undefined): void;
   getChatSpacingKind?(): ChatSpacingKind | undefined;
   getCompactToolGroupKey?(): string | undefined;
   getCompactToolGroupSummary?(): string | undefined;
-  hasQuietStreamingPreview?(): boolean;
+  hasStreamingPreview?(): boolean;
   getOwnCompactToolLabelColor?(): CompactToolLabelColor | undefined;
   setCompactToolGroupLabelColor?(color: CompactToolLabelColor | undefined): void;
   setCompactToolContinuation?(continuation: boolean, previousSummary?: string): void;

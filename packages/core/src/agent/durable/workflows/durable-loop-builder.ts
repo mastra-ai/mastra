@@ -315,6 +315,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       outputSchema: z.any(),
       execute: async stepParams => {
         const execOutput = stepParams.inputData as Record<string, any>;
+        if (execOutput.stepResult?.signalPreempted && !execOutput.stepResult.isContinued) return execOutput;
         const rt = this.resolveRuntime(stepParams);
         try {
           let drainList: ReturnType<typeof createRunMessageList> | undefined;
@@ -463,6 +464,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               messageId: state.messageId,
               requestContextEntries: state.requestContextEntries,
               stepIndex: state.iterationCount,
+              signalPreempted: state.lastStepResult?.signalPreempted,
               // Processor hooks receive the running step list (#24293) — the
               // llm-execution step reads this for stepNumber/steps parity with
               // the main loop.
@@ -674,6 +676,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         }
       }
 
+      if (state.lastStepResult?.signalPreempted) return state.lastStepResult.isContinued === true;
+
       const runMaxSteps = rt.maxSteps;
 
       // Lazy message-list rehydration for the onIterationComplete hook: the
@@ -787,14 +791,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       const isFinal = decision.isFinal;
       await emitStepFinish(!isFinal);
 
-      // Each iteration's assistant response is a distinct message, mirroring
-      // the non-durable agentic loop. The mutated state.messageId flows into
-      // the next singleIterationWorkflow input via map-to-llm-input.
-      if (!isFinal) {
-        const boundaryList = createRunMessageList({ mastra: rt.mastra }).deserialize(transcript.messageListState);
-        state.messageId = boundaryList.rotateResponseMessageId();
-        transcript.messageListState = boundaryList.serialize();
-      }
+      // Like Agent, ordinary iterations keep the same response message; the next LLM step opens
+      // a step-start boundary inside it (#26332).
 
       // Emit an iteration-complete event for observability. This fires after
       // every iteration (including the last one) so client-side callbacks

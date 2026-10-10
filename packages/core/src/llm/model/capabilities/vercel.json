@@ -69,6 +69,7 @@
     "google/gemini-omni-flash-preview",
     "google/gemma-4-26b-a4b-it",
     "google/gemma-4-31b-it",
+    "heygen/heygen-video-1",
     "inclusionai/ling-3.0-flash-vl",
     "meituan/longcat-2.5-preview",
     "meta/llama-3.3-70b",

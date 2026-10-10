@@ -3,6 +3,7 @@
     "anthropic/claude-fable-5",
     "anthropic/claude-fable-5.1",
     "anthropic/claude-haiku-4.5",
+    "anthropic/claude-haiku-5.5",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
     "anthropic/claude-opus-4.7",
@@ -229,6 +230,7 @@
     "z-ai/glm-5v-turbo"
   ],
   "structuredOutput": [
+    "anthropic/claude-haiku-5.5",
     "bailian/qwen3-coder-next",
     "bailian/qwen3.5-122b-a10b",
     "bailian/qwen3.5-27b",
@@ -497,6 +499,15 @@
       }
     ],
     "anthropic/claude-opus-4.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-haiku-5.5": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]

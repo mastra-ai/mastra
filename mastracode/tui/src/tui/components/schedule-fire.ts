@@ -10,17 +10,14 @@
 import { Text } from '@earendil-works/pi-tui';
 import { BOX_INDENT, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
-import type { QuietToolDisplayMode } from './tool-execution-interface.js';
 import { WidthAwareContainer } from './width-aware-container.js';
 
-const COLLAPSED_PROMPT_LINES = 4;
 const BODY_INDENT = BOX_INDENT + 2;
 
 export interface ScheduleFireOptions {
   prompt: string;
   attributes: Record<string, unknown>;
-  quietDisplayMode?: QuietToolDisplayMode;
-  quietPreviewLineLimit?: number;
+  previewLineLimit?: number;
 }
 
 function attr(attributes: Record<string, unknown>, key: string): string | undefined {
@@ -28,7 +25,7 @@ function attr(attributes: Record<string, unknown>, key: string): string | undefi
   return typeof value === 'string' && value ? value : undefined;
 }
 
-function normalizeQuietPreviewLineLimit(limit: number | undefined): number {
+function normalizePreviewLineLimit(limit: number | undefined): number {
   const normalized = Number.isFinite(limit) ? (limit as number) : 2;
   return Math.min(8, Math.max(0, Math.floor(normalized)));
 }
@@ -36,16 +33,14 @@ function normalizeQuietPreviewLineLimit(limit: number | undefined): number {
 export class ScheduleFireComponent extends WidthAwareContainer {
   private readonly promptLines: string[];
   private readonly attributes: Record<string, unknown>;
-  private quietDisplayMode: QuietToolDisplayMode;
-  private quietPreviewLineLimit: number;
+  private previewLineLimit: number;
   private expanded = false;
 
   constructor(options: ScheduleFireOptions) {
     super();
     this.promptLines = options.prompt.trim().split('\n');
     this.attributes = options.attributes;
-    this.quietDisplayMode = options.quietDisplayMode ?? 'normal';
-    this.quietPreviewLineLimit = normalizeQuietPreviewLineLimit(options.quietPreviewLineLimit);
+    this.previewLineLimit = normalizePreviewLineLimit(options.previewLineLimit);
   }
 
   setExpanded(expanded: boolean): void {
@@ -54,16 +49,10 @@ export class ScheduleFireComponent extends WidthAwareContainer {
     this.rebuild();
   }
 
-  setQuietModeDisplay(mode: QuietToolDisplayMode): void {
-    if (this.quietDisplayMode === mode) return;
-    this.quietDisplayMode = mode;
-    this.rebuild();
-  }
-
-  setQuietPreviewLineLimit(limit: number): void {
-    const normalized = normalizeQuietPreviewLineLimit(limit);
-    if (this.quietPreviewLineLimit === normalized) return;
-    this.quietPreviewLineLimit = normalized;
+  setPreviewLineLimit(limit: number): void {
+    const normalized = normalizePreviewLineLimit(limit);
+    if (this.previewLineLimit === normalized) return;
+    this.previewLineLimit = normalized;
     this.rebuild();
   }
 
@@ -75,7 +64,7 @@ export class ScheduleFireComponent extends WidthAwareContainer {
     this.clear();
     this.addChild(new Text(this.header(), BOX_INDENT, 0));
 
-    const collapsedLimit = this.quietDisplayMode === 'quiet' ? this.quietPreviewLineLimit : COLLAPSED_PROMPT_LINES;
+    const collapsedLimit = this.previewLineLimit;
     // Hiding a single line would cost the same space as the "1 more line" hint, so show it instead.
     const limit =
       this.expanded || this.promptLines.length <= collapsedLimit + 1 ? this.promptLines.length : collapsedLimit;

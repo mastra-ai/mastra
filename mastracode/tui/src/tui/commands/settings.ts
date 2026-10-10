@@ -11,7 +11,7 @@ import { SettingsComponent } from '../components/settings.js';
 import { askModalQuestion } from '../modal-question.js';
 import type { NotificationMode } from '../notify.js';
 import { showModalOverlay } from '../overlay.js';
-import { applyQuietModeToRenderedComponents } from '../quiet-mode.js';
+import { applyPreviewLinesToRenderedComponents } from '../preview-lines.js';
 import { handleApiKeysCommand } from './api-keys.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -179,11 +179,6 @@ async function ensureGitcrawlReady(ctx: SlashCommandContext): Promise<boolean> {
   }
 }
 
-function applyQuietModeToRenderedTools(ctx: SlashCommandContext, enabled: boolean, previewLineLimit: number): void {
-  applyQuietModeToRenderedComponents(ctx.state, enabled, previewLineLimit, getCurrentModeColor(ctx));
-  ctx.state.ui.requestRender();
-}
-
 export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<void> {
   const state = ctx.state.session.state.get() as any;
   const globalSettings = loadSettings();
@@ -193,8 +188,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
     thinkingLevel: (state?.thinkingLevel ?? globalSettings.preferences.thinkingLevel) as string,
     currentModelId: ctx.state.session.model.get() ?? '',
     escapeAsCancel: ctx.state.editor.escapeEnabled,
-    quietMode: globalSettings.preferences.quietMode,
-    quietModeMaxToolPreviewLines: globalSettings.preferences.quietModeMaxToolPreviewLines,
+    previewLines: globalSettings.preferences.previewLines,
     storageBackend: globalSettings.storage.backend,
     pgConnectionString: globalSettings.storage.pg?.connectionString ?? '',
     libsqlUrl: globalSettings.storage.libsql?.url ?? '',
@@ -237,21 +231,13 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         await ctx.state.session.state.set({ escapeAsCancel: enabled });
         await ctx.state.session.thread.setSetting({ key: 'escapeAsCancel', value: enabled });
       },
-      onQuietModeChange: enabled => {
+      onPreviewLinesChange: lines => {
         const current = loadSettings();
-        current.preferences.quietMode = enabled;
-        current.onboarding.quietModePreferenceSelected = true;
+        current.preferences.previewLines = lines;
         saveSettings(current);
-        ctx.state.quietMode = enabled;
-        ctx.state.taskProgress?.setQuietMode(enabled);
-        applyQuietModeToRenderedTools(ctx, enabled, ctx.state.quietModeMaxToolPreviewLines);
-      },
-      onQuietModeMaxToolPreviewLinesChange: lines => {
-        const current = loadSettings();
-        current.preferences.quietModeMaxToolPreviewLines = lines;
-        saveSettings(current);
-        ctx.state.quietModeMaxToolPreviewLines = lines;
-        applyQuietModeToRenderedTools(ctx, ctx.state.quietMode, lines);
+        ctx.state.previewLines = lines;
+        applyPreviewLinesToRenderedComponents(ctx.state, lines, getCurrentModeColor(ctx));
+        ctx.state.ui.requestRender();
       },
       onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => {
         const current = loadSettings();

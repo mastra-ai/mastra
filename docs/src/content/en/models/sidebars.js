@@ -616,6 +616,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/lowrouter',
+          label: 'LowRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/lucidquery',
           label: 'LucidQuery',
         },

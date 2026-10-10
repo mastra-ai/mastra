@@ -48,6 +48,18 @@ import type {
   SendAgentStateSignalResult,
 } from './types';
 
+/**
+ * DurableAgent.stream() resolves to a wrapper whose `output` is the model output;
+ * Agent.stream() resolves to the model output itself. Normalize to the latter.
+ */
+function toModelOutput<OUTPUT>(result: unknown): MastraModelOutput<OUTPUT> {
+  const inner = (result as { output?: unknown } | null)?.output;
+  if (inner && typeof inner === 'object' && 'fullStream' in inner) {
+    return inner as MastraModelOutput<OUTPUT>;
+  }
+  return result as MastraModelOutput<OUTPUT>;
+}
+
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 
 /**
@@ -1768,11 +1780,13 @@ export class AgentThreadStreamRuntime {
       }
 
       try {
-        const output = await owner.agent.stream(signal, {
-          ...(streamOptions as any),
-          runId,
-          memory: withThreadMemory(streamOptions?.memory, owner.resourceId, owner.threadId),
-        });
+        const output = toModelOutput<OUTPUT>(
+          await owner.agent.stream(signal, {
+            ...(streamOptions as any),
+            runId,
+            memory: withThreadMemory(streamOptions?.memory, owner.resourceId, owner.threadId),
+          }),
+        );
         // The run started, so the admission a duplicate is waiting on succeeded.
         settleMessageIdentity?.({ runId });
         return { runId, output };
@@ -2426,6 +2440,11 @@ export class AgentThreadStreamRuntime {
    * evicted from `preparedRunsById` by {@link #cleanupPreparedRun}), but its
    * record remains the thread's blocking run until it is resumed or released.
    */
+  /** Whether `runId` is parked on a tool suspension in this process. */
+  isRunParked(runId: string, pubsub?: PubSub): boolean {
+    return this.#isParkedRun(this.#getState(pubsub), runId);
+  }
+
   #isParkedRun(state: AgentThreadRuntimeState, runId: string): boolean {
     const record = state.threadRunsById.get(runId);
     return state.suspendedRunIds.has(runId) || record?.lifecycle === 'suspended' || record?.lifecycle === 'suspending';
@@ -2438,10 +2457,9 @@ export class AgentThreadStreamRuntime {
    * resume, and nothing sent after Stop is answered. The run is released the
    * way a finished run is: its records and thread reservation are dropped, then
    * the thread's pending work starts or its lease is given up. A run parked on
-   * a tool approval is left alone; its decline path releases it.
+   * a tool approval is released the same way: the abort is the decision.
    */
   #releaseParkedRun(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, runId: string): boolean {
-    if (state.approvalSuspendedRunIds.has(runId)) return false;
     const record = state.threadRunsById.get(runId);
     if (!this.#isParkedRun(state, runId) || !record) return false;
     const key = state.threadKeysByRunId.get(runId) ?? this.#threadKey(record.resourceId, record.threadId);
@@ -4284,6 +4302,9 @@ export class AgentThreadStreamRuntime {
     // once its terminal control event proves it finished cleanly; failed,
     // aborted, or never-terminated (process crash) runs are dropped.
     const deferredRunsByStreamId = new Map<string, AgentThreadRunRecord<any>>();
+    // Earlier segments of a run retired by a newer live segment (the original
+    // process died and recovery took over). Redeliveries for them are ignored.
+    const supersededStreamIds = new Set<string>();
     const remoteRunLeaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
     const remoteRunLeaseWatchTokens = new Map<string, symbol>();
     const remoteRunSuspensionPrompts = new Set<string>();
@@ -4480,8 +4501,10 @@ export class AgentThreadStreamRuntime {
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
       if (data.type === 'run-registered') {
+        if (supersededStreamIds.has(data.streamId)) return;
         const registrationRedelivery = handledRegistrationEventIds.has(event.id);
         handledRegistrationEventIds.add(event.id);
+        const firstRegistration = !registeredSeqsByRunId.get(data.runId)?.has(data.streamId);
         noteRunHalf(data.runId, { streamId: data.streamId, streamSeq: data.streamSeq });
         // A redelivered registration for a stream that already ended must not
         // restore the finished run as the thread's active run.
@@ -4534,6 +4557,29 @@ export class AgentThreadStreamRuntime {
             if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(data.runId);
             if (data.agentId) state.remoteAgentIdsByRunId.set(data.runId, data.agentId);
           }
+          // A live new segment of a run supersedes any earlier segment of the
+          // same run that never saw a terminal event: that segment's process
+          // died (e.g. recovery took the run over), and the lease now held
+          // under the same runId would otherwise keep it looking alive and
+          // queue the new segment behind it forever. Order by arrival, not
+          // streamSeq: sequences restart at 1 in a recovering process, and
+          // redeliveries of a segment never retire others.
+          for (const staleStreamId of firstRegistration ? (registeredSeqsByRunId.get(data.runId)?.keys() ?? []) : []) {
+            if (staleStreamId === data.streamId || terminalEventStreamIds.has(staleStreamId)) continue;
+            const staleRun = remoteRuns.get(staleStreamId);
+            if (!staleRun || staleRun.done) continue;
+            supersededStreamIds.add(staleStreamId);
+            if (deferredRunsByStreamId.has(staleStreamId)) {
+              discardDeferredRun(staleStreamId);
+              continue;
+            }
+            stopRemoteRunLeaseWatch(staleStreamId);
+            remoteRunSuspensionPrompts.delete(staleStreamId);
+            staleRun.done = true;
+            while (staleRun.waiters.length) staleRun.waiters.shift()?.();
+            while (staleRun.finishWaiters.length) staleRun.finishWaiters.shift()?.();
+            remoteRuns.delete(staleStreamId);
+          }
         }
         // Reuse a proxy that a stream-part-first delivery already created for
         // this stream — creating a fresh record here would orphan its
@@ -4554,6 +4600,7 @@ export class AgentThreadStreamRuntime {
         return;
       }
       if (data.type === 'stream-part') {
+        if (supersededStreamIds.has(data.streamId)) return;
         if (
           data.sourceId === this.#id &&
           (localStreamIds.has(data.streamId) || !replayedStreamIds.has(data.streamId))
@@ -5617,12 +5664,14 @@ export class AgentThreadStreamRuntime {
       // that outlive the TTL, then kick off the stream.
       this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId);
       try {
-        const output = await agent.stream(signal, {
-          ...(target.ifIdle?.streamOptions as any),
-          untilIdle: true,
-          runId: reservedRunId,
-          memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
-        });
+        const output = toModelOutput<OUTPUT>(
+          await agent.stream(signal, {
+            ...(target.ifIdle?.streamOptions as any),
+            untilIdle: true,
+            runId: reservedRunId,
+            memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
+          }),
+        );
         return { action: 'wake' as const, runId: reservedRunId, output };
       } catch (error) {
         state.threadKeysByRunId.delete(reservedRunId);

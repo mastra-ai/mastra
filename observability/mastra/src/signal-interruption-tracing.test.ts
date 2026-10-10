@@ -92,6 +92,10 @@ describe('signal interruption tracing', () => {
         .map(span => span.parentSpanId);
     expect(chunkParents('STALE_REASONING')).toEqual([inferences[0]!.id]);
     expect(chunkParents('replacement answer')).toEqual([inferences[1]!.id]);
+    const replacement = inferences[1]!;
+    expect(new Date(replacement.attributes?.completionStartTime as Date).getTime()).toBeGreaterThanOrEqual(
+      new Date(replacement.startTime).getTime(),
+    );
     expect(exporter.getIncompleteSpans()).toEqual([]);
   });
 });
