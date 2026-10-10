@@ -298,6 +298,7 @@ describe('SpritesSandbox', () => {
     it('rejects when the exec session cannot be opened', async () => {
       mockSprite.spawnError = new Error('WebSocket closed before open');
       await expect(sandbox().executeCommand!('ls')).rejects.toThrow('WebSocket closed before open');
+      expect(commands[0]!.closed).toBe(true);
     });
   });
 

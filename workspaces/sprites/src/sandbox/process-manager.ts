@@ -119,7 +119,13 @@ export class SpritesProcessManager extends SandboxProcessManager<SpritesSandbox>
       ...(cwd && { cwd }),
       ...(Object.keys(env).length > 0 && { env }),
     });
-    await waitForSpawn(cmd);
+    try {
+      await waitForSpawn(cmd);
+    } catch (error) {
+      // Drop any half-opened exec connection so failed spawns don't leak sockets.
+      cmd.close();
+      throw error;
+    }
 
     if (options.stdinMode === 'ignore') {
       cmd.stdin.end();
