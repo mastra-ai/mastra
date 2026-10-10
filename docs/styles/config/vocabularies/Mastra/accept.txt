@@ -115,7 +115,7 @@ STS
 STT
 (?i)Supabase
 Svelte
-SvelteKit
+(?i)SvelteKit
 Swagger
 (?i)TEXT
 Traceloop
