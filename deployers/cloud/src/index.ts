@@ -89,6 +89,7 @@ export class CloudDeployer extends Deployer {
       },
       discoveredTools,
     );
+
     process.chdir(currentCwd);
   }
 

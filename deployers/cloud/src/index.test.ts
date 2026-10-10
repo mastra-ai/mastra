@@ -9,6 +9,10 @@ import { CloudDeployer } from './index.js';
 
 // Mock the dependencies
 vi.mock('fs-extra');
+vi.mock('fs-extra/esm', () => ({
+  copy: vi.fn(async () => undefined),
+  readJSON: vi.fn(async () => ({})),
+}));
 vi.mock('./utils/file.js');
 vi.mock('./utils/deps.js');
 vi.mock('./utils/auth.js');
