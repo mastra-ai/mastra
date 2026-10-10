@@ -1980,11 +1980,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                   case 'response-metadata': {
                     const payload = rawChunk.payload as any;
+                    // A provider can split response-metadata across multiple chunks (e.g.
+                    // OpenRouter's AI SDK adapter sends an id-only chunk followed by a
+                    // modelId-only chunk for one SSE event). Merge onto the previous value
+                    // instead of replacing wholesale, so a later partial chunk cannot erase
+                    // a field an earlier chunk already set.
                     responseMetadata = {
-                      id: payload.id,
-                      timestamp: payload.timestamp,
-                      modelId: payload.modelId,
-                      headers: payload.headers,
+                      ...responseMetadata,
+                      id: payload.id ?? responseMetadata.id,
+                      timestamp: payload.timestamp ?? responseMetadata.timestamp,
+                      modelId: payload.modelId ?? responseMetadata.modelId,
+                      headers: payload.headers ?? responseMetadata.headers,
                     };
                     break;
                   }
