@@ -210,10 +210,12 @@ describe('UpstashTransport', () => {
 
     const deferred = () => {
       let resolve!: (value: unknown) => void;
-      const promise = new Promise(r => {
-        resolve = r;
+      let reject!: (error: Error) => void;
+      const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
       });
-      return { promise, resolve };
+      return { promise, resolve, reject };
     };
 
     beforeEach(() => {
@@ -340,6 +342,35 @@ describe('UpstashTransport', () => {
 
       expect(fetchMock.mock.calls.map(([, request]: any[]) => JSON.parse(request.body)[0].length - 2)).toEqual([
         2, 2, 1,
+      ]);
+      expect(batchTransport.logBuffer).toEqual([]);
+    });
+
+    it('should resend the batch from a failed in-flight flush on destroy', async () => {
+      const pending = deferred();
+      fetchMock.mockImplementationOnce(() => pending.promise);
+      const batchTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2 });
+
+      write(batchTransport, 5);
+      const destroyed = new Promise<void>((resolve, reject) => {
+        batchTransport._destroy(null as any, (error?: Error | null) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      pending.reject(new Error('Upstash down'));
+      await destroyed;
+
+      const sent = fetchMock.mock.calls.map(([, request]: any[]) =>
+        JSON.parse(request.body)[0]
+          .slice(2)
+          .map((log: string) => JSON.parse(log).msg),
+      );
+      expect(sent).toEqual([
+        ['message1', 'message2'],
+        ['message1', 'message2'],
+        ['message3', 'message4'],
+        ['message5'],
       ]);
       expect(batchTransport.logBuffer).toEqual([]);
     });

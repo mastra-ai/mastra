@@ -176,9 +176,12 @@ export class UpstashTransport extends LoggerTransport {
     }
   }
 
+  // Wait out any in-flight request, ignoring its failure since its records are back in the buffer,
+  // then keep sending until the buffer is empty. A failed request ends the drain instead of retrying forever.
   private async drainBuffer(): Promise<void> {
+    await this.flushPromise?.catch(() => {});
     while (this.logBuffer.length > 0 || this.flushPromise) {
-      await this._flush();
+      await (this.flushPromise ?? this._flush());
     }
   }
 
