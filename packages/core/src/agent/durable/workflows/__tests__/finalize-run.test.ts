@@ -413,4 +413,37 @@ describe('runDurableFinishSideEffects', () => {
     expect(seenByProcessor).toEqual({ name: 'Alice', age: 30 });
     expect(flushMessages).not.toHaveBeenCalled();
   });
+
+  it('restores MastraMemory for output processors when the snapshot dropped it (#26147)', async () => {
+    let seen: any;
+    globalRunRegistry.set('run-1', {
+      isPlaceholder: false,
+      outputProcessors: [
+        {
+          id: 'probe',
+          processOutputResult: ({ messages, requestContext }: any) => {
+            seen = requestContext?.get('MastraMemory');
+            return messages;
+          },
+        },
+      ],
+      saveQueueManager: { flushMessages: vi.fn() },
+      memory: { createThread: vi.fn() },
+    } as unknown as RunRegistryEntry);
+
+    await runDurableFinishSideEffects({
+      runId: 'run-1',
+      initData: makeInitData({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        threadExists: true,
+        memoryConfig: { readOnly: true },
+      }),
+      messageListState: makeMessageListState(),
+      mastra: { getLogger: () => undefined, getServer: () => undefined } as any,
+    });
+
+    expect(seen?.memoryConfig?.readOnly).toBe(true);
+    expect(seen?.thread?.id).toBe('thread-1');
+  });
 });

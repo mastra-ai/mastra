@@ -7656,6 +7656,17 @@ export class Mastra<
       }
     });
 
+    // Workers and runs are stopped, so nothing publishes anymore. Close transports
+    // that hold connections (e.g. Redis) so they don't keep the process alive.
+    const pubsub = this.#pubsub as PubSub & { close?: () => Promise<void> };
+    if (typeof pubsub.close === 'function') {
+      try {
+        await pubsub.close();
+      } catch (error) {
+        this.#logger?.error('Failed to close pubsub during shutdown', { error });
+      }
+    }
+
     // Close storage to release OS file handles (critical on Windows: open WAL/shm
     // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).
     if (this.#storage?.close) {
