@@ -1,0 +1,26 @@
+{
+  "name": "template-vendor-risk-questionnaire",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local Mastra template for generic vendor risk questionnaires.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": "^22.22.0 || >=24.12.0"
+  },
+  "scripts": {
+    "setup": "sh scripts/setup.sh",
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@mastra/core": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "mastra": "latest",
+    "typescript": "^5.9.3"
+  }
+}
