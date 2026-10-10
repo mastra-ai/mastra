@@ -12,6 +12,7 @@ import { createOutputHandler } from '../../../stream/base/output-format-handlers
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
+import { restoreRunAgentScopes } from '../../scopes';
 import { TripWire } from '../../trip-wire';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
 import { globalRunRegistry } from '../run-registry';
@@ -53,6 +54,7 @@ function restoreRequestContext(
 
   const restored = new RequestContext<unknown>(fallback?.entries());
   for (const [key, value] of Object.entries(entries)) restored.set(key, value);
+  restoreRunAgentScopes(restored);
   return restored;
 }
 
