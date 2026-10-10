@@ -667,7 +667,7 @@ export function createDurableToolCallStep() {
       let contextMessageList = messageList;
       if (!contextMessageList) {
         const llmOutput = getStepResult?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
-        const messageListState = readMessageListState(params.state, llmOutput ?? {});
+        const messageListState = await readMessageListState(params, llmOutput ?? {});
         if (messageListState) {
           contextMessageList = createRunMessageList({
             mastra,

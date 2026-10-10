@@ -106,7 +106,7 @@ export function createDurableLLMMappingStep() {
           threadId: state.threadId,
           resourceId: state.resourceId,
         })
-      ).deserialize(readMessageListState(params.state, llmOutput));
+      ).deserialize(await readMessageListState(params, llmOutput));
 
       if (llmOutput.stepResult.signalPreempted) {
         return {
