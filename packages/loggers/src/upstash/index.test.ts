@@ -239,6 +239,51 @@ describe('UpstashTransport', () => {
       expect(new UpstashTransport({ ...defaultOptions, maxBufferSize: 5 }).maxBufferSize).toBe(5);
     });
 
+    it('should flush instead of dropping when maxBufferSize is smaller than batchSize', async () => {
+      const smallBufferTransport = new UpstashTransport({ ...defaultOptions, batchSize: 100, maxBufferSize: 5 });
+
+      // Six writes per round: the fifth must trigger a flush so the sixth does not evict the oldest record
+      for (let round = 0; round < 4; round++) {
+        for (let i = 1; i <= 6; i++) {
+          smallBufferTransport._transform(JSON.stringify({ msg: `message${round * 6 + i}` }), 'utf8', () => {});
+        }
+        while (smallBufferTransport.logBuffer.length > 0) {
+          await smallBufferTransport._flush();
+        }
+      }
+
+      expect(smallBufferTransport.logBuffer).toHaveLength(0);
+
+      expect(smallBufferTransport.droppedRecords).toBe(0);
+      const sent = fetchMock.mock.calls.flatMap(([, request]: any[]) =>
+        JSON.parse(request.body)[0]
+          .slice(2)
+          .map((log: string) => JSON.parse(log).msg),
+      );
+      expect(sent).toEqual(Array.from({ length: 24 }, (_, index) => `message${index + 1}`));
+    });
+
+    it('should use a positive buffer limit when maxListLength disables trimming', async () => {
+      const untrimmedTransport = new UpstashTransport({ ...defaultOptions, maxListLength: -1, batchSize: 2 });
+
+      expect(untrimmedTransport.maxBufferSize).toBe(10000);
+      write(untrimmedTransport, 10);
+      while (untrimmedTransport.logBuffer.length > 0) {
+        await untrimmedTransport._flush();
+      }
+
+      expect(untrimmedTransport.droppedRecords).toBe(0);
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+    });
+
+    it('should reject a maxBufferSize that is not a positive integer', () => {
+      for (const maxBufferSize of [0, -1, 1.5]) {
+        expect(() => new UpstashTransport({ ...defaultOptions, maxBufferSize })).toThrow(
+          'maxBufferSize must be a positive integer',
+        );
+      }
+    });
+
     it('should not drop records when flushes succeed', async () => {
       write(transport, 50);
       await transport._flush();

@@ -19,7 +19,7 @@ export class UpstashTransport extends LoggerTransport {
   constructor(opts: {
     listName?: string;
     maxListLength?: number;
-    /** Maximum number of records held in memory while Upstash is unreachable. Defaults to `maxListLength`. */
+    /** Maximum number of records held in memory while Upstash is unreachable. Must be a positive integer. Defaults to `maxListLength`, or 10000 when `maxListLength` disables trimming. */
     maxBufferSize?: number;
     batchSize?: number;
     upstashUrl: string;
@@ -36,7 +36,11 @@ export class UpstashTransport extends LoggerTransport {
     this.upstashToken = opts.upstashToken;
     this.listName = opts.listName || 'application-logs';
     this.maxListLength = opts.maxListLength || 10000;
-    this.maxBufferSize = opts.maxBufferSize || this.maxListLength;
+    // A non-positive maxListLength disables LTRIM, so it cannot serve as the buffer limit.
+    this.maxBufferSize = opts.maxBufferSize ?? (this.maxListLength > 0 ? this.maxListLength : 10000);
+    if (!Number.isInteger(this.maxBufferSize) || this.maxBufferSize < 1) {
+      throw new Error('maxBufferSize must be a positive integer');
+    }
     this.batchSize = opts.batchSize || 100;
     this.flushInterval = opts.flushInterval || 10000;
 
@@ -139,14 +143,15 @@ export class UpstashTransport extends LoggerTransport {
 
       // Add to buffer
       this.logBuffer.push(log);
-      this.enforceBufferLimit();
 
-      // Flush if buffer reaches batch size
-      if (this.logBuffer.length >= this.batchSize) {
+      // Flush once a batch is ready, or earlier if the buffer limit is smaller than a batch
+      if (this.logBuffer.length >= Math.min(this.batchSize, this.maxBufferSize)) {
         this._flush().catch(err => {
           console.error('Error flushing logs to Upstash:', err);
         });
       }
+
+      this.enforceBufferLimit();
 
       // Pass through the log
       cb(null, chunk);
