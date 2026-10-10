@@ -1,5 +1,21 @@
 # mastracode
 
+## 0.46.0-alpha.7
+
+### Minor Changes
+
+- Compact rendering is now the only display mode in Mastra Code. The quiet mode toggle in `/settings` and the first-run "Try compact quiet mode?" prompt are gone. Tool calls, notifications and background completions always render as compact rows. Press Ctrl+E to expand them. ([#26576](https://github.com/mastra-ai/mastra/pull/26576))
+
+  The "Quiet mode tool preview lines" setting is now called **Preview lines** and is always shown in `/settings`. Your existing value carries over automatically. The old settings keys stay in your existing `settings.json`, so Mastra Code instances that are still running an older version when you upgrade keep their current display settings.
+
+### Patch Changes
+
+- Updated dependencies [[`20f7f87`](https://github.com/mastra-ai/mastra/commit/20f7f878953cb0965962d1e83a463be5e4ba2c26), [`d0db35e`](https://github.com/mastra-ai/mastra/commit/d0db35e00be93f1339525188c102f73dea5867d8), [`578d2c4`](https://github.com/mastra-ai/mastra/commit/578d2c41fc83b13efd88165ff0105904434a6db4), [`34844fc`](https://github.com/mastra-ai/mastra/commit/34844fcc7aeff1ae867c0aeedcd990caa520c418), [`2bf5b78`](https://github.com/mastra-ai/mastra/commit/2bf5b78761af6606b42ae2e085722eb50cdbc839), [`41bf075`](https://github.com/mastra-ai/mastra/commit/41bf0759e486ff7eb078ff9d83d532e086a16039), [`73e6b7c`](https://github.com/mastra-ai/mastra/commit/73e6b7c18ee19fbb31c6f9bad4ce23c16212876b), [`e2d49cd`](https://github.com/mastra-ai/mastra/commit/e2d49cd482b1eb3d3e5fb9828dac457ce8b02232), [`85636a2`](https://github.com/mastra-ai/mastra/commit/85636a2341aca229feb83c72b730a0d50f2f1753), [`85636a2`](https://github.com/mastra-ai/mastra/commit/85636a2341aca229feb83c72b730a0d50f2f1753)]:
+  - @mastra/core@1.76.0-alpha.7
+  - @mastra/code-sdk@1.12.0-alpha.7
+  - @mastra/observability@1.19.0-alpha.4
+  - @mastra/mcp@2.3.0-alpha.1
+
 ## 0.46.0-alpha.6
 
 ### Patch Changes

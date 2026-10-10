@@ -1,5 +1,38 @@
 # @mastra/core
 
+## 1.76.0-alpha.7
+
+### Patch Changes
+
+- Faster startup when restarting active workflow runs. Mastra no longer scans storage for workflows that set `autoRestartActiveRuns: false`. It also skips the internal workflows that run agent processors, since those only run during an agent call. ([#26588](https://github.com/mastra-ai/mastra/pull/26588))
+
+- Fixed three durable agent bugs: ([#26583](https://github.com/mastra-ai/mastra/pull/26583))
+
+  - Aborting a suspended run with `abortThreadStream()`, `abortRunStream()` or the stream result's `abort()` now removes it from `listSuspendedRuns()`. Previously the run stayed listed as suspended after the abort. This also applies to runs waiting for tool approval: aborting them now releases the run instead of leaving it for a later approve or decline.
+  - Client tool spans on Inngest agents are now parented to the exported agent run span instead of a span that was never exported.
+  - Inngest agent streams no longer hang when an event exceeds the Realtime message size limit. Oversized `finish` events are sent without the step history, and oversized `error` events keep the error name and a shortened message so `onError` still fires. Oversized non-terminal events are replaced with a `data-oversized-event` chunk so clients know an event was reduced, and a warning is logged through the Mastra logger.
+
+- Fixed a durable agent thread staying busy forever when `cleanup()` was called before the run finished. Cleanup now waits for the run to settle, so `onFinish`/`onError` fire and the thread is released for the next request. Fixes #25974. ([#26587](https://github.com/mastra-ai/mastra/pull/26587))
+
+- Fixed durable agents saving each step of a turn as a separate message. A multi-step turn is now saved as one message, as with `Agent`. Conversation history now holds more turns, and the streamed message ID matches the saved message. ([#26586](https://github.com/mastra-ai/mastra/pull/26586))
+
+- Fixed two durable agent bugs: ([#26585](https://github.com/mastra-ai/mastra/pull/26585))
+
+  - `Mastra.shutdown()` now closes the pubsub, so open Redis connections no longer keep the process running after shutdown.
+  - Read-only memory is now respected when a durable run finishes from a saved snapshot, so read-only turns are no longer saved.
+
+- Fixed durable agent runs that could not be resumed after a crash right after a tool suspended or asked for approval (#26435). The `tool-call-suspended` and `tool-call-approval` chunks are now published only after the suspended snapshot is saved, so a client that sees the question can always resume the run. ([#26589](https://github.com/mastra-ai/mastra/pull/26589))
+
+  Detaching an `AgentController` session from a thread no longer declines and deletes a parked durable run, so another session or process can still resume it.
+
+- Fixed `DurableAgent.recover()` losing tools that `ToolSearchProcessor` loaded during the run. After a crash, recovery in a fresh process now reads the run's latest transcript and restores those tools, so the model's pending tool call runs once instead of failing with `ToolNotFoundError` and being retried under a new call id. ([#26592](https://github.com/mastra-ai/mastra/pull/26592))
+
+- Experimental durable and evented agents now restart a model request that has only produced reasoning when a new message or signal arrives, so the agent answers with the new input instead of finishing a stale response. This matches the default agent. ([#25878](https://github.com/mastra-ai/mastra/pull/25878))
+
+  - The restarted request keeps the same step: it doesn't use up `maxSteps` or add token usage, and the discarded reasoning stays out of history.
+  - Input processors always finish; only the model request is cancelled.
+  - In traces, the cancelled request's step and inference spans end with finish reason `interrupted`.
+
 ## 1.76.0-alpha.6
 
 ### Minor Changes
