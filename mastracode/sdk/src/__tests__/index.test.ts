@@ -317,8 +317,11 @@ vi.mock('../agents/instructions.js', () => ({
 
 const getDynamicMemoryMock = vi.fn();
 
+const getKnowledgeOrgScopesMock = vi.fn(() => () => ['org:local']);
+
 vi.mock('../agents/memory.js', () => ({
   getDynamicMemory: getDynamicMemoryMock,
+  getKnowledgeOrgScopes: getKnowledgeOrgScopesMock,
 }));
 
 vi.mock('../agents/model.js', () => ({
@@ -1139,6 +1142,22 @@ describe('createMastraCode', () => {
       await createMastraCode({ crossAgentSignals: true });
       expect(sharedDiscoveryFlag()).toEqual({ sharedAgentDiscovery: true });
     });
+  });
+
+  it('publishes the session Knowledge org as an agent scope only with the default memory wiring', async () => {
+    const { RequestContext } = await import('@mastra/core/request-context');
+    const { createMastraCode } = await import('../index.js');
+    const codeAgentConfig = () =>
+      agentConstructorMock.mock.calls
+        .map(call => call?.[0] as { id?: string; scopes?: (ctx: unknown) => string[] } | undefined)
+        .findLast(config => config?.id === 'code-agent');
+
+    await createMastraCode();
+    const requestContext = new RequestContext();
+    expect(codeAgentConfig()?.scopes?.({ requestContext })).toEqual(['org:local']);
+
+    await createMastraCode({ memory: false });
+    expect(codeAgentConfig()?.scopes).toBeUndefined();
   });
 
   it('registers the built-in state signal providers on the code agent', async () => {

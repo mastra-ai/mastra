@@ -57,7 +57,7 @@ import { createBackgroundCompletionEvents } from './agents/background-completion
 import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
 import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
-import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
+import { getDynamicMemory, getKnowledgeOrgScopes, hasSubconsciousTools } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
@@ -1181,6 +1181,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
     model: ctx => getDynamicModel(ctx, config?.settingsPath),
+    // The default memory wiring curates Knowledge under the session org; publish it as an agent
+    // scope so Subconscious acts under the same org as the run it observes.
+    ...(config?.memory === undefined ? { scopes: ctx => getKnowledgeOrgScopes(vector)(ctx) } : {}),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time

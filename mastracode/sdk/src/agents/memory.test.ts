@@ -720,6 +720,41 @@ describe('getDynamicMemory', () => {
   });
 });
 
+describe('getKnowledgeOrgScopes', () => {
+  beforeEach(() => {
+    delete process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS;
+  });
+
+  async function orgScopes(state: Record<string, unknown>, vector: unknown = { vector: true }) {
+    const { getKnowledgeOrgScopes } = await import('./memory.js');
+    return getKnowledgeOrgScopes(vector as never)({ requestContext: createRequestContext(state) as never });
+  }
+
+  it('publishes the local session org as an org scope', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    expect(await orgScopes({ projectPath: '/tmp/project' })).toEqual([`org:${LOCAL_KNOWLEDGE_ORG_ID}`]);
+    expect(LOCAL_KNOWLEDGE_ORG_ID).toBe('local');
+  });
+
+  it('publishes the resolved Factory org as an org scope', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    expect(
+      await orgScopes({ projectPath: '/tmp/project', factoryProjectId: 'project-1', factoryOrgId: 'org-real' }),
+    ).toEqual(['org:org-real']);
+  });
+
+  it('contributes no org scope for a Factory session whose org never resolved', async () => {
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    expect(await orgScopes({ projectPath: '/tmp/project', factoryProjectId: 'project-1' })).toEqual([]);
+  });
+
+  it('contributes no org scope while Subconscious is off', async () => {
+    expect(await orgScopes({ projectPath: '/tmp/project' })).toEqual([]);
+    process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
+    expect(await orgScopes({ projectPath: '/tmp/project' }, null)).toEqual([]);
+  });
+});
+
 describe('model-route OM models', () => {
   beforeEach(() => {
     memoryConstructorMock.mockReset();
