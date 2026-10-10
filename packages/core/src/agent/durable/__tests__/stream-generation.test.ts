@@ -234,6 +234,39 @@ describe('observe() from an offset', () => {
     await transport.close();
   });
 
+  it('replays the segment before a resume when the offset lies inside it', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'observed-run';
+
+    // First segment runs, then suspends and releases its claim.
+    const first = await workflows.claimRunOwnership({ runId, ownerId: 'first', leaseMs: 30_000 });
+    const firstGeneration = first.record!.generation;
+    await runInRunFenceScope(scopeAt(runId, firstGeneration), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('a '));
+      await emitChunkEvent(pubsub, runId, textChunk('b '));
+    });
+    await workflows.releaseRunOwnership({ runId, ownerId: 'first', generation: firstGeneration });
+
+    // resume() takes a new claim. It is not a takeover, so there is no marker.
+    const resumed = await workflows.claimRunOwnership({ runId, ownerId: 'resumed', leaseMs: 30_000 });
+    const resumedGeneration = resumed.record!.generation;
+    expect(resumedGeneration).toBeGreaterThan(firstGeneration);
+    await runInRunFenceScope(scopeAt(runId, resumedGeneration), () => emitChunkEvent(pubsub, runId, textChunk('c ')));
+
+    // The observer reconnects inside the first segment.
+    const observed = await durable.observe(runId, { offset: 1 });
+    const reader = readFullStream(observed.fullStream as ReadableStream<any>);
+    await runInRunFenceScope(scopeAt(runId, resumedGeneration), async () => {
+      await emitChunkEvent(pubsub, runId, textChunk('d'));
+      await emitFinishEvent(pubsub, runId, finishData);
+    });
+    await reader.done;
+
+    expect(texts(reader.chunks)).toEqual(['b ', 'c ', 'd']);
+    observed.cleanup();
+    await transport.close();
+  });
+
   it("still reconnects when the run's claim can't be read", async () => {
     const { durable, pubsub, transport, workflows } = await observedAgent();
     const runId = 'observed-run';

@@ -300,6 +300,13 @@ type ThreadControlSubscription = {
   observers: number;
   ownedRunIds: Set<string>;
   admittedSignalIds: Set<string>;
+  /**
+   * Runs this process lost to an execution elsewhere while idle messages or
+   * continuations stayed queued here, keyed to the lost execution's stream.
+   * The successor's terminal event drains those queues; the lost stream's own
+   * terminal event does not, since the run is still executing elsewhere.
+   */
+  successorRunIds: Map<string, string>;
   unsubscribe: () => void;
 };
 
@@ -962,8 +969,14 @@ export class AgentThreadStreamRuntime {
         if (current?.registrationSeen) current.registeredElsewhere = true;
         if (lost?.runId === data.runId && lost.registrationSeen) {
           state.lostRunsByThread.delete(key);
-          this.#handOffQueuedSignals(state, resolvedPubSub, key, data.runId);
+          this.#handOffQueuedSignals(state, resolvedPubSub, key, data.runId, lost.streamId);
         }
+      } else if (data?.type === 'run-completed' || data?.type === 'run-failed') {
+        const lostStreamId = subscription.successorRunIds.get(data.runId);
+        if (lostStreamId === undefined || data.streamId === lostStreamId) return;
+        subscription.successorRunIds.delete(data.runId);
+        if (await this.#drainPendingContinuations(state, resolvedPubSub, key, data.runId)) return;
+        await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
       }
     };
     const onEvent: EventCallback = (event, ack) => {
@@ -972,7 +985,11 @@ export class AgentThreadStreamRuntime {
         type !== 'signal-enqueued' &&
         type !== 'signals-cancelled' &&
         type !== 'run-abort-requested' &&
-        type !== 'run-registered'
+        type !== 'run-registered' &&
+        !(
+          (type === 'run-completed' || type === 'run-failed') &&
+          subscription.successorRunIds.has((event.data as { runId: string }).runId)
+        )
       )
         return ack?.();
       // Finish acknowledging the delivery before an empty queue can release its listener.
@@ -992,6 +1009,7 @@ export class AgentThreadStreamRuntime {
       observers: 0,
       ownedRunIds,
       admittedSignalIds: new Set(),
+      successorRunIds: new Map(),
       unsubscribe: () => {
         active = false;
         void subscription.ready.then(() => resolvedPubSub.unsubscribe(topic, onEvent)).catch(() => {});
@@ -3479,8 +3497,8 @@ export class AgentThreadStreamRuntime {
           if (!state.threadRunsById.has(record.runId)) {
             this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
             if (record.registeredElsewhere) {
-              this.#handOffQueuedSignals(state, pubsub, key, record.runId);
-            } else if (state.preRunSignalsByThread.get(key)?.length || state.pendingSignalsByThread.get(key)?.length) {
+              this.#handOffQueuedSignals(state, pubsub, key, record.runId, record.streamId);
+            } else if (this.#hasPendingThreadWork(state, key)) {
               // It has not registered yet; its registration takes the queues.
               state.lostRunsByThread.set(key, record);
             }
@@ -3500,7 +3518,18 @@ export class AgentThreadStreamRuntime {
    * another process, which ignores ones it already admitted. Never awaited:
    * this can run inside a delivery of the thread topic it publishes to.
    */
-  #handOffQueuedSignals(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, key: string, runId: string) {
+  #handOffQueuedSignals(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+    lostStreamId: string,
+  ) {
+    // Idle messages and continuations start new runs once the thread is idle,
+    // so they stay here and start when that execution's run ends.
+    if (state.pendingIdleSignalsByThread.get(key)?.length || state.pendingContinuationsByThread.get(key)?.length) {
+      this.#ensureThreadControlSubscription(state, pubsub, key).successorRunIds.set(runId, lostStreamId);
+    }
     for (const preRun of [true, false]) {
       const queues = preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
       for (const signal of queues.get(key) ?? []) {

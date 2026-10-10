@@ -338,6 +338,51 @@ describe('thread stream: runs taken over by a later claim generation', () => {
       },
     );
 
+    it('starts an idle wake queued behind the lost execution once the execution in another process ends', async () => {
+      const { pubsub, original, recovering, subscription } = await setup({ read: false });
+      const woken: string[] = [];
+      const other = {
+        id: 'other-agent',
+        getMemory: async () => undefined,
+        stream: vi.fn(async (signal: any, streamOptions: any) => {
+          woken.push(signal.contents);
+          const c = controlledOutput(streamOptions.runId);
+          c.end();
+          return c.output;
+        }),
+      } as unknown as Agent<any, any, any, any>;
+
+      let originalLost = false;
+      const a = controlledOutput('run-1');
+      await original.registerRun(agent, a.output, options, pubsub, {
+        generation: generation(1),
+        ownershipLost: () => originalLost,
+      });
+      a.push(start);
+      await nextTicks(10);
+      const queued = await original.sendSignal(
+        other,
+        { type: 'user-message', contents: 'wake later' },
+        { resourceId: 'generation-user', threadId: 'generation-thread', ifIdle: { behavior: 'wake' } },
+        pubsub,
+      ).accepted;
+      expect(queued.action).toBe('deliver');
+      originalLost = true;
+
+      const b = controlledOutput('run-1');
+      await recovering.registerRun(agent, b.output, options, pubsub, { strict: true, generation: generation(2) });
+      a.end('failed');
+      await nextTicks(40);
+      b.push(start);
+      await nextTicks(20);
+      expect(woken).toEqual([]);
+
+      b.push(finish);
+      b.end();
+      await vi.waitFor(() => expect(woken).toEqual(['wake later']));
+      subscription.unsubscribe();
+    });
+
     it.each(['before', 'after'] as const)(
       'keeps renewing the thread lease for an execution in this process that registers the run %s the lost one ends',
       async registers => {

@@ -4411,7 +4411,11 @@ export class DurableAgent<
   /**
    * A replay from an offset can start past the marker of the execution that
    * took the run over, and would then accept what the lost execution still
-   * publishes, its finish included. Follow the run's current claim instead.
+   * publishes, its finish included. Start the reader with the floor it would
+   * have reached by reading the skipped events: the highest generation among
+   * them. Ordinary suspend/resume segments then still replay, since each
+   * segment's events precede the next claim. When the transport keeps no
+   * history to read, follow the run's current claim instead.
    * Runs fenced by a pubsub lease have no generation and are unaffected.
    * The floor only adds protection, so a failed read must not fail the reconnect;
    * the reader reads the claim again before an event can end its stream.
@@ -4422,6 +4426,15 @@ export class DurableAgent<
   ): Promise<Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration'>> {
     if (!offset) return {};
     try {
+      const skipped = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).slice(0, offset);
+      if (skipped.length === offset) {
+        let floor: number | undefined;
+        for (const event of skipped) {
+          const generation = event.generation;
+          if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
+        }
+        return { minGeneration: floor };
+      }
       return { minGeneration: await readRunGeneration(this.#mastra, runId) };
     } catch (error) {
       this.logger.warn(`[DurableAgent] Couldn't read the claim of run ${runId}; observing it without a floor`, {
