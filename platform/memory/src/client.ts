@@ -69,7 +69,6 @@ export interface MemoryObservationRecord {
 }
 
 export interface MemoryObservationStatus {
-  scope: string;
   pendingTokens: number;
   observationThreshold: number;
   shouldObserve: boolean;
