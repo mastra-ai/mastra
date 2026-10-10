@@ -16,15 +16,14 @@ import { PlatformMemory } from './platform-memory';
 
 /**
  * Agent-level parity between @mastra/memory's `Memory` and `PlatformMemory`, ported from
- * mock-om-agent, cross-thread-resource-scope and om-error-and-persistence. Each scenario runs
+ * mock-om-agent and om-error-and-persistence. Observational memory is thread-scoped. Each scenario runs
  * against both backends with the same scripted observer.
  *
  * Needs a local Platform API started with MEMORY_TEST_MODEL_URL=http://localhost:4555/v1,
  * PLATFORM_MEMORY_LIVE pointing at `{ instanceId, token }`, and an instance whose
- * observation threshold is 50 tokens. PARITY_SCOPE must match the instance scope.
+ * observation threshold is 50 tokens.
  */
 const live = process.env.PLATFORM_MEMORY_LIVE;
-const scope = (process.env.PARITY_SCOPE ?? 'thread') as 'thread' | 'resource';
 const API = 'http://127.0.0.1:3010';
 
 const BODY = `Date: Jan 1, 2026
@@ -32,11 +31,12 @@ const BODY = `Date: Jan 1, 2026
 const TAIL = `<current-task>Chatting with Ada.</current-task>
 <suggested-response>Greet Ada by name.</suggested-response>`;
 
-/** Same output as createMockObserverModel; resource scope asks for one block per thread. */
-function observerOutput(prompt: string): string {
-  const ids = [...new Set([...prompt.matchAll(/<thread id=\\?"([^"\\]+)/g)].map(m => m[1]))];
-  const body = ids.length ? ids.map(id => `<thread id="${id}">\n${BODY}\n</thread>`).join('\n') : BODY;
-  return `<observations>\n${body}\n</observations>\n${TAIL}`;
+/** Same output as createMockObserverModel. */
+function observerOutput(): string {
+  return `<observations>
+${BODY}
+</observations>
+${TAIL}`;
 }
 
 function scriptedServer(port: number): Promise<Server> {
@@ -44,7 +44,7 @@ function scriptedServer(port: number): Promise<Server> {
     let raw = '';
     req.on('data', c => (raw += c));
     req.on('end', () => {
-      const text = observerOutput(raw);
+      const text = observerOutput();
       const base = { id: 'x', created: 0, model: 'scripted' };
       const usage = { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 };
       if (!JSON.parse(raw).stream) {
@@ -84,7 +84,7 @@ const textParts = (text: string, finishReason = 'stop') => [
 
 function localObserver() {
   return new MockLanguageModelV2({
-    doStream: async ({ prompt }) => streamOf(textParts(observerOutput(JSON.stringify(prompt)))),
+    doStream: async () => streamOf(textParts(observerOutput())),
   });
 }
 
@@ -153,7 +153,6 @@ function localBackend(): Backend {
     options: {
       observationalMemory: {
         enabled: true,
-        scope,
         observation: { model: localObserver() as never, messageTokens: 50, bufferTokens: false },
         reflection: { model: localObserver() as never, observationTokens: 100_000 },
       },
@@ -164,7 +163,7 @@ function localBackend(): Backend {
     memory,
     settle: async () => {},
     observations: async (threadId, resourceId) =>
-      (await (await memoryStore()).getObservationalMemory(scope === 'resource' ? null : threadId, resourceId))
+      (await (await memoryStore()).getObservationalMemory(threadId, resourceId))
         ?.activeObservations ?? null,
     messages: async threadId => {
       const { messages } = await (
@@ -224,7 +223,7 @@ afterAll(() => server?.close());
 describe.skipIf(!live).each([
   ['Memory', localBackend],
   ['PlatformMemory', platformBackend],
-] as const)(`OM agent parity (%s, ${scope} scope)`, (_name, makeBackend) => {
+] as const)('OM agent parity (%s)', (_name, makeBackend) => {
   const run = `${Date.now()}`;
   const setup = () => {
     const backend = makeBackend();
@@ -302,21 +301,5 @@ describe.skipIf(!live).each([
     expect(cloned.length).toBe(source.length);
     expect(cloned.map(m => m.role)).toEqual(source.map(m => m.role));
     expect(await backend.observations(copy, resource)).toContain('lives in Kyoto');
-  });
-
-  it.skipIf(scope !== 'resource')('shares resource-scoped observations across threads without re-homing', async () => {
-    const { agent, backend, prompts } = setup();
-    const resource = `res-cross-${run}`;
-    await agent.generate('Hello from thread A, I need help with something important.', {
-      memory: { thread: `a-${run}`, resource },
-    });
-    await backend.settle(`a-${run}`);
-    const res = await agent.generate('Hello from thread B, help me too.', {
-      memory: { thread: `b-${run}`, resource },
-    });
-    expect(res.text).toBeTruthy();
-    expect(prompts.find(p => p.includes('Hello from thread B'))).toContain('lives in Kyoto');
-    const threadB = await backend.messages(`b-${run}`);
-    expect(threadB.some(m => m.text.includes('Hello from thread A'))).toBe(false);
   });
 });
