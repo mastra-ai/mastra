@@ -5,8 +5,10 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { FilterBar, isFilterBarGroup } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarExpression, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import {
   useFeedbackAvailable,
+  useThreadQueryAvailable,
   useTraceQueryAvailable,
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
@@ -16,8 +18,10 @@ import { TraceAsItemDialog } from '@mastra/playground-ui/domains/observability/c
 import { ScoreDataPanel, TraceScoresTab } from '@mastra/playground-ui/domains/scores';
 import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
+import { ThreadsListView } from '@mastra/playground-ui/domains/traces/components/threads-list-view';
 import { TraceColumnsMenu } from '@mastra/playground-ui/domains/traces/components/trace-columns-menu';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
+import { TraceThreadPanel } from '@mastra/playground-ui/domains/traces/components/trace-thread-panel';
 import {
   TRACE_TIME_RANGE_FIELD,
   TRACE_TIME_RANGE_FIELD_ID,
@@ -61,6 +65,7 @@ import {
   useSpanFeedback,
   useTraceFeedback,
   useTraceOrBranchSpans,
+  useTraceThreadsQuery,
   useTraceUsage,
 } from '@mastra/react/hooks/traces';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -119,6 +124,8 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   });
   const querySearchParams = new URLSearchParams(searchParams);
   querySearchParams.delete('listMode');
+  querySearchParams.delete('view');
+  querySearchParams.delete('threadId');
   if (querySearchParams.get('status') === 'running') querySearchParams.delete('status');
   // Drop params the query API can't run on, so no chip ever advertises a filter
   // that has no effect on the list.
@@ -162,6 +169,37 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const traceQuery = useTraceQueryAvailable();
   const withQueryTrace = traceQuery.enabled;
   const withFeedback = useFeedbackAvailable().enabled;
+  // The Threads view lists conversations instead of turns. Hidden when the store can't run thread queries.
+  const threadQuery = useThreadQueryAvailable();
+  const view: 'traces' | 'threads' =
+    threadQuery.enabled && searchParams.get('view') === 'threads' ? 'threads' : 'traces';
+  const selectedThreadId = view === 'threads' ? searchParams.get('threadId') : null;
+  const setView = useCallback(
+    (next: 'traces' | 'threads') =>
+      setSearchParams(
+        prev => {
+          const params = new URLSearchParams(prev);
+          if (next === 'threads') params.set('view', 'threads');
+          else params.delete('view');
+          params.delete('threadId');
+          params.delete('traceId');
+          params.delete('spanId');
+          return params;
+        },
+        { replace: true },
+      ),
+    [setSearchParams],
+  );
+  const setSelectedThreadId = useCallback(
+    (threadId: string | null) =>
+      setSearchParams(prev => {
+        const params = new URLSearchParams(prev);
+        if (threadId) params.set('threadId', threadId);
+        else params.delete('threadId');
+        return params;
+      }),
+    [setSearchParams],
+  );
 
   // Counts for the tab badges. The tab bodies own their pagination and re-use these
   // first-page queries through React Query's cache.
@@ -340,7 +378,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       }),
     orderBy: [{ field: 'startedAt', direction: sortDirection }],
     withQueryTrace,
-    enabled: !traceQuery.isLoading,
+    enabled: !traceQuery.isLoading && view === 'traces',
     legacyFilters: buildTraceListFilters({
       rootEntityType: url.selectedEntityOption?.entityType,
       status: url.selectedStatus,
@@ -349,6 +387,31 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       tokens: url.filterTokens,
     }),
   });
+  // Threads view: a thread is listed when any of its traces matches the filters. The range is pinned
+  // when the view opens (no rolling refresh) so summary query keys stay stable.
+  const [threadsNow, setThreadsNow] = useState(() => new Date());
+  const threadSelection = useMemo(
+    () =>
+      buildTraceQueryRequest({
+        rootEntityType: url.selectedEntityOption?.entityType,
+        status: url.selectedStatus,
+        dateFrom: url.selectedDateFrom,
+        dateTo: url.selectedDateTo,
+        tokens: url.filterTokens,
+        groups: url.filterGroups,
+        now: threadsNow,
+      }),
+    [
+      url.selectedEntityOption?.entityType,
+      url.selectedStatus,
+      url.selectedDateFrom,
+      url.selectedDateTo,
+      url.filterTokens,
+      url.filterGroups,
+      threadsNow,
+    ],
+  );
+  const threads = useTraceThreadsQuery({ selection: threadSelection, enabled: view === 'threads' });
   const traceColumns = useTraceColumnPreferences();
   const observabilityCapabilities = useObservabilityStorageCapabilities();
   const usageDisabledReason = observabilityCapabilities.isLoading
@@ -404,6 +467,21 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const actionRow = (
     <ActionRow>
       <ActionRow.Start>
+        {threadQuery.enabled && (
+          <Tabs
+            defaultTab="traces"
+            value={view}
+            onValueChange={next => {
+              if (next === 'threads') setThreadsNow(new Date());
+              setView(next);
+            }}
+          >
+            <TabList>
+              <Tab value="traces">Traces</Tab>
+              <Tab value="threads">Threads</Tab>
+            </TabList>
+          </Tabs>
+        )}
         <FilterBar
           fields={filterBarFields}
           operators={TRACE_FILTER_BAR_OPERATORS}
@@ -435,26 +513,30 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
               )
             }
           />
-          <FilterBar.Input placeholder="Filter traces…" />
+          <FilterBar.Input placeholder={view === 'threads' ? 'Filter threads…' : 'Filter traces…'} />
         </FilterBar>
       </ActionRow.Start>
       <ActionRow.End>
-        <TraceColumnsMenu
-          preferences={traceColumns.preferences}
-          availableMetadataKeys={availableMetadataKeys}
-          usageDisabledReason={usageDisabledReason}
-          withQueryTrace={withQueryTrace}
-          onToggleColumn={traceColumns.toggleColumn}
-          onAddCustomColumn={traceColumns.addCustomColumn}
-          onRemoveCustomColumn={traceColumns.removeCustomColumn}
-          onAddMetadataColumn={traceColumns.addMetadataColumn}
-          onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
-          onReset={traceColumns.resetColumns}
-        />
-        <Field orientation="horizontal" disabled={isTracesLoading}>
-          <Checkbox checked={autoRefetchTraces} onCheckedChange={checked => setAutoRefetchTraces(checked === true)} />
-          <FieldLabel>Auto refresh</FieldLabel>
-        </Field>
+        {view === 'traces' && (
+          <TraceColumnsMenu
+            preferences={traceColumns.preferences}
+            availableMetadataKeys={availableMetadataKeys}
+            usageDisabledReason={usageDisabledReason}
+            withQueryTrace={withQueryTrace}
+            onToggleColumn={traceColumns.toggleColumn}
+            onAddCustomColumn={traceColumns.addCustomColumn}
+            onRemoveCustomColumn={traceColumns.removeCustomColumn}
+            onAddMetadataColumn={traceColumns.addMetadataColumn}
+            onRemoveMetadataColumn={traceColumns.removeMetadataColumn}
+            onReset={traceColumns.resetColumns}
+          />
+        )}
+        {view === 'traces' && (
+          <Field orientation="horizontal" disabled={isTracesLoading}>
+            <Checkbox checked={autoRefetchTraces} onCheckedChange={checked => setAutoRefetchTraces(checked === true)} />
+            <FieldLabel>Auto refresh</FieldLabel>
+          </Field>
+        )}
       </ActionRow.End>
     </ActionRow>
   );
@@ -473,7 +555,18 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
     );
   }
 
-  if (tracesError) {
+  if (view === 'threads' && threads.error) {
+    return (
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+        <h1 className="sr-only">Traces</h1>
+        <div className="flex h-full items-center justify-center">
+          <TracesErrorContent error={threads.error} resource="threads" errorTitle="Failed to load threads" />
+        </div>
+      </PageLayout>
+    );
+  }
+
+  if (view === 'traces' && tracesError) {
     return (
       <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
         <h1 className="sr-only">Traces</h1>
@@ -487,7 +580,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const contentFiltersApplied =
     !!url.selectedEntityOption || !!url.selectedStatus || url.filterTokens.length > 0 || url.filterGroups.length > 0;
 
-  if (traces.length === 0 && !isTracesLoading && !contentFiltersApplied && !url.traceIdParam) {
+  if (view === 'traces' && traces.length === 0 && !isTracesLoading && !contentFiltersApplied && !url.traceIdParam) {
     return (
       <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
         <h1 className="sr-only">Traces</h1>
@@ -499,42 +592,67 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   return (
     <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
       <h1 className="sr-only">Traces</h1>
-      <TracesListView
-        listId={
-          scopedEntityType === EntityType.AGENT
-            ? 'agent-traces'
-            : scopedEntityType === EntityType.WORKFLOW_RUN
-              ? 'workflows-traces'
-              : 'all-traces'
-        }
-        traces={traces}
-        isLoading={isTracesLoading}
-        isFetchingNextPage={isFetchingNextPage}
-        hasNextPage={hasNextPage}
-        setEndOfListElement={setEndOfListElement}
-        filtersApplied={filtersApplied}
-        featuredTraceId={url.traceIdParam}
-        isBranchesMode={url.listMode === 'branches'}
-        columnPreferences={displayedColumnPreferences}
-        usageByTraceId={traceUsage.data}
-        createdSort={sortDirection}
-        onSortChange={onSortChange}
-        onFilterByField={handleFilterByField}
-        onTraceClick={trace => {
-          const isBranches = url.listMode === 'branches';
-          const isSameRow = isBranches
-            ? url.traceIdParam === trace.traceId && url.anchorSpanIdParam === trace.spanId
-            : url.traceIdParam === trace.traceId;
-          if (isSameRow) {
-            url.handleTraceClick('');
-            return;
+      {view === 'threads' ? (
+        <>
+          <ThreadsListView
+            threadIds={threads.threadIds}
+            isLoading={threads.isLoading}
+            isFetchingNextPage={threads.isFetchingNextPage}
+            hasNextPage={threads.hasNextPage}
+            setEndOfListElement={threads.setEndOfListElement}
+            filtersApplied={filtersApplied}
+            featuredThreadId={selectedThreadId}
+            onThreadClick={threadId => setSelectedThreadId(threadId === selectedThreadId ? null : threadId)}
+          />
+          <TraceThreadPanel
+            open={!!selectedThreadId}
+            threadId={selectedThreadId ?? ''}
+            withQueryTrace={withQueryTrace}
+            withFeedback={withFeedback}
+            onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
+            onClose={() => setSelectedThreadId(null)}
+            depth={1}
+            closeLabel="Close thread"
+          />
+        </>
+      ) : (
+        <TracesListView
+          listId={
+            scopedEntityType === EntityType.AGENT
+              ? 'agent-traces'
+              : scopedEntityType === EntityType.WORKFLOW_RUN
+                ? 'workflows-traces'
+                : 'all-traces'
           }
-          // Branches mode: seed both anchorSpanId (the branch identity) and spanId (initial
-          // selected span = the anchor). Span nav inside the panel only mutates spanId after.
-          const branchSpanId = isBranches ? (trace.spanId ?? undefined) : undefined;
-          url.handleTraceClick(trace.traceId, branchSpanId, branchSpanId);
-        }}
-      />
+          traces={traces}
+          isLoading={isTracesLoading}
+          isFetchingNextPage={isFetchingNextPage}
+          hasNextPage={hasNextPage}
+          setEndOfListElement={setEndOfListElement}
+          filtersApplied={filtersApplied}
+          featuredTraceId={url.traceIdParam}
+          isBranchesMode={url.listMode === 'branches'}
+          columnPreferences={displayedColumnPreferences}
+          usageByTraceId={traceUsage.data}
+          createdSort={sortDirection}
+          onSortChange={onSortChange}
+          onFilterByField={handleFilterByField}
+          onTraceClick={trace => {
+            const isBranches = url.listMode === 'branches';
+            const isSameRow = isBranches
+              ? url.traceIdParam === trace.traceId && url.anchorSpanIdParam === trace.spanId
+              : url.traceIdParam === trace.traceId;
+            if (isSameRow) {
+              url.handleTraceClick('');
+              return;
+            }
+            // Branches mode: seed both anchorSpanId (the branch identity) and spanId (initial
+            // selected span = the anchor). Span nav inside the panel only mutates spanId after.
+            const branchSpanId = isBranches ? (trace.spanId ?? undefined) : undefined;
+            url.handleTraceClick(trace.traceId, branchSpanId, branchSpanId);
+          }}
+        />
+      )}
 
       <TraceSpanPanel
         title="Trace details"

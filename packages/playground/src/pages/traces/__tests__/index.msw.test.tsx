@@ -8,8 +8,10 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import TracesPage from '..';
 import {
   emptyTraceQueryFields,
+  chefThreadTraces,
   legacyTraceCapabilities,
   noFeedbackCapabilities,
+  noThreadQueryCapabilities,
   noRootDurationCapabilities,
   traceQueryCapabilities,
   traceQueryFieldsWithRegion,
@@ -21,6 +23,7 @@ import {
   traceQueryRegionValues,
   traceQuerySpanModelValues,
   traceQueryPageWithThreadAndEnvironment,
+  traceThreadsPage,
 } from './fixtures/trace-query';
 import {
   branchList,
@@ -1692,6 +1695,145 @@ describe('Traces side panel span search', () => {
 
       await waitFor(() => expect(screen.queryByText('llm call')).toBeNull());
       expect(screen.getByText('weather tool')).toBeTruthy();
+    });
+  });
+});
+
+describe('Traces page threads view', () => {
+  const onThreadsRequest = vi.fn<(body: unknown) => void>();
+  const onThreadTracesRequest = vi.fn<() => void>();
+
+  const setThreadsHandlers = (capabilities: GetObservabilityCapabilitiesResponse = metricsCapableCapabilities) => {
+    setTracePageHandlers(capabilities);
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/observability/threads/query`, async ({ request }) => {
+        onThreadsRequest(await request.json());
+        return HttpResponse.json(traceThreadsPage);
+      }),
+      // Thread-scoped trace queries load the thread panel.
+      http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+        const body = await request.json();
+        const threadScoped = JSON.stringify(body).includes('thread-chef');
+        if (threadScoped) onThreadTracesRequest();
+        return HttpResponse.json(threadScoped ? chefThreadTraces : traceQueryPage);
+      }),
+      http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
+    );
+  };
+
+  const getThreadRow = async () => (await screen.findByText('thread-chef')).closest<HTMLElement>('button')!;
+
+  beforeEach(() => {
+    onThreadsRequest.mockClear();
+    onThreadTracesRequest.mockClear();
+  });
+
+  describe('when the store cannot run thread queries', () => {
+    it('offers no Threads tab', async () => {
+      setThreadsHandlers(noThreadQueryCapabilities);
+
+      renderPage();
+
+      expect(await screen.findByRole('combobox', { name: 'Add filter' })).not.toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Threads' })).toBeNull();
+    });
+
+    it('lists traces and never queries threads, even from a threads link', async () => {
+      setThreadsHandlers(noThreadQueryCapabilities);
+
+      renderPage('/traces?view=threads');
+
+      expect(await screen.findByRole('combobox', { name: 'Add filter' })).not.toBeNull();
+      expect(onThreadsRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the Threads tab is picked', () => {
+    it('writes the view to the URL', async () => {
+      setThreadsHandlers();
+
+      renderPage();
+      fireEvent.click(await screen.findByRole('tab', { name: 'Threads' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('view=threads'));
+    });
+
+    it('hides Auto refresh, which only applies to traces', async () => {
+      setThreadsHandlers();
+
+      renderPage();
+      fireEvent.click(await screen.findByRole('tab', { name: 'Threads' }));
+
+      await waitFor(() => expect(screen.queryByText('Auto refresh')).toBeNull());
+    });
+
+    it('queries threads over the selected time range', async () => {
+      setThreadsHandlers();
+
+      renderPage();
+      fireEvent.click(await screen.findByRole('tab', { name: 'Threads' }));
+
+      await waitFor(() =>
+        expect(onThreadsRequest).toHaveBeenCalledWith(
+          expect.objectContaining({ traces: expect.objectContaining({ timeRange: expect.any(Object) }) }),
+        ),
+      );
+    });
+  });
+
+  describe('when a thread is listed', () => {
+    it('shows one row with the thread id', async () => {
+      setThreadsHandlers();
+
+      renderPage('/traces?view=threads');
+
+      expect(await getThreadRow()).not.toBeNull();
+    });
+
+    it("never loads the thread's traces until the row is opened", async () => {
+      setThreadsHandlers();
+
+      renderPage('/traces?view=threads');
+      await getThreadRow();
+
+      expect(onThreadTracesRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the thread query fails', () => {
+    it('shows the error instead of an empty list', async () => {
+      setThreadsHandlers();
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/threads/query`, () =>
+          HttpResponse.json({ error: 'The time range cannot exceed 31 days' }, { status: 400 }),
+        ),
+      );
+
+      renderPage('/traces?view=threads');
+
+      expect(await screen.findByText('Failed to load threads')).not.toBeNull();
+      expect(screen.queryByText('No threads found yet')).toBeNull();
+    });
+  });
+
+  describe('when a thread row is clicked', () => {
+    it('opens the whole conversation in a panel', async () => {
+      setThreadsHandlers();
+
+      renderPage('/traces?view=threads');
+      fireEvent.click(await getThreadRow());
+
+      expect(await screen.findByTestId('thread-view-by-trace')).not.toBeNull();
+      expect(screen.getByTestId('location').textContent).toContain('threadId=thread-chef');
+    });
+
+    it('closes the panel back to the list with "Close thread"', async () => {
+      setThreadsHandlers();
+
+      renderPage('/traces?view=threads&threadId=thread-chef');
+      fireEvent.click(await screen.findByRole('button', { name: 'Close thread' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('threadId'));
     });
   });
 });
