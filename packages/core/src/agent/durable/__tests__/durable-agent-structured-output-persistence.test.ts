@@ -176,3 +176,52 @@ describe('structured output persistence (issue #26432)', () => {
     expect(metadata?.structuredOutput).toEqual(expected);
   });
 });
+
+describe('durable structuring model (#26431)', () => {
+  it('fails the run when the structuring pass fails under errorStrategy strict', async () => {
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'so-strict-durable',
+      name: 'Structured Output Strict Agent',
+      instructions: 'Return the person',
+      model: createJsonModel('It is Alice, who is 30 years old.') as LanguageModelV2,
+      memory,
+    });
+    const durable = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    new Mastra({ agents: { [agent.id]: durable }, storage: new InMemoryStore(), logger: false });
+
+    const result = await durable.stream('Who is it?', {
+      structuredOutput: { schema, model: createJsonModel('not json') as LanguageModelV2 },
+      memory: { thread: THREAD, resource: RESOURCE },
+    });
+    const outcome = await result.output.getFullOutput().then(
+      full => ({ object: full.object, error: full.error }),
+      error => ({ object: undefined, error }),
+    );
+    result.cleanup();
+
+    expect(outcome.object).toBeUndefined();
+    expect(outcome.error).toBeDefined();
+  });
+
+  it('persists a model-instance structuring model so other workers can resolve it', async () => {
+    const agent = new Agent({
+      id: 'so-model-instance',
+      name: 'Structured Output Model Instance Agent',
+      instructions: 'Return the person',
+      model: createJsonModel('Alice') as LanguageModelV2,
+    });
+    const durable = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+
+    const prepared = await durable.prepare('Who is it?', {
+      structuredOutput: { schema, model: createJsonModel('{}') as LanguageModelV2 },
+    });
+
+    const so = (prepared.workflowInput as any).options.structuredOutput;
+    expect(so.structuringModelConfig).toMatchObject({
+      provider: 'mock-provider',
+      modelId: 'mock-model-id',
+      originalConfig: 'mock-provider/mock-model-id',
+    });
+  });
+});

@@ -161,7 +161,9 @@ export async function runDurableFinishSideEffects({
   const liveStructuredOutput = registryEntry?.structuredOutput;
   const structuredOutputSchema = liveStructuredOutput?.schema ?? structuredOutput?.schema;
   let structuredOutputChunks: ChunkType[] | undefined;
-  if (structuredOutputSchema && structuredOutputText.trim()) {
+  // The structuring model reads tool calls and results too, so a tool-only answer still qualifies.
+  const structuringParts = structuredOutput?.hasStructuringModel ? responseStreamParts(messageList) : undefined;
+  if (structuredOutputSchema && (structuredOutputText.trim() || structuringParts?.length)) {
     const finishReason = outputResult?.finishReason;
     const truncated = finishReason === 'length' || finishReason === 'content-filter';
     const errorStrategy = liveStructuredOutput ? liveStructuredOutput.errorStrategy : structuredOutput?.errorStrategy;
@@ -171,7 +173,9 @@ export async function runDurableFinishSideEffects({
       // Like Agent's StructuredOutputProcessor: the main model answered in text, so a
       // separate structuring model turns that answer into the object.
       const structuringModel = liveStructuredOutput?.model ?? structuredOutput.structuringModelConfig?.originalConfig;
-      if (structuringModel && !truncated) {
+      // Never structure partial text from an aborted or failed turn.
+      const failed = finishReason === 'abort' || finishReason === 'error';
+      if (structuringModel && !truncated && !failed) {
         structuredOutputChunks = await runStructuringPass({
           options: {
             ...(liveStructuredOutput ?? {}),
@@ -185,6 +189,7 @@ export async function runDurableFinishSideEffects({
           mastra,
           agentId: initData.agentId,
           messageList,
+          streamParts: structuringParts!,
           requestContext: effectiveRequestContext,
           logger: effectiveLogger,
         });
@@ -353,6 +358,13 @@ export async function runDurableFinishSideEffects({
   };
 }
 
+class StructuringPassError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, { cause });
+    this.name = 'StructuringPassError';
+  }
+}
+
 /**
  * Rebuild the chunks the structuring prompt reads (text, tool calls and results) from the
  * run's response messages; the durable finish step has no in-memory chunk history.
@@ -388,6 +400,7 @@ async function runStructuringPass({
   mastra,
   agentId,
   messageList,
+  streamParts,
   requestContext,
   logger,
 }: {
@@ -395,6 +408,7 @@ async function runStructuringPass({
   mastra?: Mastra;
   agentId: string;
   messageList: MessageList;
+  streamParts: ChunkType[];
   requestContext: RequestContext;
   logger: IMastraLogger;
 }): Promise<ChunkType[]> {
@@ -415,7 +429,7 @@ async function runStructuringPass({
     await processor.processOutputStream({
       part: { type: 'finish' } as ChunkType,
       state,
-      streamParts: responseStreamParts(messageList),
+      streamParts,
       messageList,
       requestContext,
       abort: (() => {
@@ -423,7 +437,17 @@ async function runStructuringPass({
       }) as any,
       retryCount: 0,
     } as any);
+    // Under errorStrategy 'strict' the processor records the failure and aborts in
+    // processOutputStep (Agent retries there). The finish step cannot retry, so fail the run.
+    processor.processOutputStep({
+      state,
+      messages: [],
+      abort: ((reason: string, opts?: { metadata?: { error?: unknown } }) => {
+        throw new StructuringPassError(reason, opts?.metadata?.error);
+      }) as any,
+    } as any);
   } catch (error) {
+    if (error instanceof StructuringPassError || (options.errorStrategy ?? 'strict') === 'strict') throw error;
     logger.error('[DurableAgent] Structured output structuring pass failed', { error });
   }
   return chunks;
