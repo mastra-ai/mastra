@@ -940,6 +940,14 @@ export interface RunRegistryEntry {
    */
   workflowExecution?: Promise<unknown>;
   /**
+   * Set while an engine that persists the suspended snapshot before returning
+   * is executing. The tool-call step queues suspension chunks/events here so
+   * they are published only after the snapshot is saved; otherwise a crash in
+   * between leaves a client holding a question that `resume()` rejects (#26435).
+   * @internal
+   */
+  pendingSuspensionEvents?: Array<() => Promise<void>>;
+  /**
    * Mastra instance that owns this in-process run. Used during shutdown to
    * wait only for executions that may still need this instance's storage.
    */
