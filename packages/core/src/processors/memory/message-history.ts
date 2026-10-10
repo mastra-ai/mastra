@@ -215,15 +215,16 @@ export class MessageHistory implements Processor {
 
     const { threadId, resourceId } = context;
 
-    const newInput = messageList.get.input.db();
-    const newOutput = messageList.get.response.db();
+    const persistenceMessageList = messageList.cloneForPersistence();
+    const newInput = persistenceMessageList.get.input.db();
+    const newOutput = persistenceMessageList.get.response.db();
     // Apply transcript redaction before persisting: this path bypasses
     // drainUnsavedMessages(), and a background tool result may sit in the
     // list as a raw payload whose transcript transform lives only in
     // providerMetadata. Persisting it untransformed would leak the raw
     // payload to storage whenever this save lands after the redacting
     // save-queue flush (last-writer-wins on the message id).
-    const messagesToSave = messageList.transformMessagesForTranscript([...newInput, ...newOutput]);
+    const messagesToSave = persistenceMessageList.transformMessagesForTranscript([...newInput, ...newOutput]);
 
     if (messagesToSave.length === 0) {
       return messageList;

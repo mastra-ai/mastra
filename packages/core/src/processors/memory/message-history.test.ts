@@ -608,6 +608,58 @@ describe('MessageHistory', () => {
       });
     });
 
+    it('persists an accumulated response as one message when processors use an iteration-split view', async () => {
+      const mockStorage = {
+        saveMessages: vi.fn().mockResolvedValue(undefined),
+        getThreadById: vi.fn().mockResolvedValue({
+          id: 'thread-1',
+          title: 'Test Thread',
+          metadata: {},
+        }),
+      } as unknown as MemoryStorage;
+      const processor = new MessageHistory({ storage: mockStorage });
+      const messageList = new MessageList({ generateMessageId: () => 'earlier-response' }).add(
+        {
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'reasoning', reasoning: 'thinking', details: [] },
+              { type: 'text', text: 'answer' },
+            ],
+          },
+          id: 'response',
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+        },
+        'response',
+      );
+      messageList.splitResponseMessageAtPartOffset('response', 1);
+
+      const result = await processor.processOutputResult({
+        messageList,
+        messages: messageList.get.response.db(),
+        abort: ((reason?: string) => {
+          throw new Error(reason || 'Aborted');
+        }) as (reason?: string) => never,
+        requestContext: createRuntimeContextWithMemory('thread-1'),
+      });
+
+      expect(result.get.response.db()).toHaveLength(2);
+      expect(mockStorage.saveMessages).toHaveBeenCalledWith({
+        messages: [
+          expect.objectContaining({
+            id: 'response',
+            content: expect.objectContaining({
+              parts: [
+                expect.objectContaining({ type: 'reasoning', reasoning: 'thinking' }),
+                expect.objectContaining({ type: 'text', text: 'answer' }),
+              ],
+            }),
+          }),
+        ],
+      });
+    });
+
     it('should not persist an input-only failed run', async () => {
       const mockStorage = {
         saveMessages: vi.fn().mockResolvedValue(undefined),

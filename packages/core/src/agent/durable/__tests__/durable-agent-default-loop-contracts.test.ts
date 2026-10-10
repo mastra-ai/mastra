@@ -22,14 +22,6 @@
  * `iter-throws` throws from `onIterationComplete` and has no throwing mapper,
  * `mapper-throws` throws from `toModelOutput` and installs no hook.
  *
- * COR-1416 covers the remaining `iter-feedback` divergence: the resolved full
- * output carries the previous iteration's text again on plain (`firstfirstMORE`
- * where the stream sent `firstMORE`, finding F-2.2), so the declaration derives
- * the resolved text from plain's own streamed text.
- *
- * The declaration derives the wrong value from plain's own observation rather
- * than ignoring the field, so this leg fails again the moment either side is
- * fixed (and the helper refuses a declaration that stops reproducing at all).
  * Plain's values are pinned literally, read from the observation the helper
  * returns. The two throwing legs are the only ones driven directly: a rejected
  * run leaves the helper nothing to record.
@@ -52,8 +44,6 @@ import {
   textOnlyTape,
   toolCallTape,
   type CapturedRequest,
-  type EngineDifference,
-  type EngineObservation,
   type ModelScript,
   type ParityEngine,
   type ParitySnapshot,
@@ -161,27 +151,6 @@ function stepFinishStepResults(turn: ParitySnapshot): Array<{ isContinued?: unkn
     .map(payload => (payload?.stepResult ?? {}) as { isContinued?: unknown; reason?: unknown });
 }
 
-/**
- * COR-1416, `iter-feedback`: durable and evented resolve only the last iteration's text while plain
- * carries the previous iteration again. The expected resolved text is derived from plain's own
- * stream, which is what a consumer received.
- */
-function resolvedTextMatchesStream(plain: EngineObservation): EngineObservation {
-  return {
-    ...plain,
-    turns: plain.turns.map(turn => ({
-      ...turn,
-      fullOutput: { ...turn.fullOutput, text: turn.streamedText },
-    })),
-  };
-}
-
-const COR_1416_ITER_FEEDBACK: EngineDifference = {
-  reason:
-    'COR-1416: plain resolves the previous iteration’s text again (fullOutput.text "firstfirstMORE" where the stream sent "firstMORE"); the expectation derives the resolved text from plain’s own stream.',
-  expect: resolvedTextMatchesStream,
-};
-
 async function runOrdinaryVariant(variant: OrdinaryVariant) {
   const commits = new Map<ParityEngine, number>();
   const hookCalls = new Map<ParityEngine, HookCall[]>();
@@ -193,8 +162,6 @@ async function runOrdinaryVariant(variant: OrdinaryVariant) {
   const results = await expectEngineParity({
     engines: ENGINES,
     model: variant === 'iter-feedback' ? feedbackScript() : stepScript(3),
-    differences:
-      variant === 'iter-feedback' ? { durable: COR_1416_ITER_FEEDBACK, evented: COR_1416_ITER_FEEDBACK } : undefined,
     buildAgent: ({ engine, model }) => {
       const onCommit = () => commits.set(engine, commits.get(engine)! + 1);
       return new Agent({
@@ -353,17 +320,14 @@ describe('T18 default loop contracts (plain, durable, evented)', () => {
       ]);
     }
 
-    // Plain's resolved full output carries the previous iteration's text a second time while the
-    // stream only ever sent `firstMORE` — plain's defect (COR-1416) — so this literal is the observed
-    // wrong value and is expected to be updated to `firstMORE` when that ticket is fixed. It is
-    // pinned rather than papered over.
+    // Plain's resolved full output matches the text emitted by the stream after feedback continuation.
     const plainTurn = results.plain!.turns.at(-1)!;
     expect(hookCalls.get('plain')).toEqual([
       { iteration: 1, isFinal: true, text: 'first' },
       { iteration: 2, isFinal: true, text: 'MORE' },
     ]);
     expect(plainTurn.streamedText).toBe('firstMORE');
-    expect(plainTurn.fullOutput.text).toBe('firstfirstMORE');
+    expect(plainTurn.fullOutput.text).toBe('firstMORE');
     expect(plainTurn.chunkTypes).toEqual([
       'start',
       'step-start',
