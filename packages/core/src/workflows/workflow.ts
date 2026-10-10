@@ -72,6 +72,7 @@ import type { DynamicArgument } from '../types';
 import { PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
+import { withoutAuthToken } from './evented/helpers';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
@@ -4145,7 +4146,7 @@ export class Run<
           status: 'waiting',
           value: initialStateToUse as Record<string, any>,
           context: inputDataToUse !== undefined ? ({ input: inputDataToUse } as any) : ({} as any),
-          requestContext: (requestContext ?? new RequestContext()).toJSON(),
+          requestContext: withoutAuthToken((requestContext ?? new RequestContext()).toJSON()),
           activePaths: [0],
           activeStepsPath: {},
           serializedStepGraph: this.serializedStepGraph,

@@ -33,7 +33,7 @@ import {
   omitPriorCompletionFields,
   validateStepResumeData,
 } from '../../utils';
-import { resolveCurrentState } from '../helpers';
+import { resolveCurrentState, withoutAuthToken } from '../helpers';
 import { StepExecutor } from '../step-executor';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
@@ -805,7 +805,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             ...(existing ?? {}), // preserve anything else (suspendPayload, etc.)
             metadata: { ...(existing?.metadata ?? {}), nestedRunId: runId },
           },
-          requestContext,
+          requestContext: withoutAuthToken(requestContext),
         });
       }
     }
@@ -1637,7 +1637,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             startedAt: Date.now(),
             status: 'running',
           } as any,
-          requestContext,
+          requestContext: withoutAuthToken(requestContext),
         });
       } else if ((resumeSteps?.length ?? 0) > 0 && resumeSteps?.[0] === leafId && step.type !== 'foreach') {
         // Foreach is excluded on purpose: its resume fans out one step.run per
@@ -1676,7 +1676,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               ...(resumeSteps!.length > 1 ? { resumedNestedSteps: resumeSteps!.slice(1) } : {}),
               ...(resumedNestedPaths ? { resumedNestedPaths } : {}),
             },
-            requestContext,
+            requestContext: withoutAuthToken(requestContext),
           });
         }
       }
@@ -2548,7 +2548,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           stepId: '__state',
           result: currentState as any,
-          requestContext,
+          requestContext: withoutAuthToken(requestContext),
         });
         const suspendTracingContext = this.resolveSuspendTracingContext(runId);
         await workflowsStore?.updateWorkflowState({
@@ -2596,7 +2596,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId,
       stepId: '__state',
       result: currentState as any,
-      requestContext,
+      requestContext: withoutAuthToken(requestContext),
     });
     const cleanedStepResults: Record<string, any> = { ...stepResults, __state: currentState };
     for (const [key, res] of Object.entries(cleanedStepResults)) {
@@ -2765,7 +2765,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             runId,
             stepId: getEntryId(step.step),
             result: bailedResult as any,
-            requestContext,
+            requestContext: withoutAuthToken(requestContext),
           });
 
           // End workflow with bail result
@@ -2836,7 +2836,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         stepId: getEntryId(step.step),
         result: newResult,
-        requestContext,
+        requestContext: withoutAuthToken(requestContext),
         state: currentState,
       });
 
@@ -2984,7 +2984,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             runId,
             stepId: getEntryId(step.step),
             result: foreachSuspendResult as any,
-            requestContext,
+            requestContext: withoutAuthToken(requestContext),
           });
 
           // Check shouldPersistSnapshot option - default to true if not specified
@@ -3001,7 +3001,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               stepId: '__state',
               result: currentState as any,
-              requestContext,
+              requestContext: withoutAuthToken(requestContext),
             });
 
             const suspendTracingContext = this.resolveSuspendTracingContext(runId);
@@ -3127,7 +3127,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         stepId,
         result: persistedResult,
-        requestContext,
+        requestContext: withoutAuthToken(requestContext),
         ...(isParallelBranch ? {} : { state: currentState }),
       });
 
@@ -3246,7 +3246,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           stepId: '__state',
           result: currentState as any,
-          requestContext,
+          requestContext: withoutAuthToken(requestContext),
         });
 
         const suspendTracingContext = this.resolveSuspendTracingContext(runId);
