@@ -78,17 +78,23 @@ function toParts(content: ReadonlyArray<LanguageModelV3Content | UserContent[num
  * What this turn adds: the last run of user messages, then one assistant message holding
  * every tool-loop step (tool calls with their results) and the final reply.
  */
-function turnMessages(prompt: LanguageModelV3Message[], reply: MemoryMessagePart[]): MemoryMessageInput[] {
+function turnMessages(
+  prompt: LanguageModelV3Message[],
+  reply: MemoryMessagePart[],
+  idOf: (key: string) => string,
+  /** Prompt index where unobserved steps start; earlier steps of this turn were already observed. */
+  from = 0,
+): MemoryMessageInput[] {
   const last = prompt.findLastIndex(m => m.role === 'user');
   let first = last;
   while (first > 0 && prompt[first - 1]!.role === 'user') first--;
 
-  const messages = prompt
-    .slice(first, last + 1)
-    .map(m => (m.role === 'user' ? messageInput('user', toParts(m.content)) : null));
+  const messages = (from ? [] : prompt.slice(first, last + 1)).map(m =>
+    m.role === 'user' ? messageInput('user', toParts(m.content)) : null,
+  );
 
   const assistant: MemoryMessagePart[] = [];
-  for (const m of prompt.slice(last + 1)) {
+  for (const m of prompt.slice(Math.max(last + 1, from))) {
     if (m.role === 'assistant') assistant.push(...toParts(m.content));
     if (m.role === 'tool') {
       for (const part of m.content) {
@@ -98,7 +104,10 @@ function turnMessages(prompt: LanguageModelV3Message[], reply: MemoryMessagePart
   }
   assistant.push(...reply);
   messages.push(messageInput('assistant', assistant));
-  return messages.filter(m => m !== null);
+  // Stable ids so a turn saved mid-loop is updated, not duplicated, by later saves.
+  return messages
+    .filter(m => m !== null)
+    .map((m, i, all) => ({ ...m, id: idOf(i === all.length - 1 && m.role === 'assistant' ? 'a' : `u${i}`) }));
 }
 
 /** Replays a recalled message, including tool calls and their results, as AI SDK prompt messages. */
@@ -146,7 +155,6 @@ function fromMemory(message: MemoryMessage): LanguageModelV3Message[] {
   return replay;
 }
 
-/** Intermediate tool-calling steps are not saved; the turn is saved once the model finishes. */
 const isFinal = (reason: LanguageModelV3FinishReason) => reason.unified !== 'tool-calls';
 
 /**
@@ -171,20 +179,49 @@ export function platformMemoryMiddleware(options: PlatformMemoryMiddlewareOption
   const { threadId, readOnly } = options;
   const resourceId = options.resourceId ?? threadId;
   const originalPrompts = new WeakMap<LanguageModelV3CallOptions, LanguageModelV3Message[]>();
+  // The turn in flight. After a mid-turn observation, later steps go into a new assistant
+  // message so re-saving doesn't pull already-observed steps back into the unobserved tail.
+  let turn = { key: '', base: '', from: 0, seq: 0 };
+
+  function currentTurn(prompt: LanguageModelV3Message[]) {
+    const key = JSON.stringify(prompt.findLast(m => m.role === 'user') ?? null);
+    if (turn.key !== key) turn = { key, base: crypto.randomUUID(), from: 0, seq: 0 };
+    return turn;
+  }
 
   async function remember(prompt: LanguageModelV3Message[] | undefined, reply: MemoryMessagePart[]) {
     if (readOnly || !prompt) return;
-    const messages = turnMessages(prompt, reply);
+    const { base, from, seq } = currentTurn(prompt);
+    const messages = turnMessages(prompt, reply, suffix => `${base}-${suffix}${seq}`, from);
     if (messages.length) await client.saveMessages(threadId, { resourceId, messages });
+  }
+
+  /**
+   * Mid tool loop: saves the turn so far and, once it crosses the observation threshold,
+   * observes now so the loop continues from compressed context, like @mastra/memory does.
+   */
+  async function saveMidTurn(prompt: LanguageModelV3Message[]): Promise<boolean> {
+    const lastUser = prompt.findLastIndex(m => m.role === 'user');
+    if (readOnly || !prompt.slice(lastUser + 1).some(m => m.role === 'tool')) return false;
+    await remember(prompt, []);
+    if ((await client.getObservationStatus(threadId)).shouldObserve) {
+      await client.observe(threadId);
+      const t = currentTurn(prompt);
+      t.from = prompt.length;
+      t.seq++;
+    }
+    return true;
   }
 
   return {
     specificationVersion: 'v3',
 
     async transformParams({ params }) {
+      const saved = await saveMidTurn(params.prompt);
       const context = await client.getContext(threadId, resourceId);
       const system = params.prompt.filter(m => m.role === 'system');
-      const rest = params.prompt.filter(m => m.role !== 'system');
+      // Mid tool loop the turn so far is already saved, so memory returns it (observed or as the tail).
+      const rest = saved ? [] : params.prompt.filter(m => m.role !== 'system');
       const next: LanguageModelV3CallOptions = {
         ...params,
         prompt: [...system, ...promptOf(context).flatMap(fromMemory), ...rest],

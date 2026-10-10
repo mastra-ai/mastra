@@ -13,20 +13,31 @@ const usage = {
 };
 const stop = { unified: 'stop' as const, raw: 'stop' };
 
-function fakeClient(context: {
-  system: string | null;
-  continuation?: string;
-  messages: { role: 'user' | 'assistant'; content: string }[];
-}) {
+function fakeClient(
+  context: {
+    system: string | null;
+    continuation?: string;
+    messages: { role: 'user' | 'assistant'; content: string }[];
+  },
+  shouldObserve = false,
+) {
   const saved: unknown[] = [];
+  const ids: string[][] = [];
+  let observed = 0;
   const client = {
     getContext: async () => ({ ...context, observedAt: null }),
-    saveMessages: async (threadId: string, body: unknown) => {
-      saved.push({ threadId, body });
+    saveMessages: async (threadId: string, body: { resourceId: string; messages: { id?: string }[] }) => {
+      ids.push(body.messages.map(m => m.id!));
+      saved.push({ threadId, body: { ...body, messages: body.messages.map(({ id: _id, ...m }) => m) } });
       return { messages: [] };
     },
+    getObservationStatus: async () => ({ shouldObserve }),
+    observe: async () => {
+      observed++;
+      return { observed: true, reflected: false, record: null };
+    },
   } as unknown as PlatformMemoryClient;
-  return { client, saved };
+  return { client, saved, ids, observedCount: () => observed };
 }
 
 const recalled = {
@@ -81,8 +92,8 @@ describe('platformMemoryMiddleware', () => {
     ]);
   });
 
-  it('saves once after a tool loop, with tool calls and their results', async () => {
-    const { client, saved } = fakeClient({ system: null, messages: [] });
+  it('saves the tool loop as it goes, with tool calls and their results', async () => {
+    const { client, saved, ids, observedCount } = fakeClient({ system: null, messages: [] });
     let step = 0;
     const model = new MockLanguageModelV3({
       doGenerate: async () =>
@@ -103,7 +114,11 @@ describe('platformMemoryMiddleware', () => {
       stopWhen: stepCountIs(3),
     });
 
-    expect(saved).toEqual([
+    // Saved mid-loop, then updated in place (same ids) when the model finishes.
+    expect(saved).toHaveLength(2);
+    expect(ids[1]).toEqual(ids[0]);
+    expect(observedCount()).toBe(0);
+    expect(saved.slice(1)).toEqual([
       {
         threadId: 't1',
         body: {
@@ -294,5 +309,36 @@ describe('platformMemoryMiddleware', () => {
       prompt: 'Hi',
     });
     expect(saved).toEqual([]);
+  });
+
+  it('observes mid-loop once over threshold and continues from memory', async () => {
+    const { client, observedCount } = fakeClient(recalled, true);
+    const prompts: LanguageModelV3CallOptions['prompt'][] = [];
+    let step = 0;
+    const model = new MockLanguageModelV3({
+      doGenerate: async ({ prompt }) => {
+        prompts.push(prompt);
+        return step++ === 0
+          ? {
+              content: [{ type: 'tool-call', toolCallId: 'c1', toolName: 'weather', input: '{"city":"Kyoto"}' }],
+              finishReason: { unified: 'tool-calls', raw: 'tool_calls' },
+              usage,
+              warnings: [],
+            }
+          : { content: [{ type: 'text', text: 'Sunny.' }], finishReason: stop, usage, warnings: [] };
+      },
+    });
+
+    await generateText({
+      model: wrapLanguageModel({ model, middleware: platformMemoryMiddleware({ client, threadId: 't1' }) }),
+      prompt: 'Weather in Kyoto?',
+      tools: { weather: tool({ inputSchema: z.object({ city: z.string() }), execute: async () => 'sunny' }) },
+      stopWhen: stepCountIs(3),
+    });
+
+    expect(observedCount()).toBe(1);
+    const second = JSON.stringify(prompts[1]);
+    expect(second).toContain('Ada lives in Kyoto.');
+    expect(second).not.toContain('Weather in Kyoto?');
   });
 });

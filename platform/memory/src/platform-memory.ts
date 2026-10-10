@@ -133,7 +133,12 @@ export class PlatformMemory extends MastraMemory {
         },
         // Long tool loops: once the turn so far crosses the observation threshold,
         // observe now and continue from the compressed context, like @mastra/memory does.
-        async processInputStep({ messageList, requestContext, stepNumber, rotateResponseMessageId }: ProcessInputStepArgs) {
+        async processInputStep({
+          messageList,
+          requestContext,
+          stepNumber,
+          rotateResponseMessageId,
+        }: ProcessInputStepArgs) {
           if (stepNumber === 0) return messageList;
           const ctx = memoryContext(requestContext, messageList);
           if (!ctx || ctx.readOnly) return messageList;

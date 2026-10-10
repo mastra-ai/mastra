@@ -8,9 +8,12 @@ import type { MastraMemory } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { Memory } from '@mastra/memory';
+import { generateText, stepCountIs, tool, wrapLanguageModel } from 'ai';
+import { MockLanguageModelV3 } from 'ai/test';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
+import { platformMemoryMiddleware } from './ai-sdk';
 import { PlatformMemoryClient } from './client';
 import { PlatformMemory } from './platform-memory';
 
@@ -163,8 +166,7 @@ function localBackend(): Backend {
     memory,
     settle: async () => {},
     observations: async (threadId, resourceId) =>
-      (await (await memoryStore()).getObservationalMemory(threadId, resourceId))
-        ?.activeObservations ?? null,
+      (await (await memoryStore()).getObservationalMemory(threadId, resourceId))?.activeObservations ?? null,
     messages: async threadId => {
       const { messages } = await (
         await memoryStore()
@@ -418,5 +420,58 @@ describe.skipIf(!live).each([
     expect(prompts.at(-1)!.split('lorem ipsum').length).toBeLessThan(6 * 40);
     const saved = await backend.messages(`loop-${run}`);
     expect(saved.filter(m => m.text.includes('"toolName":"bulk"')).length).toBeGreaterThanOrEqual(6);
+  });
+});
+
+describe.skipIf(!live)('long tool loop (AI SDK middleware)', () => {
+  it('observes mid-turn so the prompt stays bounded', async () => {
+    const { instanceId, token } = JSON.parse(readFileSync(live!, 'utf8'));
+    const client = new PlatformMemoryClient({ apiUrl: API, accessToken: token, instanceId });
+    const threadId = `aisdk-loop-${Date.now()}`;
+    const usage = {
+      inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+      outputTokens: { total: 1, text: 1, reasoning: 0 },
+    };
+    const prompts: string[] = [];
+    const model = new MockLanguageModelV3({
+      doGenerate: async ({ prompt }) => {
+        prompts.push(JSON.stringify(prompt));
+        const step = prompts.length;
+        return step <= 6
+          ? {
+              content: [{ type: 'tool-call', toolCallId: `call-${step}`, toolName: 'bulk', input: '{}' }],
+              finishReason: { unified: 'tool-calls', raw: 'tool_calls' },
+              usage,
+              warnings: [],
+            }
+          : {
+              content: [{ type: 'text', text: reply }],
+              finishReason: { unified: 'stop', raw: 'stop' },
+              usage,
+              warnings: [],
+            };
+      },
+    });
+    const result = await generateText({
+      model: wrapLanguageModel({ model, middleware: platformMemoryMiddleware({ client, threadId }) }),
+      prompt: 'Collect all the rows.',
+      tools: {
+        bulk: tool({
+          inputSchema: z.object({}),
+          execute: async () => ({ rows: 'lorem ipsum dolor sit amet '.repeat(40) }),
+        }),
+      },
+      stopWhen: stepCountIs(10),
+    });
+    expect(result.text).toContain('I understand your request');
+    expect(prompts.at(-1)).toContain('lives in Kyoto');
+    expect(prompts.at(-1)!.split('lorem ipsum').length).toBeLessThan(6 * 40);
+    const { messages } = await client.listMessages(threadId, { perPage: 100 });
+    const stored = JSON.stringify(messages);
+    // Sealed after each mid-turn observation, so steps never repeat across messages.
+    const callIds = [...stored.matchAll(/"toolCallId":"([^"]+)"/g)].map(m => m[1]);
+    expect(callIds).toHaveLength(6);
+    expect(new Set(callIds).size).toBe(6);
+    expect(messages.filter(m => m.role === 'user')).toHaveLength(1);
   });
 });
