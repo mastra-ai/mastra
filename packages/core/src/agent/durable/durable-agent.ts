@@ -2074,12 +2074,24 @@ export class DurableAgent<
     if (!entry) return execute();
     const pending: Array<() => Promise<void>> = [];
     entry.pendingSuspensionEvents = pending;
+    let result: T;
     try {
-      return await execute();
+      result = await execute();
     } finally {
       if (entry.pendingSuspensionEvents === pending) delete entry.pendingSuspensionEvents;
-      for (const publish of pending) await publish();
     }
+    // Only announce a suspension the engine actually persisted; if persisting failed,
+    // the run isn't resumable and the queued events would advertise a dead question.
+    if ((result as { status?: string } | undefined)?.status === 'suspended') {
+      for (const publish of pending) {
+        try {
+          await publish();
+        } catch (error) {
+          this.logger.warn('Failed to publish deferred suspension event', { runId, error });
+        }
+      }
+    }
+    return result;
   }
 
   /**
