@@ -916,6 +916,8 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
     snapshot: WorkflowRunState;
   };
   toolCallId?: string;
+  /** Internal: The run's resolved scopes, persisted in suspend snapshots for resume */
+  resolvedScopes?: string[];
 } & ([NonNullable<OUTPUT>] extends [never]
     ? { structuredOutput?: never }
     : OUTPUT extends {}

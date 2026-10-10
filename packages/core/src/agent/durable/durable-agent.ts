@@ -11,7 +11,7 @@ import { createTimeoutAbortSignal } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
-import { RequestContext } from '../../request-context';
+import { MASTRA_SCOPES_KEY, RequestContext } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
 import { toStandardSchema } from '../../schema';
 import type { WorkflowsStorage } from '../../storage';
@@ -32,6 +32,8 @@ import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
+import type { AgentScopesSnapshot } from '../scopes';
+import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
@@ -179,6 +181,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   context?: AgentExecutionOptions<OUTPUT>['context'];
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentExecutionOptions<OUTPUT>['memory'];
+  /** Scopes this run acts with. See `AgentExecutionOptions.scopes`. */
+  scopes?: string[];
   /** Unique identifier for this execution run */
   runId?: string;
   /** Request Context containing dynamic configuration and state */
@@ -1598,6 +1602,7 @@ export class DurableAgent<
 
   async #resolveExecutionOptions(
     options?: DurableAgentStreamOptions<TOutput>,
+    snapshot?: AgentScopesSnapshot,
   ): Promise<DurableAgentStreamOptions<TOutput>> {
     if ((options as any)?.[RESOLVED_EXECUTION_OPTIONS]) {
       return options!;
@@ -1613,9 +1618,36 @@ export class DurableAgent<
     if (options?.actor !== undefined) {
       resolvedOptions.actor = options.actor;
     }
+    const scopedOptions = await this.#applyScopes(resolvedOptions, {
+      callScopes: options?.scopes,
+      defaultScopes: defaultOptions?.scopes,
+      snapshot,
+    });
     // Preserve the marker when the until-idle wrapper spreads these options.
-    Object.defineProperty(resolvedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
-    return resolvedOptions;
+    Object.defineProperty(scopedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
+    return scopedOptions;
+  }
+
+  /**
+   * Applies agent scopes to durable execution options. Durable runs resolve their thread and
+   * resource from `memory` only, so options are returned unchanged unless the run has scopes.
+   */
+  async #applyScopes<T extends DurableAgentStreamOptions<TOutput>>(
+    options: T,
+    {
+      callScopes,
+      defaultScopes,
+      snapshot,
+    }: { callScopes?: string[]; defaultScopes?: string[]; snapshot?: AgentScopesSnapshot },
+  ): Promise<T> {
+    const requestContext = options.requestContext ?? new RequestContext();
+    const configuredScopes = await this.getScopes({ requestContext });
+    const agentScopes = [...(configuredScopes ?? []), ...(defaultScopes ?? [])];
+    if (!agentScopes.length && !callScopes?.length && !requestContext.has(MASTRA_SCOPES_KEY) && !snapshot?.scopes) {
+      return options;
+    }
+    const resolved = resolveAgentScopes({ requestContext, agentScopes, callScopes, memory: options.memory, snapshot });
+    return applyResolvedAgentScopes(options, resolved, requestContext);
   }
 
   override getDefaultGenerateOptionsLegacy(options?: any) {
@@ -1633,6 +1665,10 @@ export class DurableAgent<
   // --- Memory ---
   override getMemory(options?: any) {
     return this.#wrappedAgent.getMemory(options);
+  }
+
+  override getScopes(options?: any) {
+    return this.#wrappedAgent.getScopes(options);
   }
 
   override hasOwnMemory(): boolean {
@@ -2723,6 +2759,14 @@ export class DurableAgent<
         } as DurableAgentStreamOptions<TOutput>['memory'])
       : options?.memory;
 
+    // The suspended run's non-identity scopes live on its persisted request context;
+    // its identity is the registered memory. A resume keeps that set (rule: re-supplied
+    // scopes may only be a subset of it).
+    const snapshotScopes = entry.requestContext?.get(MASTRA_SCOPES_KEY);
+    const resumeScopesSnapshot: AgentScopesSnapshot | undefined = Array.isArray(snapshotScopes)
+      ? { resourceId: memoryInfo?.resourceId, threadId: memoryInfo?.threadId, scopes: snapshotScopes }
+      : undefined;
+
     let resumeRequestContext = entry.requestContext;
     if (options?.requestContext) {
       // Keep the caller's instance so schema-transformed contexts retain their
@@ -2738,17 +2782,22 @@ export class DurableAgent<
       }
     }
 
+    const resolvedOptions = (await this.#resolveExecutionOptions(
+      {
+        ...(options as DurableAgentStreamOptions<TOutput>),
+        requestContext: resumeRequestContext as DurableAgentStreamOptions<TOutput>['requestContext'],
+        memory: registeredMemory ?? options?.memory,
+      },
+      resumeScopesSnapshot,
+    )) as DurableAgentResumeOptions<TOutput>;
+    // Scoped runs execute on a run-scoped copy of the request context.
+    resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
+
     entry.requestContext = resumeRequestContext;
     const globalEntryForContext = globalRunRegistry.get(runId);
     if (globalEntryForContext) {
       globalEntryForContext.requestContext = resumeRequestContext;
     }
-
-    const resolvedOptions = (await this.#resolveExecutionOptions({
-      ...(options as DurableAgentStreamOptions<TOutput>),
-      requestContext: resumeRequestContext as DurableAgentStreamOptions<TOutput>['requestContext'],
-      memory: registeredMemory ?? options?.memory,
-    })) as DurableAgentResumeOptions<TOutput>;
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()
@@ -4401,7 +4450,12 @@ export class DurableAgent<
   /**
    * Prepare for durable execution without starting it.
    */
-  async prepare(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>) {
+  async prepare(messages: MessageListInput, inputOptions?: AgentExecutionOptions<TOutput>) {
+    const options = inputOptions
+      ? ((await this.#applyScopes(inputOptions as DurableAgentStreamOptions<TOutput>, {
+          callScopes: inputOptions.scopes,
+        })) as AgentExecutionOptions<TOutput>)
+      : inputOptions;
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
       messages,

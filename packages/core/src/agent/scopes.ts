@@ -144,7 +144,14 @@ export function resolveAgentScopes(input: ResolveAgentScopesInput): ResolvedAgen
     scopes = [...validateScopes('snapshot scopes', snapshot.scopes)];
     const held = new Set(scopes);
     for (const scope of supplied) {
-      if (!held.has(scope)) {
+      if (held.has(scope)) continue;
+      // Naming the suspended run's own resource or thread is not a new scope.
+      const parsed = parseAgentScope(scope)!;
+      const snapshotIdentity =
+        parsed.type === 'resource' ? snapshot.resourceId : parsed.type === 'thread' ? snapshot.threadId : undefined;
+      if (snapshotIdentity !== undefined && parsed.value === snapshotIdentity) {
+        scopes.push(scope);
+      } else {
         throw scopesError(
           'AGENT_SCOPES_CONFLICT',
           `Agent scope "${scope}" was not part of the suspended run's scopes. A resumed run keeps the scopes it started with.`,
@@ -218,4 +225,42 @@ export function deriveAgentRunRequestContext<T extends RequestContext<any>>(
     derived.delete(MASTRA_SCOPES_KEY);
   }
   return derived;
+}
+
+type ScopedRunOptions = {
+  requestContext?: RequestContext<any>;
+  memory?: { resource?: string; thread?: string | { id: string } };
+};
+
+/**
+ * Returns the options a run executes with once its scopes are resolved. When scopes carry
+ * `resource:`/`thread:`, `memory` is set from them so every downstream reader sees the same
+ * identity. When the run has scopes, `requestContext` is the run-scoped copy from
+ * `deriveAgentRunRequestContext`. Options for a run without scopes are returned unchanged.
+ */
+export function applyResolvedAgentScopes<T extends ScopedRunOptions>(
+  options: T,
+  resolved: ResolvedAgentScopes,
+  requestContext: RequestContext<any>,
+): T {
+  const scopeResource = resolved.scopes.some(scope => scope.startsWith('resource:'));
+  const scopeThread = resolved.scopes.some(scope => scope.startsWith('thread:'));
+  let next = options;
+  if (scopeResource || scopeThread) {
+    const memory = options.memory;
+    const memoryThreadId = typeof memory?.thread === 'string' ? memory.thread : memory?.thread?.id;
+    next = {
+      ...next,
+      memory: {
+        ...memory,
+        resource: scopeResource ? resolved.resourceId : memory?.resource,
+        thread: scopeThread && memoryThreadId !== resolved.threadId ? resolved.threadId : memory?.thread,
+      },
+    };
+  }
+  const runRequestContext = deriveAgentRunRequestContext(requestContext, resolved.scopes);
+  if (runRequestContext !== requestContext) {
+    next = { ...next, requestContext: runRequestContext };
+  }
+  return next;
 }

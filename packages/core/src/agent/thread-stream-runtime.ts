@@ -17,6 +17,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
 import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
+import { resolveAgentScopes } from './scopes';
 import { createMessageSignal, createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
@@ -239,6 +240,48 @@ function releaseReplyTopic(pubsub: PubSub, replyTopic: string, cb: EventCallback
     .catch(() => {});
 }
 
+function unionScopes(...lists: Array<readonly string[] | undefined>): string[] {
+  return [...new Set(lists.flatMap(list => list ?? []))];
+}
+
+type ThreadTargetScopes = {
+  scopes?: string[];
+  ifIdle?: { streamOptions?: { scopes?: string[] } };
+};
+
+/**
+ * Validates the scopes a thread target carries: top-level `scopes` unioned with
+ * `ifIdle.streamOptions.scopes`. `resource:`/`thread:` scopes must equal the target's ids.
+ * Returns the union, or undefined when the target carries no scopes.
+ */
+function resolveThreadTargetScopes(
+  target: ThreadTargetScopes,
+  ids: { resourceId?: string; threadId?: string },
+): string[] | undefined {
+  const idleScopes = target.ifIdle?.streamOptions?.scopes;
+  if (target.scopes === undefined && idleScopes === undefined) return undefined;
+  const scopes = unionScopes(target.scopes, idleScopes);
+  resolveAgentScopes({ callScopes: scopes, resourceId: ids.resourceId, threadId: ids.threadId });
+  return scopes;
+}
+
+/**
+ * Moves a signal target's top-level `scopes` onto the run it may start
+ * (`ifIdle.streamOptions.scopes`). A target that delivers to a known run only has its
+ * scopes validated: an active run keeps the scopes it started with.
+ */
+function withThreadTargetScopes<T extends SendAgentSignalOptions<any>>(target: T): T {
+  const scopes = resolveThreadTargetScopes(target, target);
+  if (target.scopes === undefined) return target;
+  const { scopes: _scopes, ...rest } = target;
+  const startsRun = !!target.resourceId && !!target.threadId && (target.runId === undefined || !!target.ifIdle);
+  if (!startsRun) return rest as T;
+  return {
+    ...rest,
+    ifIdle: { ...target.ifIdle, streamOptions: { ...target.ifIdle?.streamOptions, scopes } },
+  } as T;
+}
+
 function withThreadMemory(memory: unknown, resourceId: string, threadId: string) {
   return {
     ...((memory && typeof memory === 'object' ? memory : {}) as Record<string, unknown>),
@@ -321,8 +364,7 @@ type PendingContinuation<OUTPUT = unknown> = {
 };
 
 type ClaimedThreadOwnerStreamOptions =
-  | AgentExecutionOptions<any>
-  | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
+  AgentExecutionOptions<any> | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
 
 type ClaimedThreadOwner<OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
@@ -1678,10 +1720,19 @@ export class AgentThreadStreamRuntime {
     //
     // Deliberately narrower than the no-owner path below, which spreads the whole
     // incoming `streamOptions` because there is no owner configuration to keep.
-    const streamOptions: AgentExecutionOptions<any> | undefined =
+    //
+    // Scopes cross over with the request context for the same reason: they say
+    // what the caller acts as. They are unioned with any owner scopes.
+    let streamOptions: AgentExecutionOptions<any> | undefined =
       incomingStreamOptions?.requestContext === undefined
         ? ownerStreamOptions
         : { ...ownerStreamOptions, requestContext: incomingStreamOptions.requestContext };
+    if (incomingStreamOptions?.scopes?.length) {
+      streamOptions = {
+        ...streamOptions,
+        scopes: unionScopes(ownerStreamOptions?.scopes, incomingStreamOptions.scopes),
+      };
+    }
     let control: ThreadControlSubscription | undefined;
     try {
       const subscription = this.#ensureThreadControlSubscription(state, pubsub, key);
@@ -2157,8 +2208,7 @@ export class AgentThreadStreamRuntime {
         try {
           if (cancelled) return;
           const source = (output.__getUnfilteredFullStream?.() ?? output.fullStream) as
-            | ReadableStream<unknown>
-            | undefined;
+            ReadableStream<unknown> | undefined;
           if (!source) return;
 
           if (typeof source.getReader === 'function') {
@@ -2259,7 +2309,8 @@ export class AgentThreadStreamRuntime {
       }
       if (cutoffAt === undefined || cutoff <= trimmedThrough) return;
       trimmedThrough = cutoff;
-      void runtime.#getPubSub(pubsub)
+      void runtime
+        .#getPubSub(pubsub)
         .trimTopic(runtime.#threadTopic(key), { runId: output.runId, producedBefore: cutoffAt })
         .catch(() => {});
       let keep = cutoff + 1;
@@ -5185,10 +5236,14 @@ export class AgentThreadStreamRuntime {
     });
     const queuedRunId = globalThis.crypto.randomUUID();
     // Preserve explicit cancellation, but don't inherit the active run's signal.
-    const queuedStreamOptions = target.ifIdle?.streamOptions ?? {
+    const baseQueuedStreamOptions = target.ifIdle?.streamOptions ?? {
       ...activeRecord?.streamOptions,
       abortSignal: undefined,
     };
+    const queuedScopes = resolveThreadTargetScopes(target, { resourceId, threadId });
+    const queuedStreamOptions = queuedScopes
+      ? { ...baseQueuedStreamOptions, scopes: unionScopes(baseQueuedStreamOptions.scopes, queuedScopes) }
+      : baseQueuedStreamOptions;
 
     if (activeRecord || state.activeThreadRunIds.has(key)) {
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
@@ -5286,9 +5341,10 @@ export class AgentThreadStreamRuntime {
   sendSignal<OUTPUT = unknown>(
     agent: Agent<any, any, any, any>,
     signalInput: AgentSignal,
-    target: SendAgentSignalOptions<OUTPUT>,
+    inputTarget: SendAgentSignalOptions<OUTPUT>,
     pubsub?: PubSub,
   ): SendAgentSignalResult<OUTPUT> {
+    const target = withThreadTargetScopes(inputTarget);
     const state = this.#getState(pubsub);
     let key: string | undefined;
     let runId = target.runId;

@@ -106,6 +106,7 @@ import {
   RequestContext,
   MASTRA_INHERITED_MEMORY_KEY,
   MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
   MASTRA_THREAD_ID_KEY,
   MASTRA_VERSIONS_KEY,
 } from '../request-context';
@@ -194,6 +195,8 @@ import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
+import { applyResolvedAgentScopes, resolveAgentScopes, withoutIdentityAgentScopes } from './scopes';
+import type { ResolvedAgentScopes } from './scopes';
 import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
@@ -1881,8 +1884,7 @@ export class Agent<
    * ```
    */
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, SubAgent<string, TRequestContext>>
-    | Promise<Record<string, SubAgent<string, TRequestContext>>> {
+    Record<string, SubAgent<string, TRequestContext>> | Promise<Record<string, SubAgent<string, TRequestContext>>> {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
         ? this.#agents({ requestContext: requestContext as RequestContext<TRequestContext> })
@@ -2563,8 +2565,7 @@ export class Agent<
    */
   #inheritedMemory(requestContext?: RequestContext): DynamicArgument<MastraMemory, TRequestContext> | undefined {
     const inherited = requestContext?.getRaw(MASTRA_INHERITED_MEMORY_KEY) as
-      | { agentId: string; memory: DynamicArgument<MastraMemory, any> }
-      | undefined;
+      { agentId: string; memory: DynamicArgument<MastraMemory, any> } | undefined;
     return inherited?.agentId === this.id
       ? (inherited.memory as DynamicArgument<MastraMemory, TRequestContext>)
       : undefined;
@@ -2854,14 +2855,12 @@ export class Agent<
   }
 
   /**
-   * Resolves the Agent-level `scopes` config for a call.
-   * Durable and evented subclasses use it when they resolve a run's scopes.
+   * Resolves the agent's configured `scopes` for a request.
+   * Per-call `scopes` and the reserved `mastra__scopes` request-context key are not included.
    */
-  protected async resolveConfiguredScopes({
-    requestContext,
-  }: {
-    requestContext: RequestContext;
-  }): Promise<string[] | undefined> {
+  async getScopes({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}): Promise<
+    string[] | undefined
+  > {
     if (typeof this.#scopes !== 'function') {
       return this.#scopes;
     }
@@ -2984,8 +2983,7 @@ export class Agent<
    * ```
    */
   public getInstructions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentInstructions
-    | Promise<AgentInstructions> {
+    AgentInstructions | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
       const result = this.#instructions({
         requestContext: requestContext as RequestContext<TRequestContext>,
@@ -3122,9 +3120,7 @@ export class Agent<
    * ```
    */
   public getMetadata({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | Record<string, unknown>
-    | undefined
-    | Promise<Record<string, unknown> | undefined> {
+    Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined> {
     if (this.#metadata === undefined) {
       return undefined;
     }
@@ -3268,8 +3264,7 @@ export class Agent<
    * ```
    */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | AgentExecutionOptions<TOutput>
-    | Promise<AgentExecutionOptions<TOutput>> {
+    AgentExecutionOptions<TOutput> | Promise<AgentExecutionOptions<TOutput>> {
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -3312,8 +3307,7 @@ export class Agent<
    * ```
    */
   public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    | NetworkOptions
-    | Promise<NetworkOptions> {
+    NetworkOptions | Promise<NetworkOptions> {
     if (typeof this.#defaultNetworkOptions !== 'function') {
       return this.#defaultNetworkOptions;
     }
@@ -5480,6 +5474,14 @@ export class Agent<
                   key !== MASTRA_INHERITED_MEMORY_KEY,
               ),
             );
+            // Sub-agents inherit the parent's non-identity scopes (org:, custom) and pick
+            // their own resource/thread, as with the reserved ID keys above.
+            const parentScopes = subAgentRequestContext.get(MASTRA_SCOPES_KEY);
+            if (Array.isArray(parentScopes)) {
+              const inheritedScopes = withoutIdentityAgentScopes(parentScopes);
+              if (inheritedScopes.length > 0) subAgentRequestContext.set(MASTRA_SCOPES_KEY, inheritedScopes);
+              else subAgentRequestContext.delete(MASTRA_SCOPES_KEY);
+            }
 
             // Expand `contextFromRefs` into the prompt before any hook runs so
             // onDelegationStart and messageFilter see the prompt the sub-agent
@@ -7741,6 +7743,56 @@ export class Agent<
     return info ? { toolCallId: info.toolCallId, toolName: info.toolName } : undefined;
   }
 
+  /** The full scope set a suspended run resolved, persisted beside its stream state. */
+  #getSnapshotScopes(existingSnapshot: WorkflowRunState | null | undefined): string[] | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && Array.isArray(step.suspendPayload?.__resolvedScopes)) {
+        return step.suspendPayload.__resolvedScopes;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Resolves a run's scopes (see `resolveAgentScopes`) and returns the options the run
+   * executes with. When scopes carry `resource:`/`thread:`, `memory` is set from them so
+   * every downstream reader sees the same identity. When the run has scopes, the options
+   * carry a run-scoped copy of the request context (`deriveAgentRunRequestContext`); the
+   * caller's context is never modified. Options without scopes are returned unchanged.
+   */
+  async #resolveRunScopes<T extends { requestContext?: RequestContext; memory?: AgentMemoryOption }>(
+    options: T,
+    {
+      callScopes,
+      defaultScopes,
+      existingSnapshot,
+    }: {
+      callScopes?: string[];
+      defaultScopes?: string[];
+      existingSnapshot?: WorkflowRunState | null;
+    },
+  ): Promise<{ options: T; resolved: ResolvedAgentScopes }> {
+    const requestContext = options.requestContext ?? new RequestContext();
+    const configuredScopes = await this.getScopes({ requestContext });
+    const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
+    const resolved = resolveAgentScopes({
+      requestContext,
+      agentScopes: [...(configuredScopes ?? []), ...(defaultScopes ?? [])],
+      callScopes,
+      memory: options.memory,
+      snapshot: existingSnapshot
+        ? {
+            resourceId: snapshotMemoryInfo?.resourceId,
+            threadId: snapshotMemoryInfo?.threadId,
+            scopes: this.#getSnapshotScopes(existingSnapshot),
+          }
+        : undefined,
+    });
+
+    return { options: applyResolvedAgentScopes(options, resolved, requestContext), resolved };
+  }
+
   #getAgentExecutionResourceId({
     requestContext,
     memory,
@@ -8074,8 +8126,7 @@ export class Agent<
       : undefined;
     const persistedTracingContext = isResume
       ? (resumeContext?.snapshot?.tracingContext as
-          | { traceId?: string; spanId?: string; parentSpanId?: string }
-          | undefined)
+          { traceId?: string; spanId?: string; parentSpanId?: string } | undefined)
       : undefined;
 
     // Only fall back to persisted traceId/parentSpanId when the caller didn't provide
@@ -8233,6 +8284,7 @@ export class Agent<
       agentId: this.id,
       actor: options.actor,
       agentVersionId: this.toRawConfig()?.resolvedVersionId as string | undefined,
+      resolvedScopes: options.resolvedScopes,
       agentName: this.name,
       toolCallId: options.toolCallId,
       workspace,
@@ -8628,31 +8680,28 @@ export class Agent<
     options?: MultiPrimitiveExecutionOptions<OUTPUT>,
   ): Promise<MastraAgentNetworkStream<OUTPUT>>;
   async network<OUTPUT = undefined>(messages: MessageListInput, options?: MultiPrimitiveExecutionOptions<OUTPUT>) {
-    const requestContextToUse = options?.requestContext || new RequestContext();
+    const callerRequestContext = options?.requestContext || new RequestContext();
 
     // Merge default network options with call-specific options
-    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextToUse });
-    const mergedOptions = {
-      ...defaultNetworkOptions,
-      ...options,
-      routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
-      completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
-    };
+    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: callerRequestContext });
+    const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
+      {
+        ...defaultNetworkOptions,
+        ...options,
+        requestContext: callerRequestContext,
+        routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
+        completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
+      },
+      { callScopes: options?.scopes, defaultScopes: defaultNetworkOptions?.scopes },
+    );
+    const requestContextToUse = mergedOptions.requestContext;
 
     const runId = mergedOptions?.runId || this.#mastra?.generateId() || globalThis.crypto.randomUUID();
 
-    // Reserved keys from requestContext take precedence for security.
+    // Reserved keys from requestContext take precedence for security (see resolveAgentScopes).
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
     // preventing attackers from hijacking another user's memory by passing different values in the body.
-    const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-    const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-
-    const threadId =
-      threadIdFromContext ||
-      (typeof mergedOptions?.memory?.thread === 'string'
-        ? mergedOptions?.memory?.thread
-        : mergedOptions?.memory?.thread?.id);
-    const resourceId = resourceIdFromContext || mergedOptions?.memory?.resource;
+    const { threadId, resourceId } = resolvedScopes;
 
     return await networkLoop<OUTPUT>({
       networkName: this.name,
@@ -8706,29 +8755,26 @@ export class Agent<
    */
   async resumeNetwork(resumeData: any, options: Omit<MultiPrimitiveExecutionOptions, 'runId'> & { runId: string }) {
     const runId = options.runId;
-    const requestContextToUse = options?.requestContext || new RequestContext();
+    const callerRequestContext = options?.requestContext || new RequestContext();
 
     // Merge default network options with call-specific options
-    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: requestContextToUse });
-    const mergedOptions = {
-      ...defaultNetworkOptions,
-      ...options,
-      routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
-      completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
-    };
+    const defaultNetworkOptions = await this.getDefaultNetworkOptions({ requestContext: callerRequestContext });
+    const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
+      {
+        ...defaultNetworkOptions,
+        ...options,
+        requestContext: callerRequestContext,
+        routing: { ...defaultNetworkOptions?.routing, ...options?.routing },
+        completion: { ...defaultNetworkOptions?.completion, ...options?.completion },
+      },
+      { callScopes: options?.scopes, defaultScopes: defaultNetworkOptions?.scopes },
+    );
+    const requestContextToUse = mergedOptions.requestContext;
 
-    // Reserved keys from requestContext take precedence for security.
+    // Reserved keys from requestContext take precedence for security (see resolveAgentScopes).
     // This allows middleware to securely set resourceId/threadId based on authenticated user,
     // preventing attackers from hijacking another user's memory by passing different values in the body.
-    const resourceIdFromContext = requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-    const threadIdFromContext = requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-
-    const threadId =
-      threadIdFromContext ||
-      (typeof mergedOptions?.memory?.thread === 'string'
-        ? mergedOptions?.memory?.thread
-        : mergedOptions?.memory?.thread?.id);
-    const resourceId = resourceIdFromContext || mergedOptions?.memory?.resource;
+    const { threadId, resourceId } = resolvedScopes;
 
     return await networkLoop({
       networkName: this.name,
@@ -8847,10 +8893,15 @@ export class Agent<
     const defaultOptions = await this.getDefaultOptions({
       requestContext: options?.requestContext,
     });
-    const mergedOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
-      (options ?? {}) as Record<string, unknown>,
-    ) as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig> };
+    const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
+      deepMerge(
+        defaultOptions as Record<string, unknown>,
+        (options ?? {}) as Record<string, unknown>,
+      ) as AgentExecutionOptions<any> & {
+        model?: DynamicArgument<MastraModelConfig>;
+      },
+      { callScopes: options?.scopes, defaultScopes: defaultOptions?.scopes },
+    );
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
     delete loopOptions.actor;
@@ -8903,6 +8954,7 @@ export class Agent<
           }
         : undefined,
       messages,
+      resolvedScopes: resolvedScopes.scopes,
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
@@ -8969,8 +9021,7 @@ export class Agent<
     resourceId: string;
     threadId: string;
     streamOptions?:
-      | AgentExecutionOptions<OUTPUT>
-      | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
+      AgentExecutionOptions<OUTPUT> | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
     peer?: false | AgentClaimThreadPeerOptions;
     /**
      * Called when another process asks to claim this thread. Return `true` to
@@ -9544,10 +9595,15 @@ export class Agent<
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
-    const mergedOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
-      (streamOptions ?? {}) as Record<string, unknown>,
-    ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+    const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
+      deepMerge(
+        defaultOptions as Record<string, unknown>,
+        (streamOptions ?? {}) as Record<string, unknown>,
+      ) as AgentExecutionOptions<OUTPUT> & {
+        model?: DynamicArgument<MastraModelConfig>;
+      },
+      { callScopes: streamOptions?.scopes, defaultScopes: defaultOptions?.scopes },
+    );
     validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
     const loopOptions = { ...mergedOptions };
     const actor = mergedOptions.actor;
@@ -9562,7 +9618,9 @@ export class Agent<
       return runStreamUntilIdle<OUTPUT>(
         this,
         messages,
-        { ...rest, maxIdleMs },
+        // Continuations re-enter stream() and resolve scopes again, so they get the
+        // caller's own request context rather than this call's run-scoped copy.
+        { ...rest, requestContext: streamOptions?.requestContext, maxIdleMs },
         {
           activeStreams: this.#activeStreamUntilIdle,
           bgManager: this.#mastra?.backgroundTaskManager,
@@ -9639,6 +9697,7 @@ export class Agent<
           }
         : undefined,
       messages,
+      resolvedScopes: resolvedScopes.scopes,
       methodType: 'stream',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
@@ -9941,6 +10000,13 @@ export class Agent<
       loopStreamOptions.memory = mergedStreamOptions.memory;
     }
 
+    const { options: scopedStreamOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
+      mergedStreamOptions,
+      { callScopes: streamOptions?.scopes, defaultScopes: defaultOptions?.scopes, existingSnapshot },
+    );
+    mergedStreamOptions.memory = loopStreamOptions.memory = scopedStreamOptions.memory;
+    mergedStreamOptions.requestContext = loopStreamOptions.requestContext = scopedStreamOptions.requestContext;
+
     await this.requireAgentExecutionFGA({
       requestContext: mergedStreamOptions.requestContext,
       memory: mergedStreamOptions.memory,
@@ -10001,6 +10067,7 @@ export class Agent<
             }
           : undefined,
         messages: [],
+        resolvedScopes: resolvedScopes.scopes,
         resumeContext: {
           resumeData,
           snapshot: resumeSnapshot,
@@ -10118,6 +10185,13 @@ export class Agent<
 
     const runId = options?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
+    const { options: scopedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(mergedOptions, {
+      callScopes: options?.scopes,
+      defaultScopes: defaultOptions?.scopes,
+      existingSnapshot,
+    });
+    mergedOptions.memory = loopOptions.memory = scopedOptions.memory;
+    mergedOptions.requestContext = loopOptions.requestContext = scopedOptions.requestContext;
     await this.requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,
@@ -10170,6 +10244,7 @@ export class Agent<
           }
         : undefined,
       messages: [],
+      resolvedScopes: resolvedScopes.scopes,
       resumeContext: {
         resumeData,
         snapshot: resumeSnapshot,
