@@ -5,6 +5,7 @@ import type {
   InputProcessor,
   OutputProcessor,
   ProcessInputArgs,
+  ProcessInputStepArgs,
   ProcessOutputResultArgs,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -126,6 +127,28 @@ export class PlatformMemory extends MastraMemory {
           for (const message of promptOf(context)) {
             if (message.role === 'system') messageList.addSystem(message.content, 'memory');
             // Keeps ids like `om-continuation`, which @mastra/memory never persists.
+            else messageList.add(messageFromApi(message, ctx.threadId, ctx.resourceId), 'memory');
+          }
+          return messageList;
+        },
+        // Long tool loops: once the turn so far crosses the observation threshold,
+        // observe now and continue from the compressed context, like @mastra/memory does.
+        async processInputStep({ messageList, requestContext, stepNumber, rotateResponseMessageId }: ProcessInputStepArgs) {
+          if (stepNumber === 0) return messageList;
+          const ctx = memoryContext(requestContext, messageList);
+          if (!ctx || ctx.readOnly) return messageList;
+          const messages = toApiMessages([...messageList.get.input.db(), ...messageList.get.response.db()]);
+          if (!messages.length) return messageList;
+          await client.saveMessages(ctx.threadId, { resourceId: ctx.resourceId, messages });
+          const status = await client.getObservationStatus(ctx.threadId);
+          if (!status.shouldObserve) return messageList;
+          await client.observe(ctx.threadId);
+          const context = await client.getContext(ctx.threadId, ctx.resourceId, { workingMemory });
+          rotateResponseMessageId?.();
+          messageList.removeByIds(messageList.get.all.db().map(m => m.id));
+          messageList.clearSystemMessages('memory');
+          for (const message of promptOf(context)) {
+            if (message.role === 'system') messageList.addSystem(message.content, 'memory');
             else messageList.add(messageFromApi(message, ctx.threadId, ctx.resourceId), 'memory');
           }
           return messageList;

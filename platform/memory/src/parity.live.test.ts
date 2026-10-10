@@ -363,3 +363,60 @@ describe.skipIf(!live)('what the agent model sees', () => {
     }
   });
 });
+
+/** Calls the tool `calls` times in one turn, then answers. */
+function loopModel(prompts: string[], calls: number) {
+  const usage = { inputTokens: 10, outputTokens: 10, totalTokens: 20 };
+  return new MockLanguageModelV2({
+    doGenerate: async ({ prompt }) => {
+      prompts.push(JSON.stringify(prompt));
+      const step = prompts.length;
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        usage,
+        finishReason: step <= calls ? 'tool-calls' : 'stop',
+        content:
+          step <= calls
+            ? [{ type: 'tool-call', toolCallId: `call-${step}`, toolName: 'bulk', input: '{}' }]
+            : [{ type: 'text', text: reply }],
+      } as never;
+    },
+  });
+}
+
+const bulkTool = createTool({
+  id: 'bulk',
+  description: 'Returns a large payload',
+  inputSchema: z.object({}),
+  execute: async () => ({ rows: 'lorem ipsum dolor sit amet '.repeat(40) }),
+});
+
+describe.skipIf(!live).each([
+  ['Memory', localBackend],
+  ['PlatformMemory', platformBackend],
+] as const)('long tool loop (%s)', (_name, makeBackend) => {
+  it('observes mid-turn so the prompt stays bounded', async () => {
+    const backend = makeBackend();
+    const prompts: string[] = [];
+    const agent = new Agent({
+      id: 'loop',
+      name: 'loop',
+      instructions: 'Use the bulk tool repeatedly.',
+      model: loopModel(prompts, 6) as never,
+      tools: { bulk: bulkTool },
+      memory: backend.memory,
+    });
+    const run = `${Date.now()}`;
+    const result = await agent.generate('Collect all the rows.', {
+      memory: { thread: `loop-${run}`, resource: `res-loop-${run}` },
+      maxSteps: 10,
+    });
+    expect(result.text).toContain('I understand your request');
+    // Observations land inside the same turn, and the last prompt no longer carries every tool result.
+    expect(prompts.at(-1)).toContain('lives in Kyoto');
+    expect(prompts.at(-1)!.split('lorem ipsum').length).toBeLessThan(6 * 40);
+    const saved = await backend.messages(`loop-${run}`);
+    expect(saved.filter(m => m.text.includes('"toolName":"bulk"')).length).toBeGreaterThanOrEqual(6);
+  });
+});
