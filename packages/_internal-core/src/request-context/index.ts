@@ -31,6 +31,28 @@ export const MASTRA_RESOURCE_ID_KEY = 'mastra__resourceId';
 export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
 /**
+ * Reserved key for setting agent scopes from middleware.
+ *
+ * Holds a `string[]` of `<type>:<value>` addresses (for example `org:acme`,
+ * `resource:user-1`, `thread:t-9`). Scope types are arbitrary; `resource:` and
+ * `thread:` are the conventions Memory reads as the run's resource and thread.
+ * Middleware-set scopes are combined with the agent's `scopes` resolver and the
+ * per-call `scopes` option. Conflicting `resource:`/`thread:` values throw.
+ *
+ * During a run, the agent passes tools, processors and sub-agents a copy of the
+ * request context whose `mastra__scopes` holds only the non-identity scopes;
+ * the caller's own request context is never modified.
+ *
+ * @example
+ * ```typescript
+ * // In your auth middleware:
+ * const requestContext = c.get('requestContext');
+ * requestContext.set(MASTRA_SCOPES_KEY, [`org:${user.orgId}`, `resource:${user.id}`]);
+ * ```
+ */
+export const MASTRA_SCOPES_KEY = 'mastra__scopes';
+
+/**
  * Reserved key for storing version overrides on RequestContext.
  * When set, sub-agent delegation resolves versioned agents from these overrides.
  *

@@ -780,6 +780,7 @@ export class Agent<
   #tools: DynamicArgument<TTools, TRequestContext>;
   #hooks?: ToolHooks;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
+  #scopes?: DynamicArgument<string[], TRequestContext>;
   #agents: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
   #voice: DynamicArgument<MastraVoice, TRequestContext>;
   #agentChannels: AgentChannels | null = null;
@@ -933,6 +934,7 @@ export class Agent<
       });
     }
 
+    this.#scopes = config.scopes;
     this.#scorers = config.scorers || ({} as MastraScorers);
 
     // Validate statically-configured scoring filters at definition time so a
@@ -2849,6 +2851,24 @@ export class Agent<
     });
 
     return workflowRecord;
+  }
+
+  /**
+   * Resolves the Agent-level `scopes` config for a call.
+   * Durable and evented subclasses use it when they resolve a run's scopes.
+   */
+  protected async resolveConfiguredScopes({
+    requestContext,
+  }: {
+    requestContext: RequestContext;
+  }): Promise<string[] | undefined> {
+    if (typeof this.#scopes !== 'function') {
+      return this.#scopes;
+    }
+    return this.#scopes({
+      requestContext: requestContext as RequestContext<TRequestContext>,
+      mastra: this.#mastra,
+    });
   }
 
   async listScorers({
