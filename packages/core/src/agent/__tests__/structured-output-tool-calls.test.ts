@@ -489,11 +489,7 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
     expect(object).toMatchObject(expectedOutput);
   });
 
-  /**
-   * Edge case: with maxSteps: 1 and a tool call, the framework should
-   * complete gracefully without hanging or throwing.
-   */
-  it('should handle maxSteps: 1 gracefully when model calls tools instead of generating JSON', async () => {
+  it('should reject when maxSteps ends after a completed tool call without structured output', async () => {
     const mockModel = new MockLanguageModelV2({
       doGenerate: async () => {
         return {
@@ -542,12 +538,174 @@ describe('structuredOutput + generate() with tools (#13012)', () => {
       tools: { lookup: lookupTool },
     });
 
-    const result = await agent.generate('Look up test data and summarize', {
-      maxSteps: 1,
-      structuredOutput: { schema: outputSchema },
+    await expect(
+      agent.generate('Look up test data and summarize', {
+        maxSteps: 1,
+        structuredOutput: { schema: outputSchema },
+      }),
+    ).rejects.toMatchObject({ id: 'STRUCTURED_OUTPUT_MISSING_AFTER_TOOL_CALL' });
+  });
+});
+
+describe('structuredOutput with text before a tool call (#25038)', () => {
+  const outputSchema = z.object({ answer: z.string() });
+  const lookupTool = createTool({
+    id: 'lookup',
+    description: 'Look up information',
+    inputSchema: z.object({ query: z.string() }),
+    execute: async ({ query }) => ({ result: query }),
+  });
+
+  it.each([
+    { durable: false, intermediateText: 'I will look that up.' },
+    { durable: false, intermediateText: JSON.stringify({ answer: 'draft' }) },
+    { durable: true, intermediateText: 'I will look that up.' },
+    { durable: true, intermediateText: JSON.stringify({ answer: 'draft' }) },
+  ])('uses the terminal structured output for durable=$durable', async ({ durable, intermediateText }) => {
+    let modelCalls = 0;
+    const mockModel = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        modelCalls++;
+        const hasToolResults = prompt.some(
+          (message: any) =>
+            message.role === 'tool' ||
+            (Array.isArray(message.content) && message.content.some((content: any) => content.type === 'tool-result')),
+        );
+
+        if (!hasToolResults) {
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'step-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: intermediateText },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'lookup',
+                input: JSON.stringify({ query: 'test' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
+              },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        }
+
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'step-2', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-2' },
+            { type: 'text-delta', id: 'text-2', delta: JSON.stringify({ answer: 'final' }) },
+            { type: 'text-end', id: 'text-2' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 20, outputTokens: 30, totalTokens: 50 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
     });
 
-    // Should complete without hanging
-    expect(result.toolCalls.length).toBeGreaterThan(0);
+    const agent = new Agent({
+      id: `structured-output-before-tool-${durable}`,
+      name: 'Structured Output Before Tool Agent',
+      instructions: 'Look up information and return structured results.',
+      model: mockModel,
+      tools: { lookup: lookupTool },
+      durable,
+    });
+    const stream = await agent.stream('Look up test data', {
+      maxSteps: 3,
+      structuredOutput: { schema: outputSchema },
+    });
+    const objectResults = [];
+    const errors = [];
+
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'object-result') objectResults.push(chunk.object);
+      if (chunk.type === 'error') errors.push(chunk.payload.error);
+    }
+
+    expect(modelCalls).toBe(2);
+    expect(errors).toEqual([]);
+    expect(objectResults).toEqual([{ answer: 'final' }]);
   });
+
+  it.each([
+    { durable: false, errorStrategy: 'strict' as const },
+    { durable: true, errorStrategy: 'strict' as const },
+    { durable: false, errorStrategy: 'fallback' as const },
+    { durable: true, errorStrategy: 'fallback' as const },
+    { durable: false, errorStrategy: 'warn' as const },
+    { durable: true, errorStrategy: 'warn' as const },
+  ])(
+    'applies $errorStrategy when durable=$durable stops after a completed tool call',
+    async ({ durable, errorStrategy }) => {
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'step-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            {
+              type: 'tool-call',
+              toolCallId: 'call-1',
+              toolName: 'lookup',
+              input: JSON.stringify({ query: 'test' }),
+            },
+            {
+              type: 'finish',
+              finishReason: 'tool-calls',
+              usage: { inputTokens: 10, outputTokens: 15, totalTokens: 25 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      });
+      const fallbackValue = { answer: 'fallback' };
+      const agent = new Agent({
+        id: `structured-output-missing-after-tool-${durable}-${errorStrategy}`,
+        name: 'Structured Output Missing After Tool Agent',
+        instructions: 'Look up information and return structured results.',
+        model: mockModel,
+        tools: { lookup: lookupTool },
+        durable,
+      });
+      const stream = await agent.stream('Look up test data', {
+        maxSteps: 1,
+        structuredOutput: { schema: outputSchema, errorStrategy, fallbackValue },
+      });
+      const objectResults = [];
+      const errors = [];
+
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'object-result') objectResults.push(chunk);
+        if (chunk.type === 'error') errors.push(chunk.payload.error);
+      }
+
+      if (errorStrategy === 'fallback') {
+        expect(errors).toEqual([]);
+        expect(objectResults).toEqual([
+          expect.objectContaining({ object: fallbackValue, metadata: { fallback: true } }),
+        ]);
+      } else if (errorStrategy === 'warn') {
+        expect(errors).toEqual([]);
+        expect(objectResults).toEqual([]);
+      } else {
+        expect(objectResults).toEqual([]);
+        expect(errors).toHaveLength(1);
+        expect(errors[0]).toMatchObject({ id: 'STRUCTURED_OUTPUT_MISSING_AFTER_TOOL_CALL' });
+      }
+    },
+  );
 });
