@@ -201,6 +201,105 @@ describe('UpstashTransport', () => {
     });
   });
 
+  describe('outage buffering', () => {
+    const write = (target: UpstashTransport, count: number) => {
+      for (let i = 1; i <= count; i++) {
+        target._transform(JSON.stringify({ msg: `message${i}` }), 'utf8', () => {});
+      }
+    };
+
+    const deferred = () => {
+      let resolve!: (value: unknown) => void;
+      const promise = new Promise(r => {
+        resolve = r;
+      });
+      return { promise, resolve };
+    };
+
+    beforeEach(() => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    it('should cap the buffer and drop the oldest records while Upstash is down', async () => {
+      fetchMock.mockImplementation(() => Promise.reject(new Error('Upstash down')));
+      const outageTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2, maxBufferSize: 10 });
+
+      write(outageTransport, 100);
+      await expect(outageTransport._flush()).rejects.toThrow('Upstash down');
+
+      expect(outageTransport.logBuffer).toHaveLength(10);
+      expect(outageTransport.droppedRecords).toBe(90);
+      expect(outageTransport.logBuffer.map(log => log.msg)).toEqual(
+        Array.from({ length: 10 }, (_, index) => `message${index + 91}`),
+      );
+    });
+
+    it('should default the buffer limit to maxListLength', () => {
+      expect(transport.maxBufferSize).toBe(defaultOptions.maxListLength);
+      expect(new UpstashTransport({ ...defaultOptions, maxBufferSize: 5 }).maxBufferSize).toBe(5);
+    });
+
+    it('should not drop records when flushes succeed', async () => {
+      write(transport, 50);
+      await transport._flush();
+      await transport._flush();
+
+      expect(transport.droppedRecords).toBe(0);
+    });
+
+    it('should keep only one flush request in flight', async () => {
+      const pending = deferred();
+      fetchMock.mockImplementationOnce(() => pending.promise);
+      const batchTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2 });
+
+      write(batchTransport, 50);
+      const inFlight = batchTransport._flush();
+      vi.advanceTimersByTime(defaultOptions.flushInterval);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      pending.resolve({ ok: true, json: () => Promise.resolve({ result: 'success' }) });
+      await inFlight;
+
+      await Promise.all([batchTransport._flush(), batchTransport._flush()]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('should resend failed records before newer ones', async () => {
+      fetchMock.mockImplementationOnce(() => Promise.reject(new Error('Upstash down')));
+      const batchTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2 });
+
+      write(batchTransport, 3);
+      await expect(batchTransport._flush()).rejects.toThrow('Upstash down');
+      await batchTransport._flush();
+
+      const [, request] = fetchMock.mock.calls[1];
+      const [lpush] = JSON.parse(request.body);
+      expect(lpush.slice(2).map((log: string) => JSON.parse(log).msg)).toEqual(['message1', 'message2']);
+    });
+
+    it('should wait for an in-flight flush and drain the rest on destroy', async () => {
+      const pending = deferred();
+      fetchMock.mockImplementationOnce(() => pending.promise);
+      const batchTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2 });
+
+      write(batchTransport, 5);
+      const destroyed = new Promise<void>((resolve, reject) => {
+        batchTransport._destroy(null as any, (error?: Error | null) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      pending.resolve({ ok: true, json: () => Promise.resolve({ result: 'success' }) });
+      await destroyed;
+
+      expect(fetchMock.mock.calls.map(([, request]: any[]) => JSON.parse(request.body)[0].length - 2)).toEqual([
+        2, 2, 1,
+      ]);
+      expect(batchTransport.logBuffer).toEqual([]);
+    });
+  });
+
   describe('listLogs and listLogsByRunId', () => {
     it('should fetch only the requested page for unfiltered queries', async () => {
       const logs = Array.from({ length: 2 }, (_, index) =>

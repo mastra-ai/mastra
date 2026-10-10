@@ -6,15 +6,21 @@ export class UpstashTransport extends LoggerTransport {
   upstashToken: string;
   listName: string;
   maxListLength: number;
+  maxBufferSize: number;
+  /** Number of buffered records discarded because the buffer exceeded `maxBufferSize`. */
+  droppedRecords = 0;
   batchSize: number;
   flushInterval: number;
   logBuffer: any[];
   lastFlush: number;
   flushIntervalId: NodeJS.Timeout;
+  private flushPromise: Promise<void> | null = null;
 
   constructor(opts: {
     listName?: string;
     maxListLength?: number;
+    /** Maximum number of records held in memory while Upstash is unreachable. Defaults to `maxListLength`. */
+    maxBufferSize?: number;
     batchSize?: number;
     upstashUrl: string;
     flushInterval?: number;
@@ -30,6 +36,7 @@ export class UpstashTransport extends LoggerTransport {
     this.upstashToken = opts.upstashToken;
     this.listName = opts.listName || 'application-logs';
     this.maxListLength = opts.maxListLength || 10000;
+    this.maxBufferSize = opts.maxBufferSize || this.maxListLength;
     this.batchSize = opts.batchSize || 100;
     this.flushInterval = opts.flushInterval || 10000;
 
@@ -61,11 +68,23 @@ export class UpstashTransport extends LoggerTransport {
     return response.json();
   }
 
-  async _flush() {
+  /** Sends the next batch to Upstash. Callers share the in-flight flush instead of starting a new request. */
+  _flush(): Promise<void> {
+    if (this.flushPromise) {
+      return this.flushPromise;
+    }
     if (this.logBuffer.length === 0) {
-      return;
+      return Promise.resolve();
     }
 
+    this.flushPromise = this.flushBatch().finally(() => {
+      this.flushPromise = null;
+    });
+    return this.flushPromise;
+  }
+
+  /** Pushes one batch to Upstash, returning the records to the front of the buffer if the request fails. */
+  private async flushBatch() {
     const now = Date.now();
     const logs = this.logBuffer.splice(0, this.batchSize);
 
@@ -82,7 +101,17 @@ export class UpstashTransport extends LoggerTransport {
     } catch (error) {
       // On error, put logs back in the buffer
       this.logBuffer.unshift(...logs);
+      this.enforceBufferLimit();
       throw error;
+    }
+  }
+
+  /** Drops the oldest buffered records once the buffer exceeds `maxBufferSize`. */
+  private enforceBufferLimit() {
+    const overflow = this.logBuffer.length - this.maxBufferSize;
+    if (overflow > 0) {
+      this.logBuffer.splice(0, overflow);
+      this.droppedRecords += overflow;
     }
   }
 
@@ -110,6 +139,7 @@ export class UpstashTransport extends LoggerTransport {
 
       // Add to buffer
       this.logBuffer.push(log);
+      this.enforceBufferLimit();
 
       // Flush if buffer reaches batch size
       if (this.logBuffer.length >= this.batchSize) {
@@ -129,7 +159,7 @@ export class UpstashTransport extends LoggerTransport {
     clearInterval(this.flushIntervalId);
 
     // Final flush
-    if (this.logBuffer.length > 0) {
+    if (this.logBuffer.length > 0 || this.flushPromise) {
       this.drainBuffer()
         .then(() => cb(err))
         .catch(flushErr => {
@@ -142,7 +172,7 @@ export class UpstashTransport extends LoggerTransport {
   }
 
   private async drainBuffer(): Promise<void> {
-    while (this.logBuffer.length > 0) {
+    while (this.logBuffer.length > 0 || this.flushPromise) {
       await this._flush();
     }
   }
