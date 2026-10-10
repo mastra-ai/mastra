@@ -422,7 +422,8 @@ export class WorkflowEventProcessor extends EventProcessor {
    * OOMs (COR-1431). Returns `storedResult` unchanged when the workflow has no
    * `pruneSnapshot` option. The hook needs the surrounding run context
    * (`activeStepsPath`, `activePaths`, `serializedStepGraph`) to decide what a
-   * restart still reads, so it is invoked with a synthesized running snapshot.
+   * restart still reads, so it is invoked with a complete running snapshot built
+   * from the in-flight run state.
    *
    * Live execution keeps the FULL result (the caller stores `storedResult` in
    * its in-memory `stepResults`); only the persisted record is pruned, matching
@@ -430,6 +431,8 @@ export class WorkflowEventProcessor extends EventProcessor {
    */
   private pruneStepResultForPersist({
     workflow,
+    runId,
+    state,
     stepId,
     storedResult,
     stepResults,
@@ -437,6 +440,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     activeStepsPath,
   }: {
     workflow: Workflow | undefined;
+    runId: string;
+    state: Record<string, any> | undefined;
     stepId: string;
     storedResult: StepResult<any, any, any, any>;
     stepResults: Record<string, StepResult<any, any, any, any>> | undefined;
@@ -446,14 +451,20 @@ export class WorkflowEventProcessor extends EventProcessor {
     const pruneSnapshot = workflow?.options?.pruneSnapshot;
     if (!pruneSnapshot) return storedResult;
     try {
-      const synthesized = {
+      const snapshot: WorkflowRunState = {
+        runId,
         status: 'running',
-        context: { ...(stepResults ?? {}), [stepId]: storedResult },
+        value: state ?? {},
+        context: { ...(stepResults ?? {}), [stepId]: storedResult } as WorkflowRunState['context'],
+        serializedStepGraph: workflow?.serializedStepGraph ?? [],
         activePaths: executionPath,
         activeStepsPath,
-        serializedStepGraph: workflow?.serializedStepGraph,
-      } as unknown as WorkflowRunState;
-      const pruned = pruneSnapshot({ snapshot: synthesized, workflowStatus: 'running' });
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      };
+      const pruned = pruneSnapshot({ snapshot, workflowStatus: 'running' });
       return (pruned?.context?.[stepId] as StepResult<any, any, any, any>) ?? storedResult;
     } catch (error) {
       // Pruning is a size optimization — never fail the step over it.
@@ -3066,6 +3077,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         ? storedResult
         : this.pruneStepResultForPersist({
             workflow,
+            runId,
+            state: currentState,
             stepId,
             storedResult,
             stepResults,

@@ -72,6 +72,7 @@ function createLoopingModel(toolIterations: number, toolName: string) {
 interface WriteRecord {
   method: string;
   workflowName: string;
+  runId: string;
   status: string;
   /** Serialized size of the whole row after this write — what a full-rewrite adapter hands the DB. */
   bytes: number;
@@ -159,7 +160,7 @@ async function measureRun(engine: 'default' | 'evented', toolIterations: number)
       const snap = run?.snapshot;
       const serialized = typeof snap === 'string' ? snap : JSON.stringify(snap ?? {});
       const status = (typeof snap === 'string' ? undefined : snap?.status) ?? '?';
-      records.push({ method, workflowName, status, bytes: serialized.length });
+      records.push({ method, workflowName, runId: args.runId, status, bytes: serialized.length });
       // Counted here (not when aggregating below) so the quiesce wait after the
       // run can observe progress as writes land.
       stats.writes += 1;
@@ -184,9 +185,10 @@ async function measureRun(engine: 'default' | 'evented', toolIterations: number)
   const result: any = await durableAgent.stream(`Call the echo tool ${toolIterations} times`, {
     maxSteps: toolIterations + 2,
   });
+  const chunkTypes = new Set<string>();
   if (result?.fullStream) {
-    for await (const _chunk of result.fullStream as AsyncIterable<any>) {
-      // drain
+    for await (const chunk of result.fullStream as AsyncIterable<any>) {
+      chunkTypes.add(chunk?.type);
     }
   }
   result?.cleanup?.();
@@ -197,12 +199,33 @@ async function measureRun(engine: 'default' | 'evented', toolIterations: number)
   // run itself to reach a terminal state first — the handler that performs
   // those trailing writes also drives that transition — then wait for writes to
   // quiesce, so a lull between `FINISH` and those writes cannot end the wait.
-  const runDeadline = Date.now() + 30_000;
-  while (Date.now() < runDeadline) {
+  // A failed or unfinished run must fail the test, not satisfy the size bounds.
+  // The stream must finish cleanly, and the run must settle: either a terminal
+  // write lands or the row is removed (terminal rows are deleted on settle, and
+  // the default engine never writes one). A `failed` write always fails.
+  if (!chunkTypes.has('finish') || chunkTypes.has('error')) {
+    throw new Error(`${engine} run did not finish cleanly; chunk types: ${[...chunkTypes].join(', ')}`);
+  }
+  const runRecords = () => records.filter(r => r.runId === result?.runId);
+  const settledStatus = async (): Promise<string | undefined> => {
+    const terminal = runRecords()
+      .filter(r => r.status === 'success' || r.status === 'failed')
+      .at(-1)?.status;
+    if (terminal) return terminal;
     const run = await workflowsStore.getWorkflowRunById({ runId: result?.runId });
-    const status = run?.snapshot?.status;
-    if (!run || status === 'success' || status === 'failed') break;
+    return !run && runRecords().length > 0 ? 'removed' : undefined;
+  };
+  const runDeadline = Date.now() + 30_000;
+  let settled = await settledStatus();
+  while (!settled && Date.now() < runDeadline) {
     await new Promise(resolve => setTimeout(resolve, 100));
+    settled = await settledStatus();
+  }
+  if (settled !== 'success' && settled !== 'removed') {
+    throw new Error(`${engine} run ${result?.runId} did not succeed: ${settled ?? 'timed out after 30s'}`);
+  }
+  if (runRecords().some(r => r.status === 'failed')) {
+    throw new Error(`${engine} run ${result?.runId} wrote a failed snapshot`);
   }
 
   let seen = -1;
