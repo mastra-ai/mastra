@@ -2145,6 +2145,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #createAbortedOnFinishPayload(): MastraOnFinishCallbackArgs<OUTPUT> {
     // Capture only text buffered before the abort event. Providers may continue producing
     // chunks after cancellation, but those chunks cannot extend this terminal snapshot.
+    const emptyUsage = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
+    // Steps that completed before the abort were already billed by the provider, so keep their usage.
     return {
       finishReason: 'aborted',
       text: this.#bufferedText.join(''),
@@ -2159,13 +2161,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       dynamicToolCalls: [],
       dynamicToolResults: [],
       content: [],
-      usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      usage: this.#bufferedSteps.at(-1)?.usage ?? emptyUsage,
       warnings: [],
       providerMetadata: undefined,
       request: {},
       response: {},
       steps: [],
-      totalUsage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+      totalUsage: this.#bufferedSteps.length > 0 ? this.#getTotalUsage() : emptyUsage,
       object: undefined as OUTPUT,
     };
   }
