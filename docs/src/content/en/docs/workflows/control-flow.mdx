@@ -562,6 +562,10 @@ export const testWorkflow = createWorkflow({})
   .commit();
 ```
 
+:::note
+On every loop iteration, the accumulated context is revalidated against the loop body's `inputSchema`. Any context key that is not declared in that schema is dropped before the next iteration — including keys produced by steps inside the body, such as the output of a nested workflow (for example, a nested `gate` step's output is not visible as `inputData.gate` on re-entry). To carry data across iterations (feedback, counters, previous results), declare those fields as top-level fields in the body's `inputSchema` and have the last step of the body re-emit them, or use [workflow state](/docs/workflows/workflow-state) instead of threading values through context.
+:::
+
 ### Looping with `.dowhile()`
 
 Use `.dowhile()` to run a step repeatedly while a condition remains true.
