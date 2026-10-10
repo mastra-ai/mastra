@@ -749,14 +749,21 @@ export function toCustomProviderModelId(providerName: string, modelName: string)
 }
 
 /**
+ * Providers the MastraCode gateway catalogs itself, besides the user's custom
+ * providers. Keep in sync with `MastraCodeGateway.fetchProviders()`.
+ */
+export const MASTRACODE_GATEWAY_BUILTIN_PROVIDER_IDS: readonly string[] = ['kimi-for-coding', 'github-copilot'];
+
+/**
  * The shared gateway catalog namespaces provider keys under their owning
- * gateway id, so a custom provider's models surface in the `/models` catalog
- * as `mastracode/<providerId>/<model>` instead of the canonical
+ * gateway id, so the MastraCode gateway's providers (custom providers, Kimi
+ * For Coding, GitHub Copilot) surface in the `/models` catalog as
+ * `mastracode/<providerId>/<model>` instead of the canonical
  * `<providerId>/<model>` that model resolution expects. Persisting the
  * gateway-qualified id verbatim breaks lookup later (the provider is parsed
  * as `mastracode`). Strip the prefix before saving — but only when the
- * middle segment matches one of the user's configured custom providers, so
- * legitimate `mastracode/...` gateway-routed ids are left untouched.
+ * middle segment is a provider the MastraCode gateway owns, so other
+ * `mastracode/...` ids are left untouched.
  */
 export function stripMastraCodeCustomProviderPrefix(
   modelId: string,
@@ -769,8 +776,10 @@ export function stripMastraCodeCustomProviderPrefix(
   const [providerId, ...modelParts] = rest.split('/');
   if (!providerId || modelParts.length === 0 || modelParts.some(part => part.length === 0)) return modelId;
 
-  const isCustomProvider = customProviders.some(provider => getCustomProviderId(provider.name) === providerId);
-  return isCustomProvider ? rest : modelId;
+  const isGatewayProvider =
+    MASTRACODE_GATEWAY_BUILTIN_PROVIDER_IDS.includes(providerId) ||
+    customProviders.some(provider => getCustomProviderId(provider.name) === providerId);
+  return isGatewayProvider ? rest : modelId;
 }
 
 export function parseCustomProviders(rawProviders: unknown): CustomProviderSetting[] {

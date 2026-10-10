@@ -65,6 +65,11 @@ vi.mock('../../providers/openai-codex.js', () => ({
   },
 }));
 
+vi.mock('../../providers/kimi-coding.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../providers/kimi-coding.js')>()),
+  kimiCodingProvider: vi.fn((modelId: string) => ({ __provider: 'kimi-for-coding', modelId })),
+}));
+
 const mockGetCopilotModelCatalog = vi.hoisted(() => vi.fn(async () => []));
 vi.mock('../../providers/github-copilot.js', () => ({
   githubCopilotProvider: vi.fn(() => ({ __provider: 'github-copilot' })),
@@ -764,6 +769,13 @@ describe('resolveModel', () => {
       expect(result.modelId).toBe('reasoner-v1');
       expect(result.url).toBe('https://llm.acme.dev/v1');
       expect(result.apiKey).toBe('acme-secret');
+    });
+
+    it('normalizes saved mastracode/-prefixed Kimi For Coding ids at resolution time', () => {
+      const result = resolveModel('mastracode/kimi-for-coding/k3') as Record<string, unknown>;
+
+      expect(result.__provider).toBe('kimi-for-coding');
+      expect(result.modelId).toBe('k3');
     });
 
     it('leaves mastracode/-prefixed ids alone when the segment is not a configured custom provider', () => {
