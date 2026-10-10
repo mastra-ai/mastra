@@ -1,0 +1,31 @@
+{
+  "providerId": "microsoft-word-oauth2-cc",
+  "localId": "microsoft-word",
+  "templateSha": "bb789a55bfcf744b3c83aa9132e4ffa562106aa3",
+  "templateRepo": "NangoHQ/integration-templates",
+  "generatedAt": "2026-09-30T14:44:09.598Z",
+  "toolCount": 18,
+  "skippedActions": [],
+  "files": {
+    "index.ts": "79b4a50fdaeae6b89d98d722b92eae086aa599172e608ac0f8ea04940456b42b",
+    "tools.ts": "4b973c14480c0d338f5656b3128515a6e832206fe0fd3d3c4513c69c7fdc6073",
+    "tools/copy-word-document.ts": "89567e87c98592e5233577068e599d3ba779f9da550d1a8c6b6f6dc5e26a7ea6",
+    "tools/create-folder.ts": "01f4de67993cc98bccbe92eac291fe277fa97b1135936b4ddf8fd32e02c01008",
+    "tools/create-sharing-link.ts": "6ebcd895399aeb3c8650cff11e6f43583bbd6aa55d588b9de2eb05a77e74e8ec",
+    "tools/create-word-document.ts": "011ad44cbbd15e20f69fb48b28a4bde4b860f6b614b221e83f44f0bde50a336a",
+    "tools/delete-word-document.ts": "4ebff819745ed83bd260c0a49b0da0bc2aadee1694f4828299194c62e1a03364",
+    "tools/get-site-drive.ts": "2ae0d6cf928621c9d21d78ae785a96dbcb3ffbd6dda34452e5e1dfc47d8e1f96",
+    "tools/get-user-drive.ts": "1de34add696e9d19c13a47ee78480cc7c34de5b3980025b6237d067f6c2153e9",
+    "tools/get-word-document-as-pdf.ts": "6c0c0579ce820e749e030e4adfb550f34e32ee257030990ddf5989c69b7f7877",
+    "tools/get-word-document-content.ts": "f275b01947a8859948129f21bc1a3f89a367e50f11560c4d8c95784c7aa0e730",
+    "tools/get-word-document.ts": "62a9d40e819e4b63c1a9887679247930a111744b73e53e7486aaaab29995f055",
+    "tools/list-sites.ts": "eecf7ebcfc05953812334060c7ead6f2fe5d0b285f4459b750917fcf4ecb63ac",
+    "tools/list-users.ts": "4fe2d645cb0362b854cc9b727a6cddae325b0013dc7ba98c7ed9aa08720a61ae",
+    "tools/list-word-document-permissions.ts": "54fd7767033a84e2218a3cbf257af47030dfee8b1910450d01948390470c0504",
+    "tools/list-word-document-versions.ts": "2361f6a5287bead81ce709d729683de432826161c042d64201e8ceba2a76550a",
+    "tools/list-word-documents.ts": "afcb2003c301ac6aac9b8bc9168720941a945155ded5fdec3c86a4529e9d1b5d",
+    "tools/move-word-document.ts": "a994ac599180d69c294fb043b5181f004cc2ec3cdda2ba6beba33ba64609c159",
+    "tools/update-word-document-content.ts": "ac59b83a55426a42739d1c49c3ee9e32b7ce0fec685b1465ac3700b1f9d7922c",
+    "tools/update-word-document-metadata.ts": "9ed0c196f6e2ad6c6c26e4d4c12fced81d402d088cdee913bf9afe957933e144"
+  }
+}
