@@ -371,7 +371,8 @@ overrides:
   '@babel/core@>=7.0.0 <7.29.6': 8.0.1
   '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
   dompurify@>=3.0.0 <3.4.16: 3.4.16
-  hono@<4.13.8: 4.13.8
+  # Vanta 2026-10-09: AIKIDO-2026-901222 fixed in 4.13.11
+  hono@<4.13.13: 4.13.13
   '@hono/node-server@<1.19.15': 1.19.15
   postcss@<8.5.23: 8.5.23
   ip-address@<10.7.1: 10.7.2
@@ -542,6 +543,10 @@ overrides:
   'inline-style-parser@<0.2.9': 0.2.9
   # Vanta 2026-10-08: GHSA-ch52-4w7c-c8xp (CVE-2026-93748); cacheable-request/make-fetch-happen declare ^4.1.x
   'http-cache-semantics@<4.3.0': 4.3.0
+  # Vanta 2026-10-09: GHSA-8r5x-fm3f-whwj, GHSA-p8wg-vrv2-v86f (critical), GHSA-xw65-4hp5-5hc7 / AIKIDO-2026-258160, -970464, -869467; @verdaccio/hooks pins handlebars 4.7.9
+  'handlebars@<4.7.10': 4.7.10
+  # Vanta 2026-10-09: AIKIDO-2026-231269, AIKIDO-2026-154218 (follow-redirects header leak on redirect); axios declares ^1.15.x
+  'follow-redirects@<1.16.1': 1.16.1
 allowBuilds:
   '@clerk/shared': false
   '@datadog/native-appsec': false
