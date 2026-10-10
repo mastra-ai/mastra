@@ -151,6 +151,39 @@ class PlatformMemory:
         body = {"resourceId": resource_id, "threadId": thread_id, "query": query, "limit": limit}
         return self._request("POST", "/search", body={k: v for k, v in body.items() if v is not None})["matches"]
 
+    def get_observations(self, thread_id: str) -> dict[str, Any] | None:
+        return self._request("GET", f"/threads/{_q(thread_id)}/observations")["record"]
+
+    def get_observation_status(self, thread_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/threads/{_q(thread_id)}/observations/status")
+
+    def observe(self, thread_id: str) -> dict[str, Any]:
+        return self._request("POST", f"/threads/{_q(thread_id)}/observe")
+
+    def clone_thread(
+        self,
+        thread_id: str,
+        *,
+        new_thread_id: str | None = None,
+        title: str | None = None,
+        metadata: dict[str, Any] | None = None,
+        message_limit: int | None = None,
+    ) -> dict[str, Any]:
+        body = {"newThreadId": new_thread_id, "title": title, "metadata": metadata, "messageLimit": message_limit}
+        return self._request(
+            "POST", f"/threads/{_q(thread_id)}/clone", body={k: v for k, v in body.items() if v is not None}
+        )
+
+    def delete_messages(self, thread_id: str, message_ids: list[str]) -> int:
+        return self._request(
+            "POST", f"/threads/{_q(thread_id)}/messages/delete", body={"messageIds": message_ids}
+        )["deleted"]
+
+    def get_resource(
+        self, resource_id: str, *, page: int | None = None, per_page: int | None = None
+    ) -> dict[str, Any]:
+        return self._request("GET", f"/resources/{_q(resource_id)}", query={"page": page, "perPage": per_page})
+
     def _request(
         self, method: str, path: str, *, query: dict[str, Any] | None = None, body: Any = None
     ) -> Any:

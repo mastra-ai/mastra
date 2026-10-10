@@ -68,6 +68,17 @@ export interface MemoryObservationRecord {
   [key: string]: unknown;
 }
 
+export interface MemoryObservationStatus {
+  scope: 'thread' | 'resource';
+  pendingTokens: number;
+  observationThreshold: number;
+  shouldObserve: boolean;
+  shouldReflect: boolean;
+  observationTokenCount: number;
+  reflectionThreshold: number;
+  lastObservedAt: string | null;
+}
+
 export interface MemoryObservationMatch {
   text: string;
   threadId: string | null;
@@ -204,6 +215,42 @@ export class PlatformMemoryClient {
     return this.request<{ observed: boolean; reflected: boolean; record: MemoryObservationRecord | null }>(
       'POST',
       `/threads/${encodeURIComponent(threadId)}/observe`,
+    );
+  }
+
+  /** Live observation status: pending tokens against the observe/reflect thresholds. */
+  getObservationStatus(threadId: string) {
+    return this.request<MemoryObservationStatus>('GET', `/threads/${encodeURIComponent(threadId)}/observations/status`);
+  }
+
+  /** Copies a thread, its messages, and its observations. */
+  cloneThread(
+    threadId: string,
+    body: { newThreadId?: string; title?: string; metadata?: Record<string, unknown>; messageLimit?: number } = {},
+  ) {
+    return this.request<{ thread: MemoryThread; clonedMessageCount: number }>(
+      'POST',
+      `/threads/${encodeURIComponent(threadId)}/clone`,
+      { body },
+    );
+  }
+
+  /** Deletes messages from a thread. Ids that belong to other threads are ignored. */
+  async deleteMessages(threadId: string, messageIds: string[]): Promise<number> {
+    const res = await this.request<{ deleted: number }>(
+      'POST',
+      `/threads/${encodeURIComponent(threadId)}/messages/delete`,
+      { body: { messageIds } },
+    );
+    return res.deleted;
+  }
+
+  /** Everything stored for one resource (user): working memory and threads. */
+  getResource(resourceId: string, query: { page?: number; perPage?: number } = {}) {
+    return this.request<{ resourceId: string; workingMemory: string | null; threads: MemoryThread[] }>(
+      'GET',
+      `/resources/${encodeURIComponent(resourceId)}`,
+      { query },
     );
   }
 
