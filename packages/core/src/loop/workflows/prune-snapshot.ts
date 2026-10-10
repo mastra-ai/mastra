@@ -162,10 +162,22 @@ function stripTerminalOutputFields<T>(value: T): T {
  * everything written.
  */
 function stripStepResultRequest<T>(value: T): T {
-  if (!isPlainObject(value) || !isPlainObject(value.stepResult)) return value;
-  if (!('request' in value.stepResult)) return value;
-  const { request: _request, ...stepResult } = value.stepResult;
-  return { ...value, stepResult } as T;
+  if (!isPlainObject(value)) return value;
+  const pruned: Record<string, any> = { ...value };
+  const stripRequest = (candidate: unknown) => {
+    if (!isPlainObject(candidate) || !('request' in candidate)) return candidate;
+    const { request: _request, ...withoutRequest } = candidate;
+    return withoutRequest;
+  };
+
+  pruned.stepResult = stripRequest(pruned.stepResult);
+  pruned.lastStepResult = stripRequest(pruned.lastStepResult);
+  if (isPlainObject(pruned.llmOutput)) {
+    pruned.llmOutput = { ...pruned.llmOutput };
+    pruned.llmOutput.stepResult = stripRequest(pruned.llmOutput.stepResult);
+    pruned.llmOutput.metadata = stripRequest(pruned.llmOutput.metadata);
+  }
+  return pruned as T;
 }
 
 /**
