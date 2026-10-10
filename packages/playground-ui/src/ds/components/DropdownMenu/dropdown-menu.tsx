@@ -2,6 +2,7 @@ import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import type { MenuPopupProps, MenuPositionerProps } from '@base-ui/react/menu';
 import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
+import { DropdownMenuIdentityTrigger } from './dropdown-menu-identity-trigger';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import {
@@ -23,6 +24,67 @@ import type { TriggerButtonProps } from '@/ds/primitives/trigger-button';
 import { cn } from '@/lib/utils';
 
 const DropdownMenuRoot = MenuPrimitive.Root;
+
+const NativeItemHighlightContext = React.createContext(false);
+
+function useItemHighlightClass(variant: 'default' | 'destructive' = 'default') {
+  const native = React.useContext(NativeItemHighlightContext);
+  if (!native) return undefined;
+  if (variant === 'destructive') {
+    return 'not-disabled:hover:bg-destructive-subtle not-disabled:active:bg-destructive-subtle data-highlighted:bg-destructive-subtle data-popup-open:bg-destructive-subtle';
+  }
+  return 'not-disabled:hover:bg-fill-subtle not-disabled:active:bg-fill data-highlighted:bg-fill-subtle data-popup-open:bg-fill-subtle';
+}
+
+function dropGeneratedLabelledBy(props: { 'aria-label'?: string }) {
+  if (!props['aria-label']) return {};
+  return { 'aria-labelledby': undefined };
+}
+
+const railNavigationKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'Enter', ' ']);
+
+function isEditable(target: EventTarget) {
+  if (!(target instanceof HTMLElement)) return false;
+  return target.isContentEditable || target.matches('input, textarea, select');
+}
+
+function focusRailFromActions(event: React.KeyboardEvent<HTMLDivElement>) {
+  if (event.defaultPrevented || event.key !== 'ArrowLeft' || isEditable(event.target)) return;
+  const rail = event.currentTarget.querySelector('[data-slot=dropdown-menu-rail]');
+  if (!rail) return;
+  const target =
+    rail.querySelector<HTMLButtonElement>('button[aria-current=true]:not(:disabled)') ??
+    rail.querySelector<HTMLButtonElement>('button:not(:disabled)');
+  target?.focus();
+  event.preventDefault();
+}
+
+function AccountMenuBody({ rail, children }: { rail?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <>
+      {rail && (
+        <div
+          data-slot="dropdown-menu-rail"
+          className="flex shrink-0 border-r border-border"
+          onKeyDown={event => {
+            if (event.key === 'ArrowRight') {
+              event.currentTarget.parentElement
+                ?.querySelector<HTMLElement>('[role=menuitem]:not([data-disabled])')
+                ?.focus();
+              event.preventDefault();
+            }
+            if (railNavigationKeys.has(event.key)) event.stopPropagation();
+          }}
+        >
+          {rail}
+        </div>
+      )}
+      <div data-slot="dropdown-menu-actions" className="min-h-0 min-w-0 flex-1 overflow-y-auto px-1 py-0.75">
+        {children}
+      </div>
+    </>
+  );
+}
 
 const DropdownMenuGroup = MenuPrimitive.Group;
 
@@ -60,7 +122,13 @@ const DropdownMenuSubTrigger = React.forwardRef<HTMLDivElement, DropdownMenuSubT
   ({ className, inset, children, ...props }, ref) => (
     <MenuPrimitive.SubmenuTrigger
       ref={useFluidMenuItemRef(ref)}
-      className={cn(menuItemClass, 'data-[popup-open]:text-foreground', inset && menuItemInsetClass, className)}
+      className={cn(
+        menuItemClass,
+        useItemHighlightClass(),
+        'data-[popup-open]:text-foreground',
+        inset && menuItemInsetClass,
+        className,
+      )}
       {...props}
     >
       {children}
@@ -125,7 +193,9 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
             {...props}
             {...menu.getContainerProps(props, ref)}
           >
-            <FluidMenuItems menu={menu}>{children}</FluidMenuItems>
+            <NativeItemHighlightContext.Provider value={false}>
+              <FluidMenuItems menu={menu}>{children}</FluidMenuItems>
+            </NativeItemHighlightContext.Provider>
           </MenuPrimitive.Popup>
         </MenuPrimitive.Positioner>
       </MenuPrimitive.Portal>
@@ -134,11 +204,20 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
 );
 DropdownMenuSubContent.displayName = 'DropdownMenuSubContent';
 
+type DropdownMenuContentLayoutProps = { layout?: 'menu'; rail?: never } | { layout: 'account'; rail?: React.ReactNode };
+
 type DropdownMenuContentProps = MenuPopupProps &
-  DropdownMenuContentPositionerProps & {
+  DropdownMenuContentPositionerProps &
+  DropdownMenuContentLayoutProps & {
     container?: HTMLElement;
     size?: 'default' | 'sm';
   };
+
+const accountCollisionAvoidance: DropdownMenuContentPositionerProps['collisionAvoidance'] = {
+  side: 'shift',
+  align: 'shift',
+  fallbackAxisSide: 'none',
+};
 
 const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContentProps>(
   (
@@ -146,6 +225,8 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
       className,
       container,
       size = 'default',
+      layout = 'menu',
+      rail,
       align = 'start',
       alignOffset = 0,
       side = 'bottom',
@@ -181,6 +262,36 @@ const DropdownMenuContent = React.forwardRef<HTMLDivElement, DropdownMenuContent
       disableAnchorTracking,
       collisionAvoidance,
     };
+
+    if (layout === 'account') {
+      return (
+        <MenuPrimitive.Portal container={resolvedContainer}>
+          <MenuPrimitive.Positioner
+            className={menuPositionerClass}
+            {...positionerProps}
+            collisionAvoidance={collisionAvoidance ?? accountCollisionAvoidance}
+          >
+            <MenuPrimitive.Popup
+              data-slot="dropdown-menu-content"
+              className={cn(menuPopupClass, 'flex max-h-(--available-height) w-87 overflow-hidden p-0', className)}
+              {...props}
+              ref={ref}
+              role="dialog"
+              aria-orientation={undefined}
+              {...dropGeneratedLabelledBy(props)}
+              onKeyDown={event => {
+                props.onKeyDown?.(event);
+                focusRailFromActions(event);
+              }}
+            >
+              <NativeItemHighlightContext.Provider value>
+                <AccountMenuBody rail={rail}>{children}</AccountMenuBody>
+              </NativeItemHighlightContext.Provider>
+            </MenuPrimitive.Popup>
+          </MenuPrimitive.Positioner>
+        </MenuPrimitive.Portal>
+      );
+    }
 
     return (
       <MenuPrimitive.Portal container={resolvedContainer}>
@@ -222,6 +333,7 @@ const DropdownMenuItem = React.forwardRef<HTMLDivElement, DropdownMenuItemProps>
       }}
       className={cn(
         variant === 'destructive' ? menuItemDestructiveClass : menuItemClass,
+        useItemHighlightClass(variant),
         size === 'sm' && 'h-control-sm gap-2 rounded-sm py-1 text-caption leading-none',
         inset && menuItemInsetClass,
         className,
@@ -236,7 +348,7 @@ const DropdownMenuCheckboxItem = React.forwardRef<HTMLDivElement, MenuPrimitive.
   ({ className, children, checked, ...props }, ref) => (
     <MenuPrimitive.CheckboxItem
       ref={useFluidMenuItemRef(ref)}
-      className={cn(menuItemClass, className)}
+      className={cn(menuItemClass, useItemHighlightClass(), className)}
       checked={checked}
       {...props}
     >
@@ -251,7 +363,11 @@ DropdownMenuCheckboxItem.displayName = 'DropdownMenuCheckboxItem';
 
 const DropdownMenuRadioItem = React.forwardRef<HTMLDivElement, MenuPrimitive.RadioItem.Props>(
   ({ className, children, ...props }, ref) => (
-    <MenuPrimitive.RadioItem ref={useFluidMenuItemRef(ref)} className={cn(menuItemClass, className)} {...props}>
+    <MenuPrimitive.RadioItem
+      ref={useFluidMenuItemRef(ref)}
+      className={cn(menuItemClass, useItemHighlightClass(), className)}
+      {...props}
+    >
       {children}
       <MenuPrimitive.RadioItemIndicator className={menuItemCheckClass}>
         <CheckIcon />
@@ -311,6 +427,7 @@ function DropdownMenu({
 }
 
 DropdownMenu.Trigger = DropdownMenuTrigger;
+DropdownMenu.IdentityTrigger = DropdownMenuIdentityTrigger;
 DropdownMenu.Content = DropdownMenuContent;
 DropdownMenu.Group = DropdownMenuGroup;
 DropdownMenu.Portal = DropdownMenuPortal;

@@ -4,7 +4,7 @@ import { Txt } from '../Txt';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-export type AvatarSize = 'sm' | 'md' | 'lg';
+export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'control';
 
 export type AvatarProps = {
   src?: string;
@@ -16,9 +16,19 @@ export type AvatarProps = {
 };
 
 const sizeClasses: Record<AvatarSize, string> = {
+  xs: 'size-icon-xs',
   sm: 'h-avatar-sm w-avatar-sm',
   md: 'h-avatar-md w-avatar-md',
   lg: 'h-avatar-lg w-avatar-lg',
+  control: 'h-control-md w-control-md',
+};
+
+const initialVariant: Record<AvatarSize, 'meta' | 'body'> = {
+  xs: 'meta',
+  sm: 'body',
+  md: 'body',
+  lg: 'body',
+  control: 'body',
 };
 
 export const Avatar = ({ src, name, size = 'sm', interactive = false, color, textColor }: AvatarProps) => {
@@ -42,7 +52,7 @@ export const Avatar = ({ src, name, size = 'sm', interactive = false, color, tex
         <img src={src} alt={name} className="size-full object-cover" onError={() => setDidError(true)} />
       ) : (
         <Txt
-          variant="body"
+          variant={initialVariant[size]}
           tone={showFallbackTint ? undefined : 'muted'}
           className="text-center"
           style={showFallbackTint && textColor ? { color: textColor } : undefined}
