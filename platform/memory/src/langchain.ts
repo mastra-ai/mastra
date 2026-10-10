@@ -106,6 +106,10 @@ function fromMemory(message: MemoryMessage): BaseMessage[] {
  * are saved with tool calls (and their results), reasoning, and files; observation runs on
  * the Platform.
  *
+ * Limitation: LangChain reads chat history once before a turn and writes it once after, and
+ * its callbacks can't rewrite the prompt, so a long tool loop within one turn is not compressed
+ * mid-turn (unlike `PlatformMemory` and the AI SDK middleware). It is observed after the turn.
+ *
  * ```ts
  * const chain = new RunnableWithMessageHistory({
  *   runnable: prompt.pipe(model),
