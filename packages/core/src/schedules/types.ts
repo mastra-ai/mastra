@@ -176,7 +176,8 @@ export type ScheduleEffective = {
 
 /** Trigger context passed to every hook. */
 export type ScheduleTriggerInfo = {
-  kind: 'cron' | 'manual';
+  /** `'once'` for a scheduled fire of a one-off (`runAt`) schedule. */
+  kind: 'cron' | 'once' | 'manual';
   firedAt: Date;
 };
 

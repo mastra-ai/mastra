@@ -6164,6 +6164,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "attributes",
       "cron",
+      "endAt",
       "ifActive",
       "ifIdle",
       "initialState",
@@ -6174,6 +6175,7 @@ export const API_ROUTE_METADATA = {
       "providerOptions",
       "requestContext",
       "resourceId",
+      "runAt",
       "signalType",
       "status",
       "tagName",
