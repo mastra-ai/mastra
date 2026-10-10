@@ -3275,12 +3275,13 @@ export class DurableAgent<
     streamCleanup = createdStreamCleanup;
 
     // Wait for subscription to be ready, then resume workflow
-    const workflow = this.getWorkflow();
     const requestContext = resolvedOptions.requestContext;
 
     const workflowExecution = executionFence.run(() =>
       ready
         .then(async () => {
+          // Looked up inside the chain so a throw settles (releases) the claim.
+          const workflow = this.getWorkflow();
           // The prior segment was settled above (before the event-offset
           // capture), so the snapshot is already persisted as 'suspended'.
           // Evented engine: make sure the workflow event workers are running
