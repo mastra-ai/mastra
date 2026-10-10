@@ -55,10 +55,17 @@ describe('InngestPubSub Realtime size cap (#20671)', () => {
     await pubsub.publish('agent.stream.r1', {
       type: 'finish',
       runId: 'r1',
-      data: { stepResult: { reason: 'stop', blob: huge }, output: { text: 'done', steps: [] } },
+      data: {
+        stepResult: { reason: 'stop', blob: huge },
+        output: { text: 'done', usage: { totalTokens: 3 }, steps: [] },
+      },
     });
     expect(published).toEqual([
-      { type: 'finish', runId: 'r1', data: { stepResult: { reason: 'stop' }, output: { steps: [], text: 'done' } } },
+      {
+        type: 'finish',
+        runId: 'r1',
+        data: { stepResult: { reason: 'stop' }, output: { steps: [], text: 'done', usage: { totalTokens: 3 } } },
+      },
     ]);
   });
 
