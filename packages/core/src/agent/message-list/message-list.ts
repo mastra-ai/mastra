@@ -686,6 +686,14 @@ export class MessageList {
     return this.stateManager.createSourceChecker();
   }
 
+  /**
+   * Ids of every message that entered this list from memory or as input, including messages
+   * later promoted to the response or replaced by a copy with the same id.
+   */
+  public getRememberedAndInputMessageIds(): Set<string> {
+    return new Set([...this.memoryMessagesPersisted, ...this.newUserMessagesPersisted].map(message => message.id));
+  }
+
   public getLatestUserContent(): string | null {
     const currentUserMessages = this.all.core().filter(m => m.role === 'user');
     const content = currentUserMessages.at(-1)?.content;
