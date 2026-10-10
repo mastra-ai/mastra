@@ -1,10 +1,19 @@
 import {
   ChannelsStorage,
+  CHANNEL_THREADS_PRIMARY_KEY,
+  CHANNEL_THREADS_TABLE_SCHEMA,
   TABLE_CHANNEL_INSTALLATIONS,
   TABLE_CHANNEL_CONFIG,
+  TABLE_CHANNEL_THREADS,
   TABLE_SCHEMAS,
 } from '@mastra/core/storage';
-import type { ChannelInstallation, ChannelConfig } from '@mastra/core/storage';
+import type {
+  ChannelInstallation,
+  ChannelConfig,
+  ChannelThreadKey,
+  ChannelThreadMapping,
+  ChannelThreadMappingInput,
+} from '@mastra/core/storage';
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
@@ -32,10 +41,21 @@ export class ChannelsLibSQL extends ChannelsStorage {
       tableName: TABLE_CHANNEL_CONFIG,
       schema: TABLE_SCHEMAS[TABLE_CHANNEL_CONFIG],
     });
+    // mastra_channel_threads lives outside TABLE_NAMES (same convention as the
+    // observational-memory table), hence the cast.
+    await this.#db.createTable({
+      tableName: TABLE_CHANNEL_THREADS as any,
+      schema: CHANNEL_THREADS_TABLE_SCHEMA[TABLE_CHANNEL_THREADS],
+      compositePrimaryKey: [...CHANNEL_THREADS_PRIMARY_KEY],
+    });
 
     // Indexes
     await this.#client.batch(
       [
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_channel_threads_thread_id ON "${TABLE_CHANNEL_THREADS}" ("threadId")`,
+          args: [],
+        },
         {
           sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_channel_installations_webhook ON "${TABLE_CHANNEL_INSTALLATIONS}" ("webhookId")`,
           args: [],
@@ -52,6 +72,7 @@ export class ChannelsLibSQL extends ChannelsStorage {
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_CHANNEL_INSTALLATIONS });
     await this.#db.deleteData({ tableName: TABLE_CHANNEL_CONFIG });
+    await this.#db.deleteData({ tableName: TABLE_CHANNEL_THREADS as any });
   }
 
   async saveInstallation(installation: ChannelInstallation): Promise<void> {
@@ -159,6 +180,81 @@ export class ChannelsLibSQL extends ChannelsStorage {
       sql: `DELETE FROM "${TABLE_CHANNEL_CONFIG}" WHERE platform = ?`,
       args: [platform],
     });
+  }
+
+  async getThreadMapping(key: ChannelThreadKey): Promise<ChannelThreadMapping | null> {
+    const result = await this.#client.execute({
+      sql: `SELECT * FROM "${TABLE_CHANNEL_THREADS}" WHERE platform = ? AND ownerId = ? AND externalThreadId = ?`,
+      args: [key.platform, key.ownerId, key.externalThreadId],
+    });
+    const row = result.rows?.[0];
+    return row ? this.#parseThreadMappingRow(row) : null;
+  }
+
+  async getThreadMappingByThreadId(threadId: string): Promise<ChannelThreadMapping | null> {
+    const result = await this.#client.execute({
+      sql: `SELECT * FROM "${TABLE_CHANNEL_THREADS}" WHERE threadId = ? LIMIT 1`,
+      args: [threadId],
+    });
+    const row = result.rows?.[0];
+    return row ? this.#parseThreadMappingRow(row) : null;
+  }
+
+  async upsertThreadMapping(mapping: ChannelThreadMappingInput): Promise<ChannelThreadMapping> {
+    const now = new Date().toISOString();
+    const subscribed = mapping.subscribed === undefined ? null : mapping.subscribed ? 1 : 0;
+    // On conflict threadId is never changed: the first writer owns the mapping.
+    await this.#client.execute({
+      sql: `
+        INSERT INTO "${TABLE_CHANNEL_THREADS}" (platform, ownerId, externalThreadId, threadId, externalChannelId, subscribed, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, ?, COALESCE(?, 0), ?, ?)
+        ON CONFLICT(platform, ownerId, externalThreadId) DO UPDATE SET
+          externalChannelId = excluded.externalChannelId,
+          subscribed = COALESCE(?, subscribed),
+          updatedAt = excluded.updatedAt
+      `,
+      args: [
+        mapping.platform,
+        mapping.ownerId,
+        mapping.externalThreadId,
+        mapping.threadId,
+        mapping.externalChannelId,
+        subscribed,
+        now,
+        now,
+        subscribed,
+      ],
+    });
+    const row = await this.getThreadMapping(mapping);
+    if (!row) throw new Error('Channel thread mapping was not persisted');
+    return row;
+  }
+
+  async setThreadSubscribed(key: ChannelThreadKey, subscribed: boolean): Promise<void> {
+    await this.#client.execute({
+      sql: `UPDATE "${TABLE_CHANNEL_THREADS}" SET subscribed = ?, updatedAt = ? WHERE platform = ? AND ownerId = ? AND externalThreadId = ?`,
+      args: [subscribed ? 1 : 0, new Date().toISOString(), key.platform, key.ownerId, key.externalThreadId],
+    });
+  }
+
+  async deleteThreadMapping(key: ChannelThreadKey): Promise<void> {
+    await this.#client.execute({
+      sql: `DELETE FROM "${TABLE_CHANNEL_THREADS}" WHERE platform = ? AND ownerId = ? AND externalThreadId = ?`,
+      args: [key.platform, key.ownerId, key.externalThreadId],
+    });
+  }
+
+  #parseThreadMappingRow(row: Record<string, unknown>): ChannelThreadMapping {
+    return {
+      platform: row.platform as string,
+      ownerId: row.ownerId as string,
+      externalThreadId: row.externalThreadId as string,
+      threadId: row.threadId as string,
+      externalChannelId: row.externalChannelId as string,
+      subscribed: Number(row.subscribed) === 1,
+      createdAt: new Date(row.createdAt as string),
+      updatedAt: new Date(row.updatedAt as string),
+    };
   }
 
   #parseInstallationRow(row: Record<string, unknown>): ChannelInstallation {

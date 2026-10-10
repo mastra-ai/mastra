@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { ChannelConfig, ChannelInstallation } from '@mastra/core/storage';
+import type { ChannelConfig, ChannelInstallation, ChannelThreadMappingInput } from '@mastra/core/storage';
 
 /**
  * Creates a sample channel installation for tests.
@@ -29,6 +29,20 @@ export function createSampleConfig(overrides?: Partial<ChannelConfig>): ChannelC
     platform: 'slack',
     data: { appConfigToken: 'xapp-test-token', clientId: 'client_123' },
     updatedAt: now,
+    ...overrides,
+  };
+}
+
+/**
+ * Creates a sample channel thread mapping input for tests.
+ */
+export function createSampleThreadMapping(overrides?: Partial<ChannelThreadMappingInput>): ChannelThreadMappingInput {
+  return {
+    platform: 'slack',
+    ownerId: `owner_${randomUUID()}`,
+    externalThreadId: `slack:C123:${randomUUID()}`,
+    externalChannelId: 'C123',
+    threadId: `thread_${randomUUID()}`,
     ...overrides,
   };
 }

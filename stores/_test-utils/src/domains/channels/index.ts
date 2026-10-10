@@ -1,9 +1,13 @@
 import type { ChannelsStorage, MastraStorage } from '@mastra/core/storage';
+import { supportsThreadMappings } from '@mastra/core/storage';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createSampleConfig, createSampleInstallation } from './data';
+import { createSampleConfig, createSampleInstallation, createSampleThreadMapping } from './data';
 
 export function createChannelsTests({ storage }: { storage: MastraStorage }) {
   const describeChannels = storage.stores?.channels ? describe : describe.skip;
+  // Gated before the describe call so non-capable stores skip, never pass vacuously.
+  const describeMappings =
+    storage.stores?.channels && supportsThreadMappings(storage.stores.channels) ? describe : describe.skip;
 
   let channelsStorage: ChannelsStorage;
 
@@ -240,6 +244,132 @@ export function createChannelsTests({ storage }: { storage: MastraStorage }) {
 
       it('is idempotent (does not throw when deleting non-existent)', async () => {
         await expect(channelsStorage.deleteConfig('missing')).resolves.not.toThrow();
+      });
+    });
+
+    describeMappings('thread mappings', () => {
+      const mappings = () => {
+        if (!supportsThreadMappings(channelsStorage)) throw new Error('store does not support thread mappings');
+        return channelsStorage;
+      };
+
+      it('returns null for a missing key', async () => {
+        const fetched = await mappings().getThreadMapping({
+          platform: 'slack',
+          ownerId: 'owner',
+          externalThreadId: 'slack:C1:missing',
+        });
+        expect(fetched).toBeNull();
+      });
+
+      it('upserts and reads back all fields with subscribed false by default', async () => {
+        const input = createSampleThreadMapping();
+        const stored = await mappings().upsertThreadMapping(input);
+
+        expect(stored.platform).toBe(input.platform);
+        expect(stored.ownerId).toBe(input.ownerId);
+        expect(stored.externalThreadId).toBe(input.externalThreadId);
+        expect(stored.externalChannelId).toBe(input.externalChannelId);
+        expect(stored.threadId).toBe(input.threadId);
+        expect(stored.subscribed).toBe(false);
+        expect(stored.createdAt).toBeInstanceOf(Date);
+        expect(stored.updatedAt).toBeInstanceOf(Date);
+
+        const fetched = await mappings().getThreadMapping(input);
+        expect(fetched).toEqual(stored);
+      });
+
+      it('keeps threadId and createdAt on conflict, replaces externalChannelId', async () => {
+        const input = createSampleThreadMapping({ externalChannelId: 'C-old' });
+        const first = await mappings().upsertThreadMapping(input);
+
+        await new Promise(resolve => setTimeout(resolve, 5));
+        const second = await mappings().upsertThreadMapping({
+          ...input,
+          threadId: 'another-thread',
+          externalChannelId: 'C-new',
+        });
+
+        expect(second.threadId).toBe(first.threadId);
+        expect(second.externalChannelId).toBe('C-new');
+        expect(second.createdAt.getTime()).toBe(first.createdAt.getTime());
+        expect(second.updatedAt.getTime()).toBeGreaterThanOrEqual(first.updatedAt.getTime());
+
+        const fetched = await mappings().getThreadMapping(input);
+        expect(fetched!.threadId).toBe(first.threadId);
+        expect(fetched!.externalChannelId).toBe('C-new');
+      });
+
+      it('keeps subscribed when omitted and sets it when provided on conflict', async () => {
+        const input = createSampleThreadMapping();
+        await mappings().upsertThreadMapping({ ...input, subscribed: true });
+
+        const kept = await mappings().upsertThreadMapping(input);
+        expect(kept.subscribed).toBe(true);
+
+        const flipped = await mappings().upsertThreadMapping({ ...input, subscribed: false });
+        expect(flipped.subscribed).toBe(false);
+      });
+
+      it('stores the same externalThreadId under two owners as two rows', async () => {
+        const externalThreadId = 'slack:C1:shared';
+        const a = await mappings().upsertThreadMapping(
+          createSampleThreadMapping({ ownerId: 'owner-a', externalThreadId, threadId: 'thread-a' }),
+        );
+        const b = await mappings().upsertThreadMapping(
+          createSampleThreadMapping({ ownerId: 'owner-b', externalThreadId, threadId: 'thread-b' }),
+        );
+
+        expect(a.threadId).toBe('thread-a');
+        expect(b.threadId).toBe('thread-b');
+        const fetchedA = await mappings().getThreadMapping({ platform: 'slack', ownerId: 'owner-a', externalThreadId });
+        const fetchedB = await mappings().getThreadMapping({ platform: 'slack', ownerId: 'owner-b', externalThreadId });
+        expect(fetchedA!.threadId).toBe('thread-a');
+        expect(fetchedB!.threadId).toBe('thread-b');
+      });
+
+      it('setThreadSubscribed flips the flag and is a no-op on a missing key', async () => {
+        const input = createSampleThreadMapping();
+        await mappings().upsertThreadMapping(input);
+
+        await mappings().setThreadSubscribed(input, true);
+        expect((await mappings().getThreadMapping(input))!.subscribed).toBe(true);
+
+        await mappings().setThreadSubscribed(input, false);
+        expect((await mappings().getThreadMapping(input))!.subscribed).toBe(false);
+
+        const missing = { platform: 'slack', ownerId: 'nobody', externalThreadId: 'slack:C1:none' };
+        await expect(mappings().setThreadSubscribed(missing, true)).resolves.not.toThrow();
+        expect(await mappings().getThreadMapping(missing)).toBeNull();
+      });
+
+      it('getThreadMappingByThreadId finds the row', async () => {
+        const input = createSampleThreadMapping({ threadId: 'reverse-thread' });
+        await mappings().upsertThreadMapping(input);
+
+        const fetched = await mappings().getThreadMappingByThreadId('reverse-thread');
+        expect(fetched).not.toBeNull();
+        expect(fetched!.externalThreadId).toBe(input.externalThreadId);
+
+        expect(await mappings().getThreadMappingByThreadId('no-such-thread')).toBeNull();
+      });
+
+      it('deleteThreadMapping removes the row and is idempotent', async () => {
+        const input = createSampleThreadMapping();
+        await mappings().upsertThreadMapping(input);
+
+        await mappings().deleteThreadMapping(input);
+        expect(await mappings().getThreadMapping(input)).toBeNull();
+
+        await expect(mappings().deleteThreadMapping(input)).resolves.not.toThrow();
+      });
+
+      it('dangerouslyClearAll clears mappings', async () => {
+        const input = createSampleThreadMapping();
+        await mappings().upsertThreadMapping(input);
+
+        await channelsStorage.dangerouslyClearAll();
+        expect(await mappings().getThreadMapping(input)).toBeNull();
       });
     });
   });
