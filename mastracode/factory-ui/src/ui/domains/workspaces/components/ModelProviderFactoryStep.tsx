@@ -54,7 +54,6 @@ export function ModelProviderFactoryStep({
               onComplete({ providerId: connectedProvider.provider, modelId, method: connection.method });
           }}
           onPreviewModel={onPreviewModel}
-          submitLabel="Continue"
           onChangeProvider={() => {
             connection.clear();
             onPreviewModel?.(undefined);

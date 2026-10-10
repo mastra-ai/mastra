@@ -13,7 +13,7 @@ import { ProviderConnectionDialogs } from './ProviderConnectionDialogs';
 export interface PersonalProviderFactoryStepProps {
   onContinue: (choice?: OnboardingConnectionChoice) => void;
   initialChoice?: OnboardingConnectionChoice;
-  modelChoice?: 'required' | 'optional';
+  requireModel?: boolean;
   onPreviewModel?: (modelId: string | undefined) => void;
   onPreviewProvider?: PreviewProvider;
 }
@@ -22,7 +22,7 @@ export function PersonalProviderFactoryStep({
   onContinue,
   onPreviewProvider,
   initialChoice,
-  modelChoice,
+  requireModel,
   onPreviewModel,
 }: PersonalProviderFactoryStepProps) {
   const connection = useProviderConnection({ scope: 'user', initialSelection: initialChoice });
@@ -31,10 +31,9 @@ export function PersonalProviderFactoryStep({
     connectedProvider && connection.method
       ? { providerId: connectedProvider.provider, method: connection.method }
       : undefined;
-  const canSkipModel = !modelChoice || (modelChoice === 'optional' && !connection.connected);
   return (
     <section aria-label="Personal provider setup" className="flex max-w-xl flex-col gap-6">
-      {connectedProvider && modelChoice && (
+      {connectedProvider && requireModel && (
         <FactoryDefaultModelForm
           key={connectedProvider.provider}
           scope="user"
@@ -52,7 +51,7 @@ export function PersonalProviderFactoryStep({
           }}
         />
       )}
-      {connectedProvider && !modelChoice && (
+      {connectedProvider && !requireModel && (
         <OnboardingConnectionRow
           icon={<ProviderBrandIcon provider={connectedProvider.provider} />}
           name={providerDisplayName(connectedProvider.provider)}
@@ -77,10 +76,10 @@ export function PersonalProviderFactoryStep({
           {connection.error}
         </Txt>
       )}
-      {canSkipModel && (
+      {!requireModel && (
         <div>
-          <Button variant={modelChoice ? 'ghost' : 'primary'} size="lg" onClick={() => onContinue(connectedChoice)}>
-            {modelChoice ? 'Skip for now' : 'Review setup'}
+          <Button variant="primary" size="lg" onClick={() => onContinue(connectedChoice)}>
+            Review setup
           </Button>
         </div>
       )}

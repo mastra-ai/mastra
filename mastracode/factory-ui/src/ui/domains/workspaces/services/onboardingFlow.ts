@@ -24,13 +24,19 @@ export const ONBOARDING_UPDATED_AT_KEY = 'mastracode.factory-onboarding.updated-
  */
 export const ONBOARDING_RESUME_WINDOW_MS = 30 * 60 * 1000;
 
-export type OnboardingStep =
-  | 'initial'
-  | 'vcs'
-  | 'project-management'
-  | 'model-provider'
-  | 'personal-provider'
-  | 'review';
+export const ONBOARDING_STEPS = [
+  'initial',
+  'vcs',
+  'project-management',
+  'model-provider',
+  'personal-provider',
+  'review',
+] as const;
+export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
+
+function isOnboardingStep(value: string | null): value is OnboardingStep {
+  return ONBOARDING_STEPS.some(step => step === value);
+}
 
 const repositoryFields = {
   fullName: z.string(),
@@ -92,13 +98,7 @@ export function persistOnboardingFactory(factoryId: string): void {
 /** Read the persisted step, defaulting to the beginning of the flow. */
 export function readOnboardingStep(): OnboardingStep {
   const value = sessionStorage.getItem(ONBOARDING_STEP_KEY);
-  return value === 'vcs' ||
-    value === 'project-management' ||
-    value === 'model-provider' ||
-    value === 'personal-provider' ||
-    value === 'review'
-    ? value
-    : 'initial';
+  return isOnboardingStep(value) ? value : 'initial';
 }
 
 /** Drop every onboarding marker (flow finished or abandoned). */
@@ -118,7 +118,7 @@ export function clearOnboardingFlow(): void {
  * without this check the wizard would be abandoned at the factory home.
  *
  * Three gates, all required:
- * - a mid-flow step is stored (`vcs` / `project-management` / `model-provider` / `personal-provider` / `review`),
+ * - a step past `initial` is stored,
  * - the stored factory id exists in the server-backed list (a deleted
  *   factory never traps the user),
  * - the flow progressed within {@link ONBOARDING_RESUME_WINDOW_MS} (markers
@@ -127,14 +127,7 @@ export function clearOnboardingFlow(): void {
  */
 export function hasResumableFactoryOnboarding(factories: readonly { id: string }[]): boolean {
   const step = sessionStorage.getItem(ONBOARDING_STEP_KEY);
-  if (
-    step !== 'vcs' &&
-    step !== 'project-management' &&
-    step !== 'model-provider' &&
-    step !== 'personal-provider' &&
-    step !== 'review'
-  )
-    return false;
+  if (!isOnboardingStep(step) || step === 'initial') return false;
 
   const updatedAt = Number(sessionStorage.getItem(ONBOARDING_UPDATED_AT_KEY));
   if (!Number.isFinite(updatedAt) || Date.now() - updatedAt > ONBOARDING_RESUME_WINDOW_MS) return false;

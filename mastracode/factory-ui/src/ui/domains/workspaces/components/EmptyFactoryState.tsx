@@ -1,7 +1,5 @@
 import { OnboardingProgress } from './onboarding/OnboardingProgress';
-import { usesPersonalFactoryModel } from '../services/onboardingModelChoice';
-import { onboardingSteps, onboardingStepMeta } from '../services/onboardingSteps';
-import { useIsMutating } from '@tanstack/react-query';
+import { onboardingStepMeta } from '../services/onboardingSteps';
 import { useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
@@ -11,6 +9,7 @@ import type { SourceControlRepository } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import {
   ONBOARDING_REVIEW_RETURN_KEY,
+  ONBOARDING_STEPS,
   persistOnboardingDraft,
   readOnboardingDraft,
   type OnboardingDraft,
@@ -52,14 +51,11 @@ function shownModel(previewedModel?: string, previewedProvider?: string, savedMo
 
 export function EmptyFactoryState() {
   const { baseUrl } = useApiConfig();
-  const mutationInFlight = useIsMutating() > 0;
   const complete = useCompleteFactorySetup();
   const [draft, setDraft] = useState<OnboardingDraft>(readOnboardingDraft);
   const [step, setStep] = useState<Step>(() => {
     const saved = readOnboardingStep();
-    const stored = readOnboardingDraft();
-    if (saved !== 'initial' && !stored.repository) return 'vcs';
-    return saved;
+    return saved !== 'initial' && !draft.repository ? 'vcs' : saved;
   });
   const [returnToReview, setReviewReturn] = useState(
     () => sessionStorage.getItem(ONBOARDING_REVIEW_RETURN_KEY) === 'true',
@@ -88,17 +84,12 @@ export function EmptyFactoryState() {
     goTo(returnToReview ? 'review' : next);
     setReturnToReview(false);
   };
-  const persistBeforeRedirect = (currentStep: Step) => {
-    persistOnboardingDraft(draft);
-    persistOnboardingStep(currentStep);
-  };
-  const steps = onboardingSteps();
-  const stepIndex = steps.indexOf(step);
-  const previousStep = stepIndex > 0 ? steps[stepIndex - 1] : undefined;
+  const stepIndex = ONBOARDING_STEPS.indexOf(step);
+  const previousStep = stepIndex > 0 ? ONBOARDING_STEPS[stepIndex - 1] : undefined;
   const repository = preview.repository ?? draft.repository;
   const model = shownModel(preview.model, preview.providerId, draft.model?.modelId);
   const personalModel = shownModel(preview.personalModel, preview.personalProviderId, draft.personal?.modelId);
-  const personalIsFactoryModel = usesPersonalFactoryModel(draft);
+  const personalIsFactoryModel = !draft.model;
   const meta = onboardingStepMeta(step, personalIsFactoryModel);
 
   return (
@@ -121,7 +112,7 @@ export function EmptyFactoryState() {
                       goTo(previousStep);
                     }}
                     aria-label="Go back to previous step"
-                    disabled={mutationInFlight || complete.isPending}
+                    disabled={complete.isPending}
                   >
                     <ArrowLeft aria-hidden="true" />
                     Back
@@ -152,11 +143,11 @@ export function EmptyFactoryState() {
                   githubRedirecting={githubRedirecting}
                   onConnect={() => {
                     setGithubRedirecting(true);
-                    persistBeforeRedirect('vcs');
+                    persistOnboardingStep('vcs');
                     connectGithub(baseUrl);
                   }}
                   onManageConnection={() => {
-                    persistBeforeRedirect('vcs');
+                    persistOnboardingStep('vcs');
                     manageGithubConnection(baseUrl);
                   }}
                   onPreviewRepository={previewed => previewWith({ repository: previewed })}
@@ -170,7 +161,7 @@ export function EmptyFactoryState() {
                 <ProjectManagementFactoryStep
                   onPreviewSource={setPreviewSource}
                   onConnect={() => {
-                    persistBeforeRedirect('project-management');
+                    persistOnboardingStep('project-management');
                     connectLinear(baseUrl);
                   }}
                   onContinue={() => advance('model-provider')}
@@ -195,7 +186,7 @@ export function EmptyFactoryState() {
               {step === 'personal-provider' && (
                 <PersonalProviderFactoryStep
                   initialChoice={draft.personal}
-                  modelChoice={personalIsFactoryModel ? 'required' : undefined}
+                  requireModel={personalIsFactoryModel}
                   onPreviewModel={previewed => previewWith({ personalModel: previewed })}
                   onContinue={personal => {
                     updateDraft({ ...draft, personal });

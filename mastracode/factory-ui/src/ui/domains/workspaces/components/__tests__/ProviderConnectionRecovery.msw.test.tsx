@@ -71,7 +71,7 @@ describe('provider connection recovery', () => {
         scope === 'org' ? (
           <ModelProviderFactoryStep onComplete={vi.fn()} />
         ) : (
-          <PersonalProviderFactoryStep modelChoice="required" onContinue={vi.fn()} />
+          <PersonalProviderFactoryStep requireModel onContinue={vi.fn()} />
         ),
       );
       await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
@@ -181,7 +181,7 @@ describe('provider connection recovery', () => {
         HttpResponse.json({ providers: [{ provider: 'amazon-bedrock', source: 'deployment' }], orgKeyAdmin: false }),
       ),
     );
-    renderWithProviders(<PersonalProviderFactoryStep modelChoice="required" onContinue={vi.fn()} />);
+    renderWithProviders(<PersonalProviderFactoryStep requireModel onContinue={vi.fn()} />);
     expect(await screen.findByText('No API key providers available.')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Amazon Bedrock' })).not.toBeInTheDocument();
   });

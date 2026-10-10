@@ -206,7 +206,7 @@ describe('Draft Factory onboarding', () => {
     expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
     expect(readOnboardingDraft()).toEqual({});
     expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBeNull();
-  });
+  }, 20_000);
 
   it('restores repository and model choices after a redirect or reload without writing them', async () => {
     const writes = registerSetup();

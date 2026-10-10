@@ -76,8 +76,7 @@ export function VcsFactoryStep({
   onSelectRepository,
   onPreviewRepository,
 }: VcsFactoryStepProps) {
-  // Undefined follows the connection status, including a return from OAuth.
-  // The provider list remains available through Change provider.
+  // Undefined follows the connection status, so an OAuth return lands on the connected host.
   const [providerChoice, setProviderChoice] = useState<SourceControlView | undefined>(
     initialRepository && repositoryHost(initialRepository),
   );

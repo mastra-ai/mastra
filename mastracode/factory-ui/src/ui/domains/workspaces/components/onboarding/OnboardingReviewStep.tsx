@@ -8,7 +8,6 @@ import { usePlatformConnectionsQuery } from '../../../../../hooks/usePlatformCon
 import { providerDisplayName } from '../../../settings/components/provider-display-name';
 import { isGitLabRepository } from '../../services/github';
 import type { OnboardingConnectionChoice, OnboardingDraft, OnboardingStep } from '../../services/onboardingFlow';
-import { usesPersonalFactoryModel } from '../../services/onboardingModelChoice';
 
 function OnboardingReviewRow({
   icon,
@@ -90,7 +89,6 @@ export function OnboardingReviewStep({
   const personal = draft.personal;
   const personalMethod = personal?.method === 'oauth' ? 'Provider sign-in' : 'API key';
   const personalScope = personal?.modelId ? 'your default' : 'only you';
-  const personalIsFactoryModel = usesPersonalFactoryModel(draft);
   return (
     <section aria-label="Review factory setup" className="flex flex-col gap-5">
       <div className="flex flex-col gap-3 sm:gap-4">
@@ -103,7 +101,16 @@ export function OnboardingReviewStep({
           onEdit={() => onEdit('vcs')}
         />
         <OnboardingWorkReviewRow disabled={pending} onEdit={() => onEdit('project-management')} />
-        {personalIsFactoryModel ? (
+        {draft.model ? (
+          <OnboardingReviewRow
+            icon={<Sparkles />}
+            label="Model"
+            value={draft.model.modelId}
+            detail="Factory default · organization account"
+            disabled={pending}
+            onEdit={() => onEdit('model-provider')}
+          />
+        ) : (
           <OnboardingReviewRow
             icon={<Sparkles />}
             label="Model"
@@ -112,17 +119,8 @@ export function OnboardingReviewStep({
             disabled={pending}
             onEdit={() => onEdit('personal-provider')}
           />
-        ) : (
-          <OnboardingReviewRow
-            icon={<Sparkles />}
-            label="Model"
-            value={draft.model?.modelId ?? 'Set up with an admin later'}
-            detail={draft.model ? 'Factory default · organization account' : undefined}
-            disabled={pending}
-            onEdit={() => onEdit('model-provider')}
-          />
         )}
-        {!personalIsFactoryModel && (
+        {draft.model && (
           <OnboardingReviewRow
             icon={<UserRound />}
             label="Access"

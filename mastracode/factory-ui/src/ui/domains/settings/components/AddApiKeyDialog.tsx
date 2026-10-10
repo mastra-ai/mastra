@@ -25,10 +25,6 @@ const SCOPED_KEY_ACCESS: Record<KeyScope, string> = {
   user: 'Only you can use this key. Shared organization access stays unchanged.',
 };
 
-function credentialAtScope(provider: ProviderInfo, scope: KeyScope) {
-  return scope === 'org' ? provider.orgCredential : provider.userCredential;
-}
-
 interface AddApiKeyDialogProps {
   provider: ProviderInfo;
   authEnabled: boolean;
@@ -60,7 +56,8 @@ export function AddApiKeyDialog({
   const writableScope = canWriteOrgKey ? preferredScope : 'user';
   const [scope, setScope] = useState<KeyScope>(fixedScope ?? writableScope);
 
-  const replacesSignIn = fixedScope !== undefined && credentialAtScope(provider, fixedScope) === 'oauth';
+  const fixedScopeCredential = fixedScope === 'org' ? provider.orgCredential : provider.userCredential;
+  const replacesSignIn = fixedScope !== undefined && fixedScopeCredential === 'oauth';
   const description = fixedScope
     ? SCOPED_KEY_ACCESS[fixedScope]
     : 'The key is stored securely and never displayed again.';

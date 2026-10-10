@@ -74,15 +74,7 @@ export function FactoryDefaultModelForm({
         />
       </Field>
       {scope === 'org' && <SharedCredentialNotice modelId={modelId || undefined} />}
-      <Button
-        variant="primary"
-        className="w-full"
-        disabled={!modelId}
-        onClick={() => {
-          onPreviewModel?.(modelId);
-          onContinue(modelId);
-        }}
-      >
+      <Button variant="primary" className="w-full" disabled={!modelId} onClick={() => onContinue(modelId)}>
         {submitLabel}
       </Button>
     </div>

@@ -16,11 +16,7 @@ Keep policy, validation, and persistence in [`@mastra/factory`](../factory/READM
 
 ## Onboarding
 
-The first-Factory wizard keeps repository and model selections in a session-scoped draft. Users can edit them before the final review, including switching between GitHub and GitLab. Confirmation creates the Factory, links the selected repository, and saves its default model. If a save fails, retry resumes the pending Factory. Credentials are never included in the draft.
-
-Connecting an integration or model account authorizes that reusable connection immediately. Provider sign-in and API-key entry use the existing backend endpoints and capability metadata; organization and personal access remain separate. Members without shared credentials must choose a personal model, which becomes both the Factory default and their own default. Otherwise, personal connection setup is optional. These choices do not add spending policies or change teammates’ defaults.
-
-Linear, Jira, and incident.io appear when their backend integrations are available. The illustrations show example work; importing issues happens after setup. Illustrations respect reduced motion, and compact layouts keep the controls full width above the visual.
+The first-Factory wizard keeps repository and model choices in a session-scoped draft (never credentials) until the final review. Confirming creates the Factory, links the repository, and saves its default model; a failed save keeps the pending Factory so retrying resumes it instead of creating another. Integration and provider connections are authorized as soon as they are connected. Members without shared credentials pick a personal model, which becomes both the Factory default and their own default.
 
 ## Board activity
 
