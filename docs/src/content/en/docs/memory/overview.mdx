@@ -154,11 +154,14 @@ const response = await memoryAgent.generate('Remember my favorite color is blue.
 
 Scopes can also come from the agent and from the request context. Mastra combines all three sources:
 
-```typescript title="src/mastra/agents/memory-agent.ts" {4}
+```typescript title="src/mastra/agents/memory-agent.ts" {4-7}
 export const memoryAgent = new Agent({
   id: 'memory-agent',
   name: 'Memory Agent',
-  scopes: ({ requestContext }) => [`org:${requestContext.get('org-id')}`],
+  scopes: ({ requestContext }) => {
+    const orgId = requestContext.get('org-id')
+    return orgId ? [`org:${orgId}`] : []
+  },
   memory: new Memory(),
 })
 ```

@@ -196,8 +196,22 @@ describe('resolveAgentScopes', () => {
         id: 'AGENT_SCOPES_CONFLICT',
         status: 400,
       });
-      expect(conflict(() => resolveAgentScopes({ snapshot, agentScopes: ['thread:t2'] }))).toMatchObject({
-        id: 'AGENT_SCOPES_CONFLICT',
+      expect(
+        conflict(() =>
+          resolveAgentScopes({ snapshot, requestContext: contextWith({ [MASTRA_SCOPES_KEY]: ['thread:t2'] }) }),
+        ),
+      ).toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
+    });
+
+    it('keeps the snapshot set when the Agent configuration now returns other scopes', () => {
+      expect(resolveAgentScopes({ snapshot, agentScopes: ['org:b', 'thread:t2'] })).toEqual({
+        scopes: snapshot.scopes,
+        resourceId: 'u1',
+        threadId: 't1',
+      });
+      expect(resolveAgentScopes({ snapshot: { scopes: [] }, agentScopes: ['org:local'] }).scopes).toEqual([]);
+      expect(conflict(() => resolveAgentScopes({ snapshot, agentScopes: ['Org:bad'] }))).toMatchObject({
+        id: 'AGENT_SCOPES_INVALID',
       });
     });
 

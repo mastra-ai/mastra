@@ -387,6 +387,38 @@ describe('agent scopes on runs', () => {
     await resumed.consumeStream();
   });
 
+  it('resumes a run that started without scopes after the Agent gains a scopes resolver', async () => {
+    let configured: string[] = [];
+    const seen: unknown[] = [];
+    const approve = createTool({
+      id: 'approve',
+      description: 'needs approval',
+      inputSchema: z.object({}),
+      requireApproval: true,
+      execute: async (_input, context) => {
+        seen.push(context.requestContext?.get(MASTRA_SCOPES_KEY));
+        return { ok: true };
+      },
+    });
+    const { agent } = setup({
+      model: toolCallingModel('approve'),
+      tools: { approve },
+      scopes: () => configured,
+    });
+    new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
+    const stream = await agent.stream('go', { memory: { resource: 'u1', thread: 't1' } });
+    let toolCallId: string | undefined;
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') toolCallId = chunk.payload.toolCallId;
+    }
+    expect(toolCallId).toBeDefined();
+
+    configured = ['org:local'];
+    const resumed = await agent.approveToolCall({ runId: stream.runId, toolCallId: toolCallId! });
+    await resumed.consumeStream();
+    expect(seen).toEqual([undefined]);
+  });
+
   it('restores the suspended run scopes on generate approval resume', async () => {
     const approve = createTool({
       id: 'approve',

@@ -11,7 +11,10 @@ const agent = new Agent({
   id: 'support',
   model: 'openai/gpt-5-mini',
   memory: new Memory(),
-  scopes: ({ requestContext }) => [`org:${requestContext.get('org-id')}`],
+  scopes: ({ requestContext }) => {
+    const orgId = requestContext.get('org-id');
+    return orgId ? [`org:${orgId}`] : [];
+  },
 });
 
 // Before
@@ -21,6 +24,6 @@ await agent.generate('Hi', { memory: { resource: 'user-123', thread: 'conversati
 await agent.generate('Hi', { scopes: ['resource:user-123', 'thread:conversation-123'] });
 ```
 
-Tools, processors and subagents see the run's other scopes (for example `org:acme`) under `MASTRA_SCOPES_KEY`, but not its `resource:` and `thread:` scopes, so nested agent calls can choose their own thread. Suspended runs keep their scopes when resumed: a resume may repeat some or all of them but cannot add new ones, so a run suspended before you start setting scopes in middleware must be resumed without them. When a run has scopes, it works on a copy of the request context, so values the run sets (such as `MastraMemory`) are not written back to the caller's context. Use `agent.getScopes()` to read an agent's configured scopes.
+Tools, processors and subagents see the run's other scopes (for example `org:acme`) under `MASTRA_SCOPES_KEY`, but not its `resource:` and `thread:` scopes, so nested agent calls can choose their own thread. Suspended runs keep their scopes when resumed: a resume may repeat some or all of them but cannot add new ones, so a run suspended before you start setting scopes in middleware must be resumed without them. Changing the agent's own `scopes` does not affect runs that are already suspended. When a run has scopes, it works on a copy of the request context, so values the run sets (such as `MastraMemory`) are not written back to the caller's context. Use `agent.getScopes()` to read an agent's configured scopes.
 
 Upgrade `@mastra/server` together with this release. Older servers do not reserve `MASTRA_SCOPES_KEY`, so a request body could set scopes there.

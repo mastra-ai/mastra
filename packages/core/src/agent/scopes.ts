@@ -128,14 +128,18 @@ function memoryThreadId(memory: ResolveAgentScopesInput['memory']): string | und
  * call throws. Resource and thread resolve independently: when scopes carry neither, the
  * existing precedence applies (reserved ID key, then options, then memory, then snapshot).
  *
- * On resume, the snapshot's scope set is authoritative. Re-supplied scopes may be any
- * subset of it; a scope the snapshot does not hold throws.
+ * On resume, the snapshot's scope set is authoritative. Scopes from the call or request
+ * context may be any subset of it; a scope the snapshot does not hold throws. The Agent's
+ * configured scopes are validated but not applied, so changing them never blocks a resume.
  */
 export function resolveAgentScopes(input: ResolveAgentScopesInput): ResolvedAgentScopes {
   const { requestContext, memory, snapshot } = input;
+  const agentScopes = validateScopes('config "scopes"', input.agentScopes);
   const supplied = new Set<string>([
     ...validateScopes(`request context "${MASTRA_SCOPES_KEY}"`, requestContext?.get(MASTRA_SCOPES_KEY)),
-    ...validateScopes('config "scopes"', input.agentScopes),
+    // On resume the Agent's own configuration is not re-supplied by the caller: the suspended run
+    // keeps its scopes, so an agent that adds or changes its resolver can still resume older runs.
+    ...(snapshot?.scopes ? [] : agentScopes),
     ...validateScopes('option "scopes"', input.callScopes),
   ]);
 
