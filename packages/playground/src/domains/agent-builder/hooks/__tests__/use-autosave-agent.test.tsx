@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import { useAutosaveAgent } from '../use-autosave-agent';
 import { authEnabledCapabilities } from './fixtures/auth';
+import { emptyStoredAgent } from './fixtures/stored-agent-edit';
 import { server } from '@/test/msw-server';
 
 vi.mock('@mastra/playground-ui/utils/toast', () => ({
@@ -16,6 +17,7 @@ vi.mock('@mastra/playground-ui/utils/toast', () => ({
 
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'autosave-agent';
+const storedAgent = { ...emptyStoredAgent, id: AGENT_ID, name: 'Initial', instructions: 'inst' };
 
 const baseFormValues: AgentBuilderEditFormValues = {
   name: 'Initial',
@@ -55,16 +57,13 @@ const renderAutosave = ({
     );
   };
 
-  const view = renderHook(() => useAutosaveAgent({ agentId: AGENT_ID, debounceMs, savedDisplayMs }), {
+  const view = renderHook(() => useAutosaveAgent({ storedAgent, debounceMs, savedDisplayMs }), {
     wrapper: Wrapper,
   });
 
   return { ...view, form: () => formRef.current!, queryClient };
 };
 
-// Waits for the auth-capabilities query (read by the hook's useDefaultVisibility)
-// to settle, so no-edit assertions run after that async state update lands
-// inside act instead of racing it with a bare sleep.
 const waitForCapabilitiesSettled = (queryClient: QueryClient) =>
   waitFor(() =>
     expect(queryClient.getQueryCache().findAll({ queryKey: ['auth', 'capabilities'] })[0]?.state.status).toBe(
@@ -74,8 +73,6 @@ const waitForCapabilitiesSettled = (queryClient: QueryClient) =>
 
 describe('useAutosaveAgent', () => {
   beforeEach(() => {
-    // The hook resolves a default visibility via the real auth-capabilities
-    // query; drive it through MSW instead of mocking the hook.
     server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authEnabledCapabilities)));
   });
 
@@ -85,7 +82,7 @@ describe('useAutosaveAgent', () => {
       server.use(
         http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => {
           calls += 1;
-          return HttpResponse.json({ id: AGENT_ID });
+          return HttpResponse.json(storedAgent);
         }),
       );
 
@@ -100,12 +97,12 @@ describe('useAutosaveAgent', () => {
   describe('when a single field is edited', () => {
     it('debounces into one PATCH carrying the new value', async () => {
       let calls = 0;
-      let lastBody: any = null;
+      let lastBody: unknown = null;
       server.use(
         http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, async ({ request }) => {
           calls += 1;
           lastBody = await request.json();
-          return HttpResponse.json({ id: AGENT_ID });
+          return HttpResponse.json(storedAgent);
         }),
       );
 
@@ -116,7 +113,7 @@ describe('useAutosaveAgent', () => {
       });
 
       await waitFor(() => expect(calls).toBe(1));
-      expect(lastBody.name).toBe('Renamed');
+      expect(lastBody).toMatchObject({ name: 'Renamed' });
       await waitFor(() => expect(result.current.status).toBe('saved'));
       await waitFor(() => expect(result.current.status).toBe('idle'));
     });
@@ -125,12 +122,12 @@ describe('useAutosaveAgent', () => {
   describe('when a burst of edits happens within the debounce window', () => {
     it('collapses them into a single PATCH with the latest value', async () => {
       let calls = 0;
-      let lastBody: any = null;
+      let lastBody: unknown = null;
       server.use(
         http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, async ({ request }) => {
           calls += 1;
           lastBody = await request.json();
-          return HttpResponse.json({ id: AGENT_ID });
+          return HttpResponse.json(storedAgent);
         }),
       );
 
@@ -145,7 +142,7 @@ describe('useAutosaveAgent', () => {
       });
 
       await waitFor(() => expect(calls).toBe(1), { timeout: 500 });
-      expect(lastBody.name).toBe('ABCDE');
+      expect(lastBody).toMatchObject({ name: 'ABCDE' });
     });
   });
 
@@ -155,10 +152,8 @@ describe('useAutosaveAgent', () => {
       server.use(
         http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => {
           attempt += 1;
-          // The mastra client retries 5xx up to 3 times. Fail the whole first
-          // save (4 attempts) then succeed on the retry().
           if (attempt <= 4) return HttpResponse.json({ error: 'boom' }, { status: 500 });
-          return HttpResponse.json({ id: AGENT_ID });
+          return HttpResponse.json(storedAgent);
         }),
       );
 
@@ -186,7 +181,7 @@ describe('useAutosaveAgent', () => {
       server.use(
         http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => {
           calls += 1;
-          return HttpResponse.json({ id: AGENT_ID });
+          return HttpResponse.json(storedAgent);
         }),
       );
 
@@ -212,13 +207,11 @@ describe('useAutosaveAgent', () => {
       server.use(
         http.patch(`${BASE_URL}/api/stored/agents/${AGENT_ID}`, () => {
           calls += 1;
-          return HttpResponse.json({ id: AGENT_ID });
+          return HttpResponse.json(storedAgent);
         }),
       );
 
       const { unmount, queryClient } = renderAutosave({ debounceMs: 20 });
-      // Let the auth-capabilities query settle before unmount so its async state
-      // update lands inside act rather than after the hook is gone.
       await waitForCapabilitiesSettled(queryClient);
       unmount();
 

@@ -361,7 +361,7 @@ describe('useCanCreateAgent', () => {
   });
 
   describe('when the builder is disabled but the experimental UI flag is set', () => {
-    it('keeps the legacy CMS create route', async () => {
+    it('does not allow agent creation through the retired CMS editor', async () => {
       server.use(http.get(CAPABILITIES_URL, () => HttpResponse.json(authDisabledCapabilities)));
       respondSettings(buildBuilderSettings({ enabled: false }));
 
@@ -372,7 +372,11 @@ describe('useCanCreateAgent', () => {
         const { result } = renderHook(() => useCanCreateAgent(), { wrapper: createWrapper() });
 
         await waitFor(() => expect(result.current.isLoading).toBe(false));
-        expect(result.current).toEqual({ canCreateAgent: true, createRoute: '/cms/agents/create', isLoading: false });
+        expect(result.current).toEqual({
+          canCreateAgent: false,
+          createRoute: '/agent-builder/agents/create',
+          isLoading: false,
+        });
       } finally {
         if (prev === undefined) {
           delete flagWindow.MASTRA_EXPERIMENTAL_UI;

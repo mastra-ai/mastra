@@ -13,7 +13,6 @@ export interface AgentDetailHeaderActionsProps {
   agentId: string;
 }
 
-/** Edit / Share / Config actions shown in the route header on every agent sub-page. */
 export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsProps) {
   const { data: agent } = useAgent({
     agentId: agentId,
@@ -29,7 +28,7 @@ export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsPr
     copyMessage: 'Session URL copied to clipboard!',
   });
 
-  const editPath = paths.cmsAgentEditLink(agentId);
+  const editPath = paths.agentEditLink(agentId);
   const showEditButton = canCreateAgent && agent?.source === 'stored' && Boolean(editPath);
 
   return (
