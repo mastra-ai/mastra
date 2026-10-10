@@ -287,9 +287,7 @@ export type ProviderModelsMap = {
     'glm-5v-turbo',
   ];
   readonly empiriolabs: readonly [
-    'deepseek-v3-2',
     'deepseek-v4-1-flash',
-    'deepseek-v4-flash',
     'deepseek-v4-flash-0731',
     'deepseek-v4-pro',
     'deepseek-v4-pro-0813',
@@ -333,7 +331,6 @@ export type ProviderModelsMap = {
     'qwen3-6-27b',
     'qwen3-6-35b-a3b',
     'qwen3-6-flash',
-    'qwen3-6-max-preview',
     'qwen3-6-plus',
     'qwen3-7-flash',
     'qwen3-7-max',
@@ -343,7 +340,6 @@ export type ProviderModelsMap = {
     'qwen3-8-max',
     'qwen3-8-max-0902',
     'qwen3-8-omni-flash',
-    'qwen3-max',
     'seed-2-0-code',
     'seed-2-0-lite',
     'seed-2-0-mini',
