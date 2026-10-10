@@ -333,10 +333,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
   // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
   // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
+  let defaultOptions: AgentExecutionOptions<OUTPUT> | undefined;
+  const loadDefaultOptions = async () =>
+    (defaultOptions ??= ((await typedAgent.getDefaultOptions({ requestContext })) ??
+      {}) as AgentExecutionOptions<OUTPUT>);
   let execOptions: AgentExecutionOptions<OUTPUT> = optionsAreResolved
     ? (rawExecOptions ?? ({} as AgentExecutionOptions<OUTPUT>))
     : (deepMerge(
-        ((await typedAgent.getDefaultOptions({ requestContext })) ?? {}) as Record<string, unknown>,
+        (await loadDefaultOptions()) as Record<string, unknown>,
         (rawExecOptions ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT>);
 
@@ -344,7 +348,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Durable runs read identity from `memory` only, so nothing changes without scopes.
   if (!scopesResolved) {
     const configuredScopes = (await typedAgent.getScopes?.({ requestContext })) ?? [];
-    const defaultScopes = (await typedAgent.getDefaultOptions({ requestContext }))?.scopes ?? [];
+    const defaultScopes = (await loadDefaultOptions()).scopes ?? [];
     const agentScopes = [...configuredScopes, ...defaultScopes];
     if (agentScopes.length || execOptions.scopes?.length || requestContext.has(MASTRA_SCOPES_KEY)) {
       const resolved = resolveAgentScopes({

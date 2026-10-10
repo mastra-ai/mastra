@@ -4494,6 +4494,36 @@ describe('Agent - network - tool approval and suspension', () => {
       expect(toolResult?.result).toContain('scoped info');
     });
 
+    it('keeps resume identity precedence when no scopes are involved', async () => {
+      const networkAgent = new Agent({
+        id: 'unscoped-network-agent',
+        name: 'Unscoped Network Agent',
+        instructions: 'Use the suspending-tool when asked to collect info.',
+        model: createRoutingMockModel('suspendingTool', 'tool', JSON.stringify({ initialQuery: 'plain' })),
+        tools: { suspendingTool },
+        memory,
+      });
+      const mastra = new Mastra({ agents: { networkAgent }, storage, logger: false });
+      const registeredAgent = mastra.getAgent('networkAgent');
+
+      const anStream = await registeredAgent.network('Collect information with initial query "plain"', {
+        memory: { thread: 'unscoped-thread', resource: 'unscoped-resource' },
+      });
+      for await (const _chunk of anStream) {
+        // drain until suspension
+      }
+
+      // No memory on resume: as before scopes, the resume does not pick up the snapshot thread.
+      const resumeStream = await registeredAgent.resumeNetwork(
+        { userResponse: 'plain info' },
+        { runId: anStream.runId },
+      );
+      for await (const _chunk of resumeStream) {
+        // drain
+      }
+      expect(await memory.getThreadById({ threadId: anStream.runId })).not.toBeNull();
+    });
+
     it('should resume suspended nested agent tool', async () => {
       const routingMockModel = createRoutingMockModel(
         'subAgent',

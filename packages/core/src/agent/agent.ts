@@ -195,7 +195,7 @@ import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
-import { applyResolvedAgentScopes, resolveAgentScopes, withoutIdentityAgentScopes } from './scopes';
+import { applyResolvedAgentScopes, parseAgentScope, resolveAgentScopes, withoutIdentityAgentScopes } from './scopes';
 import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
@@ -8802,15 +8802,25 @@ export class Agent<
       {
         callScopes: options?.scopes,
         defaultScopes: defaultNetworkOptions?.scopes,
-        snapshot: await this.#getNetworkSnapshotScopes(runId),
+        // Without a readable snapshot the run held no known scopes, so a resume may not add any.
+        snapshot: (await this.#getNetworkSnapshotScopes(runId)) ?? { scopes: [] },
       },
     );
     const requestContextToUse = mergedOptions.requestContext;
 
-    // Reserved keys from requestContext take precedence for security (see resolveAgentScopes).
-    // This allows middleware to securely set resourceId/threadId based on authenticated user,
-    // preventing attackers from hijacking another user's memory by passing different values in the body.
-    const { threadId, resourceId } = resolvedScopes;
+    // The snapshot is used only to check re-supplied scopes. Identity comes from scopes when
+    // present, else from the reserved keys then memory, as before scopes existed.
+    const hasScopeIdentity = (type: 'resource' | 'thread') =>
+      resolvedScopes.scopes.some(scope => parseAgentScope(scope)?.type === type);
+    const threadId = hasScopeIdentity('thread')
+      ? resolvedScopes.threadId
+      : (requestContextToUse.get(MASTRA_THREAD_ID_KEY) as string | undefined) ||
+        (typeof mergedOptions?.memory?.thread === 'string'
+          ? mergedOptions.memory.thread
+          : mergedOptions?.memory?.thread?.id);
+    const resourceId = hasScopeIdentity('resource')
+      ? resolvedScopes.resourceId
+      : (requestContextToUse.get(MASTRA_RESOURCE_ID_KEY) as string | undefined) || mergedOptions?.memory?.resource;
 
     return await networkLoop({
       networkName: this.name,

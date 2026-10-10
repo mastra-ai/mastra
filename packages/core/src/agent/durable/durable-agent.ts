@@ -4455,12 +4455,7 @@ export class DurableAgent<
   /**
    * Prepare for durable execution without starting it.
    */
-  async prepare(messages: MessageListInput, inputOptions?: AgentExecutionOptions<TOutput>) {
-    const options = inputOptions
-      ? ((await this.#applyScopes(inputOptions as DurableAgentStreamOptions<TOutput>, {
-          callScopes: inputOptions.scopes,
-        })) as AgentExecutionOptions<TOutput>)
-      : inputOptions;
+  async prepare(messages: MessageListInput, options?: AgentExecutionOptions<TOutput>) {
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
       messages,
@@ -4472,7 +4467,6 @@ export class DurableAgent<
       // its registry entry.
       runId: options?.runId,
       requestContext: options?.requestContext,
-      scopesResolved: true,
       mastra: this.#mastra,
     });
 

@@ -243,8 +243,8 @@ export function applyResolvedAgentScopes<T extends ScopedRunOptions>(
   resolved: ResolvedAgentScopes,
   requestContext: RequestContext<any>,
 ): T {
-  const scopeResource = resolved.scopes.some(scope => scope.startsWith('resource:'));
-  const scopeThread = resolved.scopes.some(scope => scope.startsWith('thread:'));
+  const scopeResource = resolved.scopes.some(scope => parseAgentScope(scope)?.type === 'resource');
+  const scopeThread = resolved.scopes.some(scope => parseAgentScope(scope)?.type === 'thread');
   let next = options;
   if (scopeResource || scopeThread) {
     const memory = options.memory;

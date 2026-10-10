@@ -28,6 +28,7 @@ export function keepSuspendedRunScopes(
   const memoryInfo = snapshot?.context?.input?.messageListState?.memoryInfo;
   for (const scope of supplied) {
     if (held.has(scope)) continue;
+    // Mirrors `parseAgentScope` in @mastra/core (split on the first colon); Core validates the grammar.
     const separator = typeof scope === 'string' ? scope.indexOf(':') : -1;
     const type = separator > 0 ? scope.slice(0, separator) : undefined;
     const value = separator > 0 ? scope.slice(separator + 1) : undefined;

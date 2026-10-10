@@ -1387,7 +1387,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }
 
         const requestContext = mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext);
-        keepSuspendedRunScopes(snapshot, requestContext, resumeOptions);
+        try {
+          keepSuspendedRunScopes(snapshot, requestContext, resumeOptions);
+        } catch (error) {
+          // A scope rejection belongs to this caller; the parked run stays resumable.
+          notResumable = true;
+          throw error;
+        }
         const tracingOptions = snapshot?.tracingContext
           ? {
               traceId: snapshot.tracingContext.traceId,

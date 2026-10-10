@@ -183,6 +183,14 @@ describe.each([
     initial.cleanup();
   });
 
+  it('prepare without options applies Agent and default scopes', async () => {
+    const { agent } = build({ scopes: ['resource:u1'], defaultOptions: { scopes: ['thread:t1', 'team:core'] } });
+    const preparation = await agent.prepare('hi');
+    expect(preparation.threadId).toBe('t1');
+    expect(preparation.resourceId).toBe('u1');
+    expect(preparation.workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY]).toEqual(['team:core']);
+  });
+
   it('resume rejects scopes added to a run that started without any', async () => {
     const { agent, initial } = await suspendForApproval([]);
     await expect(
