@@ -36,7 +36,9 @@ describe('restartAllActiveWorkflowRuns (#25579)', () => {
     });
     const storage = new InMemoryStore();
     const mastra = new Mastra({ logger: false, storage, workflows: { optedOut, regular }, agents: { support } });
-    await new Promise(r => setTimeout(r, 50));
+    await vi.waitFor(() => {
+      expect(Object.values(mastra.listWorkflows()).some(workflow => workflow.type === 'processor')).toBe(true);
+    });
 
     const wf = (await storage.getStore('workflows'))!;
     const spy = vi.spyOn(wf, 'listWorkflowRuns');

@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-`restartAllActiveWorkflowRuns()` no longer queries storage for workflows that set `autoRestartActiveRuns: false`, and no longer sweeps agent processor workflows (`<agentId>-input-processor` / `-output-processor`), which only run inside an agent call. This removes the boot-time snapshot scans reported in #25579.
+Faster startup when restarting active workflow runs. Mastra no longer scans storage for workflows that set `autoRestartActiveRuns: false`. It also skips the internal workflows that run agent processors, since those only run during an agent call.
