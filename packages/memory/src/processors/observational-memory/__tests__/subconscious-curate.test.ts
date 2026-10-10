@@ -269,6 +269,9 @@ describe('Subconscious observation curator', () => {
     expect(() => resolveCuratorScope(withContext([['mastra__scopes', ['org:acme', 'org:beta']]]))).toThrow(
       /needs one org scope/,
     );
+    expect(() => resolveCuratorScope(withContext([['mastra__scopes', ['org:a:resource:b']]]))).toThrow(
+      /must not contain ":"/,
+    );
   });
 
   it('hands the curator run the parent run scopes, custom scopes included', async () => {
