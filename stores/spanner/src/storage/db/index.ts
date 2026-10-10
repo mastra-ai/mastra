@@ -615,6 +615,48 @@ export class SpannerDB extends MastraBase {
     }
   }
 
+  /**
+   * Drops NOT NULL from `columns` where a table created by an older schema still has it.
+   * No-op in `validate` mode, where createTable already reports the mismatch.
+   */
+  async dropNotNull({
+    tableName,
+    schema,
+    columns,
+  }: {
+    tableName: TABLE_NAMES;
+    schema: Record<string, StorageColumn>;
+    columns: string[];
+  }): Promise<void> {
+    if (this.initMode === 'validate') return;
+    try {
+      const [rows] = await this.database.run({
+        sql: `SELECT COLUMN_NAME
+              FROM INFORMATION_SCHEMA.COLUMNS
+              WHERE TABLE_SCHEMA = '' AND TABLE_NAME = @tableName AND IS_NULLABLE = 'NO'
+                AND COLUMN_NAME IN UNNEST(@columns)`,
+        params: { tableName, columns },
+        json: true,
+      });
+      await this.runDdl(
+        (rows as Array<{ COLUMN_NAME: string }>).map(
+          ({ COLUMN_NAME }) =>
+            `ALTER TABLE ${quoteIdent(tableName, 'table name')} ALTER COLUMN ${quoteIdent(COLUMN_NAME, 'column name')} ${getSpannerType(schema[COLUMN_NAME]!.type)}`,
+        ),
+      );
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('SPANNER', 'DROP_NOT_NULL', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
+
   async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       const exists = await this.tableExists(tableName);

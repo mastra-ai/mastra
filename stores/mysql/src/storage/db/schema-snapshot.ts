@@ -38,6 +38,8 @@ export interface SchemaSnapshot {
   tables: Set<string>;
   /** lowercased table name -> lowercased column names present on that table. */
   columns: Map<string, Set<string>>;
+  /** lowercased table name -> lowercased names of its NOT NULL columns. */
+  notNullColumns: Map<string, Set<string>>;
   /**
    * `table.index` keys (both lowercased) for indexes present in the schema.
    * MySQL index names are unique per table, not per schema, so presence is
@@ -66,7 +68,7 @@ export async function loadSchemaSnapshot(pool: Pool, schemaName: string | undefi
       schemaName,
     ]),
     pool.execute<RowDataPacket[]>(
-      `SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = ?`,
+      `SELECT table_name, column_name, is_nullable FROM information_schema.columns WHERE table_schema = ?`,
       [schemaName],
     ),
     pool.execute<RowDataPacket[]>(
@@ -81,14 +83,25 @@ export async function loadSchemaSnapshot(pool: Pool, schemaName: string | undefi
   }
 
   const columns = new Map<string, Set<string>>();
+  const notNullColumns = new Map<string, Set<string>>();
   for (const row of columnRows ?? []) {
     const table = lower(row.table_name ?? row.TABLE_NAME);
+    const column = lower(row.column_name ?? row.COLUMN_NAME);
     let set = columns.get(table);
     if (!set) {
       set = new Set<string>();
       columns.set(table, set);
     }
-    set.add(lower(row.column_name ?? row.COLUMN_NAME));
+    set.add(column);
+
+    if ((row.is_nullable ?? row.IS_NULLABLE) === 'NO') {
+      let notNull = notNullColumns.get(table);
+      if (!notNull) {
+        notNull = new Set<string>();
+        notNullColumns.set(table, notNull);
+      }
+      notNull.add(column);
+    }
   }
 
   const indexes = new Set<string>();
@@ -96,5 +109,5 @@ export async function loadSchemaSnapshot(pool: Pool, schemaName: string | undefi
     indexes.add(indexKey(lower(row.table_name ?? row.TABLE_NAME), lower(row.index_name ?? row.INDEX_NAME)));
   }
 
-  return { schemaName, tables, columns, indexes };
+  return { schemaName, tables, columns, notNullColumns, indexes };
 }

@@ -789,6 +789,55 @@ export class StoreOperationsMySQL extends StoreOperations {
       }
     }
   }
+
+  /**
+   * Drops NOT NULL from `columns` where a table created by an older schema still has it,
+   * keeping each column's type, charset and collation. Answered from the init snapshot
+   * when it has the table, so a converged schema issues no query.
+   */
+  async dropNotNull({ tableName, columns }: { tableName: TABLE_NAMES; columns: string[] }): Promise<void> {
+    const table = tableName.toLowerCase();
+    const snapshot = this.schemaSnapshot;
+    if (snapshot?.columns.has(table)) {
+      const notNull = snapshot.notNullColumns.get(table);
+      if (!columns.some(column => notNull?.has(column.toLowerCase()))) return;
+    }
+
+    try {
+      const db = await this.getDatabase();
+      const params: SqlParam[] = [tableName, ...columns];
+      let sql = `SELECT column_name, column_type, character_set_name, collation_name FROM information_schema.columns
+        WHERE table_name = ? AND is_nullable = 'NO' AND column_name IN (${columns.map(() => '?').join(', ')})`;
+      if (db) {
+        sql += ' AND table_schema = ?';
+        params.push(db);
+      }
+      const [rows] = await this.pool.execute<RowDataPacket[]>(sql, params);
+      if (!rows.length) return;
+
+      const names = rows.map(row => String(row.column_name ?? row.COLUMN_NAME));
+      const modifies = rows.map((row, i) => {
+        const charset = row.character_set_name ?? row.CHARACTER_SET_NAME;
+        const collation = charset
+          ? ` CHARACTER SET ${charset} COLLATE ${row.collation_name ?? row.COLLATION_NAME}`
+          : '';
+        return `MODIFY COLUMN ${quoteIdentifier(names[i]!, 'column name')} ${row.column_type ?? row.COLUMN_TYPE}${collation} NULL`;
+      });
+      await this.pool.execute(`ALTER TABLE ${formatTableName(tableName, this.database)} ${modifies.join(', ')}`);
+      const notNull = snapshot?.notNullColumns.get(table);
+      for (const name of names) notNull?.delete(name.toLowerCase());
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: 'MYSQL_STORE_DROP_NOT_NULL_FAILED',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
+    }
+  }
 }
 
 const ORDER_BY_PATTERN = /^`[A-Za-z0-9_]+`(?:\s+(ASC|DESC))?$/i;
