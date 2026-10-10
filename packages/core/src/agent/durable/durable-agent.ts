@@ -2389,6 +2389,10 @@ export class DurableAgent<
       parentSignal: abortController.signal,
       timeoutMs: entry.timeoutTotalMs,
       timeoutType: 'total',
+      // The controller is per-session, but entry cleanup can also run on registry
+      // eviction while calls holding `entry.abortSignal` are still in flight (#26126).
+      // Only tear down the timer so `abort()` keeps reaching them.
+      detachParentOnCleanup: false,
     });
     entry.abortSignal = totalTimeout.signal;
     const previousCleanup = entry.cleanup;

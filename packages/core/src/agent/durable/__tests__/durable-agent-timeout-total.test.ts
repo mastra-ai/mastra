@@ -300,4 +300,44 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     expect(errorChunk.payload.error.message).toContain('totalMs');
     recovered.cleanup();
   }, 30000);
+
+  it('keeps abort() reaching an in-flight tool after the run registry entry is evicted (#26126)', async () => {
+    let toolSignal: AbortSignal | undefined;
+    let markEntered!: () => void;
+    const entered = new Promise<void>(resolve => (markEntered = resolve));
+    const hold = createTool({
+      id: 'hold',
+      description: 'Holds until aborted or timed out',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async (_input, context) => {
+        toolSignal = context?.abortSignal;
+        markEntered();
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return { ok: true };
+      },
+    });
+    const durableAgent = setup(toolCallingModel('hold') as LanguageModelV2, { hold });
+
+    const result = await durableAgent.stream('hello', {
+      maxSteps: 2,
+      modelSettings: { timeout: { totalMs: 60_000 } },
+    });
+    const drained = drain(result.fullStream);
+    await entered;
+
+    // Fill the registry past capacity so the live run entry is evicted (and disposed).
+    for (let i = 0; i < 1000; i++) {
+      globalRunRegistry.set(`filler-${i}-${Math.random()}`, {} as any);
+    }
+    expect(globalRunRegistry.has(result.runId)).toBe(false);
+
+    await result.abort();
+
+    expect(toolSignal).toBeDefined();
+    expect(toolSignal?.aborted).toBe(true);
+
+    await drained;
+    globalRunRegistry.clear();
+    result.cleanup();
+  });
 });
