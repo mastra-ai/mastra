@@ -247,6 +247,8 @@ const workspace = new Workspace({
 
 Containment applies to filesystem operations, including file tools and search indexing. It doesn't restrict shell commands.
 
+Every operation resolves symlinks before running, including when the target doesn't exist yet. Creating a file or directory through a symlink that points outside `basePath` and `allowedPaths` is rejected, and file writes verify the opened file before writing so a symlink replaced during the operation can't redirect content outside the root. Directory creation, copy, move, and delete check the path and then run the operation without re-checking, so a symlink replaced at the same instant isn't re-validated. Treat containment as a guardrail for file tools and use a sandbox with OS-level isolation as the boundary for untrusted code.
+
 Set `readOnly: true` when the agent should use files without changing them. For a static provider, Mastra removes write-related file tools.
 
 With a filesystem resolver, write tools remain registered because the provider isn't known until the request runs. The provider rejects write attempts at runtime.
