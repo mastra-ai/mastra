@@ -1225,9 +1225,13 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         const chunks = await drain(recovered.fullStream);
         expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
-        expect(prompts).toHaveLength(earlier + 3);
-        expect(prompts[earlier + 1]).not.toContain('follow-up');
-        expect(prompts[earlier + 2]).toContain('follow-up');
+        // The follow-up cancels the lost execution's request, which has no output
+        // yet. Whether the recovery repeats that request depends on whether the
+        // cancellation was checkpointed first. Either way, its last request is the
+        // first to carry the follow-up, exactly once.
+        const recoveryPrompts = prompts.slice(earlier + 1);
+        expect(recoveryPrompts.slice(0, -1).some(prompt => prompt.includes('follow-up'))).toBe(false);
+        expect(recoveryPrompts.at(-1)!.split('"text":"follow-up"')).toHaveLength(2);
 
         recovered.cleanup();
         started.cleanup();
