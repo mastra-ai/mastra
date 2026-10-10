@@ -9,7 +9,13 @@ import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import { MessageHistory } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
-import type { MemoryStorage, ObservationalMemoryRecord, ObservationalMemoryHistoryOptions } from '@mastra/core/storage';
+import type {
+  BufferedObservationChunk,
+  MemoryStorage,
+  ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
+  SwapBufferedToActiveResult,
+} from '@mastra/core/storage';
 import type { ProviderMetadata } from '@mastra/core/stream';
 import xxhash from 'xxhash-wasm';
 
@@ -30,6 +36,9 @@ import {
  * Returns the parts from the latest step of a message (after the last step-start marker).
  * If no step-start marker exists, returns all parts.
  */
+/** Re-reads of the head after an activation swap hit a generation retired by a reflection. */
+const MAX_ACTIVATION_RETIRED_RETRIES = 3;
+
 export function getLatestStepParts(parts: MastraDBMessage['content']['parts']): MastraDBMessage['content']['parts'] {
   for (let i = parts.length - 1; i >= 0; i--) {
     if (parts[i]?.type === 'step-start') {
@@ -319,7 +328,7 @@ import { optimizeObservationsForContext, formatMessagesForObserver } from './obs
 import { ObserverRunner } from './observer-runner';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import type { CompressionLevel } from './reflector-agent';
-import { ReflectorRunner } from './reflector-runner';
+import { isReflectionApplied, ReflectorRunner } from './reflector-runner';
 import { isOmReproCaptureEnabled, writeObserverExchangeReproCapture } from './repro-capture';
 import { RETRY_CONFIG } from './retry';
 import {
@@ -1684,7 +1693,8 @@ export class ObservationalMemory {
    */
   private createUnobservedMessage(message: MastraDBMessage): MastraDBMessage | null {
     const unobservedParts = getUnobservedParts(message);
-    if (unobservedParts.length === 0) return null;
+    // OM lifecycle markers written after the boundary (e.g. a later buffering cycle's markers) are not content.
+    if (unobservedParts.every(part => (part as { type?: string })?.type?.startsWith('data-om-'))) return null;
 
     return {
       ...message,
@@ -2421,8 +2431,10 @@ ${formattedMessages}
         omError('[OM] async buffering observation failed', err);
       })
       .finally(() => {
-        // Clean up the operation tracking
-        BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+        // Clean up the operation tracking, unless a later op already registered itself behind this one.
+        if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === asyncOp) {
+          BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+        }
         // Clear persistent flag
         unregisterOp(record.id, 'bufferingObservation');
         this.storage.setBufferingObservationFlag(record.id, false).catch(err => {
@@ -3432,14 +3444,21 @@ ${formattedMessages}
     // This MUST happen before the first await when buffer() is called fire-and-forget.
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, currentTokens);
 
+    // Queue behind any existing buffering operation (mutex behavior). Reading the previous op and
+    // registering this one happen before any await, so concurrent calls form a chain instead of
+    // all seeing the same predecessor and then observing the same messages in parallel.
+    const existingOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
+    let resolveOp: () => void;
+    const opPromise = new Promise<void>(resolve => {
+      resolveOp = resolve;
+    });
+    BufferingCoordinator.asyncBufferingOps.set(bufferKey, opPromise);
+
     // Clear stale flag if it was set by a crashed process (non-blocking)
     if (record.isBufferingObservation) {
       await this.storage.setBufferingObservationFlag(record.id, false).catch(() => {});
     }
 
-    // Wait for any existing buffering operation to complete first (mutex behavior).
-    // IMPORTANT: read the existing op BEFORE overwriting the map entry.
-    const existingOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
     if (existingOp) {
       try {
         await existingOp;
@@ -3448,24 +3467,16 @@ ${formattedMessages}
       }
     }
 
-    // Set persistent flag and register op
-    registerOp(record.id, 'bufferingObservation');
+    // Set persistent flag and register op. Unregister under the same id: `record` is replaced by the
+    // fresh head below, which a rollover may have given a new id.
+    const opRecordId = record.id;
+    registerOp(opRecordId, 'bufferingObservation');
     inMemoryRecord.isBufferingObservation = true;
     inMemoryRecord.lastBufferedAtTokens = currentTokens;
     this.storage.setBufferingObservationFlag(record.id, true, currentTokens).catch(err => {
       omError('[OM] Failed to set buffering observation flag', err);
     });
 
-    // Register in asyncBufferingOps so callers (and tests) can await completion
-    let resolveOp: () => void;
-    const opPromise = new Promise<void>(resolve => {
-      resolveOp = resolve;
-    });
-    BufferingCoordinator.asyncBufferingOps.set(bufferKey, opPromise);
-
-    // Keep the caller's turn-scoped record current while using a fresh storage snapshot
-    // for the asynchronous write path.
-    record = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
     const setBufferingState = (isBufferingObservation: boolean, lastBufferedAtTokens?: number) => {
       inMemoryRecord.isBufferingObservation = isBufferingObservation;
       record.isBufferingObservation = isBufferingObservation;
@@ -3478,6 +3489,10 @@ ${formattedMessages}
     let flagCleared = false;
 
     try {
+      // Keep the caller's turn-scoped record current while using a fresh storage snapshot
+      // for the asynchronous write path.
+      record = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
+
       // Load messages: use provided or load from storage
       let candidateMessages: MastraDBMessage[];
       if (opts.messages) {
@@ -3613,8 +3628,11 @@ ${formattedMessages}
       omError('[OM] buffer() failed', error);
       return { buffered: false, record };
     } finally {
-      unregisterOp(record.id, 'bufferingObservation');
-      BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+      unregisterOp(opRecordId, 'bufferingObservation');
+      // A later call may already have registered itself behind this op; keep its entry.
+      if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
+        BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+      }
       resolveOp!();
       // Only clear the flag if the success path didn't already clear it (with token count)
       if (!flagCleared) {
@@ -3768,46 +3786,58 @@ ${formattedMessages}
       // Proceed with activation of whatever chunks exist.
     }
 
-    // Re-fetch to get latest chunks after any completed buffering
-    const freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
-    if (!freshRecord) {
-      return { activated: false, record };
+    // Re-fetch to get latest chunks after any completed buffering. Activation commits only to
+    // the head generation: if a reflection retires the record between this read and the swap,
+    // storage reports `retired` and nothing was activated, so re-read the head and retry.
+    let freshRecord: ObservationalMemoryRecord | null = null;
+    let freshChunks: BufferedObservationChunk[] = [];
+    let activationResult: SwapBufferedToActiveResult | undefined;
+    for (let attempt = 0; attempt <= MAX_ACTIVATION_RETIRED_RETRIES; attempt++) {
+      freshRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+      if (!freshRecord) {
+        return { activated: false, record };
+      }
+      freshChunks = getBufferedChunks(freshRecord);
+      if (!freshChunks.length) {
+        return { activated: false, record };
+      }
+
+      // Calculate activation parameters (use per-record override if set)
+      const messageTokensThreshold = getMaxThreshold(this.getEffectiveMessageTokens(freshRecord));
+      const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
+      const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
+
+      // Prefer the live pending count; the persisted one is written at the end of the
+      // previous step and misses anything added since (e.g. a large tool-result batch).
+      const totalChunkMessageTokens = freshChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+      const currentPendingTokens = livePendingTokens ?? (freshRecord.pendingMessageTokens || totalChunkMessageTokens);
+
+      const forceMaxActivation = !!(
+        this.observationConfig.blockAfter && currentPendingTokens >= this.observationConfig.blockAfter
+      );
+
+      // Storage adapters decrement the persisted pending count during the swap. Keep
+      // that base aligned with the live count used to select chunks so the returned
+      // record reflects the unactivated tail rather than the previous step's count.
+      if (freshRecord.pendingMessageTokens !== currentPendingTokens) {
+        await this.storage.setPendingMessageTokens(freshRecord.id, currentPendingTokens);
+      }
+
+      // Perform the swap
+      activationResult = await this.storage.swapBufferedToActive({
+        id: freshRecord.id,
+        activationRatio,
+        messageTokensThreshold,
+        currentPendingTokens,
+        forceMaxActivation,
+        bufferedChunks: freshChunks,
+      });
+      if (!activationResult.retired) break;
+      omDebug(`[OM:activate] record ${freshRecord.id} was retired by a reflection; retrying on the head`);
     }
-    const freshChunks = getBufferedChunks(freshRecord);
-    if (!freshChunks.length) {
-      return { activated: false, record };
+    if (!freshRecord || !activationResult || activationResult.retired) {
+      return { activated: false, record: (await this.getRecord(threadId, resourceId)) ?? record };
     }
-
-    // Calculate activation parameters (use per-record override if set)
-    const messageTokensThreshold = getMaxThreshold(this.getEffectiveMessageTokens(freshRecord));
-    const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
-    const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
-
-    // Prefer the live pending count; the persisted one is written at the end of the
-    // previous step and misses anything added since (e.g. a large tool-result batch).
-    const totalChunkMessageTokens = freshChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-    const currentPendingTokens = livePendingTokens ?? (freshRecord.pendingMessageTokens || totalChunkMessageTokens);
-
-    const forceMaxActivation = !!(
-      this.observationConfig.blockAfter && currentPendingTokens >= this.observationConfig.blockAfter
-    );
-
-    // Storage adapters decrement the persisted pending count during the swap. Keep
-    // that base aligned with the live count used to select chunks so the returned
-    // record reflects the unactivated tail rather than the previous step's count.
-    if (freshRecord.pendingMessageTokens !== currentPendingTokens) {
-      await this.storage.setPendingMessageTokens(freshRecord.id, currentPendingTokens);
-    }
-
-    // Perform the swap
-    const activationResult = await this.storage.swapBufferedToActive({
-      id: freshRecord.id,
-      activationRatio,
-      messageTokensThreshold,
-      currentPendingTokens,
-      forceMaxActivation,
-      bufferedChunks: freshChunks,
-    });
 
     // Clear buffering flag
     await this.storage.setBufferingObservationFlag(freshRecord.id, false).catch(() => {});
@@ -4132,7 +4162,9 @@ ${formattedMessages}
     record: ObservationalMemoryRecord;
     usage?: ObserveHookUsage;
   }> {
-    const record = await this.getOrCreateRecord(threadId, resourceId);
+    // A fixed snapshot: the reflection commit compares the stored record against the text the
+    // Reflector read (some stores hand out live record references).
+    const record = { ...(await this.getOrCreateRecord(threadId, resourceId)) };
 
     if (!record.activeObservations) {
       return { reflected: false, record, usage: undefined };
@@ -4194,11 +4226,21 @@ ${formattedMessages}
       );
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
 
-      await this.storage.createReflectionGeneration({
+      const newRecordId = crypto.randomUUID();
+      const committedRecord = await this.storage.createReflectionGeneration({
         currentRecord: record,
         reflection: reflectResult.observations,
         tokenCount: reflectionTokenCount,
+        newRecordId,
       });
+      reflectionUsage = reflectResult.usage;
+      reflectionProviderMetadata = reflectResult.providerMetadata;
+      if (!isReflectionApplied(committedRecord, newRecordId, record.id)) {
+        // Another writer retired or rewrote the record while the Reflector ran; nothing changed.
+        omDebug(`[OM:reflect] manual reflection of ${record.id} not applied (head is ${committedRecord.id})`);
+        const latestRecord = await this.getOrCreateRecord(threadId, resourceId);
+        return { reflected: false, record: latestRecord, usage: reflectResult.usage };
+      }
 
       if (thread && reflectResult.extractedValues) {
         const metadataUpdate = buildThreadMetadataFromExtractedValues(

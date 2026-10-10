@@ -1,3 +1,9 @@
+import {
+  isAppendOnlySince,
+  isBufferedChunkCoveredByCursor,
+  maxObservationCursor,
+  planReflectionGenerationText,
+} from '@mastra/core/storage';
 import type { GenericId } from 'convex/values';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -5,8 +11,12 @@ import type { SerializedOMChunk, StorageRequest, StorageResponse } from '../stor
 import {
   deepMergeOMConfig,
   handleObservationalMemoryOperation,
+  isAppendOnly,
+  isChunkCoveredByCursor,
+  maxCursor,
   mergeReflectionWithUnreflected,
   parseStoredChunks,
+  planReflectionText,
   selectActivationBoundary,
 } from './observational-memory';
 import { mastraStorage } from './storage';
@@ -376,7 +386,7 @@ describe('handleObservationalMemoryOperation', () => {
       updatedAt: '2026-06-05T00:00:00.000Z',
     });
 
-    expect(result).toEqual({ ok: true });
+    expect(result).toEqual({ ok: true, result: { applied: true } });
     expect(db.patch).toHaveBeenCalledTimes(1);
     expect(docs[0]).toMatchObject({
       activeObservations: 'new observations',
@@ -540,6 +550,9 @@ describe('handleObservationalMemoryOperation', () => {
         bufferedReflectionInputTokens: 800,
         reflectedObservationLineCount: 2,
         generationCount: 1,
+        // The new generation is built from the stored record, not the caller's snapshot.
+        observedTimezone: 'Europe/Berlin',
+        totalTokensObserved: 900,
       }),
     ]);
 
@@ -659,5 +672,572 @@ describe('mastraStorage routing for observational memory', () => {
         lookupKey: 'resource:res-1',
       }),
     ).rejects.toThrow('omGetLatest is only supported for mastra_observational_memory');
+  });
+});
+
+describe('lifecycle rule parity with @mastra/core', () => {
+  // The server bundle cannot import @mastra/core at runtime, so it carries copies of the
+  // shared lifecycle rules. These must decide exactly like the core helpers.
+  it('isChunkCoveredByCursor matches isBufferedChunkCoveredByCursor', () => {
+    const chunk = '2026-06-01T00:00:00.010Z';
+    for (const cursor of [
+      null,
+      '2026-06-01T00:00:00.008Z',
+      '2026-06-01T00:00:00.009Z',
+      '2026-06-01T00:00:00.010Z',
+      '2026-06-02T00:00:00.000Z',
+    ]) {
+      expect(isChunkCoveredByCursor(chunk, cursor)).toBe(isBufferedChunkCoveredByCursor(chunk, cursor));
+    }
+  });
+
+  it('maxCursor matches maxObservationCursor', () => {
+    const a = '2026-06-01T00:00:00.000Z';
+    const b = '2026-06-02T00:00:00.000Z';
+    for (const [x, y] of [
+      [a, b],
+      [b, a],
+      [a, null],
+      [null, b],
+      [null, null],
+    ] as const) {
+      expect(maxCursor(x, y)).toBe(maxObservationCursor(x, y)?.toISOString() ?? null);
+    }
+  });
+
+  it('planReflectionText and isAppendOnly match the core rules', () => {
+    const cases = [
+      { stored: 'a\nb', snapshot: 'a\nb' },
+      { stored: 'a\nb\n\n--- message boundary (x) ---\n\nc', snapshot: 'a\nb' },
+      { stored: 'a\nb   ', snapshot: 'a\nb' },
+      { stored: 'rewritten', snapshot: 'a\nb' },
+      { stored: 'tail only', snapshot: '' },
+    ];
+    for (const { stored, snapshot } of cases) {
+      for (const reflection of ['R', '']) {
+        const input = {
+          storedObservations: stored,
+          storedObservationTokenCount: 30,
+          snapshotObservations: snapshot,
+          snapshotObservationTokenCount: 10,
+          reflection,
+          tokenCount: 5,
+        };
+        const core = planReflectionGenerationText(input);
+        expect(planReflectionText(input)).toEqual(
+          core ? { observations: core.observations, tokenCount: core.tokenCount } : null,
+        );
+      }
+      expect(isAppendOnly(stored, snapshot)).toBe(isAppendOnlySince(stored, snapshot));
+    }
+  });
+});
+
+describe('observational memory lifecycle (supersededBy)', () => {
+  const NOW = '2026-06-10T00:00:00.000Z';
+
+  function snapshotOf(doc: Record<string, any>) {
+    return {
+      id: doc.id,
+      lookupKey: doc.lookupKey,
+      scope: doc.scope,
+      threadId: doc.threadId ?? null,
+      resourceId: doc.resourceId,
+      config: doc.config,
+      metadata: doc.metadata ?? null,
+      observedTimezone: doc.observedTimezone ?? null,
+      lastObservedAt: doc.lastObservedAt ?? null,
+      totalTokensObserved: doc.totalTokensObserved,
+      generationCount: doc.generationCount,
+      activeObservations: doc.activeObservations,
+      observationTokenCount: doc.observationTokenCount,
+    };
+  }
+
+  async function run(ctx: OMOperationCtx, request: Record<string, unknown>) {
+    return (await handleObservationalMemoryOperation(ctx, OM_TABLE, {
+      tableName: OM_TABLE,
+      ...request,
+    } as any)) as any;
+  }
+
+  const byId = (docs: Array<Record<string, any>>, id: string) => docs.find(doc => doc.id === id)!;
+
+  it('omGetLatest returns the canonical head among pre-M3 duplicates (generationCount DESC, createdAt ASC, id ASC)', async () => {
+    const { ctx } = createFakeOMDb([
+      storedOMDoc({ id: 'g0', generationCount: 0 }),
+      storedOMDoc({ id: 'g1', generationCount: 1 }),
+      storedOMDoc({ id: 'g2-b', generationCount: 2, createdAt: '2026-06-03T00:00:00.000Z' }),
+      storedOMDoc({ id: 'g2-a', generationCount: 2, createdAt: '2026-06-03T00:00:00.000Z' }),
+      // Inserted last (newest _creationTime) and later createdAt: descending first() alone would pick it.
+      storedOMDoc({ id: 'g2-0', generationCount: 2, createdAt: '2026-06-04T00:00:00.000Z' }),
+    ]);
+
+    const result = await run(ctx, { op: 'omGetLatest', lookupKey: 'resource:res-1' });
+
+    expect(result.result.id).toBe('g2-a');
+  });
+
+  it('a write aimed at a non-head duplicate or older generation marks it superseded by the head; untargeted rows stay unmarked', async () => {
+    const { ctx, docs } = createFakeOMDb([
+      storedOMDoc({ id: 'g0', generationCount: 0 }),
+      storedOMDoc({ id: 'g1', generationCount: 1 }),
+      storedOMDoc({ id: 'g1-dup', generationCount: 1, createdAt: '2026-06-02T00:00:00.000Z' }),
+    ]);
+
+    const result = await run(ctx, {
+      op: 'omUpdateActive',
+      id: 'g1-dup',
+      observations: 'lost?',
+      tokenCount: 1,
+      lastObservedAt: NOW,
+      observedMessageIds: null,
+      updatedAt: NOW,
+    });
+
+    expect(result.result).toEqual({ applied: false, reason: 'retired' });
+    expect(byId(docs, 'g1-dup')).toMatchObject({ supersededBy: 'g1', activeObservations: '' });
+    expect(byId(docs, 'g0').supersededBy).toBeUndefined();
+    expect(byId(docs, 'g1').supersededBy).toBeUndefined();
+  });
+
+  it('a write aimed at the canonical head succeeds and never marks it superseded', async () => {
+    const { ctx, docs } = createFakeOMDb([
+      storedOMDoc({ id: 'g1', generationCount: 1 }),
+      storedOMDoc({ id: 'g1-dup', generationCount: 1, createdAt: '2026-06-02T00:00:00.000Z' }),
+    ]);
+
+    const result = await run(ctx, {
+      op: 'omUpdateActive',
+      id: 'g1',
+      observations: 'kept',
+      tokenCount: 1,
+      lastObservedAt: NOW,
+      observedMessageIds: null,
+      updatedAt: NOW,
+    });
+
+    expect(result.result).toEqual({ applied: true });
+    expect(byId(docs, 'g1')).toMatchObject({ activeObservations: 'kept' });
+    expect(byId(docs, 'g1').supersededBy).toBeUndefined();
+  });
+
+  it('omInitialize inserts the deterministic record once; a second initialize returns the existing head', async () => {
+    const { ctx, docs } = createFakeOMDb([]);
+    const record = { ...storedOMDoc({ id: 'om0_key' }) };
+
+    const first = await run(ctx, { op: 'omInitialize', record });
+    const second = await run(ctx, { op: 'omInitialize', record: { ...record, id: 'om0_other' } });
+
+    expect(docs).toHaveLength(1);
+    expect(first.result).toMatchObject({ id: 'om0_key', supersededBy: null });
+    expect(second.result.id).toBe('om0_key');
+  });
+
+  describe('omCreateReflectionGeneration', () => {
+    const chunkA = serializedChunk({ id: 'c-a', cycleId: 'cycle-a', lastObservedAt: '2026-06-01T05:00:00.000Z' });
+
+    function headDoc(overrides: Record<string, any> = {}) {
+      return storedOMDoc({
+        id: 'g0',
+        activeObservations: 'old line',
+        observationTokenCount: 10,
+        totalTokensObserved: 500,
+        pendingMessageTokens: 700,
+        lastObservedAt: '2026-06-01T03:00:00.000Z',
+        lastBufferedAtTime: '2026-06-01T05:00:00.000Z',
+        lastBufferedAtTokens: 1200,
+        isBufferingObservation: true,
+        bufferedObservationChunks: JSON.stringify([chunkA]),
+        bufferedReflection: 'pending reflection',
+        bufferedReflectionTokens: 9,
+        observedTimezone: 'Europe/Berlin',
+        ...overrides,
+      });
+    }
+
+    it('moves buffered chunks to the new head, carries cursor/flags/counters, does not carry buffered reflection, and retires the old row', async () => {
+      const { ctx, docs } = createFakeOMDb([headDoc()]);
+
+      const result = await run(ctx, {
+        op: 'omCreateReflectionGeneration',
+        currentRecord: snapshotOf(headDoc()),
+        newId: 'g1',
+        reflection: 'reflected',
+        tokenCount: 4,
+        now: NOW,
+      });
+
+      expect(result.result).toMatchObject({
+        id: 'g1',
+        generationCount: 1,
+        originType: 'reflection',
+        activeObservations: 'reflected',
+        observationTokenCount: 4,
+        lastObservedAt: '2026-06-01T03:00:00.000Z',
+        lastBufferedAtTime: '2026-06-01T05:00:00.000Z',
+        lastBufferedAtTokens: 1200,
+        pendingMessageTokens: 700,
+        totalTokensObserved: 500,
+        isBufferingObservation: true,
+        observedTimezone: 'Europe/Berlin',
+        supersededBy: null,
+      });
+      expect(result.result).not.toHaveProperty('bufferedReflection');
+      expect(parseStoredChunks(byId(docs, 'g1').bufferedObservationChunks)).toEqual([chunkA]);
+      expect(byId(docs, 'g0')).toMatchObject({ supersededBy: 'g1', bufferedObservationChunks: null });
+    });
+
+    it('keeps observations appended after the snapshot and adds their tokens', async () => {
+      const appended = headDoc({
+        activeObservations: 'old line\n\n--- message boundary (t) ---\n\nnew fact',
+        observationTokenCount: 25,
+      });
+      const { ctx } = createFakeOMDb([appended]);
+
+      const result = await run(ctx, {
+        op: 'omCreateReflectionGeneration',
+        currentRecord: snapshotOf(headDoc()),
+        newId: 'g1',
+        reflection: 'reflected',
+        tokenCount: 4,
+        now: NOW,
+      });
+
+      expect(result.result).toMatchObject({
+        activeObservations: 'reflected\n\n--- message boundary (t) ---\n\nnew fact',
+        observationTokenCount: 4 + 15,
+      });
+    });
+
+    it('creates nothing when the stored text was rewritten since the snapshot', async () => {
+      const { ctx, docs, inserted } = createFakeOMDb([headDoc({ activeObservations: 'rewritten' })]);
+
+      const result = await run(ctx, {
+        op: 'omCreateReflectionGeneration',
+        currentRecord: snapshotOf(headDoc()),
+        newId: 'g1',
+        reflection: 'reflected',
+        tokenCount: 4,
+        now: NOW,
+      });
+
+      expect(inserted).toHaveLength(0);
+      expect(result.result.id).toBe('g0');
+      expect(byId(docs, 'g0').supersededBy).toBeUndefined();
+    });
+
+    it('creates nothing for a retired snapshot and returns the head', async () => {
+      const { ctx, inserted } = createFakeOMDb([
+        headDoc({ supersededBy: 'g1' }),
+        storedOMDoc({ id: 'g1', generationCount: 1 }),
+      ]);
+
+      const result = await run(ctx, {
+        op: 'omCreateReflectionGeneration',
+        currentRecord: snapshotOf(headDoc()),
+        newId: 'g1-again',
+        reflection: 'reflected',
+        tokenCount: 4,
+        now: NOW,
+      });
+
+      expect(inserted).toHaveLength(0);
+      expect(result.result.id).toBe('g1');
+    });
+
+    it('returns null and creates nothing when the target is missing', async () => {
+      const { ctx, inserted } = createFakeOMDb([]);
+
+      const result = await run(ctx, {
+        op: 'omCreateReflectionGeneration',
+        currentRecord: snapshotOf(headDoc()),
+        newId: 'g1',
+        reflection: 'reflected',
+        tokenCount: 4,
+        now: NOW,
+      });
+
+      expect(inserted).toHaveLength(0);
+      expect(result.result).toBeNull();
+    });
+
+    it('per-mutation liveness check vs rollover leaves exactly one live row, the canonical head', async () => {
+      const { ctx, docs } = createFakeOMDb([
+        headDoc(),
+        storedOMDoc({ id: 'g0-dup', createdAt: '2026-06-05T00:00:00.000Z' }),
+      ]);
+
+      await run(ctx, { op: 'omSetPendingMessageTokens', id: 'g0-dup', tokenCount: 3, updatedAt: NOW });
+      await run(ctx, {
+        op: 'omCreateReflectionGeneration',
+        currentRecord: snapshotOf(headDoc()),
+        newId: 'g1',
+        reflection: 'reflected',
+        tokenCount: 4,
+        now: NOW,
+      });
+
+      expect(docs.filter(doc => !doc.supersededBy).map(doc => doc.id)).toEqual(['g1']);
+      expect(byId(docs, 'g0-dup').supersededBy).toBe('g0');
+      // The counter write was redirected to the head (and carried into g1).
+      expect(byId(docs, 'g1').pendingMessageTokens).toBe(3);
+    });
+  });
+
+  it('omSwapBufferedReflection checks liveness before the no-buffered-reflection throw', async () => {
+    const { ctx, inserted } = createFakeOMDb([
+      storedOMDoc({ id: 'g0', supersededBy: 'g1', bufferedReflection: null }),
+      storedOMDoc({ id: 'g1', generationCount: 1 }),
+    ]);
+
+    const result = await run(ctx, {
+      op: 'omSwapBufferedReflection',
+      currentRecord: snapshotOf(storedOMDoc({ id: 'g0' })),
+      newId: 'g1-again',
+      tokenCount: 1,
+      now: NOW,
+    });
+
+    expect(inserted).toHaveLength(0);
+    expect(result.result.id).toBe('g1');
+  });
+
+  it('omSwapBufferedReflection moves chunks and keeps observations appended after the snapshot', async () => {
+    const chunk = serializedChunk({ id: 'c-1', cycleId: 'cycle-1' });
+    const stored = storedOMDoc({
+      id: 'g0',
+      activeObservations: 'l1\nl2\n\n--- message boundary (t) ---\n\nnew fact',
+      observationTokenCount: 30,
+      bufferedReflection: 'R',
+      reflectedObservationLineCount: 2,
+      bufferedObservationChunks: JSON.stringify([chunk]),
+    });
+    const { ctx, docs } = createFakeOMDb([stored]);
+
+    const result = await run(ctx, {
+      op: 'omSwapBufferedReflection',
+      currentRecord: snapshotOf({ ...stored, activeObservations: 'l1\nl2', observationTokenCount: 20 }),
+      newId: 'g1',
+      tokenCount: 5,
+      now: NOW,
+    });
+
+    expect(result.result.activeObservations).toContain('new fact');
+    expect(result.result.observationTokenCount).toBe(15);
+    expect(parseStoredChunks(byId(docs, 'g1').bufferedObservationChunks)).toEqual([chunk]);
+    expect(byId(docs, 'g0')).toMatchObject({
+      supersededBy: 'g1',
+      bufferedObservationChunks: null,
+      bufferedReflection: null,
+    });
+  });
+
+  describe('omAppendBufferedChunk', () => {
+    it('redirects an append aimed at a retired generation to the head', async () => {
+      const { ctx, docs } = createFakeOMDb([
+        storedOMDoc({ id: 'g0', supersededBy: 'g1' }),
+        storedOMDoc({ id: 'g1', generationCount: 1 }),
+      ]);
+
+      const result = await run(ctx, {
+        op: 'omAppendBufferedChunk',
+        id: 'g0',
+        chunk: serializedChunk(),
+        lastBufferedAtTime: NOW,
+        updatedAt: NOW,
+      });
+
+      expect(result.result).toEqual({ persisted: true, recordId: 'g1' });
+      expect(parseStoredChunks(byId(docs, 'g1').bufferedObservationChunks)).toHaveLength(1);
+      expect(byId(docs, 'g0').bufferedObservationChunks).toBeUndefined();
+    });
+
+    it('skips a retried append with the same cycleId', async () => {
+      const chunk = serializedChunk();
+      const { ctx, docs } = createFakeOMDb([storedOMDoc({ bufferedObservationChunks: JSON.stringify([chunk]) })]);
+
+      const result = await run(ctx, {
+        op: 'omAppendBufferedChunk',
+        id: 'om-1',
+        chunk: { ...chunk, id: 'retry' },
+        updatedAt: NOW,
+      });
+
+      expect(result.result).toEqual({ persisted: false, recordId: 'om-1' });
+      expect(parseStoredChunks(docs[0]!.bufferedObservationChunks)).toHaveLength(1);
+    });
+
+    it('skips a chunk the cursor wholly covers (cursor T, chunk T+1ms) but stores one past it (chunk T+2ms)', async () => {
+      const cursor = '2026-06-01T01:00:00.000Z';
+      const { ctx, docs } = createFakeOMDb([storedOMDoc({ lastObservedAt: cursor })]);
+
+      const covered = await run(ctx, {
+        op: 'omAppendBufferedChunk',
+        id: 'om-1',
+        chunk: serializedChunk({ cycleId: 'c-covered', lastObservedAt: '2026-06-01T01:00:00.001Z' }),
+        updatedAt: NOW,
+      });
+      const uncovered = await run(ctx, {
+        op: 'omAppendBufferedChunk',
+        id: 'om-1',
+        chunk: serializedChunk({ cycleId: 'c-new', lastObservedAt: '2026-06-01T01:00:00.002Z' }),
+        updatedAt: NOW,
+      });
+
+      expect(covered.result.persisted).toBe(false);
+      expect(uncovered.result.persisted).toBe(true);
+      expect(parseStoredChunks(docs[0]!.bufferedObservationChunks).map(c => c.cycleId)).toEqual(['c-new']);
+    });
+
+    it('never moves lastBufferedAtTime backward', async () => {
+      const { ctx, docs } = createFakeOMDb([storedOMDoc({ lastBufferedAtTime: '2026-06-05T00:00:00.000Z' })]);
+
+      await run(ctx, {
+        op: 'omAppendBufferedChunk',
+        id: 'om-1',
+        chunk: serializedChunk(),
+        lastBufferedAtTime: '2026-06-04T00:00:00.000Z',
+        updatedAt: NOW,
+      });
+
+      expect(docs[0]!.lastBufferedAtTime).toBe('2026-06-05T00:00:00.000Z');
+    });
+
+    it('throws for a missing record', async () => {
+      const { ctx } = createFakeOMDb([]);
+      await expect(
+        run(ctx, { op: 'omAppendBufferedChunk', id: 'missing', chunk: serializedChunk(), updatedAt: NOW }),
+      ).rejects.toThrow('Observational memory record not found: missing');
+    });
+  });
+
+  describe('omSwapBuffered', () => {
+    it('writes nothing on a retired generation and reports retired', async () => {
+      const { ctx, db } = createFakeOMDb([
+        storedOMDoc({ id: 'g0', supersededBy: 'g1', bufferedObservationChunks: JSON.stringify([serializedChunk()]) }),
+        storedOMDoc({ id: 'g1', generationCount: 1 }),
+      ]);
+
+      const result = await run(ctx, {
+        op: 'omSwapBuffered',
+        id: 'g0',
+        activationRatio: 1,
+        messageTokensThreshold: 1000,
+        currentPendingTokens: 1000,
+        now: NOW,
+      });
+
+      expect(result.result).toMatchObject({ chunksActivated: 0, retired: true });
+      expect(db.patch).not.toHaveBeenCalled();
+    });
+
+    it('keeps a chunk appended after the caller read the record', async () => {
+      const chunkA = serializedChunk({ id: 'c-a', cycleId: 'a', messageTokens: 1000 });
+      const chunkB = serializedChunk({
+        id: 'c-b',
+        cycleId: 'b',
+        messageTokens: 1000,
+        lastObservedAt: '2026-06-01T02:00:00.000Z',
+      });
+      const { ctx, docs } = createFakeOMDb([
+        storedOMDoc({ bufferedObservationChunks: JSON.stringify([chunkA, chunkB]) }),
+      ]);
+
+      // The caller only saw chunk A (with a refreshed weight).
+      const result = await run(ctx, {
+        op: 'omSwapBuffered',
+        id: 'om-1',
+        activationRatio: 1,
+        messageTokensThreshold: 1000,
+        currentPendingTokens: 1000,
+        bufferedChunks: [{ ...chunkA, messageTokens: 900 }],
+        now: NOW,
+      });
+
+      expect(result.result.activatedCycleIds).toEqual(['a']);
+      // The remaining chunk is the stored one, unmodified.
+      expect(parseStoredChunks(docs[0]!.bufferedObservationChunks)).toEqual([chunkB]);
+    });
+
+    it('never moves the cursor backward', async () => {
+      const { ctx, docs } = createFakeOMDb([
+        storedOMDoc({
+          lastObservedAt: '2026-06-03T00:00:00.000Z',
+          bufferedObservationChunks: JSON.stringify([serializedChunk({ lastObservedAt: '2026-06-01T01:00:00.000Z' })]),
+        }),
+      ]);
+
+      await run(ctx, {
+        op: 'omSwapBuffered',
+        id: 'om-1',
+        activationRatio: 1,
+        messageTokensThreshold: 1000,
+        currentPendingTokens: 1000,
+        now: NOW,
+      });
+
+      expect(docs[0]!.lastObservedAt).toBe('2026-06-03T00:00:00.000Z');
+    });
+  });
+
+  describe('omUpdateActive', () => {
+    it('rejects a commit built from stale text without writing', async () => {
+      const { ctx, db } = createFakeOMDb([storedOMDoc({ activeObservations: 'current' })]);
+
+      const result = await run(ctx, {
+        op: 'omUpdateActive',
+        id: 'om-1',
+        observations: 'stale + new',
+        tokenCount: 1,
+        lastObservedAt: NOW,
+        observedMessageIds: null,
+        updatedAt: NOW,
+        expectedActiveObservations: 'stale',
+      });
+
+      expect(result.result).toEqual({ applied: false, reason: 'conflict' });
+      expect(db.patch).not.toHaveBeenCalled();
+    });
+
+    it('never moves the cursor backward', async () => {
+      const { ctx, docs } = createFakeOMDb([storedOMDoc({ lastObservedAt: '2026-06-03T00:00:00.000Z' })]);
+
+      await run(ctx, {
+        op: 'omUpdateActive',
+        id: 'om-1',
+        observations: 'x',
+        tokenCount: 1,
+        lastObservedAt: '2026-06-02T00:00:00.000Z',
+        observedMessageIds: null,
+        updatedAt: NOW,
+        expectedActiveObservations: '',
+      });
+
+      expect(docs[0]).toMatchObject({ activeObservations: 'x', lastObservedAt: '2026-06-03T00:00:00.000Z' });
+    });
+  });
+
+  it('flag and counter writes aimed at a retired generation land on the head', async () => {
+    const { ctx, docs } = createFakeOMDb([
+      storedOMDoc({ id: 'g0', supersededBy: 'g1' }),
+      storedOMDoc({ id: 'g1', generationCount: 1 }),
+    ]);
+
+    await run(ctx, { op: 'omSetPendingMessageTokens', id: 'g0', tokenCount: 42, updatedAt: NOW });
+    await run(ctx, {
+      op: 'omSetBufferingObservationFlag',
+      id: 'g0',
+      isBuffering: true,
+      lastBufferedAtTokens: 7,
+      updatedAt: NOW,
+    });
+
+    expect(byId(docs, 'g1')).toMatchObject({
+      pendingMessageTokens: 42,
+      isBufferingObservation: true,
+      lastBufferedAtTokens: 7,
+    });
+    expect(byId(docs, 'g0')).toMatchObject({ pendingMessageTokens: 0, isBufferingObservation: false });
   });
 });

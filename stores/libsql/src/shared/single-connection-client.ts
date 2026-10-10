@@ -18,7 +18,7 @@ export function isSingleConnectionDatabase({ url, syncUrl }: { url: string; sync
  * transactions rather than failing with `TRANSACTION_ACTIVE`.
  *
  * `transaction()` takes the gate and releases it when the transaction commits,
- * rolls back, or closes. `execute`, `batch`, `executeMultiple`, and `migrate`
+ * rolls back, or closes. `execute`, `batch`, `executeMultiple`, `migrate`, and `sync`
  * wait for the gate to be free before running but do not hold it — the driver
  * executes them synchronously on the connection, so they cannot interleave
  * with each other. Every other member passes through untouched.
@@ -89,6 +89,7 @@ export function gateSingleConnectionClient(client: Client): Client {
         case 'batch':
         case 'executeMultiple':
         case 'migrate':
+        case 'sync':
           return (...args: unknown[]) =>
             waitForGate(() => (target[prop] as (...a: unknown[]) => Promise<unknown>).apply(target, args));
         default: {

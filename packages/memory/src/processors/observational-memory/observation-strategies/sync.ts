@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
+import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { omDebug } from '../debug';
 import {
@@ -17,10 +18,11 @@ import { getLastObservedMessageCursor } from '../message-utils';
 
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
+import { getLineageHead } from '../record-lineage';
 import { ObservationStrategy } from './base';
 import type { StrategyDeps } from './base';
 import { resolveThreadTitleUpdate } from './thread-title';
-import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
+import type { ObservationPersistOutcome, ObservationRunOpts, ObserverOutput, ProcessedObservation } from './types';
 
 export class SyncObservationStrategy extends ObservationStrategy {
   private readonly startedAt = new Date().toISOString();
@@ -29,10 +31,16 @@ export class SyncObservationStrategy extends ObservationStrategy {
   private tokensToObserve = 0;
   private observerResult!: ObserverOutput;
   private priorExtractedValues?: Record<string, unknown>;
+  /** Head text the processed observations were composed from (the commit's expected text). */
+  private composedFrom = '';
 
   constructor(deps: StrategyDeps, opts: ObservationRunOpts) {
     super(deps, opts);
     this.lastMessage = opts.messages[opts.messages.length - 1];
+  }
+
+  protected override getObservedMessagesForThread(threadId: string) {
+    return threadId === this.opts.threadId ? this.opts.messages : undefined;
   }
 
   get needsLock() {
@@ -156,6 +164,35 @@ export class SyncObservationStrategy extends ObservationStrategy {
   async process(output: ObserverOutput, existingObservations: string): Promise<ProcessedObservation> {
     const { record, threadId, messages } = this.opts;
 
+    this.composedFrom = existingObservations;
+    const processed = await this.compose(output, existingObservations, record);
+
+    this.deps.emitDebugEvent({
+      type: 'observation_complete',
+      timestamp: new Date(),
+      threadId,
+      resourceId: record.resourceId ?? '',
+      observations: processed.observations,
+      rawObserverOutput: output.observations,
+      previousObservations: record.activeObservations,
+      messages: messages.map(m => ({
+        role: m.role,
+        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
+      })),
+      usage: output.usage,
+    });
+
+    return processed;
+  }
+
+  /** Build the observations to commit on top of `existingObservations` (the head text). */
+  private async compose(
+    output: ObserverOutput,
+    existingObservations: string,
+    baseRecord: ObservationalMemoryRecord,
+  ): Promise<ProcessedObservation> {
+    const { threadId, messages } = this.opts;
+
     const lastObservedAt = this.getMaxMessageTimestamp(messages);
     const messageRange = this.retrieval ? buildMessageRange(messages) : undefined;
     const newObservations = await this.wrapObservations(
@@ -169,23 +206,8 @@ export class SyncObservationStrategy extends ObservationStrategy {
     const cycleObservationTokens = this.tokenCounter.countObservations(output.observations);
 
     const newMessageIds = messages.map(m => m.id);
-    const existingIds = record.observedMessageIds ?? [];
+    const existingIds = baseRecord.observedMessageIds ?? [];
     const observedMessageIds = [...new Set([...(Array.isArray(existingIds) ? existingIds : []), ...newMessageIds])];
-
-    this.deps.emitDebugEvent({
-      type: 'observation_complete',
-      timestamp: new Date(),
-      threadId,
-      resourceId: record.resourceId ?? '',
-      observations: newObservations,
-      rawObserverOutput: output.observations,
-      previousObservations: record.activeObservations,
-      messages: messages.map(m => ({
-        role: m.role,
-        content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content),
-      })),
-      usage: output.usage,
-    });
 
     return {
       observations: newObservations,
@@ -202,25 +224,39 @@ export class SyncObservationStrategy extends ObservationStrategy {
     };
   }
 
-  async persist(processed: ProcessedObservation): Promise<boolean> {
+  async persist(processed: ProcessedObservation): Promise<ObservationPersistOutcome | void> {
     const { record, threadId, resourceId, messages } = this.opts;
 
-    const thread = await this.storage.getThreadById({ threadId });
-
-    // `Memory.deleteThread` clears the observational-memory record along with the
-    // thread, so a cycle that finishes after the delete would persist into a removed
-    // row and index vectors that the already-finished cleanup will never delete.
+    // `Memory.deleteThread` and `om.clear` delete the record, so a cycle that finishes
+    // afterwards must not persist: not into a removed row (indexing vectors the finished
+    // cleanup will never delete), and not into a record created for the thread since.
     // Keying off the record rather than the thread row matters: `observe()` is a
     // public entry point that legitimately runs for a thread that was never
     // persisted, in which case `getOrCreateRecord` has already created the record.
-    const liveRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+    const liveRecord = await getLineageHead(this.storage, record);
     if (!liveRecord) {
       omDebug(`[OM:sync-obs] skipping persist for thread ${threadId}: observational memory record is gone`);
-      return false;
+      return { status: 'not-committed', reason: 'the observational memory record was cleared' };
     }
 
-    let threadUpdateMarker: ReturnType<typeof createThreadUpdateMarker> | undefined;
+    // Commit first. The thread cursor and the completion marker below are what remove the
+    // observed messages from the live context, so they may only follow a commit that landed
+    // on the head generation.
+    const committed = await this.commitActiveObservationsToHead({
+      processed,
+      composedFrom: this.composedFrom,
+      target: liveRecord,
+      recompose: head => this.compose(this.observerResult, head.activeObservations ?? '', head),
+      cycleMessageIds: messages.map(m => m.id),
+    });
+    if (!committed) {
+      return { status: 'not-committed', reason: 'the observational memory head kept changing during the commit' };
+    }
+    processed = committed.processed;
 
+    // A covered cycle wrote nothing; the instance that did commit owns the thread's title,
+    // task, and cursor metadata, so this cycle's output must not overwrite them.
+    const thread = committed.alreadyCovered ? null : await this.storage.getThreadById({ threadId });
     if (thread) {
       const oldTitle = thread.title?.trim();
       const newTitle = resolveThreadTitleUpdate(thread, processed.threadTitle);
@@ -247,35 +283,28 @@ export class SyncObservationStrategy extends ObservationStrategy {
       });
 
       if (shouldUpdateThreadTitle) {
-        threadUpdateMarker = createThreadUpdateMarker({
-          cycleId: this.cycleId ?? crypto.randomUUID(),
-          threadId,
-          oldTitle,
-          newTitle,
-        });
+        await this.streamMarker(
+          createThreadUpdateMarker({
+            cycleId: this.cycleId ?? crypto.randomUUID(),
+            threadId,
+            oldTitle,
+            newTitle,
+          }),
+        );
       }
     }
 
-    if (threadUpdateMarker) {
-      await this.streamMarker(threadUpdateMarker);
+    if (!committed.alreadyCovered) {
+      await this.indexObservationGroups(
+        processed.observations,
+        threadId,
+        resourceId,
+        processed.lastObservedAt,
+        committed.record.id,
+      );
     }
 
-    await this.storage.updateActiveObservations({
-      id: record.id,
-      observations: processed.observations,
-      tokenCount: processed.observationTokens,
-      lastObservedAt: processed.lastObservedAt,
-      observedMessageIds: processed.observedMessageIds,
-    });
-
-    await this.indexObservationGroups(
-      processed.observations,
-      threadId,
-      resourceId,
-      processed.lastObservedAt,
-      record.id,
-    );
-    return true;
+    return { status: 'committed', processed, record: committed.record, alreadyCovered: committed.alreadyCovered };
   }
 
   async emitEndMarkers(cycleId: string, processed: ProcessedObservation) {

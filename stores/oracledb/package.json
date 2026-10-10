@@ -37,6 +37,7 @@
     "oracledb": "^6.10.0"
   },
   "devDependencies": {
+    "@internal/core": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

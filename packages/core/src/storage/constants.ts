@@ -1,3 +1,4 @@
+import { OBSERVATIONAL_MEMORY_LIFECYCLE_COLUMNS } from '@internal/core/memory';
 import { spanRecordSchema } from './domains/observability';
 import { buildStorageSchema } from './types';
 import type { StorageColumn, StorageTableConfig } from './types';
@@ -558,6 +559,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   originType: { type: 'text', nullable: false }, // 'initialization', 'observation', or 'reflection'
   config: { type: 'text', nullable: false }, // JSON object
   generationCount: { type: 'integer', nullable: false },
+  supersededBy: OBSERVATIONAL_MEMORY_LIFECYCLE_COLUMNS.supersededBy,
   lastObservedAt: { type: 'timestamp', nullable: true },
   lastReflectionAt: { type: 'timestamp', nullable: true },
   pendingMessageTokens: { type: 'integer', nullable: false }, // Token count
