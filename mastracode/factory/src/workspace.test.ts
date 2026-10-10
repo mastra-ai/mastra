@@ -3079,6 +3079,59 @@ describe('FactorySkillSource layering', () => {
     expect((await source.stat(reviewSkill)).type).toBe('file');
   });
 
+  describe('repository skill roots', () => {
+    const repoRoot = path.resolve('/repo/.claude/skills');
+    const repoFallback = (names: string[]) =>
+      ({
+        ...fallbackStub,
+        readdir: async () => names.map(name => ({ name, type: 'directory' as const })),
+      }) as any;
+
+    it('hides repository skills named after bundled or app-local Factory skills', async () => {
+      const localRoot = await makeLocalRoot({ 'my-app-skill': '---\ndescription: app\n---\n# App Skill\n' });
+      await fs.writeFile(path.join(localRoot, 'README.md'), 'not a skill');
+      const source = new FactorySkillSource(
+        repoFallback(['my-app-skill', 'factory-plan', 'repo-only-skill', 'README.md']),
+        [repoRoot],
+        localRoot,
+      );
+
+      const names = (await source.readdir(repoRoot)).map(entry => entry.name);
+      // README.md is a file in the local root, so it reserves nothing.
+      expect(names).toEqual(['repo-only-skill', 'README.md']);
+    });
+
+    it('picks up app-local skills added after the source was created', async () => {
+      const localRoot = await makeLocalRoot({});
+      const source = new FactorySkillSource(repoFallback(['late-skill']), [repoRoot], localRoot);
+      expect((await source.readdir(repoRoot)).map(entry => entry.name)).toEqual(['late-skill']);
+
+      await fs.mkdir(path.join(localRoot, 'late-skill'));
+      await fs.writeFile(path.join(localRoot, 'late-skill', 'SKILL.md'), '# Late\n');
+      expect(await source.readdir(repoRoot)).toEqual([]);
+    });
+
+    it('does not filter paths that are not registered skill roots', async () => {
+      const localRoot = await makeLocalRoot({ 'my-app-skill': '# App\n' });
+      const source = new FactorySkillSource(repoFallback(['my-app-skill', 'factory-plan']), [repoRoot], localRoot);
+      const names = (await source.readdir(path.join(repoRoot, 'nested'))).map(entry => entry.name);
+      expect(names).toEqual(['my-app-skill', 'factory-plan']);
+    });
+
+    it('reserves only bundled names without a usable local root', async () => {
+      const names = ['factory-triage', 'my-app-skill'];
+      const noLocal = new FactorySkillSource(repoFallback(names), [repoRoot], undefined);
+      expect((await noLocal.readdir(repoRoot)).map(entry => entry.name)).toEqual(['my-app-skill']);
+
+      const missingLocal = new FactorySkillSource(
+        repoFallback(names),
+        [repoRoot],
+        path.join(os.tmpdir(), 'factory-missing-local-root-does-not-exist'),
+      );
+      expect((await missingLocal.readdir(repoRoot)).map(entry => entry.name)).toEqual(['my-app-skill']);
+    });
+  });
+
   it('resolveLocalFactorySkillsPath handles the dev-server cwd variants', async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'factory-local-cwd-'));
     const skillsDir = path.join(tmpDir, 'src', 'mastra', 'public', 'factory-skills');

@@ -384,7 +384,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     description:
       'Boot-time recovery behavior for orphaned agent and workflow runs. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).',
     isOptional: true,
-    defaultValue: "{ durableAgents: 'off' }",
+    defaultValue: "{ durableAgents: 'off', workflows: 'auto', workflowConcurrency: 5 }",
     properties: [
       {
         type: 'object',
@@ -396,6 +396,22 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             defaultValue: "'off'",
             description:
               "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. This also controls the default snapshot-persistence policy for durable agents: `running` checkpoints are only written when set to `'auto'` (or when an agent sets a custom `shouldPersistSnapshot` that includes `running`). Recovery re-issues LLM calls and re-executes tool calls, so tools must be idempotent. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).",
+          },
+          {
+            name: 'workflows',
+            type: "'auto' | 'off'",
+            isOptional: true,
+            defaultValue: "'auto'",
+            description:
+              "Set to `'off'` to skip restarting active workflow runs on server boot. Individual workflows can also opt out with `autoRestartActiveRuns: false`.",
+          },
+          {
+            name: 'workflowConcurrency',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '5',
+            description:
+              'Maximum number of workflow runs restarted at the same time during boot recovery. Use `Infinity` for no limit. Workflow and durable agent recovery run in parallel.',
           },
         ],
       },

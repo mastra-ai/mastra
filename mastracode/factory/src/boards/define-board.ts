@@ -105,6 +105,12 @@ export interface BoardTransition<PhaseId extends string> {
   readonly to: PhaseId;
 }
 
+/**
+ * Terminal phases a card moves to when its tracked source (issue or follow-up) closes.
+ * `completed` is used when the source was completed, `canceled` when it was canceled or not planned.
+ */
+export type BoardSourceClosed<PhaseId extends string> = Readonly<{ completed: PhaseId; canceled: PhaseId }>;
+
 export interface BoardDefinition<BoardId extends string, PhaseId extends string> {
   readonly id: BoardId;
   readonly title: string;
@@ -117,6 +123,8 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   /** Integration event handlers for cards on this board; empty when the board declares none. */
   readonly events: BoardEventRules;
   readonly transitionPolicy?: BoardTransitionPolicy;
+  /** Where source-closed rules move a card; absent when the board opts out of auto-closing. */
+  readonly sourceClosed?: BoardSourceClosed<PhaseId>;
   allowsTransition(from: PhaseId, to: PhaseId): boolean;
   /** Declared kind of a phase, or undefined when the board has no such phase. */
   phaseKind(phase: string): BoardPhaseKind | undefined;
@@ -136,6 +144,7 @@ type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhas
   tools?: Record<string, BoardToolRule>;
   events?: BoardEventRules;
   transitionPolicy?: BoardTransitionPolicy;
+  sourceClosed?: { completed: keyof Phases & string; canceled: keyof Phases & string };
 };
 
 export class BoardDefinitionError extends Error {
@@ -187,6 +196,25 @@ function validateToolRules(tools: unknown): BoardToolRules {
     frozen[toolName] = Object.freeze({ onResult: leaf.onResult as BoardToolResultRuleHandler });
   }
   return Object.freeze(frozen);
+}
+
+function validateSourceClosed(
+  sourceClosed: unknown,
+  phases: Readonly<Record<string, BoardPhaseDefinition<string>>>,
+): BoardSourceClosed<string> | undefined {
+  if (sourceClosed === undefined) return undefined;
+  if (!isPlainObject(sourceClosed)) throw new BoardDefinitionError('Board sourceClosed must be a plain object.');
+  const keys = Object.keys(sourceClosed);
+  if (keys.length !== 2 || !keys.includes('completed') || !keys.includes('canceled')) {
+    throw new BoardDefinitionError('Board sourceClosed must declare exactly completed and canceled.');
+  }
+  for (const key of ['completed', 'canceled'] as const) {
+    const phase = sourceClosed[key];
+    if (typeof phase !== 'string' || !Object.hasOwn(phases, phase) || phases[phase]!.kind !== 'terminal') {
+      throw new BoardDefinitionError(`Board sourceClosed.${key} "${String(phase)}" must name a terminal phase.`);
+    }
+  }
+  return Object.freeze({ completed: sourceClosed.completed as string, canceled: sourceClosed.canceled as string });
 }
 
 function validateEventRules(events: unknown): BoardEventRules {
@@ -241,6 +269,8 @@ export function defineBoard<
   if (config.phases[config.initialPhase]!.kind !== 'resting') {
     throw new BoardDefinitionError(`Initial phase "${config.initialPhase}" must be a resting phase.`);
   }
+  const sourceClosed = validateSourceClosed(config.sourceClosed, config.phases) as
+    BoardSourceClosed<PhaseId> | undefined;
 
   const transitions = Object.fromEntries(
     Object.entries(config.phases).map(([phaseId, phase]) => {
@@ -325,6 +355,7 @@ export function defineBoard<
     tools,
     events,
     ...(config.transitionPolicy ? { transitionPolicy: config.transitionPolicy } : {}),
+    ...(sourceClosed ? { sourceClosed } : {}),
     allowsTransition(from: PhaseId, to: PhaseId) {
       return from === to || transitions[from]?.some(transition => transition.to === to) === true;
     },

@@ -1,4 +1,10 @@
-import { boardEventHandlers, boardForWorkItem, eventBoardId, rulePhaseField } from '../../boards/index.js';
+import {
+  boardEventHandlers,
+  boardForWorkItem,
+  eventBoardId,
+  rulePhaseField,
+  withBoardClosure,
+} from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { selectEventRule } from '../../rules/event-rules.js';
 import type {
@@ -17,6 +23,7 @@ import type {
 import { WorkItemUpdateConflictError } from '../../storage/domains/work-items/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GitLabEventRules } from './default-rules.js';
 import { encodeIssueReference, encodeSourceId, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
@@ -392,7 +399,33 @@ export class GitLabRules {
         mergeRequestIid,
         eventAt: timestamp(mergeRequest?.updated_at),
         opened: string(mergeRequest?.state) === 'opened' && (actorTrusted || mergeRequestAuthorTrusted),
+        headSha: string(object(mergeRequest?.last_commit)?.id)?.toLowerCase(),
       });
+    }
+    // A push moves the head a recorded review verdict was given on. Recording
+    // the new head lets the verdict badge show that it is outdated, while the
+    // verdict itself stays so the next pass still runs as a re-review.
+    const headSha = string(object(mergeRequest?.last_commit)?.id)?.toLowerCase();
+    const headAt = timestamp(mergeRequest?.updated_at);
+    if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
+      const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
+      // The authoring Work item mirrors the verdict of the merge request it has
+      // out; a push to an older one must not mark its successor's verdict.
+      await recordPullRequestHead(this.options.storage, {
+        orgId: reviewItem.orgId,
+        id: reviewItem.id,
+        headSha,
+        headAt,
+      });
+      if (parent) {
+        await recordPullRequestHead(this.options.storage, {
+          orgId: parent.orgId,
+          id: parent.id,
+          headSha,
+          headAt,
+          ownedPullRequestNumber: mergeRequestIid,
+        });
+      }
     }
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
@@ -412,6 +445,7 @@ export class GitLabRules {
     mergeRequestIid: number;
     eventAt: number | undefined;
     opened: boolean;
+    headSha: string | undefined;
   }): Promise<void> {
     const settling = input.event === 'mergeRequestMerged' || input.event === 'mergeRequestClosed';
     if (input.event !== 'mergeRequestOpened' && !settling) return;
@@ -430,8 +464,16 @@ export class GitLabRules {
       const patch: Record<string, unknown> = {
         mergeRequestEvents: { ...events, [key]: { at: input.eventAt ?? lastAt ?? null, open: !settling } },
       };
-      if (!settling) patch.openPullRequestNumber = input.mergeRequestIid;
-      else if (recorded === input.mergeRequestIid) {
+      if (!settling) {
+        // A head recorded for an earlier merge request must not mark this one's
+        // verdict outdated. A replayed opening of the merge request already
+        // recorded keeps the head its pushes left.
+        if (recorded !== input.mergeRequestIid) {
+          patch.pullRequestHeadSha = input.headSha ?? null;
+          patch.pullRequestHeadAt = input.eventAt ?? null;
+        }
+        patch.openPullRequestNumber = input.mergeRequestIid;
+      } else if (recorded === input.mergeRequestIid) {
         patch.openPullRequestNumber = null;
         if (input.event === 'mergeRequestMerged' && typeof item.metadata?.reviewVerdict === 'string') {
           patch.reviewVerdict = null;
@@ -523,6 +565,7 @@ export class GitLabRules {
             },
             board: boardForWorkItem(input.item),
             itemRevision: input.item.revision,
+            ...withBoardClosure(this.options.boards, input.item),
             ...rulePhaseField(this.options.boards, input.item),
           }
         : {}),

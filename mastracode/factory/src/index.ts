@@ -12,6 +12,7 @@ export type {
   BoardEventRules,
   BoardPhaseDefinition,
   BoardRegistry,
+  BoardSourceClosed,
   BoardTransition,
   BoardTransitionPolicy,
   BoardTransitionPolicyContext,
