@@ -674,6 +674,8 @@ export class DurableAgent<
 
   /** Active streamUntilIdle wrappers keyed by scope (threadId|resourceId) */
   #activeStreamUntilIdle = new Map<string, () => void>();
+  /** The stream segment (stream() or resume()) that currently owns each run id's shared state. */
+  #segmentOwner = new Map<string, symbol>();
 
   /** Timeout for auto-cleanup after stream finishes (0 = disabled) */
   readonly #cleanupTimeoutMs: number;
@@ -2493,6 +2495,8 @@ export class DurableAgent<
     // 2. Register non-serializable state (both local and global registries)
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
     globalRunRegistry.set(runId, { ...registryEntry, messageList });
+    const segment = Symbol(runId);
+    this.#segmentOwner.set(runId, segment);
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
@@ -2516,9 +2520,14 @@ export class DurableAgent<
 
       agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
       streamCleanup?.();
-      this.#runRegistry.cleanup(runId);
-      globalRunRegistry.delete(runId);
-      this.#clearPubsubTopic(runId);
+      // A deferred cleanup must not tear down a newer segment (e.g. resume())
+      // registered under the same run id.
+      if (this.#segmentOwner.get(runId) === segment) {
+        this.#segmentOwner.delete(runId);
+        this.#runRegistry.cleanup(runId);
+        globalRunRegistry.delete(runId);
+        this.#clearPubsubTopic(runId);
+      }
       cleanedUp = true;
     };
 
@@ -2645,7 +2654,18 @@ export class DurableAgent<
 
     // 5. Cleanup function — routes through the shared performCleanup() so the
     // explicit call and the auto-cleanup timer release the same resources.
-    const cleanup = performCleanup;
+    // A cleanup() that arrives before the output settles waits for the run's
+    // terminal event, including an error event still being published in the
+    // background. Tearing down the reader first would drop it, leaving the
+    // output unsettled and the thread busy forever (#25974).
+    const cleanup = () => {
+      if (cleanedUp || output.status !== 'running') return performCleanup();
+      void workflowExecution
+        .then(() => this.pubsub.flush())
+        .then(() => waitForEventDelivery())
+        .catch(() => {})
+        .finally(performCleanup);
+    };
 
     const abort = async (reason?: unknown) => {
       if (!abortController.signal.aborted) {
@@ -2903,6 +2923,9 @@ export class DurableAgent<
       globalEntryForAbort.abortSignal = entry.abortSignal;
     }
 
+    const segment = Symbol(runId);
+    this.#segmentOwner.set(runId, segment);
+
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
     let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2924,9 +2947,12 @@ export class DurableAgent<
 
       agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
       streamCleanup?.();
-      this.#runRegistry.cleanup(runId);
-      globalRunRegistry.delete(runId);
-      this.#clearPubsubTopic(runId);
+      if (this.#segmentOwner.get(runId) === segment) {
+        this.#segmentOwner.delete(runId);
+        this.#runRegistry.cleanup(runId);
+        globalRunRegistry.delete(runId);
+        this.#clearPubsubTopic(runId);
+      }
       cleanedUp = true;
     };
 
@@ -2944,12 +2970,25 @@ export class DurableAgent<
     await priorExecution?.catch(() => {
       /* errors already handled by the prior segment */
     });
-    const initialToolCalls = await this.#loadSuspendedToolCalls(runId);
-
-    // Skip events already broadcast by the original run (e.g. the SUSPENDED
-    // chunk that paused it). Without this, a resume that closes on suspend
-    // (resumeGenerate) would immediately close on the replayed SUSPENDED.
-    const resumeOffset = await this.#getPubsubOffset(runId);
+    let initialToolCalls: ToolCallChunk[];
+    let resumeOffset: number | 'latest';
+    try {
+      initialToolCalls = await this.#loadSuspendedToolCalls(runId);
+      // Skip events already broadcast by the original run (e.g. the SUSPENDED
+      // chunk that paused it). Without this, a resume that closes on suspend
+      // (resumeGenerate) would immediately close on the replayed SUSPENDED.
+      resumeOffset = await this.#getPubsubOffset(runId);
+    } catch (error) {
+      // The caller gets no cleanup handle and the prior segment no longer owns
+      // the run, so release what this segment claimed before rethrowing.
+      if (this.#segmentOwner.get(runId) === segment) {
+        this.#segmentOwner.delete(runId);
+        this.#runRegistry.cleanup(runId);
+        globalRunRegistry.delete(runId);
+        this.#clearPubsubTopic(runId);
+      }
+      throw error;
+    }
 
     // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
     // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume

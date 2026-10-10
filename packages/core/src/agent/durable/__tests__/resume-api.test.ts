@@ -1206,7 +1206,7 @@ describe('Resume State Preservation', () => {
 
     // Cleanup should remove from registry
     cleanup();
-    expect(durableAgent.runRegistry.has(runId)).toBe(false);
+    await vi.waitFor(() => expect(durableAgent.runRegistry.has(runId)).toBe(false));
   });
 });
 
