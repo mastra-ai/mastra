@@ -212,6 +212,9 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
       },
     } as const;
   }
+  // Custom boards define their own lifecycle and cannot accept a transition
+  // targeting the built-in Work board. Let their custom rules handle the merge.
+  if (context.board !== 'work') return;
   // Provenance bound the event to the originating Work item instead: the merge
   // is what finishes the work, so it closes the Work card alongside its Review card —
   // unless the card has since opened another pull request, which is still out.
