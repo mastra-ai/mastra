@@ -144,7 +144,7 @@ function normalizePublicExecutionOptions(
 ): Record<string, unknown> | undefined {
   if (!options || typeof options !== 'object' || Array.isArray(options)) return undefined;
 
-  const { actor: _actor, requestContext, ...normalized } = options;
+  const { actor: _actor, scopes: _scopes, requestContext, ...normalized } = options;
   stripClientCredentialHeaders(normalized);
   mergeBodyRequestContext(serverRequestContext, requestContext);
   return { ...normalized, requestContext: serverRequestContext };
@@ -1478,7 +1478,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
@@ -1587,7 +1587,7 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
@@ -1658,7 +1658,7 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const { messages, resourceId, resourceid, threadId, ...rest } = params;
@@ -1879,7 +1879,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, versions, ...rest } = params;
@@ -2509,7 +2509,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
     try {
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;
@@ -2736,7 +2736,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       await validateDurableToolCallAccess({
@@ -2819,7 +2819,7 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       }
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
       const normalizedStreamOptions = normalizePublicExecutionOptions(
         params.streamOptions as Record<string, unknown> | undefined,
@@ -2940,7 +2940,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       await validateDurableToolCallAccess({
@@ -2984,7 +2984,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
 
       stripClientCredentialHeaders(params);
 
@@ -3183,7 +3183,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Run id is required' });
       }
 
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
 
       stripClientCredentialHeaders(params);
 
@@ -3319,7 +3319,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       await validateDurableToolCallAccess({
@@ -3373,7 +3373,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       await validateDurableToolCallAccess({
@@ -3420,7 +3420,7 @@ export const STREAM_NETWORK_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       validateBody({ messages });
@@ -3471,7 +3471,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const streamResult = await agent.approveNetworkToolCall({
@@ -3511,7 +3511,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
 
       // UI Frameworks may send "client tools" in the body,
       // but it interferes with llm providers tool handling, so we remove them
-      sanitizeBody(params, ['tools', 'actor']);
+      sanitizeBody(params, ['tools', 'actor', 'scopes']);
       stripClientCredentialHeaders(params);
 
       const streamResult = await agent.declineNetworkToolCall({

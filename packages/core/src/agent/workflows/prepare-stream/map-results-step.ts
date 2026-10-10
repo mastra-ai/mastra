@@ -41,6 +41,7 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   agentSpan?: Span<SpanType.AGENT_RUN>;
   agentId: string;
   agentVersionId?: string;
+  resolvedScopes?: string[];
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
   authorizeMemory: (permission: MastraFGAPermissionInput, threadId: string) => Promise<void>;
@@ -59,6 +60,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   agentSpan,
   agentId,
   agentVersionId,
+  resolvedScopes,
   methodType,
   saveQueueManager,
   authorizeMemory,
@@ -86,6 +88,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       ...options,
       agentId,
       agentVersionId,
+      resolvedScopes,
       tools: convertedTools,
       runId,
       temperature: options.modelSettings?.temperature,
@@ -295,6 +298,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       methodType: modelMethodType,
       agentId,
       agentVersionId,
+      resolvedScopes,
       requestContext: result.requestContext!,
       actor: options.actor,
       mcp: options.mcp,

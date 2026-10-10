@@ -518,6 +518,13 @@ const result = await agent.generate('message for agent')
               '**Deprecated.** Use structuredOutput without a model to achieve the same thing. Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.',
           },
           {
+            name: 'scopes',
+            type: 'string[]',
+            isOptional: true,
+            description:
+              "Scopes the run acts as, written as `<type>:<value>` (for example `org:acme`, `resource:user-123`, `thread:conversation-123`). Memory reads its resource and thread from `resource:` and `thread:` scopes. Other scopes are passed to tools and processors. Combined with the agent's `scopes` and the `mastra__scopes` request context key. Throws if a `resource:` or `thread:` scope conflicts with another resource or thread value.",
+          },
+          {
             name: 'memory',
             type: 'object',
             isOptional: true,

@@ -10,6 +10,11 @@ export const MASTRA_RESOURCE_ID_KEY = 'mastra__resourceId';
 
 export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
+/**
+ * Agent scopes set by trusted middleware. Never accepted from a request body.
+ */
+export const MASTRA_SCOPES_KEY = 'mastra__scopes';
+
 export const MASTRA_USER_KEY = 'mastra__user';
 
 export const MASTRA_USER_PERMISSIONS_KEY = 'mastra__userPermissions';
@@ -54,6 +59,9 @@ export const MASTRA_STUDIO_CLIENT_TYPE = 'studio';
 const RESERVED_CONTEXT_KEYS = new Set([
   MASTRA_RESOURCE_ID_KEY,
   MASTRA_THREAD_ID_KEY,
+  // Agent scopes decide memory identity and what the agent acts as; only
+  // server middleware may set them.
+  MASTRA_SCOPES_KEY,
   MASTRA_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   MASTRA_USER_ROLES_KEY,

@@ -10,9 +10,10 @@
  * - A `buildResult` callback to construct the caller-specific return value
  * - Optional `postPipeInner` hooks for durable-specific cleanup/abort tracking
  */
+import { resolveAgentScopes } from '../../agent/scopes';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { MastraMemory } from '../../memory/memory';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import { deepMerge } from '../../utils';
 
 // ---------------------------------------------------------------------------
@@ -49,12 +50,29 @@ export interface ResolvedScope {
  * falls through to a plain stream in that case.
  */
 export async function resolveScope(
-  agent: { getMemory: (opts?: any) => Promise<MastraMemory | undefined> },
+  agent: {
+    getMemory: (opts?: any) => Promise<MastraMemory | undefined>;
+    getScopes?: (opts?: any) => Promise<string[] | undefined>;
+  },
   mergedOptions: Record<string, any>,
 ): Promise<ResolvedScope | null> {
   const requestContext = (mergedOptions?.requestContext as RequestContext | undefined) ?? new RequestContext();
   const memory = await agent.getMemory({ requestContext });
   if (!memory) return null;
+
+  // With agent scopes, the run's thread/resource come from the same resolver stream() uses.
+  const agentScopes = (await agent.getScopes?.({ requestContext })) ?? [];
+  const callScopes = mergedOptions?.scopes as string[] | undefined;
+  if (agentScopes.length || callScopes?.length || requestContext.has(MASTRA_SCOPES_KEY)) {
+    const { threadId, resourceId } = resolveAgentScopes({
+      requestContext,
+      agentScopes,
+      callScopes,
+      memory: mergedOptions?.memory,
+    });
+    const scopeKey = threadId || resourceId ? `${threadId ?? ''}|${resourceId ?? ''}` : null;
+    return { threadId, resourceId, scopeKey };
+  }
 
   const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
   const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;

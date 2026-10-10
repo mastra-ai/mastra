@@ -8,6 +8,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import {
   MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
   MASTRA_THREAD_ID_KEY,
   MASTRA_VERSIONS_KEY,
   RequestContext,
@@ -1012,6 +1013,100 @@ describe('Agent Routes Authorization', () => {
           requestContext: new RequestContext(),
         } as any),
       ).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
+  describe('agent scopes at the HTTP boundary', () => {
+    const forged = ['org:victim', 'resource:victim', 'thread:victim'];
+
+    function middlewareContext() {
+      return new RequestContext([[MASTRA_SCOPES_KEY, ['org:acme']]]);
+    }
+
+    it('strips body scopes on generate and stream', async () => {
+      const captured: any[] = [];
+      vi.spyOn(mockAgent, 'generate').mockImplementation(async (_messages, options) => {
+        captured.push(options);
+        return { text: 'ok' } as any;
+      });
+      vi.spyOn(mockAgent, 'stream').mockImplementation(async (_messages, options) => {
+        captured.push(options);
+        return { toUIMessageStreamResponse: () => new Response() } as any;
+      });
+
+      for (const route of [GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE]) {
+        const handler = route.handler as any;
+        await handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: middlewareContext(),
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+          scopes: forged,
+        }).catch(() => undefined);
+      }
+
+      const forwarded = captured.filter(Boolean);
+      expect(forwarded.length).toBeGreaterThanOrEqual(2);
+      for (const options of forwarded) {
+        expect(options).not.toHaveProperty('scopes');
+        expect(options.requestContext.get(MASTRA_SCOPES_KEY)).toEqual(['org:acme']);
+      }
+    });
+
+    it('strips scopes from signal and message idle stream options', async () => {
+      const targets: any[] = [];
+      const capture = vi.fn((_input, target) => {
+        targets.push(target);
+        return { accepted: Promise.resolve({ action: 'deliver', runId: 'run-id' }), signal: { id: 'signal-id' } };
+      });
+      (mockAgent as any).sendSignal = capture;
+      (mockAgent as any).sendMessage = capture;
+      (mockAgent as any).queueMessage = capture;
+
+      const ifIdle = { streamOptions: { scopes: forged, requestContext: { [MASTRA_SCOPES_KEY]: forged } } };
+      await (SEND_AGENT_SIGNAL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: middlewareContext(),
+        signal: { type: 'user-message', contents: 'hello' },
+        resourceId: 'user-a',
+        threadId: 'thread-a',
+        scopes: forged,
+        ifIdle,
+      });
+      await (SEND_AGENT_MESSAGE_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: middlewareContext(),
+        message: { contents: 'hello' },
+        resourceId: 'user-a',
+        threadId: 'thread-a',
+        scopes: forged,
+        ifIdle,
+      });
+
+      expect(targets).toHaveLength(2);
+      for (const target of targets) {
+        expect(target).not.toHaveProperty('scopes');
+        expect(target.ifIdle.streamOptions).not.toHaveProperty('scopes');
+        expect(target.ifIdle.streamOptions.requestContext.get(MASTRA_SCOPES_KEY)).toEqual(['org:acme']);
+      }
+    });
+
+    it('maps a scopes conflict to HTTP 400 on generate and stream', async () => {
+      for (const route of [GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE]) {
+        await expect(
+          (route.handler as any)({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['thread:middleware-thread']]]),
+            abortSignal: new AbortController().signal,
+            messages: [{ role: 'user', content: 'test' }],
+            memory: { thread: 'body-thread', resource: 'user-a' },
+          }),
+        ).rejects.toMatchObject({ status: 400 });
+      }
     });
   });
 

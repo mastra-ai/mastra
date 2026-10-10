@@ -295,7 +295,19 @@ requestContext.set(MASTRA_THREAD_ID_KEY, threadId)
 | - | - |
 | `MASTRA_RESOURCE_ID_KEY` | Forces all memory operations to use this resource ID. The server validates that accessed threads belong to this resource and returns 403 if not. |
 | `MASTRA_THREAD_ID_KEY` | Forces thread operations to use this thread ID, overriding client-provided values |
+| `MASTRA_SCOPES_KEY` | Sets the [scopes](/docs/memory/overview#identify-memory-with-scopes) the agent run acts as, as an array of `<type>:<value>` strings. Combined with the agent's `scopes` and per-call `scopes`. A `resource:` or `thread:` scope that conflicts with another resource or thread value returns a 400 error. |
 | `MASTRA_MESSAGE_AUTHOR_KEY` | Names who sent a user message as `{ id, name?, avatarUrl? }`. Agent-controller sessions copy it onto every message the request sends as `providerMetadata.mastra.author`, so a thread shared by several people can show who wrote what. |
+
+Server ownership checks read only `MASTRA_RESOURCE_ID_KEY` and `MASTRA_THREAD_ID_KEY`. If your middleware sets identity through `MASTRA_SCOPES_KEY` and you want those checks, set `MASTRA_RESOURCE_ID_KEY` too:
+
+```typescript
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY } from '@mastra/core/request-context'
+
+requestContext.set(MASTRA_SCOPES_KEY, [`org:${user.orgId}`, `resource:${user.id}`])
+requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
+```
+
+Scopes from the request context and per-call `scopes` need a `@mastra/server` release that reserves them. Older servers pass these values from request bodies through to the agent, so while one is registered, agents throw an `AGENT_SCOPES_SERVER_OUTDATED` error instead of using them. The agent's own `scopes` option still applies.
 
 These keys are used to implement user isolation in multi-tenant applications. See [Authorization middleware](/docs/server/middleware#authorization-user-isolation) for usage examples.
 
