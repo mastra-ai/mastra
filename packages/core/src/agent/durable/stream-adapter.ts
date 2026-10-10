@@ -13,6 +13,7 @@ import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/prod
 import { ChunkFrom } from '../../stream/types';
 import type {
   ChunkType,
+  DataChunkType,
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
   MastraStreamTransformOptions,
@@ -869,7 +870,7 @@ function generationTag(runId: string, generation?: number): { generation?: numbe
 export async function emitChunkEvent<OUTPUT = undefined>(
   pubsub: PubSub,
   runId: string,
-  chunk: ChunkType<OUTPUT>,
+  chunk: ChunkType<OUTPUT> | DataChunkType,
   outputProcessed?: boolean,
 ): Promise<void> {
   const topic = AGENT_STREAM_TOPIC(runId);

@@ -107,7 +107,23 @@ export function createDurableLLMMappingStep() {
           threadId: state.threadId,
           resourceId: state.resourceId,
         })
-      ).deserialize(readMessageListState(params.state, llmOutput));
+      ).deserialize(await readMessageListState(params, llmOutput));
+
+      if (llmOutput.stepResult.signalPreempted) {
+        return {
+          ...(await storeMessageListState(params, messageList.serialize())),
+          messageId,
+          stepResult: llmOutput.stepResult,
+          toolResults: [],
+          output: {
+            text: '',
+            toolCalls: [],
+            usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+            steps: [],
+          },
+          state,
+        } satisfies DurableAgenticExecutionOutput;
+      }
 
       // A declined approval has no `result` but is fully resolved: persist it as `output-denied`
       // with the approval decision (rather than as a successful `result`) so it round-trips on

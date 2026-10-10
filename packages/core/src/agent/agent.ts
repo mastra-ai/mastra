@@ -1230,6 +1230,12 @@ export class Agent<
     return (runId, scope) => agentThreadStreamRuntime.drainPendingSignals(runId, pubsub, scope);
   }
 
+  /** @internal */
+  __getSubscribePendingSignals(): (runId: string, listener: () => void) => () => void {
+    const pubsub = this.getPubSub();
+    return (runId, listener) => agentThreadStreamRuntime.subscribePendingSignals(runId, listener, pubsub);
+  }
+
   /**
    * Registers the agent the shared `AgentThreadStreamRuntime` calls back into
    * for this agent's signal, message, and subscription APIs. The runtime starts
@@ -2572,6 +2578,16 @@ export class Agent<
 
   public hasOwnMemory(): boolean {
     return Boolean(this.#memory);
+  }
+
+  /**
+   * Whether the agent's memory is a fixed instance, so it resolves to the same
+   * store on every call. Function memory and memory inherited from a delegating
+   * agent depend on the request context, which a resume may not repeat.
+   * @internal
+   */
+  __hasFixedMemory(): boolean {
+    return Boolean(this.#memory) && typeof this.#memory !== 'function';
   }
 
   /**
