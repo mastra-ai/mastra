@@ -116,6 +116,7 @@ export class WorkflowsPG extends WorkflowsStorage {
   #schema: string;
   #skipDefaultIndexes?: boolean;
   #indexes?: CreateIndexOptions[];
+  #warnedUnindexedStatusFilter = false;
 
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
@@ -665,6 +666,12 @@ export class WorkflowsPG extends WorkflowsStorage {
           snapshotType === 'jsonb'
             ? `snapshot ->> 'status'`
             : `regexp_replace(snapshot::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status'`;
+        if (snapshotType !== 'jsonb' && !this.#warnedUnindexedStatusFilter) {
+          this.#warnedUnindexedStatusFilter = true;
+          this.logger?.warn?.(
+            `[${TABLE_WORKFLOW_SNAPSHOT}] snapshot column is ${snapshotType ?? 'not jsonb'}, so filtering workflow runs by status scans the whole table. Migrate the column to jsonb to make status queries (including boot-time recovery) use an index.`,
+          );
+        }
         conditions.push(`${statusExpr} = $${paramIndex}`);
         values.push(status);
         paramIndex++;

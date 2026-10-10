@@ -22,6 +22,7 @@ import type { Event } from '../events/types';
 import type { IMastraLogger } from '../logger';
 import { RegisteredLogger } from '../logger';
 import type { Mastra } from '../mastra';
+import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../mastra/run-with-concurrency';
 import type { ObservabilityContext, Span, TracingOptions, TracingPolicy } from '../observability';
 import {
   EntityType,
@@ -3388,7 +3389,8 @@ export class Workflow<
     if (activeRuns.runs.length > 0) {
       this.logger.debug('Restarting active workflow runs', { count: activeRuns.runs.length });
     }
-    for (const runSnapshot of activeRuns.runs) {
+    const concurrency = this.#mastra?.recoveryConfig?.workflowConcurrency ?? DEFAULT_RESTART_CONCURRENCY;
+    await runWithConcurrency(activeRuns.runs, concurrency, async runSnapshot => {
       try {
         const run = await this.createRun({ runId: runSnapshot.runId });
         await run.restart();
@@ -3396,7 +3398,7 @@ export class Workflow<
       } catch (error) {
         this.logger.error('Failed to restart workflow run', { workflowId: this.id, runId: runSnapshot.runId, error });
       }
-    }
+    });
   }
 
   async deleteWorkflowRunById(runId: string) {
