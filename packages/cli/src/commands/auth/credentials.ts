@@ -1,9 +1,11 @@
 import { execFileSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { chmod, mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
+import { chmod, mkdir, readFile, rename, stat, utimes, writeFile, unlink } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir, release } from 'node:os';
 import { join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import * as p from '@clack/prompts';
 
@@ -11,6 +13,16 @@ import { MASTRA_PLATFORM_API_URL } from './client.js';
 
 const CREDENTIALS_DIR = join(homedir(), '.mastra');
 const CREDENTIALS_FILE = join(CREDENTIALS_DIR, 'credentials.json');
+const CREDENTIALS_LOCK_FILE = join(CREDENTIALS_DIR, 'credentials.lock');
+const CREDENTIALS_LOCK_RETRY_MS = 50;
+const CREDENTIALS_LOCK_TIMEOUT_MS = 30_000;
+// A live lock owner refreshes the lock mtime every CREDENTIALS_LOCK_TOUCH_MS, so a
+// lock untouched for CREDENTIALS_LOCK_STALE_MS belongs to a crashed process.
+const CREDENTIALS_LOCK_TOUCH_MS = 5_000;
+const CREDENTIALS_LOCK_STALE_MS = 15_000;
+// Must stay well below CREDENTIALS_LOCK_TIMEOUT_MS so a hung refresh request
+// releases the lock before waiters give up.
+const REFRESH_REQUEST_TIMEOUT_MS = 10_000;
 
 export interface Credentials {
   token: string;
@@ -45,11 +57,80 @@ class LoginTimedOutError extends Error {
   }
 }
 
-export async function saveCredentials(creds: Credentials): Promise<void> {
+async function acquireCredentialsLock(signal?: AbortSignal): Promise<() => Promise<void>> {
   await mkdir(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
-  await writeFile(CREDENTIALS_FILE, JSON.stringify(creds, null, 2), { mode: 0o600 });
+  const startedAt = Date.now();
+
+  while (true) {
+    signal?.throwIfAborted();
+    try {
+      await writeFile(CREDENTIALS_LOCK_FILE, JSON.stringify({ pid: process.pid }), {
+        encoding: 'utf-8',
+        mode: 0o600,
+        flag: 'wx',
+      });
+      // Keep the lock mtime fresh so waiters never mistake a held lock for a
+      // stale one, no matter how long the locked operation runs.
+      const keepAlive = setInterval(() => {
+        const now = new Date();
+        void utimes(CREDENTIALS_LOCK_FILE, now, now).catch(() => {});
+      }, CREDENTIALS_LOCK_TOUCH_MS);
+      keepAlive.unref?.();
+      return async () => {
+        clearInterval(keepAlive);
+        await unlink(CREDENTIALS_LOCK_FILE).catch(() => {});
+      };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    }
+
+    // Reclaim a lock only when its mtime stopped advancing: live owners refresh
+    // it every CREDENTIALS_LOCK_TOUCH_MS, so a lock untouched for
+    // CREDENTIALS_LOCK_STALE_MS has no live owner (crashed or killed process).
+    // The stat happens immediately before the unlink to keep the window in
+    // which a freshly swapped-in lock could be removed as small as possible.
+    try {
+      const lockStat = await stat(CREDENTIALS_LOCK_FILE);
+      if (Date.now() - lockStat.mtimeMs >= CREDENTIALS_LOCK_STALE_MS) {
+        await unlink(CREDENTIALS_LOCK_FILE).catch(() => {});
+        continue;
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') continue;
+      throw error;
+    }
+
+    if (Date.now() - startedAt >= CREDENTIALS_LOCK_TIMEOUT_MS) {
+      throw new Error('Timed out waiting for another Mastra CLI process to update credentials.');
+    }
+    await delay(CREDENTIALS_LOCK_RETRY_MS, undefined, { signal });
+  }
+}
+
+async function withCredentialsLock<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  const releaseLock = await acquireCredentialsLock(signal);
+  try {
+    return await operation();
+  } finally {
+    await releaseLock();
+  }
+}
+
+async function saveCredentialsUnlocked(creds: Credentials): Promise<void> {
+  await mkdir(CREDENTIALS_DIR, { recursive: true, mode: 0o700 });
+  const temporaryFile = `${CREDENTIALS_FILE}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryFile, JSON.stringify(creds, null, 2), { mode: 0o600 });
+    await rename(temporaryFile, CREDENTIALS_FILE);
+  } finally {
+    await unlink(temporaryFile).catch(() => {});
+  }
   await chmod(CREDENTIALS_DIR, 0o700).catch(() => {});
   await chmod(CREDENTIALS_FILE, 0o600).catch(() => {});
+}
+
+export async function saveCredentials(creds: Credentials): Promise<void> {
+  await withCredentialsLock(() => saveCredentialsUnlocked(creds));
 }
 
 export async function loadCredentials(): Promise<Credentials | null> {
@@ -62,11 +143,9 @@ export async function loadCredentials(): Promise<Credentials | null> {
 }
 
 export async function clearCredentials(): Promise<void> {
-  try {
-    await unlink(CREDENTIALS_FILE);
-  } catch {
-    // file doesn't exist, that's fine
-  }
+  await withCredentialsLock(async () => {
+    await unlink(CREDENTIALS_FILE).catch(() => {});
+  });
 }
 
 export async function getCurrentOrgId(): Promise<string | null> {
@@ -80,10 +159,12 @@ export async function getCurrentOrgId(): Promise<string | null> {
 }
 
 export async function setCurrentOrgId(orgId: string): Promise<void> {
-  const creds = await loadCredentials();
-  if (!creds) throw new Error('Not logged in');
-  creds.currentOrgId = orgId;
-  await saveCredentials(creds);
+  await withCredentialsLock(async () => {
+    const creds = await loadCredentials();
+    if (!creds) throw new Error('Not logged in');
+    creds.currentOrgId = orgId;
+    await saveCredentialsUnlocked(creds);
+  });
 }
 
 function isWSL(): boolean {
@@ -127,22 +208,44 @@ export async function tryRefreshToken(creds: Credentials, signal?: AbortSignal):
   if (!creds.refreshToken) return null;
 
   try {
-    // Use plain fetch — NOT createApiClient/authenticatedFetch — to avoid
-    // a deadlock: authenticatedFetch intercepts 401s by calling tryRefreshToken,
-    // so if this request also 401s we'd infinitely recurse.
-    const res = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/refresh-token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken: creds.refreshToken }),
-      signal,
-    });
-    if (!res.ok) return null;
+    return await withCredentialsLock(async () => {
+      const storedCredentials = await loadCredentials();
+      // Logged out while we waited for the lock: don't resurrect the session
+      // from the caller's stale refresh token.
+      if (!storedCredentials) return null;
+      // A different account logged in while we waited: don't hand its token to
+      // this caller or rotate its refresh token.
+      if (storedCredentials.user?.id !== creds.user?.id) return null;
+      if (storedCredentials.token !== creds.token || storedCredentials.refreshToken !== creds.refreshToken) {
+        return storedCredentials.token;
+      }
 
-    const data = (await res.json()) as { accessToken: string; refreshToken: string };
-    creds.token = data.accessToken;
-    creds.refreshToken = data.refreshToken;
-    await saveCredentials(creds);
-    return data.accessToken;
+      if (!storedCredentials.refreshToken) return null;
+
+      // Bound the request so a hung refresh releases the lock before waiting
+      // processes time out.
+      const timeoutSignal = AbortSignal.timeout(REFRESH_REQUEST_TIMEOUT_MS);
+      // Use plain fetch — NOT createApiClient/authenticatedFetch — to avoid
+      // a deadlock: authenticatedFetch intercepts 401s by calling tryRefreshToken,
+      // so if this request also 401s we'd infinitely recurse.
+      const res = await fetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/refresh-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken: storedCredentials.refreshToken }),
+        signal: signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal,
+      });
+      if (!res.ok) return null;
+
+      const data = (await res.json()) as { accessToken: string; refreshToken: string };
+      const refreshedCredentials = {
+        ...storedCredentials,
+        token: data.accessToken,
+        refreshToken: data.refreshToken,
+      };
+      Object.assign(creds, refreshedCredentials);
+      await saveCredentialsUnlocked(refreshedCredentials);
+      return data.accessToken;
+    }, signal);
   } catch {
     return null;
   }
