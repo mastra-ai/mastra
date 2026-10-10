@@ -10,6 +10,7 @@ export type {
   BoardDefinition,
   BoardPhaseDefinition,
   BoardRegistry,
+  BoardSourceClosed,
   BoardTransition,
   BoardTransitionPolicy,
   BoardTransitionPolicyContext,

@@ -102,23 +102,25 @@ function issueOpened(context: FactoryGithubRuleContext) {
 
 function issueClosed(context: FactoryGithubRuleContext) {
   if (!context.item || context.item.source !== 'github-issue' || !context.issue) return;
-  if (context.board !== 'work') return;
-  // Already off the board: nothing to reconcile.
-  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  // The card's board decides where a closed source sends it; boards that declare no
+  // `sourceClosed` mapping keep the card where it is, as do cards already finished.
+  const closure = context.boardClosure;
+  if (!context.board || !closure || closure.itemTerminal) return;
   // Issue closure is a repository fact, not third-party input — no actor trust
   // gate. `not_planned` (and `duplicate`) means abandoned, everything else is
   // completed work.
   const canceled = context.issue.stateReason === 'not_planned' || context.issue.stateReason === 'duplicate';
+  const target = canceled ? closure.canceled : closure.completed;
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:issue-closed`,
-    board: 'work',
-    stage: canceled ? 'canceled' : 'done',
+    board: context.board,
+    stage: target.phase,
     message: {
       text:
         `GitHub issue #${context.issue.number} was closed` +
         `${context.issue.stateReason ? ` (${context.issue.stateReason})` : ''}; ` +
-        `this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
+        `this ${closure.boardTitle} card was moved to ${target.title}.`,
     },
   } as const;
 }

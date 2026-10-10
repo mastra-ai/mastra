@@ -1,4 +1,4 @@
-import { boardForWorkItem } from '../../boards/index.js';
+import { boardForWorkItem, withBoardClosure } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import type {
   FactoryGitLabEventName,
@@ -522,6 +522,7 @@ export class GitLabRules {
             },
             board: boardForWorkItem(input.item),
             itemRevision: input.item.revision,
+            ...withBoardClosure(this.options.boards, input.item),
           }
         : {}),
       intake: input.board,

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { boardForWorkItem, workItemPhaseSemantics } from '../../boards/index.js';
+import { boardForWorkItem, withBoardClosure, workItemPhaseSemantics } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import type {
@@ -559,6 +559,7 @@ export class GithubRules {
               },
               board: boardForWorkItem(item),
               itemRevision: item.revision,
+              ...withBoardClosure(this.options.boards, item),
             }
           : {}),
         ...(intake ? { intake } : {}),

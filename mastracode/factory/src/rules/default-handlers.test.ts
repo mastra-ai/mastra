@@ -1,10 +1,19 @@
 import { describe, expect, it, vi } from 'vitest';
+import { defineBoard } from '../boards/define-board.js';
+import { createBoardRegistry } from '../boards/registry.js';
 import { reviewBoard } from '../boards/review.js';
+import { withBoardClosure } from '../boards/semantics.js';
 import { workBoard } from '../boards/work.js';
 import { defaultGithubRules } from '../integrations/github/default-rules.js';
+import { defaultGitLabRules } from '../integrations/gitlab/default-rules.js';
+import { defaultIncidentioRules } from '../integrations/incidentio/default-rules.js';
+import { defaultJiraRules } from '../integrations/jira/default-rules.js';
 import { defaultLinearRules } from '../integrations/linear/default-rules.js';
 import type {
   FactoryGithubRuleContext,
+  FactoryGitLabRuleContext,
+  FactoryIncidentioRuleContext,
+  FactoryJiraRuleContext,
   FactoryLinearRuleContext,
   FactoryStageRuleContext,
   FactoryToolResultRuleContext,
@@ -28,6 +37,39 @@ const item = {
   stages: ['intake'],
   metadata: null as Record<string, unknown> | null,
 };
+
+const releaseBoard = defineBoard({
+  id: 'release',
+  title: 'Release',
+  initialPhase: 'queued',
+  sourceClosed: { completed: 'shipped', canceled: 'dropped' },
+  phases: {
+    queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+    dropped: { title: 'Dropped', kind: 'terminal' },
+  },
+});
+const plainBoard = defineBoard({
+  id: 'plain',
+  title: 'Plain',
+  initialPhase: 'queued',
+  phases: {
+    queued: { title: 'Queued', kind: 'resting', next: 'finished' },
+    finished: { title: 'Finished', kind: 'terminal' },
+  },
+});
+const closureBoards = createBoardRegistry({ boards: [releaseBoard, plainBoard] });
+
+/** Bound card fields a rule runner passes, including the board-declared closure targets. */
+function onBoard(board: string, stages: string[], source: string = item.source) {
+  const card = { ...item, source, stages } as typeof item;
+  return {
+    item: card,
+    board,
+    itemRevision: 4,
+    ...withBoardClosure(closureBoards, { board, externalSource: null, stages }),
+  };
+}
 
 function reject() {
   return { type: 'reject', code: 'forbidden', reason: 'Not allowed.' } as const;
@@ -182,18 +224,11 @@ describe('built-in board and integration handlers', () => {
   it('transitions linked GitHub issue cards deterministically on closure', async () => {
     const rule = defaultGithubRules.issueClosed;
     const github = githubContext('issueClosed');
-    const done = await rule?.({
-      ...github,
-      item: { ...item, stages: ['planning'] },
-      board: 'work',
-      itemRevision: 4,
-    });
+    const done = await rule?.({ ...github, ...onBoard('work', ['planning']) });
     const canceled = await rule?.({
       ...github,
       ingress: { type: 'github', id: 'delivery-not-planned' },
-      item: { ...item, stages: ['planning'] },
-      board: 'work',
-      itemRevision: 4,
+      ...onBoard('work', ['planning']),
       issue: {
         number: 42,
         title: 'Issue 42',
@@ -227,16 +262,12 @@ describe('built-in board and integration handlers', () => {
     expect(
       githubRule?.({ ...github, item: { ...item, source: 'github-pr' }, board: 'review', itemRevision: 1 }),
     ).toBeUndefined();
-    expect(
-      githubRule?.({ ...github, item: { ...item, stages: ['done'] }, board: 'work', itemRevision: 1 }),
-    ).toBeUndefined();
+    expect(githubRule?.({ ...github, ...onBoard('work', ['done']) })).toBeUndefined();
     expect(
       linearRule?.({
         ...linear,
         event: 'issueClosed',
-        item: { ...item, source: 'linear-issue', stages: ['planning'] },
-        board: 'work',
-        itemRevision: 1,
+        ...onBoard('work', ['planning'], 'linear-issue'),
         issue: { ...linear.issue, stateType: 'completed' },
       }),
     ).toMatchObject({
@@ -248,12 +279,156 @@ describe('built-in board and integration handlers', () => {
       linearRule?.({
         ...linear,
         event: 'issueClosed',
-        item: { ...item, source: 'linear-issue', stages: ['canceled'] },
-        board: 'work',
-        itemRevision: 1,
+        ...onBoard('work', ['canceled'], 'linear-issue'),
         issue: { ...linear.issue, stateType: 'canceled' },
       }),
     ).toBeUndefined();
+  });
+
+  describe('source-closed rules follow the board the card is on', () => {
+    const trackerIssue = (stateType: string) => ({
+      id: 'issue-1',
+      identifier: 'ENG-42',
+      title: 'Issue',
+      url: 'https://tracker.test/ENG-42',
+      state: stateType,
+      stateType,
+      priorityLabel: 'High',
+      assignee: null,
+      author: null,
+      labels: [],
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+    });
+    const gitlab = (): FactoryGitLabRuleContext => {
+      return {
+        ...base,
+        actor: { type: 'gitlab', username: 'author', trusted: true, factoryAuthored: false },
+        event: 'issueClosed',
+        deliveryId: 'delivery-1',
+        factory: { createdAt: '2026-06-01T00:00:00Z' },
+        repository: { id: 10, fullName: 'acme/repo', host: 'gitlab.test' },
+        issue: {
+          number: 42,
+          sourceKey: 'gitlab:10:issue:42',
+          title: 'Issue 42',
+          url: 'https://gitlab.test/acme/repo/-/issues/42',
+          state: 'closed',
+          authorTrusted: true,
+        },
+      } as FactoryGitLabRuleContext;
+    };
+    const cases = [
+      {
+        name: 'GitHub',
+        source: 'github-issue',
+        label: 'GitHub issue #42 was closed',
+        cancelSuffix: ' (not_planned)',
+        run: (canceled: boolean, card: ReturnType<typeof onBoard>) =>
+          defaultGithubRules.issueClosed?.({
+            ...githubContext('issueClosed'),
+            ...card,
+            issue: {
+              number: 42,
+              title: 'Issue 42',
+              url: 'https://github.test/acme/repo/issues/42',
+              createdAt: '2026-07-01T00:00:00Z',
+              ...(canceled ? { stateReason: 'not_planned' as const } : {}),
+            },
+          }),
+      },
+      {
+        name: 'GitLab',
+        source: 'gitlab-issue',
+        label: 'GitLab issue #42 was closed',
+        cancelSuffix: undefined,
+        run: (_canceled: boolean, card: ReturnType<typeof onBoard>) =>
+          defaultGitLabRules.issueClosed?.({ ...gitlab(), ...card }),
+      },
+      {
+        name: 'Linear',
+        source: 'linear-issue',
+        label: 'Linear issue ENG-42 was',
+        cancelSuffix: ' canceled',
+        run: (canceled: boolean, card: ReturnType<typeof onBoard>) =>
+          defaultLinearRules.issueClosed?.({
+            ...linearContext(),
+            event: 'issueClosed',
+            ...card,
+            issue: { ...linearContext().issue, stateType: canceled ? 'canceled' : 'completed' },
+          }),
+      },
+      {
+        name: 'Jira',
+        source: 'jira-issue',
+        label: 'Jira issue ENG-42 was',
+        cancelSuffix: ' canceled',
+        run: (canceled: boolean, card: ReturnType<typeof onBoard>) =>
+          defaultJiraRules.issueClosed?.({
+            ...base,
+            actor: { type: 'human', id: 'user-1' },
+            event: 'issueClosed',
+            ...card,
+            issue: { ...trackerIssue(canceled ? 'canceled' : 'completed'), project: 'ENG', site: null },
+          } as FactoryJiraRuleContext),
+      },
+      {
+        name: 'incident.io',
+        source: 'incidentio-follow-up',
+        label: 'incident.io follow-up ENG-42 was',
+        cancelSuffix: ' canceled',
+        run: (canceled: boolean, card: ReturnType<typeof onBoard>) =>
+          defaultIncidentioRules.followUpClosed?.({
+            ...base,
+            actor: { type: 'human', id: 'user-1' },
+            event: 'followUpClosed',
+            ...card,
+            issue: { ...trackerIssue(canceled ? 'canceled' : 'completed'), incident: null },
+          } as FactoryIncidentioRuleContext),
+      },
+    ];
+
+    it.each(cases)('$name keeps closing Work cards into Done and Canceled', async ({ source, run, cancelSuffix }) => {
+      expect(await run(false, onBoard('work', ['execute'], source))).toMatchObject({
+        type: 'transition',
+        board: 'work',
+        stage: 'done',
+        message: { text: expect.stringMatching(/; this Work card was moved to Done\.$/) },
+      });
+      if (cancelSuffix === undefined) return;
+      expect(await run(true, onBoard('work', ['execute'], source))).toMatchObject({
+        board: 'work',
+        stage: 'canceled',
+        message: { text: expect.stringMatching(/; this Work card was moved to Canceled\.$/) },
+      });
+    });
+
+    it.each(cases)(
+      '$name closes a custom-board card into the phase its board declares',
+      async ({ source, run, label, cancelSuffix }) => {
+        const completed = await run(false, onBoard('release', ['queued'], source));
+        expect(completed).toMatchObject({ type: 'transition', board: 'release', stage: 'shipped' });
+        const text = (completed as { message: { text: string } }).message.text;
+        expect(text.startsWith(label)).toBe(true);
+        expect(text.endsWith('; this Release card was moved to Shipped.')).toBe(true);
+        if (cancelSuffix === undefined) return;
+        expect(await run(true, onBoard('release', ['queued'], source))).toMatchObject({
+          type: 'transition',
+          board: 'release',
+          stage: 'dropped',
+          message: { text: expect.stringContaining(cancelSuffix + '; this Release card was moved to Dropped.') },
+        });
+      },
+    );
+
+    it.each(cases)(
+      '$name leaves cards alone when the board declares no mapping or the card is finished',
+      async ({ source, run }) => {
+        expect(await run(false, onBoard('plain', ['queued'], source))).toBeUndefined();
+        expect(await run(false, onBoard('release', ['shipped'], source))).toBeUndefined();
+        expect(await run(true, onBoard('work', ['done'], source))).toBeUndefined();
+      },
+    );
   });
 
   it('starts Linear investigation when a human moves an issue into Triage', async () => {
