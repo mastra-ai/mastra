@@ -803,6 +803,69 @@ export function createKnowledgeStorageTests(
       expect((await store.getNode(first.scopes['repo:mastra']!))?.isScope).toBe(true);
     });
 
+    it('filters scope nodes to one subtree or exact addresses and pages them by name', async () => {
+      let ids: Record<string, string>;
+      try {
+        ({ scopes: ids } = await store.reconcileStructure({
+          scopes: [
+            { address: 'org:acme', name: 'Acme' },
+            { address: 'team:a', name: 'A', parentAddresses: ['org:acme'] },
+            { address: 'team:b', name: 'B', parentAddresses: ['org:acme'] },
+            { address: 'project:p', name: 'P', parentAddresses: ['team:a', 'team:b'] },
+            { address: 'org:other', name: 'Other' },
+            { address: 'team:o', name: 'O', parentAddresses: ['org:other'] },
+          ],
+        }));
+      } catch (error) {
+        const unsupported =
+          error instanceof Error &&
+          (error.name === 'KnowledgeUnsupportedError' ||
+            /does not support structured reconciliation/.test(error.message));
+        if (unsupported) return;
+        throw error;
+      }
+
+      const within = await store.listScopeNodes({ withinAddress: 'org:acme' });
+      expect(within.scopes.map(scope => scope.address)).toEqual(['team:a', 'org:acme', 'team:b', 'project:p']);
+      expect(within.nextCursor).toBeNull();
+      // Parent ids come back in a stable order so pages of the same query compare equal.
+      expect(within.scopes.find(scope => scope.address === 'project:p')?.parentIds).toEqual(
+        [ids['team:a'], ids['team:b']].sort(),
+      );
+
+      expect(await store.listScopeNodes({ withinAddress: 'org:acme', limit: Number.NaN })).toEqual(within);
+      const first = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3 });
+      expect(first.scopes).toHaveLength(3);
+      expect(first.nextCursor).toEqual(expect.any(String));
+      const second = await store.listScopeNodes({ withinAddress: 'org:acme', limit: 3, cursor: first.nextCursor! });
+      expect([...first.scopes, ...second.scopes]).toEqual(within.scopes);
+      expect(second.nextCursor).toBeNull();
+      await expect(store.listScopeNodes({ withinAddress: 'org:other', cursor: first.nextCursor! })).rejects.toThrow(
+        'does not match this query',
+      );
+
+      expect((await store.listScopeNodes({ withinAddress: 'team:b' })).scopes.map(scope => scope.address)).toEqual([
+        'team:b',
+        'project:p',
+      ]);
+      expect((await store.listScopeNodes({ addresses: ['team:o', 'missing'] })).scopes.map(scope => scope.id)).toEqual([
+        ids['team:o'],
+      ]);
+      expect(await store.listScopeNodes({ withinAddress: 'missing' })).toEqual({ scopes: [], nextCursor: null });
+
+      // An id filter inside a subtree answers "is this scope in that subtree?" with one bounded read.
+      expect(
+        (await store.listScopeNodes({ withinAddress: 'org:acme', ids: [ids['project:p']!], limit: 1 })).scopes.map(
+          scope => scope.address,
+        ),
+      ).toEqual(['project:p']);
+      expect(await store.listScopeNodes({ withinAddress: 'org:acme', ids: [ids['team:o']!] })).toEqual({
+        scopes: [],
+        nextCursor: null,
+      });
+      expect(await store.listScopeNodes({ ids: [] })).toEqual({ scopes: [], nextCursor: null });
+    });
+
     it('leaves existing scopes untouched when a plan does not retrofit', async () => {
       const created = await store.reconcileStructure({
         retrofit: false,

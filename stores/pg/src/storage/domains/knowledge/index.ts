@@ -50,7 +50,9 @@ import {
   KnowledgeConflictError,
   KnowledgeNotFoundError,
   KnowledgeStorage,
+  pageKnowledgeScopeNodes,
   parseKnowledgeNodeCursor,
+  parseListKnowledgeScopeNodesInput,
   parseKnowledgeWikilinks,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_MENTIONS,
@@ -77,6 +79,9 @@ import type {
   KnowledgeNodeAddress,
   KnowledgeRecord,
   KnowledgeScopeAddress,
+  KnowledgeScopeNodeSummary,
+  ListKnowledgeScopeNodesInput,
+  ListKnowledgeScopeNodesOutput,
   KnowledgeScopeIds,
   KnowledgeSemanticDocumentType,
   KnowledgeStructurePlan,
@@ -1406,6 +1411,64 @@ export class KnowledgePG extends KnowledgeStorage {
       args: [input.after ?? null, input.after ?? null, limit],
     });
     return result.rows.map(row => ({ address: String(row.address), scopeNodeId: String(row.scopeNodeId) }));
+  }
+
+  async listScopeNodes(input: ListKnowledgeScopeNodesInput = {}): Promise<ListKnowledgeScopeNodesOutput> {
+    const { limit, after } = parseListKnowledgeScopeNodesInput(input);
+    const args: (string | number | null)[] = [];
+    const filters: string[] = [];
+    let cte = '';
+    if (input.withinAddress !== undefined) {
+      // Follows membership edges downward from the root scope; UNION stops at cycles.
+      cte = `WITH RECURSIVE within_scope(id) AS (SELECT a.scopeNodeId FROM "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a JOIN "${TABLE_KNOWLEDGE_NODES}" r ON r.id=a.scopeNodeId WHERE a.address=? AND r.isScope=TRUE AND r.deletedAt IS NULL UNION SELECT e.nodeId FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" e JOIN within_scope w ON e.scopeNodeId=w.id JOIN "${TABLE_KNOWLEDGE_NODES}" c ON c.id=e.nodeId WHERE c.isScope=TRUE AND c.deletedAt IS NULL) `;
+      args.push(input.withinAddress);
+      filters.push('n.id IN (SELECT id FROM within_scope)');
+    }
+    if (input.addresses) {
+      if (!input.addresses.length) return { scopes: [], nextCursor: null };
+      filters.push(`a.address IN (${input.addresses.map(() => '?').join(',')})`);
+      args.push(...input.addresses);
+    }
+    if (input.ids) {
+      if (!input.ids.length) return { scopes: [], nextCursor: null };
+      filters.push(`n.id IN (${input.ids.map(() => '?').join(',')})`);
+      args.push(...input.ids);
+    }
+    if (after) {
+      filters.push('(n.name COLLATE "C">? COLLATE "C" OR (n.name=? AND n.id>?))');
+      args.push(after.name, after.name, after.id);
+    }
+    args.push(limit + 1);
+    const result = await this.#readExecutor.execute({
+      sql: `${cte}SELECT n.id,a.address,n.name,n.kind,n.metadata,json(n.metadata) AS metadataJson FROM "${TABLE_KNOWLEDGE_NODES}" n JOIN "${TABLE_KNOWLEDGE_SCOPE_ADDRESSES}" a ON a.scopeNodeId=n.id WHERE n.isScope=TRUE AND n.deletedAt IS NULL${filters.map(filter => ` AND ${filter}`).join('')} ORDER BY n.name COLLATE "C" ASC,n.id ASC LIMIT ?`,
+      args,
+    });
+    const ids = result.rows.map(row => String(row.id));
+    const parents = new Map<string, string[]>();
+    if (ids.length) {
+      const edges = await this.#readExecutor.execute({
+        sql: `SELECT nodeId,scopeNodeId FROM "${TABLE_KNOWLEDGE_NODE_SCOPES}" WHERE nodeId IN (${ids.map(() => '?').join(',')}) ORDER BY scopeNodeId`,
+        args: ids,
+      });
+      for (const edge of edges.rows) {
+        const nodeId = String(edge.nodeId);
+        parents.set(nodeId, [...(parents.get(nodeId) ?? []), String(edge.scopeNodeId)]);
+      }
+    }
+    const rows: KnowledgeScopeNodeSummary[] = result.rows.map(row => {
+      const metadata =
+        row.metadata == null ? undefined : parseJson<Record<string, unknown>>(row.metadataJson ?? row.metadata);
+      const description = metadata?.description;
+      return {
+        id: String(row.id),
+        address: String(row.address),
+        name: String(row.name),
+        ...(row.kind == null ? {} : { kind: String(row.kind) }),
+        ...(typeof description === 'string' ? { description } : {}),
+        parentIds: parents.get(String(row.id)) ?? [],
+      };
+    });
+    return pageKnowledgeScopeNodes(rows, limit, input);
   }
 
   async getNodeAddress(input: { source: string; address: string }): Promise<KnowledgeNodeAddress | null> {
