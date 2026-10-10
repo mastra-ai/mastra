@@ -2,7 +2,7 @@
 '@mastra/memory': patch
 ---
 
-Subconscious now reads its org from an `org:<id>` agent scope on the run it observes. The `organizationId` request-context key still works when no org scope is set, and an org scope wins if both are present. Runs without an org now skip Subconscious quietly instead of reporting an error, since a run scoped only to a user or thread is valid. If a run holds two different org scopes, curation and the Knowledge tools report an error, and pinned knowledge is skipped for that run.
+Subconscious now reads its org from an `org:<id>` agent scope on the run it observes. The `organizationId` request-context key still works when no org scope is set, and an org scope wins if both are present. Runs without an org now skip Subconscious quietly instead of reporting an error, since a run scoped only to a user or thread is valid. If a run holds two different org scopes, curation, reminders and the Knowledge tools report an error, and pinned knowledge is skipped for that run.
 
 ```ts
 await agent.stream('Plan the launch', {
