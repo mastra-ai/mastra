@@ -16,6 +16,7 @@ import type {
 import { WorkItemUpdateConflictError } from '../../storage/domains/work-items/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GitLabEventRules } from './default-rules.js';
 import { encodeIssueReference, encodeSourceId, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
@@ -396,26 +397,26 @@ export class GitLabRules {
     }
     // A push moves the head a recorded review verdict was given on. Recording
     // the new head lets the verdict badge show that it is outdated, while the
-    // verdict itself stays so the next pass still runs as a re-review. Updates
-    // that only edit the merge request carry the same head and write nothing.
+    // verdict itself stays so the next pass still runs as a re-review.
     const headSha = string(object(mergeRequest?.last_commit)?.id)?.toLowerCase();
     const headAt = timestamp(mergeRequest?.updated_at);
     if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
       const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
       // The authoring Work item mirrors the verdict of the merge request it has
       // out; a push to an older one must not mark its successor's verdict.
-      const recorded = parent?.metadata?.openPullRequestNumber;
-      const parentOwned = parent && (typeof recorded !== 'number' || recorded === mergeRequestIid);
-      for (const card of [reviewItem, parentOwned ? parent : undefined]) {
-        if (!card || card.metadata?.pullRequestHeadSha === headSha) continue;
-        // A late or redelivered push must not put back a head a newer push replaced.
-        const recordedAt = card.metadata?.pullRequestHeadAt;
-        if (headAt !== undefined && typeof recordedAt === 'number' && recordedAt >= headAt) continue;
-        await this.options.storage.update({
-          orgId: card.orgId,
-          id: card.id,
-          userId: 'factory-rule-dispatcher',
-          patch: { metadata: { pullRequestHeadSha: headSha, pullRequestHeadAt: headAt ?? null } },
+      await recordPullRequestHead(this.options.storage, {
+        orgId: reviewItem.orgId,
+        id: reviewItem.id,
+        headSha,
+        headAt,
+      });
+      if (parent) {
+        await recordPullRequestHead(this.options.storage, {
+          orgId: parent.orgId,
+          id: parent.id,
+          headSha,
+          headAt,
+          ownedPullRequestNumber: mergeRequestIid,
         });
       }
     }
@@ -457,10 +458,14 @@ export class GitLabRules {
         mergeRequestEvents: { ...events, [key]: { at: input.eventAt ?? lastAt ?? null, open: !settling } },
       };
       if (!settling) {
+        // A head recorded for an earlier merge request must not mark this one's
+        // verdict outdated. A replayed opening of the merge request already
+        // recorded keeps the head its pushes left.
+        if (recorded !== input.mergeRequestIid) {
+          patch.pullRequestHeadSha = input.headSha ?? null;
+          patch.pullRequestHeadAt = input.eventAt ?? null;
+        }
         patch.openPullRequestNumber = input.mergeRequestIid;
-        // A head recorded for an earlier merge request must not mark this one's verdict outdated.
-        patch.pullRequestHeadSha = input.headSha ?? null;
-        patch.pullRequestHeadAt = input.eventAt ?? null;
       } else if (recorded === input.mergeRequestIid) {
         patch.openPullRequestNumber = null;
         if (input.event === 'mergeRequestMerged' && typeof item.metadata?.reviewVerdict === 'string') {

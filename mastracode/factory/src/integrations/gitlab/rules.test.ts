@@ -492,7 +492,12 @@ describe('GitLabRules', () => {
       'utf8',
     ).toString('base64url')}`;
 
-    function mergeRequestUpdated(deliveryId: string, lastCommit: string, oldrev?: string, updatedAt?: string) {
+    function mergeRequestUpdated(
+      deliveryId: string,
+      lastCommit: string,
+      oldrev?: string,
+      updatedAt: string | undefined = '2030-01-01 01:00:00 UTC',
+    ) {
       const base = mergeRequestOpened(deliveryId);
       return {
         ...base,
@@ -583,15 +588,21 @@ describe('GitLabRules', () => {
       expect(await metadataOf(workId)).not.toHaveProperty('pullRequestHeadSha');
     });
 
-    it('does not rewrite the cards when an edit carries the head already recorded', async () => {
-      const { seeded, service, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
-      await service.ingest(mergeRequestUpdated('delivery-mr-push-1', pushedHeadSha, reviewedHeadSha));
-      const revision = (await seeded.workItems.get({ orgId: 'org-1', id: reviewId }))?.revision;
+    it('keeps a head that returned to an earlier commit when the push in between arrives late', async () => {
+      const { service, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
+      await service.ingest(mergeRequestUpdated('d-a', reviewedHeadSha, 'aaaa', '2030-01-01 01:00:00 UTC'));
+      await service.ingest(mergeRequestUpdated('d-a-again', reviewedHeadSha, 'bbbb', '2030-01-01 03:00:00 UTC'));
+      await service.ingest(mergeRequestUpdated('d-b-late', pushedHeadSha, 'aaaa', '2030-01-01 02:00:00 UTC'));
 
-      await service.ingest(mergeRequestUpdated('delivery-mr-title-edit', pushedHeadSha));
+      expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: reviewedHeadSha });
+    });
+
+    it('ignores an update that carries no time to order it by', async () => {
+      const { service, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
+      await service.ingest(mergeRequestUpdated('d-timed', pushedHeadSha, 'aaaa'));
+      await service.ingest(mergeRequestUpdated('d-untimed', reviewedHeadSha, 'bbbb', ''));
 
       expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
-      expect((await seeded.workItems.get({ orgId: 'org-1', id: reviewId }))?.revision).toBe(revision);
     });
   });
 
@@ -646,6 +657,33 @@ describe('GitLabRules', () => {
 
       await service.ingest(mergeRequestEvent('d-close', 'close', '2030-01-01T01:00:00Z'));
       expect((await read())?.openPullRequestNumber).toBeNull();
+    });
+
+    it('keeps the pushed head when an untimed opening of the recorded merge request is replayed', async () => {
+      const { seeded, project, service } = await setup();
+      const work = await seedWork(seeded, project.id, {
+        openPullRequestNumber: 17,
+        pullRequestHeadSha: '8fa258d000000000000000000000000000000000',
+        pullRequestHeadAt: Date.parse('2030-01-01T02:00:00Z'),
+      });
+      const opened = mergeRequestOpened('d-open-replay');
+      const event = {
+        ...opened,
+        payload: {
+          ...opened.payload,
+          object_attributes: {
+            ...opened.payload.object_attributes,
+            last_commit: { id: 'be10bfa000000000000000000000000000000000' },
+          },
+        },
+      };
+
+      await service.ingest(event);
+
+      expect((await seeded.workItems.get({ orgId: 'org-1', id: work.id }))?.metadata).toMatchObject({
+        openPullRequestNumber: 17,
+        pullRequestHeadSha: '8fa258d000000000000000000000000000000000',
+      });
     });
 
     it('replaces a head left by an earlier merge request when the next one opens', async () => {

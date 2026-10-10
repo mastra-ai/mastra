@@ -1732,7 +1732,7 @@ describe('GithubRules', () => {
     const reviewedHeadSha = 'be10bfa000000000000000000000000000000000';
     const pushedHeadSha = '8fa258d000000000000000000000000000000000';
 
-    function push(deliveryId: string, sha: string, updatedAt?: string) {
+    function push(deliveryId: string, sha: string, updatedAt: string | undefined = '2030-01-01T01:00:00Z') {
       const delivery = pullRequest('synchronize', deliveryId);
       return {
         ...delivery,
@@ -1845,6 +1845,29 @@ describe('GithubRules', () => {
 
       await service.ingest(push('delivery-head-new', pushedHeadSha, '2030-01-01T02:00:00Z'));
       await service.ingest(push('delivery-head-late', reviewedHeadSha, '2030-01-01T01:00:00Z'));
+
+      for (const id of [reviewId, workId]) {
+        expect(await metadataOf(id)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      }
+    });
+
+    it('keeps a head that returned to an earlier commit when the push in between arrives late', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed('write', { openPullRequestNumber: 17 });
+
+      await service.ingest(push('delivery-head-a', reviewedHeadSha, '2030-01-01T01:00:00Z'));
+      await service.ingest(push('delivery-head-a-again', reviewedHeadSha, '2030-01-01T03:00:00Z'));
+      await service.ingest(push('delivery-head-b-late', pushedHeadSha, '2030-01-01T02:00:00Z'));
+
+      for (const id of [reviewId, workId]) {
+        expect(await metadataOf(id)).toMatchObject({ pullRequestHeadSha: reviewedHeadSha });
+      }
+    });
+
+    it('ignores a push that carries no time to order it by', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed('write', { openPullRequestNumber: 17 });
+
+      await service.ingest(push('delivery-head-timed', pushedHeadSha));
+      await service.ingest(push('delivery-head-untimed', reviewedHeadSha, ''));
 
       for (const id of [reviewId, workId]) {
         expect(await metadataOf(id)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });

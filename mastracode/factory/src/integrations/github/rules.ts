@@ -24,6 +24,7 @@ import {
   WorkItemUpdateConflictError,
 } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
@@ -55,10 +56,6 @@ function object(value: unknown): Record<string, unknown> | undefined {
 function timestamp(value: unknown): number | undefined {
   const parsed = typeof value === 'string' ? Date.parse(value) : NaN;
   return Number.isNaN(parsed) ? undefined : parsed;
-}
-
-function isNewerOrEqual(recorded: unknown, at: number): boolean {
-  return typeof recorded === 'number' && recorded >= at;
 }
 
 function string(value: unknown): string | undefined {
@@ -844,17 +841,19 @@ export class GithubRules {
       );
       // The authoring Work item mirrors the verdict of the pull request it has
       // out; a push to an older one must not mark its successor's verdict.
-      const recorded = parent?.metadata?.openPullRequestNumber;
-      const parentOwned = parent && (typeof recorded !== 'number' || recorded === pullRequestNumber);
-      for (const card of [relatedItem, parentOwned ? parent : undefined]) {
-        if (!card || card.metadata?.pullRequestHeadSha === headSha) continue;
-        // A late or redelivered push must not put back a head a newer push replaced.
-        if (headAt !== undefined && isNewerOrEqual(card.metadata?.pullRequestHeadAt, headAt)) continue;
-        await this.options.storage.update({
-          orgId: card.orgId,
-          id: card.id,
-          userId: 'factory-rule-dispatcher',
-          patch: { metadata: { pullRequestHeadSha: headSha, pullRequestHeadAt: headAt ?? null } },
+      await recordPullRequestHead(this.options.storage, {
+        orgId: relatedItem.orgId,
+        id: relatedItem.id,
+        headSha,
+        headAt,
+      });
+      if (parent) {
+        await recordPullRequestHead(this.options.storage, {
+          orgId: parent.orgId,
+          id: parent.id,
+          headSha,
+          headAt,
+          ownedPullRequestNumber: pullRequestNumber,
         });
       }
     };
