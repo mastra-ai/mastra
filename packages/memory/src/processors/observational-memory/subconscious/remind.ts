@@ -1,7 +1,6 @@
 import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@mastra/core/storage';
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
-import { omDebug } from '../debug';
 import { Extractor } from '../extractor';
 import { withOmInternalThreadId } from '../internal-request-context';
 import type { ObservationalMemoryModel } from '../types';
@@ -21,7 +20,7 @@ function resolveScope(context: {
   resourceId?: string;
   threadId: string;
 }) {
-  const organizationId = resolveSubconsciousOrgId(context.requestContext, omDebug);
+  const organizationId = resolveSubconsciousOrgId(context.requestContext);
   if (!organizationId) return undefined;
   const resourceId = resolveKnowledgeResourceId(context.requestContext, context.resourceId);
   if (!resourceId) {

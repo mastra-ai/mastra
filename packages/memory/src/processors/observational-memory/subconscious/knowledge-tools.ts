@@ -10,7 +10,6 @@ import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from 'json-schema';
 
-import { omDebug } from '../debug';
 import { MISSING_ORG_SCOPE_MESSAGE, resolveKnowledgeResourceId, resolveSubconsciousOrgId } from './scope';
 import type { KnowledgeSemanticIndexCoordinator } from './semantic-index';
 
@@ -34,7 +33,7 @@ export type KnowledgeToolContext = {
 };
 
 export function resolveKnowledgeToolScope(context: KnowledgeToolContext | undefined): KnowledgeScope {
-  const organizationId = resolveSubconsciousOrgId(context?.requestContext, omDebug);
+  const organizationId = resolveSubconsciousOrgId(context?.requestContext);
   const resourceId = resolveKnowledgeResourceId(context?.requestContext, context?.agent?.resourceId);
   const threadId = context?.agent?.threadId;
   if (!organizationId) throw new Error(MISSING_ORG_SCOPE_MESSAGE);

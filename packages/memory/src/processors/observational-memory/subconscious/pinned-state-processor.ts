@@ -146,7 +146,7 @@ export class PinnedStateProcessor implements Processor<typeof SUBCONSCIOUS_PINS_
     // Curate reports the same condition.
     let organizationId: string | undefined;
     try {
-      organizationId = resolveSubconsciousOrgId(args.requestContext, omDebug);
+      organizationId = resolveSubconsciousOrgId(args.requestContext);
     } catch (error) {
       omDebug(`[Subconscious] pinned state skipped: ${error instanceof Error ? error.message : String(error)}`);
       return undefined;

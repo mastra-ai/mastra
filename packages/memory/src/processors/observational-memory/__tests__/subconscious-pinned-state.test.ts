@@ -110,19 +110,30 @@ describe('PinnedStateProcessor', () => {
     expect(result!.contents).toContain('Always speak French.');
   });
 
-  it('resolves the org from the legacy organizationId key, prefers an org scope, and skips without an org', async () => {
+  it('resolves the org from an org scope or the legacy organizationId key, and skips without one org', async () => {
     const { tools, processor } = createHarness();
     const pinned = await tools.knowledge_pin!.execute!({ text: 'Always speak French.' } as any, {} as any);
 
     const legacy = await processor.computeStateSignal(makeArgs({}, [['organizationId', 'acme']]));
     expect(legacy!.contents).toContain(pinned.id);
-    const scoped = await processor.computeStateSignal(
+    const scoped = await processor.computeStateSignal(makeArgs({}, [['mastra__scopes', ['org:acme', 'team:core']]]));
+    expect(scoped!.contents).toContain(pinned.id);
+    const matching = await processor.computeStateSignal(
       makeArgs({}, [
-        ['organizationId', 'other'],
+        ['organizationId', 'acme'],
         ['mastra__scopes', ['org:acme', 'team:core']],
       ]),
     );
-    expect(scoped!.contents).toContain(pinned.id);
+    expect(matching!.contents).toContain(pinned.id);
+    // An org scope that differs from organizationId skips pins rather than failing the parent turn.
+    expect(
+      await processor.computeStateSignal(
+        makeArgs({}, [
+          ['organizationId', 'other'],
+          ['mastra__scopes', ['org:acme', 'team:core']],
+        ]),
+      ),
+    ).toBeUndefined();
     expect(await processor.computeStateSignal(makeArgs({}, [['mastra__scopes', ['team:core']]]))).toBeUndefined();
     // Two org scopes skip pins rather than failing the parent turn.
     expect(

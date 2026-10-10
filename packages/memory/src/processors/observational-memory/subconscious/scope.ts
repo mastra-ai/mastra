@@ -34,15 +34,12 @@ export function getAgentScopes(requestContext: ScopeRequestContext): string[] {
 /**
  * Resolves the org Subconscious writes Knowledge under.
  *
- * An `org:<id>` agent scope wins. Without one, the legacy `organizationId` request-context key is
- * used. Returns undefined when neither is present: Knowledge needs an org for now, so Subconscious
- * skips that run. Throws when the run holds more than one distinct org scope, or an org value
- * containing `:`.
+ * An `org:<id>` agent scope and the legacy `organizationId` request-context key are both accepted.
+ * Returns undefined when neither is present: Knowledge needs an org for now, so Subconscious skips
+ * that run. Throws when the run holds more than one distinct org — two org scopes, or an org scope
+ * that differs from `organizationId` — or an org value containing `:`.
  */
-export function resolveSubconsciousOrgId(
-  requestContext: ScopeRequestContext,
-  debug?: (message: string) => void,
-): string | undefined {
+export function resolveSubconsciousOrgId(requestContext: ScopeRequestContext): string | undefined {
   const orgIds = [
     ...new Set(
       getAgentScopes(requestContext)
@@ -55,24 +52,19 @@ export function resolveSubconsciousOrgId(
   if (nested) {
     throw new Error(`Subconscious org scope "org:${nested}" must not contain ":".`);
   }
+  const legacy = requestContext?.get?.('organizationId');
+  const mismatchedLegacy = typeof legacy === 'string' && legacy.trim() && !orgIds.includes(legacy);
+  if (mismatchedLegacy) {
+    if (!orgIds.length) return legacy;
+    orgIds.push(legacy);
+  }
   if (orgIds.length > 1) {
     throw new Error(
-      `Subconscious needs one org scope, but the run holds ${orgIds.length}: ${orgIds.map(id => `org:${id}`).join(', ')}.`,
+      `Subconscious needs one org, but the run holds ${orgIds.length}: ${orgIds.map(id => `org:${id}`).join(', ')}.` +
+        (mismatchedLegacy ? ' An org scope must match the organizationId request-context key when both are set.' : ''),
     );
   }
-
-  const legacy = requestContext?.get?.('organizationId');
-  const legacyOrgId = typeof legacy === 'string' && legacy.trim() ? legacy : undefined;
-  const [scopedOrgId] = orgIds;
-  if (scopedOrgId) {
-    if (legacyOrgId && legacyOrgId !== scopedOrgId) {
-      debug?.(
-        `[Subconscious] org scope "org:${scopedOrgId}" differs from organizationId "${legacyOrgId}"; using the org scope.`,
-      );
-    }
-    return scopedOrgId;
-  }
-  return legacyOrgId;
+  return orgIds[0];
 }
 
 export const MISSING_ORG_SCOPE_MESSAGE =

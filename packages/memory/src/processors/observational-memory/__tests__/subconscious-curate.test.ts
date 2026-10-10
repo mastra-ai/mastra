@@ -256,18 +256,32 @@ describe('Subconscious observation curator', () => {
       'resource:user-42',
       'thread:alpha',
     ]);
-    // An org scope wins over a differing organizationId, without throwing.
+    expect(resolveCuratorScope(withContext([['mastra__scopes', ['org:acme', 'team:core']]]))).toEqual([
+      'org:acme',
+      'resource:user-42',
+      'thread:alpha',
+    ]);
+    // A matching org scope and organizationId agree on one org.
     expect(
+      resolveCuratorScope(
+        withContext([
+          ['organizationId', 'acme'],
+          ['mastra__scopes', ['org:acme', 'team:core']],
+        ]),
+      ),
+    ).toEqual(['org:acme', 'resource:user-42', 'thread:alpha']);
+    // An org scope that differs from organizationId is two orgs, so the run is refused.
+    expect(() =>
       resolveCuratorScope(
         withContext([
           ['organizationId', 'legacy'],
           ['mastra__scopes', ['org:acme', 'team:core']],
         ]),
       ),
-    ).toEqual(['org:acme', 'resource:user-42', 'thread:alpha']);
+    ).toThrow('Subconscious needs one org, but the run holds 2: org:acme, org:legacy.');
     expect(resolveCuratorScope(withContext([['mastra__scopes', ['team:core']]]))).toBeUndefined();
     expect(() => resolveCuratorScope(withContext([['mastra__scopes', ['org:acme', 'org:beta']]]))).toThrow(
-      /needs one org scope/,
+      /needs one org/,
     );
     expect(() => resolveCuratorScope(withContext([['mastra__scopes', ['org:a:resource:b']]]))).toThrow(
       /must not contain ":"/,
@@ -528,7 +542,7 @@ describe('Subconscious observation curator', () => {
     await vi.waitFor(() =>
       expect(writer.custom).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ error: expect.stringContaining('needs one org scope') }),
+          data: expect.objectContaining({ error: expect.stringContaining('needs one org') }),
         }),
       ),
     );
