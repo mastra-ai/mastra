@@ -142,6 +142,33 @@ Each thread has an owner (`resourceId`) that can't be changed after creation. Av
 
 To list all threads for a resource, or retrieve a specific thread, [use the memory API directly](/docs/memory/message-history#querying).
 
+### Identify memory with scopes
+
+Instead of a `memory` object, you can pass `scopes`: the addresses a run acts as, written as `<type>:<value>`. Memory reads the resource from a `resource:` scope and the thread from a `thread:` scope. Other scopes, such as `org:acme`, are passed to tools and processors.
+
+```typescript {2}
+const response = await memoryAgent.generate('Remember my favorite color is blue.', {
+  scopes: ['org:acme', 'resource:user-123', 'thread:conversation-123'],
+})
+```
+
+Scopes can also come from the agent and from the request context. Mastra combines all three sources:
+
+```typescript title="src/mastra/agents/memory-agent.ts" {4}
+export const memoryAgent = new Agent({
+  id: 'memory-agent',
+  name: 'Memory Agent',
+  scopes: ({ requestContext }) => [`org:${requestContext.get('org-id')}`],
+  memory: new Memory(),
+})
+```
+
+Trusted server middleware can set scopes with the `MASTRA_SCOPES_KEY` request context key. Visit [Request Context](/docs/server/request-context#reserved-keys) for details. Clients can't send scopes in a request body.
+
+You can mix scopes with `memory.resource`, `memory.thread`, or the resource and thread request context keys, as long as they agree. If a `resource:` or `thread:` scope names a different value than another source, the call throws an error.
+
+Tools, processors, and subagents receive the run's other scopes, but not its `resource:` and `thread:` scopes. Each nested agent call picks its own resource and thread.
+
 ## Observational Memory
 
 Long conversations can fill the context window with raw message history and reduce agent performance. [Observational Memory](../memory/observational-memory) uses background agents to compress older messages into observations. This reduces the context used by message history while retaining information for later turns.
