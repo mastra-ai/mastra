@@ -27,3 +27,4 @@ export * from './schedules';
 export * from './tool-provider-connections';
 export * from './notifications';
 export * from './thread-state';
+export * from './signal-subscriptions';

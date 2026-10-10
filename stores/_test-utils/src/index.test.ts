@@ -1,8 +1,9 @@
-import { MockStore } from '@mastra/core/storage';
+import { InMemorySignalSubscriptionsStorage, MockStore } from '@mastra/core/storage';
 import type { ObservabilityStorage } from '@mastra/core/storage';
 import { createTestSuite } from './factory';
 import { createMastraStorageCompositionTests } from './composite-tests';
 import { createObservabilityVNextTests } from './domains/observability-vnext';
+import { createSignalSubscriptionsConformanceTests } from './domains/signal-subscriptions';
 
 // Test InMemoryStore (MockStore)
 createTestSuite(new MockStore(), { scopedTraceDeletion: true });
@@ -22,4 +23,13 @@ createObservabilityVNextTests({
     const store = new MockStore();
     return (await store.getStore('observability')) as ObservabilityStorage;
   },
+});
+
+// Run the shared signal-subscriptions contract against the in-memory adapter.
+// Both "replicas" share one instance because the store is process-local.
+const signalSubscriptions = new InMemorySignalSubscriptionsStorage();
+createSignalSubscriptionsConformanceTests({
+  storeName: 'InMemorySignalSubscriptionsStorage',
+  createStore: async () => signalSubscriptions,
+  databaseClock: false,
 });

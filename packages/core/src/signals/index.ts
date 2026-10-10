@@ -6,6 +6,8 @@ export {
   type SignalProviderWebhookRequest,
 } from './signal-provider';
 
+export type { DurableSubscriptionScope } from './durable-subscription-scope';
+
 export { WebhookSignalProvider, type WebhookSignalProviderOptions } from './webhook-signal-provider';
 
 // `TaskSignalProvider` is a SignalProvider that bundles the built-in task tools
