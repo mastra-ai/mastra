@@ -84,6 +84,17 @@ export interface MemoryObservationMatch {
   observedAt: string | null;
 }
 
+export interface MemoryThreadConfigUpdate {
+  observationTokens?: number | null;
+  reflectionTokens?: number | null;
+}
+
+export interface MemoryThreadConfig {
+  observationTokens: number;
+  reflectionTokens: number;
+  overrides: { observationTokens: number | null; reflectionTokens: number | null };
+}
+
 export interface MemoryObservationRun {
   id: string;
   threadId: string;
@@ -239,6 +250,18 @@ export class PlatformMemoryClient {
   async listObservationRuns(query: { threadId?: string; limit?: number } = {}) {
     const res = await this.request<{ runs: MemoryObservationRun[] }>('GET', '/runs', { query });
     return res.runs;
+  }
+
+  /** Effective observation thresholds for the thread and which ones it overrides. */
+  getThreadConfig(threadId: string) {
+    return this.request<MemoryThreadConfig>('GET', `/threads/${encodeURIComponent(threadId)}/config`);
+  }
+
+  /** Overrides thresholds for one thread. Pass `null` to fall back to the instance value. */
+  updateThreadConfig(threadId: string, config: MemoryThreadConfigUpdate) {
+    return this.request<MemoryThreadConfig>('PATCH', `/threads/${encodeURIComponent(threadId)}/config`, {
+      body: config,
+    });
   }
 
   /** Copies a thread, its messages, and its observations. */

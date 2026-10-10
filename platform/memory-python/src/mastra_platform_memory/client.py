@@ -165,6 +165,13 @@ class PlatformMemory:
     ) -> list[dict[str, Any]]:
         return self._request("GET", "/runs", query={"threadId": thread_id, "limit": limit})["runs"]
 
+    def get_thread_config(self, thread_id: str) -> dict[str, Any]:
+        return self._request("GET", f"/threads/{_q(thread_id)}/config")
+
+    def update_thread_config(self, thread_id: str, config: dict[str, int | None]) -> dict[str, Any]:
+        """Override thresholds for one thread, e.g. {"observationTokens": 5000}. None restores the instance value."""
+        return self._request("PATCH", f"/threads/{_q(thread_id)}/config", body=config)
+
     def clone_thread(
         self,
         thread_id: str,
