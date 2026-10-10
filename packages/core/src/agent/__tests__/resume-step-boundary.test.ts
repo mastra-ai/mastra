@@ -66,9 +66,11 @@ describe('resumed streams open a step boundary (#26475)', () => {
     const first = await a.stream('refund', { maxSteps: 20 });
     let toolCallId = await drain(first);
     const runId = first.runId;
+    const expectedIds = ['call-lookup'];
 
     for (let i = 0; i < RESUMES; i++) {
       expect(toolCallId).toBeDefined();
+      expectedIds.push(toolCallId!);
       toolCallId = await drain(await a.approveToolCall({ runId, toolCallId: toolCallId! }));
     }
 
@@ -77,6 +79,10 @@ describe('resumed streams open a step boundary (#26475)', () => {
     expect(steps.length).toBeGreaterThan(RESUMES);
     const perStep = steps.map(s => (s.content ?? []).filter((p: any) => p.type === 'tool-call').length);
     expect(Math.max(...perStep)).toBe(1);
+    const savedIds = steps.flatMap(s =>
+      (s.content ?? []).filter((p: any) => p.type === 'tool-call').map((p: any) => p.toolCallId),
+    );
+    expect(savedIds).toEqual(expectedIds);
   });
 });
 
