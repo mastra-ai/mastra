@@ -164,8 +164,14 @@ export interface PersistStepUpdateParams {
    * Used when a resumed step starts, so its resume data survives a crash mid-step.
    */
   recordResumedStepStart?: boolean;
+  /**
+   * The run's abort signal. `Run.cancel()` stores `canceled` directly, outside the ordered
+   * write queue, so a queued `running` checkpoint must not overwrite it.
+   */
+  abortSignal?: AbortSignal;
 }
 
+/** Persists a step snapshot in run order while honoring persistence and resume guards. */
 export async function persistStepUpdate(
   engine: DefaultExecutionEngine,
   params: PersistStepUpdateParams,
@@ -184,7 +190,9 @@ export async function persistStepUpdate(
     tracingContext,
     phase,
     recordResumedStepStart,
+    abortSignal,
   } = params;
+  const isCanceled = () => abortSignal?.reason === WORKFLOW_CANCELLED_SYMBOL;
 
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
 
@@ -200,56 +208,86 @@ export async function persistStepUpdate(
     return;
   }
 
-  await engine.wrapDurableOperation(operationId, async () => {
-    if (!evaluateBeforeDurableOperation && !persistencePredicate?.({ stepResults, workflowStatus })) {
-      return;
-    }
-
-    // Guard: never overwrite a `suspended` / `paused` snapshot with a later
-    // `running` update from the same run. During resume the loop transitions
-    // suspended → running mid-execution, and any step-update write would
-    // otherwise clobber the suspend record before the resume actually
-    // completes. The engine tracks its own last-persisted status for this
-    // run (process-local) so we don't need an extra storage read per step.
-    if (workflowStatus === 'running' && !recordResumedStepStart) {
-      const lastPersisted = engine.getLastPersistedStatus(runId);
-      if (lastPersisted === 'suspended' || lastPersisted === 'paused') {
+  await engine.wrapDurableOperation(operationId, () =>
+    engine.runSerializedPersist(runId, async () => {
+      if (!evaluateBeforeDurableOperation && !persistencePredicate?.({ stepResults, workflowStatus })) {
         return;
       }
-    }
 
-    const requestContextObj = engine.serializeRequestContext(requestContext);
+      // Guard: never overwrite a `suspended` / `paused` snapshot with a later
+      // `running` update from the same run. During resume the loop transitions
+      // suspended → running mid-execution, and any step-update write would
+      // otherwise clobber the suspend record before the resume actually
+      // completes. The engine tracks its own last-persisted status for this
+      // run (process-local) so we don't need an extra storage read per step.
+      if (workflowStatus === 'running' && !recordResumedStepStart) {
+        const lastPersisted = engine.getLastPersistedStatus(runId);
+        if (lastPersisted === 'suspended' || lastPersisted === 'paused') {
+          return;
+        }
+      }
 
-    const snapshot: WorkflowRunState = {
-      runId,
-      parentWorkflow: executionContext.parentWorkflow,
-      status: workflowStatus,
-      value: executionContext.state,
-      context: stepResults as any,
-      activePaths: executionContext.executionPath,
-      stepExecutionPath: executionContext.stepExecutionPath,
-      activeStepsPath: executionContext.activeStepsPath,
-      serializedStepGraph,
-      suspendedPaths: executionContext.suspendedPaths,
-      waitingPaths: {},
-      resumeLabels: executionContext.resumeLabels,
-      result,
-      error,
-      requestContext: requestContextObj,
-      timestamp: Date.now(),
-      // Persist tracing context for span continuity on resume
-      tracingContext,
-    };
+      // A checkpoint queued before cancellation would leave the canceled run restartable.
+      if (workflowStatus === 'running' && isCanceled()) {
+        return;
+      }
 
-    const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: workflowId,
-      runId,
-      resourceId,
-      snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
-    });
-    engine.setLastPersistedStatus(runId, workflowStatus);
-  });
+      const requestContextObj = engine.serializeRequestContext(requestContext);
+
+      const snapshot: WorkflowRunState = {
+        runId,
+        parentWorkflow: executionContext.parentWorkflow,
+        status: workflowStatus,
+        value: executionContext.state,
+        context: stepResults as any,
+        activePaths: executionContext.executionPath,
+        stepExecutionPath: executionContext.stepExecutionPath,
+        activeStepsPath: executionContext.activeStepsPath,
+        serializedStepGraph,
+        suspendedPaths: executionContext.suspendedPaths,
+        waitingPaths: {},
+        resumeLabels: executionContext.resumeLabels,
+        result,
+        error,
+        requestContext: requestContextObj,
+        timestamp: Date.now(),
+        // Persist tracing context for span continuity on resume
+        tracingContext,
+      };
+
+      const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
+      const persistedSnapshot =
+        workflowsStore && engine.options?.pruneSnapshot
+          ? engine.options.pruneSnapshot({ snapshot, workflowStatus })
+          : snapshot;
+      // Include item starts and sibling writes carrying accumulated foreach progress.
+      // Final snapshots remain writable so a budget failure can save completed results.
+      const isForeachCheckpoint =
+        workflowStatus === 'running' &&
+        (executionContext.foreachIndex !== undefined ||
+          Object.entries(stepResults).some(
+            ([id, step]) =>
+              id !== 'input' &&
+              id !== '__state' &&
+              step?.status === 'running' &&
+              step.suspendPayload?.__workflow_meta?.foreachOutput,
+          ));
+      if (workflowsStore && isForeachCheckpoint) {
+        engine.reserveForeachCheckpoint(runId, persistedSnapshot);
+      }
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: workflowId,
+        runId,
+        resourceId,
+        snapshot: persistedSnapshot,
+      });
+      engine.setLastPersistedStatus(runId, workflowStatus);
+      // Cancellation can land while this write is in flight and be overwritten by it.
+      if (workflowStatus === 'running' && isCanceled()) {
+        await workflowsStore?.updateWorkflowState({ workflowName: workflowId, runId, opts: { status: 'canceled' } });
+      }
+    }),
+  );
 }
 
 export interface ExecuteEntryParams extends ObservabilityContext {

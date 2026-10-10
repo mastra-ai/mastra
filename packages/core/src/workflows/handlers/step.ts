@@ -71,6 +71,7 @@ export interface ExecuteStepParams extends ObservabilityContext {
   entryMetadata?: Record<string, any>;
 }
 
+/** Executes a step with lifecycle hooks and preserves foreach progress in its start snapshot. */
 export async function executeStep(
   engine: DefaultExecutionEngine,
   params: ExecuteStepParams,
@@ -225,6 +226,17 @@ export async function executeStep(
     skipEmits,
   });
 
+  // A foreach iteration shares its step id with the foreach entry, whose running result carries
+  // the finished iterations. Keep them in this start checkpoint so a crash right after it still
+  // restarts without them (#26214). Read it at the write: siblings
+  // may have finished while the span and startup hooks above were awaited.
+  const foreachCheckpoint =
+    executionContext.foreachIndex !== undefined && stepResults[step.id]?.status === 'running'
+      ? stepResults[step.id]?.suspendPayload?.__workflow_meta?.foreachOutput
+        ? stepResults[step.id]?.suspendPayload
+        : undefined
+      : undefined;
+
   await engine.persistStepUpdate({
     workflowId,
     runId,
@@ -232,7 +244,7 @@ export async function executeStep(
     serializedStepGraph,
     stepResults: {
       ...stepResults,
-      [step.id]: stepInfo,
+      [step.id]: foreachCheckpoint ? { ...stepInfo, suspendPayload: foreachCheckpoint } : stepInfo,
     } as Record<string, StepResult<any, any, any, any>>,
     executionContext,
     workflowStatus: 'running',

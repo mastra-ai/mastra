@@ -37,6 +37,8 @@ export interface ExecutionEngineOptions {
     workflowStatus: WorkflowRunStatus;
   }) => boolean;
   evaluatePersistencePredicateBeforeDurableOperation?: boolean;
+  /** See WorkflowOptions.maxForeachCheckpointBytes. */
+  maxForeachCheckpointBytes?: number;
 
   /**
    * Acknowledges that `resume()` calls cannot be de-duplicated via the persisted

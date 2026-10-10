@@ -228,6 +228,14 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
             defaultValue: '() => true',
           },
           {
+            name: 'maxForeachCheckpointBytes',
+            type: 'number',
+            description:
+              'Maximum cumulative UTF-8 JSON bytes of running foreach snapshots per execution attempt in the default engine. Must be a positive safe integer. Counts item starts and accumulated progress after pruneSnapshot. Exceeding the budget fails the run rather than skipping checkpoints. The final failure snapshot can still preserve completed results and is outside this budget. A fresh process or a new attempt after a terminal result gets a fresh budget. Increase only in trusted workflow configuration for larger workloads.',
+            isOptional: true,
+            defaultValue: '16777216 (16 MiB)',
+          },
+          {
             name: 'pruneSnapshot',
             type: '(params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState',
             description:

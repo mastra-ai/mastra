@@ -138,6 +138,7 @@ export interface ExecuteParallelParams extends ObservabilityContext {
   perStep?: boolean;
 }
 
+/** Executes active parallel arms and checkpoints completed arms for restart. */
 export async function executeParallel(
   engine: DefaultExecutionEngine,
   params: ExecuteParallelParams,
@@ -196,6 +197,8 @@ export async function executeParallel(
       makeStepRunning = timeTravel.steps[0] === stepId;
     }
     if (!makeStepRunning) {
+      // On restart an arm that already finished is no longer active, but a later arm may still be.
+      if (restart) continue;
       break;
     }
     const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
@@ -218,53 +221,88 @@ export async function executeParallel(
   }
 
   let execResults: any;
-  const results: StepResult<any, any, any, any>[] = await Promise.all(
-    steps.map(async (step, i) => {
-      const stepId = getSingleStepEntryId(step);
-      const currStepResult = stepResults[stepId];
-      if (currStepResult && currStepResult.status !== 'running') {
-        return currStepResult;
-      }
-      if (!currStepResult && (perStep || timeTravel)) {
-        return {} as StepResult<any, any, any, any>;
-      }
-      const stepExecResult = await executeChildEntry(engine, step, {
+  // Arms finish in any order. Each finished arm is checkpointed so a crash while siblings are
+  // still running does not re-run it on restart (#26214). Writes of one run are ordered by the
+  // engine. Wait for started arms even if one rejects, then propagate the original failure.
+  // Once the block has settled, no arm may write a later running checkpoint.
+  let blockSettled = false;
+  /** Saves arm completion unless the block has already reached its final result. */
+  const checkpointArm = async (armIndex: number) => {
+    if (blockSettled) return;
+    await engine.persistStepUpdate({
+      workflowId,
+      runId,
+      resourceId,
+      serializedStepGraph,
+      stepResults,
+      executionContext,
+      workflowStatus: 'running',
+      requestContext,
+      phase: `arm-end.${armIndex}`,
+      abortSignal: abortController?.signal,
+    });
+  };
+  const arms = steps.map(async (step, i) => {
+    const stepId = getSingleStepEntryId(step);
+    const currStepResult = stepResults[stepId];
+    if (currStepResult && currStepResult.status !== 'running') {
+      return currStepResult;
+    }
+    if (!currStepResult && (perStep || timeTravel)) {
+      return {} as StepResult<any, any, any, any>;
+    }
+    const stepExecResult = await executeChildEntry(engine, step, {
+      workflowId,
+      runId,
+      resourceId,
+      prevOutput,
+      stepResults,
+      serializedStepGraph,
+      restart,
+      timeTravel,
+      resume,
+      executionContext: {
+        activeStepsPath: executionContext.activeStepsPath,
         workflowId,
         runId,
-        resourceId,
-        prevOutput,
-        stepResults,
-        serializedStepGraph,
-        restart,
-        timeTravel,
-        resume,
-        executionContext: {
-          activeStepsPath: executionContext.activeStepsPath,
-          workflowId,
-          runId,
-          executionPath: [...executionContext.executionPath, i],
-          stepExecutionPath: executionContext.stepExecutionPath,
-          suspendedPaths: executionContext.suspendedPaths,
-          resumeLabels: executionContext.resumeLabels,
-          retryConfig: executionContext.retryConfig,
-          state: executionContext.state,
-          tracingIds: executionContext.tracingIds,
-        },
-        ...createObservabilityContext({ currentSpan: parallelSpan }),
-        pubsub,
-        abortController,
-        requestContext,
-        actor,
-        outputWriter,
-        disableScorers,
-        perStep,
-      });
-      // Apply context changes from parallel step execution
-      engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
-      Object.assign(stepResults, stepExecResult.stepResults);
-      return stepExecResult.result;
-    }),
-  );
+        executionPath: [...executionContext.executionPath, i],
+        stepExecutionPath: executionContext.stepExecutionPath,
+        suspendedPaths: executionContext.suspendedPaths,
+        resumeLabels: executionContext.resumeLabels,
+        retryConfig: executionContext.retryConfig,
+        state: executionContext.state,
+        tracingIds: executionContext.tracingIds,
+      },
+      ...createObservabilityContext({ currentSpan: parallelSpan }),
+      pubsub,
+      abortController,
+      requestContext,
+      actor,
+      outputWriter,
+      disableScorers,
+      perStep,
+    });
+    // Apply context changes from parallel step execution
+    engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
+    Object.assign(stepResults, stepExecResult.stepResults);
+    // A failed arm is final too: restart must report its failure, not repeat its side effects.
+    const armFinished = stepExecResult.result.status === 'success' || stepExecResult.result.status === 'failed';
+    if (armFinished && !abortController?.signal?.aborted) {
+      await checkpointArm(i);
+    }
+    return stepExecResult.result;
+  });
+  let results: StepResult<any, any, any, any>[];
+  try {
+    results = await Promise.all(arms);
+  } catch (error) {
+    // Promise.all rejects early, but siblings can still finish side effects.
+    // Keep their checkpoints enabled until they settle and preserve the first error.
+    await Promise.allSettled(arms);
+    throw error;
+  } finally {
+    blockSettled = true;
+  }
   const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
 
   const hasSuspended = results.find(result => result.status === 'suspended');
@@ -950,6 +988,7 @@ export interface ExecuteForeachParams extends ObservabilityContext {
   perStep?: boolean;
 }
 
+/** Executes foreach items while preserving completed results across restart or resume. */
 export async function executeForeach(
   engine: DefaultExecutionEngine,
   params: ExecuteForeachParams,
@@ -1153,8 +1192,54 @@ export async function executeForeach(
     }
   };
 
+  // Items finish in any order. After each success the finished items are written to
+  // `__workflow_meta.foreachOutput`, the channel suspend and restart already read, so a
+  // crash mid-block does not re-run them (#26214). The engine orders all writes of a run.
+  // Siblings of a resumed foreach read the suspended entry for their own resume data, and the
+  // persistence guard drops `running` writes after a suspend anyway, so only first runs and restarts checkpoint.
+  const resumingSuspended = prevPayload?.status === 'suspended';
+  /** Rebuilds the running foreach result from the finished items and puts it back in the shared slot. */
+  const restoreProgress = () => {
+    const foreachOutput: PersistedForeachStepResult[] = [];
+    prevForeachOutput.forEach((itemResult, index) => {
+      if (itemResult?.status === 'success') {
+        const { payload: _payload, ...compact } = itemResult;
+        foreachOutput[index] = compact as PersistedForeachStepResult;
+      }
+    });
+    // Iterations share `stepResults[stepId]` and overwrite it with their own result.
+    stepResults[stepId] = {
+      ...stepInfo,
+      status: 'running',
+      suspendPayload: { __workflow_meta: { foreachOutput } },
+    } as StepResult<any, any, any, any>;
+  };
+
+  /** Saves accumulated item progress through the run's ordered snapshot queue. */
+  const checkpointItem = (k: number) => {
+    restoreProgress();
+    return engine.persistStepUpdate({
+      workflowId,
+      runId,
+      resourceId,
+      serializedStepGraph,
+      stepResults,
+      executionContext,
+      workflowStatus: 'running',
+      requestContext,
+      phase: `item-end.${k}`,
+      abortSignal: abortController?.signal,
+    });
+  };
+
+  /**
+   * Executes one queued item and checkpoints eligible successes before releasing its slot.
+   * A checkpoint failure stops queued work while preserving the item's successful result.
+   */
   const worker = async (task: ForeachTask, cb: DoneCallback) => {
     const { item, k, resumeToUse } = task;
+    let checkpointDue = false;
+    let itemSucceeded = false;
 
     try {
       // Honor cancellation before dispatching more work
@@ -1180,11 +1265,15 @@ export async function executeForeach(
       Object.assign(stepResults, stepExecResult.stepResults);
 
       const result = stepExecResult.result as ForeachStepResult;
+      itemSucceeded = result.status === 'success';
+      checkpointDue = itemSucceeded && !resumingSuspended;
 
-      if (result.status !== 'success') {
-        await handleNonSuccessResult(result, k);
-      } else {
-        await handleSuccessResult(result, k);
+      // Put the finished items back right away, whatever this item's outcome: the awaits below would
+      // otherwise leave its plain result in the shared slot, and a sibling's start checkpoint would
+      // drop earlier progress. A failed or suspended item is reported from its own result, not this slot.
+      if (!resumingSuspended) {
+        if (result.status === 'success') prevForeachOutput[k] = { ...result, suspendPayload: {} };
+        restoreProgress();
       }
 
       if (result.status === 'success' && result.output !== undefined) {
@@ -1199,6 +1288,14 @@ export async function executeForeach(
       // round-trip through the workflow snapshot. For non-suspended results we
       // clear it to keep the snapshot small.
       prevForeachOutput[k] = result.status === 'suspended' ? result : { ...result, suspendPayload: {} };
+
+      // Save the execution result before publishing progress. A publication failure must
+      // fail the block without turning a completed side effect into a retryable item.
+      if (result.status !== 'success') {
+        await handleNonSuccessResult(result, k);
+      } else {
+        await handleSuccessResult(result, k);
+      }
     } catch (err) {
       const errorObj = err instanceof Error ? err : new Error(String(err));
       const thrownResult: PersistedForeachStepResult = {
@@ -1211,11 +1308,26 @@ export async function executeForeach(
       if (!errorResult) {
         errorResult = thrownResult as StepFailure<any, any, any, any>;
       }
-      // Record the iteration that threw so the failure result below reports it
-      // as failed (and therefore retried) rather than leaving a hole in the
-      // per-iteration progress array.
-      prevForeachOutput[k] = thrownResult;
+      // Retry an iteration that threw, but retain successful execution when only
+      // its progress publication failed. Its checkpoint is still due below.
+      if (!itemSucceeded) prevForeachOutput[k] = thrownResult;
       killQueue();
+    }
+
+    if (checkpointDue && !abortController?.signal?.aborted) {
+      try {
+        await checkpointItem(k);
+      } catch (err) {
+        // The item itself finished, so keep it out of the failed set and fail the run on the write error.
+        errorResult ??= {
+          status: 'failed',
+          error: err instanceof Error ? err : new Error(String(err)),
+          payload: undefined,
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        } as StepFailure<any, any, any, any>;
+        killQueue();
+      }
     }
 
     inFlight--;
