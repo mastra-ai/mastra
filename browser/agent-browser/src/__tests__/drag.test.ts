@@ -34,7 +34,7 @@ const { sourceLocator, targetLocator, selectorSourceLocator, selectorTargetLocat
     return { sourceLocator, targetLocator, selectorSourceLocator, selectorTargetLocator, mockPage, mockManager };
   });
 
-vi.mock('agent-browser', () => ({
+vi.mock('../browser-manager', () => ({
   BrowserManager: class {
     launch = mockManager.launch;
     close = mockManager.close;

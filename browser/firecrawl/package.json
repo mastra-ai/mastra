@@ -40,7 +40,6 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "agent-browser": "0.19.0",
     "eslint": "^10.7.0",
     "playwright-core": "^1.61.1",
     "tsdown": "0.22.9",
@@ -48,9 +47,8 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/agent-browser": ">=0.3.0 <1.0.0",
-    "@mastra/core": ">=1.22.0-0 <2.0.0-0",
-    "agent-browser": ">=0.19.0"
+    "@mastra/agent-browser": ">=0.6.0-0 <1.0.0",
+    "@mastra/core": ">=1.22.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

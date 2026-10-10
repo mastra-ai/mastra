@@ -52,7 +52,7 @@ When interacting with pages:
 
 :::note
 
-For local launches (the default), AgentBrowser requires a Chromium binary installed via Playwright. This is normally downloaded automatically when you install `@mastra/agent-browser`. If launching the browser fails with `"browser executable is missing"`, run `npx playwright install chromium`. If you connect to a remote browser using the [`cdpUrl`](/reference/browser/agent-browser) option, the remote browser provides Chromium.
+For local launches (the default), AgentBrowser starts Chrome with Playwright as a child process of your app, so the browser exits with it. It uses Playwright's Chromium when installed (`npx playwright install chromium`) and otherwise falls back to an installed Google Chrome. If launching fails with `"Chrome executable not found"`, install one of them or set `executablePath`. If you connect to a remote browser using the [`cdpUrl`](/reference/browser/agent-browser) option, the remote browser provides Chromium.
 
 :::
 

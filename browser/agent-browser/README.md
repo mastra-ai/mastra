@@ -1,6 +1,6 @@
 # @mastra/agent-browser
 
-Deterministic browser automation for Mastra agents using [agent-browser](https://github.com/vercel-labs/agent-browser).
+Deterministic browser automation for Mastra agents using [Playwright](https://playwright.dev) and accessibility-tree element refs.
 
 ## Installation
 

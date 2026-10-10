@@ -19,9 +19,9 @@ import type {
 } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
 
-import { BrowserManager } from 'agent-browser';
-import type { BrowserLaunchOptions } from 'agent-browser';
 import type { Page, Locator } from 'playwright-core';
+import { BrowserManager } from './browser-manager';
+import type { BrowserLaunchOptions } from './browser-manager';
 import type {
   GotoInput,
   SnapshotInput,
@@ -818,7 +818,8 @@ export class AgentBrowser extends MastraBrowser {
       }
 
       // Count refs
-      const refs = snapshot.match(/@e\d+/g) || [];
+      // Includes refs inside iframes (e.g. @f1e2)
+      const refs = snapshot.match(/@(?:f\d+)?e\d+/g) || [];
       const elementCount = new Set(refs).size;
 
       return {
