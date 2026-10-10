@@ -386,6 +386,50 @@ describe('DurableAgent isTaskComplete', () => {
     expect(finishChunk?.payload?.stepResult).toMatchObject({ reason: 'error', isContinued: false });
   });
 
+  it('surfaces a payload-less "error" finish instead of silently completing', async () => {
+    let doStreamCalls = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => {
+        doStreamCalls++;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: `id-${doStreamCalls}`,
+              modelId: 'gemini-2.5-flash',
+              timestamp: new Date(0),
+            },
+            {
+              type: 'finish',
+              finishReason: 'error',
+              usage: { inputTokens: 10, outputTokens: 0, totalTokens: 10 },
+            },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+    const baseAgent = new Agent({
+      id: 'durable-payload-less-error-agent',
+      name: 'Durable Payload-less Error Agent',
+      instructions: 'noop',
+      model: model as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const { output, cleanup } = await durableAgent.stream('go', { maxSteps: 4 });
+    const chunks = await drain(output.fullStream as unknown as ReadableStream<any>);
+    await cleanup();
+
+    expect(doStreamCalls).toBe(1);
+    expect(chunks.some(c => c.type === 'error')).toBe(true);
+    expect(chunks.filter(c => c.type === 'step-finish').at(-1)?.payload?.stepResult).toMatchObject({
+      reason: 'error',
+      isContinued: false,
+    });
+  });
+
   it('still grades a finishReason "other" iteration that produced output', async () => {
     const model = new MockLanguageModelV2({
       doStream: async () => ({

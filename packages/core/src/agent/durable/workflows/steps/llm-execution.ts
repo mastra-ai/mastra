@@ -2065,6 +2065,26 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         },
                       });
                     }
+                    // A provider can also finish with reason 'error' without
+                    // emitting an error chunk (for example Gemini's
+                    // MALFORMED_FUNCTION_CALL). Surface the payload-less
+                    // finish through the shared retry/error-processor path,
+                    // matching the regular agent loop.
+                    if (finishReason === 'error') {
+                      const rawReason = payload.stepResult?.rawReason;
+                      throw new MastraError({
+                        id: 'AGENT_STREAM_ERROR',
+                        text: rawReason
+                          ? `Agent stream finished with finishReason "error" (provider reported "${rawReason}") but no error payload was provided`
+                          : 'Agent stream finished with finishReason "error" but no error payload was provided',
+                        domain: ErrorDomain.AGENT,
+                        category: ErrorCategory.SYSTEM,
+                        details: {
+                          runId,
+                          ...(rawReason && { rawFinishReason: rawReason }),
+                        },
+                      });
+                    }
                     break;
                   }
 
