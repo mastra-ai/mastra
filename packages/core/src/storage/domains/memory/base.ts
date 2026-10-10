@@ -103,6 +103,9 @@ export abstract class MemoryStorage extends StorageDomain {
    * Memory fences are raised only for runs claimed in a workflows store that
    * supports run fencing, so supporting it here has no effect on its own.
    *
+   * A rejected write throws a `RunFenceConflictError` itself, not wrapped in
+   * another error, and writes nothing.
+   *
    * Adapters that return true must pass the run-fencing conformance suite.
    * An adapter that has to probe its backend to know returns a promise, and
    * rejects when the probe fails: it must never answer false and later true.
