@@ -15,4 +15,4 @@ defineBoard({
 });
 ```
 
-Integration rule contexts bound to a card now also carry `phase: { id, kind, role, outcomes }`, so handlers can act on what the card's phase means without checking board ids. Handlers set explicitly in an integration's `rules` still take precedence, so existing deployments behave as before.
+Integration rule contexts bound to a card now also carry `phase: { id, kind, role?, outcomes }`, so handlers can act on what the card's phase means without checking board ids. Handlers set explicitly in an integration's `rules` still take precedence, so existing deployments behave as before.

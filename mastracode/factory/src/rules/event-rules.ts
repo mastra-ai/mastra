@@ -34,7 +34,7 @@ export function composeEventRule<TContext>(
   if (!base) return boardRule;
   return context => {
     const decision = boardRule(context);
-    if (decision instanceof Promise) return decision.then(resolved => resolved ?? base(context));
+    if (isPromiseLike(decision)) return Promise.resolve(decision).then(resolved => resolved ?? base(context));
     return decision ?? base(context);
   };
 }
@@ -51,4 +51,8 @@ export function selectEventRule<E extends string, TContext>(
   const base = rules[event];
   if (explicitOverrides.get(rules)?.has(event)) return base;
   return composeEventRule(boardRules?.[event], base);
+}
+
+function isPromiseLike<T>(value: T | PromiseLike<T>): value is PromiseLike<T> {
+  return typeof (value as { then?: unknown } | null | undefined)?.then === 'function';
 }

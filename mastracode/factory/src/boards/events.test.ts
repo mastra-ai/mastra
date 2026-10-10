@@ -72,6 +72,11 @@ describe('selectEventRule', () => {
       type: 'notify',
       idempotencyKey: 'base',
     });
+    const thenable = { then: (resolve: (value: undefined) => void) => resolve(undefined) };
+    await expect(composeEventRule<object>(() => thenable as never, base)!({})).resolves.toEqual({
+      type: 'notify',
+      idempotencyKey: 'base',
+    });
     const handler = () => decision;
     expect(composeEventRule<object>(handler, null)).toBe(handler);
   });
