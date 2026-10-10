@@ -1,6 +1,8 @@
 import { MessageList } from '../../../agent/message-list';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
 import { normalizePerPage, calculatePagination } from '../../base';
+import { matchesRunFence, resolveRunFence, RunFenceConflictError } from '../../run-fencing';
+import type { RunFence } from '../../run-fencing';
 import type {
   StorageMessageType,
   StorageResourceType,
@@ -53,6 +55,36 @@ export class InMemoryMemory extends MemoryStorage {
     this.db.messages.clear();
     this.db.resources.clear();
     this.db.observationalMemory.clear();
+    this.db.runFences.clear();
+  }
+
+  // Fence checks and the writes they guard run without awaiting in between,
+  // which makes each fenced write atomic on the single JS thread.
+
+  supportsRunFencing(): boolean {
+    return true;
+  }
+
+  private assertFence(explicit: RunFence | undefined, operation: string): void {
+    const fence = resolveRunFence(this, explicit);
+    if (fence && !matchesRunFence(this.db.runFences.get(fence.runId), fence)) {
+      throw new RunFenceConflictError(fence, operation);
+    }
+  }
+
+  async raiseRunFence(fence: RunFence): Promise<boolean> {
+    const current = this.db.runFences.get(fence.runId);
+    if (!current || current.generation < fence.generation) {
+      this.db.runFences.set(fence.runId, { generation: fence.generation, ownerId: fence.ownerId });
+      return true;
+    }
+    return matchesRunFence(current, fence);
+  }
+
+  // This store has no retention, so there is no `retiredAt` to set; retiring
+  // only reports whether `fence` is still current.
+  async retireRunFence(fence: RunFence): Promise<boolean> {
+    return matchesRunFence(this.db.runFences.get(fence.runId), fence);
   }
 
   async getThreadById({
@@ -67,7 +99,8 @@ export class InMemoryMemory extends MemoryStorage {
     return { ...thread, metadata: thread.metadata ? { ...thread.metadata } : thread.metadata };
   }
 
-  async saveThread({ thread }: { thread: StorageThreadType }): Promise<StorageThreadType> {
+  async saveThread({ thread, fence }: { thread: StorageThreadType; fence?: RunFence }): Promise<StorageThreadType> {
+    this.assertFence(fence, 'saveThread');
     const key = thread.id;
     this.db.threads.set(key, thread);
     return thread;
@@ -77,11 +110,14 @@ export class InMemoryMemory extends MemoryStorage {
     id,
     title,
     metadata,
+    fence,
   }: {
     id: string;
     title?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageThreadType> {
+    this.assertFence(fence, 'updateThread');
     const thread = this.db.threads.get(id);
 
     if (!thread) {
@@ -226,10 +262,12 @@ export class InMemoryMemory extends MemoryStorage {
     } else if (metadataFilter) {
       hasMore = offset + paginatedThreadMessages.length < totalThreadMessages;
     } else if (include && include.length > 0) {
-      // When using include, check if we've returned all messages from the thread
-      // because include might bring in messages beyond the pagination window
-      const returnedThreadMessageIds = new Set(messages.filter(m => m.threadId === threadId).map(m => m.id));
-      hasMore = returnedThreadMessageIds.size < totalThreadMessages;
+      // Include can return matching messages beyond the pagination window, so there are no
+      // more pages once every matching message has been returned. Included messages that
+      // don't match the query aren't part of the total, so they don't count.
+      const matchingIds = new Set(threadMessages.map(m => m.id));
+      const allMatchingReturned = messages.filter(m => matchingIds.has(m.id)).length >= totalThreadMessages;
+      hasMore = !allMatchingReturned && offset + perPage < totalThreadMessages;
     } else {
       // Standard pagination: check if there are more pages
       hasMore = offset + perPage < totalThreadMessages;
@@ -415,8 +453,12 @@ export class InMemoryMemory extends MemoryStorage {
     return { messages: list.get.all.db() };
   }
 
-  async saveMessages(args: { messages: MastraDBMessage[] }): Promise<{ messages: MastraDBMessage[] }> {
+  async saveMessages(args: {
+    messages: MastraDBMessage[];
+    fence?: RunFence;
+  }): Promise<{ messages: MastraDBMessage[] }> {
     const { messages } = args;
+    this.assertFence(args.fence, 'saveMessages');
     // Simulate error handling for testing - check before saving
     if (messages.some(msg => msg.id === 'error-message' || msg.resourceId === null)) {
       throw new Error('Simulated error for testing');
@@ -450,7 +492,11 @@ export class InMemoryMemory extends MemoryStorage {
     return { messages: list.get.all.db() };
   }
 
-  async updateMessages(args: { messages: (Partial<MastraDBMessage> & { id: string })[] }): Promise<MastraDBMessage[]> {
+  async updateMessages(args: {
+    messages: (Partial<MastraDBMessage> & { id: string })[];
+    fence?: RunFence;
+  }): Promise<MastraDBMessage[]> {
+    this.assertFence(args.fence, 'updateMessages');
     const updatedMessages: MastraDBMessage[] = [];
     for (const update of args.messages) {
       const storageMsg = this.db.messages.get(update.id);
@@ -529,7 +575,8 @@ export class InMemoryMemory extends MemoryStorage {
     return updatedMessages;
   }
 
-  async deleteMessages(messageIds: string[]): Promise<void> {
+  async deleteMessages(messageIds: string[], options?: { fence?: RunFence }): Promise<void> {
+    this.assertFence(options?.fence, 'deleteMessages');
     if (!messageIds || messageIds.length === 0) {
       return;
     }
@@ -618,11 +665,14 @@ export class InMemoryMemory extends MemoryStorage {
     resourceId,
     workingMemory,
     metadata,
+    fence,
   }: {
     resourceId: string;
     workingMemory?: string;
     metadata?: Record<string, unknown>;
+    fence?: RunFence;
   }): Promise<StorageResourceType> {
+    this.assertFence(fence, 'updateResource');
     let resource = this.db.resources.get(resourceId);
 
     if (!resource) {
@@ -893,6 +943,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    this.assertFence(undefined, 'updateActiveObservations');
     const { id, observations, tokenCount, lastObservedAt, observedMessageIds } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
@@ -916,6 +967,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    this.assertFence(undefined, 'updateBufferedObservations');
     const { id, chunk } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
@@ -953,6 +1005,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
+    this.assertFence(undefined, 'swapBufferedToActive');
     const { id, activationRatio, lastObservedAt } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
@@ -1104,6 +1157,11 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
+    this.assertFence(undefined, 'createReflectionGeneration');
+    return this.insertReflectionGeneration(input);
+  }
+
+  private insertReflectionGeneration(input: CreateReflectionGenerationInput): ObservationalMemoryRecord {
     const { currentRecord, reflection, tokenCount } = input;
     const key = this.getObservationalMemoryKey(currentRecord.threadId, currentRecord.resourceId);
     const now = new Date();
@@ -1144,6 +1202,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
+    this.assertFence(undefined, 'updateBufferedReflection');
     const { id, reflection, tokenCount, inputTokenCount, reflectedObservationLineCount } = input;
     const record = this.findObservationalMemoryRecordById(id);
     if (!record) {
@@ -1159,6 +1218,7 @@ export class InMemoryMemory extends MemoryStorage {
   }
 
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
+    this.assertFence(undefined, 'swapBufferedReflectionToActive');
     const { currentRecord } = input;
     const record = this.findObservationalMemoryRecordById(currentRecord.id);
     if (!record) {
@@ -1185,7 +1245,9 @@ export class InMemoryMemory extends MemoryStorage {
 
     // Create a new generation with the merged content.
     // tokenCount is computed by the processor using its token counter on the combined content.
-    const newRecord = await this.createReflectionGeneration({
+    // No await between the fence check above and these writes, so a newer owner's
+    // buffered reflection can't land in between and be cleared below.
+    const newRecord = this.insertReflectionGeneration({
       currentRecord: record,
       reflection: newObservations,
       tokenCount: input.tokenCount,

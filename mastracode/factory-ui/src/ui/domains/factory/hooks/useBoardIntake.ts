@@ -44,6 +44,7 @@ import type { BoardStageId } from '../stages';
  * phase.
  */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
+const NO_REPOSITORIES: readonly string[] = [];
 
 const INTAKE_CARD_SOURCES: Record<IntakeSource, BoardCandidate['source']> = {
   github: 'github-issue',
@@ -103,14 +104,15 @@ function combineIntakeFeeds(feeds: readonly (IntakeFeed & { isPending: boolean }
 
 export function useBoardIntake({
   factoryProjectId,
-  repository,
+  repositories,
   definition,
   knownSourceKeys,
   elsewhereSourceKeys = EMPTY_KEYS,
   sourceFilters,
 }: {
   factoryProjectId: string;
-  repository: LinkedRepositoryPayload;
+  /** Every linked repository; the first decides between GitHub and GitLab review feeds. */
+  repositories: readonly LinkedRepositoryPayload[];
   definition: InstalledBoardInfo;
   knownSourceKeys: ReadonlySet<string>;
   /** Subset of `knownSourceKeys` whose card lives on another board. */
@@ -120,8 +122,9 @@ export function useBoardIntake({
   const kind = definition.id;
   const review = kind === 'review';
   const initialPhase = definition.initialPhase;
-  const projectRepositoryId = repository.projectRepositoryId;
-  const gitlabRepository = repository.provider === 'gitlab';
+  const repository = repositories[0];
+  const projectRepositoryId = repository?.projectRepositoryId;
+  const gitlabRepository = repository?.provider === 'gitlab';
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
   const jiraStatusQuery = useJiraStatusQuery();
@@ -130,7 +133,17 @@ export function useBoardIntake({
   const config = configQuery.data;
   const gitlabStatusQuery = useGitLabStatusQuery(!review);
   const githubEnabled = config?.github.enabled ?? true;
-  const githubSelected = config ? (config.github.sourceIds?.includes(repository.slug) ?? false) : true;
+  // Every linked GitHub repository feeds intake, not just the first one.
+  // Review watches pull requests on all of them; Work only browses the
+  // repositories selected as issue sources.
+  const reviewRepositoryIds = repositories
+    .filter(linked => linked.provider !== 'gitlab')
+    .map(linked => linked.projectRepositoryId);
+  const githubRepositoryIds = repositories
+    .filter(linked => linked.provider !== 'gitlab')
+    .filter(linked => (config ? (config.github.sourceIds?.includes(linked.slug) ?? false) : true))
+    .map(linked => linked.projectRepositoryId);
+  const githubSelected = githubRepositoryIds.length > 0;
   const gitlabConnected = Boolean(gitlabStatusQuery.data?.enabled && gitlabStatusQuery.data.configured);
   const linearFeature = linearStatusQuery.data?.enabled ?? false;
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
@@ -218,10 +231,10 @@ export function useBoardIntake({
 
   // Fetch every configured source so teammate filters can include provider identities
   // even when a different intake feed is visible. Only the browsed feeds affect loading.
-  const issues = useProjectIssuesQuery(!review && githubIntakeActive ? projectRepositoryId : undefined);
+  const issues = useProjectIssuesQuery(!review && githubIntakeActive ? githubRepositoryIds : NO_REPOSITORIES);
   // Auto-triage is a Work-only lane, so only Work browses the triaged feed.
   const triageIssues = useProjectIssuesQuery(
-    kind === 'work' && browsesGithub ? projectRepositoryId : undefined,
+    kind === 'work' && browsesGithub ? githubRepositoryIds : NO_REPOSITORIES,
     AUTO_TRIAGED_LABEL,
   );
   // Mirrors the server's resolution: the first route (in listing order) whose
@@ -232,7 +245,7 @@ export function useBoardIntake({
     return routedBoard === kind;
   });
   const projectBindings = (bindingsQuery.data ?? []).filter(binding => binding.factoryProjectId === factoryProjectId);
-  const pulls = useProjectPullRequestsQuery(review && !gitlabRepository ? projectRepositoryId : undefined);
+  const pulls = useProjectPullRequestsQuery(review && !gitlabRepository ? reviewRepositoryIds : NO_REPOSITORIES);
   const mergeRequests = useGitLabMergeRequestsQuery(
     review && gitlabRepository ? factoryProjectId : undefined,
     review && gitlabRepository ? projectRepositoryId : undefined,
