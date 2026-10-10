@@ -43,14 +43,16 @@ const PIN_677: TemplatePin = {
 };
 
 /**
- * NangoHQ/integration-templates#708 fixes linear attachment tools rejecting
- * null creator emails, surfaces GraphQL errors[] in linear cycle/project
- * actions (including partial `data: { field: null }` responses), and accepts
- * fireflies action_items as either an array or a newline-joined string.
+ * NangoHQ/integration-templates#708 (merged) fixes linear attachment tools
+ * rejecting null creator emails, surfaces GraphQL errors[] in linear
+ * cycle/project actions (including partial `data: { field: null }` responses),
+ * and accepts fireflies action_items as either an array or a newline-joined
+ * string. Pinned to upstream main at the merge commit; fold back into
+ * TEMPLATE_SHA on the next workspace-wide refresh.
  */
 const PIN_708: TemplatePin = {
   repo: 'NangoHQ/integration-templates',
-  sha: 'a1c18489448116e9b387226000b771ac2c9c8f68',
+  sha: '4e61bff484f0ab28810e3f252be8bff1f49928a9',
 };
 
 export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
