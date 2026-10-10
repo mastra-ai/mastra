@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
+import type { DatasetExperiment } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ExperimentCrumb } from '../experiment-crumb';
+import { ExperimentCrumb, ExperimentCrumbStatusIcon } from '../experiment-crumb';
+import { DATASET_ID, experimentsResponseOf, makeExperiment } from './fixtures/experiment-crumb';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -26,12 +28,8 @@ const renderCrumb = (experimentId: string) => {
   );
 };
 
-const stubExperiments = (experiments: Array<{ id: string; datasetId: string; name?: string }>) => {
-  server.use(
-    http.get(`${BASE_URL}/api/experiments`, () =>
-      HttpResponse.json({ experiments, pagination: { total: experiments.length, page: 0 } }),
-    ),
-  );
+const stubExperiments = (experiments: DatasetExperiment[]) => {
+  server.use(http.get(`${BASE_URL}/api/experiments`, () => HttpResponse.json(experimentsResponseOf(experiments))));
 };
 
 afterEach(() => cleanup());
@@ -39,7 +37,7 @@ afterEach(() => cleanup());
 describe('ExperimentCrumb', () => {
   it('should render the experiment name when the experiment has one', async () => {
     // Given an experiment with a name
-    stubExperiments([{ id: 'exp-named-0001', datasetId: 'ds-1', name: 'Nightly regression' }]);
+    stubExperiments([makeExperiment({ id: 'exp-named-0001', name: 'Nightly regression' })]);
 
     // When the crumb renders for that experiment
     renderCrumb('exp-named-0001');
@@ -51,7 +49,7 @@ describe('ExperimentCrumb', () => {
 
   it('should fall back to the short id when the experiment has no name', async () => {
     // Given an experiment without a name
-    stubExperiments([{ id: 'abcdef1234567890', datasetId: 'ds-1' }]);
+    stubExperiments([makeExperiment({ id: 'abcdef1234567890' })]);
 
     // When the crumb renders
     renderCrumb('abcdef1234567890');
@@ -69,5 +67,51 @@ describe('ExperimentCrumb', () => {
 
     // Then the id fallback is shown immediately (no empty crumb)
     expect(screen.getByText('abcdef12...')).toBeDefined();
+  });
+});
+
+describe('ExperimentCrumbStatusIcon', () => {
+  const renderIcon = (experimentId: string) => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return render(
+      <MastraReactProvider baseUrl={BASE_URL}>
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={[`/experiments/${experimentId}`]}>
+            <Routes>
+              <Route path="/experiments/:experimentId" element={<ExperimentCrumbStatusIcon />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </MastraReactProvider>,
+    );
+  };
+
+  it('should stop spinning once the experiment detail reports it has completed', async () => {
+    // Given a stale experiments list that still says "running" while the detail endpoint says "completed"
+    stubExperiments([makeExperiment({ id: 'exp-1', status: 'running' })]);
+    server.use(
+      http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/exp-1`, () =>
+        HttpResponse.json(makeExperiment({ id: 'exp-1', status: 'completed' })),
+      ),
+    );
+
+    // When the status icon renders
+    const { container } = renderIcon('exp-1');
+
+    // Then the completed icon is shown and the spinner is gone
+    await waitFor(() => expect(container.querySelector('.lucide-circle-check')).not.toBeNull());
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('should fall back to the list status until the detail query resolves', async () => {
+    // Given a running experiment whose detail request never resolves
+    stubExperiments([makeExperiment({ id: 'exp-2', status: 'running' })]);
+    server.use(http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/exp-2`, () => new Promise(() => {})));
+
+    // When the status icon renders
+    renderIcon('exp-2');
+
+    // Then the spinner from the list status is shown
+    expect(await screen.findByRole('status')).toBeDefined();
   });
 });
