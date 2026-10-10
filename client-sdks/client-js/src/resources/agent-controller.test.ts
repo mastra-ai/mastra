@@ -605,6 +605,52 @@ describe('AgentController Resource', () => {
     expect((global.fetch as any).mock.calls).toHaveLength(2);
   });
 
+  it.each([408, 429])('keeps reconnecting after a %s resubscribe response', async status => {
+    const firstEvent = { type: 'agent_start' };
+    const secondEvent = { type: 'agent_end' };
+    const openStream = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(secondEvent)}\n\n`));
+        },
+      }),
+      { status: 200, headers: new Headers({ 'Content-Type': 'text/event-stream' }) },
+    );
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(firstEvent)}\n\n`]))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'retry later' }), { status, statusText: 'Retry later' }),
+      )
+      .mockResolvedValueOnce(openStream);
+
+    const onError = vi.fn();
+    const events: unknown[] = [];
+    const received = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 2000);
+      const sub = client
+        .getAgentController('code')
+        .session('user-1')
+        .subscribe({
+          onEvent: event => {
+            events.push(event);
+            if (events.length === 2) {
+              clearTimeout(timer);
+              void sub.then(s => s.unsubscribe());
+              resolve();
+            }
+          },
+          onError,
+          reconnect: { maxRetries: 5, delayMs: 0 },
+        });
+    });
+
+    await received;
+
+    expect(events).toEqual([firstEvent, secondEvent]);
+    expect(onError).not.toHaveBeenCalled();
+    expect((global.fetch as any).mock.calls).toHaveLength(3);
+  });
+
   it('does not reconnect after unsubscribe', async () => {
     const firstEvent = { type: 'agent_start' };
     (global.fetch as any).mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(firstEvent)}\n\n`]));
