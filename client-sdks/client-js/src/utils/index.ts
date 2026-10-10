@@ -219,3 +219,12 @@ export function mergeAbortSignals(...signals: Array<AbortSignal | undefined>): A
   }
   return controller.signal;
 }
+
+/**
+ * Whether an error carries an HTTP status that retrying cannot fix: any 4xx
+ * client error (e.g. 401/403 auth failures) or 501 Not Implemented.
+ */
+export function isTerminalHttpError(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null | undefined)?.status;
+  return typeof status === 'number' && ((status >= 400 && status < 500) || status === 501);
+}

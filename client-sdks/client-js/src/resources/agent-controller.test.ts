@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
+import { MastraClientError } from '../types';
 import { agentControllerMessageText, isKnownAgentControllerEvent } from './agent-controller';
 import type { AgentControllerEvent, KnownAgentControllerEvent } from './agent-controller';
 
@@ -572,6 +573,36 @@ describe('AgentController Resource', () => {
 
     expect((global.fetch as any).mock.calls).toHaveLength(3);
     expect(received).toEqual([firstEvent, secondEvent]);
+  });
+
+  it.each([401, 403])('stops reconnecting and reports the original %s error', async status => {
+    const firstEvent = { type: 'agent_start' };
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(firstEvent)}\n\n`]))
+      .mockResolvedValue(new Response(JSON.stringify({ error: 'denied' }), { status, statusText: 'Denied' }));
+
+    const onError = vi.fn();
+    const reported = new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 2000);
+      onError.mockImplementation(error => {
+        clearTimeout(timer);
+        resolve(error);
+      });
+    });
+
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({ onEvent: () => {}, onError, reconnect: { maxRetries: Infinity, delayMs: 0 } });
+
+    const error = await reported;
+    await new Promise(r => setTimeout(r, 20));
+    sub.unsubscribe();
+
+    expect(error).toBeInstanceOf(MastraClientError);
+    expect((error as MastraClientError).status).toBe(status);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect((global.fetch as any).mock.calls).toHaveLength(2);
   });
 
   it('does not reconnect after unsubscribe', async () => {

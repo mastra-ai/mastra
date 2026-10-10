@@ -61,7 +61,13 @@ import type {
   ToolInvocationUIPartWithMeta,
 } from '../types';
 
-import { mergeAbortSignals, parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
+import {
+  isTerminalHttpError,
+  mergeAbortSignals,
+  parseClientRequestContext,
+  requestContextQueryString,
+  toQueryParams,
+} from '../utils';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
@@ -946,8 +952,9 @@ export class Agent extends BaseResource {
               response = await requestSubscription();
               break;
             } catch (error) {
-              if (isClosed() || attempts >= reconnectOptions.maxRetries) {
-                if (isClosed()) return;
+              if (isClosed()) return;
+              // Auth denials and other client errors won't resolve by resubscribing.
+              if (isTerminalHttpError(error) || attempts >= reconnectOptions.maxRetries) {
                 throw error;
               }
             }
