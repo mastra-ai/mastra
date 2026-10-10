@@ -139,4 +139,119 @@ describe('provider-executed tool results flagged isError (#26526)', () => {
     const found = findProviderToolResult(await messageList.get.all.aiV5.llmPrompt());
     expect(found?.part.output).toEqual({ type: 'json', value: success });
   });
+
+  it("keeps each turn's own error when a toolCallId is reused across turns", async () => {
+    const otherError = { type: 'tool_search_tool_result_error', errorCode: 'too_many_requests' };
+    const errorTurn = (id: string, createdAt: number, result: unknown): MastraDBMessage => ({
+      id,
+      role: 'assistant',
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'srvtoolu_1',
+              toolName: 'tool_search_tool_regex',
+              args: { pattern: '(' },
+              ...getToolResultInvocationState({ result, isError: true }),
+            },
+            providerExecuted: true,
+          },
+        ],
+      },
+      createdAt: new Date(createdAt),
+    });
+
+    const messageList = new MessageList();
+    messageList.add(
+      [
+        userMessage(),
+        errorTurn('assistant-1', 2, toolSearchError),
+        { ...userMessage(), id: 'user-2', createdAt: new Date(3) },
+        errorTurn('assistant-2', 4, otherError),
+        { ...userMessage(), id: 'user-3', createdAt: new Date(5) },
+      ],
+      'memory',
+    );
+
+    const outputs = (await messageList.get.all.aiV5.llmPrompt()).flatMap(message =>
+      Array.isArray(message.content)
+        ? message.content.filter((part: any) => part.type === 'tool-result').map((part: any) => part.output)
+        : [],
+    );
+    expect(outputs).toEqual([
+      { type: 'error-json', value: toolSearchError },
+      { type: 'error-json', value: otherError },
+    ]);
+  });
+
+  it.each(['output-available', 'error'] as const)(
+    'applies the %s transcript redaction to the stored error object before it is saved or replayed',
+    async phase => {
+      const messageList = new MessageList();
+      messageList.add(userMessage(), 'input');
+      messageList.add(providerToolCallMessage(), 'response');
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolCallId: 'srvtoolu_1',
+          toolName: 'tool_search_tool_regex',
+          args: { pattern: '(' },
+          ...getToolResultInvocationState({ result: { ...toolSearchError, detail: 'SECRET' }, isError: true }),
+        },
+        providerMetadata: {
+          mastra: { toolPayloadTransform: { transcript: { [phase]: { transformed: toolSearchError } } } },
+        },
+        providerExecuted: true,
+      });
+
+      const drained = messageList.drainUnsavedMessages();
+      expect(JSON.stringify(drained)).not.toContain('SECRET');
+      const part = drained.find(message => message.id === 'assistant-1')?.content.parts?.[0] as any;
+      expect(part.toolInvocation.state).toBe('output-error');
+      expect(part.toolInvocation.result).toEqual(toolSearchError);
+      expect(part.toolInvocation.errorText).toBe(JSON.stringify(toolSearchError));
+
+      const recalled = new MessageList();
+      recalled.add(JSON.parse(JSON.stringify(drained)), 'memory');
+      recalled.add({ ...userMessage(), id: 'user-2', createdAt: new Date(3) }, 'input');
+      const found = findProviderToolResult(await recalled.get.all.aiV5.llmPrompt());
+      expect(found?.part.output).toEqual({ type: 'error-json', value: toolSearchError });
+    },
+  );
+
+  it('keeps the structured error when an output-error part is merged into its tool call', async () => {
+    const messageList = new MessageList();
+    messageList.add([userMessage(), providerToolCallMessage()], 'memory');
+    messageList.add(
+      {
+        id: 'assistant-1-result',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'srvtoolu_1',
+                toolName: 'tool_search_tool_regex',
+                args: { pattern: '(' },
+                ...getToolResultInvocationState({ result: toolSearchError, isError: true }),
+              },
+              providerExecuted: true,
+            },
+          ],
+        },
+        createdAt: new Date(3),
+      },
+      'response',
+    );
+
+    const parts = messageList.get.all.db().flatMap(message => message.content.parts ?? []);
+    const invocations = parts.filter((part: any) => part.toolInvocation?.toolCallId === 'srvtoolu_1') as any[];
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0].toolInvocation.state).toBe('output-error');
+    expect(invocations[0].toolInvocation.result).toEqual(toolSearchError);
+  });
 });

@@ -232,6 +232,51 @@ describe('DurableAgent deferred provider-executed tool results (#14282)', () => 
       await result.consumeStream();
       await expectPersistedAsError(mockMemory, 'thread-deferred-error-agent', 'resource-deferred-error');
     });
+
+    const redactingErrorProcessor = {
+      id: 'deferred-error-redactor',
+      name: 'Deferred Error Redactor',
+      processToolResult: async ({ toolCallId, toolName, args, messageList }: any) => {
+        if (toolCallId === PROVIDER_CALL_ID) {
+          messageList.updateToolInvocation({
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-error',
+              toolCallId,
+              toolName,
+              args,
+              result: toolSearchError,
+              errorText: JSON.stringify(toolSearchError),
+            },
+            providerExecuted: true,
+          });
+        }
+      },
+    };
+
+    it.each(['durable', 'base'] as const)(
+      'keeps a processToolResult redaction of the deferred error (%s agent)',
+      async kind => {
+        const { mockMemory, durableAgent, baseAgent } = setup(pubsub, {
+          deferredResult: { ...toolSearchError, detail: 'SECRET-DETAIL' },
+          isError: true,
+          outputProcessors: [redactingErrorProcessor],
+        });
+        const thread = `thread-deferred-error-redact-${kind}`;
+        const options = { memory: { thread, resource: 'resource-deferred-error' } };
+        if (kind === 'durable') {
+          const result = await durableAgent.stream('search and check weather', options);
+          await drain(result.fullStream);
+          result.cleanup();
+        } else {
+          const result = await baseAgent.stream('search and check weather', options);
+          await result.consumeStream();
+        }
+        await expectPersistedAsError(mockMemory, thread, 'resource-deferred-error');
+        const recalled = await mockMemory.recall({ threadId: thread, resourceId: 'resource-deferred-error' });
+        expect(JSON.stringify(recalled.messages)).not.toContain('SECRET-DETAIL');
+      },
+    );
   });
 
   it('runs processToolResult on the deferred result before emission and persistence', async () => {

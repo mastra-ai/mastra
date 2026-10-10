@@ -231,7 +231,7 @@ function readToolResultFromMessageList(messageList: MessageList, toolCallId: str
       if (
         part?.type === 'tool-invocation' &&
         part.toolInvocation?.toolCallId === toolCallId &&
-        part.toolInvocation?.state === 'result'
+        (part.toolInvocation?.state === 'result' || part.toolInvocation?.state === 'output-error')
       ) {
         return part.toolInvocation.result;
       }
