@@ -1641,8 +1641,10 @@ export class DurableAgent<
     }: { callScopes?: string[]; defaultScopes?: string[]; snapshot?: AgentScopesSnapshot },
   ): Promise<T> {
     const requestContext = options.requestContext ?? new RequestContext();
-    const configuredScopes = await this.getScopes({ requestContext });
-    const agentScopes = [...(configuredScopes ?? []), ...(defaultScopes ?? [])];
+    // A resumed run keeps its suspended scopes, so the Agent's configuration is not consulted.
+    const agentScopes = snapshot
+      ? []
+      : [...((await this.getScopes({ requestContext })) ?? []), ...(defaultScopes ?? [])];
     if (!agentScopes.length && !callScopes?.length && !requestContext.has(MASTRA_SCOPES_KEY) && !snapshot?.scopes) {
       return options;
     }
@@ -2777,6 +2779,8 @@ export class DurableAgent<
       // input source. Caller values win except for framework-managed memory.
       resumeRequestContext = options.requestContext;
       for (const [key, value] of entry.requestContext?.entries() ?? []) {
+        // The suspended run's scopes are applied on the run's own context below, never the caller's.
+        if (key === MASTRA_SCOPES_KEY) continue;
         if (!resumeRequestContext.has(key)) resumeRequestContext.set(key, value);
       }
       if (entry.requestContext?.has('MastraMemory')) {

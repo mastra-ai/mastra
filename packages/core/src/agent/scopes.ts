@@ -12,7 +12,10 @@ const SCOPE_TYPE_PATTERN = /^[a-z][a-z0-9_-]*$/;
 export type AgentScopesSnapshot = {
   resourceId?: string;
   threadId?: string;
-  /** The full scope set the suspended run resolved, including identity scopes. */
+  /**
+   * The full scope set the suspended run resolved, including identity scopes. Present (even
+   * empty) means this is a resume: the set is authoritative and Agent configuration is ignored.
+   */
   scopes?: readonly string[];
 };
 

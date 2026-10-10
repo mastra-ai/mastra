@@ -154,11 +154,12 @@ const response = await memoryAgent.generate('Remember my favorite color is blue.
 
 Scopes can also come from the agent and from the request context. Mastra combines all three sources:
 
-```typescript title="src/mastra/agents/memory-agent.ts" {4-7}
+```typescript title="src/mastra/agents/memory-agent.ts" {4-8}
 export const memoryAgent = new Agent({
   id: 'memory-agent',
   name: 'Memory Agent',
   scopes: ({ requestContext }) => {
+    // Set by your auth middleware. Request bodies can fill unreserved keys.
     const orgId = requestContext.get('org-id')
     return orgId ? [`org:${orgId}`] : []
   },
@@ -166,7 +167,7 @@ export const memoryAgent = new Agent({
 })
 ```
 
-Trusted server middleware can set scopes with the `MASTRA_SCOPES_KEY` request context key. Visit [Request Context](/docs/server/request-context#reserved-keys) for details. Clients can't send scopes in a request body.
+The resolver's inputs must come from the server, not the client: a request body can set any request context key that isn't reserved. Trusted server middleware can also set scopes directly with the `MASTRA_SCOPES_KEY` request context key. Visit [Request Context](/docs/server/request-context#reserved-keys) for details. Clients can't send scopes in a request body.
 
 You can mix scopes with `memory.resource`, `memory.thread`, or the resource and thread request context keys, as long as they agree. If a `resource:` or `thread:` scope names a different value than another source, the call throws an error.
 

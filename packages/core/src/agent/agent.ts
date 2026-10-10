@@ -7802,23 +7802,27 @@ export class Agent<
     },
   ): Promise<{ options: T; resolved: ResolvedAgentScopes }> {
     const requestContext = options.requestContext ?? new RequestContext();
-    const configuredScopes = await this.getScopes({ requestContext });
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
+    const resumeSnapshot =
+      snapshot ??
+      (existingSnapshot
+        ? {
+            resourceId: snapshotMemoryInfo?.resourceId,
+            threadId: snapshotMemoryInfo?.threadId,
+            // A run suspended without recorded scopes held none, so a resume may not add any.
+            scopes: this.#getSnapshotScopes(existingSnapshot) ?? [],
+          }
+        : undefined);
+    // A resumed run keeps its suspended scopes, so the Agent's configuration is not consulted.
+    const agentScopes = resumeSnapshot
+      ? []
+      : [...((await this.getScopes({ requestContext })) ?? []), ...(defaultScopes ?? [])];
     const resolved = resolveAgentScopes({
       requestContext,
-      agentScopes: [...(configuredScopes ?? []), ...(defaultScopes ?? [])],
+      agentScopes,
       callScopes,
       memory: options.memory,
-      snapshot:
-        snapshot ??
-        (existingSnapshot
-          ? {
-              resourceId: snapshotMemoryInfo?.resourceId,
-              threadId: snapshotMemoryInfo?.threadId,
-              // A run suspended without recorded scopes held none, so a resume may not add any.
-              scopes: this.#getSnapshotScopes(existingSnapshot) ?? [],
-            }
-          : undefined),
+      snapshot: resumeSnapshot,
     });
 
     return { options: applyResolvedAgentScopes(options, resolved, requestContext), resolved };

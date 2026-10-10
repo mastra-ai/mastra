@@ -12,6 +12,7 @@ const agent = new Agent({
   model: 'openai/gpt-5-mini',
   memory: new Memory(),
   scopes: ({ requestContext }) => {
+    // Set by your auth middleware. Request bodies can fill unreserved keys, so only read trusted ones.
     const orgId = requestContext.get('org-id');
     return orgId ? [`org:${orgId}`] : [];
   },

@@ -109,7 +109,7 @@ describe.each([
     ).rejects.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT', details: { status: 400 } });
   });
 
-  async function suspendForApproval(scopes: string[]) {
+  async function suspendForApproval(scopes: string[], config: Partial<ConstructorParameters<typeof Agent>[0]> = {}) {
     let calls = 0;
     const model = new MockLanguageModelV2({
       doStream: async () => {
@@ -144,7 +144,7 @@ describe.each([
         return { ok: true };
       },
     });
-    const { agent } = build({ model: model as LanguageModelV2, tools: { approve } });
+    const { agent } = build({ model: model as LanguageModelV2, tools: { approve }, ...config });
     new Mastra({ logger: false, storage: new MockStore(), agents: { scopedAgent: agent } });
     let suspended: unknown;
     const initial = await agent.stream('go', { scopes, onSuspended: data => (suspended = data) });
@@ -189,6 +189,55 @@ describe.each([
     expect(preparation.threadId).toBe('t1');
     expect(preparation.resourceId).toBe('u1');
     expect(preparation.workflowInput.requestContextEntries?.[MASTRA_SCOPES_KEY]).toEqual(['team:core']);
+  });
+
+  it('resume never writes the suspended run scopes onto the caller context', async () => {
+    const { agent, initial, toolSeen } = await suspendForApproval(['org:a', 'resource:u1', 'thread:t1']);
+    const callerContext = new RequestContext();
+    let finished = false;
+    const resumed = await agent.resume(
+      initial.runId,
+      { approved: true },
+      {
+        requestContext: callerContext,
+        onFinish: () => {
+          finished = true;
+        },
+      },
+    );
+    await vi.waitFor(() => expect(finished).toBe(true));
+    expect(toolSeen).toEqual([['org:a']]);
+    expect(callerContext.has(MASTRA_SCOPES_KEY)).toBe(false);
+    resumed.cleanup();
+    initial.cleanup();
+  });
+
+  it('resumes a run that started without scopes after the Agent gains a scopes resolver', async () => {
+    let configured: string[] = [];
+    let resolverCalls = 0;
+    const { agent, initial, toolSeen } = await suspendForApproval([], {
+      scopes: () => {
+        resolverCalls++;
+        return configured;
+      },
+    });
+    configured = ['org:local'];
+    const callsBeforeResume = resolverCalls;
+    let finished = false;
+    const resumed = await agent.resume(
+      initial.runId,
+      { approved: true },
+      {
+        onFinish: () => {
+          finished = true;
+        },
+      },
+    );
+    await vi.waitFor(() => expect(finished).toBe(true));
+    expect(toolSeen).toEqual([undefined]);
+    expect(resolverCalls).toBe(callsBeforeResume);
+    resumed.cleanup();
+    initial.cleanup();
   });
 
   it('resume rejects scopes added to a run that started without any', async () => {
