@@ -68,7 +68,7 @@ export function IntakeSourceRouting({
           </div>
         </div>
       )}
-      <ScrollArea orientation="vertical" maxHeight="20rem">
+      <ScrollArea orientation="vertical" maxHeight={integrationId === 'linear' ? undefined : '20rem'}>
         <div role="group" aria-label={`${label} routing`} className="flex flex-col">
           {matchingSources.length === 0 ? (
             <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
