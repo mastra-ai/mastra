@@ -714,6 +714,22 @@ describe('QUERY_TRACES', () => {
     }
   });
 
+  it('passes only the selected fields the store declares', async () => {
+    const legacy = createHarness(['trace-query']);
+    await QUERY_TRACES.handler(params(legacy.mastra, { timeRange: TIME_RANGE, select: ['outputPreview'] }));
+    expect(legacy.observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.not.objectContaining({ select: expect.anything() }),
+    );
+
+    const partial = createHarness(['trace-query', 'trace-query-select:outputPreview']);
+    await QUERY_TRACES.handler(
+      params(partial.mastra, { timeRange: TIME_RANGE, select: ['errorPreview', 'outputPreview', 'tags'] }),
+    );
+    expect(partial.observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({ select: ['outputPreview'] }),
+    );
+  });
+
   it('passes context identifier predicates to stores that advertise support', async () => {
     const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-context-ids']);
 

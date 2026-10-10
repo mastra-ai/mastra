@@ -73,6 +73,7 @@ import type {
   QueryThreadsResult,
   TraceQueryObservedFieldsResult,
   TraceQueryResponse,
+  TraceQuerySelectField,
   TrustedThreadQueryPlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
@@ -122,6 +123,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
+ * - `trace-query-select:<field>`: the named `select` field (for example `outputPreview`) on trace-query rows
  * - `feedback`: the feedback CRUD, review-status and analytics methods
  */
 export type ObservabilityStorageFeature =
@@ -142,7 +144,8 @@ export type ObservabilityStorageFeature =
   | 'thread-query'
   | 'trace-query-tenant-scope'
   | 'feedback'
-  | 'trace-query-context-ids';
+  | 'trace-query-context-ids'
+  | `trace-query-select:${TraceQuerySelectField}`;
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).

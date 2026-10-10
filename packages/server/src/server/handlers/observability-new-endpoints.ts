@@ -103,6 +103,7 @@ import {
   createObservabilityListQuerySchema,
   getObservabilityStorageCapabilities,
   getObservabilityStore,
+  narrowTraceQuerySelect,
   NEW_ROUTE_DEFS,
   NO_OBSERVABILITY_STORAGE_CAPABILITIES,
   OBSERVABILITY_LIST_ENDPOINTS,
@@ -313,6 +314,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     mode,
     after,
     limit,
+    select,
   }) => {
     let plan;
     try {
@@ -333,7 +335,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
             })
           : undefined;
       plan = coreStorage.planTraceQuery(
-        { timeRange, where, group, orderBy, page, pagination, mode, after, limit },
+        { timeRange, where, group, orderBy, page, pagination, mode, after, limit, select },
         { authorizationBinding, scope: resolveTraceQueryScope(requestContext) },
       );
     } catch (error) {
@@ -367,7 +369,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     }
 
     try {
-      return await observabilityStore.queryTraces(plan);
+      return await observabilityStore.queryTraces(narrowTraceQuerySelect(observabilityStore, plan));
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryCursorError) {
         throwTraceQueryError(error.code === 'TRACE_QUERY_CURSOR_CONFLICT' ? 409 : 400, {

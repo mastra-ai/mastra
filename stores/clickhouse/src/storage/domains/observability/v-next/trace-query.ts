@@ -642,24 +642,38 @@ LIMIT ${limit}`,
 }
 
 /**
- * Fetches the metadata/input payloads for page-mode rows. Looks rows up by the
- * trace_roots sort-key prefix `(startedAt, traceId)`, so only the page's
- * granules are read. A root can have unmerged versions in different `endedAt`
- * partitions, so `endedAt` is part of the key: the payload comes from the same
- * version as the candidate row.
+ * Fetches the payloads of the rows already on a page: metadata/input for page-mode rows, plus
+ * any selected previews. Looks rows up by the trace_roots sort-key prefix `(startedAt, traceId)`,
+ * so only the page's granules are read. A root can have unmerged versions in different `endedAt`
+ * partitions, so `endedAt` is part of the key: the payload comes from the same version as the
+ * candidate row.
  */
 export function compileClickHouseTraceRootPayloads(
   keys: Array<{ traceId: string; rootSpanId: string; startedAt: string; endedAt: string }>,
+  plan?: coreStorage.TrustedTraceQueryTracesPlan,
 ): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
   const tuples = keys.map(
     key =>
       `(${parameters.add(key.startedAt, "DateTime64(3, 'UTC')")}, ${parameters.add(key.traceId, 'String')}, ${parameters.add(key.rootSpanId, 'String')}, ${parameters.add(key.endedAt, "DateTime64(3, 'UTC')")})`,
   );
+  // Keyset and delta rows already carry metadata/input; page-mode rows only carry narrow columns.
+  const columns = [
+    ...(plan && plan.paginationMode !== 'page' ? [] : ['metadataRaw AS metadata', 'input']),
+    ...(plan?.select?.includes('outputPreview') ? ['output'] : []),
+    ...(plan?.select?.includes('errorPreview') ? ['error AS selectedError'] : []),
+  ];
+  // Plain min/max bounds let partition and primary-key pruning work without analysing the tuple set.
+  const bounds = (['startedAt', 'endedAt'] as const).map(column => {
+    const values = keys.map(key => key[column]).sort();
+    const type = "DateTime64(3, 'UTC')";
+    return `${column} >= ${parameters.add(values[0]!, type)} AND ${column} <= ${parameters.add(values.at(-1)!, type)}`;
+  });
   return {
-    query: `SELECT traceId, spanId AS rootSpanId, metadataRaw AS metadata, input
+    query: `SELECT traceId, spanId AS rootSpanId, ${columns.join(', ')}
 FROM ${TABLE_TRACE_ROOTS}
-WHERE (startedAt, traceId, spanId, endedAt) IN (${tuples.join(', ')})
+WHERE ${bounds.join(' AND ')}
+  AND (startedAt, traceId, spanId, endedAt) IN (${tuples.join(', ')})
 LIMIT 1 BY traceId, spanId`,
     query_params: parameters.params,
   };
@@ -870,6 +884,33 @@ export async function getTraceQueryValues(
   });
 }
 
+function traceRowToResult(row: Record<string, unknown>, plan: coreStorage.TrustedTraceQueryTracesPlan) {
+  return {
+    traceId: String(row.traceId),
+    rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: parseJson(row.metadata) ?? null,
+    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    threadId: row.threadId == null ? null : String(row.threadId),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
+    startedAt: asIsoTimestamp(row.startedAt),
+    endedAt: asIsoTimestamp(row.endedAt),
+    entityName: row.entityName == null ? null : String(row.entityName),
+    entityType: row.entityType == null ? null : String(row.entityType),
+    environment: row.environment == null ? null : String(row.environment),
+    status: row.status,
+    ...(plan.select?.includes('outputPreview')
+      ? { outputPreview: coreStorage.buildOutputPreview(row.output) ?? null }
+      : {}),
+    ...(plan.select?.includes('errorPreview')
+      ? { errorPreview: coreStorage.buildErrorPreview(row.selectedError) ?? null }
+      : {}),
+  };
+}
+
 export async function queryTraces(
   client: ClickHouseClient,
   plan: TrustedTraceQueryPlan,
@@ -932,30 +973,14 @@ export async function queryTraces(
             startedAt: asIsoTimestamp(row.startedAt),
             endedAt: asIsoTimestamp(row.endedAt),
           })),
+          plan,
         ),
       );
       for (const payload of payloadRows) payloads.set(`${payload.traceId}\u0000${payload.rootSpanId}`, payload);
     }
     const traces = pageRows
       .map(row => ({ ...row, ...payloads.get(`${row.traceId}\u0000${row.rootSpanId}`) }))
-      .map(row => ({
-        traceId: String(row.traceId),
-        rootSpanId: String(row.rootSpanId),
-        name: row.name,
-        entityId: row.entityId ?? null,
-        parentSpanId: row.parentSpanId ?? null,
-        createdAt: asIsoTimestamp(row.startedAt),
-        metadata: parseJson(row.metadata) ?? null,
-        inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-        threadId: row.threadId == null ? null : String(row.threadId),
-        resourceId: row.resourceId == null ? null : String(row.resourceId),
-        startedAt: asIsoTimestamp(row.startedAt),
-        endedAt: asIsoTimestamp(row.endedAt),
-        entityName: row.entityName == null ? null : String(row.entityName),
-        entityType: row.entityType == null ? null : String(row.entityType),
-        environment: row.environment == null ? null : String(row.environment),
-        status: row.status,
-      }));
+      .map(row => traceRowToResult(row, plan));
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
       ...(deltaHead
@@ -991,24 +1016,27 @@ export async function queryTraces(
     });
   }
 
-  const traces = visibleRows.map(row => ({
-    traceId: String(row.traceId),
-    rootSpanId: String(row.rootSpanId),
-    name: row.name,
-    entityId: row.entityId ?? null,
-    parentSpanId: row.parentSpanId ?? null,
-    createdAt: asIsoTimestamp(row.startedAt),
-    metadata: parseJson(row.metadata) ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-    threadId: row.threadId == null ? null : String(row.threadId),
-    resourceId: row.resourceId == null ? null : String(row.resourceId),
-    startedAt: asIsoTimestamp(row.startedAt),
-    endedAt: asIsoTimestamp(row.endedAt),
-    entityName: row.entityName == null ? null : String(row.entityName),
-    entityType: row.entityType == null ? null : String(row.entityType),
-    environment: row.environment == null ? null : String(row.environment),
-    status: row.status,
-  }));
+  // Previews are read for the visible rows only, so the candidate sort never carries them.
+  const previews = new Map<string, Record<string, unknown>>();
+  if (plan.select?.length && visibleRows.length > 0) {
+    const previewRows = await runWithClickHouseTraceQueryTimeout(
+      client,
+      { timeoutMs: remaining() },
+      compileClickHouseTraceRootPayloads(
+        visibleRows.map(row => ({
+          traceId: String(row.traceId),
+          rootSpanId: String(row.rootSpanId),
+          startedAt: asIsoTimestamp(row.startedAt),
+          endedAt: asIsoTimestamp(row.endedAt),
+        })),
+        plan,
+      ),
+    );
+    for (const preview of previewRows) previews.set(`${preview.traceId}\u0000${preview.rootSpanId}`, preview);
+  }
+  const traces = visibleRows.map(row =>
+    traceRowToResult({ ...row, ...previews.get(`${row.traceId}\u0000${row.rootSpanId}`) }, plan),
+  );
   const last = traces.at(-1);
   if (plan.paginationMode === 'delta') {
     const lastRow = visibleRows.at(-1);

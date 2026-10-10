@@ -45,6 +45,13 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .boolean()
     .describe('Trace query field discovery (POST /observability/traces/query/fields and /values)'),
   traceQueryTenantScope: z.boolean().describe('Trusted tenant scoping of trace and thread queries'),
+  // Optional because servers released before `select` don't send it; clients fall back to `[]`.
+  traceQuerySelect: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Fields `select` can add to trace query rows. Send only these; servers without this list reject `select`.',
+    ),
   threadQuery: z.boolean().describe('Advanced thread queries (POST /observability/threads/query)'),
   spanQuery: z.boolean().describe('Span queries (POST /observability/spans/query)'),
   feedback: z

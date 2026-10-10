@@ -3601,6 +3601,8 @@ type Shared_Type_64 = {
   entityType: string | null;
   environment: string | null;
   status: 'success' | 'error';
+  outputPreview?: (string | null) | undefined;
+  errorPreview?: (string | null) | undefined;
 };
 
 type Shared_Type_65 = {
@@ -3694,6 +3696,8 @@ type Shared_Type_67 = {
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
   traceQueryTenantScope: boolean;
+  /** Fields `select` can add to trace query rows. Send only these; servers without this list reject `select`. */
+  traceQuerySelect?: string[] | undefined;
   /** Advanced thread queries (POST /observability/threads/query) */
   threadQuery: boolean;
   /** Span queries (POST /observability/spans/query) */
@@ -10331,6 +10335,7 @@ export type PostObservabilityTracesQuery_Body = {
   after?: string | undefined;
   /** Maximum number of updates to return in one delta poll */
   limit?: number | undefined;
+  select?: string[] | undefined;
 };
 
 export type PostObservabilityTracesQuery_Response =

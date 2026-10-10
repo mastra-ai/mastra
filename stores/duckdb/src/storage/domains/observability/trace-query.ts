@@ -9,6 +9,7 @@ import type {
   TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
+  TraceQuerySelectField,
   TraceQuerySpanField,
   TraceQueryTenantScope,
   TrustedThreadPredicate,
@@ -686,6 +687,60 @@ LIMIT ?`,
   };
 }
 
+/**
+ * Reads selected previews for the traces already on a page, so the candidate sorts never carry the
+ * payloads. Keeps each trace's newest root event, the same row `current_roots` keeps. A root's events
+ * are written at its `startedAt` and `endedAt`, so the time bounds always include that row and let the
+ * scan skip unrelated blocks; a long `IN` list alone becomes a join that reads every root row.
+ */
+export function compileDuckDBTraceRootPreviews(
+  rows: Array<{ traceId: string; startedAt: string; endedAt: string }>,
+  select: readonly TraceQuerySelectField[],
+): CompiledDuckDBTraceQuery {
+  const columns = [
+    ...(select.includes('outputPreview') ? [`${payloadColumnSql('output')} AS output`] : []),
+    ...(select.includes('errorPreview') ? [`${payloadColumnSql('error')} AS selectedError`] : []),
+  ];
+  const startedAt = rows.map(row => row.startedAt).sort()[0]!;
+  const endedAt = rows
+    .map(row => row.endedAt)
+    .sort()
+    .at(-1)!;
+  return {
+    sql: `SELECT traceId, ${columns.join(', ')}
+FROM (
+  SELECT *, row_number() OVER (PARTITION BY traceId ORDER BY cursorId DESC) AS rootRank
+  FROM span_events
+  WHERE parentSpanId IS NULL
+    AND timestamp >= CAST(? AS TIMESTAMP)
+    AND timestamp <= CAST(? AS TIMESTAMP)
+    AND traceId IN (${rows.map(() => '?').join(', ')})
+)
+WHERE rootRank = 1`,
+    values: [startedAt, endedAt, ...rows.map(row => row.traceId)],
+  };
+}
+
+async function withSelectedPreviews(
+  db: DuckDBConnection,
+  plan: coreStorage.TrustedTraceQueryTracesPlan,
+  rows: Record<string, unknown>[],
+): Promise<Record<string, unknown>[]> {
+  if (!plan.select?.length || rows.length === 0) return rows;
+  const query = compileDuckDBTraceRootPreviews(
+    rows.map(row => ({
+      traceId: String(row.traceId),
+      startedAt: asIsoTimestamp(row.startedAt),
+      endedAt: asIsoTimestamp(row.endedAt),
+    })),
+    plan.select,
+  );
+  const previews = new Map(
+    (await db.query<Record<string, unknown>>(query.sql, query.values)).map(row => [String(row.traceId), row]),
+  );
+  return rows.map(row => ({ ...row, ...previews.get(String(row.traceId)) }));
+}
+
 export function compileDuckDBThreadQuery(plan: TrustedThreadQueryPlan): CompiledDuckDBTraceQuery {
   const relatedCollections = collectRelatedCollections(plan.traces.where);
   collectThreadRelatedCollections(plan.where, relatedCollections);
@@ -863,32 +918,45 @@ export function asIsoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
 }
 
+function traceRowToResult(row: Record<string, unknown>, plan: coreStorage.TrustedTraceQueryTracesPlan) {
+  return {
+    traceId: String(row.traceId),
+    rootSpanId: String(row.rootSpanId),
+    name: row.name,
+    entityId: row.entityId ?? null,
+    parentSpanId: row.parentSpanId ?? null,
+    createdAt: asIsoTimestamp(row.startedAt),
+    metadata: parseJson(row.metadata) ?? null,
+    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    threadId: row.threadId == null ? null : String(row.threadId),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
+    startedAt: asIsoTimestamp(row.startedAt),
+    endedAt: asIsoTimestamp(row.endedAt),
+    entityName: row.entityName == null ? null : String(row.entityName),
+    entityType: row.entityType == null ? null : String(row.entityType),
+    environment: row.environment == null ? null : String(row.environment),
+    status: row.status,
+    ...(plan.select?.includes('outputPreview')
+      ? { outputPreview: coreStorage.buildOutputPreview(row.output) ?? null }
+      : {}),
+    ...(plan.select?.includes('errorPreview')
+      ? { errorPreview: coreStorage.buildErrorPreview(row.selectedError) ?? null }
+      : {}),
+  };
+}
+
 export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
   if (plan.paginationMode === 'delta') assertDeltaPollingEnabled();
   if (plan.paginationMode === 'page') {
     const query = compileDuckDBTraceQuery(plan);
     const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
     const total = Number(rows[0]?.total ?? 0);
-    const traces = rows
-      .filter(row => row.traceId != null)
-      .map(row => ({
-        traceId: String(row.traceId),
-        rootSpanId: String(row.rootSpanId),
-        name: row.name,
-        entityId: row.entityId ?? null,
-        parentSpanId: row.parentSpanId ?? null,
-        createdAt: asIsoTimestamp(row.startedAt),
-        metadata: parseJson(row.metadata) ?? null,
-        inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-        threadId: row.threadId == null ? null : String(row.threadId),
-        resourceId: row.resourceId == null ? null : String(row.resourceId),
-        startedAt: asIsoTimestamp(row.startedAt),
-        endedAt: asIsoTimestamp(row.endedAt),
-        entityName: row.entityName == null ? null : String(row.entityName),
-        entityType: row.entityType == null ? null : String(row.entityType),
-        environment: row.environment == null ? null : String(row.environment),
-        status: row.status,
-      }));
+    const pageRows = await withSelectedPreviews(
+      db,
+      plan,
+      rows.filter(row => row.traceId != null),
+    );
+    const traces = pageRows.map(row => traceRowToResult(row, plan));
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
       // The list-polling feature predates the trace-query cursor encoder.
@@ -923,24 +991,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     });
   }
 
-  const traces = visibleRows.map(row => ({
-    traceId: String(row.traceId),
-    rootSpanId: String(row.rootSpanId),
-    name: row.name,
-    entityId: row.entityId ?? null,
-    parentSpanId: row.parentSpanId ?? null,
-    createdAt: asIsoTimestamp(row.startedAt),
-    metadata: parseJson(row.metadata) ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
-    threadId: row.threadId == null ? null : String(row.threadId),
-    resourceId: row.resourceId == null ? null : String(row.resourceId),
-    startedAt: asIsoTimestamp(row.startedAt),
-    endedAt: asIsoTimestamp(row.endedAt),
-    entityName: row.entityName == null ? null : String(row.entityName),
-    entityType: row.entityType == null ? null : String(row.entityType),
-    environment: row.environment == null ? null : String(row.environment),
-    status: row.status,
-  }));
+  const traces = (await withSelectedPreviews(db, plan, visibleRows)).map(row => traceRowToResult(row, plan));
   if (plan.paginationMode === 'delta') {
     const previous = coreStorage.getTraceQueryDeltaWatermark(plan, 'duckdb') ?? '0';
     const head = String(rows[0]?.streamHead ?? 0);

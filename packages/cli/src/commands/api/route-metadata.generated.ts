@@ -2037,6 +2037,7 @@ export const API_ROUTE_METADATA = {
       "orderBy",
       "page",
       "pagination",
+      "select",
       "timeRange",
       "where"
     ],

@@ -17,6 +17,7 @@ import type { DuckDBConnection } from '../../db/index';
 import {
   compileDuckDBThreadQuery,
   compileDuckDBTraceQuery,
+  compileDuckDBTraceRootPreviews,
   compileDuckDBTraceQueryValues,
   getTraceQueryObservedFields,
   queryThreads,
@@ -36,6 +37,29 @@ function threadPlan(input: Record<string, unknown> = {}): TrustedThreadQueryPlan
 }
 
 describe('DuckDB advanced trace query', () => {
+  it('reads selected previews only for the rows on the page', () => {
+    for (const selected of [
+      plan({ select: ['outputPreview', 'errorPreview'] }),
+      plan({ pagination: { page: 0, perPage: 25 }, select: ['outputPreview', 'errorPreview'] }),
+    ]) {
+      const compiled = compileDuckDBTraceQuery(selected);
+      expect(compiled.sql).not.toContain('r.output');
+      expect(compiled.sql).not.toContain('selectedError');
+    }
+
+    const previews = compileDuckDBTraceRootPreviews(
+      [
+        { traceId: 'trace-a', startedAt: '2026-08-02T00:00:00.000Z', endedAt: '2026-08-02T00:00:05.000Z' },
+        { traceId: 'trace-b', startedAt: '2026-08-01T00:00:00.000Z', endedAt: '2026-08-01T00:00:01.000Z' },
+      ],
+      ['errorPreview'],
+    );
+    expect(previews.sql).toContain("SELECT traceId, NULLIF(error, 'null') AS selectedError\n");
+    expect(previews.sql).toContain('timestamp >= CAST(? AS TIMESTAMP)');
+    expect(previews.sql).toContain('traceId IN (?, ?)');
+    expect(previews.values).toEqual(['2026-08-01T00:00:00.000Z', '2026-08-02T00:00:05.000Z', 'trace-a', 'trace-b']);
+  });
+
   it('compiles root duration predicates from root timestamps', () => {
     const compiled = compileDuckDBTraceQuery(
       plan({ where: { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } } }),

@@ -182,6 +182,7 @@ export async function writeTraceQueryFixture(
       attributes: span.attributes,
       metadata: span.metadata,
       error: span.error as CreateSpanRecord['error'],
+      output: span.output,
     }));
   for (const span of records) await storage.createSpan({ span });
 
@@ -491,6 +492,91 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
     }
 
     if (capabilities.traceQuery) {
+      it('returns only the selected root output and error previews', async () => {
+        const template = TRACE_QUERY_FIXTURE_DATA.spans.find(span => span.parentSpanId === null && !span.isPending)!;
+        await writeTraceQueryFixture(
+          storage,
+          {
+            spans: [
+              {
+                ...template,
+                traceId: 'selected-preview',
+                spanId: 'selected-preview',
+                output: { text: 'preview answer' },
+                error: { name: 'TypeError', message: 'preview failure', stack: 'not returned' },
+              },
+              {
+                ...template,
+                traceId: 'selected-string-preview',
+                spanId: 'selected-string-preview',
+                output: '[1] cited answer from the source',
+                error: null,
+              },
+            ],
+            scores: [],
+            feedback: [],
+          },
+          capabilities.traceQuerySpanWriteModel,
+        );
+
+        // A plain-text output that looks like JSON must still preview as text in every store.
+        const stringOutput = await storage.queryTraces(
+          planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'selected-string-preview' } },
+              select: ['outputPreview'],
+            }),
+          ),
+        );
+        if (!('traces' in stringOutput)) throw new Error('Expected traces');
+        expect(stringOutput.traces[0]?.outputPreview).toBe('[1] cited answer from the source');
+
+        const selected = await storage.queryTraces(
+          planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'selected-preview' } },
+              select: ['outputPreview', 'errorPreview'],
+            }),
+          ),
+        );
+        if (!('traces' in selected)) throw new Error('Expected traces');
+        expect(selected.traces).toHaveLength(1);
+        expect(selected.traces[0]).toMatchObject({
+          outputPreview: 'preview answer',
+          errorPreview: 'TypeError: preview failure',
+        });
+
+        const paged = await storage.queryTraces(
+          planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'selected-preview' } },
+              pagination: { page: 0, perPage: 25 },
+              select: ['outputPreview', 'errorPreview'],
+            }),
+          ),
+        );
+        if (!('traces' in paged)) throw new Error('Expected traces');
+        expect(paged.traces[0]).toMatchObject({
+          outputPreview: 'preview answer',
+          errorPreview: 'TypeError: preview failure',
+        });
+
+        const plain = await storage.queryTraces(
+          planTraceQuery(
+            parseTraceQueryRequest({
+              timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+              where: { op: 'eq', left: { path: 'traceId' }, right: { literal: 'selected-preview' } },
+            }),
+          ),
+        );
+        if (!('traces' in plain)) throw new Error('Expected traces');
+        expect(plain.traces[0]).not.toHaveProperty('outputPreview');
+        expect(plain.traces[0]).not.toHaveProperty('errorPreview');
+      });
+
       it('matches advanced predicate conformance when polling trace deltas', async () => {
         const feature = 'observability-delta-polling';
         const wasEnabled = coreFeatures.has(feature);
