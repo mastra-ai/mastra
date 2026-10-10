@@ -1711,12 +1711,12 @@ describe('Agent signal routes', () => {
       expect(mockRequest).toHaveBeenCalledTimes(2);
     });
 
-    it('keeps retrying server errors within the reconnect limit', async () => {
+    it.each([408, 429, 503])('keeps retrying %s errors within the reconnect limit', async status => {
       const agent = new Agent(mockClientOptions, 'test-agent');
       const mockRequest = vi
         .fn()
         .mockResolvedValueOnce(endedStream())
-        .mockRejectedValueOnce(new MastraClientError(503, 'Service Unavailable', 'HTTP error! status: 503'))
+        .mockRejectedValueOnce(new MastraClientError(status, 'Retry later', `HTTP error! status: ${status}`))
         .mockResolvedValueOnce(endedStream());
       agent['request'] = mockRequest as (typeof agent)['request'];
 

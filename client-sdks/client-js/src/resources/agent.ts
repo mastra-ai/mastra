@@ -62,7 +62,7 @@ import type {
 } from '../types';
 
 import {
-  isTerminalHttpError,
+  isTerminalReconnectError,
   mergeAbortSignals,
   parseClientRequestContext,
   requestContextQueryString,
@@ -953,8 +953,9 @@ export class Agent extends BaseResource {
               break;
             } catch (error) {
               if (isClosed()) return;
-              // Auth denials and other client errors won't resolve by resubscribing.
-              if (isTerminalHttpError(error) || attempts >= reconnectOptions.maxRetries) {
+              // Auth denials and other client errors won't resolve by resubscribing;
+              // 408/429 stay retryable.
+              if (isTerminalReconnectError(error) || attempts >= reconnectOptions.maxRetries) {
                 throw error;
               }
             }

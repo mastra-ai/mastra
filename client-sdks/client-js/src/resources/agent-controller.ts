@@ -36,7 +36,7 @@ import type {
   SendNotificationResult,
   ToolCategory,
 } from '../types';
-import { isTerminalHttpError, parseClientRequestContext } from '../utils';
+import { isTerminalReconnectError, parseClientRequestContext } from '../utils';
 import { BaseResource } from './base';
 
 /**
@@ -563,8 +563,9 @@ export class AgentControllerSession extends BaseResource {
             reconnectedResponse = await requestStream();
           } catch (error) {
             if (cancelled) return;
-            // Auth denials and other client errors won't resolve by resubscribing.
-            if (isTerminalHttpError(error)) {
+            // Auth denials and other client errors won't resolve by resubscribing;
+            // 408/429 stay retryable.
+            if (isTerminalReconnectError(error)) {
               safeOnError(error);
               return;
             }

@@ -228,3 +228,13 @@ export function isTerminalHttpError(error: unknown): boolean {
   const status = (error as { status?: unknown } | null | undefined)?.status;
   return typeof status === 'number' && ((status >= 400 && status < 500) || status === 501);
 }
+
+/**
+ * Whether a failed resubscribe should end a long-lived subscription instead of
+ * retrying. Like {@link isTerminalHttpError}, but 408 Request Timeout and
+ * 429 Too Many Requests stay retryable because they mean "try again later".
+ */
+export function isTerminalReconnectError(error: unknown): boolean {
+  const status = (error as { status?: unknown } | null | undefined)?.status;
+  return isTerminalHttpError(error) && status !== 408 && status !== 429;
+}
