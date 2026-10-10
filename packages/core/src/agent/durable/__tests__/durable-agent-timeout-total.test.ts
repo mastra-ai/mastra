@@ -28,6 +28,7 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { __resetExecutionFencesForTests } from '../execution-fence';
 import { globalRunRegistry } from '../run-registry';
 
 function hangingModel() {
@@ -279,14 +280,18 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
 
     // ---- The restart: nothing of process 1 survives but its storage.
     // clear() runs each entry's cleanup, which also disarms process 1's
-    // in-memory budget timer — exactly what a real crash does.
+    // in-memory budget timer — exactly what a real crash does. Process 1's
+    // hanging execution is still running here, so its local execution
+    // fence must be forgotten too.
     globalRunRegistry.clear();
+    __resetExecutionFencesForTests();
     await pubsub.close();
     pubsub = new EventEmitterPubSub();
 
-    // ---- Process 2: recover the run; the model hangs again. ----
+    // ---- Process 2: recover the run; the model hangs again. Process 1's
+    // claim is still within its lease, so recovering right away takes it over.
     const secondDurable = build();
-    const recovered = await secondDurable.recover(runId);
+    const recovered = await secondDurable.recover(runId, { force: true });
 
     // Read side: the rebuilt registry entry restored the budget from the
     // persisted snapshot.

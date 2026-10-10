@@ -103,6 +103,9 @@ export { prepareForDurableExecution, type PreparationOptions, type PreparationRe
 // Run registry for non-serializable state
 export { RunRegistry, ExtendedRunRegistry, globalRunRegistry, type ExtendedRunRegistryEntry } from './run-registry';
 
+// Lets shared test suites simulate a process crash
+export { __resetExecutionFencesForTests } from './execution-fence';
+
 // Shared thread-stream runtime, so durable-agent integrations outside core
 // (e.g. @mastra/inngest) can register their runs the same way DurableAgent does.
 export { agentThreadStreamRuntime } from '../thread-stream-runtime';

@@ -71,7 +71,8 @@
  * that park graph 1 (a gate, a held write) those are the same moment. For an
  * every-write checkpoint that is not the one being restarted, the non-workflow
  * domains are a little ahead of that checkpoint — workflow rows still come from
- * the checkpoint itself.
+ * the checkpoint itself. Run claims are copied with their leases expired, so
+ * graph 2 restarts as if graph 1's claim had lapsed after the crash.
  */
 
 import { expect, vi } from 'vitest';
@@ -99,6 +100,7 @@ export async function loadGraph() {
     { createDurableAgent },
     { createEventedAgent },
     { globalRunRegistry },
+    { __resetExecutionFencesForTests },
     workflows,
     eventedWorkflows,
   ] = await Promise.all([
@@ -109,6 +111,7 @@ export async function loadGraph() {
     import('../create-durable-agent'),
     import('../create-evented-agent'),
     import('../run-registry'),
+    import('../execution-fence'),
     import('../../../workflows'),
     import('../../../workflows/evented'),
   ]);
@@ -120,6 +123,8 @@ export async function loadGraph() {
     createDurableAgent,
     createEventedAgent,
     globalRunRegistry,
+    /** Stops this graph's claim heartbeats and forgets its local executions. */
+    resetExecutionFences: __resetExecutionFencesForTests,
     createWorkflow: workflows.createWorkflow,
     createStep: workflows.createStep,
     createEventedWorkflow: eventedWorkflows.createWorkflow,
@@ -314,6 +319,10 @@ function copyStore(from: any, to: any) {
       (target as Record<string, any>)[key] = value;
     }
   }
+  // Graph 2 starts after graph 1's run claims have lapsed, as they would once a
+  // crashed process stops renewing them. Keep their generations so the restart
+  // claims a newer one.
+  for (const owner of target.runOwners.values()) owner.leaseExpiresAt = new Date(0);
 }
 
 const WRITE_METHODS = [

@@ -11,6 +11,9 @@
  * catches the durable loop's events being tagged `localOnly` (COR-1389): the
  * run would sit in `running` forever with no error in either process.
  *
+ * The worker checks that the producer's execution still owns the run before
+ * and after each step, so the run's claim must be visible to both processes.
+ *
  * Children import the built `dist`, matching `events/__tests__/local-only-multiprocess.test.ts`.
  */
 import { fork } from 'node:child_process';
@@ -113,9 +116,16 @@ const whereAmI = createTool({
 const agent = new Agent({ id: 'two-process-agent', name: 'two-process-agent', instructions: 'Use tools.', model, tools: { whereAmI } });
 const evented = createEventedAgent({ agent });
 const pubsub = new UnixSocketPubSub(socketPath);
+// Each process has its own in-memory store, so storage can't carry the run's
+// ownership claim to the worker. Turn storage fencing off so the claim lives in
+// the shared pubsub lease, which both processes can check.
+const storage = new InMemoryStore();
+for (const domain of ['workflows', 'memory']) {
+  (await storage.getStore(domain)).supportsRunFencing = () => false;
+}
 const mastra = new Mastra({
   logger: false,
-  storage: new InMemoryStore(),
+  storage,
   pubsub,
   agents: { [evented.id]: evented },
 });

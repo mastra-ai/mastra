@@ -73,6 +73,7 @@ import type { AnyWorkspace } from '../workspace';
 import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
+import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
 import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
@@ -1314,6 +1315,17 @@ export interface DurableAgentLike {
    */
   readonly pubsub?: PubSub;
   /**
+   * Subscribe to the events of a run's stream, without those an execution
+   * that lost the run still publishes. Used by the server to observe a run;
+   * when absent, it subscribes to `pubsub` directly.
+   * @internal
+   */
+  __subscribeToRunStream?(
+    runId: string,
+    options: { offset?: number },
+    onEvent: (event: AgentStreamEvent) => void,
+  ): Promise<() => Promise<void>>;
+  /**
    * Get workflows that need to be registered with Mastra.
    * Called during agent registration to auto-register durable execution workflows.
    */
@@ -1332,10 +1344,12 @@ export interface DurableAgentLike {
    */
   [key: string]: any;
   /**
-   * Recover active runs for this durable agent.
+   * Recover active runs for this durable agent, or only `runId` when given.
+   * A run another execution still drives is reported as `skipped`, with
+   * `retryAt` (epoch ms) when it may be recoverable later.
    */
-  recoverActiveRuns(): Promise<{
-    recovered: Array<{ runId: string }>;
+  recoverActiveRuns(options?: { runId?: string }): Promise<{
+    recovered: Array<{ runId: string; status?: 'success' | 'failed' | 'skipped'; retryAt?: number }>;
     succeeded: number;
     failed: number;
   }>;

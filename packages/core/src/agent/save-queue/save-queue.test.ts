@@ -169,4 +169,65 @@ describe('SaveQueueManager', () => {
       expect.arrayContaining([expect.objectContaining({ type: 'tool-invocation' })]),
     );
   });
+
+  describe('beforePersist', () => {
+    it('runs before the save and persists when it resolves', async () => {
+      const order: string[] = [];
+      mockMemory.saveMessages = vi.fn(async () => {
+        order.push('save');
+      });
+      const list = new MessageList({ threadId: 'thread-guard' });
+      list.add(makeTestMessage('m1', 'thread-guard', 'user', 'Hello'), 'user');
+
+      await manager.flushMessages(list, 'thread-guard', undefined, {
+        beforePersist: async () => {
+          order.push('guard');
+        },
+      });
+
+      expect(order).toEqual(['guard', 'save']);
+    });
+
+    it('skips the save, keeps the messages unsaved, and rejects when it rejects', async () => {
+      const list = new MessageList({ threadId: 'thread-guard' });
+      list.add(makeTestMessage('m1', 'thread-guard', 'user', 'Hello'), 'user');
+      const guardError = new Error('superseded');
+
+      await expect(
+        manager.flushMessages(list, 'thread-guard', undefined, { beforePersist: () => Promise.reject(guardError) }),
+      ).rejects.toBe(guardError);
+
+      expect(saveCalls).toBe(0);
+      expect(list.drainUnsavedMessages().map(m => m.id)).toEqual(['m1']);
+    });
+
+    it('does not poison later saves on the same thread', async () => {
+      const list = new MessageList({ threadId: 'thread-guard' });
+      list.add(makeTestMessage('m1', 'thread-guard', 'user', 'Hello'), 'user');
+
+      const rejected = manager.flushMessages(list, 'thread-guard', undefined, {
+        beforePersist: () => Promise.reject(new Error('superseded')),
+      });
+      const later = manager.flushMessages(list, 'thread-guard');
+
+      await expect(rejected).rejects.toThrow('superseded');
+      await expect(later).resolves.toBeUndefined();
+      expect(saved.map(m => m.id)).toEqual(['m1']);
+    });
+
+    it('still logs storage errors instead of rejecting', async () => {
+      const logger = { error: vi.fn() } as any;
+      mockMemory.saveMessages = vi.fn(async () => {
+        throw new Error('db down');
+      });
+      const manager = new SaveQueueManager({ memory: mockMemory, logger });
+      const list = new MessageList({ threadId: 'thread-guard' });
+      list.add(makeTestMessage('m1', 'thread-guard', 'user', 'Hello'), 'user');
+
+      await expect(
+        manager.flushMessages(list, 'thread-guard', undefined, { beforePersist: async () => {} }),
+      ).resolves.toBeUndefined();
+      expect(logger.error).toHaveBeenCalledWith('Error in enqueueSave', expect.anything());
+    });
+  });
 });

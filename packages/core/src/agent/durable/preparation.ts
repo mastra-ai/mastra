@@ -54,6 +54,7 @@ import {
   applyClientToolModelOutput,
   fireClientToolOutputHooks,
 } from '../workflows/prepare-stream/client-tool-output-hooks';
+import { MASTRA_DURABLE_EXECUTIONS_KEY } from './execution-fence';
 import { authorizeDurableMemory } from './memory-fga';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput, serializeClientTools, serializeToolsetToolNames } from './utils/serialize-state';
@@ -90,6 +91,9 @@ function snapshotRequestContextEntries(
     // executing worker's. The caller's own versions entry is re-added at the
     // call site.
     if (key === MASTRA_VERSIONS_KEY) continue;
+    // Execution ids are claimed per execution. A persisted id would be restored
+    // over a later execution's id (e.g. the recovered one) and fence it out.
+    if (key === MASTRA_DURABLE_EXECUTIONS_KEY) continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
     // the event loop on every durable step, and reading the value twice (probe

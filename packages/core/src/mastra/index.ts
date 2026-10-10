@@ -1,6 +1,6 @@
 import type { Agent } from '../agent';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
-import { getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
+import { abandonDurableAgentExecutions, getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -73,6 +73,7 @@ import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inm
 import { InMemoryDB } from '../storage/domains/inmemory-db';
 import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
 import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
+import { runOutsideRunFenceScope } from '../storage/run-fencing';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import { trackFeatureUsage } from '../telemetry/feature-telemetry';
@@ -671,8 +672,8 @@ export interface Config<
    *
    * Opt-in only. Auto-recovery re-runs the agentic loop from the last persisted
    * snapshot, so it re-issues LLM calls (real cost) and re-executes tool calls
-   * (must be idempotent). In multi-instance deploys every replica will race to
-   * recover the same runs, since there is no lease/lock yet.
+   * (must be idempotent). In multi-instance deploys a run another replica
+   * still drives is skipped, and recovered once that replica's claim lapses.
    *
    * @default { durableAgents: 'off' }
    */
@@ -778,6 +779,14 @@ const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
 // Mirrors BackgroundTaskManager's grace period and the deployer's
 // `server.drainTimeout` default.
 const DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS = 5_000;
+// Spreads re-checks of durable-agent runs other instances still drove at boot,
+// so replicas that skipped the same run don't all try it at the same instant.
+const DURABLE_RECOVERY_RECHECK_JITTER_MS = 5_000;
+// A re-check that throws (e.g. storage briefly unavailable) is retried after
+// this delay, doubling per consecutive failure, up to
+// DURABLE_RECOVERY_RECHECK_MAX_RETRIES times.
+const DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS = 30_000;
+const DURABLE_RECOVERY_RECHECK_MAX_RETRIES = 5;
 
 /**
  * Registers and coordinates agents, workflows, storage, and other Mastra services.
@@ -843,6 +852,9 @@ export class Mastra<
   #storageExplicit = false;
   #storageFallbackWarningPending = false;
   #recoveryConfig: MastraRecoveryConfig = { durableAgents: 'off' };
+  #durableRecoveryRechecks = new Map<string, ReturnType<typeof setTimeout>>();
+  #durableRecoveryRechecksInFlight = new Set<Promise<void>>();
+  #shuttingDown = false;
   #scorers?: TScorers;
   #classifiers?: TClassifiers;
   #tools?: TTools;
@@ -4238,6 +4250,11 @@ export class Mastra<
    * can also call it directly if you need finer control (e.g. running it in a
    * cron, or gating it behind a leader election).
    *
+   * Runs another instance still drives are skipped, not taken over, and
+   * counted in `skipped`. Each is re-checked once that instance's claim could
+   * have lapsed, so a run whose instance crashed is recovered without another
+   * call. `shutdown()` cancels pending re-checks.
+   *
    * Requires persistent storage — with an in-memory store there is nothing to
    * recover after a process restart, so this is a no-op and returns zeroed
    * counts.
@@ -4247,10 +4264,11 @@ export class Mastra<
     recovered: number;
     succeeded: number;
     failed: number;
+    skipped: number;
   }> {
     if (!this.#storage) {
       this.#logger.debug('Cannot recover durable agents. Mastra storage is not initialized');
-      return { agents: 0, recovered: 0, succeeded: 0, failed: 0 };
+      return { agents: 0, recovered: 0, succeeded: 0, failed: 0, skipped: 0 };
     }
 
     const durableAgents: DurableAgentLike[] = [];
@@ -4261,7 +4279,7 @@ export class Mastra<
     }
 
     if (durableAgents.length === 0) {
-      return { agents: 0, recovered: 0, succeeded: 0, failed: 0 };
+      return { agents: 0, recovered: 0, succeeded: 0, failed: 0, skipped: 0 };
     }
 
     this.#logger.debug(
@@ -4271,11 +4289,19 @@ export class Mastra<
     let recovered = 0;
     let succeeded = 0;
     let failed = 0;
+    let skipped = 0;
 
     for (const agent of durableAgents) {
       try {
         const result = await agent.recoverActiveRuns();
-        recovered += result.recovered.length;
+        for (const run of result.recovered) {
+          if (run.status === 'skipped') {
+            skipped++;
+            this.#scheduleDurableRecoveryRecheck(agent, run);
+          } else {
+            recovered++;
+          }
+        }
         succeeded += result.succeeded;
         failed += result.failed;
       } catch (error) {
@@ -4286,7 +4312,54 @@ export class Mastra<
       }
     }
 
-    return { agents: durableAgents.length, recovered, succeeded, failed };
+    return { agents: durableAgents.length, recovered, succeeded, failed, skipped };
+  }
+
+  /**
+   * Re-check a run another execution drove when it was skipped, once that
+   * execution's claim could have lapsed. Runs this process drives carry no
+   * `retryAt` and are not re-checked. A re-check that throws is retried with
+   * backoff; `failures` counts the consecutive ones.
+   */
+  #scheduleDurableRecoveryRecheck(
+    agent: DurableAgentLike,
+    run: { runId: string; retryAt?: number },
+    failures = 0,
+  ): void {
+    if (run.retryAt === undefined || this.#shuttingDown) return;
+    const key = JSON.stringify([agent.id, run.runId]);
+    clearTimeout(this.#durableRecoveryRechecks.get(key));
+    const delay = Math.max(0, run.retryAt - Date.now()) + Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS;
+    const timer = setTimeout(() => {
+      this.#durableRecoveryRechecks.delete(key);
+      const recheck = agent
+        .recoverActiveRuns({ runId: run.runId })
+        .then(result => {
+          for (const next of result.recovered) {
+            if (next.status === 'skipped') this.#scheduleDurableRecoveryRecheck(agent, next);
+          }
+        })
+        .catch(error => {
+          const context = { agentId: agent.id, runId: run.runId, error };
+          if (failures >= DURABLE_RECOVERY_RECHECK_MAX_RETRIES) {
+            this.#logger.error(
+              'Failed to re-check durable agent run for recovery; leaving it for the next boot or a manual recover()',
+              context,
+            );
+            return;
+          }
+          this.#logger.warn('Failed to re-check durable agent run for recovery; retrying', context);
+          this.#scheduleDurableRecoveryRecheck(
+            agent,
+            { runId: run.runId, retryAt: Date.now() + DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS * 2 ** failures },
+            failures + 1,
+          );
+        })
+        .finally(() => this.#durableRecoveryRechecksInFlight.delete(recheck));
+      this.#durableRecoveryRechecksInFlight.add(recheck);
+    }, delay);
+    timer.unref?.();
+    this.#durableRecoveryRechecks.set(key, timer);
   }
 
   /**
@@ -7134,7 +7207,9 @@ export class Mastra<
     // instance share one start instead of racing worker.init()/start().
     // Cleared on settle so a dispatch after stopWorkers() can start again.
     if (!this.#executionWorkersStartPromise) {
-      this.#executionWorkersStartPromise = this.#startExecutionWorkers().finally(() => {
+      // Lazy startup can be triggered from inside a durable run. The workers'
+      // timers and subscriptions outlive it and must not carry its write fence.
+      this.#executionWorkersStartPromise = runOutsideRunFenceScope(() => this.#startExecutionWorkers()).finally(() => {
         this.#executionWorkersStartPromise = undefined;
       });
     }
@@ -7564,7 +7639,8 @@ export class Mastra<
    * through this instance are given up to `drainTimeout` milliseconds
    * (default 5000) to reach a terminal or suspended state before workers and
    * pubsub subscriptions are torn down. Runs that do not settle within the
-   * window are abandoned with a warning.
+   * window are abandoned with a warning. An abandoned durable agent run stops
+   * without writing and is released, so the next boot recovers it right away.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
     const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
@@ -7575,6 +7651,14 @@ export class Mastra<
     // stuck step must only be charged once — the deployer's shutdown deadline
     // is sized as `drainTimeout + fixed teardown`, and stacking would break it.
     const deadline = Date.now() + drainTimeout;
+
+    // A pending durable-agent recovery re-check must not start a run while the
+    // instance drains. One already under way may still be claiming its run, so
+    // the drain below waits for it like a run: what it claims is then drained
+    // or abandoned, not left claimed until the claim expires.
+    this.#shuttingDown = true;
+    this.#durableRecoveryRechecks.forEach(timer => clearTimeout(timer));
+    this.#durableRecoveryRechecks.clear();
 
     // The scorer hook lives on a process-global emitter. Release it before any
     // awaited teardown so even a later cleanup failure cannot retain this
@@ -7594,9 +7678,11 @@ export class Mastra<
     // returning a settled execution, which would otherwise spin this loop.
     const awaited = new Set<Promise<unknown>>();
     for (;;) {
-      const pendingRuns = [...this.#activeEventedRuns, ...getActiveDurableAgentWorkflowExecutions(this)].filter(
-        run => !awaited.has(run),
-      );
+      const pendingRuns = [
+        ...this.#activeEventedRuns,
+        ...getActiveDurableAgentWorkflowExecutions(this),
+        ...this.#durableRecoveryRechecksInFlight,
+      ].filter(run => !awaited.has(run));
       if (pendingRuns.length === 0) break;
       pendingRuns.forEach(run => awaited.add(run));
       const drained = await this.#awaitBounded(
@@ -7613,6 +7699,11 @@ export class Mastra<
         }
       });
     }
+
+    // A durable-agent execution still running now would keep its run claimed
+    // until the claim expires. Stop it without writing and release the run, so
+    // the next boot recovers it right away. Storage must still be open.
+    await abandonDurableAgentExecutions(this);
 
     // The shared BackgroundTaskWorker deliberately delegates manager ownership
     // to Mastra. Stop the manager while workers, pubsub, and storage are still

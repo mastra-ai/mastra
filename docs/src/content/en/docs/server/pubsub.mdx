@@ -79,6 +79,8 @@ Use a distributed backend when you run more than one instance or host, and every
 
 For example, sending a signal to an agent run requires the signal event to cross the process boundary to the instance that owns the run. With the in-process default, that instance never receives the event.
 
+[Durable agent](/docs/harness/durable-agents#run-ownership) crash recovery also depends on the backend when the storage adapter doesn't support run fencing. Recovery then uses the backend's leases to tell whether another instance still drives a run. `RedisStreamsPubSub` provides leases across hosts. `GoogleCloudPubSub` doesn't.
+
 Both backends below deliver across processes and hosts and persist events for redelivery.
 
 The following example uses [Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/):

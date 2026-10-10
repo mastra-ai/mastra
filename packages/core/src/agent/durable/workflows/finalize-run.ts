@@ -13,6 +13,7 @@ import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
 import { TripWire } from '../../trip-wire';
+import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
 import { globalRunRegistry } from '../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
@@ -183,6 +184,15 @@ export async function runDurableFinishSideEffects({
     }
   }
 
+  // Output processors persist messages too (MessageHistory saves the response
+  // in processOutputResult), so a superseded execution must stop here, before
+  // either memory write path, and never reach the finish event (#23734). This
+  // check sits outside the processor try/catch, which swallows errors. It uses
+  // the live `requestContext`: the snapshot entries never carry the
+  // execution id.
+  const assertOwned = () => assertExecutionOwned({ runId, agentId: initData.agentId, requestContext, mastra });
+  await assertOwned();
+
   // Keep this MessageList for every later phase. ProcessorRunner applies
   // returned message arrays back onto it, including removals and replacements.
   if (registryEntry?.outputProcessors?.length) {
@@ -271,8 +281,11 @@ export async function runDurableFinishSideEffects({
         });
       }
 
-      await saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig);
+      await saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig, {
+        beforePersist: assertOwned,
+      });
     } catch (error) {
+      if (isExecutionFenceError(error)) throw error;
       effectiveLogger.error('[DurableAgent] Error persisting messages', {
         runId,
         threadId: durableState.threadId,

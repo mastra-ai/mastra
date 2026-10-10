@@ -412,9 +412,11 @@ Re-drives every orphaned `running` durable-agent run across all registered durab
 
 Requires persistent storage. With an in-memory store, there's nothing to recover after a process restart.
 
+A run that another execution still drives isn't taken over. It's counted in `skipped` and checked again once that execution's claim could have lapsed, so a run whose process crashed is recovered without another call. `shutdown()` cancels pending re-checks. See [run ownership](/docs/harness/durable-agents#run-ownership).
+
 ```typescript
 const result = await mastra.recoverAllDurableAgents()
-// { agents: 2, recovered: 3, succeeded: 3, failed: 0 }
+// { agents: 2, recovered: 3, succeeded: 3, failed: 0, skipped: 1 }
 ```
 
 Returns:
@@ -429,7 +431,7 @@ Returns:
   {
     name: 'recovered',
     type: 'number',
-    description: 'Total number of runs that were re-driven.',
+    description: 'Total number of runs that were re-driven: `succeeded` plus `failed`.',
   },
   {
     name: 'succeeded',
@@ -440,6 +442,11 @@ Returns:
     name: 'failed',
     type: 'number',
     description: 'Runs whose restart threw an error.',
+  },
+  {
+    name: 'skipped',
+    type: 'number',
+    description: 'Runs that another execution still drives. Each is checked again later.',
   },
 ]}
 />
