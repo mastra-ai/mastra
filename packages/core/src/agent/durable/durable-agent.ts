@@ -425,10 +425,11 @@ export interface DurableAgentConfig<
    *
    * The default policy always persists `pending | paused | suspended`
    * (required for human-in-the-loop `resume()`), and persists `running`
-   * only when the Mastra instance is configured with
-   * `recovery: { durableAgents: 'auto' }` — `running` checkpoints exist
-   * solely so `listActiveRuns()` / `recover()` / `recoverActiveRuns()` can
-   * see in-flight runs after a crash.
+   * when the Mastra instance is configured with
+   * `recovery: { durableAgents: 'auto' }`, or at each step boundary after
+   * `mastra.shutdown()` starts (even with recovery off). `running`
+   * checkpoints exist solely so `listActiveRuns()` / `recover()` /
+   * `recoverActiveRuns()` can see in-flight runs after a crash or shutdown.
    *
    * Footguns when providing a custom predicate:
    * - Excluding `paused` / `suspended` breaks human-in-the-loop resume.
@@ -2230,12 +2231,12 @@ export class DurableAgent<
    *
    * Always persists `pending | paused | suspended` — those records are the
    * resume artifacts human-in-the-loop flows depend on. Persists `running`
-   * only when crash recovery is enabled (`recovery.durableAgents: 'auto'`):
-   * `running` checkpoints exist solely to feed `listActiveRuns()` /
-   * `recover()` / `recoverActiveRuns()`, and are pure write amplification
-   * when nothing consumes them (issue #23915). Also persists `running` once
-   * `mastra.shutdown()` has started, so a run still in flight when the process
-   * exits leaves a checkpoint to recover from (issue #26600).
+   * when crash recovery is enabled (`recovery.durableAgents: 'auto'`), or
+   * at each step boundary once `mastra.shutdown()` has started (even with
+   * recovery off), so a run still in flight when the process exits leaves a
+   * checkpoint to recover from (issue #26600). Otherwise `running`
+   * checkpoints are pure write amplification: they exist solely to feed
+   * `listActiveRuns()` / `recover()` / `recoverActiveRuns()` (issue #23915).
    *
    * Reads the recovery config lazily (per persist call, via the Mastra
    * reference) so the policy stays correct regardless of whether the
