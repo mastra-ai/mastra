@@ -136,6 +136,12 @@ class PlatformMemory:
                 return None
             raise
 
+    def update_thread(
+        self, thread_id: str, *, title: str | None = None, metadata: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        body = {"title": title, "metadata": metadata}
+        return self._request("PATCH", f"/threads/{_q(thread_id)}", body={k: v for k, v in body.items() if v is not None})
+
     def delete_thread(self, thread_id: str) -> None:
         self._request("DELETE", f"/threads/{_q(thread_id)}")
 
@@ -146,7 +152,7 @@ class PlatformMemory:
         self._request("PUT", "/working-memory", body={"resourceId": resource_id, "workingMemory": working_memory})
 
     def search(
-        self, query: str, *, resource_id: str, thread_id: str | None = None, limit: int | None = None
+        self, query: str, *, resource_id: str | None = None, thread_id: str | None = None, limit: int | None = None
     ) -> list[dict[str, Any]]:
         body = {"resourceId": resource_id, "threadId": thread_id, "query": query, "limit": limit}
         return self._request("POST", "/search", body={k: v for k, v in body.items() if v is not None})["matches"]
@@ -195,6 +201,13 @@ class PlatformMemory:
         self, resource_id: str, *, page: int | None = None, per_page: int | None = None
     ) -> dict[str, Any]:
         return self._request("GET", f"/resources/{_q(resource_id)}", query={"page": page, "perPage": per_page})
+
+    def list_resources(self, *, page: int | None = None, per_page: int | None = None) -> dict[str, Any]:
+        return self._request("GET", "/resources", query={"page": page, "perPage": per_page})
+
+    def delete_resource(self, resource_id: str) -> int:
+        """Delete every thread, message, observation and the working memory for a resource."""
+        return self._request("DELETE", f"/resources/{_q(resource_id)}")["deletedThreads"]
 
     def _request(
         self, method: str, path: str, *, query: dict[str, Any] | None = None, body: Any = None
