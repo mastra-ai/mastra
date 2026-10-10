@@ -1,5 +1,14 @@
 # @mastra/cloudflare
 
+## 1.7.2-alpha.1
+
+### Patch Changes
+
+- Fixed `listMessagesById` in Cloudflare KV storage returning an empty list when a lookup fails. It now throws, like the other storage adapters, so a temporary KV outage is no longer mistaken for the messages having been deleted. ([#26222](https://github.com/mastra-ai/mastra/pull/26222))
+
+- Updated dependencies [[`eda5b00`](https://github.com/mastra-ai/mastra/commit/eda5b0081bdc49cc17ac8fc1267fccabb5e7a33f)]:
+  - @mastra/core@1.76.0-alpha.8
+
 ## 1.7.2-alpha.0
 
 ### Patch Changes
