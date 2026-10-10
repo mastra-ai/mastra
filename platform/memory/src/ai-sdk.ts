@@ -1,13 +1,27 @@
 import type {
+  JSONValue,
   LanguageModelV3CallOptions,
+  LanguageModelV3Content,
+  LanguageModelV3DataContent,
   LanguageModelV3FinishReason,
   LanguageModelV3Message,
   LanguageModelV3Middleware,
   LanguageModelV3StreamPart,
+  LanguageModelV3ToolResultOutput,
 } from '@ai-sdk/provider';
 
 import { PlatformMemoryClient } from './client';
-import type { MemoryMessageInput, PlatformMemoryClientOptions } from './client';
+import type { MemoryMessage, MemoryMessageInput, MemoryMessagePart, PlatformMemoryClientOptions } from './client';
+import {
+  attachToolResult,
+  filePart,
+  messageInput,
+  partsOf,
+  reasoningPart,
+  textPart,
+  toolInvocationsOf,
+  toolPart,
+} from './parts';
 
 export type PlatformMemoryMiddlewareOptions = PlatformMemoryClientOptions & {
   threadId: string;
@@ -18,25 +32,110 @@ export type PlatformMemoryMiddlewareOptions = PlatformMemoryClientOptions & {
   client?: PlatformMemoryClient;
 };
 
-function textOf(content: ReadonlyArray<{ type: string; text?: string }>): string {
-  return content
-    .filter(part => part.type === 'text')
-    .map(part => part.text ?? '')
-    .join('');
+type AssistantContent = Extract<LanguageModelV3Message, { role: 'assistant' }>['content'];
+type UserContent = Extract<LanguageModelV3Message, { role: 'user' }>['content'];
+
+function dataToString(data: LanguageModelV3DataContent): string {
+  if (typeof data === 'string') return data;
+  if (data instanceof URL) return data.toString();
+  let binary = '';
+  for (let i = 0; i < data.length; i += 0x8000) binary += String.fromCharCode(...data.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+function parseInput(input: unknown): unknown {
+  if (typeof input !== 'string') return input;
+  try {
+    return JSON.parse(input);
+  } catch {
+    return input;
+  }
+}
+
+function outputValue(output: LanguageModelV3ToolResultOutput): unknown {
+  return output.type === 'text' || output.type === 'json' ? output.value : output;
+}
+
+/** Converts AI SDK prompt or result content into Mastra V2 parts. */
+function toParts(content: ReadonlyArray<LanguageModelV3Content | UserContent[number] | AssistantContent[number]>) {
+  const parts: MemoryMessagePart[] = [];
+  for (const part of content) {
+    if (part.type === 'text' && part.text) parts.push(textPart(part.text));
+    else if (part.type === 'reasoning' && part.text) parts.push(reasoningPart(part.text));
+    else if (part.type === 'file') parts.push(filePart(dataToString(part.data), part.mediaType));
+    else if (part.type === 'tool-call') {
+      parts.push(toolPart({ toolCallId: part.toolCallId, toolName: part.toolName, args: parseInput(part.input) }));
+    } else if (part.type === 'tool-result') {
+      const result = 'output' in part ? outputValue(part.output) : part.result;
+      attachToolResult(parts, part.toolCallId, result);
+    }
+  }
+  return parts;
 }
 
 /**
- * The user message(s) that started this turn: the last run of user messages.
- * Tool-loop steps append assistant/tool messages after it, so this is stable across steps.
+ * What this turn adds: the last run of user messages, then one assistant message holding
+ * every tool-loop step (tool calls with their results) and the final reply.
  */
-function turnUserMessages(prompt: LanguageModelV3Message[]): MemoryMessageInput[] {
+function turnMessages(prompt: LanguageModelV3Message[], reply: MemoryMessagePart[]): MemoryMessageInput[] {
   const last = prompt.findLastIndex(m => m.role === 'user');
   let first = last;
   while (first > 0 && prompt[first - 1]!.role === 'user') first--;
-  return prompt.slice(first, last + 1).flatMap(m => {
-    const content = m.role === 'user' ? textOf(m.content) : '';
-    return content ? [{ role: 'user' as const, content }] : [];
+
+  const messages = prompt
+    .slice(first, last + 1)
+    .map(m => (m.role === 'user' ? messageInput('user', toParts(m.content)) : null));
+
+  const assistant: MemoryMessagePart[] = [];
+  for (const m of prompt.slice(last + 1)) {
+    if (m.role === 'assistant') assistant.push(...toParts(m.content));
+    if (m.role === 'tool') {
+      for (const part of m.content) {
+        if (part.type === 'tool-result') attachToolResult(assistant, part.toolCallId, outputValue(part.output));
+      }
+    }
+  }
+  assistant.push(...reply);
+  messages.push(messageInput('assistant', assistant));
+  return messages.filter(m => m !== null);
+}
+
+/** Replays a recalled message, including tool calls and their results, as AI SDK prompt messages. */
+function fromMemory(message: MemoryMessage): LanguageModelV3Message[] {
+  const parts = partsOf(message);
+  if (message.role !== 'assistant') {
+    const content: UserContent = parts.flatMap((part): UserContent => {
+      if (part.type === 'text') return [{ type: 'text', text: part.text as string }];
+      if (part.type === 'file') return [{ type: 'file', data: part.data as string, mediaType: part.mimeType as string }];
+      return [];
+    });
+    return content.length ? [{ role: 'user', content }] : [];
+  }
+
+  const content: AssistantContent = parts.flatMap((part): AssistantContent => {
+    if (part.type === 'text') return [{ type: 'text', text: part.text as string }];
+    if (part.type === 'reasoning') return [{ type: 'reasoning', text: part.reasoning as string }];
+    if (part.type === 'file') return [{ type: 'file', data: part.data as string, mediaType: part.mimeType as string }];
+    return [];
   });
+  const results = toolInvocationsOf(parts).filter(t => t.state === 'result');
+  // A tool call is only valid in a prompt alongside its result.
+  content.push(
+    ...results.map(t => ({ type: 'tool-call' as const, toolCallId: t.toolCallId, toolName: t.toolName, input: t.args })),
+  );
+  const replay: LanguageModelV3Message[] = content.length ? [{ role: 'assistant', content }] : [];
+  if (results.length) {
+    replay.push({
+      role: 'tool',
+      content: results.map(t => ({
+        type: 'tool-result',
+        toolCallId: t.toolCallId,
+        toolName: t.toolName,
+        output: { type: 'json', value: (t.result ?? null) as JSONValue },
+      })),
+    });
+  }
+  return replay;
 }
 
 /** Intermediate tool-calling steps are not saved; the turn is saved once the model finishes. */
@@ -47,7 +146,8 @@ const isFinal = (reason: LanguageModelV3FinishReason) => reason.unified !== 'too
  *
  * Before each call it prepends the instance's observations (as a system message)
  * and the unobserved message tail. After the final step it saves the user's
- * message and the model's text reply; observation runs on the Platform.
+ * message and the model's reply, including tool calls, reasoning, and files;
+ * observation runs on the Platform.
  *
  * Send only the new user message: earlier turns come from memory.
  *
@@ -64,10 +164,9 @@ export function platformMemoryMiddleware(options: PlatformMemoryMiddlewareOption
   const resourceId = options.resourceId ?? threadId;
   const originalPrompts = new WeakMap<LanguageModelV3CallOptions, LanguageModelV3Message[]>();
 
-  async function remember(prompt: LanguageModelV3Message[] | undefined, reply: string) {
+  async function remember(prompt: LanguageModelV3Message[] | undefined, reply: MemoryMessagePart[]) {
     if (readOnly || !prompt) return;
-    const messages = turnUserMessages(prompt);
-    if (reply) messages.push({ role: 'assistant', content: reply });
+    const messages = turnMessages(prompt, reply);
     if (messages.length) await client.saveMessages(threadId, { resourceId, messages });
   }
 
@@ -76,11 +175,6 @@ export function platformMemoryMiddleware(options: PlatformMemoryMiddlewareOption
 
     async transformParams({ params }) {
       const context = await client.getContext(threadId, resourceId);
-      const recalled: LanguageModelV3Message[] = context.messages.map(m =>
-        m.role === 'assistant'
-          ? { role: 'assistant', content: [{ type: 'text', text: m.content }] }
-          : { role: 'user', content: [{ type: 'text', text: m.content }] },
-      );
       const system = params.prompt.filter(m => m.role === 'system');
       const rest = params.prompt.filter(m => m.role !== 'system');
       const next: LanguageModelV3CallOptions = {
@@ -88,7 +182,7 @@ export function platformMemoryMiddleware(options: PlatformMemoryMiddlewareOption
         prompt: [
           ...system,
           ...(context.system ? [{ role: 'system' as const, content: context.system }] : []),
-          ...recalled,
+          ...context.messages.flatMap(fromMemory),
           ...rest,
         ],
       };
@@ -99,7 +193,7 @@ export function platformMemoryMiddleware(options: PlatformMemoryMiddlewareOption
     async wrapGenerate({ doGenerate, params }) {
       const result = await doGenerate();
       if (isFinal(result.finishReason)) {
-        await remember(originalPrompts.get(params), textOf(result.content));
+        await remember(originalPrompts.get(params), toParts(result.content));
       }
       return result;
     },
@@ -107,19 +201,31 @@ export function platformMemoryMiddleware(options: PlatformMemoryMiddlewareOption
     async wrapStream({ doStream, params }) {
       const { stream, ...rest } = await doStream();
       const prompt = originalPrompts.get(params);
-      let reply = '';
+      const content: LanguageModelV3Content[] = [];
+      let text = '';
+      let reasoning = '';
+      const flushDeltas = () => {
+        if (reasoning) content.push({ type: 'reasoning', text: reasoning });
+        if (text) content.push({ type: 'text', text });
+        reasoning = text = '';
+      };
       let final = false;
       return {
         ...rest,
         stream: stream.pipeThrough(
           new TransformStream<LanguageModelV3StreamPart, LanguageModelV3StreamPart>({
             transform(part, controller) {
-              if (part.type === 'text-delta') reply += part.delta;
-              if (part.type === 'finish') final = isFinal(part.finishReason);
+              if (part.type === 'text-delta') text += part.delta;
+              else if (part.type === 'reasoning-delta') reasoning += part.delta;
+              else if (part.type === 'file' || part.type === 'tool-call' || part.type === 'tool-result') {
+                flushDeltas();
+                content.push(part);
+              } else if (part.type === 'finish') final = isFinal(part.finishReason);
               controller.enqueue(part);
             },
             async flush() {
-              if (final) await remember(prompt, reply);
+              flushDeltas();
+              if (final) await remember(prompt, toParts(content));
             },
           }),
         ),

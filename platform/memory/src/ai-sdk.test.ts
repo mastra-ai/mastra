@@ -67,15 +67,15 @@ describe('platformMemoryMiddleware', () => {
         body: {
           resourceId: 'u1',
           messages: [
-            { role: 'user', content: 'Where do I live?' },
-            { role: 'assistant', content: 'You live in Kyoto.' },
+            { role: 'user', content: 'Where do I live?', parts: [{ type: 'text', text: 'Where do I live?' }] },
+            { role: 'assistant', content: 'You live in Kyoto.', parts: [{ type: 'text', text: 'You live in Kyoto.' }] },
           ],
         },
       },
     ]);
   });
 
-  it('saves once after a tool loop, with the original user message', async () => {
+  it('saves once after a tool loop, with tool calls and their results', async () => {
     const { client, saved } = fakeClient({ system: null, messages: [] });
     let step = 0;
     const model = new MockLanguageModelV3({
@@ -103,8 +103,24 @@ describe('platformMemoryMiddleware', () => {
         body: {
           resourceId: 't1',
           messages: [
-            { role: 'user', content: 'Weather in Kyoto?' },
-            { role: 'assistant', content: 'Sunny.' },
+            { role: 'user', content: 'Weather in Kyoto?', parts: [{ type: 'text', text: 'Weather in Kyoto?' }] },
+            {
+              role: 'assistant',
+              content: 'Sunny.',
+              parts: [
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'c1',
+                    toolName: 'weather',
+                    args: { city: 'Kyoto' },
+                    result: 'sunny',
+                  },
+                },
+                { type: 'text', text: 'Sunny.' },
+              ],
+            },
           ],
         },
       },
@@ -140,10 +156,109 @@ describe('platformMemoryMiddleware', () => {
         body: {
           resourceId: 't1',
           messages: [
-            { role: 'user', content: 'Hi' },
-            { role: 'assistant', content: 'Hello' },
+            { role: 'user', content: 'Hi', parts: [{ type: 'text', text: 'Hi' }] },
+            { role: 'assistant', content: 'Hello', parts: [{ type: 'text', text: 'Hello' }] },
           ],
         },
+      },
+    ]);
+  });
+
+  it('saves streamed reasoning and user files as parts', async () => {
+    const { client, saved } = fakeClient({ system: null, messages: [] });
+    const model = new MockLanguageModelV3({
+      doStream: async () => ({
+        stream: simulateReadableStream({
+          chunks: [
+            { type: 'reasoning-start', id: 'r' },
+            { type: 'reasoning-delta', id: 'r', delta: 'It is a cat.' },
+            { type: 'reasoning-end', id: 'r' },
+            { type: 'text-start', id: '1' },
+            { type: 'text-delta', id: '1', delta: 'A cat.' },
+            { type: 'text-end', id: '1' },
+            { type: 'finish', finishReason: stop, usage },
+          ],
+        }),
+      }),
+    });
+
+    const result = streamText({
+      model: wrapLanguageModel({ model, middleware: platformMemoryMiddleware({ client, threadId: 't1' }) }),
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'What is this?' },
+            { type: 'file', data: new Uint8Array([1, 2, 3]), mediaType: 'image/png' },
+          ],
+        },
+      ],
+    });
+    await result.consumeStream();
+
+    expect((saved[0] as { body: { messages: unknown[] } }).body.messages).toEqual([
+      {
+        role: 'user',
+        content: 'What is this?',
+        parts: [
+          { type: 'text', text: 'What is this?' },
+          { type: 'file', data: 'AQID', mimeType: 'image/png' },
+        ],
+      },
+      {
+        role: 'assistant',
+        content: 'A cat.',
+        parts: [
+          { type: 'reasoning', reasoning: 'It is a cat.', details: [{ type: 'text', text: 'It is a cat.' }] },
+          { type: 'text', text: 'A cat.' },
+        ],
+      },
+    ]);
+  });
+
+  it('replays recalled tool calls with their results', async () => {
+    const { client } = fakeClient({
+      system: null,
+      messages: [
+        {
+          role: 'assistant',
+          content: 'Sunny.',
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'result', toolCallId: 'c1', toolName: 'weather', args: { city: 'Kyoto' }, result: 'sunny' },
+            },
+            { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId: 'c2', toolName: 'weather', args: {} } },
+            { type: 'text', text: 'Sunny.' },
+          ],
+        },
+      ],
+    } as never);
+    const calls: LanguageModelV3CallOptions[] = [];
+    const model = new MockLanguageModelV3({
+      doGenerate: async options => {
+        calls.push(options);
+        return { content: [{ type: 'text', text: 'ok' }], finishReason: stop, usage, warnings: [] };
+      },
+    });
+    await generateText({
+      model: wrapLanguageModel({ model, middleware: platformMemoryMiddleware({ client, threadId: 't1', readOnly: true }) }),
+      prompt: 'And tomorrow?',
+    });
+
+    expect(calls[0]!.prompt.slice(0, 2)).toEqual([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Sunny.' },
+          { type: 'tool-call', toolCallId: 'c1', toolName: 'weather', input: { city: 'Kyoto' } },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          { type: 'tool-result', toolCallId: 'c1', toolName: 'weather', output: { type: 'json', value: 'sunny' } },
+        ],
       },
     ]);
   });
