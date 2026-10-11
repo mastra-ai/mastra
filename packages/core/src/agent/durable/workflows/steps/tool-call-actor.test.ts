@@ -200,6 +200,58 @@ describe('durable tool-call context forwarding', () => {
     }
   });
 
+  it.each([
+    ['names an unknown suspension', 'askUser', 'made-up', 'resume-call'],
+    ['resumes a delegated tool', 'workflow-sub', 'call-a', 'call-a'],
+  ])(
+    "leaves another tool's suspension with a reused id intact when the model %s",
+    async (_label, toolName, suspendedToolCallId, otherToolCallId) => {
+      const runId = 'durable-reused-id-run';
+      const suspended = (id: string, name: string) => ({
+        id: `suspended-${name}`,
+        role: 'assistant',
+        createdAt: new Date(0),
+        content: {
+          format: 2,
+          metadata: { suspendedTools: { [id]: { toolCallId: id, toolName: name, runId: 'inner-a' } } },
+          parts: [{ type: 'data-tool-call-suspended', data: { toolCallId: id, toolName: name, runId: 'inner-a' } }],
+        },
+      });
+      const own = suspended('call-a', toolName);
+      const other = suspended(otherToolCallId, 'otherTool');
+      const messageList = {
+        add: vi.fn(),
+        get: {
+          response: { db: () => [own, other] },
+          all: { db: () => [own, other] },
+          input: { aiV5: { model: () => [] } },
+        },
+      };
+      globalRunRegistry.set(runId, {
+        tools: { [toolName]: { execute: vi.fn().mockResolvedValue('ok') } },
+        messageList,
+      } as any);
+
+      try {
+        await (createDurableToolCallStep() as any).execute({
+          inputData: {
+            toolCallId: 'resume-call',
+            toolName,
+            args: { resumeData: { answer: 'blue' }, suspendedToolCallId },
+          },
+          mastra: { getLogger: () => undefined },
+          suspend: vi.fn(),
+          getInitData: () => ({ runId, agentId: 'agent-1', options: {}, state: {} }),
+        });
+
+        expect(other.content.metadata.suspendedTools).toHaveProperty(otherToolCallId);
+        expect(other.content.parts[0]!.data).not.toHaveProperty('resumed');
+      } finally {
+        globalRunRegistry.delete(runId);
+      }
+    },
+  );
+
   it('forwards MCP protocol context from the run registry', async () => {
     const runId = 'durable-tool-mcp-run';
     const execute = vi.fn().mockResolvedValue('ok');

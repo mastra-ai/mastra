@@ -284,7 +284,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       };
 
       const removeToolMetadata = async (
-        target: { toolCallId?: string; toolName: string; runId?: string },
+        target: { toolCallId?: string; toolName: string; runId?: string; matchToolName?: boolean },
         type: 'suspension' | 'approval',
       ): Promise<Record<string, any> | undefined> => {
         const { saveQueueManager, memoryConfig, threadId } = _internal || {};
@@ -295,7 +295,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           const entryToolCallId = typeof entry?.toolCallId === 'string' ? entry.toolCallId : fallbackToolCallId;
           const entryToolName = entry?.parentToolName ?? entry?.toolName;
           const entryRunId = type === 'approval' ? entry?.delegatedRunId : (entry?.delegatedRunId ?? entry?.runId);
-          if (target.toolCallId) return entryToolCallId === target.toolCallId;
+          if (target.toolCallId) {
+            return (
+              entryToolCallId === target.toolCallId && (!target.matchToolName || entryToolName === target.toolName)
+            );
+          }
           return entryToolName === target.toolName && !!target.runId && entryRunId === target.runId;
         };
 
@@ -909,9 +913,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   messages: messageList.get.all.db(),
                 })
               : undefined;
-          const cleanupTarget = needsRunIdLookup
+          const cleanupIdentity = needsRunIdLookup
             ? resolvedSuspensionIdentity
             : (modelResumedSuspension ?? { toolCallId: inputData.toolCallId, toolName: inputData.toolName });
+          // Ids in a model-driven resume are model-supplied, so removal also matches the tool
+          // name and leaves another tool's suspension that reuses the id alone.
+          const cleanupTarget =
+            cleanupIdentity && isResumeToolCall ? { ...cleanupIdentity, matchToolName: true } : cleanupIdentity;
           const clearedEntry = cleanupTarget
             ? await removeToolMetadata(cleanupTarget, resolvedSuspensionIdentity?.type ?? 'suspension')
             : undefined;

@@ -2662,6 +2662,83 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
     });
   });
 
+  it("leaves another tool's suspension with the same id intact on auto-resume", async () => {
+    const own = createSuspendedAssistantMessage('shared-call-id', 'hitl-tool');
+    const other = createSuspendedAssistantMessage('shared-call-id', 'other-tool');
+    const messageList = {
+      add: vi.fn(),
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [own, other] },
+        all: { db: () => [own, other], aiV5: { model: () => [] } },
+      },
+    } as unknown as MessageList;
+    const toolCallStep = createToolCallStep({
+      tools: { 'hitl-tool': { execute: vi.fn(async () => ({ confirmed: true })) } } as ToolSet,
+      messageList,
+      controller,
+      runId: 'parent-run-id',
+      streamState,
+      _internal: { saveQueueManager: { flushMessages: vi.fn() }, threadId: 'thread-1' },
+    } as any);
+
+    await toolCallStep.execute({
+      ...makeBaseExecuteParams(vi.fn()),
+      inputData: {
+        toolCallId: 'auto-resume-call-id',
+        toolName: 'hitl-tool',
+        args: { prompt: 'do thing', resumeData: { confirmed: true }, suspendedToolCallId: 'shared-call-id' },
+      },
+    });
+
+    expect(own.content.metadata.suspendedTools).toBeUndefined();
+    expect(other.content.metadata.suspendedTools).toHaveProperty('shared-call-id');
+  });
+
+  it.each([
+    ['names an unknown suspension', 'hitl-tool', 'other-tool', 'made-up-call-id', 'auto-resume-call-id'],
+    ['resumes a delegated tool', 'workflow-sub', 'other-tool', 'shared-call-id', 'shared-call-id'],
+  ])(
+    "leaves another tool's suspension with a reused id intact when the model %s",
+    async (_label, toolName, otherToolName, suspendedToolCallId, otherToolCallId) => {
+      const own = createSuspendedAssistantMessage('shared-call-id', toolName);
+      const other = createSuspendedAssistantMessage(otherToolCallId, otherToolName);
+      const messageList = {
+        add: vi.fn(),
+        get: {
+          input: { aiV5: { model: () => [] } },
+          response: { db: () => [own, other] },
+          all: { db: () => [own, other], aiV5: { model: () => [] } },
+        },
+      } as unknown as MessageList;
+      const toolCallStep = createToolCallStep({
+        tools: { [toolName]: { execute: vi.fn(async () => ({ confirmed: true })) } } as unknown as ToolSet,
+        messageList,
+        controller,
+        runId: 'parent-run-id',
+        streamState,
+        _internal: { saveQueueManager: { flushMessages: vi.fn() }, threadId: 'thread-1' },
+      } as any);
+
+      await toolCallStep.execute({
+        ...makeBaseExecuteParams(vi.fn()),
+        inputData: {
+          toolCallId: 'auto-resume-call-id',
+          toolName,
+          args: { prompt: 'do thing', resumeData: { confirmed: true }, suspendedToolCallId },
+        },
+      });
+
+      expect(other.content.metadata.suspendedTools).toHaveProperty(otherToolCallId);
+      expect(controller.enqueue).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'tool-call-resumed',
+          payload: expect.objectContaining({ toolName: otherToolName }),
+        }),
+      );
+    },
+  );
+
   it("leaves another tool's suspension intact when the model names it on auto-resume", async () => {
     const message = createSuspendedAssistantMessage('other-call-id', 'other-tool');
     const flushMessages = vi.fn();

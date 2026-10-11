@@ -836,7 +836,7 @@ export function createDurableToolCallStep() {
       };
 
       const removeToolMetadata = async (
-        target: { toolCallId?: string; toolName: string; runId?: string },
+        target: { toolCallId?: string; toolName: string; runId?: string; matchToolName?: boolean },
         type: 'suspension' | 'approval',
       ) => {
         if (!resumeMessageList) return;
@@ -847,7 +847,11 @@ export function createDurableToolCallStep() {
           const entryToolCallId = typeof entry?.toolCallId === 'string' ? entry.toolCallId : fallbackToolCallId;
           const entryToolName = entry?.parentToolName ?? entry?.toolName;
           const entryRunId = type === 'approval' ? entry?.delegatedRunId : (entry?.delegatedRunId ?? entry?.runId);
-          if (target.toolCallId) return entryToolCallId === target.toolCallId;
+          if (target.toolCallId) {
+            return (
+              entryToolCallId === target.toolCallId && (!target.matchToolName || entryToolName === target.toolName)
+            );
+          }
           return entryToolName === target.toolName && !!target.runId && entryRunId === target.runId;
         };
 
@@ -1146,9 +1150,13 @@ export function createDurableToolCallStep() {
                 messages: messageList?.get.all.db() ?? [],
               })
             : undefined;
-        const cleanupTarget = isResumableTool
+        const cleanupIdentity = isResumableTool
           ? resolvedSuspensionIdentity
           : (modelResumedSuspension ?? { toolCallId, toolName });
+        // Ids in a model-driven resume are model-supplied, so removal also matches the tool
+        // name and leaves another tool's suspension that reuses the id alone.
+        const cleanupTarget =
+          cleanupIdentity && hasModelResumeData ? { ...cleanupIdentity, matchToolName: true } : cleanupIdentity;
         if (cleanupTarget) {
           await removeToolMetadata(cleanupTarget, resolvedSuspensionIdentity?.type ?? 'suspension');
         }
