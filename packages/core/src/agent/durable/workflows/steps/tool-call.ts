@@ -36,6 +36,7 @@ import { getToolTitle } from '../../../../tools/tool-title';
 import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../../tools/validation';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
+import { defineLazyWriter } from '../../../../workflows/utils';
 import { createStep } from '../../../../workflows/workflow';
 import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
@@ -1202,7 +1203,7 @@ export function createDurableToolCallStep() {
         delegationMessages = delegationList.get.all.aiV5.prompt();
       }
 
-      const toolOptions = {
+      const toolOptionsWithoutWriter = {
         toolCallId,
         messages: isAgentTool ? (delegationMessages ?? []) : (contextMessageList?.get.input.aiV5.model() ?? []),
         getMessages: messageList ? () => messageList.get.all.db() : undefined,
@@ -1228,12 +1229,6 @@ export function createDurableToolCallStep() {
           : {}),
         ...(toolAbortSignal ? { abortSignal: toolAbortSignal } : {}),
         outputWriter,
-        // Raw `Tool` instances resolved from the Mastra registry (the cross-process
-        // fallback path) are not wrapped by CoreToolBuilder, so they only get a
-        // `writer` if we construct it here — mirrors the non-durable tool-call-step.
-        // Registry tools go through CoreToolBuilder, which builds its own ToolStream.
-        writer: new ToolStream({ prefix: 'tool', callId: toolCallId, name: toolName, runId }, outputWriter),
-
         // In-execution suspend callback — allows tools to suspend mid-execution
         suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
           wasSuspended = true;
@@ -1383,6 +1378,15 @@ export function createDurableToolCallStep() {
           }
         },
       };
+      // Raw `Tool` instances resolved from the Mastra registry (the cross-process
+      // fallback path) are not wrapped by CoreToolBuilder, so they only get a
+      // `writer` from here — mirrors the non-durable tool-call-step. Registry tools
+      // go through CoreToolBuilder, which builds its own ToolStream, so this one is
+      // created only if the tool actually reads it.
+      const toolOptions = defineLazyWriter(
+        toolOptionsWithoutWriter,
+        () => new ToolStream({ prefix: 'tool', callId: toolCallId, name: toolName, runId }, outputWriter),
+      );
 
       // Live-attempt barrier only. Durable recovery must use persisted task and
       // transcript state because this Promise does not survive workflow replay.
