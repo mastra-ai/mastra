@@ -16,7 +16,7 @@ import type {
   ToolCallAttributes,
 } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
-import { initLogger, _exportsForTestingOnly } from 'braintrust';
+import { flush as flushBraintrust, initLogger, _exportsForTestingOnly } from 'braintrust';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BraintrustExporter } from './tracing';
 import type { BraintrustExporterConfig, BraintrustLogger, BraintrustSpan } from './tracing';
@@ -66,6 +66,7 @@ describe('BraintrustExporter', () => {
       id: 'mockLogger',
       startSpan: vi.fn().mockReturnValue(mockSpan),
       logFeedback: vi.fn(),
+      flush: vi.fn().mockResolvedValue(undefined),
     };
 
     mockInitLogger = vi.mocked(initLogger);
@@ -2363,6 +2364,82 @@ describe('BraintrustExporter', () => {
 
       // Should not throw
       await expect(disabledExporter.shutdown()).resolves.not.toThrow();
+    });
+
+    it('flushes updates created while aborting open spans', async () => {
+      const rootSpan = createMockSpan({
+        id: 'root-span',
+        name: 'root',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: rootSpan,
+      });
+
+      await exporter.shutdown();
+
+      expect(mockLogger.flush).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('Flush', () => {
+    it('waits for the local logger background queue', async () => {
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: createMockSpan({
+          id: 'root-span',
+          name: 'root',
+          type: SpanType.AGENT_RUN,
+          isRoot: true,
+          attributes: {},
+        }),
+      });
+
+      let releaseFlush: (() => void) | undefined;
+      const pendingFlush = new Promise<void>(resolve => {
+        releaseFlush = resolve;
+      });
+      mockLogger.flush.mockReturnValueOnce(pendingFlush);
+
+      let resolved = false;
+      const flushing = exporter.flush().then(() => {
+        resolved = true;
+      });
+
+      await Promise.resolve();
+      expect(mockLogger.flush).toHaveBeenCalledOnce();
+      expect(resolved).toBe(false);
+
+      releaseFlush?.();
+      await flushing;
+      expect(resolved).toBe(true);
+    });
+
+    it('flushes the global Braintrust logger after using an ambient span', async () => {
+      const ambientSpan = { ...mockSpan, id: 'ambient-span' };
+      const configuredLogger = { ...mockLogger, startSpan: vi.fn().mockReturnValue(mockSpan) };
+      const ambientExporter = new TestBraintrustExporter({
+        braintrustLogger: configuredLogger,
+        currentSpan: () => ambientSpan,
+      });
+
+      await ambientExporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: createMockSpan({
+          id: 'root-span',
+          name: 'root',
+          type: SpanType.AGENT_RUN,
+          isRoot: true,
+          attributes: {},
+        }),
+      });
+      await ambientExporter.flush();
+
+      expect(vi.mocked(flushBraintrust)).toHaveBeenCalledOnce();
     });
   });
 

@@ -11,7 +11,7 @@ import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { TrackingExporter } from '@mastra/observability';
 import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
-import { initLogger, currentSpan } from 'braintrust';
+import { initLogger, currentSpan, flush as flushBraintrust } from 'braintrust';
 import { removeNullish, convertAISDKMessage, serializeToolResult } from './formatter';
 import type { OpenAIMessage } from './formatter';
 import { formatUsageMetrics } from './metrics';
@@ -72,6 +72,7 @@ export interface BraintrustLogger {
     metadata?: Record<string, any>;
     source: 'external';
   }): void;
+  flush?(): Promise<void>;
 }
 
 /**
@@ -151,6 +152,7 @@ export class BraintrustExporter extends TrackingExporter<
   #useProvidedLogger: boolean;
   #providedLogger?: BraintrustLogger;
   #localLogger?: BraintrustLogger;
+  #usesExternalSpan = false;
 
   constructor(config: BraintrustExporterConfig = {}) {
     // Resolve env vars BEFORE calling super (config is readonly in base class)
@@ -328,6 +330,7 @@ export class BraintrustExporter extends TrackingExporter<
       // Check if it's a valid span (not the NOOP_SPAN)
       if (externalSpan && externalSpan.id) {
         // External span detected - attach Mastra traces to it
+        this.#usesExternalSpan = true;
         return externalSpan;
       } else {
         // No external span - use provided logger
@@ -426,6 +429,27 @@ export class BraintrustExporter extends TrackingExporter<
       metadata: { errorDetails: reason },
     });
     spanData.span.end();
+  }
+
+  /**
+   * Wait for Braintrust's background logger before reporting that data was flushed.
+   */
+  protected override async _flush(): Promise<void> {
+    const logger = this.#useProvidedLogger ? this.#providedLogger : this.#localLogger;
+    await logger?.flush?.();
+
+    // Spans created under an ambient Braintrust span use the SDK's global logger,
+    // rather than the configured logger instance.
+    if (this.#usesExternalSpan) {
+      await flushBraintrust();
+    }
+  }
+
+  /**
+   * shutdown() aborts open spans before this hook, so flush those final updates too.
+   */
+  protected override async _postShutdown(): Promise<void> {
+    await this._flush();
   }
 
   // ==============================================================================
