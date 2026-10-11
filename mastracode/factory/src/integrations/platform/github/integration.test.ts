@@ -1089,10 +1089,10 @@ describe('PlatformGithubIntegration', () => {
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
       if (url.includes('/github-app/installations')) {
-        // Covers both possible Platform semantics for `userId`: as a filter (user installs only)
-        // the org install comes from the org-key listing; as a widening it appears in both.
+        // Widening semantics: the user listing repeats the org install, which must be deduplicated.
+        // Filter semantics are covered by the listSources test.
         return json({
-          installations: url.includes('userId=user-1') ? [personalInstallation] : [orgInstallation],
+          installations: url.includes('userId=user-1') ? [orgInstallation, personalInstallation] : [orgInstallation],
           pendingRequests: [],
         });
       }
@@ -1124,7 +1124,8 @@ describe('PlatformGithubIntegration', () => {
     mountApiRoutes(app as never, integration.routes(context));
 
     const status = await app.request('/web/github/status');
-    await expect(status.json()).resolves.toMatchObject({
+    const statusBody = (await status.json()) as { installations: Array<{ installationId: number }> };
+    expect(statusBody).toMatchObject({
       connected: true,
       installations: [
         { installationId: 7, accountLogin: 'acme', accountType: 'Organization' },
@@ -1132,6 +1133,7 @@ describe('PlatformGithubIntegration', () => {
       ],
       reason: 'ready',
     });
+    expect(statusBody.installations.map(({ installationId }) => installationId)).toEqual([7, 9]);
     expect(fetchImpl).toHaveBeenCalledWith(
       'https://platform.example.com/v1/server/github-app/installations',
       expect.anything(),
