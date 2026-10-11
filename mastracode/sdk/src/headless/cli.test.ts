@@ -1,3 +1,5 @@
+import { Writable } from 'node:stream';
+
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const lifecycleMocks = vi.hoisted(() => {
@@ -39,7 +41,7 @@ vi.mock('../process-memory-diagnostics.js', () => ({
 }));
 vi.mock('./run-mc.js', () => ({ runMC: lifecycleMocks.runMC }));
 
-import { hasHeadlessFlag, parseHeadlessArgs, runMCCli } from './cli.js';
+import { flushWritable, hasHeadlessFlag, parseHeadlessArgs, runMCCli } from './cli.js';
 import { buildParseArgsOptions, FLAGS, renderFlagUsage } from './flags.js';
 
 function argv(...rest: string[]): string[] {
@@ -427,6 +429,71 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     expect(lifecycleMocks.order.at(-1)).toBe('exit-0');
   }, 10_000);
 
+  /** Run `--output json` against a stdout that behaves like a slow pipe. */
+  async function runWithPipedStdout(status: string, exitCode: number, writeError?: Error) {
+    lifecycleMocks.createMastraCode.mockImplementation(async () => ({
+      controller: {
+        getMastra: vi.fn(() => ({ stopWorkers: vi.fn(async () => {}) })),
+        stopIntervals: vi.fn(async () => {}),
+      },
+      session: {},
+      mcpManager: { hasServers: () => false, disconnect: vi.fn(async () => {}) },
+      signalsPubSub: { close: vi.fn(async () => {}) },
+      stopPluginSignalProviders: vi.fn(),
+      releaseThreadClaims: vi.fn(),
+    }));
+    lifecycleMocks.runMC.mockReturnValue({
+      async *[Symbol.asyncIterator]() {},
+      result: Promise.resolve({ status, text: 'done', toolCalls: [], toolResults: [], exitCode }),
+    });
+    process.argv = argv('--prompt', 'do it', '--output', 'json');
+
+    // Bytes stay queued until the write callbacks run, as on a pipe whose
+    // reader is slower than the writer.
+    let pending = 0;
+    const lengthSpy = vi.spyOn(process.stdout, 'writableLength', 'get').mockImplementation(() => pending);
+    const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(((
+      chunk: string,
+      callback?: (error?: Error | null) => void,
+    ) => {
+      pending += chunk.length;
+      setTimeout(() => {
+        pending = 0;
+        if (chunk) lifecycleMocks.order.push('stdout-result-flushed');
+        callback?.(writeError);
+      }, 20);
+      return false;
+    }) as typeof process.stdout.write);
+
+    let written: unknown[][];
+    try {
+      await expect(runMCCli('do it')).rejects.toThrow(/EXIT:/);
+    } finally {
+      written = [...stdoutSpy.mock.calls];
+      stdoutSpy.mockRestore();
+      lengthSpy.mockRestore();
+    }
+    return written;
+  }
+
+  it('waits for pending stdout writes before exiting', async () => {
+    const written = await runWithPipedStdout('completed', 0);
+
+    expect(JSON.parse(written[0]![0] as string)).toMatchObject({ status: 'completed', text: 'done' });
+    expect(lifecycleMocks.order.slice(-3)).toEqual(['diagnostics-stop', 'stdout-result-flushed', 'exit-0']);
+  });
+
+  it('fails an otherwise successful run whose output could not be delivered', async () => {
+    const epipe = Object.assign(new Error('write EPIPE'), { code: 'EPIPE' });
+
+    await runWithPipedStdout('completed', 0, epipe);
+    expect(lifecycleMocks.order.at(-1)).toBe('exit-1');
+
+    lifecycleMocks.order.length = 0;
+    await runWithPipedStdout('timeout', 2, epipe);
+    expect(lifecycleMocks.order.at(-1)).toBe('exit-2');
+  });
+
   it('stops diagnostics when Mastra Code startup fails', async () => {
     lifecycleMocks.createMastraCode.mockRejectedValue(new Error('boot failed'));
 
@@ -434,6 +501,58 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
 
     expect(lifecycleMocks.diagnostics.stop).toHaveBeenCalledOnce();
     expect(lifecycleMocks.order).toEqual(['diagnostics-start', 'diagnostics-stop', 'exit-1']);
+  });
+});
+
+describe('flushWritable', () => {
+  /** A writable whose underlying writes finish only when `release` is called. */
+  function slowStream() {
+    const callbacks: Array<(error?: Error | null) => void> = [];
+    const stream = new Writable({
+      highWaterMark: 16,
+      write(_chunk, _encoding, callback) {
+        callbacks.push(callback);
+      },
+    });
+    const release = (error?: Error) => {
+      while (callbacks.length) callbacks.shift()!(error);
+    };
+    return { stream, release };
+  }
+
+  it('resolves immediately when nothing is pending', async () => {
+    await expect(flushWritable(new Writable({ write: (_c, _e, cb) => cb() }))).resolves.toBe(true);
+  });
+
+  it('resolves only after earlier writes have been handed off', async () => {
+    const { stream, release } = slowStream();
+    stream.write('x'.repeat(1024 * 1024));
+    let flushed: boolean | undefined;
+    const flush = flushWritable(stream).then(result => {
+      flushed = result;
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(flushed).toBeUndefined();
+
+    // The queued zero-length write lands after the payload; release both.
+    release();
+    await new Promise(resolve => setImmediate(resolve));
+    release();
+    await flush;
+    expect(flushed).toBe(true);
+  });
+
+  it('reports failure when the reader goes away mid-flush', async () => {
+    const { stream, release } = slowStream();
+    stream.write('x'.repeat(1024));
+    const flush = flushWritable(stream);
+
+    release(Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }));
+
+    await expect(flush).resolves.toBe(false);
+    expect(stream.destroyed).toBe(true);
+    await expect(flushWritable(stream)).resolves.toBe(false);
   });
 });
 
