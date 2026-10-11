@@ -608,6 +608,7 @@ export class RailwaySandbox extends MastraSandbox {
       ...(this._templateOption !== undefined && { template: this._templateOption }),
       ...(this._timeout !== undefined && { timeout: this._timeout }),
       ...(this._instructionsOverride !== undefined && { instructions: this._instructionsOverride }),
+      ...(options.sandboxId !== undefined && { sandboxId: options.sandboxId }),
       reattach: this._reattach,
     });
   }

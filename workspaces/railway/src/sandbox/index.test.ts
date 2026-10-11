@@ -275,6 +275,20 @@ describe('RailwaySandbox', () => {
         await expect(sandbox._start()).resolves.toEqual({ outcome: 'created' });
         expect(mockCreate).toHaveBeenCalledTimes(1);
       });
+
+      it('clone({ sandboxId }) inherits reattach and targets the given sandbox', async () => {
+        mockConnect.mockRejectedValueOnce(new MockSandboxNotFoundError('gone'));
+        const template = new RailwaySandbox({ token: 'tok', reattach: 'required' });
+
+        const child = template.clone({ id: 'child', sandboxId: 'rw-child' });
+
+        await expect(child._start()).rejects.toMatchObject({
+          code: 'SANDBOX_REATTACH_FAILED',
+          details: expect.objectContaining({ sandboxId: 'rw-child' }),
+        });
+        expect(mockConnect).toHaveBeenCalledWith('rw-child', expect.anything());
+        expect(mockCreate).not.toHaveBeenCalled();
+      });
     });
 
     it('throws SandboxNotReadyError when accessing railway before start', () => {
