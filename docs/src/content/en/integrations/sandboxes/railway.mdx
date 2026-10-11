@@ -198,7 +198,7 @@ const sandbox = new RailwaySandbox({
 })
 ```
 
-With `reattach: 'required'`, a missing or stopped sandbox rejects `start()` with a `SandboxError` whose `code` is `SANDBOX_REATTACH_FAILED`, and no new sandbox is created. The error's `details` include `provider`, `sandboxId`, and the logical `id`. Other errors, such as network or authentication failures, propagate unchanged. To start fresh, clear your persisted `sandboxId` and construct the sandbox without it. Clones inherit the `reattach` setting.
+With `reattach: 'required'`, a missing or stopped sandbox rejects `start()` with a `SandboxError` whose `code` is `SANDBOX_REATTACH_FAILED`, and no new sandbox is created. The error's `details` include `provider`, `sandboxId`, and `logicalId` (the sandbox's logical `id`). Other errors, such as network or authentication failures, propagate unchanged. To start fresh, clear your persisted `sandboxId` and construct the sandbox without it. Clones inherit the `reattach` setting.
 
 ## Constructor parameters
 

@@ -192,7 +192,7 @@ const sandbox = new E2BSandbox({
 })
 ```
 
-With `reattach: 'required'`, a gone sandbox rejects `start()` with a `SandboxError` whose `code` is `SANDBOX_REATTACH_FAILED`, and no lookup or create runs. The error's `details` include `provider`, `sandboxId`, and the logical `id`. Other errors propagate unchanged, as they do under `'best-effort'`. To start fresh, clear your persisted `sandboxId` and construct the sandbox without it. Clones inherit the `reattach` setting.
+With `reattach: 'required'`, a gone sandbox rejects `start()` with a `SandboxError` whose `code` is `SANDBOX_REATTACH_FAILED`, and no lookup or create runs. The error's `details` include `provider`, `sandboxId`, and `logicalId` (the sandbox's logical `id`). Other errors propagate unchanged, as they do under `'best-effort'`. To start fresh, clear your persisted `sandboxId` and construct the sandbox without it. Clones inherit the `reattach` setting.
 
 ## Background processes
 

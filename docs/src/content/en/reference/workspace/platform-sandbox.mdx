@@ -128,7 +128,7 @@ const sandbox = new PlatformSandbox({
 })
 ```
 
-With `reattach: 'required'`, a reattach target the platform reports as missing (404), gone (410), or destroyed rejects `start()` with a `SandboxError` whose `code` is `SANDBOX_REATTACH_FAILED`, and no sandbox is provisioned. The error's `details` include `provider`, `sandboxId`, the logical `id`, and the `reason`. Other errors propagate unchanged. To start fresh, clear your persisted `sandboxId` and construct the sandbox without it. Clones inherit the `reattach` setting.
+With `reattach: 'required'`, a reattach target the platform reports as missing (404), gone (410), or destroyed rejects `start()` with a `SandboxError` whose `code` is `SANDBOX_REATTACH_FAILED`, and no sandbox is provisioned. The error's `details` include `provider`, `sandboxId`, `logicalId` (the sandbox's logical `id`), and `reason`. Other errors propagate unchanged. To start fresh, clear your persisted `sandboxId` and construct the sandbox without it. Clones inherit the `reattach` setting.
 
 ### Reusable templates
 
