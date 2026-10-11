@@ -441,6 +441,9 @@ describe('NotificationsLibSQL primary key', () => {
       .sort((a, b) => Number(a.pk) - Number(b.pk))
       .map(row => row.name);
     expect(pk).toEqual(['threadId', 'id']);
+
+    const indexes = await client.execute(`PRAGMA index_list("${TABLE_NOTIFICATIONS}")`);
+    expect(indexes.rows.map(row => row.name)).not.toContain('idx_notifications_thread_id_unique');
   });
 
   it('upserts when the same notification id is written twice in a thread', async () => {

@@ -1,4 +1,11 @@
-import { NotificationsStorage, TABLE_CONFIGS, TABLE_NOTIFICATIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import {
+  createStorageErrorId,
+  NotificationsStorage,
+  TABLE_CONFIGS,
+  TABLE_NOTIFICATIONS,
+  TABLE_SCHEMAS,
+} from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
   CreateNotificationInput,
@@ -167,7 +174,8 @@ export class NotificationsPG extends NotificationsStorage {
    * all, which allows duplicate ids and leaves the table without a replica
    * identity (UPDATE/DELETE fail under logical replication). `createTable` is a
    * no-op for existing tables, so add the key here. If duplicate rows already
-   * exist the key cannot be added; warn with remediation instead of blocking init.
+   * exist, or the role does not own the table, the key cannot be added; warn with
+   * remediation instead of blocking init.
    */
   private async ensurePrimaryKey(): Promise<void> {
     if (await this.#hasPrimaryKey()) return;
@@ -175,13 +183,15 @@ export class NotificationsPG extends NotificationsStorage {
     const tableName = getTableName({ indexName: TABLE_NOTIFICATIONS, schemaName: getSchemaName(this.#schema) });
     const keyColumns = COMPOSITE_PRIMARY_KEY.map(column => `"${parseSqlIdentifier(column, 'column name')}"`).join(', ');
 
+    const remediation = `ALTER TABLE ${tableName} ADD PRIMARY KEY (${keyColumns});`;
+
     const duplicate = await this.#db.client.oneOrNone(
       `SELECT 1 FROM ${tableName} GROUP BY ${keyColumns} HAVING count(*) > 1 LIMIT 1`,
     );
     if (duplicate) {
       this.logger?.warn?.(
         `${tableName} contains duplicate (${keyColumns}) rows, so its PRIMARY KEY could not be added. ` +
-          `Remove the duplicates, then run: ALTER TABLE ${tableName} ADD PRIMARY KEY (${keyColumns});`,
+          `Remove the duplicates, then run: ${remediation}`,
       );
       return;
     }
@@ -192,7 +202,23 @@ export class NotificationsPG extends NotificationsStorage {
     } catch (error) {
       // Another process may have added the key concurrently.
       if (await this.#hasPrimaryKey()) return;
-      throw error;
+      // Least-privilege roles that don't own the table can still use it; only the owner can add the key.
+      if ((error as { code?: string })?.code === '42501') {
+        this.logger?.warn?.(
+          `Insufficient privilege to add PRIMARY KEY (${keyColumns}) to ${tableName}. ` +
+            `Ask the table owner to run: ${remediation}`,
+        );
+        return;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'ADD_NOTIFICATIONS_PRIMARY_KEY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { tableName },
+        },
+        error,
+      );
     }
   }
 

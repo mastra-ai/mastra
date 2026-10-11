@@ -522,4 +522,36 @@ describe('NotificationsPG primary key', () => {
     expect(await primaryKeyColumns()).toEqual([]);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('ADD PRIMARY KEY ("threadId", "id")'));
   });
+
+  const rejectAlterTable = (error: Error) => {
+    const query = pool.query.bind(pool) as (...args: any[]) => any;
+    vi.spyOn(pool, 'query').mockImplementation(((text: unknown, ...rest: any[]) =>
+      typeof text === 'string' && text.includes('ADD PRIMARY KEY')
+        ? Promise.reject(error)
+        : query(text, ...rest)) as any);
+  };
+
+  it('warns and continues when the role lacks privilege to add the key', async () => {
+    await createLegacyTable();
+    rejectAlterTable(Object.assign(new Error('must be owner of table mastra_notifications'), { code: '42501' }));
+
+    const store = new NotificationsPG({ pool });
+    const warn = vi.fn();
+    store.__setLogger({ warn, info: vi.fn(), debug: vi.fn(), error: vi.fn() } as any);
+    await expect(store.init()).resolves.toBeUndefined();
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('ADD PRIMARY KEY ("threadId", "id")'));
+    vi.restoreAllMocks();
+    expect(await primaryKeyColumns()).toEqual([]);
+  });
+
+  it('wraps other migration failures in a MastraError', async () => {
+    await createLegacyTable();
+    rejectAlterTable(Object.assign(new Error('boom'), { code: 'XX000' }));
+
+    await expect(new NotificationsPG({ pool }).init()).rejects.toMatchObject({
+      id: 'MASTRA_STORAGE_PG_ADD_NOTIFICATIONS_PRIMARY_KEY_FAILED',
+    });
+    vi.restoreAllMocks();
+  });
 });

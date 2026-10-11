@@ -142,10 +142,14 @@ export class NotificationsLibSQL extends NotificationsStorage {
   /**
    * Tables created before the composite primary key was declared have no key.
    * SQLite cannot add a primary key in place, so enforce the same uniqueness with
-   * a unique index (a no-op cost on new tables, which already have the key). If
-   * duplicate rows exist the index cannot be built; warn instead of blocking init.
+   * a unique index. Tables that already have the key are skipped, since SQLite
+   * would otherwise maintain a redundant second index. If duplicate rows exist
+   * the index cannot be built; warn instead of blocking init.
    */
   private async ensureUniqueKey(): Promise<void> {
+    const columns = await this.#client.execute(`PRAGMA table_info("${TABLE_NOTIFICATIONS}")`);
+    if (columns.rows.some(row => Number(row.pk) > 0)) return;
+
     try {
       await this.#client.execute(
         `CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_thread_id_unique ON "${TABLE_NOTIFICATIONS}" ("threadId", "id")`,
