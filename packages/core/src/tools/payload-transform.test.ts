@@ -6,8 +6,69 @@ import {
   transformToolPayloadForTargets,
   withToolPayloadTransformMetadata,
 } from './payload-transform';
+import type { ToolPayloadTransformPhase, ToolPayloadTransformTarget } from './types';
 
 describe('tool payload transform', () => {
+  it.each(['display', 'transcript'] as const)(
+    'preserves completed input when only %s output has a transformer',
+    async target => {
+      const transform = await transformToolPayloadForTargets(
+        {
+          phase: 'input-available',
+          toolName: 'lookup',
+          toolCallId: 'call-1',
+          input: { query: 'first' },
+        },
+        { toolTransform: { [target]: { output: () => ({ safe: true }) } } },
+      );
+      expect(transform).toBeUndefined();
+    },
+  );
+
+  it.each(
+    (['display', 'transcript'] as ToolPayloadTransformTarget[]).flatMap(target =>
+      (['error', 'approval', 'suspend', 'resume'] as ToolPayloadTransformPhase[]).map(phase => ({ target, phase })),
+    ),
+  )('leaves an unconfigured $target $phase phase unchanged', async ({ target, phase }) => {
+    const transform = await transformToolPayloadForTargets(
+      { phase, toolName: 'lookup', toolCallId: 'call-1' },
+      { toolTransform: { [target]: { output: () => ({ safe: true }) } } },
+    );
+    expect(transform).toBeUndefined();
+  });
+
+  it('still transforms outputs with an output-only transcript configuration', async () => {
+    const transform = await transformToolPayloadForTargets(
+      {
+        phase: 'output-available',
+        toolName: 'lookup',
+        toolCallId: 'call-1',
+        output: { query: 'first', payload: 'large' },
+      },
+      { toolTransform: { transcript: { output: ({ output }) => ({ query: (output as { query: string }).query }) } } },
+    );
+    expect(transform?.transcript?.['output-available']).toEqual({ transformed: { query: 'first' } });
+    expect(transform?.display).toBeUndefined();
+  });
+
+  it('keeps a configured transformer fail-closed when it returns undefined', async () => {
+    const transform = await transformToolPayloadForTargets(
+      { phase: 'output-available', toolName: 'lookup', toolCallId: 'call-1', output: { secret: 'raw' } },
+      { toolTransform: { transcript: { output: () => undefined } } },
+    );
+    expect(transform?.transcript?.['output-available']).toEqual({
+      transformed: { message: 'Tool output-available payload unavailable' },
+    });
+  });
+
+  it('suppresses input deltas even when only output transformation is configured', async () => {
+    const transform = await transformToolPayloadForTargets(
+      { phase: 'input-delta', toolName: 'lookup', toolCallId: 'call-1', inputTextDelta: '{"query":' },
+      { toolTransform: { transcript: { output: () => ({ safe: true }) } } },
+    );
+    expect(transform?.transcript?.['input-delta']).toEqual({ suppress: true });
+  });
+
   it('keeps payloads untransformed when no policy is configured', async () => {
     const transform = await transformToolPayloadForTargets(
       {

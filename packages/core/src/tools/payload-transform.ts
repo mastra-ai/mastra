@@ -101,7 +101,9 @@ async function transformOneTarget(
   ].filter(Boolean) as ToolPayloadTransformFunction[];
 
   if (transformers.length === 0) {
-    return context.phase === 'input-delta' ? { suppress: true } : { transformed: safePlaceholder(context) };
+    // A transformer for another phase does not rewrite this completed payload.
+    // Partial input still stays hidden until a safe delta transform is available.
+    return context.phase === 'input-delta' ? { suppress: true } : undefined;
   }
 
   for (const transformer of transformers) {

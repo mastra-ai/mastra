@@ -343,6 +343,8 @@ Use `transform` when a tool returns raw data your application needs, but browser
 
 If a transform is configured and it fails, Mastra doesn't fall back to the raw payload for display or transcript targets. Input deltas are suppressed when no safe `inputDelta` transform is available.
 
+Tool-level transforms apply to the phases you configure. For example, an `output` transform leaves completed tool inputs unchanged unless you also configure `input`. A shared agent-level policy still runs for every phase in its target scope.
+
 The following example redacts a secret from both targets:
 
 ```typescript title="src/mastra/tools/customer-tool.ts"
