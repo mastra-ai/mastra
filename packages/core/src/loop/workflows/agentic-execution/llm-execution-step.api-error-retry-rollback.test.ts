@@ -15,6 +15,8 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '../../../agent/__tests__/mock-model';
 import { Agent } from '../../../agent/agent';
+import { createDurableAgent } from '../../../agent/durable/create-durable-agent';
+import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Processor } from '../../../processors';
 import { createTool } from '../../../tools';
 
@@ -254,5 +256,34 @@ describe('#26081 — mid-stream API-error retry discards the failed attempt', ()
 
     expect(await output.object).toEqual({ answer: 42 });
     expect(prompts).toHaveLength(2);
+  });
+
+  it("drops the failed partial text from a durable agent's final answer", async () => {
+    const prompts: any[][] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt as any[]);
+        const stream =
+          prompts.length === 1 ? failingTextStream('resp-1', FAILED_PREFIX) : textStream('resp-2', RECOVERED_TEXT);
+        return { stream, rawCall: { rawPrompt: null, rawSettings: {} }, warnings: [] };
+      },
+    });
+    const agent = new Agent({
+      id: 'durable-api-error-retry-rollback',
+      name: 'durable-api-error-retry-rollback',
+      instructions: 'Answer.',
+      model: [{ model, maxRetries: 0 }],
+      errorProcessors: [retryOnceProcessor()],
+    });
+    const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+
+    const { output, cleanup } = await durableAgent.stream('q', { maxSteps: 1 });
+    try {
+      expect(await output.text).toBe(RECOVERED_TEXT);
+      expect(prompts).toHaveLength(2);
+      expect(assistantText(prompts[1]!)).toEqual([]);
+    } finally {
+      await cleanup?.();
+    }
   });
 });

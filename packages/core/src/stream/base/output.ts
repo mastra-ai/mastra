@@ -693,6 +693,13 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               // cancelled by a queued signal ends without step-finish, so drop what it streamed.
               self.#bufferedByStep.reasoning = [];
               self.#bufferedByStepReasoningDetails = {};
+              // Text works the same way: a request that streamed text and then failed into an
+              // API-error retry (the durable agent starts each attempt with a new step-start)
+              // must not leave its partial text in front of the next request's answer (#26081).
+              if (self.#bufferedByStep.text) {
+                self.#bufferedByStep.text = '';
+                self.#bufferedText.length = Math.min(self.#bufferedText.length, self.#bufferedTextAtStepStart);
+              }
               if (self.#reasoningAtStepStart) {
                 self.#bufferedReasoning.length = self.#reasoningAtStepStart.length;
                 self.#bufferedReasoningDetails = self.#reasoningAtStepStart.details;
