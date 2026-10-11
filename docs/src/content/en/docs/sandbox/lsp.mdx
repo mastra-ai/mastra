@@ -29,7 +29,7 @@ LSP starts a long-running language-server process and exchanges JSON-RPC message
 - A static [sandbox](/docs/sandbox/overview) with a process manager whose process handles provide readable output and writable input streams. Sandbox resolvers aren't supported.
 - The `vscode-jsonrpc` and `vscode-languageserver-protocol` packages installed in the Mastra application.
 - A language-server binary and its runtime installed where the sandbox process runs.
-- An absolute project root and project files available through matching paths to both the Mastra application and the sandbox process.
+- An absolute project root and project files available through matching paths in the workspace filesystem and the sandbox process.
 
 Mastra has built-in server definitions for TypeScript and JavaScript, Python, Go, and Rust. The matching language-server binary must still be installed. You can [register another server](#custom-language-servers) for other file types.
 
