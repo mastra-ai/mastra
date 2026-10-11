@@ -401,7 +401,7 @@ describe('workspace_lsp_inspect', () => {
       { workspace },
     );
 
-    expect(mockLsp.prepareQuery).toHaveBeenCalledWith(absolutePath);
+    expect(mockLsp.prepareQuery).toHaveBeenCalledWith(absolutePath, 'const foo = 1');
     expect(mockClient.notifyClose).toHaveBeenCalledWith(absolutePath);
   });
 
@@ -508,5 +508,158 @@ describe('workspace_lsp_inspect', () => {
     });
     expect(result).toHaveProperty('implementation');
     expect(result).not.toHaveProperty('hover');
+  });
+
+  describe('workspace filesystem reads', () => {
+    const remotePath = '/remote-sandbox/project/src/app.ts';
+    const remoteDefPath = '/remote-sandbox/project/src/lib.ts';
+
+    function createMockClient(definitions: unknown[] = []) {
+      return {
+        queryHover: vi.fn().mockResolvedValue(null),
+        queryDefinition: vi.fn().mockResolvedValue(definitions),
+        queryImplementation: vi.fn().mockResolvedValue([]),
+        notifyChange: vi.fn(),
+        waitForDiagnostics: vi.fn().mockResolvedValue([]),
+        notifyClose: vi.fn(),
+        serverName: 'typescript',
+      };
+    }
+
+    function useRemoteFilesystem(files: Record<string, string | Buffer>) {
+      const remoteFs = {
+        readFile: vi.fn(async (filePath: string) => {
+          const content = files[filePath];
+          if (content === undefined) throw new Error(`File not found: ${filePath}`);
+          return content;
+        }),
+      };
+      Object.defineProperty(workspace, 'filesystem', { get: () => remoteFs, configurable: true });
+      return remoteFs;
+    }
+
+    it('reads the inspected file through the workspace filesystem', async () => {
+      const remoteFs = useRemoteFilesystem({ [remotePath]: 'const remote = 1' });
+      const mockClient = createMockClient();
+      const mockLsp = {
+        root: '/remote-sandbox/project',
+        prepareQuery: vi.fn().mockResolvedValue({
+          client: mockClient,
+          uri: `file://${remotePath}`,
+          languageId: 'typescript',
+          serverName: 'typescript',
+          release: vi.fn(),
+        }),
+      };
+      lspStub = mockLsp;
+
+      const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+        { path: remotePath, line: 1, match: 'const <<<remote = 1' },
+        { workspace },
+      );
+
+      expect(result).not.toHaveProperty('error');
+      expect(remoteFs.readFile).toHaveBeenCalledWith(remotePath, { encoding: 'utf-8' });
+      expect(mockLsp.prepareQuery).toHaveBeenCalledWith(remotePath, 'const remote = 1');
+      expect(mockClient.notifyChange).toHaveBeenCalledWith(remotePath, 'const remote = 1', 1);
+    });
+
+    it('reads definition previews through the workspace filesystem', async () => {
+      useRemoteFilesystem({
+        [remotePath]: 'import { helper } from "./lib"',
+        [remoteDefPath]: '// lib\nexport function helper() {}',
+      });
+      const mockClient = createMockClient([
+        {
+          uri: `file://${remoteDefPath}`,
+          range: { start: { line: 1, character: 16 }, end: { line: 1, character: 22 } },
+        },
+      ]);
+      lspStub = {
+        root: '/remote-sandbox/project',
+        prepareQuery: vi.fn().mockResolvedValue({
+          client: mockClient,
+          uri: `file://${remotePath}`,
+          languageId: 'typescript',
+          serverName: 'typescript',
+          release: vi.fn(),
+        }),
+      };
+
+      const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+        { path: remotePath, line: 1, match: 'import { <<<helper } from "./lib"' },
+        { workspace },
+      );
+
+      expect(result).toMatchObject({
+        definition: [{ location: expect.stringContaining('lib.ts:L2:C17'), preview: 'export function helper() {}' }],
+      });
+    });
+
+    it('decodes Buffer content from the workspace filesystem', async () => {
+      useRemoteFilesystem({ [remotePath]: Buffer.from('const buffered = 1') });
+      const mockLsp = {
+        root: '/remote-sandbox/project',
+        prepareQuery: vi.fn().mockResolvedValue({
+          client: createMockClient(),
+          uri: `file://${remotePath}`,
+          languageId: 'typescript',
+          serverName: 'typescript',
+          release: vi.fn(),
+        }),
+      };
+      lspStub = mockLsp;
+
+      await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+        { path: remotePath, line: 1, match: 'const <<<buffered = 1' },
+        { workspace },
+      );
+
+      expect(mockLsp.prepareQuery).toHaveBeenCalledWith(remotePath, 'const buffered = 1');
+    });
+
+    it('returns an error instead of inspecting an empty document when the file cannot be read', async () => {
+      useRemoteFilesystem({});
+      const mockLsp = { root: '/remote-sandbox/project', prepareQuery: vi.fn() };
+      lspStub = mockLsp;
+
+      const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+        { path: remotePath, line: 1, match: 'const <<<missing = 1' },
+        { workspace },
+      );
+
+      expect(result).toEqual({ error: `Could not read file: ${remotePath}` });
+      expect(mockLsp.prepareQuery).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the host filesystem for paths outside a contained local workspace', async () => {
+      const outsideDir = await fs.mkdtemp(path.join(os.tmpdir(), 'lsp-inspect-outside-'));
+      const outsidePath = path.join(outsideDir, 'outside.ts');
+      await fs.writeFile(outsidePath, 'const outside = 1');
+
+      try {
+        const mockLsp = {
+          root: tempDir,
+          prepareQuery: vi.fn().mockResolvedValue({
+            client: createMockClient(),
+            uri: `file://${outsidePath}`,
+            languageId: 'typescript',
+            serverName: 'typescript',
+            release: vi.fn(),
+          }),
+        };
+        lspStub = mockLsp;
+
+        const result = await tools[WORKSPACE_TOOLS.LSP.LSP_INSPECT].execute(
+          { path: outsidePath, line: 1, match: 'const <<<outside = 1' },
+          { workspace },
+        );
+
+        expect(result).not.toHaveProperty('error');
+        expect(mockLsp.prepareQuery).toHaveBeenCalledWith(outsidePath, 'const outside = 1');
+      } finally {
+        await fs.rm(outsideDir, { recursive: true, force: true });
+      }
+    });
   });
 });

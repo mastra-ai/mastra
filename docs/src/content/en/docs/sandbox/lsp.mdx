@@ -214,16 +214,15 @@ Direct client positions are 0-indexed. A leaked lease can prevent an idle client
 
 ### Remote sandboxes
 
-Remote LSP isn't backend-transparent. The language-server command runs through the remote sandbox process manager, but binary discovery, file reads, and some source previews still use the Mastra host.
+The language-server command runs through the remote sandbox process manager. The `lsp_inspect` tool reads the inspected file and definition previews through the workspace filesystem, so files that exist only in the remote sandbox are inspected with their real content. If the workspace filesystem can't read a path, Mastra falls back to the host filesystem. If neither can read the inspected file, the tool returns an error.
 
-Use remote LSP only when all of these conditions are met:
+Binary discovery still runs on the Mastra host. Use remote LSP only when all of these conditions are met:
 
 - The remote process manager provides readable output and writable input streams.
-- The project uses matching absolute paths on the Mastra host and in the remote sandbox.
+- The workspace filesystem and the remote sandbox use the same absolute paths for project files.
 - The resolved server command is installed in the remote image. Configure it with `binaryOverrides` for a built-in server or `lsp.servers.command` for a custom server.
-- The host can read files needed for inspection and definition previews.
 
-A local filesystem and remote sandbox don't synchronize automatically. A binary installed only on the host can't run in the remote sandbox, and remote-only files can't provide all host-side results. For remote-only projects, use `grep`, indexed [search](/docs/sandbox/search), and sandbox commands until LSP file access is backend-transparent.
+A binary installed only on the host can't run in the remote sandbox. When filesystem paths don't match sandbox paths, use `grep`, indexed [search](/docs/sandbox/search), and sandbox commands instead.
 
 ## Related
 
