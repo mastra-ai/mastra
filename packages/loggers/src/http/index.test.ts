@@ -825,6 +825,32 @@ describe('HttpTransport', () => {
   });
 
   describe('_transform error handling', () => {
+    it.each(['object', 'JSON'])('preserves epoch-zero timestamps in %s logs', async input => {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      const log = { msg: 'epoch', time: 0 };
+      const callback = vi.fn();
+      const chunk = input === 'JSON' ? JSON.stringify(log) : log;
+
+      transport._transform(chunk, 'utf8', callback);
+      await transport._flush();
+
+      expect(callback).toHaveBeenCalledWith(null, chunk);
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body).logs[0]).toEqual({ msg: 'epoch', time: 0 });
+    });
+
+    it.each([undefined, null])('fills a %s timestamp with the current time', time => {
+      vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+      transport._transform({ msg: 'missing timestamp', time }, 'utf8', () => {});
+
+      expect(transport.getBufferedLogs()[0]?.time).toBe(Date.now());
+    });
+
+    it('preserves an existing positive timestamp', () => {
+      transport._transform({ msg: 'existing timestamp', time: 1234 }, 'utf8', () => {});
+
+      expect(transport.getBufferedLogs()[0]?.time).toBe(1234);
+    });
+
     it('should handle JSON parse errors', () => {
       const callback = vi.fn();
 

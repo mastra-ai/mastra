@@ -237,7 +237,7 @@ export class HttpTransport extends LoggerTransport {
       const log = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
 
       // Add timestamp if not present
-      if (!log.time) {
+      if (log.time === undefined || log.time === null) {
         log.time = Date.now();
       }
 
