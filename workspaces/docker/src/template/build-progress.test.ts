@@ -204,4 +204,17 @@ describe('createBuildEventNormalizer — BuildKit', () => {
       step: { id: 'sha256:x', name: '[1/1] RUN false', cached: false },
     });
   });
+
+  it('starts an errored vertex before completing it', () => {
+    const { events, normalizer } = collect();
+    normalizer.handle(trace({ vertexes: [{ digest: 'sha256:x', name: '[1/1] RUN false', error: 'exit code: 1' }] }));
+    expect(events).toEqual([
+      { type: 'step-start', step: { id: 'sha256:x', name: '[1/1] RUN false' } },
+      {
+        type: 'step-complete',
+        step: { id: 'sha256:x', name: '[1/1] RUN false', cached: false },
+        error: 'exit code: 1',
+      },
+    ]);
+  });
 });

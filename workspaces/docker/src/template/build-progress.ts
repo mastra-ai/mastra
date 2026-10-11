@@ -292,7 +292,7 @@ export function createBuildEventNormalizer(
       if (update.name && !state.step.name) state.step.name = update.name;
       if (update.cached) state.step.cached = true;
       if (state.step.name.startsWith('[internal]')) continue;
-      if (!state.started && (update.started || update.completed || update.cached)) {
+      if (!state.started && (update.started || update.completed || update.cached || update.error)) {
         state.started = true;
         emit({ type: 'step-start', step: { ...state.step } });
       }
