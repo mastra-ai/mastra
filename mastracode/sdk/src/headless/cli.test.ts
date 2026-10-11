@@ -15,15 +15,21 @@ const lifecycleMocks = vi.hoisted(() => {
     stopDiagnostics: vi.fn(async () => diagnostics.stop()),
     runMC: vi.fn(),
     loadSettings: vi.fn(),
+    saveSettings: vi.fn(),
     resolveModelDefaults: vi.fn(),
     listBuiltinModePacks: vi.fn(),
   };
 });
 
 vi.mock('../index.js', () => ({ createMastraCode: lifecycleMocks.createMastraCode }));
-vi.mock('../onboarding/packs.js', () => ({ listBuiltinModePacks: lifecycleMocks.listBuiltinModePacks }));
-vi.mock('../onboarding/settings.js', () => ({
+vi.mock('../onboarding/packs.js', async () => ({
+  ...(await vi.importActual<typeof import('../onboarding/packs.js')>('../onboarding/packs.js')),
+  listBuiltinModePacks: lifecycleMocks.listBuiltinModePacks,
+}));
+vi.mock('../onboarding/settings.js', async () => ({
+  ...(await vi.importActual<typeof import('../onboarding/settings.js')>('../onboarding/settings.js')),
   loadSettings: lifecycleMocks.loadSettings,
+  saveSettings: lifecycleMocks.saveSettings,
   resolveModelDefaults: lifecycleMocks.resolveModelDefaults,
 }));
 vi.mock('../process-memory-diagnostics.js', () => ({
@@ -128,6 +134,12 @@ describe('parseHeadlessArgs', () => {
     expect(args.settings).toBe('./s.json');
   });
 
+  it('parses --pack and --pack=<id>', () => {
+    expect(parseHeadlessArgs(argv('-p', 'x', '--pack', 'openai')).pack).toBe('openai');
+    expect(parseHeadlessArgs(argv('-p', 'x', '--pack=custom:Kimi')).pack).toBe('custom:Kimi');
+    expect(parseHeadlessArgs(argv('-p', 'x')).pack).toBeUndefined();
+  });
+
   it('parses --max-turns as a positive integer', () => {
     expect(parseHeadlessArgs(argv('-p', 'x', '--max-turns', '5')).maxTurns).toBe(5);
   });
@@ -218,6 +230,7 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     lifecycleMocks.diagnostics.stop.mockClear();
     lifecycleMocks.runMC.mockReset();
     lifecycleMocks.loadSettings.mockReset();
+    lifecycleMocks.saveSettings.mockClear();
     lifecycleMocks.resolveModelDefaults.mockReset();
     lifecycleMocks.listBuiltinModePacks.mockReset();
     lifecycleMocks.loadSettings.mockReturnValue({ models: { activeModelPackId: null, modeDefaults: {} } });
@@ -306,6 +319,86 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     expect(at('claims-release')).toBeGreaterThan(-1);
     expect(at('claims-release')).toBeLessThan(at('providers-stop'));
     expect(at('claims-release')).toBeLessThan(at('dispatch-stop'));
+  });
+
+  it('passes a deferred pack resolver to runMC and activates the pack only once applied', async () => {
+    const settings = {
+      models: { activeModelPackId: null, modeDefaults: {}, packFallbacks: {} },
+      customModelPacks: [{ name: 'review-pack', models: { build: 'anthropic/claude-opus-4-6' } }],
+    };
+    lifecycleMocks.loadSettings.mockReturnValue(settings);
+    lifecycleMocks.createMastraCode.mockImplementation(async () => ({
+      controller: {
+        getMastra: vi.fn(() => ({ stopWorkers: vi.fn(async () => {}) })),
+        stopIntervals: vi.fn(async () => {}),
+      },
+      session: { mode: { get: () => 'build' } },
+      mcpManager: { hasServers: () => false, disconnect: vi.fn(async () => {}) },
+      signalsPubSub: { async close() {} },
+    }));
+    // runMC resolves the pack against the post-resume mode and calls
+    // onApplied only once it has applied the selection to the session.
+    lifecycleMocks.runMC.mockImplementation((options: any) => {
+      const selection = options.pack.resolve('build');
+      expect(selection.modelId).toBe('anthropic/claude-opus-4-6');
+      // Settings must not be saved before the pack is applied.
+      expect(lifecycleMocks.saveSettings).not.toHaveBeenCalled();
+      options.pack.onApplied();
+      return {
+        async *[Symbol.asyncIterator]() {},
+        result: Promise.resolve({ status: 'completed', exitCode: 0 }),
+      };
+    });
+    process.argv = argv('--prompt', 'do it', '--pack', 'review-pack');
+
+    await expect(runMCCli('do it', { coAuthor: { name: 'mastracode' } })).rejects.toThrow('EXIT:0');
+
+    expect(settings.models.activeModelPackId).toBe('custom:review-pack');
+    expect(lifecycleMocks.saveSettings).toHaveBeenCalledWith(settings, undefined);
+    expect(lifecycleMocks.runMC).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pack: expect.objectContaining({ id: 'custom:review-pack', resolve: expect.any(Function) }),
+      }),
+    );
+  });
+
+  it('propagates a pack-mode rejection from runMC without saving settings', async () => {
+    lifecycleMocks.loadSettings.mockReturnValue({
+      models: { activeModelPackId: null, modeDefaults: {}, packFallbacks: {} },
+      customModelPacks: [{ name: 'plan-only', models: { plan: 'anthropic/claude-opus-4-6' } }],
+    });
+    lifecycleMocks.createMastraCode.mockImplementation(async () => ({
+      controller: {
+        getMastra: vi.fn(() => ({ stopWorkers: vi.fn(async () => {}) })),
+        stopIntervals: vi.fn(async () => {}),
+      },
+      session: { mode: { get: () => 'build' } },
+      mcpManager: { hasServers: () => false, disconnect: vi.fn(async () => {}) },
+      signalsPubSub: { async close() {} },
+    }));
+    // The real runMC fails the run when the pack has no model for the mode it
+    // ended up in; onApplied is never called, so settings stay untouched.
+    lifecycleMocks.runMC.mockImplementation((options: any) => {
+      expect(options.pack.resolve('build')).toBeUndefined();
+      return {
+        async *[Symbol.asyncIterator]() {},
+        result: Promise.resolve({
+          status: 'error',
+          error: { name: 'Error', message: 'Model pack "custom:plan-only" has no model for build mode' },
+          exitCode: 1,
+        }),
+      };
+    });
+    process.argv = argv('--prompt', 'do it', '--pack', 'plan-only');
+
+    await expect(runMCCli('do it', { coAuthor: { name: 'mastracode' } })).rejects.toThrow('EXIT:1');
+
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Model pack "custom:plan-only" has no model for build mode'),
+    );
+    expect(lifecycleMocks.saveSettings).not.toHaveBeenCalled();
+    // Teardown still ran on the error path.
+    expect(lifecycleMocks.order).toContain('diagnostics-stop');
   });
 
   it('exits even when notification dispatch never finishes stopping', async () => {
