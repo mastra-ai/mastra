@@ -15,6 +15,27 @@ const callbackParamNames = [
   'setup_action',
 ];
 
+// Codes Mastra Platform's GitHub App callback redirects back with when it
+// refuses to link an installation or a GitHub account.
+const callbackErrorMessages: Record<string, string> = {
+  github_app_installation_preexisting:
+    'Your GitHub account already has the Mastra GitHub App installed, so this link didn’t connect it. In Mastra Platform, go to Accounts and choose Refresh accounts to link it to your organization, then come back here.',
+  github_app_installation_not_owned:
+    'Only the owner of this GitHub account, or an owner of the GitHub organization, can link this installation.',
+  github_app_installation_linked_elsewhere:
+    'This GitHub installation is already linked to another Mastra organization. Remove it there first, or install the app again for this organization.',
+  github_app_sign_in_required: 'Sign in to Mastra Platform in this browser, then connect GitHub again.',
+  github_app_session_mismatch:
+    'This GitHub link was started for a different Mastra account or organization. Connect GitHub again from your own account.',
+  github_app_person_not_platform_user:
+    'This GitHub link was started for an account that isn’t a Mastra account. To link GitHub through Mastra Platform, sign in to Factory with Mastra.',
+  github_app_user_authorization_failed: 'GitHub authorization failed. Connect GitHub again.',
+};
+
+function callbackErrorMessage(code: string | null): string | undefined {
+  return code && Object.hasOwn(callbackErrorMessages, code) ? callbackErrorMessages[code] : undefined;
+}
+
 function hasGitHubAppCallback(searchParams: URLSearchParams): boolean {
   return callbackParamNames.some(name => searchParams.has(name));
 }
@@ -34,6 +55,7 @@ export function GitHubAppCallbackHandler() {
     const installed = searchParams.get('github_app_installed') === 'true';
     const userAuthorized = searchParams.get('github_app_user_authorized') === 'true';
     const failed = searchParams.has('github_app_error');
+    const errorMessage = callbackErrorMessage(searchParams.get('github_app_error'));
 
     void queryClient.invalidateQueries({ queryKey: queryKeys.githubStatus() });
     void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
@@ -50,6 +72,9 @@ export function GitHubAppCallbackHandler() {
         toast.success('GitHub App installed');
       } else if (userAuthorized) {
         toast.success('GitHub account connected');
+      } else if (errorMessage) {
+        // These explain what to do next, so keep them up until dismissed.
+        toast.error(errorMessage, { duration: Infinity });
       } else if (failed) {
         toast.error('GitHub connection failed');
       }
