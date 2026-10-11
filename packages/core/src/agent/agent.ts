@@ -296,6 +296,12 @@ const RESUME_SUSPEND_DURABILITY_MAX_POLL_INTERVAL_MS = 500;
  */
 const inFlightUnclaimedResumes = new Set<string>();
 
+/**
+ * How long a resume claim may stay `pending` (claimed but not started) before a later resume
+ * treats it as abandoned by a process that died, and takes the suspension over.
+ */
+export const AGENT_RESUME_CLAIM_STALE_MS = 60_000;
+
 const createSubAgentInputSchema = ({ withResultRefs = false }: { withResultRefs?: boolean } = {}) =>
   z.object({
     prompt: z.string().describe('The prompt to send to the agent'),
@@ -7761,9 +7767,18 @@ export class Agent<
    * concurrent approvals/resumes of the same run (double clicks, client retries, two tabs)
    * cannot both execute the suspended tool. Losers throw `AGENT_RESUME_ALREADY_CLAIMED`.
    *
-   * Stores that support atomic updates get a `suspended -> running` compare-and-set that holds
-   * across processes, and the resumed run starts from the claimed snapshot. Other stores only
-   * get an in-process guard.
+   * Stores that support atomic updates get compare-and-set transitions that hold across
+   * processes, and the resumed run starts from the claimed snapshot. Other stores only get an
+   * in-process guard. The `agentic-loop` row moves:
+   *
+   * - `suspended -> pending` when claimed, stamped with `resumeClaimedAt`.
+   * - `pending -> running` in `claim.start()`, right before the resumed run executes. Only one
+   *   caller can make this move, so only one resume executes the tool.
+   * - back to `suspended` in `claim.release()` when the resume fails before the run executes.
+   *
+   * A claim left `pending` by a process that died before starting or releasing it is abandoned.
+   * Once it is older than `AGENT_RESUME_CLAIM_STALE_MS`, a later resume hands the suspension back
+   * and claims it again. A live claimant that loses the suspension this way fails in `start()`.
    *
    * `claim.release()` is idempotent. The loop calls it when the resumed run ends; resume methods
    * also call it on any failure before or after handing the claim to the loop. It hands the
@@ -7813,23 +7828,53 @@ export class Agent<
       };
     }
 
-    const claimed = await workflowsStore.updateWorkflowState({
-      workflowName: AGENTIC_LOOP_WORKFLOW_ID,
-      runId,
-      opts: { status: 'running', expectedStatus: 'suspended' },
-    });
-    if (!claimed) throwAlreadyClaimed();
+    const claim = () =>
+      workflowsStore.updateWorkflowState({
+        workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+        runId,
+        opts: { status: 'pending', expectedStatus: 'suspended', resumeClaimedAt: Date.now() },
+      });
 
+    let claimed = await claim();
+    if (!claimed) {
+      const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
+      const abandoned =
+        current?.status === 'pending' &&
+        current.timestamp === snapshot.timestamp &&
+        typeof current.resumeClaimedAt === 'number' &&
+        Date.now() - current.resumeClaimedAt >= AGENT_RESUME_CLAIM_STALE_MS;
+      if (!abandoned) throwAlreadyClaimed();
+
+      // Hand the abandoned suspension back, then claim it like any other. If a concurrent caller
+      // re-claimed it in between, this hand-back can only make that caller's `start()` fail; the
+      // single `pending -> running` move still lets at most one resume execute.
+      this.logger.warn(
+        `[Agent:${this.name}] - Taking over resume claim for run ${runId} that was not started within ${AGENT_RESUME_CLAIM_STALE_MS}ms.`,
+      );
+      await workflowsStore.updateWorkflowState({
+        workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+        runId,
+        opts: { status: 'suspended', expectedStatus: 'pending' },
+      });
+      claimed = await claim();
+      if (!claimed) throwAlreadyClaimed();
+    }
+
+    const claimedAt = claimed!.resumeClaimedAt;
+    let claimStatus: 'pending' | 'running' = 'pending';
     let started = false;
     let released = false;
     const release = async () => {
       if (started || released) return;
       released = true;
       try {
+        // Skip when a later resume took this claim over: the suspension is no longer ours.
+        const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
+        if (current?.resumeClaimedAt !== claimedAt) return;
         await workflowsStore.updateWorkflowState({
           workflowName: AGENTIC_LOOP_WORKFLOW_ID,
           runId,
-          opts: { status: 'suspended', expectedStatus: 'running' },
+          opts: { status: 'suspended', expectedStatus: claimStatus },
         });
       } catch (error) {
         this.logger.warn(`[Agent ${this.name}] Failed to release resume claim for run ${runId}`, { error });
@@ -7846,6 +7891,19 @@ export class Agent<
 
     return {
       snapshot,
+      start: async () => {
+        const running = await workflowsStore.updateWorkflowState({
+          workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+          runId,
+          opts: { status: 'running', expectedStatus: 'pending' },
+        });
+        if (!running) {
+          // A later resume took this claim over as abandoned; it owns the suspension now.
+          released = true;
+          throwAlreadyClaimed();
+        }
+        claimStatus = 'running';
+      },
       onExecutionStarted: () => {
         started = true;
       },

@@ -123,6 +123,21 @@ describe('handleError', () => {
     });
   });
 
+  describe('AGENT_RESUME_ALREADY_CLAIMED', () => {
+    it('maps a losing concurrent approval or resume to 409', () => {
+      const err = Object.assign(new Error('already being resumed'), { id: 'AGENT_RESUME_ALREADY_CLAIMED' });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(409);
+      expect(caught!.message).toBe('already being resumed');
+    });
+  });
+
   describe('WORKFLOW_RESUME_ALREADY_CLAIMED', () => {
     it('maps a losing concurrent resume to 409', () => {
       const err = Object.assign(new Error('already resumed'), { id: 'WORKFLOW_RESUME_ALREADY_CLAIMED' });

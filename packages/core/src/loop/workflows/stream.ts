@@ -415,6 +415,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           });
         }
 
+        await resumeContext?.claim?.start?.();
+
         const executionPromise = resumeContext?.claim?.snapshot
           ? run.resumeClaimed({
               resumeData: resumeContext.resumeData,

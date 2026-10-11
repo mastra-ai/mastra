@@ -44,10 +44,10 @@ function isWorkflowSchemaValidationError(error: unknown): error is Error {
   return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_SCHEMA_VALIDATION_FAILED_CODE;
 }
 
-const WORKFLOW_RESUME_ALREADY_CLAIMED_CODE = 'WORKFLOW_RESUME_ALREADY_CLAIMED';
+const RESUME_ALREADY_CLAIMED_CODES = new Set(['WORKFLOW_RESUME_ALREADY_CLAIMED', 'AGENT_RESUME_ALREADY_CLAIMED']);
 
-function isWorkflowResumeAlreadyClaimedError(error: unknown): error is Error {
-  return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_RESUME_ALREADY_CLAIMED_CODE;
+function isResumeAlreadyClaimedError(error: unknown): error is Error {
+  return error instanceof Error && RESUME_ALREADY_CLAIMED_CODES.has((error as { id?: unknown }).id as string);
 }
 
 /**
@@ -150,7 +150,7 @@ export function handleError(error: unknown, defaultMessage: string): never {
   // A losing concurrent resume, or a recover of a run that is live or suspended, is a conflict on
   // run state, not a malformed request, so it maps to 409 and clients can distinguish it from a
   // 400/500 and re-read the run.
-  if (isWorkflowResumeAlreadyClaimedError(error) || isDurableRunConflictError(error)) {
+  if (isResumeAlreadyClaimedError(error) || isDurableRunConflictError(error)) {
     throw new HTTPException(409, {
       message: error.message,
       stack: error.stack,

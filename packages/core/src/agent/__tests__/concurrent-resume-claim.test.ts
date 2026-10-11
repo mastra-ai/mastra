@@ -8,7 +8,7 @@ import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
-import { Agent } from '../agent';
+import { Agent, AGENT_RESUME_CLAIM_STALE_MS } from '../agent';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 
 function createMockModel() {
@@ -192,5 +192,34 @@ describe('concurrent resumes of a suspended agent run', () => {
 
     expect(execute).toHaveBeenCalledTimes(1);
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('only de-duplicated within this process'));
+  }, 30000);
+
+  // A process that dies between claiming and starting the resume leaves the claim behind.
+  async function strandClaim(workflowsStore: any, runId: string, ageMs: number) {
+    const stranded = await workflowsStore.updateWorkflowState({
+      workflowName: 'agentic-loop',
+      runId,
+      opts: { status: 'pending', expectedStatus: 'suspended', resumeClaimedAt: Date.now() - ageMs },
+    });
+    expect(stranded?.status).toBe('pending');
+  }
+
+  it('lets a later approval take over a claim abandoned before the resume started', async () => {
+    const { agent, execute, runId, toolCallId, workflowsStore } = await setup();
+    await strandClaim(workflowsStore, runId, AGENT_RESUME_CLAIM_STALE_MS + 1_000);
+
+    await drain(await agent.approveToolCall({ runId, toolCallId }));
+
+    expect(execute).toHaveBeenCalledTimes(1);
+  }, 30000);
+
+  it('rejects an approval while a recent claim may still be starting', async () => {
+    const { agent, execute, runId, toolCallId, workflowsStore } = await setup();
+    await strandClaim(workflowsStore, runId, 0);
+
+    await expect(agent.approveToolCall({ runId, toolCallId })).rejects.toMatchObject({
+      id: 'AGENT_RESUME_ALREADY_CLAIMED',
+    });
+    expect(execute).not.toHaveBeenCalled();
   }, 30000);
 });

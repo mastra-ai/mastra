@@ -216,6 +216,11 @@ export type LoopConfig<OUTPUT = undefined> = {
 export type AgentLoopResumeClaim = {
   /** The suspended snapshot the claim was taken on. Absent when the store cannot claim atomically. */
   snapshot?: WorkflowRunState;
+  /**
+   * Marks the claim started right before the resumed run executes. Throws when the claim was
+   * taken over in the meantime, in which case the run must not execute.
+   */
+  start?: () => Promise<void>;
   /** Called right before the resumed run starts executing steps. */
   onExecutionStarted?: () => void;
   /** Ends the claim. Idempotent; hands the suspension back only if the run never started. */
