@@ -164,6 +164,23 @@ describe('MastraCodeGateway', () => {
       expect(auth).toEqual({ bearerToken: 'oauth', source: 'gateway' });
     });
 
+    it('finds a Kimi API key stored under the catalog provider id', () => {
+      // `/api-keys` saves under the row's provider id, and Factory tenants saved
+      // `kimi-code-plan-cn` keys before it was mapped to `kimi-for-coding`.
+      writeAuthJson({
+        'apikey:kimi-code-plan-cn': { type: 'api_key', key: 'sk-kimi-stored' },
+      });
+
+      const auth = MastraCodeGateway.resolveProviderAuth({
+        gatewayId: 'mastracode',
+        providerId: 'kimi-code-plan-cn',
+        modelId: 'k3',
+        routerId: 'kimi-code-plan-cn/k3',
+      });
+
+      expect(auth).toEqual({ apiKey: 'sk-kimi-stored', source: 'gateway' });
+    });
+
     it('returns undefined when the provider has no credentials', () => {
       writeAuthJson({});
 

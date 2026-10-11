@@ -189,6 +189,10 @@ function getProviderAuthKey(
   }
   const dedicatedKey = credentials.getStoredApiKey(authProviderId)?.trim();
   if (dedicatedKey) return dedicatedKey;
+  // `/api-keys` stores keys under the catalog provider id (`kimi-code-plan-cn`),
+  // which can differ from the credential id.
+  const catalogKey = authProviderId !== providerId ? credentials.getStoredApiKey(providerId)?.trim() : undefined;
+  if (catalogKey) return catalogKey;
   if (credentials.allowEnvironmentFallback === false) return undefined;
   return authProviderId === KIMI_CODING_CREDENTIAL_ID ? process.env.KIMI_API_KEY?.trim() || undefined : undefined;
 }
