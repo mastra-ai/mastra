@@ -858,6 +858,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const registryEntry: RunRegistryEntry = {
     mastra,
     tools,
+    requestTools: tools,
     saveQueueManager,
     memory,
     memoryAuthorizationChecks,
