@@ -54,6 +54,7 @@
     "deepseek/deepseek-v4-flash-vision-exp",
     "fireworks_ai/accounts/fireworks/models/inkling",
     "flexai/DeepSeek-V4.1-Flash",
+    "flexai/Muse-Glimmer-30B",
     "flexai/Step-3.7-Flash",
     "google/deep-research-max-preview-04-2026",
     "google/deep-research-preview-04-2026",
@@ -283,6 +284,7 @@
     "fireworks_ai/gpt-oss-120b",
     "flexai/DeepSeek-V4-Flash-0731",
     "flexai/DeepSeek-V4.1-Flash",
+    "flexai/Muse-Glimmer-30B",
     "flexai/Step-3.7-Flash",
     "flexai/gpt-oss-120b",
     "flexai/gpt-oss-20b",
@@ -1054,6 +1056,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "flexai/Muse-Glimmer-30B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "flexai/DeepSeek-V4.1-Flash": [
