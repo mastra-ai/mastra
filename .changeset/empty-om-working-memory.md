@@ -2,4 +2,6 @@
 '@mastra/memory': patch
 ---
 
-Fixed observational memory wiping schema-based working memory when the Observer model (for example Gemini with `manageWorkingMemory: true`) returned an empty working-memory object. An empty working-memory extraction now triggers the JSON-prompt retry and never overwrites stored working memory; if the retry fails, other extracted values (such as the thread title) are still kept.
+Fixed observational memory erasing schema-based working memory. This happened when the Observer model returned an empty working-memory object, which Gemini does with `manageWorkingMemory: true`.
+
+An empty working-memory result no longer replaces stored working memory. Mastra now retries the extraction when this happens. Other extracted values, such as the thread title, are kept whether the retry succeeds or fails.

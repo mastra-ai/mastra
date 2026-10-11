@@ -140,7 +140,8 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
   if (retryEmptyObject) {
     try {
       const fallbackJsonPromptInjection = coreFeatures.has('json-prompt-injection:inline') ? 'inline' : true;
-      object = await streamWithStructuredOutput(fallbackJsonPromptInjection);
+      // Retry values win, but keep first-response values the retry omitted.
+      object = { ...object, ...(await streamWithStructuredOutput(fallbackJsonPromptInjection)) };
     } catch (fallbackError) {
       if (isAbortError(fallbackError, opts.abortSignal)) {
         throw fallbackError;

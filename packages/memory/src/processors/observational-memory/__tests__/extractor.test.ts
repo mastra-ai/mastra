@@ -568,6 +568,35 @@ describe('Extractor', () => {
     expect(stream).toHaveBeenCalledTimes(2);
   });
 
+  it('keeps first-response sibling values that a successful retry omits', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => null),
+    } as any;
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const resolved = await resolveExtractors([new WorkingMemoryExtractor(), priority], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    const stream = vi
+      .fn()
+      .mockResolvedValueOnce({ object: Promise.resolve({ 'working-memory': {}, priority: 'high' }) })
+      .mockResolvedValueOnce({ object: Promise.resolve({ 'working-memory': { name: 'Neo' } }) });
+
+    const result = await extractStructuredValues({
+      agent: { stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: resolved,
+    });
+
+    expect(result.values).toEqual({ 'working-memory': { name: 'Neo' }, priority: 'high' });
+    expect(result.failures).toEqual([]);
+    expect(stream).toHaveBeenCalledTimes(2);
+  });
+
   it('does not retry when an extractor that has not opted in returns an empty object', async () => {
     const details = new Extractor({
       name: 'Details',
