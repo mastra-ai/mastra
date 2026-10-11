@@ -391,6 +391,12 @@ export class GithubIntegration implements FactoryIntegration {
   >();
   /** Same key → lookup already in flight, so overlapping callers share one request. */
   readonly #collaboratorPermissionInFlight = new Map<string, Promise<GithubRepositoryPermission | undefined>>();
+  /**
+   * One Octokit per installation, so its auth instance keeps the installation
+   * token cached (auth-app refreshes it before expiry) instead of minting a new
+   * token on every call.
+   */
+  readonly #installationOctokits = new Map<number, Octokit>();
 
   constructor(config: GithubIntegrationConfig) {
     this.#rules = resolveGithubRules(config.rules);
@@ -495,7 +501,12 @@ export class GithubIntegration implements FactoryIntegration {
    * token). Used to list repos and to operate on a repo on the user's behalf.
    */
   getInstallationOctokit(installationId: number): Octokit {
-    return new Octokit({ authStrategy: createAppAuth, auth: { ...this.#appAuth(), installationId } });
+    let octokit = this.#installationOctokits.get(installationId);
+    if (!octokit) {
+      octokit = new Octokit({ authStrategy: createAppAuth, auth: { ...this.#appAuth(), installationId } });
+      this.#installationOctokits.set(installationId, octokit);
+    }
+    return octokit;
   }
 
   /** Octokit authenticated as a user via their OAuth token (the identify step). */
