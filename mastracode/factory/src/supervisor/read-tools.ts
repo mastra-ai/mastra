@@ -10,6 +10,7 @@ import { z } from 'zod';
 
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { decisionRetryable } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import { FACTORY_RULE_STAGES, factoryRuleStage } from '../rules/types.js';
 import type { FactoryRuleStage } from '../rules/types.js';
@@ -107,7 +108,7 @@ function summarizeDecision(decision: FactoryDeferredDecisionRecord) {
     leaseExpiresAt: iso(decision.leaseExpiresAt),
     failureCode: decision.failureCode,
     failureLabel: decision.failureCode ? factoryDispatchFailureMetadata(decision.failureCode).label : null,
-    canRetry: decision.status === 'failed' ? factoryDispatchFailureMetadata(decision.failureCode).canRetry : false,
+    canRetry: decisionRetryable(decision, false),
     lastError: decision.lastError ? truncate(decision.lastError, MAX_ERROR) : null,
     approvedBy: decision.approvedBy,
     createdAt: iso(decision.createdAt),

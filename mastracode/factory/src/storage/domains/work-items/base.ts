@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
+import { factoryDispatchFailureMetadata } from '../../../rules/dispatch-errors.js';
 import { externalSourceForWorkItem } from '../../../rules/types.js';
 import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
 import type { FactoryHealthFinding } from '../../../supervisor/health.js';
@@ -2742,7 +2743,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
   }
 
-  /** Requeue the same idempotent terminal effect; non-failed decisions are never rerun. */
+  /** Requeue the same idempotent terminal effect; non-failed or non-retryable decisions are never rerun. */
   async retryDeferredDecision(
     orgId: string,
     factoryProjectId: string,
@@ -2756,6 +2757,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
         current => {
           if (current.status !== 'failed') return null;
+          const failureCode = isStoredFactoryDispatchFailureCode(current.failure_code) ? current.failure_code : null;
+          if (!factoryDispatchFailureMetadata(failureCode).canRetry) return null;
           retried = true;
           return {
             status: 'retry',
