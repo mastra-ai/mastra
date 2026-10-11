@@ -456,12 +456,15 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
           modelRoute: packSelection.modelRoute,
           [MODEL_FALLBACK_STATE_KEY]: null,
         } as unknown as Partial<TState>);
-        options.pack.onApplied?.();
       }
       const sessionModelId = modelIdToApply ?? packModelId;
       if (sessionModelId) {
         await session.model.switch(sessionModelId);
       }
+      // Persist the pack activation (global default) only once the pack has
+      // fully taken effect on the session — a failed model switch above must
+      // not leave the global default changed.
+      options.pack?.onApplied?.();
       if (options.thinkingLevel) {
         await session.state.set({ thinkingLevel: options.thinkingLevel } as unknown as Partial<TState>);
       }
