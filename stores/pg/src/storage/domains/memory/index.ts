@@ -2898,7 +2898,9 @@ export class MemoryPG extends MemoryStorage {
       const nowStr = new Date().toISOString();
       const observedMessageIdsJson = input.observedMessageIds ? toPgJson(input.observedMessageIds) : null;
 
+      const fence = resolveRunFence(this, undefined);
       return await this.#db.client.tx(async t => {
+        if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'commitActiveObservations');
         const row = await this.#lockOMRow(t, tableName, input.id);
         if (!row) {
           throw new MastraError({
@@ -2966,24 +2968,29 @@ export class MemoryPG extends MemoryStorage {
       const { currentRecord } = input;
       const lookupKey = this.getOMKey(currentRecord.threadId, currentRecord.resourceId);
       const tableName = this.#omTableName();
-      return await this.#withOMLookupKeyLock(tableName, lookupKey, async t => {
-        const row = await this.#lockOMRow(t, tableName, currentRecord.id);
-        if (!row) return currentRecord;
-        // A retired snapshot creates nothing; the caller adopts the head.
-        if (row.supersededBy) return this.parseOMRow(await this.#resolveLiveOMRow(t, tableName, row));
-        const stored = this.parseOMRow(row);
-        const plan = planReflectionGenerationText({
-          storedObservations: stored.activeObservations,
-          storedObservationTokenCount: stored.observationTokenCount,
-          snapshotObservations: currentRecord.activeObservations,
-          snapshotObservationTokenCount: currentRecord.observationTokenCount,
-          reflection: input.reflection,
-          tokenCount: input.tokenCount,
-        });
-        // The text was rewritten (not only appended to) since the snapshot: the reflection is stale.
-        if (!plan) return stored;
-        return this.#rollOverOMRow(t, tableName, stored.id, plan.observations, plan.tokenCount, input.newRecordId);
-      });
+      return await this.#withOMLookupKeyLock(
+        tableName,
+        lookupKey,
+        async t => {
+          const row = await this.#lockOMRow(t, tableName, currentRecord.id);
+          if (!row) return currentRecord;
+          // A retired snapshot creates nothing; the caller adopts the head.
+          if (row.supersededBy) return this.parseOMRow(await this.#resolveLiveOMRow(t, tableName, row));
+          const stored = this.parseOMRow(row);
+          const plan = planReflectionGenerationText({
+            storedObservations: stored.activeObservations,
+            storedObservationTokenCount: stored.observationTokenCount,
+            snapshotObservations: currentRecord.activeObservations,
+            snapshotObservationTokenCount: currentRecord.observationTokenCount,
+            reflection: input.reflection,
+            tokenCount: input.tokenCount,
+          });
+          // The text was rewritten (not only appended to) since the snapshot: the reflection is stale.
+          if (!plan) return stored;
+          return this.#rollOverOMRow(t, tableName, stored.id, plan.observations, plan.tokenCount, input.newRecordId);
+        },
+        'createReflectionGeneration',
+      );
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -3293,7 +3300,9 @@ export class MemoryPG extends MemoryStorage {
         extractionFailures: input.chunk.extractionFailures,
       };
 
+      const fence = resolveRunFence(this, undefined);
       return await this.#db.client.tx(async t => {
+        if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'appendBufferedObservations');
         const row = await this.#lockOMRow(t, tableName, input.id);
         if (!row) {
           throw new MastraError({
@@ -3356,7 +3365,9 @@ export class MemoryPG extends MemoryStorage {
       });
       const nowStr = new Date().toISOString();
 
+      const fence = resolveRunFence(this, undefined);
       return await this.#db.client.tx(async t => {
+        if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'swapBufferedToActive');
         // Lock the record: activation is computed from (and written back to) the stored state.
         const record = await this.#lockOMRow(t, tableName, input.id);
         if (!record) {
@@ -3637,59 +3648,62 @@ export class MemoryPG extends MemoryStorage {
       const tableName = this.#omTableName();
       const lookupKey = this.getOMKey(currentRecord.threadId, currentRecord.resourceId);
 
-      return await this.#withOMLookupKeyLock(tableName, lookupKey, async t => {
-        const row = await this.#lockOMRow(t, tableName, currentRecord.id);
-        if (!row) return currentRecord;
-        // A retired snapshot creates nothing; the caller adopts the head.
-        if (row.supersededBy) return this.parseOMRow(await this.#resolveLiveOMRow(t, tableName, row));
-        const stored = this.parseOMRow(row);
+      return await this.#withOMLookupKeyLock(
+        tableName,
+        lookupKey,
+        async t => {
+          const row = await this.#lockOMRow(t, tableName, currentRecord.id);
+          if (!row) return currentRecord;
+          // A retired snapshot creates nothing; the caller adopts the head.
+          if (row.supersededBy) return this.parseOMRow(await this.#resolveLiveOMRow(t, tableName, row));
+          const stored = this.parseOMRow(row);
 
-        const bufferedReflection = stored.bufferedReflection || '';
-        if (!bufferedReflection) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
-            text: 'No buffered reflection to swap',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { id: currentRecord.id },
-          });
-        }
-        // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
-        // reflected line count.
-        if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) {
-          return stored;
-        }
+          const bufferedReflection = stored.bufferedReflection || '';
+          if (!bufferedReflection) {
+            throw new MastraError({
+              id: createStorageErrorId('PG', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
+              text: 'No buffered reflection to swap',
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { id: currentRecord.id },
+            });
+          }
+          // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
+          // reflected line count.
+          if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) {
+            return stored;
+          }
 
-        // Split current activeObservations by the recorded boundary.
-        // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
-        // Lines after reflectedLineCount were added after reflection started → kept as-is.
-        const reflectedLineCount = stored.reflectedObservationLineCount ?? 0;
-        const unreflectedContent = (stored.activeObservations || '')
-          .split('\n')
-          .slice(reflectedLineCount)
-          .join('\n')
-          .trim();
-        const newObservations = unreflectedContent
-          ? `${bufferedReflection}\n\n${unreflectedContent}`
-          : bufferedReflection;
-        // tokenCount is computed by the processor from its snapshot; add tokens appended since.
-        const tokenCount =
-          input.tokenCount +
-          Math.max(0, (stored.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
+          // Split current activeObservations by the recorded boundary.
+          // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
+          // Lines after reflectedLineCount were added after reflection started → kept as-is.
+          const reflectedLineCount = stored.reflectedObservationLineCount ?? 0;
+          const unreflectedContent = (stored.activeObservations || '')
+            .split('\n')
+            .slice(reflectedLineCount)
+            .join('\n')
+            .trim();
+          const newObservations = unreflectedContent
+            ? `${bufferedReflection}\n\n${unreflectedContent}`
+            : bufferedReflection;
+          // tokenCount is computed by the processor from its snapshot; add tokens appended since.
+          const tokenCount =
+            input.tokenCount +
+            Math.max(0, (stored.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
 
-        const newRecord = await this.#rollOverOMRow(
-          t,
-          tableName,
-          stored.id,
-          newObservations,
-          tokenCount,
-          input.newRecordId,
-        );
+          const newRecord = await this.#rollOverOMRow(
+            t,
+            tableName,
+            stored.id,
+            newObservations,
+            tokenCount,
+            input.newRecordId,
+          );
 
-        // Clear buffered reflection state on the retired record.
-        const nowStr = new Date().toISOString();
-        await t.none(
-          `UPDATE ${tableName} SET
+          // Clear buffered reflection state on the retired record.
+          const nowStr = new Date().toISOString();
+          await t.none(
+            `UPDATE ${tableName} SET
             "bufferedReflection" = NULL,
             "bufferedReflectionTokens" = NULL,
             "bufferedReflectionInputTokens" = NULL,
@@ -3697,10 +3711,12 @@ export class MemoryPG extends MemoryStorage {
             "updatedAt" = $1,
             "updatedAtZ" = $2
           WHERE id = $3`,
-          [nowStr, nowStr, stored.id],
-        );
-        return newRecord;
-      });
+            [nowStr, nowStr, stored.id],
+          );
+          return newRecord;
+        },
+        'swapBufferedReflectionToActive',
+      );
     } catch (error) {
       if (error instanceof MastraError || isRunFenceConflictError(error)) {
         throw error;

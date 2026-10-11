@@ -1890,15 +1890,23 @@ export class MemoryLibSQL extends MemoryStorage {
    * No interactive transaction is held across `await`s: the `libsql` driver is synchronous, so
    * an open write transaction makes any other connection's write in this process block the
    * event loop until `busy_timeout` (SQLITE_BUSY). Each statement or batch here runs in one call.
+   *
+   * With `fencedOperation`, a write made inside a run fence scope is fenced: each attempt first
+   * checks the run's claim, and the attempt's reads put the claim into their guards, so a claim
+   * taken over between the check and the write turns the write into a conflict and the next
+   * attempt's check rejects it.
    */
   async #withOMCas<T>(
     operation: string,
-    attempt: (attemptIndex: number) => Promise<T | typeof OM_CAS_CONFLICT>,
+    attempt: (attemptIndex: number, check: RunFenceCheck | undefined) => Promise<T | typeof OM_CAS_CONFLICT>,
+    fencedOperation?: string,
   ): Promise<T> {
+    const check = fencedOperation ? this.#runFenceCheck(undefined, fencedOperation) : undefined;
     // A SQLITE_BUSY rerun is as safe as a conflict rerun: every attempt re-reads before its guarded write.
     return this.#write(operation, async () => {
       for (let i = 0; i < OM_MAX_CAS_ATTEMPTS; i++) {
-        const result = await attempt(i);
+        if (check) await assertRunFence(this.#client, check);
+        const result = await attempt(i, check);
         if (result !== OM_CAS_CONFLICT) return result;
         // An embedded replica reads locally; pull the other instance's write before re-reading.
         if (this.#embeddedReplica) await this.#client.sync?.();
@@ -1921,40 +1929,50 @@ export class MemoryLibSQL extends MemoryStorage {
     return this.#embeddedReplica && attemptIndex === 0;
   }
 
-  #toOMRow(result: { columns: string[]; rows: Record<string, unknown>[] }): OMRow | null {
+  /**
+   * With `check`, the guard also requires the run's claim to still match it, so a guarded write
+   * made after the claim was taken over matches no row.
+   */
+  #toOMRow(result: { columns: string[]; rows: Record<string, unknown>[] }, check?: RunFenceCheck): OMRow | null {
     const row = result.rows?.[0];
     if (!row) return null;
     const columns = result.columns;
-    return {
-      record: this.parseOMRow(row),
-      // Every column as read: a write guarded by this matches only the unchanged row.
-      guard: {
-        sql: columns.map(c => `"${c}" IS ?`).join(' AND '),
-        args: columns.map(c => row[c] as InValue),
-      },
+    // Every column as read: a write guarded by this matches only the unchanged row.
+    const guard = {
+      sql: columns.map(c => `"${c}" IS ?`).join(' AND '),
+      args: columns.map(c => row[c] as InValue),
     };
+    if (check) {
+      guard.sql += ` AND EXISTS (SELECT 1 FROM ${check.claimsTable} WHERE runId = ? AND generation = ? AND ownerId = ?)`;
+      guard.args.push(check.fence.runId, check.fence.generation, check.fence.ownerId);
+    }
+    return { record: this.parseOMRow(row), guard };
   }
 
-  async #readOMRow(id: string): Promise<OMRow | null> {
-    return this.#toOMRow(await this.#client.execute({ sql: `SELECT * FROM "${OM_TABLE}" WHERE id = ?`, args: [id] }));
+  async #readOMRow(id: string, check?: RunFenceCheck): Promise<OMRow | null> {
+    return this.#toOMRow(
+      await this.#client.execute({ sql: `SELECT * FROM "${OM_TABLE}" WHERE id = ?`, args: [id] }),
+      check,
+    );
   }
 
-  async #readOMHeadRow(lookupKey: string): Promise<OMRow | null> {
+  async #readOMHeadRow(lookupKey: string, check?: RunFenceCheck): Promise<OMRow | null> {
     return this.#toOMRow(
       await this.#client.execute({
         sql: `SELECT * FROM "${OM_TABLE}" WHERE "lookupKey" = ? ORDER BY ${OM_HEAD_ORDER} LIMIT 1`,
         args: [lookupKey],
       }),
+      check,
     );
   }
 
   /** The live row a lifecycle write aimed at `row` lands on: the row itself while live, otherwise the head. */
-  async #resolveLiveOMRow(row: OMRow): Promise<OMRow> {
+  async #resolveLiveOMRow(row: OMRow, check?: RunFenceCheck): Promise<OMRow> {
     let current = row;
     for (let hop = 0; current.record.supersededBy; hop++) {
       const head =
         hop < OM_MAX_HEAD_HOPS
-          ? await this.#readOMHeadRow(this.getOMKey(current.record.threadId, current.record.resourceId))
+          ? await this.#readOMHeadRow(this.getOMKey(current.record.threadId, current.record.resourceId), check)
           : null;
       if (!head || head.record.id === current.record.id) {
         throw new MastraError({
@@ -2350,31 +2368,33 @@ export class MemoryLibSQL extends MemoryStorage {
       const now = new Date();
       const observedMessageIdsJson = input.observedMessageIds ? JSON.stringify(input.observedMessageIds) : null;
 
-      return await this.#withOMCas('UPDATE_ACTIVE_OBSERVATIONS', async attemptIndex => {
-        const row = await this.#readOMRow(input.id);
-        if (!row) {
-          if (this.#mayBeUnsynced(attemptIndex)) return OM_CAS_CONFLICT;
-          throw new MastraError({
-            id: createStorageErrorId('LIBSQL', 'UPDATE_ACTIVE_OBSERVATIONS', 'NOT_FOUND'),
-            text: `Observational memory record not found: ${input.id}`,
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            details: { id: input.id },
-          });
-        }
-        const stored = row.record;
-        if (stored.supersededBy) return { applied: false, reason: 'retired' as const };
-        if (
-          input.expectedActiveObservations !== undefined &&
-          input.expectedActiveObservations !== stored.activeObservations
-        ) {
-          return { applied: false, reason: 'conflict' as const };
-        }
+      return await this.#withOMCas(
+        'UPDATE_ACTIVE_OBSERVATIONS',
+        async (attemptIndex, check) => {
+          const row = await this.#readOMRow(input.id, check);
+          if (!row) {
+            if (this.#mayBeUnsynced(attemptIndex)) return OM_CAS_CONFLICT;
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'UPDATE_ACTIVE_OBSERVATIONS', 'NOT_FOUND'),
+              text: `Observational memory record not found: ${input.id}`,
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.THIRD_PARTY,
+              details: { id: input.id },
+            });
+          }
+          const stored = row.record;
+          if (stored.supersededBy) return { applied: false, reason: 'retired' as const };
+          if (
+            input.expectedActiveObservations !== undefined &&
+            input.expectedActiveObservations !== stored.activeObservations
+          ) {
+            return { applied: false, reason: 'conflict' as const };
+          }
 
-        // The cursor never moves backward.
-        const lastObservedAt = maxObservationCursor(stored.lastObservedAt, input.lastObservedAt)!;
-        const updated = await this.#client.execute({
-          sql: `UPDATE "${OM_TABLE}" SET
+          // The cursor never moves backward.
+          const lastObservedAt = maxObservationCursor(stored.lastObservedAt, input.lastObservedAt)!;
+          const updated = await this.#client.execute({
+            sql: `UPDATE "${OM_TABLE}" SET
             "activeObservations" = ?,
             "lastObservedAt" = ?,
             "pendingMessageTokens" = 0,
@@ -2383,19 +2403,21 @@ export class MemoryLibSQL extends MemoryStorage {
             "observedMessageIds" = ?,
             "updatedAt" = ?
           WHERE id = ? AND ${row.guard.sql}`,
-          args: [
-            input.observations,
-            lastObservedAt.toISOString(),
-            input.tokenCount,
-            input.tokenCount,
-            observedMessageIdsJson,
-            now.toISOString(),
-            input.id,
-            ...row.guard.args,
-          ],
-        });
-        return updated.rowsAffected === 1 ? { applied: true } : OM_CAS_CONFLICT;
-      });
+            args: [
+              input.observations,
+              lastObservedAt.toISOString(),
+              input.tokenCount,
+              input.tokenCount,
+              observedMessageIdsJson,
+              now.toISOString(),
+              input.id,
+              ...row.guard.args,
+            ],
+          });
+          return updated.rowsAffected === 1 ? { applied: true } : OM_CAS_CONFLICT;
+        },
+        'commitActiveObservations',
+      );
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -2414,25 +2436,29 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
     try {
-      return await this.#withOMCas('CREATE_REFLECTION_GENERATION', async attemptIndex => {
-        const { currentRecord } = input;
-        const row = await this.#readOMRow(currentRecord.id);
-        if (!row) return this.#mayBeUnsynced(attemptIndex) ? OM_CAS_CONFLICT : currentRecord;
-        const stored = row.record;
-        // A retired snapshot creates nothing; the caller adopts the head.
-        if (stored.supersededBy) return (await this.#resolveLiveOMRow(row)).record;
-        const plan = planReflectionGenerationText({
-          storedObservations: stored.activeObservations,
-          storedObservationTokenCount: stored.observationTokenCount,
-          snapshotObservations: currentRecord.activeObservations,
-          snapshotObservationTokenCount: currentRecord.observationTokenCount,
-          reflection: input.reflection,
-          tokenCount: input.tokenCount,
-        });
-        // The text was rewritten (not only appended to) since the snapshot: the reflection is stale.
-        if (!plan) return stored;
-        return this.#rollOverObservationalMemory(row, plan.observations, plan.tokenCount, input.newRecordId);
-      });
+      return await this.#withOMCas(
+        'CREATE_REFLECTION_GENERATION',
+        async (attemptIndex, check) => {
+          const { currentRecord } = input;
+          const row = await this.#readOMRow(currentRecord.id, check);
+          if (!row) return this.#mayBeUnsynced(attemptIndex) ? OM_CAS_CONFLICT : currentRecord;
+          const stored = row.record;
+          // A retired snapshot creates nothing; the caller adopts the head.
+          if (stored.supersededBy) return (await this.#resolveLiveOMRow(row, check)).record;
+          const plan = planReflectionGenerationText({
+            storedObservations: stored.activeObservations,
+            storedObservationTokenCount: stored.observationTokenCount,
+            snapshotObservations: currentRecord.activeObservations,
+            snapshotObservationTokenCount: currentRecord.observationTokenCount,
+            reflection: input.reflection,
+            tokenCount: input.tokenCount,
+          });
+          // The text was rewritten (not only appended to) since the snapshot: the reflection is stale.
+          if (!plan) return stored;
+          return this.#rollOverObservationalMemory(row, plan.observations, plan.tokenCount, input.newRecordId);
+        },
+        'createReflectionGeneration',
+      );
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -2715,65 +2741,71 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const nowStr = new Date().toISOString();
 
-      return await this.#withOMCas('UPDATE_BUFFERED_OBSERVATIONS', async attemptIndex => {
-        const row = await this.#readOMRow(input.id);
-        if (!row) {
-          if (this.#mayBeUnsynced(attemptIndex)) return OM_CAS_CONFLICT;
-          throw new MastraError({
-            id: createStorageErrorId('LIBSQL', 'UPDATE_BUFFERED_OBSERVATIONS', 'NOT_FOUND'),
-            text: `Observational memory record not found: ${input.id}`,
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            details: { id: input.id },
-          });
-        }
-        // A retired id is redirected to the head.
-        const targetRow = await this.#resolveLiveOMRow(row);
-        const target = targetRow.record;
-        const existingChunks = Array.isArray(target.bufferedObservationChunks) ? target.bufferedObservationChunks : [];
+      return await this.#withOMCas(
+        'UPDATE_BUFFERED_OBSERVATIONS',
+        async (attemptIndex, check) => {
+          const row = await this.#readOMRow(input.id, check);
+          if (!row) {
+            if (this.#mayBeUnsynced(attemptIndex)) return OM_CAS_CONFLICT;
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'UPDATE_BUFFERED_OBSERVATIONS', 'NOT_FOUND'),
+              text: `Observational memory record not found: ${input.id}`,
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.THIRD_PARTY,
+              details: { id: input.id },
+            });
+          }
+          // A retired id is redirected to the head.
+          const targetRow = await this.#resolveLiveOMRow(row, check);
+          const target = targetRow.record;
+          const existingChunks = Array.isArray(target.bufferedObservationChunks)
+            ? target.bufferedObservationChunks
+            : [];
 
-        // Skip a retried append (same cycle) and a chunk the cursor already wholly covers.
-        if (
-          existingChunks.some(existing => existing.cycleId === input.chunk.cycleId) ||
-          isBufferedChunkCoveredByCursor(input.chunk.lastObservedAt, target.lastObservedAt)
-        ) {
-          return { persisted: false, recordId: target.id };
-        }
+          // Skip a retried append (same cycle) and a chunk the cursor already wholly covers.
+          if (
+            existingChunks.some(existing => existing.cycleId === input.chunk.cycleId) ||
+            isBufferedChunkCoveredByCursor(input.chunk.lastObservedAt, target.lastObservedAt)
+          ) {
+            return { persisted: false, recordId: target.id };
+          }
 
-        const newChunk: BufferedObservationChunk = {
-          id: `ombuf-${globalThis.crypto.randomUUID()}`,
-          cycleId: input.chunk.cycleId,
-          observations: input.chunk.observations,
-          tokenCount: input.chunk.tokenCount,
-          messageIds: input.chunk.messageIds,
-          messageTokens: input.chunk.messageTokens,
-          lastObservedAt: input.chunk.lastObservedAt,
-          createdAt: new Date(),
-          suggestedContinuation: input.chunk.suggestedContinuation,
-          currentTask: input.chunk.currentTask,
-          threadTitle: input.chunk.threadTitle,
-          extractedValues: input.chunk.extractedValues,
-          extractionFailures: input.chunk.extractionFailures,
-        };
+          const newChunk: BufferedObservationChunk = {
+            id: `ombuf-${globalThis.crypto.randomUUID()}`,
+            cycleId: input.chunk.cycleId,
+            observations: input.chunk.observations,
+            tokenCount: input.chunk.tokenCount,
+            messageIds: input.chunk.messageIds,
+            messageTokens: input.chunk.messageTokens,
+            lastObservedAt: input.chunk.lastObservedAt,
+            createdAt: new Date(),
+            suggestedContinuation: input.chunk.suggestedContinuation,
+            currentTask: input.chunk.currentTask,
+            threadTitle: input.chunk.threadTitle,
+            extractedValues: input.chunk.extractedValues,
+            extractionFailures: input.chunk.extractionFailures,
+          };
 
-        // lastBufferedAtTime never moves backward.
-        const lastBufferedAtTime = maxObservationCursor(target.lastBufferedAtTime, input.lastBufferedAtTime);
-        const updated = await this.#client.execute({
-          sql: `UPDATE "${OM_TABLE}" SET
+          // lastBufferedAtTime never moves backward.
+          const lastBufferedAtTime = maxObservationCursor(target.lastBufferedAtTime, input.lastBufferedAtTime);
+          const updated = await this.#client.execute({
+            sql: `UPDATE "${OM_TABLE}" SET
             "bufferedObservationChunks" = ?,
             "lastBufferedAtTime" = ?,
             "updatedAt" = ?
           WHERE id = ? AND ${targetRow.guard.sql}`,
-          args: [
-            JSON.stringify([...existingChunks, newChunk]),
-            lastBufferedAtTime ? lastBufferedAtTime.toISOString() : null,
-            nowStr,
-            target.id,
-            ...targetRow.guard.args,
-          ],
-        });
-        return updated.rowsAffected === 1 ? { persisted: true, recordId: target.id } : OM_CAS_CONFLICT;
-      });
+            args: [
+              JSON.stringify([...existingChunks, newChunk]),
+              lastBufferedAtTime ? lastBufferedAtTime.toISOString() : null,
+              nowStr,
+              target.id,
+              ...targetRow.guard.args,
+            ],
+          });
+          return updated.rowsAffected === 1 ? { persisted: true, recordId: target.id } : OM_CAS_CONFLICT;
+        },
+        'appendBufferedObservations',
+      );
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -2794,169 +2826,171 @@ export class MemoryLibSQL extends MemoryStorage {
     try {
       const nowStr = new Date().toISOString();
 
-      return await this.#withOMCas('SWAP_BUFFERED_TO_ACTIVE', async attemptIndex => {
-        // Get current record
-        const current = await this.#client.execute({
-          sql: `SELECT * FROM "${OM_TABLE}" WHERE id = ?`,
-          args: [input.id],
-        });
-
-        if (!current.rows || current.rows.length === 0) {
-          if (this.#mayBeUnsynced(attemptIndex)) return OM_CAS_CONFLICT;
-          throw new MastraError({
-            id: createStorageErrorId('LIBSQL', 'SWAP_BUFFERED_TO_ACTIVE', 'NOT_FOUND'),
-            text: `Observational memory record not found: ${input.id}`,
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.THIRD_PARTY,
-            details: { id: input.id },
+      return await this.#withOMCas(
+        'SWAP_BUFFERED_TO_ACTIVE',
+        async (attemptIndex, check) => {
+          // Get current record
+          const current = await this.#client.execute({
+            sql: `SELECT * FROM "${OM_TABLE}" WHERE id = ?`,
+            args: [input.id],
           });
-        }
 
-        const row = current.rows[0]!;
-        const guard = this.#toOMRow(current)!.guard;
-        const emptyResult: SwapBufferedToActiveResult = {
-          chunksActivated: 0,
-          messageTokensActivated: 0,
-          observationTokensActivated: 0,
-          messagesActivated: 0,
-          activatedCycleIds: [],
-          activatedMessageIds: [],
-        };
-        // A retired record is frozen: activation reports it and writes nothing.
-        if (row.supersededBy) {
-          return { ...emptyResult, retired: true };
-        }
-
-        // Activation always works on the stored list, so a chunk appended after the caller
-        // read the record is never dropped. Caller-provided chunks only override token weights.
-        let persistedChunks: BufferedObservationChunk[] = [];
-        if (row.bufferedObservationChunks) {
-          try {
-            const parsed =
-              typeof row.bufferedObservationChunks === 'string'
-                ? JSON.parse(row.bufferedObservationChunks)
-                : row.bufferedObservationChunks;
-            persistedChunks = Array.isArray(parsed) ? parsed : [];
-          } catch {
-            persistedChunks = [];
+          if (!current.rows || current.rows.length === 0) {
+            if (this.#mayBeUnsynced(attemptIndex)) return OM_CAS_CONFLICT;
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'SWAP_BUFFERED_TO_ACTIVE', 'NOT_FOUND'),
+              text: `Observational memory record not found: ${input.id}`,
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.THIRD_PARTY,
+              details: { id: input.id },
+            });
           }
-        }
-        const refreshedWeights = new Map(
-          (Array.isArray(input.bufferedChunks) ? input.bufferedChunks : []).map(c => [c.id, c.messageTokens]),
-        );
-        const chunks = persistedChunks.map(c =>
-          refreshedWeights.has(c.id) ? { ...c, messageTokens: refreshedWeights.get(c.id)! } : c,
-        );
 
-        if (chunks.length === 0) {
-          return emptyResult;
-        }
+          const row = current.rows[0]!;
+          const guard = this.#toOMRow(current, check)!.guard;
+          const emptyResult: SwapBufferedToActiveResult = {
+            chunksActivated: 0,
+            messageTokensActivated: 0,
+            observationTokensActivated: 0,
+            messagesActivated: 0,
+            activatedCycleIds: [],
+            activatedMessageIds: [],
+          };
+          // A retired record is frozen: activation reports it and writes nothing.
+          if (row.supersededBy) {
+            return { ...emptyResult, retired: true };
+          }
 
-        // Calculate target message tokens to activate based on new formula:
-        // retentionFloor = threshold * (1 - ratio) represents tokens to keep as raw messages
-        // targetMessageTokens = max(0, currentPending - retentionFloor) represents tokens to activate
-        const retentionFloor = input.messageTokensThreshold * (1 - input.activationRatio);
-        const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
-
-        // Find the closest chunk boundary to the target, biased over (prefer removing
-        // slightly more than the target so remaining context lands at or below retentionFloor).
-        // Track both best-over and best-under boundaries so we can fall back to under
-        // if the over boundary would overshoot by too much.
-        let cumulativeMessageTokens = 0;
-        let bestOverBoundary = 0;
-        let bestOverTokens = 0;
-        let bestUnderBoundary = 0;
-        let bestUnderTokens = 0;
-
-        for (let i = 0; i < chunks.length; i++) {
-          cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
-          const boundary = i + 1;
-
-          if (cumulativeMessageTokens >= targetMessageTokens) {
-            // Over or equal — track the closest (lowest) over boundary
-            if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
-              bestOverBoundary = boundary;
-              bestOverTokens = cumulativeMessageTokens;
+          // Activation always works on the stored list, so a chunk appended after the caller
+          // read the record is never dropped. Caller-provided chunks only override token weights.
+          let persistedChunks: BufferedObservationChunk[] = [];
+          if (row.bufferedObservationChunks) {
+            try {
+              const parsed =
+                typeof row.bufferedObservationChunks === 'string'
+                  ? JSON.parse(row.bufferedObservationChunks)
+                  : row.bufferedObservationChunks;
+              persistedChunks = Array.isArray(parsed) ? parsed : [];
+            } catch {
+              persistedChunks = [];
             }
+          }
+          const refreshedWeights = new Map(
+            (Array.isArray(input.bufferedChunks) ? input.bufferedChunks : []).map(c => [c.id, c.messageTokens]),
+          );
+          const chunks = persistedChunks.map(c =>
+            refreshedWeights.has(c.id) ? { ...c, messageTokens: refreshedWeights.get(c.id)! } : c,
+          );
+
+          if (chunks.length === 0) {
+            return emptyResult;
+          }
+
+          // Calculate target message tokens to activate based on new formula:
+          // retentionFloor = threshold * (1 - ratio) represents tokens to keep as raw messages
+          // targetMessageTokens = max(0, currentPending - retentionFloor) represents tokens to activate
+          const retentionFloor = input.messageTokensThreshold * (1 - input.activationRatio);
+          const targetMessageTokens = Math.max(0, input.currentPendingTokens - retentionFloor);
+
+          // Find the closest chunk boundary to the target, biased over (prefer removing
+          // slightly more than the target so remaining context lands at or below retentionFloor).
+          // Track both best-over and best-under boundaries so we can fall back to under
+          // if the over boundary would overshoot by too much.
+          let cumulativeMessageTokens = 0;
+          let bestOverBoundary = 0;
+          let bestOverTokens = 0;
+          let bestUnderBoundary = 0;
+          let bestUnderTokens = 0;
+
+          for (let i = 0; i < chunks.length; i++) {
+            cumulativeMessageTokens += chunks[i]!.messageTokens ?? 0;
+            const boundary = i + 1;
+
+            if (cumulativeMessageTokens >= targetMessageTokens) {
+              // Over or equal — track the closest (lowest) over boundary
+              if (bestOverBoundary === 0 || cumulativeMessageTokens < bestOverTokens) {
+                bestOverBoundary = boundary;
+                bestOverTokens = cumulativeMessageTokens;
+              }
+            } else {
+              // Under — track the closest (highest) under boundary
+              if (cumulativeMessageTokens > bestUnderTokens) {
+                bestUnderBoundary = boundary;
+                bestUnderTokens = cumulativeMessageTokens;
+              }
+            }
+          }
+
+          // Safeguard: if the over boundary would eat into more than 95% of the
+          // retention floor, fall back to the best under boundary instead.
+          // This prevents edge cases where a large chunk overshoots dramatically.
+          // When forceMaxActivation is set (above blockAfter), still prefer the over
+          // boundary, but never if it would leave fewer than the smaller of 1000
+          // tokens or the retention floor remaining.
+          const maxOvershoot = retentionFloor * 0.95;
+          const overshoot = bestOverTokens - targetMessageTokens;
+          const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
+          const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
+          // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
+          const minRemaining = Math.min(1000, retentionFloor);
+
+          let chunksToActivate: number;
+          if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
+            chunksToActivate = bestOverBoundary;
+          } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
+            chunksToActivate = bestOverBoundary;
+          } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
+            chunksToActivate = bestUnderBoundary;
+          } else if (bestOverBoundary > 0) {
+            // All boundaries are over and exceed the safeguard — still activate
+            // the closest over boundary (better than nothing)
+            chunksToActivate = bestOverBoundary;
           } else {
-            // Under — track the closest (highest) under boundary
-            if (cumulativeMessageTokens > bestUnderTokens) {
-              bestUnderBoundary = boundary;
-              bestUnderTokens = cumulativeMessageTokens;
-            }
+            chunksToActivate = 1;
           }
-        }
 
-        // Safeguard: if the over boundary would eat into more than 95% of the
-        // retention floor, fall back to the best under boundary instead.
-        // This prevents edge cases where a large chunk overshoots dramatically.
-        // When forceMaxActivation is set (above blockAfter), still prefer the over
-        // boundary, but never if it would leave fewer than the smaller of 1000
-        // tokens or the retention floor remaining.
-        const maxOvershoot = retentionFloor * 0.95;
-        const overshoot = bestOverTokens - targetMessageTokens;
-        const remainingAfterOver = input.currentPendingTokens - bestOverTokens;
-        const remainingAfterUnder = input.currentPendingTokens - bestUnderTokens;
-        // When activationRatio ≈ 1.0, retentionFloor is 0 and minRemaining becomes 0 — intentional for "activate everything" configs.
-        const minRemaining = Math.min(1000, retentionFloor);
+          // Split chunks
+          const activatedChunks = chunks.slice(0, chunksToActivate);
+          const remainingChunks = persistedChunks.slice(chunksToActivate);
 
-        let chunksToActivate: number;
-        if (input.forceMaxActivation && bestOverBoundary > 0 && remainingAfterOver >= minRemaining) {
-          chunksToActivate = bestOverBoundary;
-        } else if (bestOverBoundary > 0 && overshoot <= maxOvershoot && remainingAfterOver >= minRemaining) {
-          chunksToActivate = bestOverBoundary;
-        } else if (bestUnderBoundary > 0 && remainingAfterUnder >= minRemaining) {
-          chunksToActivate = bestUnderBoundary;
-        } else if (bestOverBoundary > 0) {
-          // All boundaries are over and exceed the safeguard — still activate
-          // the closest over boundary (better than nothing)
-          chunksToActivate = bestOverBoundary;
-        } else {
-          chunksToActivate = 1;
-        }
+          // Combine activated observations
+          const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
+          const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
+          const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+          const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
+          const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((id): id is string => !!id);
+          const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds ?? []);
 
-        // Split chunks
-        const activatedChunks = chunks.slice(0, chunksToActivate);
-        const remainingChunks = persistedChunks.slice(chunksToActivate);
+          // Derive lastObservedAt from the latest activated chunk, or use provided value
+          const latestChunk = activatedChunks[activatedChunks.length - 1];
+          const lastObservedAt =
+            input.lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
+          // The stored cursor never moves backward (a sync observation may already be past this chunk).
+          const lastObservedAtStr = maxObservationCursor(
+            row.lastObservedAt as string | null,
+            lastObservedAt,
+          )!.toISOString();
 
-        // Combine activated observations
-        const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
-        const activatedTokens = activatedChunks.reduce((sum, c) => sum + c.tokenCount, 0);
-        const activatedMessageTokens = activatedChunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-        const activatedMessageCount = activatedChunks.reduce((sum, c) => sum + c.messageIds.length, 0);
-        const activatedCycleIds = activatedChunks.map(c => c.cycleId).filter((id): id is string => !!id);
-        const activatedMessageIds = activatedChunks.flatMap(c => c.messageIds ?? []);
+          // Get existing values
+          const existingActive = (row.activeObservations as string) || '';
+          const existingTokenCount = Number(row.observationTokenCount || 0);
 
-        // Derive lastObservedAt from the latest activated chunk, or use provided value
-        const latestChunk = activatedChunks[activatedChunks.length - 1];
-        const lastObservedAt =
-          input.lastObservedAt ?? (latestChunk?.lastObservedAt ? new Date(latestChunk.lastObservedAt) : new Date());
-        // The stored cursor never moves backward (a sync observation may already be past this chunk).
-        const lastObservedAtStr = maxObservationCursor(
-          row.lastObservedAt as string | null,
-          lastObservedAt,
-        )!.toISOString();
+          // Calculate new values
+          const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
+          const newActive = existingActive ? `${existingActive}${boundary}${activatedContent}` : activatedContent;
+          const newTokenCount = existingTokenCount + activatedTokens;
+          // NOTE: We intentionally do NOT add message IDs to observedMessageIds during buffered activation.
+          // Buffered chunks represent observations of messages as they were at buffering time.
+          // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
+          // New content after lastObservedAt will be picked up in subsequent observations.
 
-        // Get existing values
-        const existingActive = (row.activeObservations as string) || '';
-        const existingTokenCount = Number(row.observationTokenCount || 0);
+          // Decrement pending message tokens (clamped to zero)
+          const existingPending = Number(row.pendingMessageTokens || 0);
+          const newPending = Math.max(0, existingPending - activatedMessageTokens);
 
-        // Calculate new values
-        const boundary = `\n\n--- message boundary (${lastObservedAt.toISOString()}) ---\n\n`;
-        const newActive = existingActive ? `${existingActive}${boundary}${activatedContent}` : activatedContent;
-        const newTokenCount = existingTokenCount + activatedTokens;
-        // NOTE: We intentionally do NOT add message IDs to observedMessageIds during buffered activation.
-        // Buffered chunks represent observations of messages as they were at buffering time.
-        // With streaming, messages grow after buffering, so we rely on lastObservedAt for filtering.
-        // New content after lastObservedAt will be picked up in subsequent observations.
-
-        // Decrement pending message tokens (clamped to zero)
-        const existingPending = Number(row.pendingMessageTokens || 0);
-        const newPending = Math.max(0, existingPending - activatedMessageTokens);
-
-        // Guarded by the row as read: a concurrent append, swap, or rollover forces a fresh read.
-        const updateResult = await this.#client.execute({
-          sql: `UPDATE "${OM_TABLE}" SET
+          // Guarded by the row as read: a concurrent append, swap, or rollover forces a fresh read.
+          const updateResult = await this.#client.execute({
+            sql: `UPDATE "${OM_TABLE}" SET
               "activeObservations" = ?,
               "observationTokenCount" = ?,
               "pendingMessageTokens" = ?,
@@ -2964,44 +2998,46 @@ export class MemoryLibSQL extends MemoryStorage {
               "lastObservedAt" = ?,
               "updatedAt" = ?
             WHERE id = ? AND ${guard.sql}`,
-          args: [
-            newActive,
-            newTokenCount,
-            newPending,
-            remainingChunks.length > 0 ? JSON.stringify(remainingChunks) : null,
-            lastObservedAtStr,
-            nowStr,
-            input.id,
-            ...guard.args,
-          ],
-        });
+            args: [
+              newActive,
+              newTokenCount,
+              newPending,
+              remainingChunks.length > 0 ? JSON.stringify(remainingChunks) : null,
+              lastObservedAtStr,
+              nowStr,
+              input.id,
+              ...guard.args,
+            ],
+          });
 
-        if (updateResult.rowsAffected === 0) {
-          return OM_CAS_CONFLICT;
-        }
+          if (updateResult.rowsAffected === 0) {
+            return OM_CAS_CONFLICT;
+          }
 
-        // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
-        const latestChunkHints = activatedChunks[activatedChunks.length - 1];
+          // Use hints from the most recent activated chunk only — stale hints from older chunks are discarded
+          const latestChunkHints = activatedChunks[activatedChunks.length - 1];
 
-        return {
-          chunksActivated: activatedChunks.length,
-          messageTokensActivated: activatedMessageTokens,
-          observationTokensActivated: activatedTokens,
-          messagesActivated: activatedMessageCount,
-          activatedCycleIds,
-          activatedMessageIds,
-          observations: activatedContent,
-          perChunk: activatedChunks.map(c => ({
-            cycleId: c.cycleId ?? '',
-            messageTokens: c.messageTokens ?? 0,
-            observationTokens: c.tokenCount,
-            messageCount: c.messageIds.length,
-            observations: c.observations,
-          })),
-          suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
-          currentTask: latestChunkHints?.currentTask ?? undefined,
-        };
-      });
+          return {
+            chunksActivated: activatedChunks.length,
+            messageTokensActivated: activatedMessageTokens,
+            observationTokensActivated: activatedTokens,
+            messagesActivated: activatedMessageCount,
+            activatedCycleIds,
+            activatedMessageIds,
+            observations: activatedContent,
+            perChunk: activatedChunks.map(c => ({
+              cycleId: c.cycleId ?? '',
+              messageTokens: c.messageTokens ?? 0,
+              observationTokens: c.tokenCount,
+              messageCount: c.messageIds.length,
+              observations: c.observations,
+            })),
+            suggestedContinuation: latestChunkHints?.suggestedContinuation ?? undefined,
+            currentTask: latestChunkHints?.currentTask ?? undefined,
+          };
+        },
+        'swapBufferedToActive',
+      );
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
@@ -3077,50 +3113,54 @@ export class MemoryLibSQL extends MemoryStorage {
 
   async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
     try {
-      return await this.#withOMCas('SWAP_BUFFERED_REFLECTION_TO_ACTIVE', async attemptIndex => {
-        const { currentRecord } = input;
-        const row = await this.#readOMRow(currentRecord.id);
-        if (!row) return this.#mayBeUnsynced(attemptIndex) ? OM_CAS_CONFLICT : currentRecord;
-        const stored = row.record;
-        // A retired snapshot creates nothing; the caller adopts the head.
-        if (stored.supersededBy) return (await this.#resolveLiveOMRow(row)).record;
+      return await this.#withOMCas(
+        'SWAP_BUFFERED_REFLECTION_TO_ACTIVE',
+        async (attemptIndex, check) => {
+          const { currentRecord } = input;
+          const row = await this.#readOMRow(currentRecord.id, check);
+          if (!row) return this.#mayBeUnsynced(attemptIndex) ? OM_CAS_CONFLICT : currentRecord;
+          const stored = row.record;
+          // A retired snapshot creates nothing; the caller adopts the head.
+          if (stored.supersededBy) return (await this.#resolveLiveOMRow(row, check)).record;
 
-        const bufferedReflection = stored.bufferedReflection || '';
-        if (!bufferedReflection) {
-          throw new MastraError({
-            id: createStorageErrorId('LIBSQL', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
-            text: 'No buffered reflection to swap',
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            details: { id: currentRecord.id },
-          });
-        }
-        // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
-        // reflected line count.
-        if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) {
-          return stored;
-        }
+          const bufferedReflection = stored.bufferedReflection || '';
+          if (!bufferedReflection) {
+            throw new MastraError({
+              id: createStorageErrorId('LIBSQL', 'SWAP_BUFFERED_REFLECTION_TO_ACTIVE', 'NO_CONTENT'),
+              text: 'No buffered reflection to swap',
+              domain: ErrorDomain.STORAGE,
+              category: ErrorCategory.USER,
+              details: { id: currentRecord.id },
+            });
+          }
+          // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
+          // reflected line count.
+          if (!isAppendOnlySince(stored.activeObservations, currentRecord.activeObservations)) {
+            return stored;
+          }
 
-        // Split current activeObservations by the recorded boundary.
-        // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
-        // Lines after reflectedLineCount were added after reflection started → kept as-is.
-        const reflectedLineCount = stored.reflectedObservationLineCount ?? 0;
-        const unreflectedContent = (stored.activeObservations || '')
-          .split('\n')
-          .slice(reflectedLineCount)
-          .join('\n')
-          .trim();
-        const newObservations = unreflectedContent
-          ? `${bufferedReflection}\n\n${unreflectedContent}`
-          : bufferedReflection;
-        // tokenCount is computed by the processor from its snapshot; add tokens appended since.
-        const tokenCount =
-          input.tokenCount +
-          Math.max(0, (stored.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
+          // Split current activeObservations by the recorded boundary.
+          // Lines 0..reflectedLineCount were reflected on → replaced by bufferedReflection.
+          // Lines after reflectedLineCount were added after reflection started → kept as-is.
+          const reflectedLineCount = stored.reflectedObservationLineCount ?? 0;
+          const unreflectedContent = (stored.activeObservations || '')
+            .split('\n')
+            .slice(reflectedLineCount)
+            .join('\n')
+            .trim();
+          const newObservations = unreflectedContent
+            ? `${bufferedReflection}\n\n${unreflectedContent}`
+            : bufferedReflection;
+          // tokenCount is computed by the processor from its snapshot; add tokens appended since.
+          const tokenCount =
+            input.tokenCount +
+            Math.max(0, (stored.observationTokenCount ?? 0) - (currentRecord.observationTokenCount ?? 0));
 
-        // The rollover also clears the buffered reflection on the retired record.
-        return this.#rollOverObservationalMemory(row, newObservations, tokenCount, input.newRecordId);
-      });
+          // The rollover also clears the buffered reflection on the retired record.
+          return this.#rollOverObservationalMemory(row, newObservations, tokenCount, input.newRecordId);
+        },
+        'swapBufferedReflectionToActive',
+      );
     } catch (error) {
       if (error instanceof MastraError) {
         throw error;
