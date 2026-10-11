@@ -333,6 +333,8 @@ export const mastraObservationalMemoryTable = defineTable({
   lastBufferedAtTokens: v.number(),
   lastBufferedAtTime: v.optional(v.union(v.string(), v.null())),
   metadata: v.optional(v.union(v.string(), v.null())),
+  // Set to the successor's id when a reflection retires this generation; never cleared.
+  supersededBy: v.optional(v.union(v.string(), v.null())),
   createdAt: v.string(),
   updatedAt: v.string(),
 })
