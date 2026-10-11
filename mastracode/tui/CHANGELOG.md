@@ -1,5 +1,25 @@
 # mastracode
 
+## 0.46.0-alpha.9
+
+### Minor Changes
+
+- Added a `--pack <id>` startup flag to the interactive TUI. It accepts a builtin pack id (`anthropic`, `openai`, `github-copilot`) or a saved custom pack by `custom:<name>` or bare name. Unknown ids fail fast with the list of valid packs. Startup uses the pack's models for the session and saves the pack as the global default. `--pack` takes precedence over `MASTRACODE_MODEL_ID`. ([#26691](https://github.com/mastra-ai/mastra/pull/26691))
+
+  **Example**
+
+  ```bash
+  mastracode --pack anthropic
+  mastracode --pack custom:Kimi
+  mastracode --pack Kimi
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`a65d0c7`](https://github.com/mastra-ai/mastra/commit/a65d0c788824081f36ccd95078a8d1214ff687c4), [`fdd4587`](https://github.com/mastra-ai/mastra/commit/fdd458784211bc89f5da4837a7ba4a1a7485e3e5), [`fdd4587`](https://github.com/mastra-ai/mastra/commit/fdd458784211bc89f5da4837a7ba4a1a7485e3e5), [`e89310a`](https://github.com/mastra-ai/mastra/commit/e89310a8db29a663a85c6a31a8c376cc8f59c129), [`590d6ca`](https://github.com/mastra-ai/mastra/commit/590d6ca9fa6ccf8b55dcf2e98da080ee1a348f67)]:
+  - @mastra/core@1.76.0-alpha.9
+  - @mastra/code-sdk@1.12.0-alpha.9
+
 ## 0.46.0-alpha.8
 
 ### Patch Changes
