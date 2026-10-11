@@ -1144,6 +1144,75 @@ describe('PlatformGithubIntegration', () => {
     expect(stored.map(installation => installation.externalId).sort()).toEqual(['7', '9']);
   });
 
+  it('keeps org installations when the acting-user installation listing fails', async () => {
+    const seed = await createPlatformStorageForTests();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.endsWith('/github-app/installations?userId=user-1')) {
+        return json({ error: 'unknown query parameter: userId' }, 400);
+      }
+      if (url.endsWith('/github-app/installations')) {
+        return json({
+          installations: [
+            { installationId: 7, accountLogin: 'acme', accountType: 'Organization', suspendedAt: null, usable: true },
+          ],
+          pendingRequests: [],
+        });
+      }
+      if (url.endsWith('/github-app/installations/7/repositories')) {
+        return json({
+          repositories: [
+            {
+              id: 101,
+              owner: 'acme',
+              name: 'app',
+              fullName: 'acme/app',
+              private: true,
+              defaultBranch: 'main',
+              htmlUrl: 'https://github.com/acme/app',
+            },
+          ],
+        });
+      }
+      if (url.includes('/github-app/user-connection')) {
+        return json({ connected: true, githubUsername: 'ada' });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const context = {
+      auth: fakeAuth(),
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      controller: {},
+      stateSigner: {},
+      baseUrl: 'https://factory.example',
+    } as unknown as IntegrationContext;
+    integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, integration.routes(context));
+
+    const status = await app.request('/web/github/status');
+    expect(status.status).toBe(200);
+    await expect(status.json()).resolves.toMatchObject({
+      connected: true,
+      installations: [{ installationId: 7, accountLogin: 'acme', accountType: 'Organization' }],
+      reason: 'ready',
+    });
+    await expect(integration.intake.listSources({ orgId: 'org-1', userId: 'user-1' })).resolves.toEqual([
+      expect.objectContaining({ id: 'acme/app', metadata: expect.objectContaining({ installationId: 7 }) }),
+    ]);
+  });
+
   it('reports why no installation is accessible when status is not connected', async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {

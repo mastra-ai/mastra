@@ -772,6 +772,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
    * Usable installations visible to the org key plus those visible to the acting
    * user (personal-account installs). Both lists are fetched and merged so org
    * installs stay visible whether Platform treats `userId` as a filter or a widening.
+   * The user listing is best-effort: if it fails, the org-key result is still returned.
    */
   async #listUsableInstallations(userId: string): Promise<PlatformGithubInstallation[]> {
     const [orgResult, userResult] = await Promise.all([
@@ -779,10 +780,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         'GET',
         `${API_PREFIX}/github-app/installations`,
       ),
-      this.#client.request<{ installations: PlatformGithubInstallation[] }>(
-        'GET',
-        `${API_PREFIX}/github-app/installations?${new URLSearchParams({ userId })}`,
-      ),
+      this.#client
+        .request<{ installations: PlatformGithubInstallation[] }>(
+          'GET',
+          `${API_PREFIX}/github-app/installations?${new URLSearchParams({ userId })}`,
+        )
+        .catch(error => {
+          logPlatformWarn('Platform GitHub user installation listing failed', {
+            userId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return { installations: [] as PlatformGithubInstallation[] };
+        }),
     ]);
     const byId = new Map<number, PlatformGithubInstallation>();
     for (const installation of [...orgResult.installations, ...userResult.installations]) {
