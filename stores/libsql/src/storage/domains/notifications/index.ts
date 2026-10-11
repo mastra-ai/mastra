@@ -1,4 +1,4 @@
-import { NotificationsStorage, TABLE_NOTIFICATIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
+import { NotificationsStorage, TABLE_CONFIGS, TABLE_NOTIFICATIONS, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type {
   CreateNotificationInput,
   ListDueNotificationsInput,
@@ -115,7 +115,10 @@ export class NotificationsLibSQL extends NotificationsStorage {
     await this.#db.createTable({
       tableName: TABLE_NOTIFICATIONS,
       schema: TABLE_SCHEMAS[TABLE_NOTIFICATIONS],
+      compositePrimaryKey: TABLE_CONFIGS[TABLE_NOTIFICATIONS]?.compositePrimaryKey,
     });
+
+    await this.ensureUniqueKey();
 
     await this.#client.batch(
       [
@@ -134,6 +137,25 @@ export class NotificationsLibSQL extends NotificationsStorage {
       ],
       'write',
     );
+  }
+
+  /**
+   * Tables created before the composite primary key was declared have no key.
+   * SQLite cannot add a primary key in place, so enforce the same uniqueness with
+   * a unique index (a no-op cost on new tables, which already have the key). If
+   * duplicate rows exist the index cannot be built; warn instead of blocking init.
+   */
+  private async ensureUniqueKey(): Promise<void> {
+    try {
+      await this.#client.execute(
+        `CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_thread_id_unique ON "${TABLE_NOTIFICATIONS}" ("threadId", "id")`,
+      );
+    } catch (error) {
+      this.logger?.warn?.(
+        `Could not enforce unique ("threadId", "id") on ${TABLE_NOTIFICATIONS}; remove duplicate rows and restart to add it.`,
+        error,
+      );
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
