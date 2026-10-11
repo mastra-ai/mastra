@@ -785,6 +785,22 @@ describe('HttpTransport', () => {
   });
 
   describe('listLogs and listLogsByRunId', () => {
+    it.each([
+      { page: 0, expectedPage: 1 },
+      { page: undefined, expectedPage: 1 },
+      { page: 3, expectedPage: 3 },
+    ])('returns page $expectedPage when page is $page', async ({ page, expectedPage }) => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        const expected = { logs: [], total: 0, page: expectedPage, perPage: 25, hasMore: false };
+        expect(await transport.listLogs({ page, perPage: 25 })).toEqual(expected);
+        expect(await transport.listLogsByRunId({ runId: 'test-run-id', page, perPage: 25 })).toEqual(expected);
+      } finally {
+        consoleSpy.mockRestore();
+      }
+    });
+
     it('should return empty results for listLogs with warning', async () => {
       const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
