@@ -47,5 +47,22 @@ describe('OpenAIReasoningSchemaCompatLayer', () => {
       const layer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
       expect(layer.shouldApply()).toBe(false);
     });
+
+    it('should apply for @ai-sdk/azure reasoning models', () => {
+      const layer = new OpenAIReasoningSchemaCompatLayer({
+        provider: 'azure.responses',
+        modelId: 'o3-mini',
+        supportsStructuredOutputs: false,
+      });
+      expect(layer.shouldApply()).toBe(true);
+    });
+
+    it.each([
+      ['azure.chat', 'gpt-4o'],
+      ['azure.responses', 'claude-o3-test'],
+    ])('should not apply for other @ai-sdk/azure models (%s, %s)', (provider, modelId) => {
+      const layer = new OpenAIReasoningSchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
+      expect(layer.shouldApply()).toBe(false);
+    });
   });
 });

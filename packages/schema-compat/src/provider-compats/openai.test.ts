@@ -1,6 +1,7 @@
 import Ajv from 'ajv';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
+import { applyOpenAICompatTransforms } from '../standard-schema-compat';
 import type { ModelInformation } from '../types';
 import { isZodType } from '../utils';
 import { zodToJsonSchema } from '../zod-to-json';
@@ -772,6 +773,65 @@ describe('OpenAISchemaCompatLayer', () => {
 
       const layer = new OpenAISchemaCompatLayer(modelInfo);
       expect(layer.shouldApply()).toBe(false);
+    });
+
+    it.each([
+      ['azure.responses', 'my-gpt5-deployment'],
+      ['azure.chat', 'gpt-4o'],
+    ])('should apply for @ai-sdk/azure models (%s, %s)', (provider, modelId) => {
+      const layer = new OpenAISchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
+      expect(layer.shouldApply()).toBe(true);
+    });
+
+    it.each([
+      ['azure.responses', 'claude-sonnet-4-5'],
+      ['azure.responses', 'deepseek-v3'],
+      ['azure.chat', 'meta-llama-3-70b'],
+      ['azure.responses', 'o3-mini'],
+    ])('should not apply for @ai-sdk/azure models owned by another layer (%s, %s)', (provider, modelId) => {
+      const layer = new OpenAISchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
+      expect(layer.shouldApply()).toBe(false);
+    });
+  });
+
+  describe('@ai-sdk/azure models', () => {
+    const azureCompat = new OpenAISchemaCompatLayer({
+      provider: 'azure.responses',
+      modelId: 'my-gpt5-deployment',
+      supportsStructuredOutputs: false,
+    });
+    const schema = z.object({
+      query: z.string(),
+      outcome: z.enum(['WON', 'LOST', 'OPEN']).optional(),
+      maxDealAmount: z.number().optional(),
+    });
+
+    it('offers optional properties as required and nullable', () => {
+      const json = azureCompat.processToJSONSchema(schema) as Record<string, any>;
+      expect(allPropsRequired(json)).toEqual({ valid: true, missing: [] });
+      const validate = new Ajv({ strict: false }).compile(json);
+      expect(validate({ query: 'Acme', outcome: null, maxDealAmount: null })).toBe(true);
+    });
+
+    it('maps null back to undefined before the tool runs', async () => {
+      const compatSchema = azureCompat.processToCompatSchema(schema);
+      const result: any = await compatSchema['~standard'].validate({
+        query: 'Acme',
+        outcome: null,
+        maxDealAmount: null,
+      });
+      expect(result).not.toHaveProperty('issues');
+      expect(result.value.outcome).toBeUndefined();
+      expect(result.value.maxDealAmount).toBeUndefined();
+    });
+
+    it('is transformed by applyOpenAICompatTransforms', () => {
+      const processed = applyOpenAICompatTransforms(schema, {
+        provider: 'azure.chat',
+        modelId: 'gpt-4o',
+        supportsStructuredOutputs: false,
+      });
+      expect(processed).not.toBe(schema);
     });
   });
 

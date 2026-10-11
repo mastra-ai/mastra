@@ -16,7 +16,7 @@ import {
   isNull,
   isIntersection,
 } from '../zodTypes';
-import { OpenAISchemaCompatLayer } from './openai';
+import { isOpenAICompatibleModel, OpenAISchemaCompatLayer } from './openai';
 
 export class OpenAIReasoningSchemaCompatLayer extends OpenAISchemaCompatLayer {
   getSchemaTarget(): Targets | undefined {
@@ -33,7 +33,7 @@ export class OpenAIReasoningSchemaCompatLayer extends OpenAISchemaCompatLayer {
 
   shouldApply(): boolean {
     const model = this.getModel();
-    if (this.isReasoningModel() && (model.provider.includes(`openai`) || model.modelId?.includes(`openai`))) {
+    if (this.isReasoningModel() && isOpenAICompatibleModel(model)) {
       return true;
     }
 

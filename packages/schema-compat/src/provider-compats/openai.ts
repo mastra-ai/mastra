@@ -102,6 +102,15 @@ function schemaValuesEqual(left: unknown, right: unknown, keyword?: string): boo
   );
 }
 
+export function isOpenAICompatibleModel(model: { provider?: string; modelId?: string }): boolean {
+  const provider = model.provider ?? '';
+  const modelId = model.modelId ?? '';
+  if (provider.includes('openai') || modelId.includes('openai')) return true;
+  // @ai-sdk/azure reports `azure.responses` / `azure.chat`, and deployment names rarely contain "openai".
+  // Model families with their own layer must still reach it, since the first applicable layer wins.
+  return provider.startsWith('azure.') && !/claude|deepseek|meta/.test(modelId);
+}
+
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   getSchemaTarget(): Targets | undefined {
     return `jsonSchema7`;
@@ -117,10 +126,7 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
 
   shouldApply(): boolean {
     const model = this.getModel();
-    if (
-      !this.isReasoningModel() &&
-      (model.provider.includes(`openai`) || model.modelId?.includes(`openai`) || model.provider.includes(`groq`))
-    ) {
+    if (!this.isReasoningModel() && (isOpenAICompatibleModel(model) || model.provider.includes(`groq`))) {
       return true;
     }
 

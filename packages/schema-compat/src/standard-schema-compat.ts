@@ -5,7 +5,7 @@
  * to StandardSchemaWithJSON types, particularly for OpenAI compatibility.
  */
 
-import { OpenAISchemaCompatLayer } from './provider-compats/openai';
+import { isOpenAICompatibleModel, OpenAISchemaCompatLayer } from './provider-compats/openai';
 import { OpenAIReasoningSchemaCompatLayer } from './provider-compats/openai-reasoning';
 import { toStandardSchema } from './standard-schema/standard-schema';
 import type { StandardSchemaWithJSON } from './standard-schema/standard-schema.types';
@@ -58,9 +58,7 @@ export function extractZodSchema(schema: unknown): unknown {
  */
 export function applyOpenAICompatTransforms<T>(schema: T, modelInfo: ModelInformation): T | StandardSchemaWithJSON {
   // Only apply to OpenAI models
-  const isOpenAI = modelInfo.provider?.includes('openai') || modelInfo.modelId?.includes('openai');
-
-  if (!isOpenAI) {
+  if (!isOpenAICompatibleModel(modelInfo)) {
     return schema;
   }
 
