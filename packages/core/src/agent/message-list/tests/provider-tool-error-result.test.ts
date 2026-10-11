@@ -254,4 +254,70 @@ describe('provider-executed tool results flagged isError (#26526)', () => {
     expect(invocations[0].toolInvocation.state).toBe('output-error');
     expect(invocations[0].toolInvocation.result).toEqual(toolSearchError);
   });
+
+  it('drops the stored error object when the transcript transform redacts it to undefined', async () => {
+    const callMessage = providerToolCallMessage();
+    callMessage.content.toolInvocations = [
+      { state: 'call', toolCallId: 'srvtoolu_1', toolName: 'tool_search_tool_regex', args: { pattern: '(' } },
+    ];
+    const messageList = new MessageList();
+    messageList.add(userMessage(), 'input');
+    messageList.add(callMessage, 'response');
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        toolCallId: 'srvtoolu_1',
+        toolName: 'tool_search_tool_regex',
+        args: { pattern: '(' },
+        ...getToolResultInvocationState({ result: { ...toolSearchError, detail: 'SECRET' }, isError: true }),
+      },
+      providerMetadata: {
+        mastra: { toolPayloadTransform: { transcript: { 'output-available': { transformed: undefined } } } },
+      },
+      providerExecuted: true,
+    });
+
+    const drained = messageList.drainUnsavedMessages();
+    expect(JSON.stringify(drained)).not.toContain('SECRET');
+    const assistant = drained.find(message => message.id === 'assistant-1')!;
+    expect((assistant.content.parts?.[0] as any).toolInvocation.result).toBeUndefined();
+    expect((assistant.content.toolInvocations?.[0] as any).result).toBeUndefined();
+  });
+
+  it('does not mirror a client-tool error into the legacy toolInvocations as a result', () => {
+    const messageList = new MessageList();
+    messageList.add(userMessage(), 'input');
+    messageList.add(
+      {
+        id: 'assistant-client',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call_client', toolName: 'getWeather', args: { city: 'x' } },
+            },
+          ],
+          toolInvocations: [{ state: 'call', toolCallId: 'call_client', toolName: 'getWeather', args: { city: 'x' } }],
+        },
+        createdAt: new Date(2),
+      },
+      'response',
+    );
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'output-error',
+        toolCallId: 'call_client',
+        toolName: 'getWeather',
+        args: { city: 'x' },
+        errorText: 'boom',
+      },
+    });
+
+    const message = messageList.get.all.db().find(m => m.id === 'assistant-client')!;
+    expect((message.content.parts?.[0] as any).toolInvocation.state).toBe('output-error');
+    expect(message.content.toolInvocations?.[0]?.state).toBe('call');
+  });
 });

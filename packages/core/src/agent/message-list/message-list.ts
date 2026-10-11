@@ -1553,7 +1553,7 @@ export class MessageList {
           ...(part.toolInvocation.state === 'output-error'
             ? {
                 errorText: transformedErrorText,
-                ...(transformedErrorResult !== undefined ? { result: transformedErrorResult } : {}),
+                ...(isProviderErrorResult ? { result: transformedErrorResult } : {}),
               }
             : {}),
         });
@@ -1567,7 +1567,7 @@ export class MessageList {
             ...(part.toolInvocation.state === 'output-error'
               ? {
                   errorText: transformedErrorText,
-                  ...(transformedErrorResult !== undefined ? { result: transformedErrorResult } : {}),
+                  ...(isProviderErrorResult ? { result: transformedErrorResult } : {}),
                 }
               : {}),
           },
@@ -1599,7 +1599,7 @@ export class MessageList {
       return {
         ...invocation,
         ...(transformed.args !== undefined ? { args: transformed.args } : {}),
-        ...(invocation.state === 'result' && transformed.result !== undefined ? { result: transformed.result } : {}),
+        ...(invocation.state === 'result' && 'result' in transformed ? { result: transformed.result } : {}),
         ...(invocationState === 'output-error' && transformed.errorText !== undefined
           ? { errorText: transformed.errorText }
           : {}),
@@ -1947,10 +1947,13 @@ export class MessageList {
     // the result and the (possibly reconciled) toolCallId, matching the entry by
     // the id it held before reconciliation. Spread the legacy entry first to
     // preserve its type, then override only the fields that change here.
-    // A provider-flagged error (`output-error`) is mirrored as a result: v4 has no error state.
+    // A provider-executed error (`output-error`) is mirrored as a result: v4 has no error state.
+    // Client-tool errors stay out of the mirror so v4 never reads them as successes.
     if (
       Array.isArray(msg.content.toolInvocations) &&
-      (inputPart.toolInvocation.state === 'result' || inputPart.toolInvocation.state === 'output-error')
+      (inputPart.toolInvocation.state === 'result' ||
+        (inputPart.toolInvocation.state === 'output-error' &&
+          (inputPartWithMeta.providerExecuted ?? originalPart.providerExecuted) === true))
     ) {
       const resultInvocation = inputPart.toolInvocation;
       msg.content.toolInvocations = msg.content.toolInvocations.map(invocation =>

@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed threads breaking after a provider tool fails. When a provider-run tool such as Anthropic tool search returns an error, later steps and recalled conversations now send that error back to the model correctly. Before, the model received it as a successful result, and every later step in the thread failed.
+Fixed provider tool errors being sent back to the model as successful results. When a provider-run tool returns an error, Mastra now saves it as an error and sends it back as an error in later steps and recalled conversations.
