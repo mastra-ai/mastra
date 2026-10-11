@@ -17,6 +17,7 @@ import type {
   UpdateVectorParams,
   DeleteVectorsParams,
 } from '@mastra/core/vector';
+import { gateIfLocalFile } from '../shared/file-transaction-gate';
 import { resetConnectionsAfterBusy } from '../shared/reset-after-busy-client';
 import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
 import type { LibSQLVectorFilter } from './filter';
@@ -93,7 +94,7 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
     this.turso = isSingleConnectionDatabase({ url, syncUrl })
       ? gateSingleConnectionClient(client)
       : isLocalDb
-        ? resetConnectionsAfterBusy(client, { maxWaitMs: 5000 })
+        ? gateIfLocalFile(resetConnectionsAfterBusy(client, { maxWaitMs: 5000 }), url, { maxWaitMs: 5000 })
         : client;
     this.maxRetries = maxRetries;
     this.initialBackoffMs = initialBackoffMs;

@@ -2,6 +2,7 @@ import { createClient } from '@libsql/client';
 import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
+import { gateIfLocalFile } from '../shared/file-transaction-gate';
 import { resetConnectionsAfterBusy } from '../shared/reset-after-busy-client';
 import { gateSingleConnectionClient, isSingleConnectionDatabase } from '../shared/single-connection-client';
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
@@ -238,10 +239,14 @@ export class LibSQLStore extends MastraCompositeStore {
       this.client = isSingleConnectionDatabase(config)
         ? gateSingleConnectionClient(client)
         : this.isLocalDb
-          ? resetConnectionsAfterBusy(client, {
-              afterReset: () => this.applyLocalPragmas(client),
-              maxWaitMs: this.connectionTimeoutMs,
-            })
+          ? gateIfLocalFile(
+              resetConnectionsAfterBusy(client, {
+                afterReset: () => this.applyLocalPragmas(client),
+                maxWaitMs: this.connectionTimeoutMs,
+              }),
+              config.url,
+              { maxWaitMs: this.connectionTimeoutMs },
+            )
           : client;
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
     } else {
