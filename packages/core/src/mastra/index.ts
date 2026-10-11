@@ -4261,6 +4261,15 @@ export class Mastra<
   }
 
   /**
+   * True once `shutdown()` has started. Durable agents use it to checkpoint
+   * in-flight runs so they can be recovered after the process exits.
+   * @internal
+   */
+  get __shuttingDown(): boolean {
+    return this.#shuttingDown;
+  }
+
+  /**
    * Re-drive every orphaned RUNNING durable-agent run across every registered
    * `DurableAgent`. Delegates to `DurableAgent.recoverActiveRuns()` on each
    * agent that supports it (default-engine durable agents only — Inngest and
@@ -7661,8 +7670,11 @@ export class Mastra<
    * through this instance are given up to `drainTimeout` milliseconds
    * (default 5000) to reach a terminal or suspended state before workers and
    * pubsub subscriptions are torn down. Runs that do not settle within the
-   * window are abandoned with a warning. An abandoned durable agent run stops
-   * without writing and is released, so the next boot recovers it right away.
+   * window are abandoned with a warning. Durable agent runs using the default
+   * snapshot policy persist a `running` checkpoint at each step boundary they
+   * reach during the drain. An abandoned durable agent run then stops without
+   * writing and is released. It can be recovered only if a checkpoint was
+   * persisted.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
     const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');

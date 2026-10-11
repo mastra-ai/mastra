@@ -1,5 +1,74 @@
 # @mastra/factory
 
+## 0.21.0-alpha.8
+
+### Minor Changes
+
+- Added board-owned integration event rules: pass `events` to `defineBoard`, keyed by integration (`github`, `gitlab`, `linear`, `jira`, `incidentio`) and event name. A board handler runs for events bound to a card on that board; `null` switches the event off for that board only, so Work and Review keep their behavior. ([#26627](https://github.com/mastra-ai/mastra/pull/26627))
+
+  ```ts
+  defineBoard({
+    id: 'delivery',
+    // ...
+    events: {
+      github: { pullRequestMerged: verifyCompletion, pullRequestCommentCreated: null },
+      linear: { issueClosed: moveToCanceled },
+    },
+  });
+  ```
+
+  Added `phase` to integration rule contexts bound to a card: `phase: { id, kind, role?, outcomes }`, so handlers can act on what the card's phase means without checking board ids. Handlers set explicitly in an integration's `rules` still take precedence, so existing deployments behave as before.
+
+- Closing a tracked issue now closes its card on custom boards too. Boards declare where closed sources go with `sourceClosed` in `defineBoard()`: ([#26621](https://github.com/mastra-ai/mastra/pull/26621))
+
+  ```ts
+  defineBoard({
+    id: 'release',
+    title: 'Release',
+    initialPhase: 'queued',
+    sourceClosed: { completed: 'shipped', canceled: 'dropped' },
+    phases: {/* ... */},
+  });
+  ```
+
+  The stock close rules for GitHub, GitLab, Linear, Jira, and incident.io move the card to that phase on its own board. Before, they only acted on Work cards and silently left cards on other boards in place. Work behaves as before, and boards that don't declare `sourceClosed` still leave their cards alone. Custom rule overrides can read the targets from `context.boardClosure`.
+
+### Patch Changes
+
+- Avoid invalid Work-board transitions when pull requests merge from custom boards. ([#26604](https://github.com/mastra-ai/mastra/pull/26604))
+
+- Open board tabs on large Factory projects no longer reload every card from the database on each poll. Card changes, including new comment counts, still appear on the next poll from any server replica. ([#26647](https://github.com/mastra-ai/mastra/pull/26647))
+
+- Factory now reads far fewer rule decisions in the background. The health check only loads decisions still in flight, and the supervisor's card and failure views load only the decisions they show, instead of every decision the Factory ever made. Finding the decisions produced by a rule evaluation is also much faster on large projects. ([#26648](https://github.com/mastra-ai/mastra/pull/26648))
+
+- Fixed the Factory board only picking up issues and pull requests from a project's first linked GitHub repository. Previously, repositories you linked later stayed empty until someone opened their issue lists directly. ([#26631](https://github.com/mastra-ai/mastra/pull/26631))
+
+  - Linking a GitHub repository now brings its open issues and pull requests onto the board right away (up to five pages of each). Older items show up as cards but are never auto-started.
+  - The background issue reconciler for the direct GitHub integration now finds open issues that were missed while webhooks were down, in every linked repository.
+  - The Intake lane, global search, and the Sessions sidebar now cover every linked repository. Card details load from the repository the card came from, and one repository failing to load no longer blanks the others.
+
+- Supervisor health now flags a card that is stuck in a working phase, such as a Planning card whose plan run failed, even when leftover triage work is still attached to it. Previously a parked triage proposal or an old triage session hid the stuck card, so nothing reported that it needed a new run. ([#26649](https://github.com/mastra-ai/mastra/pull/26649))
+
+- Fixed the Factory review verdict badge so it no longer shows an old approval as current after new commits are pushed. When a pull request or merge request gets a new head, its Review card and the Work card that opened it now show the previous verdict as outdated (for example `Approved · be10bfa (outdated)`) until the next review pass records a new one. The stored verdict is kept, so the next pass still runs as a re-review. ([#26609](https://github.com/mastra-ai/mastra/pull/26609))
+
+- Factory no longer aborts the running agent, posts the stage notice, or sends a skill kickoff when the card leaves its phase while the work-item feed is loading. The decision now settles as superseded instead of succeeded. The same check runs after the stage notice is delivered. ([#26632](https://github.com/mastra-ai/mastra/pull/26632))
+
+- Repository skills no longer collide with skills your app ships in its own Factory skills directory. Previously only Factory's bundled skill names were protected, so a repository skill with the same name as an app-defined skill made that skill unresolvable and broke any board phase that invoked it. In Factory sessions, repository skills that share a name with any Factory-served skill (bundled or app-defined) are now hidden. ([#26614](https://github.com/mastra-ai/mastra/pull/26614))
+
+- Fixed Factory disagreeing about which failed runs can be retried. `GET /decisions` now reports `canRetry: false` for decisions that have not failed, instead of `true`. The Supervisor `factory_retry_decision` tool now refuses failures a rerun cannot fix, such as `run_overdue` or `skill_delivery_ambiguous`, which the retry route and inbox already treated as not retryable. ([#26659](https://github.com/mastra-ai/mastra/pull/26659))
+
+- Fixed Factory reviews being withheld for pull requests opened by GitHub Apps. Re-reviews now find Factory's earlier review. Reviews still stop when the pull request author cannot be verified or does not match the recorded author. ([#26658](https://github.com/mastra-ai/mastra/pull/26658))
+
+- Faster rule processing on large Factory projects. Rule evaluations are now indexed by their ingress event, so looking up whether an event was already evaluated no longer scans every evaluation ever recorded. ([#26645](https://github.com/mastra-ai/mastra/pull/26645))
+
+- GitHub issues now land on the board set by their repository's intake source binding when no label route matches, instead of always arriving on Work. Label routes still take precedence, and when an issue's last routed label is removed — or its label route is cleared — its card returns to the binding's board. ([#26616](https://github.com/mastra-ai/mastra/pull/26616))
+
+- Fixed issue edits and comments queuing a `factory-triage` run for cards that shouldn't be re-triaged. The default GitHub and GitLab re-triage rules now only fire for cards on the Work board, so cards on custom boards (including ones in working or terminal phases) are left alone. GitLab cards in Execute, Review, Done, or Canceled are also no longer re-triaged, matching GitHub. Custom boards that want re-triage can add their own rule. ([#26656](https://github.com/mastra-ai/mastra/pull/26656))
+
+- Updated dependencies [[`b48ddcc`](https://github.com/mastra-ai/mastra/commit/b48ddcc7768c76f02d1dd4ed0f21d417a8b21418), [`cf6446c`](https://github.com/mastra-ai/mastra/commit/cf6446cae036784bd6802e4bcca8f3cf34a9ca9f), [`46bb6b2`](https://github.com/mastra-ai/mastra/commit/46bb6b29dd83cabb09cf720dd8a3655860bf5858), [`25b8b60`](https://github.com/mastra-ai/mastra/commit/25b8b6074cbb5f0c744e4edb4ce0c5ee1f3771d6), [`faf79ea`](https://github.com/mastra-ai/mastra/commit/faf79ea0d1aa7b2265b070f5323339fa275ebb49), [`a1793d7`](https://github.com/mastra-ai/mastra/commit/a1793d7d077ed450125628ede812897ecbf08c4c), [`3645c3d`](https://github.com/mastra-ai/mastra/commit/3645c3d67e0c1f40005035911103deba381d246a), [`e5688d2`](https://github.com/mastra-ai/mastra/commit/e5688d2945aff1e867eb8b9fc5f25393d6579216), [`eda5b00`](https://github.com/mastra-ai/mastra/commit/eda5b0081bdc49cc17ac8fc1267fccabb5e7a33f), [`46bb6b2`](https://github.com/mastra-ai/mastra/commit/46bb6b29dd83cabb09cf720dd8a3655860bf5858), [`b6b3f49`](https://github.com/mastra-ai/mastra/commit/b6b3f49d35ce62b584d9753361a7db7c15045801), [`a2d52e1`](https://github.com/mastra-ai/mastra/commit/a2d52e1d6a1542e3eb994853145ffd113fd02c2f), [`4416137`](https://github.com/mastra-ai/mastra/commit/4416137e6b9368c11fcb31edba3d1937cfe61a40), [`46bb6b2`](https://github.com/mastra-ai/mastra/commit/46bb6b29dd83cabb09cf720dd8a3655860bf5858), [`180bdc5`](https://github.com/mastra-ai/mastra/commit/180bdc5398e253ffae7eaff6330409d7f5254f8b), [`45a1ab7`](https://github.com/mastra-ai/mastra/commit/45a1ab7f300637be9d5b953d82b58f77b64c1b56)]:
+  - @mastra/core@1.76.0-alpha.8
+  - @mastra/code-sdk@1.12.0-alpha.8
+
 ## 0.21.0-alpha.7
 
 ### Patch Changes

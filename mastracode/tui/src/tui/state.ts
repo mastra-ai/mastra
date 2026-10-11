@@ -143,6 +143,12 @@ export interface MastraTUIOptions {
   initialModelOverride?: boolean;
 
   /**
+   * Pack id from `--pack`: applied to the session (and the thread startup
+   * resumes) after initial thread selection, the way /models → Activate does.
+   */
+  initialPackId?: string;
+
+  /**
    * When set, don't send `initialMessage` if startup resumes a thread that
    * already has messages (`--tui-initial-prompt`); show this notice instead. By
    * default the message is always sent.

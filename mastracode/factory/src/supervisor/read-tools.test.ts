@@ -117,6 +117,37 @@ describe('createFactorySupervisorReadTools', () => {
     expect(overview.checkedAt).toBe(NOW.toISOString());
   });
 
+  it('reports a failed run as not retryable once its card has moved on, matching the retry tool', async () => {
+    const seed = await createFactoryStorageForTests();
+    const { workItems } = seed;
+    const { item, decision } = await queueFailedPlan(workItems, 7);
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const moved = await new FactoryTransitionService({
+      storage: workItems,
+      configVersion: 'rules-v1',
+      boards: createLifecycleTestRegistry({}),
+    }).transition({
+      ...SCOPE,
+      workItemId: item.id,
+      board: 'work',
+      stage: 'review',
+      expectedRevision: item.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-7-review' },
+      cause: 'board_drag',
+    });
+    expect(moved.status).toBe('accepted');
+    const tools = createFactorySupervisorReadTools({ scope: SCOPE, boards: builtInBoards, ...seed, now: () => NOW });
+
+    const overview = await execute<any>(tools.factory_overview, {});
+    const detail = await execute<any>(tools.factory_inspect_work_item, { number: 7 });
+
+    expect(overview.failedDecisions).toEqual([expect.objectContaining({ id: decision.id, canRetry: false })]);
+    expect(detail.decisions).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: decision.id, canRetry: false })]),
+    );
+  });
+
   it('factory_health_check returns the deterministic report', async () => {
     const seed = await createFactoryStorageForTests();
     await queueFailedPlan(seed.workItems, 1);

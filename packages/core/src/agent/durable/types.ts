@@ -748,6 +748,13 @@ export interface RunRegistryEntry {
    * `tools` when seeding a step (issue #22933).
    */
   baseTools?: Record<string, CoreTool>;
+  /**
+   * The tools built for the request that started (or last resumed) the run.
+   * A warm resume rebuilds these with the resuming call's request context and
+   * swaps out only entries that still hold one of them, so processor-added or
+   * replaced tools are kept (#25960).
+   */
+  requestTools?: Record<string, CoreTool>;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */
   saveQueueManager?: SaveQueueManager;
   /** Memory instance for thread creation and message persistence */
