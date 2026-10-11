@@ -39,7 +39,8 @@ export function gateLocalFileClient(client: Client, key: string, { maxWaitMs = 5
   const othersOpen = () => [...(openTransactions.get(key) ?? [])].filter(open => open.owner !== gated);
 
   // Synchronous when no other client holds a transaction, so a call reaches the driver in the same tick as before.
-  const waitForOthers = (): Promise<void> | void => {
+  // Resolves `true` once no other transaction is open, `false` if `maxWaitMs` passed first.
+  const waitForOthers = (): Promise<boolean> | void => {
     if (othersOpen().length === 0) return;
     return (async () => {
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -47,8 +48,9 @@ export function gateLocalFileClient(client: Client, key: string, { maxWaitMs = 5
       try {
         // Another transaction can open while this call waits, so wait until none is open.
         for (let open = othersOpen(); open.length > 0; open = othersOpen()) {
-          if ((await Promise.race([Promise.all(open.map(o => o.done)), gaveUp])) === 'timeout') return;
+          if ((await Promise.race([Promise.all(open.map(o => o.done)), gaveUp])) === 'timeout') return false;
         }
+        return true;
       } finally {
         clearTimeout(timer);
       }
@@ -61,8 +63,12 @@ export function gateLocalFileClient(client: Client, key: string, { maxWaitMs = 5
   };
 
   const transaction = async (open: (mode?: TransactionMode) => Promise<Transaction>, mode?: TransactionMode) => {
-    const waiting = waitForOthers();
-    if (waiting) await waiting;
+    // Waiters released by the same transaction resume one by one; recheck right before registering
+    // so the first to resume holds the file and the others go back to waiting for it.
+    const deadline = Date.now() + maxWaitMs;
+    for (let waiting = waitForOthers(); waiting; waiting = Date.now() < deadline ? waitForOthers() : undefined) {
+      if (!(await waiting)) break;
+    }
 
     let finish!: () => void;
     const entry: OpenTransaction = { owner: gated, done: new Promise<void>(r => (finish = r)) };

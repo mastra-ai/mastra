@@ -58,6 +58,25 @@ describe('gateIfLocalFile', () => {
     await expect(writeDuringTransaction(open(true), open(true))).resolves.toEqual(['a', 'b']);
   });
 
+  it('opens one transaction at a time when several clients were waiting for the same one', async () => {
+    const holder = open(true);
+    const tx = await holder.transaction('write');
+    await tx.execute("INSERT INTO t VALUES ('a')");
+    const queued = ['b', 'c'].map(v =>
+      (async () => {
+        const own = await open(true).transaction('write');
+        await own.execute({ sql: 'INSERT INTO t VALUES (?)', args: [v] });
+        await new Promise(resolve => setTimeout(resolve, 20));
+        await own.commit();
+      })(),
+    );
+    await new Promise(resolve => setTimeout(resolve, 20));
+    await tx.commit();
+    const failed = (await Promise.allSettled(queued)).find(r => r.status === 'rejected');
+    if (failed) throw failed.reason;
+    expect((await holder.execute('SELECT v FROM t ORDER BY v')).rows.map(row => row.v)).toEqual(['a', 'b', 'c']);
+  });
+
   const within = <T>(promise: Promise<T>, ms: number) =>
     Promise.race([promise, new Promise<'waited'>(resolve => setTimeout(resolve, ms, 'waited'))]);
 
