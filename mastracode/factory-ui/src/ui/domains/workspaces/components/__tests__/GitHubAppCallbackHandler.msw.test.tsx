@@ -74,6 +74,10 @@ describe('GitHubAppCallbackHandler', () => {
       'This GitHub link was started for an account that isn’t a Mastra account. To link GitHub through Mastra Platform, sign in to Factory with Mastra.',
     ],
     [
+      'github_app_link_already_used',
+      'This GitHub link was already used. If you just finished connecting GitHub, you’re all set; otherwise connect GitHub again.',
+    ],
+    [
       'github_app_installation_not_owned',
       'Only the owner of this GitHub account, or an owner of the GitHub organization, can link this installation.',
     ],

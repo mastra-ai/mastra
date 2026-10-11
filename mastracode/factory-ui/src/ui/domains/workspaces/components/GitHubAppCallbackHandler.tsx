@@ -29,6 +29,8 @@ const callbackErrorMessages: Record<string, string> = {
     'This GitHub link was started for a different Mastra account or organization. Connect GitHub again from your own account.',
   github_app_person_not_platform_user:
     'This GitHub link was started for an account that isn’t a Mastra account. To link GitHub through Mastra Platform, sign in to Factory with Mastra.',
+  github_app_link_already_used:
+    'This GitHub link was already used. If you just finished connecting GitHub, you’re all set; otherwise connect GitHub again.',
   github_app_user_authorization_failed: 'GitHub authorization failed. Connect GitHub again.',
 };
 
