@@ -6,7 +6,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -17,7 +17,7 @@ function createSplitMetadataModel() {
     doStream: async () => ({
       stream: convertArrayToReadableStream([
         { type: 'stream-start', warnings: [] },
-        { type: 'response-metadata', id: 'gen-repro' },
+        { type: 'response-metadata', id: 'gen-repro', timestamp: new Date(0) },
         { type: 'response-metadata', modelId: 'provider-model' },
         { type: 'text-start', id: 'text-1' },
         { type: 'text-delta', id: 'text-1', delta: 'Hello' },
@@ -29,14 +29,17 @@ function createSplitMetadataModel() {
   });
 }
 
-const engines = ['regular', 'durable', 'evented'] as const;
+// Distributed pubsubs deliver events as JSON, so Dates arrive as ISO strings.
+class JsonEventEmitterPubSub extends EventEmitterPubSub {
+  override publish(topic: string, event: any) {
+    return super.publish(topic, JSON.parse(JSON.stringify(event)));
+  }
+}
+
+const engines = ['regular', 'durable', 'evented', 'durable (json pubsub)', 'evented (json pubsub)'] as const;
 
 describe('partial response-metadata chunks', () => {
   let pubsub: EventEmitterPubSub;
-
-  beforeEach(() => {
-    pubsub = new EventEmitterPubSub();
-  });
 
   afterEach(async () => {
     await pubsub.close();
@@ -62,13 +65,15 @@ describe('partial response-metadata chunks', () => {
         },
       };
 
+      pubsub = engine.endsWith('(json pubsub)') ? new JsonEventEmitterPubSub() : new EventEmitterPubSub();
       if (engine === 'regular') {
         const result = await agent.stream('hi', options);
         await result.consumeStream();
         expect((await result.response).id).toBe('gen-repro');
       } else {
-        const wrapped =
-          engine === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub });
+        const wrapped = engine.startsWith('durable')
+          ? createDurableAgent({ agent, pubsub })
+          : createEventedAgent({ agent, pubsub });
         const { output, cleanup } = await wrapped.stream('hi', options);
         await output.consumeStream();
         cleanup();
@@ -78,6 +83,7 @@ describe('partial response-metadata chunks', () => {
       for (const response of [...stepResponses, ...finishResponses]) {
         expect(response.id).toBe('gen-repro');
         expect(response.modelId).toBe('provider-model');
+        expect(response.timestamp).toEqual(new Date(0));
       }
       expect(finishResponses).toHaveLength(1);
     });

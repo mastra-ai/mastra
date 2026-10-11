@@ -407,7 +407,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             lastErrorCause = errPayload?.error ?? errPayload;
           }
           if ((chunk as any).type === 'step-finish') {
-            const { id, modelId, timestamp } = (chunk as any).payload?.metadata ?? {};
+            const metadata = (chunk as any).payload?.metadata;
+            // A JSON-serializing pubsub delivers the response timestamp as an ISO string.
+            if (typeof metadata?.timestamp === 'string') {
+              metadata.timestamp = new Date(metadata.timestamp);
+            }
+            const { id, modelId, timestamp } = metadata ?? {};
             lastStepResponse = { id, modelId, timestamp };
           }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
