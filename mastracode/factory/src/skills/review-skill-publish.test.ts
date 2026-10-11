@@ -38,6 +38,20 @@ describe.each(['factory-review', 'factory-rereview'])('%s author cross-check', s
   });
 });
 
+describe('factory-rereview prior-pass lookup', () => {
+  const content = readFileSync(join(skillsDir, 'factory-rereview', 'SKILL.md'), 'utf8');
+
+  it('finds its earlier review by REST login, not the gh CLI reviewer login', () => {
+    expect(content).toContain(
+      `gh api repos/<owner>/<repo>/pulls/<number>/reviews --paginate --jq '.[] | select(.user.login == "<factory-app>[bot]") | {state, submitted_at, body}'`,
+    );
+    expect(content).toContain(
+      `gh api repos/<owner>/<repo>/issues/<number>/comments --paginate --jq '.[] | select(.user.login == "<factory-app>[bot]") | {created_at, body}'`,
+    );
+    expect(content).not.toContain('select(.author.login == "<factory-app[bot]>")');
+  });
+});
+
 describe.each(['factory-review', 'factory-rereview'])('%s verdict ordering', skill => {
   const content = readFileSync(join(skillsDir, skill, 'SKILL.md'), 'utf8');
 
