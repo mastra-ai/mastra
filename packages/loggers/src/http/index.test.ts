@@ -822,6 +822,46 @@ describe('HttpTransport', () => {
 
       consoleSpy.mockRestore();
     });
+
+    it('should normalize page 0 to page 1 for listLogs', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(await transport.listLogs({ page: 0 })).toEqual({
+        logs: [],
+        total: 0,
+        page: 1,
+        perPage: 100,
+        hasMore: false,
+      });
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should normalize page 0 to page 1 for listLogsByRunId', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(await transport.listLogsByRunId({ runId: 'test-run-id', page: 0 })).toEqual({
+        logs: [],
+        total: 0,
+        page: 1,
+        perPage: 100,
+        hasMore: false,
+      });
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should preserve positive page and perPage values', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(await transport.listLogs({ page: 3, perPage: 10 })).toMatchObject({ page: 3, perPage: 10 });
+      expect(await transport.listLogsByRunId({ runId: 'test-run-id', page: 3, perPage: 10 })).toMatchObject({
+        page: 3,
+        perPage: 10,
+      });
+
+      consoleSpy.mockRestore();
+    });
   });
 
   describe('_transform error handling', () => {
