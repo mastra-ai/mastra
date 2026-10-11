@@ -164,6 +164,12 @@ const AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = readPositiveIntEnv(
  * can shed it sooner; 30 minute default.
  */
 const AGENT_SUSPENDED_RUN_TTL_MS = readPositiveIntEnv('MASTRA_SUSPENDED_RUN_TTL_MS', 30 * 60 * 1000);
+/**
+ * How long after a sweep an idle send keeps waiting for the swept run's lease
+ * to lapse: one lease TTL plus slack for a renewal that was already in flight.
+ */
+const AGENT_THREAD_SWEPT_LEASE_WAIT_MS = AGENT_THREAD_LEASE_TTL_MS + 1_000;
+const SWEPT_LEASE_POLL_INTERVAL_MS = 100;
 
 export const AGENT_THREAD_LEASE_CONFLICT_CODE = 'AGENT_THREAD_LEASE_CONFLICT';
 
@@ -465,6 +471,13 @@ type AgentThreadRuntimeState = {
    * if `activeThreadRunIds` is rotated by a follow-up signal.
    */
   leaseRenewalTimers: Map<string, ReturnType<typeof setInterval>>;
+  /**
+   * Runs the suspended-run sweep evicted, keyed by thread key, with the time
+   * their lease renewal stopped. The sweep leaves the lease to expire, so an
+   * idle send that loses the lease to one of these runs has no local run to
+   * hand its signal to; it waits for the lease to lapse instead.
+   */
+  sweptRunsByThread: Map<string, { runId: string; sweptAt: number }>;
   threadEventListeners: Set<ThreadEventListenerRegistration>;
   threadControlSubscriptions: Map<string, ThreadControlSubscription>;
 };
@@ -654,6 +667,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     abortedRunIds: new Set(),
     startingQueuedRunIds: new Set(),
     leaseRenewalTimers: new Map(),
+    sweptRunsByThread: new Map(),
     threadEventListeners: new Set(),
     threadControlSubscriptions: new Map(),
   };
@@ -1953,6 +1967,22 @@ export class AgentThreadStreamRuntime {
     state.locallyQueuedSignalIdsByThread.set(key, ids);
   }
 
+  /**
+   * Takes the follow-ups queued behind a reservation that lost the lease to
+   * `winnerRunId`, so they can be forwarded with the reservation's own signal.
+   * They are recorded as handed to the winner: their forwarded events must be
+   * admitted, not dropped as local echoes, when the winner runs in this runtime.
+   */
+  #takeQueuedBehindReservation(state: AgentThreadRuntimeState, key: string, winnerRunId: string) {
+    const queued = state.preRunSignalsByThread.get(key) ?? [];
+    state.preRunSignalsByThread.delete(key);
+    const ids = state.locallyQueuedSignalIdsByThread.get(key);
+    for (const signal of queued) {
+      if (ids?.has(signal.id)) ids.set(signal.id, winnerRunId);
+    }
+    return queued;
+  }
+
   #isLocalSignalEcho(state: AgentThreadRuntimeState, key: string, signalId: string, runId: string) {
     const ids = state.locallyQueuedSignalIdsByThread.get(key);
     return !!ids?.has(signalId) && ids.get(signalId) !== runId;
@@ -2977,6 +3007,45 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
+   * An idle send that loses the lease to a run this runtime swept would forward
+   * its signal to a run nothing here or elsewhere executes, so wait for that
+   * lease to lapse and take it. The sweep stopped renewal, so the lease expires
+   * within one TTL of the sweep. If the swept runId still holds it after that,
+   * another instance resumed the run and is renewing it, and the caller forwards
+   * the signal to that run as before.
+   *
+   * `acquire` retries the lease with the caller's own error handling.
+   */
+  async #waitForSweptRunLease(
+    state: AgentThreadRuntimeState,
+    key: string,
+    lease: { acquired: boolean; owner?: string },
+    acquire: () => Promise<{ acquired: boolean; owner?: string }>,
+  ): Promise<{ acquired: boolean; owner?: string }> {
+    const swept = state.sweptRunsByThread.get(key);
+    if (!swept || swept.runId !== lease.owner || state.threadRunsById.has(swept.runId)) return lease;
+    const deadline = swept.sweptAt + AGENT_THREAD_SWEPT_LEASE_WAIT_MS;
+    while (
+      !lease.acquired &&
+      lease.owner === swept.runId &&
+      Date.now() < deadline &&
+      // A resume of the run, here or seen from another instance, will keep renewing its lease.
+      !state.threadRunsById.has(swept.runId) &&
+      state.remoteThreadKeysByRunId.get(swept.runId) !== key
+    ) {
+      await new Promise(resolve => setTimeout(resolve, Math.min(SWEPT_LEASE_POLL_INTERVAL_MS, deadline - Date.now())));
+      lease = await acquire();
+    }
+    if (
+      state.sweptRunsByThread.get(key) === swept &&
+      (lease.acquired || (lease.owner !== undefined && lease.owner !== swept.runId))
+    ) {
+      state.sweptRunsByThread.delete(key);
+    }
+    return lease;
+  }
+
+  /**
    * Evict SUSPENDED records parked longer than {@link AGENT_SUSPENDED_RUN_TTL_MS}.
    * Called lazily on each registration so cleanup is proportional to activity and
    * zero-cost when idle — mirrors the internal-workflow registry sweep. Bounds the
@@ -2991,6 +3060,9 @@ export class AgentThreadStreamRuntime {
    */
   #sweepStaleSuspendedRecords(state: AgentThreadRuntimeState, pubsub: PubSub | undefined) {
     const now = Date.now();
+    for (const [key, swept] of state.sweptRunsByThread) {
+      if (now > swept.sweptAt + AGENT_THREAD_SWEPT_LEASE_WAIT_MS) state.sweptRunsByThread.delete(key);
+    }
     for (const [streamId, record] of state.threadRunsByStreamId) {
       if (record.lifecycle !== 'suspended' || record.suspendedAt === undefined) continue;
       if (now - record.suspendedAt <= AGENT_SUSPENDED_RUN_TTL_MS) continue;
@@ -3006,6 +3078,7 @@ export class AgentThreadStreamRuntime {
       state.threadKeysByRunId.delete(record.runId);
       this.#clearSuspendedRun(state, record.runId);
       this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
+      state.sweptRunsByThread.set(staleKey, { runId: record.runId, sweptAt: now });
       if (
         state.activeThreadRunIds.get(staleKey) === record.runId &&
         state.activeThreadStreamIds.get(staleKey) === streamId
@@ -5856,9 +5929,16 @@ export class AgentThreadStreamRuntime {
       // but failing closed would silently drop user messages on any Redis blip which
       // is the worse failure mode. Lease TTL + renewal still bound the duplicate
       // window to a single run, and the next clean acquireLease re-serializes callers.
-      const lease = await leaseProvider
-        .acquireLease(reservedKey, reservedRunId, AGENT_THREAD_LEASE_TTL_MS)
-        .catch(() => ({ acquired: true as boolean, owner: reservedRunId as string | undefined }));
+      const acquireLease = () =>
+        leaseProvider
+          .acquireLease(reservedKey, reservedRunId, AGENT_THREAD_LEASE_TTL_MS)
+          .catch(() => ({ acquired: true as boolean, owner: reservedRunId as string | undefined }));
+      let lease = await acquireLease();
+      if (!lease.acquired) {
+        // Retries fail open like the first attempt, so a lease backend error while
+        // waiting starts the run here instead of reporting delivery to the swept run.
+        lease = await this.#waitForSweptRunLease(state, reservedKey, lease, acquireLease);
+      }
 
       if (!lease.acquired) {
         // Lost the wake race to another process. Roll back our optimistic local reservation
@@ -5867,20 +5947,32 @@ export class AgentThreadStreamRuntime {
           state.activeThreadRunIds.delete(reservedKey);
         }
         state.threadKeysByRunId.delete(reservedRunId);
+        const winnerRunId = lease.owner;
+        const queuedBehindReservation = winnerRunId
+          ? this.#takeQueuedBehindReservation(state, reservedKey, winnerRunId)
+          : [];
         state.preRunSignalsByThread.delete(reservedKey);
 
         // Forward the user signal to the winning runId so the message is not dropped.
         // Await the publish so that callers using `accepted` resolution as their
         // "safe to exit" boundary (e.g. a serverless Lambda holding the request open
         // via waitUntil) don't tear down before the enqueue lands on the broker.
-        const winnerRunId = lease.owner;
+        // Follow-ups sent while this reservation waited out a swept run's lease were
+        // queued for it, so they go to the same winner.
         if (winnerRunId) {
-          await this.#publishAndWait(pubsub, reservedKey, {
-            type: 'signal-enqueued',
-            runId: winnerRunId,
-            signal: this.#serializeSignal(signal),
-            sourceId: this.#getSourceId(),
-          }).catch(() => {});
+          await Promise.all(
+            [signal, ...queuedBehindReservation].map(forwarded =>
+              this.#publishAndWait(pubsub, reservedKey, {
+                type: 'signal-enqueued',
+                runId: winnerRunId,
+                signal: this.#serializeSignal(forwarded),
+                sourceId: this.#getSourceId(),
+              }).catch(() => {}),
+            ),
+          );
+          // Wake requests a claimed owner queued behind this reservation while it
+          // waited have no run here to drain them either.
+          void this.#drainPendingIdleSignals(state, pubsub, reservedKey);
         }
         return { action: 'deliver' as const, runId: winnerRunId ?? reservedRunId };
       }
