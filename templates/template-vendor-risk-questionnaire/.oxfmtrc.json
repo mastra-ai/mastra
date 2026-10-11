@@ -10,5 +10,13 @@
   "printWidth": 120,
   "arrowParens": "avoid",
   "sortPackageJson": false,
-  "ignorePatterns": ["node_modules/", ".mastra/", "dist/", "coverage/", "package-lock.json", "pnpm-lock.yaml"]
+  "ignorePatterns": [
+    "node_modules/",
+    ".mastra/",
+    "dist/",
+    "coverage/",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    ".runtime/"
+  ]
 }

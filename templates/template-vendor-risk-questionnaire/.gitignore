@@ -11,3 +11,5 @@ coverage/
 .DS_Store
 package-lock.json
 pnpm-lock.yaml
+
+.runtime/
