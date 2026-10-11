@@ -731,6 +731,14 @@ export const environmentRoute = registerApiRoute('/environment', {
       expect([...outputDependencies.keys()]).toEqual(expect.arrayContaining(Object.keys(packageJson.dependencies)));
     });
 
+    it('should gate boot-time workflow recovery on recovery.workflows', async () => {
+      const entry = await readFile(join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs'), 'utf-8');
+
+      expect(entry).toMatch(/recoveryConfig\?\.workflows\s*!==\s*["']off["']/);
+      expect(entry).toContain('restartAllActiveWorkflowRuns()');
+      expect(entry).toContain('recoverAllDurableAgents()');
+    });
+
     it('should emit a worker runtime entry with a readiness endpoint', async () => {
       const workerEntryPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'worker.mjs');
       const workerEntry = await readFile(workerEntryPath, 'utf-8');

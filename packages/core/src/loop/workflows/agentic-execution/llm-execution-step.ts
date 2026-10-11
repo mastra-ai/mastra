@@ -1510,7 +1510,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // response when a tool call is followed by text, and nothing stored tells them apart.
       // Undefined on the first iteration, and on any iteration with no open assistant message to
       // append to — both roll the message back whole, which is what the rejection means there.
-      const openedBoundary = currentIteration > 1 ? messageList.openStepBoundary() : undefined;
+      // A resumed stream restarts `currentIteration`, so earlier steps also open a boundary.
+      const openedBoundary =
+        currentIteration > 1 || (inputData.output?.steps?.length ?? 0) > 0 ? messageList.openStepBoundary() : undefined;
       const iterationBoundary = openedBoundary?.boundary;
       if (openedBoundary?.appended) appendedStepBoundary = iterationBoundary;
       let transcriptStep: TranscriptStep = {

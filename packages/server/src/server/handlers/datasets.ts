@@ -733,6 +733,41 @@ export const EXPERIMENT_REVIEW_SUMMARY_ROUTE = createRoute({
   },
 });
 
+export const GET_ANY_EXPERIMENT_ROUTE = createRoute({
+  method: 'GET',
+  path: '/experiments/:experimentId',
+  responseType: 'json',
+  pathParamSchema: experimentIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
+  responseSchema: experimentResponseSchema,
+  summary: 'Get experiment',
+  description:
+    'Returns an experiment by ID regardless of dataset association, including its datasetId (null for experiments orphaned by dataset deletion).',
+  tags: ['Experiments'],
+  requiresAuth: true,
+  handler: async ({ mastra, experimentId, ...params }) => {
+    assertDatasetsAvailable();
+    try {
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      // A tenancy mismatch returns null, so it is indistinguishable from a missing experiment.
+      const experiment = await mastra.datasets.getExperiment({
+        experimentId,
+        ...(organizationId !== undefined ? { organizationId } : {}),
+        ...(projectId !== undefined ? { projectId } : {}),
+      });
+      if (!experiment) {
+        throw new HTTPException(404, { message: `Experiment not found: ${experimentId}` });
+      }
+      return experiment;
+    } catch (error) {
+      if (error instanceof MastraError) {
+        throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
+      }
+      return handleError(error, 'Error getting experiment');
+    }
+  },
+});
+
 export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
   method: 'DELETE',
   path: '/experiments/:experimentId',

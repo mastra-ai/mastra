@@ -432,6 +432,14 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       const namedSpec =
         this.templateSpec && isNamedTemplateSpec(this.templateSpec) ? this.templateSpec : this._resolvedNamedSpec;
       if (namedSpec) {
+        const { fallbackTemplate } = namedSpec;
+        if (fallbackTemplate === false) {
+          this._resolvedTemplateId = undefined;
+          this.logger.error(
+            `${LOG_PREFIX} Creating from '${resolvedTemplateId}' failed (fallback disabled): ${createError}`,
+          );
+          throw createError;
+        }
         // Bounded ladder: broken name → named fallback → default mountable
         // template. Every rung only advances on a template-unusable error, so
         // a broken build never wedges the session on a dead name.
@@ -442,7 +450,7 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
         const spec = namedSpec;
         const fallbackId =
           resolvedTemplateId === spec.ref
-            ? await this.resolveFallbackTemplate(spec.fallbackTemplate)
+            ? await this.resolveFallbackTemplate(fallbackTemplate)
             : await this.buildOrReuseDefaultTemplate();
         try {
           sdkSandbox = await createFromTemplate(fallbackId);
@@ -1153,6 +1161,11 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
         this._resolvedTemplateId = ref;
         return ref;
       } catch (error) {
+        if (fallbackTemplate === false) {
+          this._resolvedTemplateId = undefined;
+          this.logger.error(`${LOG_PREFIX} Template '${ref}' resolution failed (fallback disabled): ${error}`);
+          throw error;
+        }
         this.logger.warn(`${LOG_PREFIX} Template '${ref}' resolution failed, falling back: ${error}`);
         return await this.resolveFallbackTemplate(fallbackTemplate);
       }
@@ -1214,7 +1227,9 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
       });
   }
 
-  private async resolveFallbackTemplate(fallbackTemplate: NamedTemplateSpec['fallbackTemplate']): Promise<string> {
+  private async resolveFallbackTemplate(
+    fallbackTemplate: Exclude<NamedTemplateSpec['fallbackTemplate'], false>,
+  ): Promise<string> {
     if (typeof fallbackTemplate === 'string') {
       this._resolvedTemplateId = fallbackTemplate;
       return fallbackTemplate;
