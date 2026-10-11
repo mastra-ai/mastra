@@ -96,6 +96,7 @@ async function startProcess(
     { EventEmitterPubSub },
     transcripts,
     { globalRunRegistry },
+    runMessageRefs,
   ] = await Promise.all([
     import('../../../mastra'),
     import('../../../storage'),
@@ -106,6 +107,7 @@ async function startProcess(
     import('../../../events/event-emitter'),
     import('../workflows/shared/message-list-state'),
     import('../run-registry'),
+    import('../run-message-refs'),
   ]);
   transcripts.__setMidRunLoadRetryDelaysForTests([1, 1, 1]);
 
@@ -160,6 +162,7 @@ async function startProcess(
     storage,
     transcripts,
     globalRunRegistry,
+    runMessageRefs,
     toolExecutions: () => toolExecutions,
   };
 }
@@ -453,13 +456,15 @@ describe('memory-recalled messages in durable runs', () => {
   it.each(engines)(
     'resumes an approval in the same process with the stored version of recalled messages edited or deleted while suspended (%s engine)',
     async engine => {
-      const { durableAgent, workflows, prompts, storage } = await startProcess(history(), {
+      const { durableAgent, workflows, prompts, storage, runMessageRefs } = await startProcess(history(), {
         requireApproval: true,
         engine,
       });
       const { runId, toolCallId } = await streamUntilApproval(durableAgent, workflows);
       // Recalled history, plus the messages this run saved before suspending.
       expect(refIds(await outerSnapshot(workflows, runId), engine).sort()).toEqual(await expectedRefIds(storage));
+      // A suspended run may wait indefinitely, so it does not hold its rows in memory.
+      expect(runMessageRefs.peekRunMessageRefs(runId)).toBeUndefined();
 
       const memoryStore = (await storage.getStore('memory'))!;
       await memoryStore.updateMessages({

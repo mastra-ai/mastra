@@ -862,8 +862,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           pruneSnapshot: this.pruneSnapshotHook(),
           // Snapshots written up to the end reference this process's saved
           // rows, so release them only once the run has persisted its result.
-          onFinish: ({ status, getInitData }) => {
-            if (status !== 'suspended') releaseMessageListState({ state: undefined, getInitData });
+          // A suspended run releases too: it may wait indefinitely, and on
+          // resume `hydrate` reloads the rows it references from storage.
+          onFinish: ({ getInitData }) => {
+            releaseMessageListState({ state: undefined, getInitData });
           },
           validateInputs: false,
           // Engine step events off for the same reason as the iteration
