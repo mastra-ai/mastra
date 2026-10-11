@@ -4778,6 +4778,17 @@ export class Run<
     return this._resume({ ...params, skipParentWorkflowClaim: true });
   }
 
+  /**
+   * Resumes a run whose suspension the caller already claimed (`suspended -> running`) in storage.
+   * Skips the built-in claim and the `suspended` status check, which a claimed run no longer passes.
+   * @internal
+   */
+  async resumeClaimed(
+    params: Parameters<this['resume']>[0] & { claimedSnapshot: WorkflowRunState; onExecutionStarted?: () => void },
+  ) {
+    return this._resume(params);
+  }
+
   async resume<TResume>(
     params: {
       resumeData?: TResume;

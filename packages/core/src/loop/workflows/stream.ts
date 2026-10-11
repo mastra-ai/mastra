@@ -415,20 +415,30 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           });
         }
 
-        const executionPromise = resumeContext
-          ? run.resume({
+        const executionPromise = resumeContext?.claim?.snapshot
+          ? run.resumeClaimed({
               resumeData: resumeContext.resumeData,
               ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
               requestContext,
               actor: rest.actor,
               label: toolCallId,
+              claimedSnapshot: resumeContext.claim.snapshot,
+              onExecutionStarted: resumeContext.claim.onExecutionStarted,
             })
-          : run.start({
-              inputData: initialData,
-              ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
-              requestContext,
-              actor: rest.actor,
-            });
+          : resumeContext
+            ? run.resume({
+                resumeData: resumeContext.resumeData,
+                ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
+                requestContext,
+                actor: rest.actor,
+                label: toolCallId,
+              })
+            : run.start({
+                inputData: initialData,
+                ...createObservabilityContext(rest.modelSpanTracker?.getTracingContext()),
+                requestContext,
+                actor: rest.actor,
+              });
 
         let executionResult: Awaited<typeof executionPromise>;
         try {
@@ -512,6 +522,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         upstreamAbortSignal?.removeEventListener('abort', onUpstreamAbort);
         cleanupTotalTimeout();
         await stopGoalActivity({ agentId, runId, now: _internal?.now });
+        await resumeContext?.claim?.release();
         if (!keepRegisteredForResume) {
           rest.mastra?.__unregisterInternalWorkflow(agenticLoopWorkflow.id, runId);
         }

@@ -46,6 +46,7 @@ import { RegisteredLogger } from '../logger';
 import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { networkLoop } from '../loop/network';
 import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
+import type { AgentLoopResumeClaim } from '../loop/types';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
@@ -288,6 +289,12 @@ interface StandaloneDurableWrapper {
 const RESUME_SUSPEND_DURABILITY_TIMEOUT_MS = 30_000;
 /** Upper bound for the exponential poll backoff inside that wait. */
 const RESUME_SUSPEND_DURABILITY_MAX_POLL_INTERVAL_MS = 500;
+
+/**
+ * Agentic-loop runs currently being resumed in this process, for stores that
+ * cannot claim a run atomically. Keyed by runId.
+ */
+const inFlightUnclaimedResumes = new Set<string>();
 
 const createSubAgentInputSchema = ({ withResultRefs = false }: { withResultRefs?: boolean } = {}) =>
   z.object({
@@ -7750,6 +7757,98 @@ export class Agent<
   }
 
   /**
+   * Claims a suspended agentic-loop run for one resume before the resumed loop starts, so
+   * concurrent approvals/resumes of the same run (double clicks, client retries, two tabs)
+   * cannot both execute the suspended tool. Losers throw `AGENT_RESUME_ALREADY_CLAIMED`.
+   *
+   * Stores that support atomic updates get a `suspended -> running` compare-and-set that holds
+   * across processes, and the resumed run starts from the claimed snapshot. Other stores only
+   * get an in-process guard.
+   *
+   * `claim.release()` is idempotent. The loop calls it when the resumed run ends; resume methods
+   * also call it on any failure before or after handing the claim to the loop. It hands the
+   * suspension back to later callers only if the resumed run never started executing.
+   */
+  async #claimSuspendedAgenticLoopRun({
+    snapshot,
+    runId,
+    toolCallId,
+    method,
+  }: {
+    snapshot: WorkflowRunState;
+    runId: string;
+    toolCallId: string | undefined;
+    method: string;
+  }): Promise<AgentLoopResumeClaim> {
+    const throwAlreadyClaimed = (): never => {
+      throw new MastraError({
+        id: 'AGENT_RESUME_ALREADY_CLAIMED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" ${method}() cannot resume run "${runId}" because another resume of it is already in progress.`,
+        details: {
+          agentName: this.name,
+          method,
+          runId,
+          ...(toolCallId !== undefined ? { toolCallId } : {}),
+        },
+      });
+    };
+
+    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+
+    if (!workflowsStore?.supportsConcurrentUpdates()) {
+      if (inFlightUnclaimedResumes.has(runId)) throwAlreadyClaimed();
+      inFlightUnclaimedResumes.add(runId);
+      return {
+        release: async () => {
+          inFlightUnclaimedResumes.delete(runId);
+        },
+      };
+    }
+
+    const claimed = await workflowsStore.updateWorkflowState({
+      workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+      runId,
+      opts: { status: 'running', expectedStatus: 'suspended' },
+    });
+    if (!claimed) throwAlreadyClaimed();
+
+    let started = false;
+    let released = false;
+    const release = async () => {
+      if (started || released) return;
+      released = true;
+      try {
+        await workflowsStore.updateWorkflowState({
+          workflowName: AGENTIC_LOOP_WORKFLOW_ID,
+          runId,
+          opts: { status: 'suspended', expectedStatus: 'running' },
+        });
+      } catch (error) {
+        this.logger.warn(`[Agent ${this.name}] Failed to release resume claim for run ${runId}`, { error });
+      }
+    };
+
+    // Another resume can claim, run, and re-suspend the run between the validation read and this
+    // claim. Every suspend persist rewrites the snapshot timestamp, so a different timestamp means
+    // this caller claimed a newer suspension than the one it validated.
+    if (claimed!.timestamp !== snapshot.timestamp) {
+      await release();
+      throwAlreadyClaimed();
+    }
+
+    return {
+      snapshot,
+      onExecutionStarted: () => {
+        started = true;
+      },
+      release,
+    };
+  }
+
+  /**
    * Suspend payloads persisted before they carried `toolCallId` only hold the
    * id as the workflow resume label (`resumeLabels[toolCallId] = { stepId }`).
    * Recover it when exactly one label points at the suspended step.
@@ -10027,43 +10126,50 @@ export class Agent<
       runId,
       method: 'resumeStream',
     });
-
-    const llm = await this.getLLM({
-      requestContext: mergedStreamOptions.requestContext,
-      model: mergedStreamOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
+    const resumeClaim = await this.#claimSuspendedAgenticLoopRun({
+      snapshot: resumeSnapshot,
+      runId,
+      toolCallId: streamOptions?.toolCallId,
+      method: 'resumeStream',
     });
 
-    if (!isSupportedLanguageModel(llm.getModel())) {
-      const modelInfo = llm.getModel();
-      const specVersion = modelInfo.specificationVersion;
-      throw new MastraError({
-        id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text:
-          specVersion === 'v1'
-            ? 'V1 models are not supported for resumeStream. Please use streamLegacy instead.'
-            : `Model has unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
-        details: {
-          modelId: modelInfo.modelId,
-          provider: modelInfo.provider,
-          specificationVersion: specVersion,
-        },
-      });
-    }
-
+    let preparedOptions: AgentExecutionOptions<OUTPUT> | undefined;
     const threadStreamPubSub = this.getPubSub();
-    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
-      this as Agent<any, any, any, any>,
-      loopStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
-    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
-      { ...loopStreamOptions, actor } as unknown as AgentExecutionOptions<OUTPUT>,
-      threadStreamPubSub,
-    );
-
     try {
+      const llm = await this.getLLM({
+        requestContext: mergedStreamOptions.requestContext,
+        model: mergedStreamOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
+      });
+
+      if (!isSupportedLanguageModel(llm.getModel())) {
+        const modelInfo = llm.getModel();
+        const specVersion = modelInfo.specificationVersion;
+        throw new MastraError({
+          id: 'AGENT_STREAM_V1_MODEL_NOT_SUPPORTED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text:
+            specVersion === 'v1'
+              ? 'V1 models are not supported for resumeStream. Please use streamLegacy instead.'
+              : `Model has unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
+          details: {
+            modelId: modelInfo.modelId,
+            provider: modelInfo.provider,
+            specificationVersion: specVersion,
+          },
+        });
+      }
+
+      await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+        this as Agent<any, any, any, any>,
+        loopStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+        threadStreamPubSub,
+      );
+      preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
+        { ...loopStreamOptions, actor } as unknown as AgentExecutionOptions<OUTPUT>,
+        threadStreamPubSub,
+      );
+
       const result = await this.#execute({
         ...preparedOptions,
         actor,
@@ -10077,6 +10183,7 @@ export class Agent<
         resumeContext: {
           resumeData,
           snapshot: resumeSnapshot,
+          claim: resumeClaim,
         },
         methodType: 'stream',
         // Use agent's maxProcessorRetries as default, allow options to override
@@ -10113,14 +10220,17 @@ export class Agent<
 
       return result.result as unknown as MastraModelOutput<OUTPUT>;
     } catch (error) {
+      await resumeClaim.release();
       // Release the thread reservation taken by waitForCrossAgentThreadRun so
       // a failed resume does not block subsequent runs on this thread.
-      agentThreadStreamRuntime.releaseThreadRunReservation(
-        runId,
-        threadStreamPubSub,
-        undefined,
-        preparedOptions.abortSignal,
-      );
+      if (preparedOptions) {
+        agentThreadStreamRuntime.releaseThreadRunReservation(
+          runId,
+          threadStreamPubSub,
+          undefined,
+          preparedOptions.abortSignal,
+        );
+      }
       throw error;
     }
   }
@@ -10204,86 +10314,99 @@ export class Agent<
       runId,
       method: 'resumeGenerate',
     });
-
-    const llm = await this.getLLM({
-      requestContext: mergedOptions.requestContext,
-      model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
+    const resumeClaim = await this.#claimSuspendedAgenticLoopRun({
+      snapshot: resumeSnapshot,
+      runId,
+      toolCallId: options?.toolCallId,
+      method: 'resumeGenerate',
     });
 
-    const modelInfo = llm.getModel();
-
-    if (!isSupportedLanguageModel(modelInfo)) {
-      const modelId = modelInfo.modelId || 'unknown';
-      const provider = modelInfo.provider || 'unknown';
-      const specVersion = modelInfo.specificationVersion;
-      throw new MastraError({
-        id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text:
-          specVersion === 'v1'
-            ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
-            : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
-        details: {
-          agentName: this.name,
-          modelId,
-          provider,
-          specificationVersion: specVersion,
-        },
+    let fullOutput: Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
+    try {
+      const llm = await this.getLLM({
+        requestContext: mergedOptions.requestContext,
+        model: mergedOptions.model as DynamicArgument<MastraModelConfig, TRequestContext> | undefined,
       });
-    }
 
-    const result = await this.#execute({
-      ...loopOptions,
-      actor,
-      structuredOutput: mergedOptions.structuredOutput
-        ? {
-            ...mergedOptions.structuredOutput,
-            schema: toStandardSchema(mergedOptions.structuredOutput.schema),
-          }
-        : undefined,
-      messages: [],
-      resumeContext: {
-        resumeData,
-        snapshot: resumeSnapshot,
-      },
-      methodType: 'generate',
-      // Use agent's maxProcessorRetries as default, allow options to override
-      maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
-    } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
+      const modelInfo = llm.getModel();
 
-    if (result.status !== 'success') {
-      if (result.status === 'failed') {
-        throw new MastraError(
-          {
-            id: 'AGENT_GENERATE_FAILED',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
+      if (!isSupportedLanguageModel(modelInfo)) {
+        const modelId = modelInfo.modelId || 'unknown';
+        const provider = modelInfo.provider || 'unknown';
+        const specVersion = modelInfo.specificationVersion;
+        throw new MastraError({
+          id: 'AGENT_GENERATE_V1_MODEL_NOT_SUPPORTED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text:
+            specVersion === 'v1'
+              ? `Agent "${this.name}" is using AI SDK v4 model (${provider}:${modelId}) which is not compatible with generate(). Please use AI SDK v5+ models or call the generateLegacy() method instead. See https://mastra.ai/en/docs/streaming/overview for more information.`
+              : `Agent "${this.name}" has a model (${provider}:${modelId}) with unrecognized specificationVersion "${specVersion}". Supported versions: v1 (legacy), v2 (AI SDK v5), v3 (AI SDK v6). Please ensure your AI SDK provider is compatible with this version of Mastra.`,
+          details: {
+            agentName: this.name,
+            modelId,
+            provider,
+            specificationVersion: specVersion,
           },
-          // pass original error to preserve stack trace
-          result.error,
-        );
+        });
       }
-      throw new MastraError({
-        id: 'AGENT_GENERATE_UNKNOWN_ERROR',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'An unknown error occurred while generating',
-      });
-    }
 
-    if (typeof result.result?.getFullOutput !== 'function') {
-      throw new MastraError({
-        id: 'AGENT_GENERATE_MALFORMED_RESULT',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.SYSTEM,
-        text: 'Execution workflow produced a result without getFullOutput',
-      });
-    }
+      const result = await this.#execute({
+        ...loopOptions,
+        actor,
+        structuredOutput: mergedOptions.structuredOutput
+          ? {
+              ...mergedOptions.structuredOutput,
+              schema: toStandardSchema(mergedOptions.structuredOutput.schema),
+            }
+          : undefined,
+        messages: [],
+        resumeContext: {
+          resumeData,
+          snapshot: resumeSnapshot,
+          claim: resumeClaim,
+        },
+        methodType: 'generate',
+        // Use agent's maxProcessorRetries as default, allow options to override
+        maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
+      } as unknown as InnerAgentExecutionOptions<OUTPUT> & { _threadStreamPubSub?: PubSub });
 
-    const fullOutput = (await result.result.getFullOutput()) as Awaited<
-      ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>
-    >;
+      if (result.status !== 'success') {
+        if (result.status === 'failed') {
+          throw new MastraError(
+            {
+              id: 'AGENT_GENERATE_FAILED',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+            },
+            // pass original error to preserve stack trace
+            result.error,
+          );
+        }
+        throw new MastraError({
+          id: 'AGENT_GENERATE_UNKNOWN_ERROR',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'An unknown error occurred while generating',
+        });
+      }
+
+      if (typeof result.result?.getFullOutput !== 'function') {
+        throw new MastraError({
+          id: 'AGENT_GENERATE_MALFORMED_RESULT',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          text: 'Execution workflow produced a result without getFullOutput',
+        });
+      }
+
+      fullOutput = (await result.result.getFullOutput()) as Awaited<
+        ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>
+      >;
+    } catch (error) {
+      await resumeClaim.release();
+      throw error;
+    }
 
     const error = fullOutput.error;
 
