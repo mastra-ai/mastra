@@ -431,7 +431,9 @@ describe('provider key routes with a tenant', () => {
       type: 'api_key',
       key: 'sk-kimi',
     });
-    expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-a' }, 'kimi-code-plan-cn')).toBeUndefined();
+    expect(
+      await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-a' }, 'kimi-code-plan-cn'),
+    ).toBeUndefined();
   });
 
   it('does not materialize OM models when a provider key is connected', async () => {

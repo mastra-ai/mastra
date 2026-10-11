@@ -44,7 +44,9 @@ describe('getProviderList', () => {
   it('maps the kimi-code-plan-cn catalog provider to the kimi-for-coding OAuth slot', () => {
     const ctx = makeCtx({ loggedIn: ['kimi-for-coding'] });
 
-    const list = getProviderList(ctx, [{ provider: 'kimi-code-plan-cn', hasApiKey: true, apiKeyEnvVar: 'KIMI_API_KEY' }]);
+    const list = getProviderList(ctx, [
+      { provider: 'kimi-code-plan-cn', hasApiKey: true, apiKeyEnvVar: 'KIMI_API_KEY' },
+    ]);
 
     expect(list[0]?.source).toBe('oauth');
   });
