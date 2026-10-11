@@ -182,6 +182,7 @@ describe('concurrent resumes of a suspended agent run', () => {
 
   it('runs the tool once on stores without atomic updates within one process', async () => {
     const { agent, execute, runId, toolCallId } = await setup({ atomicStore: false });
+    const warn = vi.spyOn(agent.__getLogger(), 'warn');
 
     const results = await Promise.allSettled([
       agent.approveToolCall({ runId, toolCallId }),
@@ -190,5 +191,6 @@ describe('concurrent resumes of a suspended agent run', () => {
     await drain(expectOneWinner(results));
 
     expect(execute).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('only de-duplicated within this process'));
   }, 30000);
 });

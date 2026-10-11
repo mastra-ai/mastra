@@ -7799,6 +7799,11 @@ export class Agent<
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
 
     if (!workflowsStore?.supportsConcurrentUpdates()) {
+      if (workflowsStore) {
+        this.logger.warn(
+          `[Agent:${this.name}] - The configured workflow storage does not support concurrent updates, so concurrent ${method}() calls for run ${runId} are only de-duplicated within this process. Resumes arriving at other processes may execute the suspended tool more than once.`,
+        );
+      }
       if (inFlightUnclaimedResumes.has(runId)) throwAlreadyClaimed();
       inFlightUnclaimedResumes.add(runId);
       return {
