@@ -2911,6 +2911,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // If processAPIError signaled retry, return early with retry metadata
       if (apiErrorRetryResult?.retry) {
         cleanupProviderToolSpans(true);
+        // The failed attempt already streamed its partial output into the messageList.
+        // Roll it back to this iteration's boundary, as a retrying tripwire does, so the
+        // retry prompt and the recovered response do not carry the failed prefix (#26081).
+        // The attempt streamed under `transcriptStep.messageId`; processAPIError may have
+        // rotated `currentMessageId` (and `outputStream.messageId`) since. Anything an
+        // earlier discard committed under that id goes back to the carry buffer and is
+        // written again by the discard below.
+        eagerCoordinator?.recarryCommittedWork(transcriptStep.messageId);
+        messageList.rollbackToStepBoundary(transcriptStep.messageId, iterationBoundary);
         // Same discard as the thrown-error path: this attempt's tool calls are dropped
         // (the step returns `toolCalls: []`), so its eager work must not survive either.
         await discardAttemptEagerWork();
