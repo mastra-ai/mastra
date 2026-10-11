@@ -103,6 +103,21 @@ describe('MastraCodeGateway', () => {
       expect(createGateway().handlesModel('anthropic/claude-opus-4-8')).toBe(false);
     });
 
+    it('stops claiming a model after another store removes its api key and the catalog refreshes', async () => {
+      writeAuthJson({
+        'apikey:302ai': { type: 'api_key', key: 'sk-302ai' },
+      });
+      const gateway = createGateway();
+      expect(gateway.handlesModel('302ai/MiniMax-M1')).toBe(true);
+
+      // `/api-keys` deletes through the TUI's own AuthStorage instance, which only
+      // updates auth.json on disk — not this gateway's store.
+      writeFileSync(join(appDataDir, 'auth.json'), JSON.stringify({}), 'utf8');
+      await gateway.fetchProviders();
+
+      expect(gateway.handlesModel('302ai/MiniMax-M1')).toBe(false);
+    });
+
     it('does not claim an id without a provider and model', () => {
       writeAuthJson({
         anthropic: { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() + 1_000_000 },

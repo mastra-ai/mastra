@@ -410,6 +410,10 @@ export class MastraCodeGateway extends MastraModelGateway {
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+    // Catalog auth (`handlesModel`, `resolveAuth`) reads this store, while
+    // `/api-keys` and logins write through other AuthStorage instances. Pick
+    // up their changes on every catalog refresh.
+    this.#credentials.reload();
     const providers: Record<string, ProviderConfig> = {};
     for (const provider of this.#getCustomProviders()) {
       const models = provider.models ?? [];
