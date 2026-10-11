@@ -1,5 +1,24 @@
 # @mastra/libsql
 
+## 1.26.0-alpha.3
+
+### Patch Changes
+
+- Fixed local libSQL file databases staying blocked for seconds after a write was refused with `SQLITE_BUSY`. Later writes failed with "SQL statements in progress" until the stuck connection was garbage collected. `LibSQLStore` now reopens its connections after a busy refusal, including when it is under constant load. ([#26261](https://github.com/mastra-ai/mastra/pull/26261))
+
+- Fixed `SQLITE_BUSY: database is locked` errors when more than one LibSQL client in the same process uses the same local database file, for example a `Memory` with its own `LibSQLStore` pointing at the file Mastra's storage uses. A write from one client no longer blocks the process while another client's transaction is open; it waits for that transaction to finish instead. ([#26420](https://github.com/mastra-ai/mastra/pull/26420))
+
+- Added run fencing for durable agents. libSQL stores now reject writes from a durable agent execution that lost its run to crash recovery, so it can't overwrite the recovered run's messages, threads, or workflow state ([#23734](https://github.com/mastra-ai/mastra/issues/23734)). ([#26420](https://github.com/mastra-ai/mastra/pull/26420))
+
+  Claims are kept in two new tables, `mastra_workflow_run_owners` and `mastra_memory_run_fences`, which are created on init. If you set `disableInit: true`, create them before upgrading. Durable agent runs fail to start until the tables exist.
+
+  To prune them, set `retention.workflows.runOwnership` and `retention.memory.runFences` and call `storage.prune()`.
+
+  Requires `@mastra/core` 1.76.0 or a later 1.x release.
+
+- Updated dependencies [[`b48ddcc`](https://github.com/mastra-ai/mastra/commit/b48ddcc7768c76f02d1dd4ed0f21d417a8b21418), [`cf6446c`](https://github.com/mastra-ai/mastra/commit/cf6446cae036784bd6802e4bcca8f3cf34a9ca9f), [`46bb6b2`](https://github.com/mastra-ai/mastra/commit/46bb6b29dd83cabb09cf720dd8a3655860bf5858), [`25b8b60`](https://github.com/mastra-ai/mastra/commit/25b8b6074cbb5f0c744e4edb4ce0c5ee1f3771d6), [`faf79ea`](https://github.com/mastra-ai/mastra/commit/faf79ea0d1aa7b2265b070f5323339fa275ebb49), [`a1793d7`](https://github.com/mastra-ai/mastra/commit/a1793d7d077ed450125628ede812897ecbf08c4c), [`3645c3d`](https://github.com/mastra-ai/mastra/commit/3645c3d67e0c1f40005035911103deba381d246a), [`e5688d2`](https://github.com/mastra-ai/mastra/commit/e5688d2945aff1e867eb8b9fc5f25393d6579216), [`eda5b00`](https://github.com/mastra-ai/mastra/commit/eda5b0081bdc49cc17ac8fc1267fccabb5e7a33f), [`46bb6b2`](https://github.com/mastra-ai/mastra/commit/46bb6b29dd83cabb09cf720dd8a3655860bf5858), [`b6b3f49`](https://github.com/mastra-ai/mastra/commit/b6b3f49d35ce62b584d9753361a7db7c15045801), [`a2d52e1`](https://github.com/mastra-ai/mastra/commit/a2d52e1d6a1542e3eb994853145ffd113fd02c2f), [`4416137`](https://github.com/mastra-ai/mastra/commit/4416137e6b9368c11fcb31edba3d1937cfe61a40), [`46bb6b2`](https://github.com/mastra-ai/mastra/commit/46bb6b29dd83cabb09cf720dd8a3655860bf5858), [`180bdc5`](https://github.com/mastra-ai/mastra/commit/180bdc5398e253ffae7eaff6330409d7f5254f8b), [`45a1ab7`](https://github.com/mastra-ai/mastra/commit/45a1ab7f300637be9d5b953d82b58f77b64c1b56)]:
+  - @mastra/core@1.76.0-alpha.8
+
 ## 1.26.0-alpha.2
 
 ### Minor Changes
