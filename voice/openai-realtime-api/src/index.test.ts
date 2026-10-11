@@ -517,4 +517,134 @@ describe('OpenAIRealtimeVoice', () => {
       expect(mockCallback).toHaveBeenCalledTimes(3);
     });
   });
+
+  describe('speaker stream lifecycle for responses without audio', () => {
+    const wire = (v: OpenAIRealtimeVoice) => {
+      const handlers: Record<string, (...args: any[]) => void> = {};
+      (v as any).ws = {
+        on: vi.fn((event, callback) => {
+          handlers[event] = callback;
+        }),
+        send: vi.fn(),
+        close: vi.fn(),
+      };
+      (v as any).sessionReady = true;
+      (v as any).setupEventListeners();
+      return {
+        send: (ev: Record<string, unknown>) => handlers.message?.(Buffer.from(JSON.stringify(ev))),
+        closeSocket: (code: number, reason: string) => handlers.close?.(code, Buffer.from(reason)),
+      };
+    };
+
+    const endsWithin = (stream: NodeJS.ReadableStream, ms: number) =>
+      Promise.race([
+        new Promise(resolve => stream.once('end', () => resolve('end'))),
+        new Promise(resolve => setTimeout(() => resolve('still open'), ms)),
+      ]);
+
+    const captureSpeaker = (v: OpenAIRealtimeVoice) => {
+      const streams: NodeJS.ReadableStream[] = [];
+      v.on('speaker', stream => {
+        stream.resume();
+        streams.push(stream);
+      });
+      return streams;
+    };
+
+    const functionCall = {
+      id: 'item_1',
+      type: 'function_call',
+      name: 'get_weather',
+      call_id: 'call_1',
+      arguments: '{}',
+    };
+
+    const sendToolOnlyResponse = (send: (ev: Record<string, unknown>) => void, responseId: string) => {
+      send({ type: 'response.created', response: { id: responseId, status: 'in_progress', output: [] } });
+      send({
+        type: 'response.output_item.added',
+        response_id: responseId,
+        output_index: 0,
+        item: { ...functionCall, arguments: '' },
+      });
+      send({
+        type: 'response.function_call_arguments.done',
+        response_id: responseId,
+        item_id: 'item_1',
+        call_id: 'call_1',
+        arguments: '{}',
+      });
+      send({ type: 'response.output_item.done', response_id: responseId, output_index: 0, item: functionCall });
+      send({ type: 'response.done', response: { id: responseId, status: 'completed', output: [functionCall] } });
+    };
+
+    it('ends the speaker stream of a tool-call-only response', async () => {
+      const { send } = wire(voice);
+      voice.addTools({
+        get_weather: { description: 'weather', inputSchema: undefined, execute: vi.fn().mockResolvedValue({ t: 21 }) },
+      } as any);
+      const speakers = captureSpeaker(voice);
+
+      sendToolOnlyResponse(send, 'resp_tool');
+
+      expect(speakers).toHaveLength(1);
+      expect(await endsWithin(speakers[0]!, 200)).toBe('end');
+    });
+
+    it('ends the speaker stream before a slow tool call finishes', async () => {
+      const { send } = wire(voice);
+      voice.addTools({
+        get_weather: { description: 'weather', inputSchema: undefined, execute: () => new Promise(() => {}) },
+      } as any);
+      const speakers = captureSpeaker(voice);
+
+      sendToolOnlyResponse(send, 'resp_slow_tool');
+
+      expect(await endsWithin(speakers[0]!, 200)).toBe('end');
+    });
+
+    it('ends the speaker stream of a text-only response', async () => {
+      const { send } = wire(voice);
+      const speakers = captureSpeaker(voice);
+
+      send({ type: 'response.created', response: { id: 'resp_text', status: 'in_progress', output: [] } });
+      send({
+        type: 'response.output_text.delta',
+        response_id: 'resp_text',
+        item_id: 'i',
+        output_index: 0,
+        content_index: 0,
+        delta: 'hello',
+      });
+      send({
+        type: 'response.output_text.done',
+        response_id: 'resp_text',
+        item_id: 'i',
+        output_index: 0,
+        content_index: 0,
+        text: 'hello',
+      });
+      send({ type: 'response.done', response: { id: 'resp_text', status: 'completed', output: [] } });
+
+      expect(await endsWithin(speakers[0]!, 200)).toBe('end');
+    });
+
+    it('ends in-flight speaker streams when the socket closes', async () => {
+      const { send, closeSocket } = wire(voice);
+      const speakers = captureSpeaker(voice);
+
+      send({ type: 'response.created', response: { id: 'resp_live', status: 'in_progress', output: [] } });
+      send({
+        type: 'response.output_audio.delta',
+        response_id: 'resp_live',
+        item_id: 'i',
+        output_index: 0,
+        content_index: 0,
+        delta: Buffer.alloc(320).toString('base64'),
+      });
+      closeSocket(1006, '');
+
+      expect(await endsWithin(speakers[0]!, 200)).toBe('end');
+    });
+  });
 });
