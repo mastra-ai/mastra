@@ -321,7 +321,7 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     expect(at('claims-release')).toBeLessThan(at('dispatch-stop'));
   });
 
-  it('activates a valid --pack after the boot and passes it to runMC', async () => {
+  it('passes a deferred pack resolver to runMC and activates the pack only once applied', async () => {
     const settings = {
       models: { activeModelPackId: null, modeDefaults: {}, packFallbacks: {} },
       customModelPacks: [{ name: 'review-pack', models: { build: 'anthropic/claude-opus-4-6' } }],
@@ -336,9 +336,18 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
       mcpManager: { hasServers: () => false, disconnect: vi.fn(async () => {}) },
       signalsPubSub: { async close() {} },
     }));
-    lifecycleMocks.runMC.mockReturnValue({
-      async *[Symbol.asyncIterator]() {},
-      result: Promise.resolve({ status: 'completed', exitCode: 0 }),
+    // runMC resolves the pack against the post-resume mode and calls
+    // onApplied only once it has applied the selection to the session.
+    lifecycleMocks.runMC.mockImplementation((options: any) => {
+      const selection = options.pack.resolve('build');
+      expect(selection.modelId).toBe('anthropic/claude-opus-4-6');
+      // Settings must not be saved before the pack is applied.
+      expect(lifecycleMocks.saveSettings).not.toHaveBeenCalled();
+      options.pack.onApplied();
+      return {
+        async *[Symbol.asyncIterator]() {},
+        result: Promise.resolve({ status: 'completed', exitCode: 0 }),
+      };
     });
     process.argv = argv('--prompt', 'do it', '--pack', 'review-pack');
 
@@ -348,12 +357,12 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     expect(lifecycleMocks.saveSettings).toHaveBeenCalledWith(settings, undefined);
     expect(lifecycleMocks.runMC).toHaveBeenCalledWith(
       expect.objectContaining({
-        pack: expect.objectContaining({ id: 'custom:review-pack', modelId: 'anthropic/claude-opus-4-6' }),
+        pack: expect.objectContaining({ id: 'custom:review-pack', resolve: expect.any(Function) }),
       }),
     );
   });
 
-  it('rejects a --pack with no model for the run mode without saving settings', async () => {
+  it('propagates a pack-mode rejection from runMC without saving settings', async () => {
     lifecycleMocks.loadSettings.mockReturnValue({
       models: { activeModelPackId: null, modeDefaults: {}, packFallbacks: {} },
       customModelPacks: [{ name: 'plan-only', models: { plan: 'anthropic/claude-opus-4-6' } }],
@@ -367,9 +376,18 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
       mcpManager: { hasServers: () => false, disconnect: vi.fn(async () => {}) },
       signalsPubSub: { async close() {} },
     }));
-    lifecycleMocks.runMC.mockReturnValue({
-      async *[Symbol.asyncIterator]() {},
-      result: Promise.resolve({ status: 'completed', exitCode: 0 }),
+    // The real runMC fails the run when the pack has no model for the mode it
+    // ended up in; onApplied is never called, so settings stay untouched.
+    lifecycleMocks.runMC.mockImplementation((options: any) => {
+      expect(options.pack.resolve('build')).toBeUndefined();
+      return {
+        async *[Symbol.asyncIterator]() {},
+        result: Promise.resolve({
+          status: 'error',
+          error: { name: 'Error', message: 'Model pack "custom:plan-only" has no model for build mode' },
+          exitCode: 1,
+        }),
+      };
     });
     process.argv = argv('--prompt', 'do it', '--pack', 'plan-only');
 
@@ -379,8 +397,7 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
       expect.stringContaining('Model pack "custom:plan-only" has no model for build mode'),
     );
     expect(lifecycleMocks.saveSettings).not.toHaveBeenCalled();
-    expect(lifecycleMocks.runMC).not.toHaveBeenCalled();
-    // The rejection throws through the existing error path, so teardown still ran.
+    // Teardown still ran on the error path.
     expect(lifecycleMocks.order).toContain('diagnostics-stop');
   });
 

@@ -359,12 +359,14 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
     const restoredThreadSelection = Boolean(restoredThreadId || thread?.clone);
     const modeIdForModel = options.mode ?? (options.modeDefaults ? session.mode.get() : undefined);
     const configuredDefaultModelId = modeIdForModel ? options.modeDefaults?.[modeIdForModel] : undefined;
-    const modelIdToApply =
-      options.model ??
-      options.pack?.modelId ??
-      (options.mode || !restoredThreadSelection ? configuredDefaultModelId : undefined);
+    // A pack's model is not resolved here: a resumed thread restores its
+    // persisted mode during thread selection, and the pack selection depends
+    // on that mode. It is resolved and validated during config application.
+    const modelIdToApply = options.pack
+      ? options.model
+      : (options.model ?? (options.mode || !restoredThreadSelection ? configuredDefaultModelId : undefined));
     // Where modelIdToApply came from, so validation errors name the right source.
-    const modelSource = options.model ? 'flag' : options.pack?.modelId ? 'pack' : 'mode';
+    const modelSource = options.model ? 'flag' : 'mode';
     try {
       if (options.mode && !controller.listModes().some(mode => mode.id === options.mode)) {
         return fail(`Unknown mode: "${options.mode}"`);
@@ -375,15 +377,11 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
         const match = available.find(model => model.id === modelIdToApply);
         if (!match) {
           if (modelSource === 'flag') return fail(`Unknown model: "${modelIdToApply}"`);
-          if (modelSource === 'pack') return fail(`Unknown model "${modelIdToApply}" from pack "${options.pack!.id}"`);
           return fail(`Unknown model "${modelIdToApply}" configured for mode "${modeIdForModel}"`);
         }
         if (!match.hasApiKey) {
           const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
           if (modelSource === 'flag') return fail(`Model "${modelIdToApply}" has no API key configured.${keyHint}`);
-          if (modelSource === 'pack') {
-            return fail(`Model "${modelIdToApply}" (pack: ${options.pack!.id}) has no API key configured.${keyHint}`);
-          }
           return fail(`Model "${modelIdToApply}" (mode: ${modeIdForModel}) has no API key configured.${keyHint}`);
         }
       }
@@ -425,22 +423,44 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
       if (options.mode) {
         await session.mode.switch({ modeId: options.mode });
       }
+      let packModelId: string | undefined;
       if (options.pack) {
+        // Resolve the selection against the mode in effect now — thread
+        // selection above may have restored a resumed thread's persisted mode.
+        const packModeId = options.mode ?? session.mode.get();
+        const packSelection = options.pack.resolve(packModeId);
+        if (!packSelection) {
+          return fail(`Model pack "${options.pack.id}" has no model for ${packModeId} mode`);
+        }
+        const available = await controller.listAvailableModels();
+        const match = available.find(model => model.id === packSelection.modelId);
+        if (!match) {
+          return fail(`Unknown model "${packSelection.modelId}" from pack "${options.pack.id}"`);
+        }
+        if (!match.hasApiKey) {
+          const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
+          return fail(
+            `Model "${packSelection.modelId}" (pack: ${options.pack.id}) has no API key configured.${keyHint}`,
+          );
+        }
+        packModelId = packSelection.modelId;
         // Mirror /models → Activate on the session: sticky thread pack id,
         // subagent models, and the fallback route. Clears any pending fallback
         // from a continued thread so the pack's own route starts clean.
         await session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: options.pack.id });
         await session.thread.setSetting({ key: MODEL_FALLBACK_STATE_KEY, value: undefined });
-        for (const [agentType, modelId] of Object.entries(options.pack.subagentModels ?? {})) {
+        for (const [agentType, modelId] of Object.entries(packSelection.subagentModels ?? {})) {
           await session.subagents.model.set({ modelId, agentType });
         }
         await session.state.set({
-          modelRoute: options.pack.modelRoute,
+          modelRoute: packSelection.modelRoute,
           [MODEL_FALLBACK_STATE_KEY]: null,
         } as unknown as Partial<TState>);
+        options.pack.onApplied?.();
       }
-      if (modelIdToApply) {
-        await session.model.switch(modelIdToApply);
+      const sessionModelId = modelIdToApply ?? packModelId;
+      if (sessionModelId) {
+        await session.model.switch(sessionModelId);
       }
       if (options.thinkingLevel) {
         await session.state.set({ thinkingLevel: options.thinkingLevel } as unknown as Partial<TState>);

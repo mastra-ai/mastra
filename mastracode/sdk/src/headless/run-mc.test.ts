@@ -282,26 +282,33 @@ describe('runMC', () => {
       return originalSendMessage(input);
     });
 
+    const selection = {
+      modelId: packModel!.id,
+      subagentModels: {
+        explore: 'test/explore-model',
+        plan: 'test/plan-model',
+        execute: 'test/execute-model',
+      },
+      modelRoute: {
+        entries: [{ id: 'custom:Test', label: 'Test', modelId: packModel!.id, memoryModelId: 'test/memory-model' }],
+      },
+    };
+    const onApplied = vi.fn();
+
     const result = await runMC({
       controller,
       session,
       prompt: 'Use the pack',
       pack: {
         id: 'custom:Test',
-        modelId: packModel!.id,
-        subagentModels: {
-          explore: 'test/explore-model',
-          plan: 'test/plan-model',
-          execute: 'test/execute-model',
-        },
-        modelRoute: {
-          entries: [{ id: 'custom:Test', label: 'Test', modelId: packModel!.id, memoryModelId: 'test/memory-model' }],
-        },
+        resolve: () => selection,
+        onApplied,
       },
     }).result;
 
     expect(result.status).toBe('completed');
     expect(modelIdAtSend).toBe(packModel!.id);
+    expect(onApplied).toHaveBeenCalledTimes(1);
     const threads = await session.thread.list();
     const thread = threads.find(t => t.id === result.threadId);
     expect((thread?.metadata as Record<string, unknown> | undefined)?.activeModelPackId).toBe('custom:Test');
@@ -336,9 +343,7 @@ describe('runMC', () => {
       model: explicitModel.id,
       pack: {
         id: 'custom:Test',
-        modelId: packModel!.id,
-        subagentModels: {},
-        modelRoute: { entries: [] },
+        resolve: () => ({ modelId: packModel!.id, subagentModels: {}, modelRoute: { entries: [] } }),
       },
     }).result;
 
@@ -372,7 +377,10 @@ describe('runMC', () => {
       session,
       prompt: 'Use the pack on the restored thread',
       thread: { id: restoredThreadId },
-      pack: { id: 'custom:Test', modelId: packModel!.id, subagentModels: {}, modelRoute: { entries: [] } },
+      pack: {
+        id: 'custom:Test',
+        resolve: () => ({ modelId: packModel!.id, subagentModels: {}, modelRoute: { entries: [] } }),
+      },
     }).result;
 
     expect(result.status).toBe('completed');
@@ -381,6 +389,66 @@ describe('runMC', () => {
     const threads = await session.thread.list();
     const thread = threads.find(t => t.id === restoredThreadId);
     expect((thread?.metadata as Record<string, unknown> | undefined)?.activeModelPackId).toBe('custom:Test');
+  });
+
+  it('resolves the pack against the mode a resumed thread restores', async () => {
+    const { controller, session } = await makeHarness({
+      doStream: async () => ({ stream: textStream('Resumed mode answer.') }),
+    });
+    const restoredThreadId = session.thread.getId()!;
+    // Pin the thread to a non-startup mode, then move on so the resume
+    // restores that mode during the run. Modes persist across thread.create,
+    // so switch the fresh thread back explicitly.
+    await session.mode.switch({ modeId: 'build' });
+    await session.thread.create();
+    await session.mode.switch({ modeId: 'default' });
+    expect(session.mode.get()).toBe('default');
+
+    const [packModel] = await controller.listAvailableModels();
+    expect(packModel).toBeDefined();
+    vi.spyOn(controller, 'listAvailableModels').mockResolvedValue([{ ...packModel!, hasApiKey: true }]);
+    let modeSeenByResolve: string | undefined;
+
+    const result = await runMC({
+      controller,
+      session,
+      prompt: 'Pack on a resumed build thread',
+      thread: { id: restoredThreadId },
+      pack: {
+        id: 'custom:Test',
+        resolve: modeId => {
+          modeSeenByResolve = modeId;
+          return { modelId: packModel!.id, subagentModels: {}, modelRoute: { entries: [] } };
+        },
+      },
+    }).result;
+
+    expect(result.status).toBe('completed');
+    expect(modeSeenByResolve).toBe('build');
+  });
+
+  it('fails without sending when the pack has no model for the selected mode', async () => {
+    const { controller, session } = await makeHarness({
+      doStream: async () => ({ stream: textStream('Should never be sent.') }),
+    });
+    const sendMessage = vi.spyOn(session, 'sendMessage');
+    const onApplied = vi.fn();
+
+    const result = await runMC({
+      controller,
+      session,
+      prompt: 'Pack missing this mode',
+      pack: {
+        id: 'custom:Test',
+        resolve: () => undefined,
+        onApplied,
+      },
+    }).result;
+
+    expect(result.status).toBe('error');
+    expect(result.error?.message).toContain('custom:Test');
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(onApplied).not.toHaveBeenCalled();
   });
 
   it('yields controller events while iterating, then resolves', async () => {

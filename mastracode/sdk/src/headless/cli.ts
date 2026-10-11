@@ -198,10 +198,13 @@ export async function runMCCli(
   }
 
   // Resolve --pack up front: an unknown pack fails fast with the valid list,
-  // before MastraCode boots. Activation (which mirrors /models → Activate and
-  // becomes the global default pack in settings) happens only after the boot,
-  // once the pack is known to have a model for the run's mode — a pack that
-  // doesn't must not change the persisted default on its way out.
+  // before MastraCode boots. The selection itself is resolved inside runMC
+  // after thread selection, because a resumed thread restores its persisted
+  // mode — the mode that decides whether the pack has a model for this run.
+  // Activation (which mirrors /models → Activate and becomes the global
+  // default pack in settings) is saved via onApplied only once the pack has
+  // actually been applied to the session — a rejected pack must not change
+  // the persisted default on its way out.
   const settings = loadSettings(args.settings);
   let packId: string | undefined;
   if (args.pack !== undefined) {
@@ -226,16 +229,6 @@ export async function runMCCli(
     boot = await createMastraCode({ settingsPath: args.settings, coAuthor: options?.coAuthor });
     const { controller, session, mcpManager } = boot;
 
-    const packModeId = packId ? (args.mode ?? session.mode.get()) : undefined;
-    const packSelection = packId && packModeId ? resolvePackSelection(settings, packId, packModeId) : undefined;
-    if (packId && !packSelection) {
-      // Thrown so the catch/finally below still runs the teardown.
-      throw new Error(`Model pack "${packId}" has no model for ${packModeId} mode`);
-    }
-    if (packId) {
-      activateModePackInSettings(settings, packId);
-      saveSettings(settings, args.settings);
-    }
     const effectiveDefaults = resolveModelDefaults(settings, listBuiltinModePacks());
 
     if (mcpManager?.hasServers()) {
@@ -256,7 +249,18 @@ export async function runMCCli(
       model: args.model,
       mode: args.mode,
       modeDefaults: effectiveDefaults,
-      ...(packId && packSelection ? { pack: { id: packId, ...packSelection } } : {}),
+      ...(packId
+        ? {
+            pack: {
+              id: packId,
+              resolve: (modeId: string) => resolvePackSelection(settings, packId, modeId),
+              onApplied: () => {
+                activateModePackInSettings(settings, packId);
+                saveSettings(settings, args.settings);
+              },
+            },
+          }
+        : {}),
       thinkingLevel: args.thinkingLevel,
       thread: { id: args.thread, continueLatest: args.continue_, clone: args.cloneThread },
       resourceId: args.resourceId,

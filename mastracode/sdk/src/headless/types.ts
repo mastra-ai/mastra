@@ -65,12 +65,19 @@ interface RunMCBaseOptions<TState extends Record<string, unknown> = Record<strin
   modeDefaults?: Record<string, string>;
   /**
    * A model pack to activate for the run (canonical id from
-   * `resolveModePackArg`), with its selection pre-resolved for the run's mode
-   * via `resolvePackSelection`. Sets the thread's activeModelPackId, the
-   * subagent models, and the model route; `model` still wins for the active
-   * mode's session model.
+   * `resolveModePackArg`). The selection is resolved via `resolve` only after
+   * thread selection, because a resumed thread restores its persisted mode —
+   * the mode that decides which model the pack provides. Sets the thread's
+   * activeModelPackId, the subagent models, and the model route; `model`
+   * still wins for the active mode's session model. `onApplied` fires once
+   * the pack has been applied to the session (used by the CLI to persist the
+   * activation as the global default only when it actually took effect).
    */
-  pack?: { id: string } & PackSelection;
+  pack?: {
+    id: string;
+    resolve: (modeId: string) => PackSelection | undefined;
+    onApplied?: () => void;
+  };
   /** Thinking-effort level. */
   thinkingLevel?: ThinkingLevel;
   /** Thread selection / mutation. */
