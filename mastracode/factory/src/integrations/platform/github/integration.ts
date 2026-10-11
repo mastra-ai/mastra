@@ -271,7 +271,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           suspendedAt: string | null;
           usable: boolean;
         }>;
-      }>('GET', `${API_PREFIX}/github-app/installations`);
+      }>('GET', `${API_PREFIX}/github-app/installations?${new URLSearchParams({ userId })}`);
       const usable = installations.installations.filter(
         installation => installation.usable && !installation.suspendedAt,
       );
@@ -681,6 +681,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           userConnected: userConnection.connected,
           userGithubUsername: userConnection.githubUsername,
           reason: installations.length > 0 ? 'ready' : 'not_connected',
+          ...(installations.length === 0 && userConnection.reason
+            ? { userConnectionReason: userConnection.reason }
+            : {}),
           diagnostics: this.diagnostics(),
         });
       },
@@ -700,11 +703,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         const originator = routeBaseUrl(ctx, c.req.url);
         logPlatformInfo('Starting Platform GitHub connect flow', {
           orgId: tenant.orgId,
+          userId: tenant.userId,
           redirectTo,
           originator,
         });
         const query = new URLSearchParams({
           action: 'install',
+          userId: tenant.userId,
           redirectTo,
           originator,
         });
@@ -764,15 +769,20 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         });
       }
       return connection;
-    } catch {
-      return { connected: false, githubUsername: null };
+    } catch (error) {
+      logPlatformWarn('Platform GitHub user connection verification failed', {
+        userId,
+        reason: 'verification-unavailable',
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return { connected: false, githubUsername: null, reason: 'verification-unavailable' };
     }
   }
 
   async #syncInstallations(orgId: string, userId: string): Promise<SourceControlInstallation[]> {
     const result = await this.#client.request<{ installations: PlatformGithubInstallation[] }>(
       'GET',
-      `${API_PREFIX}/github-app/installations`,
+      `${API_PREFIX}/github-app/installations?${new URLSearchParams({ userId })}`,
     );
     const usableInstallations = result.installations.filter(
       installation => installation.usable && !installation.suspendedAt,
