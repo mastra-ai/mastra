@@ -1449,6 +1449,23 @@ describe('normalizeQueryParams', () => {
     expect(Object.keys(result)).toEqual(['page']);
   });
 
+  it('does not treat inherited Object.prototype members as existing bracket groups', () => {
+    // `toString` is inherited, not own: bracket-group creation must not read or
+    // write the shared builtin function.
+    const result = normalizeQueryParams({
+      'toString[length]': 'x',
+      'valueOf[tagged]': 'x',
+    });
+
+    expect(result).toEqual({
+      toString: JSON.stringify({ length: 'x' }),
+      valueOf: JSON.stringify({ tagged: 'x' }),
+    });
+    // The shared builtins were not mutated
+    expect(Object.prototype.toString.length).toBe(0);
+    expect((Object.prototype.valueOf as unknown as Record<string, unknown>).tagged).toBeUndefined();
+  });
+
   it('returns a plain object that supports spreads, `in` checks, and JSON serialization', () => {
     const result = normalizeQueryParams({ 'filter[status]': 'x', page: '1' });
 

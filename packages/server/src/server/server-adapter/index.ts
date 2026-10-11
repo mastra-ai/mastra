@@ -354,7 +354,7 @@ export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<
           ? value
           : undefined;
       if (strValue !== undefined && isSafeObjectKey(parent) && isSafeObjectKey(child)) {
-        if (!bracketGroups[parent]) {
+        if (!Object.hasOwn(bracketGroups, parent)) {
           bracketGroups[parent] = {};
         }
         bracketGroups[parent]![child] = strValue;
