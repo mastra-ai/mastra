@@ -4,6 +4,7 @@ import type { Mastra } from '../../../../mastra';
 import { createObservabilityContext } from '../../../../observability';
 import { RequestContext } from '../../../../request-context';
 import { MessageList } from '../../../message-list';
+import type { StoredMessageLoader } from '../../../message-list/memory-message-refs';
 import type { DurableAgenticLoopOutput, DurableAgenticWorkflowInput } from '../../types';
 
 export interface ExecuteDurableAgentScorersParams {
@@ -14,6 +15,8 @@ export interface ExecuteDurableAgentScorersParams {
   mastra?: Mastra;
   requestContext?: RequestContext;
   tracingContext?: Parameters<typeof createObservabilityContext>[0];
+  /** Loads response messages the run pruned from its transcript (kept there by id only) from memory. */
+  loadStoredMessages?: StoredMessageLoader;
 }
 
 /**
@@ -28,13 +31,14 @@ export interface ExecuteDurableAgentScorersParams {
  * resolved by name from the Mastra instance (so this is safe on a worker in
  * another process), and anything that goes wrong is logged and skipped.
  */
-export function executeDurableAgentScorers({
+export async function executeDurableAgentScorers({
   initData,
   finalOutput,
   mastra,
   requestContext,
   tracingContext,
-}: ExecuteDurableAgentScorersParams): void {
+  loadStoredMessages,
+}: ExecuteDurableAgentScorersParams): Promise<void> {
   const scorers = initData.scorers;
   if (!scorers || Object.keys(scorers).length === 0) {
     return;
@@ -55,7 +59,17 @@ export function executeDurableAgentScorers({
 
   const outputMessageList = new MessageList();
   outputMessageList.deserialize(finalOutput.messageListState);
-  const scorerOutput = outputMessageList.getRunResponseMessages();
+  let scorerOutput: Awaited<ReturnType<MessageList['getRunResponseMessages']>>;
+  try {
+    scorerOutput = await outputMessageList.getRunResponseMessages(loadStoredMessages);
+  } catch (error) {
+    // Scoring is observability, not execution: never fail a run over it.
+    logger?.warn?.('Skipped scorers: could not load pruned response messages', {
+      error,
+      runId: initData.runId,
+    });
+    return;
+  }
 
   const resolveContext = requestContext ?? new RequestContext();
 

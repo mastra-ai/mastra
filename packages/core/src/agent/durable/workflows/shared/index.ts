@@ -29,6 +29,7 @@ export { buildDeferredStepFinishChunk, buildDurableStepContent } from '@internal
 export {
   dehydrateSnapshotTranscripts,
   hydrateMessageListState,
+  loadRunStoredMessages,
   openMessageListState,
   readMessageListState,
   releaseMessageListState,

@@ -193,6 +193,7 @@ import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, cl
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
+import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { buildResumeSpanInput } from './resume-span-input';
 import { SaveQueueManager } from './save-queue';
 import type { CreatedAgentSignal } from './signals';
@@ -7305,7 +7306,15 @@ export class Agent<
       taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
     };
 
-    const scorerOutput: ScorerRunOutputForAgent = messageList.getRunResponseMessages();
+    let scorerOutput: ScorerRunOutputForAgent;
+    try {
+      // A resumed run knows the response messages pruned before it suspended by id only.
+      const memory = await this.getMemory({ requestContext });
+      scorerOutput = await messageList.getRunResponseMessages(createStoredMessageLoader(memory));
+    } catch (e) {
+      this.logger.warn('Failed to load run response messages for scorers', { agent: this.name, error: e });
+      return;
+    }
 
     if (Object.keys(scorers || {}).length > 0) {
       for (const [_id, scorerObject] of Object.entries(scorers)) {
