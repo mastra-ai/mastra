@@ -940,9 +940,9 @@ const memory = new Memory({
 })
 ```
 
-- `previousObserverTokens: 2000` → default. Keeps \~2k tokens of recent observations.
+- `previousObserverTokens: false` → default. Sends the full previous observations.
+- `previousObserverTokens: 2000` → keeps \~2k tokens of recent observations.
 - `previousObserverTokens: 0` → omit previous observations completely.
-- `previousObserverTokens: false` → disable truncation and keep full previous observations.
 
 ## Hooks
 

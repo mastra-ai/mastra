@@ -92,6 +92,7 @@ function createStrategy(outcome: PersistOutcome, hooks: readonly Extractor[] = [
     reflectionConfig: { observationTokens: 1000 },
     scope: 'thread',
     retrieval: false,
+    prepareObserverContext: (context: string | undefined) => ({ context, wasTruncated: false }),
   } as unknown as StrategyDeps;
   const opts = {
     record: { id: 'record-1' } as ObservationRunOpts['record'],
