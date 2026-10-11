@@ -25,10 +25,40 @@ export class BufferingCoordinator {
   static asyncBufferingOps = new Map<string, Promise<void>>();
 
   /**
+   * Observation buffer ops that may still append a buffered chunk.
+   * Key format: "obs:{lockKey}"
+   * Value: Promise that resolves once the op has persisted its chunk (or ended without one)
+   *
+   * Above the threshold→blockAfter band, activation waits (bounded) on this phase so the chunk
+   * activates instead of being re-observed by the sync pass. It is not needed for safety: storage
+   * keeps a chunk appended during activation. An op stays in asyncBufferingOps through its
+   * post-persist work (indexing, thread title), which activation never waits for.
+   */
+  static pendingChunkWrites = new Map<string, Promise<void>>();
+
+  /**
    * Track the last token boundary at which we started buffering.
    * Key format: "obs:{lockKey}" or "refl:{lockKey}"
    */
   static lastBufferedBoundary = new Map<string, number>();
+
+  /**
+   * The buffer op that set the observation boundary, if one did. Any other write (an activation
+   * reset, another op) replaces or clears it, so an op that outlived it never writes its boundary
+   * back. Key format: "obs:{lockKey}"
+   */
+  static observationBoundaryOwners = new Map<string, symbol>();
+
+  /** Set the observation boundary; `owner` is the buffer op setting it, if any. */
+  static setObservationBoundary(bufferKey: string, tokens: number, owner?: symbol): void {
+    BufferingCoordinator.lastBufferedBoundary.set(bufferKey, tokens);
+    if (owner) BufferingCoordinator.observationBoundaryOwners.set(bufferKey, owner);
+    else BufferingCoordinator.observationBoundaryOwners.delete(bufferKey);
+  }
+
+  static ownsObservationBoundary(bufferKey: string, owner: symbol): boolean {
+    return BufferingCoordinator.observationBoundaryOwners.get(bufferKey) === owner;
+  }
 
   /**
    * Track the timestamp cursor for buffered messages.
@@ -77,6 +107,22 @@ export class BufferingCoordinator {
   }
 
   /**
+   * Mark an observation buffer op as able to append a chunk. Call the returned release
+   * function once it no longer can; releasing more than once is a no-op.
+   */
+  static trackChunkWrite(bufferKey: string): () => void {
+    let resolve!: () => void;
+    const pending = new Promise<void>(r => (resolve = r));
+    BufferingCoordinator.pendingChunkWrites.set(bufferKey, pending);
+    return () => {
+      if (BufferingCoordinator.pendingChunkWrites.get(bufferKey) === pending) {
+        BufferingCoordinator.pendingChunkWrites.delete(bufferKey);
+      }
+      resolve();
+    };
+  }
+
+  /**
    * Clean up static maps for a thread/resource to prevent memory leaks.
    */
   cleanupStaticMaps(threadId: string, resourceId?: string | null, activatedMessageIds?: string[]): void {
@@ -88,11 +134,13 @@ export class BufferingCoordinator {
       // Partial cleanup after activation: clear stale boundary/time state for
       // the observation buffer key so the next buffer cycle isn't suppressed.
       BufferingCoordinator.lastBufferedBoundary.delete(obsBufKey);
+      BufferingCoordinator.observationBoundaryOwners.delete(obsBufKey);
       BufferingCoordinator.lastBufferedAtTime.delete(obsBufKey);
     } else {
       // Full cleanup: remove all static state for this thread
       BufferingCoordinator.lastBufferedAtTime.delete(obsBufKey);
       BufferingCoordinator.lastBufferedBoundary.delete(obsBufKey);
+      BufferingCoordinator.observationBoundaryOwners.delete(obsBufKey);
       BufferingCoordinator.lastBufferedBoundary.delete(reflBufKey);
       BufferingCoordinator.asyncBufferingOps.delete(obsBufKey);
       BufferingCoordinator.asyncBufferingOps.delete(reflBufKey);

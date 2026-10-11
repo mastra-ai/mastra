@@ -149,6 +149,7 @@ async function seedThread(storage: InMemoryMemory, threadId: string, resourceId:
 beforeEach(() => {
   BufferingCoordinator.asyncBufferingOps.clear();
   BufferingCoordinator.lastBufferedBoundary.clear();
+  BufferingCoordinator.observationBoundaryOwners.clear();
   BufferingCoordinator.lastBufferedAtTime.clear();
   BufferingCoordinator.reflectionBufferCycleIds.clear();
 });

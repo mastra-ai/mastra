@@ -1,7 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 
-import { omDebug } from '../debug';
+import { omDebug, omError } from '../debug';
 import {
   applyExtractorHooks,
   buildThreadMetadataFromExtractedValues,
@@ -228,6 +228,11 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
     } else {
       this.persistedRecordId = appendResult.recordId;
     }
+    // The chunk is buffered and can be activated from here on, so mark the cycle done now
+    // rather than after the post-persist work below. That keeps the buffering-end marker
+    // ahead of any activation marker for this chunk.
+    await this.emitBufferingEndMarker(processed);
+    await this.opts.onBufferedChunkPersisted?.();
     // Storage redirects an append aimed at a retired generation to the head; report the
     // generation the chunk landed on, which a later reflection may already have superseded.
     if (committedRecord.id !== this.persistedRecordId) {
@@ -238,61 +243,69 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       committedRecord = landedOn;
     }
 
-    await this.indexObservationGroups(
-      processed.observations,
-      threadId,
-      resourceId,
-      processed.lastObservedAt,
-      this.persistedRecordId,
-    );
+    // The chunk is stored and its end marker written, so a failure in the side effects below
+    // must not fail the cycle: that would add a failed marker for a chunk that still activates.
+    try {
+      await this.indexObservationGroups(
+        processed.observations,
+        threadId,
+        resourceId,
+        processed.lastObservedAt,
+        this.persistedRecordId,
+      );
 
-    // Persist extracted values immediately; buffered observation activation is unrelated to extractor state.
-    const candidateTitle = processed.threadTitle?.trim();
-    const hasValidThreadTitle = !!candidateTitle && candidateTitle.length >= 3;
-    if (hasValidThreadTitle || processed.extractedValues) {
-      const thread = await this.storage.getThreadById({ threadId });
-      if (thread) {
-        const oldTitle = thread.title?.trim();
-        const newTitle = resolveThreadTitleUpdate(thread, candidateTitle);
-        const shouldUpdateThreadTitle = newTitle !== undefined;
-        const previousOmMetadata = getThreadOMMetadata(thread.metadata);
-        const metadataUpdate = buildThreadMetadataFromExtractedValues(
-          processed.extractors ?? this.observationConfig.extractors,
-          processed.extractedValues,
-        );
-        const newMetadata = setThreadOMMetadata(thread.metadata, {
-          ...(hasValidThreadTitle || metadataUpdate.threadTitle
-            ? { threadTitle: metadataUpdate.threadTitle ?? processed.threadTitle }
-            : {}),
-          extracted: {
-            ...(previousOmMetadata?.extracted ?? {}),
-            ...(metadataUpdate.extracted ?? {}),
-          },
-        });
-        await this.storage.patchThread({
-          id: threadId,
-          ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
-          metadata: newMetadata,
-        });
-
-        if (shouldUpdateThreadTitle) {
-          const marker = createThreadUpdateMarker({
-            cycleId: this.cycleId,
-            threadId,
-            oldTitle,
-            newTitle,
+      // Persist extracted values immediately; buffered observation activation is unrelated to extractor state.
+      const candidateTitle = processed.threadTitle?.trim();
+      const hasValidThreadTitle = !!candidateTitle && candidateTitle.length >= 3;
+      if (hasValidThreadTitle || processed.extractedValues) {
+        const thread = await this.storage.getThreadById({ threadId });
+        if (thread) {
+          const oldTitle = thread.title?.trim();
+          const newTitle = resolveThreadTitleUpdate(thread, candidateTitle);
+          const shouldUpdateThreadTitle = newTitle !== undefined;
+          const previousOmMetadata = getThreadOMMetadata(thread.metadata);
+          const metadataUpdate = buildThreadMetadataFromExtractedValues(
+            processed.extractors ?? this.observationConfig.extractors,
+            processed.extractedValues,
+          );
+          const newMetadata = setThreadOMMetadata(thread.metadata, {
+            ...(hasValidThreadTitle || metadataUpdate.threadTitle
+              ? { threadTitle: metadataUpdate.threadTitle ?? processed.threadTitle }
+              : {}),
+            extracted: {
+              ...(previousOmMetadata?.extracted ?? {}),
+              ...(metadataUpdate.extracted ?? {}),
+            },
           });
-          await this.streamMarker(marker);
+          await this.storage.patchThread({
+            id: threadId,
+            ...(shouldUpdateThreadTitle ? { title: newTitle } : {}),
+            metadata: newMetadata,
+          });
+
+          if (shouldUpdateThreadTitle) {
+            const marker = createThreadUpdateMarker({
+              cycleId: this.cycleId,
+              threadId,
+              oldTitle,
+              newTitle,
+            });
+            await this.streamMarker(marker);
+          }
         }
       }
+    } catch (error) {
+      omError('[OM] Post-buffer indexing or thread update failed; the buffered chunk is kept', error);
     }
 
     return { status: 'committed', processed, record: committedRecord };
   }
 
-  async emitEndMarkers(_cycleId: string, processed: ProcessedObservation) {
-    if (!processed.observations) return;
+  async emitEndMarkers() {
+    // Emitted from persist() as soon as the chunk is stored.
+  }
 
+  private async emitBufferingEndMarker(processed: ProcessedObservation) {
     const { record, threadId, messages } = this.opts;
     const tokensBuffered = await this.tokenCounter.countMessagesAsync(messages);
     const updatedRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
