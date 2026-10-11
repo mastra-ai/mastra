@@ -8,7 +8,11 @@ import { createMastraCode } from '@mastra/code-sdk';
 import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
 import { hasHeadlessFlag, runMCCli } from '@mastra/code-sdk/headless/index';
-import { activateModePackInSettings, resolveModePackArg, resolvePackSelection } from '@mastra/code-sdk/onboarding/pack-activation';
+import {
+  activateModePackInSettings,
+  resolveModePackArg,
+  resolvePackSelection,
+} from '@mastra/code-sdk/onboarding/pack-activation';
 import {
   createBrowserFromSettings,
   loadSettings,
