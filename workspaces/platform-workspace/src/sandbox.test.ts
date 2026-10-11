@@ -916,6 +916,102 @@ describe('PlatformSandbox', () => {
     );
   });
 
+  describe("reattach: 'required'", () => {
+    const strictSandbox = (fetchMock: ReturnType<typeof vi.fn>) =>
+      new PlatformSandbox({
+        id: 'session-1',
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        sandboxId: 'sbx_gone',
+        reattach: 'required',
+        fetch: fetchMock,
+      });
+
+    it.each([
+      [404, { error: { message: 'Sandbox not found', type: 'not_found' } }],
+      [410, { error: { message: 'Sandbox has been destroyed', type: 'sandbox_destroyed' } }],
+    ])('throws SANDBOX_REATTACH_FAILED without POST /sandbox on %i', async (status, body) => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi.fn().mockImplementation(async () => json(body, { status }));
+      const sandbox = strictSandbox(fetchMock);
+
+      await expect(sandbox._start()).rejects.toMatchObject({
+        name: 'SandboxError',
+        code: 'SANDBOX_REATTACH_FAILED',
+        details: { provider: 'platform', sandboxId: 'sbx_gone', reason: String(status) },
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(String(fetchMock.mock.calls[0]![0])).toBe(
+        'https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_gone',
+      );
+
+      // A retry stays strict: it re-checks the same id and never provisions.
+      await expect(sandbox._start()).rejects.toMatchObject({ code: 'SANDBOX_REATTACH_FAILED' });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls.every(call => String(call[0]).endsWith('/sandbox/sbx_gone'))).toBe(true);
+    });
+
+    it('throws SANDBOX_REATTACH_FAILED when the reattached record is destroyed', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          json({ id: 'sbx_gone', createdAt: '2026-06-26T00:00:00.000Z', destroyedAt: '2026-06-27T00:00:00.000Z' }),
+        );
+      const sandbox = strictSandbox(fetchMock);
+
+      await expect(sandbox._start()).rejects.toMatchObject({
+        code: 'SANDBOX_REATTACH_FAILED',
+        details: { reason: 'destroyed' },
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('rethrows other reattach errors unchanged', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ error: { message: 'Forbidden', type: 'forbidden' } }, { status: 403 }));
+      const sandbox = strictSandbox(fetchMock);
+
+      const error = await sandbox._start().catch(e => e);
+      expect(error.code).not.toBe('SANDBOX_REATTACH_FAILED');
+      expect(error.status).toBe(403);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('reattaches normally when the sandbox is live', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(json({ id: 'sbx_gone', createdAt: '2026-06-26T00:00:00.000Z', destroyedAt: null }));
+
+      await expect(strictSandbox(fetchMock)._start()).resolves.toEqual({ outcome: 'connected' });
+    });
+
+    it('is inherited by clone()', async () => {
+      vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+      const fetchMock = vi
+        .fn()
+        .mockImplementation(async () =>
+          json({ error: { message: 'Sandbox not found', type: 'not_found' } }, { status: 404 }),
+        );
+      const template = new PlatformSandbox({
+        accessToken: 'sk_test',
+        projectId: 'proj_123',
+        environmentId: 'env_123',
+        reattach: 'required',
+        fetch: fetchMock,
+      });
+
+      const child = template.clone({ id: 'session-2', sandboxId: 'sbx_gone' });
+
+      await expect(child._start()).rejects.toMatchObject({ code: 'SANDBOX_REATTACH_FAILED' });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it('exposes the platform-assigned sandbox id via getInfo metadata for reattach persistence', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi

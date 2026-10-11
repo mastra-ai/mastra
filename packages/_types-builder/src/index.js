@@ -186,6 +186,12 @@ export async function generateTypes(rootDir, bundledPackages = new Set(), { roll
       onlyFiles: true,
     });
 
+    if (dtsFiles.length === 0) {
+      throw new Error(
+        `tsc -p tsconfig.build.json emitted no .d.ts files into ${path.join(rootDir, 'dist')}. Make sure tsconfig.build.json extends the root tsconfig.build.json (noEmit: false) and sets outDir.`,
+      );
+    }
+
     for (const dtsFile of dtsFiles) {
       const fullPath = path.join(rootDir, dtsFile);
       if (bundledPackages.size) {

@@ -528,6 +528,60 @@ describe('pruneAgentLoopSnapshot stepResult.request strip', () => {
 
     expect(countRequestEchoes(original)).toBe(1);
   });
+
+  describe('LLM output wrapped under llmOutput by the durable mapping steps (issue #26462)', () => {
+    function llmOutput() {
+      return {
+        text: 'calling tools',
+        toolCalls: [{ toolCallId: 'call-1', toolName: 'big', args: {} }],
+        stepResult: stepResult(),
+        metadata: { id: 'resp-1', modelId: 'mock-model', request: requestEcho() },
+      };
+    }
+
+    function mappingSnapshot() {
+      return snapshotWith({
+        'collect-tool-results': { status: 'success', output: { llmOutput: llmOutput(), toolResults: [] } },
+        'durable-llm-mapping': { status: 'running', payload: { llmOutput: llmOutput(), toolResults: [] } },
+      });
+    }
+
+    it('strips the request from llmOutput.stepResult and llmOutput.metadata on output and payload', () => {
+      const context = contextOf(pruneAgentLoopSnapshot({ snapshot: mappingSnapshot() }));
+
+      for (const nested of [
+        context['collect-tool-results'].output.llmOutput,
+        context['durable-llm-mapping'].payload.llmOutput,
+      ]) {
+        expect(nested.stepResult).not.toHaveProperty('request');
+        expect(nested.metadata).not.toHaveProperty('request');
+      }
+    });
+
+    it('keeps everything else the mapping step reads from llmOutput', () => {
+      const context = contextOf(pruneAgentLoopSnapshot({ snapshot: mappingSnapshot() }));
+      const { request: _stepRequest, ...stepResultWithoutRequest } = stepResult();
+
+      expect(context['collect-tool-results'].output).toEqual({
+        llmOutput: {
+          text: 'calling tools',
+          toolCalls: [{ toolCallId: 'call-1', toolName: 'big', args: {} }],
+          stepResult: stepResultWithoutRequest,
+          metadata: { id: 'resp-1', modelId: 'mock-model' },
+        },
+        toolResults: [],
+      });
+    });
+
+    it('is copy-on-write and does not mutate the caller snapshot', () => {
+      const original = mappingSnapshot();
+      pruneAgentLoopSnapshot({ snapshot: original });
+
+      const collected = contextOf(original)['collect-tool-results'].output.llmOutput;
+      expect(collected.stepResult.request).toEqual(requestEcho());
+      expect(collected.metadata.request).toEqual(requestEcho());
+    });
+  });
 });
 
 describe('pruneAgentLoopSnapshot foreach step-level stream state', () => {

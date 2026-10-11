@@ -20175,12 +20175,40 @@ export interface GetExperimentsReviewSummary_RouteContract {
 }
 
 // ============================================================================
-// Route: DELETE /experiments/:experimentId
+// Route: GET /experiments/:experimentId
 // ============================================================================
-export type DeleteExperimentsExperimentId_PathParams = {
+export type GetExperimentsExperimentId_PathParams = {
   /** Unique identifier for the experiment */
   experimentId: string;
 };
+
+export type GetExperimentsExperimentId_QueryParams = GetDatasetsDatasetId_QueryParams;
+
+export type GetExperimentsExperimentId_Response = Shared_Type_89;
+
+export type GetExperimentsExperimentId_Request = Simplify<
+  (GetExperimentsExperimentId_PathParams extends never ? {} : { params: GetExperimentsExperimentId_PathParams }) &
+    (GetExperimentsExperimentId_QueryParams extends never
+      ? {}
+      : {} extends GetExperimentsExperimentId_QueryParams
+        ? { query?: GetExperimentsExperimentId_QueryParams }
+        : { query: GetExperimentsExperimentId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetExperimentsExperimentId_RouteContract {
+  pathParams: GetExperimentsExperimentId_PathParams;
+  queryParams: GetExperimentsExperimentId_QueryParams;
+  body: never;
+  request: GetExperimentsExperimentId_Request;
+  response: GetExperimentsExperimentId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /experiments/:experimentId
+// ============================================================================
+export type DeleteExperimentsExperimentId_PathParams = GetExperimentsExperimentId_PathParams;
 
 export type DeleteExperimentsExperimentId_QueryParams = GetDatasetsDatasetId_QueryParams;
 
@@ -20517,7 +20545,7 @@ export interface PostDatasetsDatasetIdExperimentsExperimentIdResults_RouteContra
 export type PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams =
   PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams;
 
-export type PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Response = Shared_Type_89;
+export type PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Response = GetExperimentsExperimentId_Response;
 
 export type PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Request = Simplify<
   (PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams extends never
@@ -20611,8 +20639,7 @@ export type PatchDatasetsDatasetIdExperimentsExperimentId_Body = {
     | undefined;
 };
 
-export type PatchDatasetsDatasetIdExperimentsExperimentId_Response =
-  PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Response;
+export type PatchDatasetsDatasetIdExperimentsExperimentId_Response = GetExperimentsExperimentId_Response;
 
 export type PatchDatasetsDatasetIdExperimentsExperimentId_Request = Simplify<
   (PatchDatasetsDatasetIdExperimentsExperimentId_PathParams extends never
@@ -24269,6 +24296,7 @@ export interface RouteTypes {
   'GET /datasets/:datasetId/items/:itemId/versions/:datasetVersion': GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_RouteContract;
   'GET /experiments': GetExperiments_RouteContract;
   'GET /experiments/review-summary': GetExperimentsReviewSummary_RouteContract;
+  'GET /experiments/:experimentId': GetExperimentsExperimentId_RouteContract;
   'DELETE /experiments/:experimentId': DeleteExperimentsExperimentId_RouteContract;
   'GET /datasets/:datasetId/experiments': GetDatasetsDatasetIdExperiments_RouteContract;
   'POST /datasets/:datasetId/experiments': PostDatasetsDatasetIdExperiments_RouteContract;
@@ -24828,6 +24856,7 @@ export interface Client {
   };
   '/experiments/:experimentId': {
     DELETE: DeleteExperimentsExperimentId_RouteContract;
+    GET: GetExperimentsExperimentId_RouteContract;
   };
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;
