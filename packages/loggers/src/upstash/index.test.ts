@@ -377,6 +377,17 @@ describe('UpstashTransport', () => {
   });
 
   describe('listLogs and listLogsByRunId', () => {
+    it('should normalize page 0 to page 1 when a query fails', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      fetchMock.mockImplementation(() => Promise.reject(new Error('Upstash down')));
+      const expected = { logs: [], total: 0, page: 1, perPage: 100, hasMore: false };
+
+      expect(await transport.listLogs({ page: 0 })).toEqual(expected);
+      expect(await transport.listLogsByRunId({ runId: 'run-1', page: 0 })).toEqual(expected);
+
+      consoleSpy.mockRestore();
+    });
+
     it('should fetch only the requested page for unfiltered queries', async () => {
       const logs = Array.from({ length: 2 }, (_, index) =>
         JSON.stringify({ msg: `message${index + 3}`, time: index + 3 }),
