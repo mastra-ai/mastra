@@ -69,7 +69,10 @@ describe('partial response-metadata chunks', () => {
       if (engine === 'regular') {
         const result = await agent.stream('hi', options);
         await result.consumeStream();
-        expect((await result.response).id).toBe('gen-repro');
+        const response = await result.response;
+        expect(response.id).toBe('gen-repro');
+        expect(response.modelId).toBe('provider-model');
+        expect(response.timestamp).toEqual(new Date(0));
       } else {
         const wrapped = engine.startsWith('durable')
           ? createDurableAgent({ agent, pubsub })
