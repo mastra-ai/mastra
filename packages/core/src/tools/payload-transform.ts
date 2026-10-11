@@ -100,8 +100,11 @@ async function transformOneTarget(
     getToolTransformer(source, context.target, context.phase),
   ].filter(Boolean) as ToolPayloadTransformFunction[];
 
+  // No transformer for this phase: keep the raw payload. Only input deltas stay suppressed,
+  // since partial input can't be checked against a transform. Configured transformers that
+  // fail or return undefined still fall back to the placeholder below.
   if (transformers.length === 0) {
-    return context.phase === 'input-delta' ? { suppress: true } : { transformed: safePlaceholder(context) };
+    return context.phase === 'input-delta' ? { suppress: true } : undefined;
   }
 
   for (const transformer of transformers) {
