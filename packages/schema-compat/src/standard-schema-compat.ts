@@ -69,11 +69,9 @@ export function applyOpenAICompatTransforms<T>(schema: T, modelInfo: ModelInform
     return schema;
   }
 
-  // Create appropriate compat layer based on model type
-  const isReasoningModel = /^o[1-5]/.test(modelInfo.modelId);
-  const compatLayer = isReasoningModel
-    ? new OpenAIReasoningSchemaCompatLayer(modelInfo)
-    : new OpenAISchemaCompatLayer(modelInfo);
+  // Use the same reasoning-model detection as the layers, so Azure deployment names like `my-o3-deployment` match
+  const reasoningLayer = new OpenAIReasoningSchemaCompatLayer(modelInfo);
+  const compatLayer = reasoningLayer.isReasoningModel() ? reasoningLayer : new OpenAISchemaCompatLayer(modelInfo);
 
   if (!compatLayer.shouldApply()) {
     // Compat layer determined it's not needed

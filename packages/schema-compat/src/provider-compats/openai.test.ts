@@ -833,6 +833,15 @@ describe('OpenAISchemaCompatLayer', () => {
       });
       expect(processed).not.toBe(schema);
     });
+
+    it('is transformed by applyOpenAICompatTransforms for prefixed reasoning deployments', () => {
+      const processed = applyOpenAICompatTransforms(schema, {
+        provider: 'azure.responses',
+        modelId: 'my-o3-deployment',
+        supportsStructuredOutputs: false,
+      });
+      expect(processed).not.toBe(schema);
+    });
   });
 
   // =============================================================================
