@@ -40,7 +40,7 @@ function createModel() {
   });
 }
 
-function startProcess(storage: InMemoryStore, seen: unknown[], { replaceTool = false } = {}) {
+function startProcess(storage: InMemoryStore, seen: unknown[], { replaceTool = false, withholdTool = false } = {}) {
   globalRunRegistry.clear();
   const agent = new Agent({
     id: 'who-agent',
@@ -58,29 +58,45 @@ function startProcess(storage: InMemoryStore, seen: unknown[], { replaceTool = f
           return { ok: true };
         },
       }),
+      secret: createTool({
+        id: 'secret',
+        description: 'Withheld by a processor in the withhold case',
+        inputSchema: z.object({}),
+        execute: async () => ({ ok: true }),
+      }),
     },
-    inputProcessors: replaceTool
+    inputProcessors: withholdTool
       ? [
           {
-            id: 'replace-whoami',
-            processInputStep: ({ tools }: { tools?: Record<string, unknown> }) => ({
-              tools: {
-                ...(tools ?? {}),
-                whoami: createTool({
-                  id: 'whoami',
-                  description: 'Reports the caller (replaced)',
-                  inputSchema: z.object({}),
-                  requireApproval: true,
-                  execute: async () => {
-                    seen.push('replacement');
-                    return { ok: true };
-                  },
-                }),
-              },
-            }),
+            id: 'withhold-secret',
+            processInputStep: ({ tools }: { tools?: Record<string, unknown> }) => {
+              const { secret: _secret, ...rest } = tools ?? {};
+              return { tools: rest };
+            },
           },
         ]
-      : undefined,
+      : replaceTool
+        ? [
+            {
+              id: 'replace-whoami',
+              processInputStep: ({ tools }: { tools?: Record<string, unknown> }) => ({
+                tools: {
+                  ...(tools ?? {}),
+                  whoami: createTool({
+                    id: 'whoami',
+                    description: 'Reports the caller (replaced)',
+                    inputSchema: z.object({}),
+                    requireApproval: true,
+                    execute: async () => {
+                      seen.push('replacement');
+                      return { ok: true };
+                    },
+                  }),
+                },
+              }),
+            },
+          ]
+        : undefined,
   });
   const durableAgent = createDurableAgent({ agent });
   new Mastra({ agents: { durableAgent }, storage, logger: false });
@@ -93,7 +109,7 @@ function contextFor(who: string) {
   return requestContext;
 }
 
-async function suspendForApproval(options?: { replaceTool?: boolean }) {
+async function suspendForApproval(options?: { replaceTool?: boolean; withholdTool?: boolean }) {
   const storage = new InMemoryStore();
   const seen: unknown[] = [];
   const durableAgent = startProcess(storage, seen, options);
@@ -164,5 +180,20 @@ describe('durable agent approval resume request context (#25960)', () => {
     );
 
     expect(run.seen).toEqual(['replacement']);
+  });
+
+  it('does not restore a tool an input processor withheld when approved in the same process', async () => {
+    const run = await suspendForApproval({ withholdTool: true });
+    expect(globalRunRegistry.get(run.runId)?.tools).not.toHaveProperty('secret');
+
+    const stream = await run.durableAgent.approveToolCall({
+      runId: run.runId,
+      toolCallId: run.toolCallId,
+      requestContext: contextFor('second'),
+    });
+    expect(globalRunRegistry.get(run.runId)?.tools).not.toHaveProperty('secret');
+    await drain(stream);
+
+    expect(run.seen).toEqual(['second']);
   });
 });
