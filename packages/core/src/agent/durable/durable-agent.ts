@@ -53,6 +53,7 @@ import {
 import type { UntrackedRunLiveness } from './execution-fence';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationResult } from './preparation';
+import { recordRunSavedMessages } from './run-message-refs';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import {
   createDurableAgentStream,
@@ -80,7 +81,7 @@ import type {
 } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
-import { loadMessageListStateForResume } from './workflows/shared/message-list-state';
+import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 /** Recoveries in progress in this process, keyed by agent and run. */
@@ -461,10 +462,11 @@ export interface DurableAgentConfig<
    *
    * The default policy always persists `pending | paused | suspended`
    * (required for human-in-the-loop `resume()`), and persists `running`
-   * only when the Mastra instance is configured with
-   * `recovery: { durableAgents: 'auto' }` — `running` checkpoints exist
-   * solely so `listActiveRuns()` / `recover()` / `recoverActiveRuns()` can
-   * see in-flight runs after a crash.
+   * when the Mastra instance is configured with
+   * `recovery: { durableAgents: 'auto' }`, or at each step boundary after
+   * `mastra.shutdown()` starts (even with recovery off). `running`
+   * checkpoints exist solely so `listActiveRuns()` / `recover()` /
+   * `recoverActiveRuns()` can see in-flight runs after a crash or shutdown.
    *
    * Footguns when providing a custom predicate:
    * - Excluding `paused` / `suspended` breaks human-in-the-loop resume.
@@ -879,15 +881,23 @@ export class DurableAgent<
     runId: string,
     loopSnapshot: WorkflowRunState,
   ): Promise<unknown> {
+    let latest: unknown;
     try {
       const nested = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_EXECUTION });
       const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
-      const fromNested = snapshot && latestMessageListState(snapshot);
-      if (fromNested) return fromNested;
+      latest = snapshot && latestMessageListState(snapshot);
     } catch {
       // Fall back to the loop snapshot.
     }
-    return latestMessageListState(loopSnapshot);
+    latest ??= latestMessageListState(loopSnapshot);
+    if (!latest) return latest;
+    // Messages memory already stores are kept as refs; restore them so callers
+    // see the full rows (e.g. ToolSearch results). #loadRecalledMessages has
+    // already loaded them, so this normally needs no storage read.
+    return hydrateMessageListState(
+      { state: undefined, getInitData: () => loopSnapshot.context?.input, mastra: this.#mastra },
+      latest as Parameters<typeof hydrateMessageListState>[1],
+    );
   }
 
   async #loadRecoverableSnapshot(
@@ -1249,7 +1259,13 @@ export class DurableAgent<
 
     const messageList = new MessageList({ threadId, resourceId });
     try {
-      messageList.deserialize(workflowInput.messageListState);
+      // The persisted input keeps messages memory already stores as refs.
+      messageList.deserialize(
+        await hydrateMessageListState(
+          { state: undefined, getInitData: () => workflowInput, mastra: this.#mastra },
+          workflowInput.messageListState,
+        ),
+      );
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] recover(${runId}) messageList deserialize skipped: ${error}`);
     }
@@ -1330,7 +1346,11 @@ export class DurableAgent<
     executionFence.throwIfLost();
 
     const saveQueueManager = memory
-      ? new SaveQueueManager({ logger: this.#mastra?.getLogger?.() as any, memory })
+      ? new SaveQueueManager({
+          logger: this.#mastra?.getLogger?.() as any,
+          memory,
+          onSaved: recordRunSavedMessages(runId),
+        })
       : undefined;
     const backgroundTasksConfig = this.getBackgroundTasksConfig?.();
     const backgroundTaskManager = this.#mastra?.backgroundTaskManager;
@@ -2172,10 +2192,12 @@ export class DurableAgent<
    *
    * Always persists `pending | paused | suspended` — those records are the
    * resume artifacts human-in-the-loop flows depend on. Persists `running`
-   * only when crash recovery is enabled (`recovery.durableAgents: 'auto'`):
-   * `running` checkpoints exist solely to feed `listActiveRuns()` /
-   * `recover()` / `recoverActiveRuns()`, and are pure write amplification
-   * when nothing consumes them (issue #23915).
+   * when crash recovery is enabled (`recovery.durableAgents: 'auto'`), or
+   * at each step boundary once `mastra.shutdown()` has started (even with
+   * recovery off), so a run still in flight when the process exits leaves a
+   * checkpoint to recover from (issue #26600). Otherwise `running`
+   * checkpoints are pure write amplification: they exist solely to feed
+   * `listActiveRuns()` / `recover()` / `recoverActiveRuns()` (issue #23915).
    *
    * Reads the recovery config lazily (per persist call, via the Mastra
    * reference) so the policy stays correct regardless of whether the
@@ -2186,7 +2208,8 @@ export class DurableAgent<
       workflowStatus === 'pending' ||
       workflowStatus === 'paused' ||
       workflowStatus === 'suspended' ||
-      (workflowStatus === 'running' && this.#mastra?.recoveryConfig?.durableAgents === 'auto')
+      (workflowStatus === 'running' &&
+        (this.#mastra?.recoveryConfig?.durableAgents === 'auto' || this.#mastra?.__shuttingDown === true))
     );
   };
 
