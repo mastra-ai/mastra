@@ -279,7 +279,7 @@ export class FlagEmbedding extends Embedding {
 
     try {
       if (showDownloadProgress) {
-        console.info(`Downloading ${model} from Hugging Face (${repo})...`);
+        console.error(`Downloading ${model} from Hugging Face (${repo})...`);
       }
       for (const file of [...COMMON_MODEL_FILES, ...files]) {
         const downloaded = await downloadFileToCacheDir({ repo, path: file, cacheDir: hubCacheDir });

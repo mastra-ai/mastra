@@ -1,3 +1,4 @@
+import { Console } from 'node:console';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -31,6 +32,8 @@ describe('FlagEmbedding.retrieveModel', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
     fs.rmSync(cacheDir, { recursive: true, force: true });
   });
 
@@ -55,6 +58,30 @@ describe('FlagEmbedding.retrieveModel', () => {
         'tokenizer_config.json',
       ].sort(),
     );
+  });
+
+  it('writes download notices to stderr without contaminating stdout', async () => {
+    vi.stubGlobal('console', new Console(process.stdout, process.stderr));
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    await FlagEmbedding.retrieveModel(EmbeddingModel.BGESmallENV15, cacheDir);
+
+    expect(stdout.mock.calls.map(([chunk]) => String(chunk)).join('')).toBe('');
+    expect(stderr.mock.calls.map(([chunk]) => String(chunk)).join('')).toContain(
+      `Downloading ${EmbeddingModel.BGESmallENV15}`,
+    );
+  });
+
+  it('keeps both streams quiet when download progress is disabled', async () => {
+    vi.stubGlobal('console', new Console(process.stdout, process.stderr));
+    const stdout = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    const stderr = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+    await FlagEmbedding.retrieveModel(EmbeddingModel.BGESmallENV15, cacheDir, false);
+
+    expect(stdout).not.toHaveBeenCalled();
+    expect(stderr).not.toHaveBeenCalled();
   });
 
   it('reuses an existing cache directory without downloading', async () => {
