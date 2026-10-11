@@ -7305,7 +7305,7 @@ export class Agent<
       taggedSystemMessages: messageList.getPersisted.taggedSystemMessages,
     };
 
-    const scorerOutput: ScorerRunOutputForAgent = messageList.getPersisted.response.db();
+    const scorerOutput: ScorerRunOutputForAgent = messageList.getRunResponseMessages();
 
     if (Object.keys(scorers || {}).length > 0) {
       for (const [_id, scorerObject] of Object.entries(scorers)) {

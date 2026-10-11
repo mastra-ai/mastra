@@ -2788,7 +2788,7 @@ ${formattedMessages}
 
       if (messageList) {
         if (idsToRemoveList.length > 0) {
-          messageList.removeByIds(idsToRemoveList);
+          messageList.removeByIds(idsToRemoveList, { pruned: true });
         }
         return messageList.get.all.db();
       }
@@ -2826,7 +2826,7 @@ ${formattedMessages}
 
       if (messageList) {
         if (idsToRemove.length > 0) {
-          messageList.removeByIds(idsToRemove);
+          messageList.removeByIds(idsToRemove, { pruned: true });
         }
 
         if (messagesToSave.length > 0) {

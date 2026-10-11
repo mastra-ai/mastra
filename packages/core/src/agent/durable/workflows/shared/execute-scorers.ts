@@ -55,7 +55,7 @@ export function executeDurableAgentScorers({
 
   const outputMessageList = new MessageList();
   outputMessageList.deserialize(finalOutput.messageListState);
-  const scorerOutput = outputMessageList.getPersisted.response.db();
+  const scorerOutput = outputMessageList.getRunResponseMessages();
 
   const resolveContext = requestContext ?? new RequestContext();
 

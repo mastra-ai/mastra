@@ -42,7 +42,7 @@ import {
   withUnavailableAttachmentPlaceholders,
   withUnavailableAttachmentUrls,
 } from './prompt/unavailable-attachments';
-import { MessageStateManager } from './state';
+import { MessageStateManager, deserializeMessages, serializeMessages } from './state';
 import type {
   MastraDBMessage,
   MastraMessagePart,
@@ -278,6 +278,11 @@ export class MessageList {
 
   // Centralized state management for message tracking
   private stateManager = new MessageStateManager();
+
+  // Response messages this run produced that were later pruned from the live context (e.g. by
+  // observational memory after observing them). They no longer belong in the prompt, but they
+  // are still part of the run's response — see getRunResponseMessages().
+  #prunedResponseMessages = new Map<string, MastraDBMessage>();
 
   // Legacy getters for backward compatibility - delegate to stateManager
   private get memoryMessages() {
@@ -566,7 +571,14 @@ export class MessageList {
       agentNetworkAppend: this._agentNetworkAppend,
     });
     const lastStepBoundary = this.#locateLastStepBoundary();
-    return lastStepBoundary ? { ...state, lastStepBoundary } : state;
+    const prunedResponseMessages = this.#getPrunedResponseMessages();
+    return {
+      ...state,
+      ...(lastStepBoundary ? { lastStepBoundary } : {}),
+      ...(prunedResponseMessages.length > 0
+        ? { prunedResponseMessages: serializeMessages(prunedResponseMessages) }
+        : {}),
+    };
   }
 
   /**
@@ -609,6 +621,9 @@ export class MessageList {
     for (const message of this.messages) {
       this.updateLastCreatedAt(message);
     }
+    this.#prunedResponseMessages = new Map(
+      deserializeMessages(state.prunedResponseMessages ?? []).map(message => [message.id, message]),
+    );
     this.#lastStepBoundary = undefined;
     if (state.lastStepBoundary) {
       const { messageId, partIndex } = state.lastStepBoundary;
@@ -762,14 +777,21 @@ export class MessageList {
   /**
    * Remove messages by ID
    * @param ids - Array of message IDs to remove
+   * @param options.pruned - The messages are only being dropped from the live context (e.g. after
+   *   observational memory has observed them). Response messages removed this way stay part of the
+   *   run's response reported by getRunResponseMessages().
    * @returns Array of removed messages
    */
-  public removeByIds(ids: string[]): MastraDBMessage[] {
+  public removeByIds(ids: string[], options?: { pruned?: boolean }): MastraDBMessage[] {
     const idsSet = new Set(ids);
     const removed: MastraDBMessage[] = [];
+    const persistedResponse = this.newResponseMessagesPersisted;
     this.messages = this.messages.filter(m => {
       if (idsSet.has(m.id)) {
         removed.push(m);
+        if (options?.pruned && persistedResponse.has(m)) {
+          this.#prunedResponseMessages.set(m.id, m);
+        }
         this.stateManager.removeMessage(m);
         return false;
       }
@@ -1325,6 +1347,25 @@ export class MessageList {
         aiV4UIMessagesToAIV4CoreMessages(this.toAIV4UIMessages(this.response.db(), { transformToolPayloads: false })),
     },
   };
+  /** Pruned response messages that are not (again) tracked as response messages in the live list. */
+  #getPrunedResponseMessages(): MastraDBMessage[] {
+    if (this.#prunedResponseMessages.size === 0) return [];
+    const liveResponseIds = new Set(this.responsePersisted.db().map(message => message.id));
+    return Array.from(this.#prunedResponseMessages.values()).filter(message => !liveResponseIds.has(message.id));
+  }
+
+  /**
+   * Every response message this run produced, in order, including messages that were later pruned
+   * from the live context (see removeByIds' `pruned` option). Use this to evaluate the whole run,
+   * e.g. for scoring; use getPersisted.response for what is still in the list.
+   */
+  public getRunResponseMessages(): MastraDBMessage[] {
+    const live = this.responsePersisted.db();
+    const pruned = this.#getPrunedResponseMessages();
+    if (pruned.length === 0) return live;
+    return [...pruned, ...live].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  }
+
   private responsePersisted = {
     db: (): MastraDBMessage[] => this.messages.filter(m => this.newResponseMessagesPersisted.has(m)),
 

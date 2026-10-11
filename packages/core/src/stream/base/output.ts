@@ -1866,7 +1866,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
           systemMessages: this.messageList.getSystemMessages(),
           taggedSystemMessages: this.messageList.getPersisted.taggedSystemMessages,
         },
-        output: this.messageList.getPersisted.response.db(),
+        output: this.messageList.getRunResponseMessages(),
       };
     }
 
