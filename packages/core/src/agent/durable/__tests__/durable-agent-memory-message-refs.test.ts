@@ -245,6 +245,12 @@ const refIds = (snapshot: WorkflowRunState | undefined, engine: Engine = 'defaul
     .filter((m: any) => m.__ref === 'memory')
     .map((m: any) => m.id);
 
+/** Recalled history plus the messages this run saved to memory, in thread order. */
+async function expectedRefIds(storage: InstanceType<typeof import('../../../storage').InMemoryStore>) {
+  const { messages } = await (await storage.getStore('memory'))!.listMessages({ threadId, perPage: false });
+  return [...allHistoryIds, ...messages.map(m => m.id).filter(id => !allHistoryIds.includes(id))].sort();
+}
+
 /** JSON paths whose string values contain `needle`. */
 function copyPaths(value: unknown, needle: string, path = '$'): string[] {
   if (typeof value === 'string') return value.includes(needle) ? [path] : [];
@@ -319,7 +325,9 @@ describe('memory-recalled messages in durable runs', () => {
     },
   );
 
-  it.each(engines)(
+  // Default engine only: the evented engine writes workflow state with refs at each step, and its
+  // pruned checkpoints keep no other transcript copy once the input is saved, so it passes either way.
+  it.each(['default'] as const)(
     'keeps at most one inline copy of a saved message in each running checkpoint (%s engine)',
     async engine => {
       const { durableAgent, workflows, storage, globalRunRegistry } = await startProcess(history(), {
@@ -451,7 +459,7 @@ describe('memory-recalled messages in durable runs', () => {
       });
       const { runId, toolCallId } = await streamUntilApproval(durableAgent, workflows);
       // Recalled history, plus the messages this run saved before suspending.
-      expect(refIds(await outerSnapshot(workflows, runId), engine)).toEqual(expect.arrayContaining(allHistoryIds));
+      expect(refIds(await outerSnapshot(workflows, runId), engine).sort()).toEqual(await expectedRefIds(storage));
 
       const memoryStore = (await storage.getStore('memory'))!;
       await memoryStore.updateMessages({
@@ -484,7 +492,7 @@ describe('memory-recalled messages in durable runs', () => {
       });
       const { runId, toolCallId } = await streamUntilApproval(durableAgent, workflows);
       const suspended = await outerSnapshot(workflows, runId);
-      expect(refIds(suspended, engine)).toEqual(expect.arrayContaining(allHistoryIds));
+      expect(refIds(suspended, engine).sort()).toEqual(await expectedRefIds(storage));
       expect(JSON.stringify(workflowState(suspended, engine))).not.toContain(historyText(0));
 
       const memoryStore = (await storage.getStore('memory'))!;
