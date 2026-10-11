@@ -7276,10 +7276,12 @@ export class Agent<
     overrideScorers,
     threadId,
     resourceId,
+    memory,
     ...observabilityContext
   }: {
     messageList: MessageList;
     runId: string;
+    memory?: MastraMemory;
     requestContext: RequestContext;
     structuredOutput?: boolean;
     overrideScorers?:
@@ -7299,6 +7301,10 @@ export class Agent<
       return;
     }
 
+    if (Object.keys(scorers || {}).length === 0) {
+      return;
+    }
+
     const scorerInput: ScorerRunInputForAgent = {
       inputMessages: messageList.getPersisted.input.db(),
       rememberedMessages: messageList.getPersisted.remembered.db(),
@@ -7309,35 +7315,32 @@ export class Agent<
     let scorerOutput: ScorerRunOutputForAgent;
     try {
       // A resumed run knows the response messages pruned before it suspended by id only.
-      const memory = await this.getMemory({ requestContext });
       scorerOutput = await messageList.getRunResponseMessages(createStoredMessageLoader(memory));
     } catch (e) {
       this.logger.warn('Failed to load run response messages for scorers', { agent: this.name, error: e });
       return;
     }
 
-    if (Object.keys(scorers || {}).length > 0) {
-      for (const [_id, scorerObject] of Object.entries(scorers)) {
-        runScorer({
-          mastra: this.#mastra ?? this.#ephemeralMastra,
-          scorerId: scorerObject.scorer.id,
-          scorerObject: scorerObject,
-          runId,
-          input: scorerInput,
-          output: scorerOutput,
-          requestContext,
-          entity: {
-            id: this.id,
-            name: this.name,
-          },
-          source: 'LIVE',
-          entityType: 'AGENT',
-          structuredOutput: !!structuredOutput,
-          threadId,
-          resourceId,
-          ...observabilityContext,
-        });
-      }
+    for (const [_id, scorerObject] of Object.entries(scorers)) {
+      runScorer({
+        mastra: this.#mastra ?? this.#ephemeralMastra,
+        scorerId: scorerObject.scorer.id,
+        scorerObject: scorerObject,
+        runId,
+        input: scorerInput,
+        output: scorerOutput,
+        requestContext,
+        entity: {
+          id: this.id,
+          name: this.name,
+        },
+        source: 'LIVE',
+        entityType: 'AGENT',
+        structuredOutput: !!structuredOutput,
+        threadId,
+        resourceId,
+        ...observabilityContext,
+      });
     }
   }
 
@@ -8619,6 +8622,7 @@ export class Agent<
       overrideScorers,
       threadId,
       resourceId,
+      memory,
       ...observabilityContext,
     });
 

@@ -62,6 +62,18 @@ describe('MessageList.getRunResponseMessages', () => {
     expect(ids(await list.getRunResponseMessages())).toEqual(['a1']);
   });
 
+  it('forgets a pruned message once its re-added copy is removed normally', async () => {
+    const list = new MessageList({ threadId: 't', resourceId: 'r' });
+    list.add(message('a1', 'assistant', 'first', 2000), 'response');
+
+    const [removed] = list.removeByIds(['a1'], { pruned: true });
+    list.add(removed!, 'response');
+    list.removeByIds(['a1']);
+
+    expect(await list.getRunResponseMessages()).toEqual([]);
+    expect(list.serialize().prunedResponseMessageIds).toBeUndefined();
+  });
+
   it('keeps only the ids of pruned response messages in serialized state', async () => {
     const list = new MessageList({ threadId: 't', resourceId: 'r' });
     list.add(message('a1', 'assistant', 'before suspend', 2000), 'response');

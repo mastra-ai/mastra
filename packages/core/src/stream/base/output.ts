@@ -1881,15 +1881,19 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       | undefined;
 
     if (this.#returnScorerData) {
-      scoringData = {
-        input: {
-          inputMessages: this.messageList.getPersisted.input.db(),
-          rememberedMessages: this.messageList.getPersisted.remembered.db(),
-          systemMessages: this.messageList.getSystemMessages(),
-          taggedSystemMessages: this.messageList.getPersisted.taggedSystemMessages,
-        },
-        output: await this.messageList.getRunResponseMessages(this.#options.loadStoredMessages),
-      };
+      try {
+        scoringData = {
+          input: {
+            inputMessages: this.messageList.getPersisted.input.db(),
+            rememberedMessages: this.messageList.getPersisted.remembered.db(),
+            systemMessages: this.messageList.getSystemMessages(),
+            taggedSystemMessages: this.messageList.getPersisted.taggedSystemMessages,
+          },
+          output: await this.messageList.getRunResponseMessages(this.#options.loadStoredMessages),
+        };
+      } catch (error) {
+        this.logger.warn('Failed to load run response messages for scoring data', { error });
+      }
     }
 
     const steps = await this.steps;

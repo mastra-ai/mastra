@@ -789,6 +789,8 @@ export class MessageList {
         removed.push(m);
         if (options?.pruned && persistedResponse.has(m)) {
           this.#prunedResponseMessages.set(m.id, m);
+        } else if (!options?.pruned) {
+          this.#prunedResponseMessages.delete(m.id);
         }
         this.stateManager.removeMessage(m);
         return false;
