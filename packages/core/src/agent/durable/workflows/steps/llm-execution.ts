@@ -1719,7 +1719,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 let processedChunk: typeof clientChunk | null | undefined;
                 if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
                   if (rawChunk.type === 'step-finish') {
-                    deferredStepFinishChunk = clientChunk;
+                    // The rewritten provider 'finish' chunk carries no response metadata;
+                    // add it so onStepFinish/onFinish report the provider's response id
+                    // and model, as the regular agent does.
+                    const { id, timestamp, modelId } = responseMetadata;
+                    deferredStepFinishChunk = {
+                      ...clientChunk,
+                      payload: {
+                        ...clientChunk.payload,
+                        metadata: {
+                          ...(id !== undefined ? { id } : {}),
+                          ...(timestamp !== undefined ? { timestamp } : {}),
+                          ...(modelId !== undefined ? { modelId } : {}),
+                          ...(clientChunk.payload as any)?.metadata,
+                        },
+                      },
+                    } as typeof clientChunk;
                   } else if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
                     try {
                       processedChunk = await processAndEmitChunk(clientChunk, {
@@ -1972,11 +1987,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                   case 'response-metadata': {
                     const payload = rawChunk.payload as any;
+                    // Providers may split metadata across several chunks, so keep
+                    // earlier values for fields a chunk omits.
                     responseMetadata = {
-                      id: payload.id,
-                      timestamp: payload.timestamp,
-                      modelId: payload.modelId,
-                      headers: payload.headers,
+                      id: payload.id ?? responseMetadata.id,
+                      timestamp: payload.timestamp ?? responseMetadata.timestamp,
+                      modelId: payload.modelId ?? responseMetadata.modelId,
+                      headers: payload.headers ?? responseMetadata.headers,
                     };
                     break;
                   }

@@ -288,6 +288,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   let lastErrorStack: string | undefined;
   let lastErrorName: string | undefined;
   let lastErrorCause: unknown;
+  // Response metadata (provider response id, model, timestamp) of the latest step, for onFinish.
+  let lastStepResponse: { id?: string; modelId?: string; timestamp?: Date } = {};
 
   // Idle/liveness watchdog. A durable run whose driving process crashed stops
   // emitting chunks but never publishes a terminal FINISH/ERROR/ABORT event, so
@@ -404,6 +406,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             lastErrorName = typeof errPayload?.error?.name === 'string' ? errPayload.error.name : undefined;
             lastErrorCause = errPayload?.error ?? errPayload;
           }
+          if ((chunk as any).type === 'step-finish') {
+            const { id, modelId, timestamp } = (chunk as any).payload?.metadata ?? {};
+            lastStepResponse = { id, modelId, timestamp };
+          }
           safeEnqueue(controller, chunk as ChunkType<OUTPUT>);
           await onChunk?.(chunk as ChunkType<OUTPUT>);
           break;
@@ -512,7 +518,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
                 totalUsage: normalizeUsage(data.output?.usage),
                 warnings: data.stepResult?.warnings ?? [],
                 request: { body: undefined },
-                response: {},
+                response: lastStepResponse,
                 reasoningText: undefined,
                 providerMetadata: undefined,
               });
