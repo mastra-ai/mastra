@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Fixed Factory onboarding getting stuck on "Connect GitHub" when the Mastra Platform GitHub App is installed on a personal GitHub account. Installs started from Factory are now attributed to the signed-in user, and the installation list is requested on that user's behalf, so personal-account installations show up and connect. When no installation is accessible, `/web/github/status` now includes a `userConnectionReason` explaining why.
+Factory now sends the signed-in user's id when it starts a Mastra Platform GitHub App install and when it lists installations. It merges the org's installations with the user's, so personal-account installs can show up during onboarding. Before, onboarding could get stuck on "Connect GitHub" for these installs. This needs Mastra Platform to support `userId` on those endpoints. When no installation is accessible, `/web/github/status` now includes a `userConnectionReason` field that explains why.

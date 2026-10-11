@@ -163,45 +163,51 @@ describe('PlatformGithubIntegration', () => {
     ]);
   });
 
-  it('lists platform-owned installations and repositories as Intake sources', async () => {
-    const fetchImpl = vi
-      .fn<typeof fetch>()
-      .mockResolvedValueOnce(
-        json({
-          installations: [
-            {
-              installationId: 7,
-              accountLogin: 'acme',
-              accountType: 'Organization',
-              suspendedAt: null,
-              usable: true,
-            },
-            {
-              installationId: 8,
-              accountLogin: 'old',
-              accountType: 'Organization',
-              suspendedAt: '2026-07-01T00:00:00Z',
-              usable: false,
-            },
-          ],
-          pendingRequests: [],
-        }),
-      )
-      .mockResolvedValueOnce(
-        json({
+  it('lists org and acting-user installations and their repositories as Intake sources', async () => {
+    const orgInstallations = [
+      { installationId: 7, accountLogin: 'acme', accountType: 'Organization', suspendedAt: null, usable: true },
+      {
+        installationId: 8,
+        accountLogin: 'old',
+        accountType: 'Organization',
+        suspendedAt: '2026-07-01T00:00:00Z',
+        usable: false,
+      },
+    ];
+    const personalInstallation = {
+      installationId: 9,
+      accountLogin: 'ada',
+      accountType: 'User',
+      suspendedAt: null,
+      usable: true,
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      // Platform filters by userId here: the org install is only returned to the org-key listing.
+      if (url.endsWith('/github-app/installations'))
+        return json({ installations: orgInstallations, pendingRequests: [] });
+      if (url.endsWith('/github-app/installations?userId=user-1')) {
+        return json({ installations: [personalInstallation], pendingRequests: [] });
+      }
+      const repoMatch = url.match(/\/github-app\/installations\/(\d+)\/repositories$/);
+      if (repoMatch) {
+        const repository =
+          repoMatch[1] === '7'
+            ? { id: 101, owner: 'acme', name: 'app', fullName: 'acme/app' }
+            : { id: 202, owner: 'ada', name: 'notes', fullName: 'ada/notes' };
+        return json({
           repositories: [
             {
-              id: 101,
-              owner: 'acme',
-              name: 'app',
-              fullName: 'acme/app',
+              ...repository,
               private: true,
               defaultBranch: 'main',
-              htmlUrl: 'https://github.com/acme/app',
+              htmlUrl: `https://github.com/${repository.fullName}`,
             },
           ],
-        }),
-      );
+        });
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
     const { sourceControl } = await createPlatformStorageForTests();
     const integration = createIntegration(fetchImpl);
     const storage = sourceControl.forIntegration('github');
@@ -214,22 +220,27 @@ describe('PlatformGithubIntegration', () => {
         type: 'repository',
         metadata: expect.objectContaining({ installationId: 7, repositoryId: 101, defaultBranch: 'main' }),
       },
+      {
+        id: 'ada/notes',
+        name: 'ada/notes',
+        type: 'repository',
+        metadata: expect.objectContaining({ installationId: 9, repositoryId: 202, defaultBranch: 'main' }),
+      },
     ]);
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      1,
-      'https://platform.example.com/v1/server/github-app/installations?userId=user-1',
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://platform.example.com/v1/server/github-app/installations',
       expect.objectContaining({ headers: expect.objectContaining({ authorization: 'Bearer platform-token' }) }),
     );
-    expect(fetchImpl).toHaveBeenNthCalledWith(
-      2,
-      'https://platform.example.com/v1/server/github-app/installations/7/repositories',
+    expect(fetchImpl).not.toHaveBeenCalledWith(
+      'https://platform.example.com/v1/server/github-app/installations/8/repositories',
       expect.anything(),
     );
-    const [storedInstallation] = await storage.installations.list({ orgId: 'org-1' });
-    expect(storedInstallation).toMatchObject({ externalId: '7', accountName: 'acme' });
-    await expect(
-      storage.repositories.list({ orgId: 'org-1', installationId: storedInstallation!.id }),
-    ).resolves.toEqual([expect.objectContaining({ externalId: '101', slug: 'acme/app' })]);
+    const storedInstallations = await storage.installations.list({ orgId: 'org-1' });
+    expect(storedInstallations.map(installation => installation.externalId).sort()).toEqual(['7', '9']);
+    const acmeInstallation = storedInstallations.find(installation => installation.externalId === '7');
+    await expect(storage.repositories.list({ orgId: 'org-1', installationId: acmeInstallation!.id })).resolves.toEqual([
+      expect.objectContaining({ externalId: '101', slug: 'acme/app' }),
+    ]);
   });
 
   it('normalizes issue and PR resources through the shared capabilities', async () => {
@@ -1059,16 +1070,29 @@ describe('PlatformGithubIntegration', () => {
     );
   });
 
-  it('lists installations as the acting user so personal-account installs connect', async () => {
+  it('merges org installations with the acting user personal-account installs', async () => {
     const seed = await createPlatformStorageForTests();
+    const orgInstallation = {
+      installationId: 7,
+      accountLogin: 'acme',
+      accountType: 'Organization',
+      suspendedAt: null,
+      usable: true,
+    };
+    const personalInstallation = {
+      installationId: 9,
+      accountLogin: 'ada',
+      accountType: 'User',
+      suspendedAt: null,
+      usable: true,
+    };
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
       if (url.includes('/github-app/installations')) {
-        // Platform only exposes personal-account installs in the owning user's context.
+        // Covers both possible Platform semantics for `userId`: as a filter (user installs only)
+        // the org install comes from the org-key listing; as a widening it appears in both.
         return json({
-          installations: url.includes('userId=user-1')
-            ? [{ installationId: 9, accountLogin: 'ada', accountType: 'User', suspendedAt: null, usable: true }]
-            : [],
+          installations: url.includes('userId=user-1') ? [personalInstallation] : [orgInstallation],
           pendingRequests: [],
         });
       }
@@ -1102,16 +1126,22 @@ describe('PlatformGithubIntegration', () => {
     const status = await app.request('/web/github/status');
     await expect(status.json()).resolves.toMatchObject({
       connected: true,
-      installations: [{ installationId: 9, accountLogin: 'ada', accountType: 'User' }],
+      installations: [
+        { installationId: 7, accountLogin: 'acme', accountType: 'Organization' },
+        { installationId: 9, accountLogin: 'ada', accountType: 'User' },
+      ],
       reason: 'ready',
     });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      'https://platform.example.com/v1/server/github-app/installations',
+      expect.anything(),
+    );
     expect(fetchImpl).toHaveBeenCalledWith(
       'https://platform.example.com/v1/server/github-app/installations?userId=user-1',
       expect.anything(),
     );
-    await expect(context.storage.sourceControl.installations.list({ orgId: 'org-1' })).resolves.toEqual([
-      expect.objectContaining({ externalId: '9', accountName: 'ada', accountType: 'User' }),
-    ]);
+    const stored = await context.storage.sourceControl.installations.list({ orgId: 'org-1' });
+    expect(stored.map(installation => installation.externalId).sort()).toEqual(['7', '9']);
   });
 
   it('reports why no installation is accessible when status is not connected', async () => {
