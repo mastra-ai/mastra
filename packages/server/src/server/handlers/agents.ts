@@ -1769,31 +1769,37 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
   }
 
   const gateways = mastra ? Object.values(mastra.listGateways() ?? {}) : [];
-  for (const gateway of gateways) {
-    // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
-    if (gateway.id === 'models.dev') continue;
-    // When blocking external providers, skip the built-in default gateways
-    // so only user-registered custom gateways remain.
-    if (blockExternalProviders && defaultGatewayIds.has(gateway.id)) continue;
-    try {
-      const gatewayProviders = await gateway.fetchProviders();
-      for (const [providerId, config] of Object.entries(gatewayProviders)) {
-        // Apply the same prefixing logic as registry-generator to avoid
-        // creating duplicate entries alongside PROVIDER_REGISTRY data.
-        // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
-        // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
-        const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
-        // Only add if not already present from PROVIDER_REGISTRY to prevent
-        // duplicates when PROVIDER_REGISTRY already has the prefixed key
-        // (e.g. dev mode where GatewayRegistry includes custom gateways).
-        if (!(prefixedId in allProviders)) {
-          allProviders[prefixedId] = config;
-        }
-      }
-    } catch (error) {
-      console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
+  const fetchedGateways = gateways.filter(
+    gateway =>
+      // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
+      gateway.id !== 'models.dev' &&
+      // When blocking external providers, skip the built-in default gateways
+      // so only user-registered custom gateways remain.
+      !(blockExternalProviders && defaultGatewayIds.has(gateway.id)),
+  );
+  // Fetch gateways in parallel, then merge in registration order so the
+  // "first one wins" rule below stays deterministic.
+  const results = await Promise.allSettled(fetchedGateways.map(async gateway => gateway.fetchProviders()));
+  fetchedGateways.forEach((gateway, index) => {
+    const result = results[index]!;
+    if (result.status === 'rejected') {
+      console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, result.reason);
+      return;
     }
-  }
+    for (const [providerId, config] of Object.entries(result.value)) {
+      // Apply the same prefixing logic as registry-generator to avoid
+      // creating duplicate entries alongside PROVIDER_REGISTRY data.
+      // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
+      // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
+      const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
+      // Only add if not already present from PROVIDER_REGISTRY to prevent
+      // duplicates when PROVIDER_REGISTRY already has the prefixed key
+      // (e.g. dev mode where GatewayRegistry includes custom gateways).
+      if (!(prefixedId in allProviders)) {
+        allProviders[prefixedId] = config;
+      }
+    }
+  });
 
   return Object.entries(allProviders).map(([id, provider]) => {
     return {

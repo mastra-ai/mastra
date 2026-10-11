@@ -34,13 +34,36 @@ interface TokenData {
   url: string;
 }
 
+const PROVIDERS_CACHE_TTL_MS = 5 * 60 * 1000;
+const PROVIDERS_FETCH_TIMEOUT_MS = 5_000;
+
 export class NetlifyGateway extends MastraModelGateway {
   readonly id = 'netlify';
   readonly name = 'Netlify AI Gateway';
   private tokenCache = new InMemoryServerCache();
+  private providersCache?: { promise: Promise<Record<string, ProviderConfig>>; expiresAt: number };
 
+  /**
+   * Netlify's provider list changes rarely, but this is called on every
+   * `GET /agents/providers` request. Reuse the result (and any in-flight
+   * request) for a few minutes; failures are not cached.
+   */
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
-    const response = await fetch('https://api.netlify.com/api/v1/ai-gateway/providers');
+    if (this.providersCache && this.providersCache.expiresAt > Date.now()) {
+      return this.providersCache.promise;
+    }
+    const cache = { promise: this.fetchProvidersFromApi(), expiresAt: Date.now() + PROVIDERS_CACHE_TTL_MS };
+    this.providersCache = cache;
+    cache.promise.catch(() => {
+      if (this.providersCache === cache) this.providersCache = undefined;
+    });
+    return cache.promise;
+  }
+
+  private async fetchProvidersFromApi(): Promise<Record<string, ProviderConfig>> {
+    const response = await fetch('https://api.netlify.com/api/v1/ai-gateway/providers', {
+      signal: AbortSignal.timeout(PROVIDERS_FETCH_TIMEOUT_MS),
+    });
     if (!response.ok) {
       throw new Error(`Failed to fetch from Netlify: ${response.statusText}`);
     }

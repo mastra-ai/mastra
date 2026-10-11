@@ -36,7 +36,9 @@ describe('NetlifyGateway', () => {
 
       const providers = await gateway.fetchProviders();
 
-      expect(mockFetch).toHaveBeenCalledWith('https://api.netlify.com/api/v1/ai-gateway/providers');
+      expect(mockFetch).toHaveBeenCalledWith('https://api.netlify.com/api/v1/ai-gateway/providers', {
+        signal: expect.any(AbortSignal),
+      });
       expect(providers).toBeDefined();
       expect(Object.keys(providers).length).toBe(1);
       expect(providers['netlify']).toBeDefined();
@@ -91,6 +93,29 @@ describe('NetlifyGateway', () => {
       });
 
       await expect(gateway.fetchProviders()).rejects.toThrow('Failed to fetch from Netlify: Internal Server Error');
+    });
+
+    it('should reuse the provider list for repeated calls', async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: async () => mockNetlifyResponse });
+
+      const [first, second] = await Promise.all([gateway.fetchProviders(), gateway.fetchProviders()]);
+      const third = await gateway.fetchProviders();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(second).toBe(first);
+      expect(third).toBe(first);
+    });
+
+    it('should not cache failures', async () => {
+      mockFetch
+        .mockResolvedValueOnce({ ok: false, statusText: 'Internal Server Error' })
+        .mockResolvedValueOnce({ ok: true, json: async () => mockNetlifyResponse });
+
+      await expect(gateway.fetchProviders()).rejects.toThrow();
+      const providers = await gateway.fetchProviders();
+
+      expect(providers['netlify']).toBeDefined();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
   });
 
