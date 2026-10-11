@@ -220,6 +220,7 @@ import {
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import { setCredentialStoreProvider } from '../credential-resolver.js';
 import {
+  canUseProvider,
   createMastraCodeGateway,
   resolveModel,
   getDynamicModel,
@@ -562,6 +563,24 @@ describe('resolveModel', () => {
       mockAuthStorageInstance.get.mockReturnValue(undefined);
       const result = resolveModel('openai/gpt-4o') as Record<string, unknown>;
       expect(result.__provider).toBe('model-router');
+    });
+
+    it('reports only providers the signed-in Factory account can use, ignoring server keys', () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'server-google-key');
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: (providerId: string) =>
+          providerId === 'anthropic' ? { type: 'api_key' as const, key: 'sk-anthropic' } : undefined,
+        getStoredApiKey: (providerId: string) => (providerId === 'anthropic' ? 'sk-anthropic' : undefined),
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+
+      expect(canUseProvider('anthropic', { requestContext })).toBe(true);
+      expect(canUseProvider('google', { requestContext })).toBe(false);
+      vi.unstubAllEnvs();
     });
 
     it('reports a missing signed-in Factory credential instead of an environment variable', () => {

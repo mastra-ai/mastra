@@ -504,7 +504,7 @@ function readStoredOMConfig(
   autoModelSource: 'live-session' | 'configured-default',
   availableProviders: ReadonlySet<string>,
 ): OMConfigInfo {
-  const autoModelId = resolveAutoOMModelId(currentModelId);
+  const autoModelId = resolveAutoOMModelId(currentModelId, providerId => availableProviders.has(providerId));
   const observerModelId = record?.observerModelId ?? autoModelId;
   const reflectorModelId = record?.reflectorModelId ?? autoModelId;
   return {
@@ -689,17 +689,16 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       return availableProviders;
     };
 
-    // Factory-scoped OM reads without a stored row fall back to the low-cost
-    // OM model of the factory default model's provider — not the global
-    // built-in default, whose provider may have no credential here.
+    // Without a live session, Auto previews against the factory default model
+    // (resolved with this account's providers in readStoredOMConfig) — not the
+    // global built-in default, whose provider may have no credential here.
     const factoryOmFallback = async (factoryProjectId: string | undefined): Promise<string | undefined> => {
       try {
-        const defaultModelId = factoryProjectId
+        return factoryProjectId
           ? await options.factoryProjects
               ?.getById({ id: factoryProjectId })
               .then(project => project?.defaultModelId ?? undefined)
           : controller.listModes?.().find(mode => mode.defaultModelId)?.defaultModelId;
-        return defaultModelId ? resolveAutoOMModelId(defaultModelId) : undefined;
       } catch {
         return undefined;
       }

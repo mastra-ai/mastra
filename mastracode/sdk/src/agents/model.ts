@@ -308,6 +308,30 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
   });
 }
 
+/**
+ * Whether `resolveModel` can authenticate a provider for this request, using the
+ * same credential lookup (tenant store in deployed Factory, otherwise local auth
+ * and environment keys).
+ */
+export function canUseProvider(providerId: string, options?: { requestContext?: RequestContext }): boolean {
+  reloadAuthStorage();
+  const baseCredentialStore = resolveCredentialStore(options?.requestContext) ?? getGlobalAuthStorage();
+  const gateway = createMastraCodeGateway({
+    mastraGatewayBaseUrl: '',
+    routeThroughMastraGateway: false,
+    customProviders: resolveCustomProviders(options?.requestContext) ?? loadSettings().customProviders,
+    credentialStore: createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext),
+  });
+  return Boolean(
+    gateway.resolveAuth({
+      gatewayId: MASTRACODE_GATEWAY_ID,
+      providerId,
+      modelId: '',
+      routerId: `${MASTRACODE_GATEWAY_ID}/${providerId}`,
+    }),
+  );
+}
+
 export interface ThinkingRequestContext {
   state?: { thinkingLevel?: unknown };
   session?: { modeId?: string };
