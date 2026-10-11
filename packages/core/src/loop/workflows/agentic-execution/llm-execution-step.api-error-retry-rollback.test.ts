@@ -218,5 +218,11 @@ describe('#26081 — mid-stream API-error retry discards the failed attempt', ()
     expect(await output.text).toBe(RECOVERED_TEXT);
     const response = await output.response;
     expect(responseTexts(response.messages)).toEqual([RECOVERED_TEXT]);
+
+    // The retried attempt reports no content of its own, not the accepted tool step's.
+    const retried = (await output.steps).filter(step => (step.finishReason as string) === 'retry');
+    expect(retried).toHaveLength(1);
+    expect(retried[0]!.text).toBe('');
+    expect(retried[0]!.content).toEqual([]);
   });
 });

@@ -943,7 +943,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 // may be a stale reference (each workflow step deserializes
                 // a fresh instance).  Fall back to the live messageList for
                 // non-durable agents.
-                content: (chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1),
+                // A retried attempt was rolled back, so the last response content belongs to an earlier step.
+                content: isRetriedStep
+                  ? []
+                  : ((chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1)),
                 text: stepText,
                 // Include tripwire data if present
                 tripwire: stepTripwire,
