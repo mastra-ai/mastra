@@ -726,7 +726,7 @@ describe('pruneAgentLoopSnapshot nested provider request strips', () => {
     const nestedRequest = requestEcho();
     const snapshot = snapshotWith({
       step: {
-        status: 'success',
+        status: 'running',
         payload: {
           llmOutput: {
             stepResult: { reason: 'stop', request: nestedRequest },
@@ -745,6 +745,10 @@ describe('pruneAgentLoopSnapshot nested provider request strips', () => {
     });
 
     const pruned = (pruneAgentLoopSnapshot({ snapshot }).context as Record<string, any>).step;
+
+    expect(pruned.payload.lastStepResult).toBeDefined();
+    expect(pruned.output.lastStepResult).toBeDefined();
+
     for (const value of [
       pruned.payload.llmOutput.stepResult,
       pruned.payload.llmOutput.metadata,
@@ -755,6 +759,7 @@ describe('pruneAgentLoopSnapshot nested provider request strips', () => {
     ]) {
       expect(value).not.toHaveProperty('request');
     }
+
     expect(pruned.payload.llmOutput.metadata.response).toEqual({ headers: {} });
     expect(pruned.payload.llmOutput.stepResult.reason).toBe('stop');
   });
