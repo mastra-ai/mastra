@@ -219,7 +219,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           threadIds: allThreadIds,
           config: this.getObservationMarkerConfig(),
         });
-        await this.streamMarker(startMarker);
+        await this.streamMarker(startMarker, lastMessage);
       }
     }
   }
@@ -514,7 +514,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           recordId: this.opts.record.id,
           threadId,
         });
-        await this.streamMarker(endMarker);
+        await this.streamMarker(endMarker, lastMessage);
       }
     }
   }
@@ -534,7 +534,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           recordId: this.opts.record.id,
           threadId,
         });
-        await this.streamMarker(failedMarker);
+        await this.streamMarker(failedMarker, lastMessage);
       }
     }
   }
