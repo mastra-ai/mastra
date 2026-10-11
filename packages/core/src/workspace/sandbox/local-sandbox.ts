@@ -112,7 +112,10 @@ export interface LocalSandboxOptions extends Omit<MastraSandboxOptions, 'process
    * Useful on Windows systems whose native commands emit a legacy code page. Default: 'utf-8'.
    */
   outputEncoding?: string;
-  /** Default timeout for operations in ms (default: 30000) */
+  /**
+   * Default timeout for executeCommand in ms (default: 30000).
+   * Use 0 to disable. Does not apply to processes.spawn.
+   */
   timeout?: number;
   /**
    * Isolation backend for sandboxed execution.
@@ -194,6 +197,7 @@ export class LocalSandbox extends MastraSandbox<string> {
   declare readonly mounts: MountManager;
   private readonly env: NodeJS.ProcessEnv;
   private readonly _outputEncoding?: string;
+  private readonly timeout: number;
   private _nativeSandboxConfig: NativeSandboxConfig;
   /**
    * SBPL the user wrote, read from `seatbeltProfilePath` at start. Set only when that file
@@ -249,6 +253,12 @@ export class LocalSandbox extends MastraSandbox<string> {
       processes: new LocalProcessManager({ env: options.env ?? {}, outputEncoding: options.outputEncoding }),
     });
 
+    this.timeout = options.timeout ?? 30_000;
+    // Apply the foreground default without limiting background process lifetimes.
+    const executeCommand = this.executeCommand!;
+    this.executeCommand = (command, args, options) =>
+      executeCommand.call(this, command, args, { ...options, timeout: options?.timeout ?? this.timeout });
+
     this.id = options.id ?? this.generateId();
     this._createdAt = new Date();
     this.setWorkingDirectory(expandTilde(options.workingDirectory ?? path.join(process.cwd(), '.sandbox')));
@@ -288,6 +298,7 @@ export class LocalSandbox extends MastraSandbox<string> {
       ...(options.id !== undefined && { id: options.id }),
       workingDirectory: options.workingDirectory ?? this.workingDirectory,
       env: options.env ?? this.env,
+      timeout: this.timeout,
       isolation: this.isolation,
       outputEncoding: this._outputEncoding,
       nativeSandbox: {
