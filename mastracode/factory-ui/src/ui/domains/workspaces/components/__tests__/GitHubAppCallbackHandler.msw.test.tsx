@@ -78,6 +78,10 @@ describe('GitHubAppCallbackHandler', () => {
       'This GitHub link was already used. If you just finished connecting GitHub, you’re all set; otherwise connect GitHub again.',
     ],
     [
+      'github_app_user_authorization_required',
+      'Mastra Platform needs you to authorize the GitHub App with your GitHub account to link this installation. Connect GitHub again and approve the authorization step.',
+    ],
+    [
       'github_app_installation_not_owned',
       'Only the owner of this GitHub account, or an owner of the GitHub organization, can link this installation.',
     ],
