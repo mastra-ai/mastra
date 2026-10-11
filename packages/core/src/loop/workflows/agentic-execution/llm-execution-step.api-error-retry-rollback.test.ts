@@ -225,4 +225,34 @@ describe('#26081 — mid-stream API-error retry discards the failed attempt', ()
     expect(retried[0]!.text).toBe('');
     expect(retried[0]!.content).toEqual([]);
   });
+
+  it('does not carry a structured object from the failed attempt onto the recovered one', async () => {
+    const schema = z.object({ answer: z.number() });
+    const prompts: any[][] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt as any[]);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream:
+            prompts.length === 1
+              ? failingTextStream('resp-1', JSON.stringify({ answer: 41 }))
+              : textStream('resp-2', JSON.stringify({ answer: 42 })),
+        };
+      },
+    });
+    const agent = new Agent({
+      id: 'api-error-retry-object',
+      name: 'API error retry object',
+      instructions: 'Answer.',
+      model,
+      errorProcessors: [retryOnceProcessor()],
+    });
+
+    const output = await agent.stream('q', { maxSteps: 1, structuredOutput: { schema } });
+
+    expect(await output.object).toEqual({ answer: 42 });
+    expect(prompts).toHaveLength(2);
+  });
 });
