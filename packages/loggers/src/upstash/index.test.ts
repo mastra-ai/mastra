@@ -377,13 +377,32 @@ describe('UpstashTransport', () => {
   });
 
   describe('listLogs and listLogsByRunId', () => {
-    it('should normalize page 0 to page 1 when a query fails', async () => {
+    it('should normalize page 0 to page 1 when listLogs fails', async () => {
       const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       fetchMock.mockImplementation(() => Promise.reject(new Error('Upstash down')));
-      const expected = { logs: [], total: 0, page: 1, perPage: 100, hasMore: false };
 
-      expect(await transport.listLogs({ page: 0 })).toEqual(expected);
-      expect(await transport.listLogsByRunId({ runId: 'run-1', page: 0 })).toEqual(expected);
+      expect(await transport.listLogs({ page: 0 })).toEqual({
+        logs: [],
+        total: 0,
+        page: 1,
+        perPage: 100,
+        hasMore: false,
+      });
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should normalize page 0 to page 1 when listLogsByRunId fails', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(transport, 'listLogs').mockRejectedValueOnce(new Error('Upstash down'));
+
+      expect(await transport.listLogsByRunId({ runId: 'run-1', page: 0 })).toEqual({
+        logs: [],
+        total: 0,
+        page: 1,
+        perPage: 100,
+        hasMore: false,
+      });
 
       consoleSpy.mockRestore();
     });
