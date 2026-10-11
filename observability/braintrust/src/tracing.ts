@@ -1,3 +1,4 @@
+
 /**
  * Braintrust Exporter for Mastra Observability
  *
@@ -48,6 +49,7 @@ export interface BraintrustSpan {
   }): BraintrustSpan;
   log(event: Record<string, any>): void;
   end(args?: { endTime?: number }): number;
+  flush?(): Promise<void>;
 }
 
 /**
@@ -152,7 +154,7 @@ export class BraintrustExporter extends TrackingExporter<
   #useProvidedLogger: boolean;
   #providedLogger?: BraintrustLogger;
   #localLogger?: BraintrustLogger;
-  #usesExternalSpan = false;
+  #externalSpans = new Set<BraintrustSpan>();
 
   constructor(config: BraintrustExporterConfig = {}) {
     // Resolve env vars BEFORE calling super (config is readonly in base class)
@@ -330,7 +332,7 @@ export class BraintrustExporter extends TrackingExporter<
       // Check if it's a valid span (not the NOOP_SPAN)
       if (externalSpan && externalSpan.id) {
         // External span detected - attach Mastra traces to it
-        this.#usesExternalSpan = true;
+        this.#externalSpans.add(externalSpan);
         return externalSpan;
       } else {
         // No external span - use provided logger
@@ -438,9 +440,13 @@ export class BraintrustExporter extends TrackingExporter<
     const logger = this.#useProvidedLogger ? this.#providedLogger : this.#localLogger;
     await logger?.flush?.();
 
-    // Spans created under an ambient Braintrust span use the SDK's global logger,
-    // rather than the configured logger instance.
-    if (this.#usesExternalSpan) {
+    // Flush every external span used by this exporter.
+    for (const externalSpan of this.#externalSpans) {
+      await externalSpan.flush?.();
+    }
+
+    // Preserve compatibility with the global Braintrust logger.
+    if (this.#externalSpans.size > 0) {
       await flushBraintrust();
     }
   }
