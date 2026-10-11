@@ -1,5 +1,4 @@
 ---
-'@mastra/server': patch
 '@mastra/core': patch
 ---
 
