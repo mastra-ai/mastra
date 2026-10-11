@@ -27,10 +27,13 @@ export async function draftingFixture(
     text?: string;
     denied?: boolean;
     databasePath?: string;
+    runId?: string;
+    runtimeRoot?: string;
   } = {},
 ) {
-  const runId = 'draft-run',
-    url = `file:${options.databasePath ?? resolve(root, 'state.db')}`;
+  const runId = options.runId ?? 'draft-run',
+    url = `file:${options.databasePath ?? resolve(root, 'state.db')}`,
+    runtimeRoot = options.runtimeRoot ?? resolve(root, 'runtime');
   const data = options.questions ?? [{ text: 'Does production require MFA?' }];
   const s = source(
     xlsxFixture([
@@ -95,7 +98,7 @@ export async function draftingFixture(
     runId,
     manifest,
     root: resolve(root, 'evidence'),
-    runtimeRoot: resolve(root, 'runtime'),
+    runtimeRoot,
     scope: { organizationId: 'northstar', product: 'tasks', environment: 'production', domains: ['access'] },
     context: context(),
   });
@@ -106,7 +109,16 @@ export async function draftingFixture(
   } finally {
     store.close();
   }
-  return { root, runId, url, manifestPath, snapshot, questions: imported.input.questions, input: imported.input };
+  return {
+    root,
+    runId,
+    url,
+    runtimeRoot,
+    manifestPath,
+    snapshot,
+    questions: imported.input.questions,
+    input: imported.input,
+  };
 }
 export type DraftFixture = Awaited<ReturnType<typeof draftingFixture>>;
 export interface CasePlan {

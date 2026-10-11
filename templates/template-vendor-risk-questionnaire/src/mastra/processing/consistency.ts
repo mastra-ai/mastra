@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { createAnswerConsistencyAgent } from '../agents/answer-consistency.ts';
+import { bindAnswerConsistencyAgent } from '../agents/answer-consistency.ts';
 import { questionResultSchema } from '../contracts/answer.ts';
 import type { QuestionResult, Reason } from '../contracts/answer.ts';
 import { canonicalJson } from '../intake/source.ts';
@@ -84,14 +84,17 @@ export async function flagInconsistentAnswers(inputResults: QuestionResult[], en
           const screenComparison = createScreening({ ...environment, questionId, requestContext });
           await screenComparison(comparisonPayload, 'draft');
 
-          const verifier = createAnswerConsistencyAgent({
-            ...environment,
-            questionId,
-            phase: 'verification',
-            provider: environment.models('verification', questionId),
-            maxTurns: 1,
-            validateOutput: value => comparisonSchema.parse(value),
-          });
+          const verifier = bindAnswerConsistencyAgent(
+            {
+              ...environment,
+              questionId,
+              phase: 'verification',
+              provider: environment.models('verification', questionId),
+              maxTurns: 1,
+              validateOutput: value => comparisonSchema.parse(value),
+            },
+            requestContext,
+          );
           const response = await verifier.generate(comparisonPayload, {
             requestContext,
             structuredOutput: { schema: comparisonSchema, errorStrategy: 'strict' },

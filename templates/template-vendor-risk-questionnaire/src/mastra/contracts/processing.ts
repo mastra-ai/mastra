@@ -8,7 +8,7 @@ export const securityOutcomeSchema = z
     runId: id,
     questionId: id,
     policyVersion: z.literal(1),
-    boundary: z.enum(['question', 'evidence', 'tool_result', 'draft']),
+    boundary: z.enum(['question', 'evidence', 'tool_result', 'draft', 'reviewer', 'export']),
     gate: z.enum(['SEC-001', 'SEC-002']),
     status: z.enum(['passed', 'blocked', 'failed']),
     reason: z.enum(['PASSED', 'REGEX_BLOCKED', 'INJECTION_BLOCKED', 'PII_BLOCKED', 'DETECTOR_FAILED']),

@@ -1,0 +1,177 @@
+import { chmod, lstat, readdir, readFile, rm } from 'node:fs/promises';
+import { resolve, relative } from 'node:path';
+import { z } from 'zod';
+import { openDatabase } from '../persistence/database.ts';
+import { writeTransaction } from '../persistence/transaction.ts';
+import { openReviewStore } from '../persistence/review.ts';
+import { reviewStateSchema, scopedRunId } from '../contracts/review.ts';
+import { hash } from '../contracts/primitives.ts';
+import { canonicalJson, sha256 } from '../intake/source.ts';
+import { containedDirectory } from '../exports/publication.ts';
+import type { MastraStorage } from '@mastra/core/storage';
+import type { createQuestionnaireWorkflow } from '../workflows/vendor-risk-questionnaire.ts';
+
+export const cleanupConfirmationSchema = z
+  .object({ runId: scopedRunId, revision: z.int().nonnegative(), previewDigest: hash, confirm: z.literal(true) })
+  .strict();
+const tables = [
+  'vrq_decisions',
+  'vrq_review',
+  'vrq_security',
+  'vrq_usage',
+  'vrq_results',
+  'vrq_processing',
+  'vrq_evidence_snapshots',
+  'vrq_intakes',
+] as const;
+export interface CleanupOptions {
+  databaseUrl: string;
+  runtimeRoot: string;
+  workflow: ReturnType<typeof createQuestionnaireWorkflow>;
+  storage: MastraStorage;
+}
+async function tree(root: string, path: string): Promise<Array<{ path: string; digest: string }>> {
+  const stat = await lstat(path);
+  if (stat.isSymbolicLink()) throw new Error('UNSAFE_CLEANUP_PATH');
+  if (stat.isFile()) return [{ path: relative(root, path), digest: sha256(await readFile(path)) }];
+  if (!stat.isDirectory()) throw new Error('UNSAFE_CLEANUP_PATH');
+  const files = (await readdir(path)).sort(),
+    result = [{ path: relative(root, path) + '/', digest: sha256(canonicalJson(files)) }];
+  for (const f of files) result.push(...(await tree(root, resolve(path, f))));
+  return result;
+}
+export async function previewCleanup(runId: string, options: CleanupOptions) {
+  scopedRunId.parse(runId);
+  const review = await openReviewStore(options.databaseUrl),
+    client = await openDatabase(options.databaseUrl);
+  try {
+    const state = await review.read(runId);
+    if (!state || state.claimToken) throw new Error('NO_CLEANABLE_RUN');
+    await containedDirectory(options.runtimeRoot, options.runtimeRoot);
+    const roots: string[] = [];
+    const exports = resolve(options.runtimeRoot, 'exports', runId);
+    try {
+      await lstat(exports);
+      roots.push(exports);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+    }
+    const snapshots = resolve(options.runtimeRoot, 'snapshots');
+    try {
+      await containedDirectory(options.runtimeRoot, snapshots);
+      const exact = resolve(snapshots, `${runId}-${state.evidenceDigest}`);
+      try {
+        await lstat(exact);
+        roots.push(exact);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      }
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+    }
+    const files = [];
+    for (const p of roots) files.push(...(await tree(options.runtimeRoot, p)));
+    const records = [];
+    for (const table of tables) {
+      const rows = await client.execute({
+        sql: `SELECT * FROM ${table} WHERE run_id = ? ORDER BY rowid`,
+        args: [runId],
+      });
+      records.push({ table, count: rows.rows.length, digest: sha256(canonicalJson(rows.rows)) });
+    }
+    const snapshot = await options.workflow.getWorkflowRunById(state.workflowRunId);
+    const workflowStore = await options.storage.getStore('workflows');
+    if (!workflowStore) throw new Error('WORKFLOW_STORAGE_REQUIRED');
+    const all = (await workflowStore.listWorkflowRuns({ perPage: false })).runs;
+    const selected: Array<{ workflowName: string; runId: string }> = [
+      { workflowName: options.workflow.id, runId: state.workflowRunId },
+    ];
+    const key = (v: { workflowName: string; runId: string }) => `${v.workflowName}:${v.runId}`;
+    for (let i = 0; i < selected.length; i++) {
+      const parent = selected[i]!;
+      for (const child of all) {
+        const record = typeof child.snapshot === 'string' ? JSON.parse(child.snapshot) : child.snapshot;
+        if (
+          record.parentWorkflow?.workflowId === parent.workflowName &&
+          record.parentWorkflow.runId === parent.runId &&
+          !selected.some(s => key(s) === key(child))
+        )
+          selected.push({ workflowName: child.workflowName, runId: child.runId });
+      }
+    }
+    const workflowRuns = selected.map(s => ({
+      ...s,
+      digest: sha256(canonicalJson(all.find(r => key(r) === key(s))?.snapshot ?? null)),
+    }));
+    const preview = {
+      runId,
+      revision: state.revision,
+      workflowRunId: state.workflowRunId,
+      workflowRuns,
+      workflowDigest: sha256(canonicalJson(snapshot)),
+      roots: roots.map(p => relative(options.runtimeRoot, p)),
+      files,
+      records,
+    };
+    return { ...preview, previewDigest: sha256(canonicalJson(preview)) };
+  } finally {
+    review.close();
+    client.close();
+  }
+}
+export async function confirmCleanup(raw: unknown, options: CleanupOptions) {
+  const c = cleanupConfirmationSchema.parse(raw),
+    preview = await previewCleanup(c.runId, options);
+  if (preview.revision !== c.revision || preview.previewDigest !== c.previewDigest)
+    throw new Error('STALE_CLEANUP_PREVIEW');
+  const client = await openDatabase(options.databaseUrl);
+  try {
+    // Serialize approval/revision ownership before destructive work; no transaction spans filesystem operations.
+    await writeTransaction(client, async tx => {
+      const rows = await tx.execute({
+        sql: 'SELECT state_json,claim_token FROM vrq_review WHERE run_id = ?',
+        args: [c.runId],
+      });
+      const state = reviewStateSchema.parse(JSON.parse(String(rows.rows[0]?.state_json)));
+      if (state.claimToken || rows.rows[0]?.claim_token || state.revision !== preview.revision)
+        throw new Error('STALE_CLEANUP_PREVIEW');
+      for (const record of preview.records) {
+        const current = await tx.execute({
+          sql: `SELECT * FROM ${record.table} WHERE run_id = ? ORDER BY rowid`,
+          args: [c.runId],
+        });
+        if (sha256(canonicalJson(current.rows)) !== record.digest) throw new Error('STALE_CLEANUP_PREVIEW');
+      }
+      const token = `cleanup-${c.previewDigest}`;
+      const changed = await tx.execute({
+        sql: 'UPDATE vrq_review SET state_json = ?,claim_token = ? WHERE run_id = ? AND claim_token IS NULL',
+        args: [canonicalJson({ ...state, claimToken: token, claimAt: new Date().toISOString() }), token, c.runId],
+      });
+      if (changed.rowsAffected !== 1) throw new Error('CLEANUP_BUSY');
+    });
+    for (const path of preview.roots) {
+      const absolute = resolve(options.runtimeRoot, path);
+      await containedDirectory(options.runtimeRoot, absolute);
+      await tree(options.runtimeRoot, absolute);
+      await chmod(absolute, 0o700);
+      await rm(absolute, { recursive: true });
+    }
+    const workflowStore = await options.storage.getStore('workflows');
+    if (!workflowStore) throw new Error('WORKFLOW_STORAGE_REQUIRED');
+    for (const run of [...preview.workflowRuns].reverse()) {
+      if (run.workflowName === options.workflow.id && run.runId === preview.workflowRunId)
+        await options.workflow.deleteWorkflowRunById(run.runId);
+      else await workflowStore.deleteWorkflowRunById({ workflowName: run.workflowName, runId: run.runId });
+    }
+    await writeTransaction(client, async tx => {
+      for (const table of tables) await tx.execute({ sql: `DELETE FROM ${table} WHERE run_id = ?`, args: [c.runId] });
+    });
+    return {
+      runId: c.runId,
+      deletedRecords: preview.records.reduce((sum, r) => sum + r.count, 0),
+      deletedFiles: preview.files.length,
+    };
+  } finally {
+    client.close();
+  }
+}

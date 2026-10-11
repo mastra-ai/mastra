@@ -18,7 +18,7 @@ import { questionResultSchema } from '../contracts/answer.ts';
 import type { Reason, QuestionResult } from '../contracts/answer.ts';
 import { ProcessingFailure } from '../processing/failure.ts';
 
-export async function openProcessingStore(url = databaseUrl) {
+export async function openProcessingStore(url = databaseUrl, reviewClaim?: { token: string; revision: number }) {
   const client = await openDatabase(url);
   await client.batch(
     [
@@ -98,7 +98,14 @@ export async function openProcessingStore(url = databaseUrl) {
         writeTransaction(client, async tx => {
           const run = await runFrom(tx, runId);
           if (!run) throw new Error('Missing processing identity.');
-          if (run.stopReason || run.state !== 'processing')
+          const reviewReservation =
+            reviewClaim && run.state === 'awaiting_review' && ['injection', 'pii', 'verification'].includes(phase)
+              ? await tx.execute({
+                  sql: "SELECT claim_token FROM vrq_review WHERE run_id = ? AND claim_token = ? AND json_extract(state_json, '$.state') = 'awaiting_review' AND json_extract(state_json, '$.revision') = ?",
+                  args: [runId, reviewClaim.token, reviewClaim.revision],
+                })
+              : undefined;
+          if (run.stopReason || (run.state !== 'processing' && !reviewReservation?.rows[0]?.claim_token))
             return { failure: run.stopReason ?? 'BUDGET_EXHAUSTED' } as const;
           const records = await usageFrom(tx, runId);
           const p = run.policy,

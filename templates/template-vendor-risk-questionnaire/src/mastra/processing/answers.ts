@@ -1,7 +1,7 @@
 import { RequestContext } from '@mastra/core/request-context';
 
-import { createEvidenceAnswerAgent } from '../agents/evidence-answer.ts';
-import { createSupportVerifierAgent } from '../agents/support-verifier.ts';
+import { bindEvidenceAnswerAgent } from '../agents/evidence-answer.ts';
+import { bindSupportVerifierAgent } from '../agents/support-verifier.ts';
 import { createQuestionEvidenceTools, modelEvidenceExcerpt } from '../tools/question-evidence.ts';
 import type { CanonicalQuestion } from '../contracts/question.ts';
 import { draftSchema, draftResponseSchema, questionResultSchema, verificationSchema } from '../contracts/answer.ts';
@@ -134,7 +134,7 @@ export async function processQuestion(
 
     // Query planning is screened too: generated tool arguments cannot introduce unscreened content.
     await screen(canonicalJson(interpretation), 'tool_result');
-    const answerer = createEvidenceAnswerAgent(
+    const answerer = bindEvidenceAnswerAgent(
       {
         runId,
         questionId: question.id,
@@ -148,6 +148,7 @@ export async function processQuestion(
         validateOutput: value => draftResponseSchema.parse(value),
         validateToolInput: validateGeneratedToolInput,
       },
+      requestContext,
       tools,
     );
     const response = await answerer.generate(canonicalJson({ question: questionInput, interpretation }), {
@@ -237,18 +238,21 @@ export async function processQuestion(
     }
     // An invalid citation never enters the verifier context as purported support.
     if (draft.value !== 'unknown' && !reasons.includes('INVALID_ATTRIBUTION')) {
-      const verifier = createSupportVerifierAgent({
-        runId,
-        questionId: question.id,
-        policy,
-        store,
-        provider: models('verification', question.id),
-        phase: 'verification',
-        maxTurns: 1,
-        onAttempt,
-        beforeCall,
-        validateOutput: value => verificationSchema.parse(value),
-      });
+      const verifier = bindSupportVerifierAgent(
+        {
+          runId,
+          questionId: question.id,
+          policy,
+          store,
+          provider: models('verification', question.id),
+          phase: 'verification',
+          maxTurns: 1,
+          onAttempt,
+          beforeCall,
+          validateOutput: value => verificationSchema.parse(value),
+        },
+        requestContext,
+      );
       const supportResponse = await verifier.generate(
         canonicalJson({
           question: questionInput,

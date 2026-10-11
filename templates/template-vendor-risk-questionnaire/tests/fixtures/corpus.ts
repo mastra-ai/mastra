@@ -1,3 +1,5 @@
+import { defaultExecutionPolicy } from '../../src/mastra/contracts/execution-policy.ts';
+import { evidenceProfileSchema } from '../../src/mastra/contracts/profile.ts';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { xlsxFixture, docxFixture, pdfFixture } from './office.ts';
@@ -210,4 +212,14 @@ export async function generateCorpus(root: string) {
   variants.documents[3]!.sha256 = '0'.repeat(64);
   await writeFile(resolve(root, 'manifest-denied.json'), JSON.stringify(variants, null, 2) + '\n');
   return manifest;
+}
+
+export function demoProfile(root: string) {
+  return evidenceProfileSchema.parse({
+    schemaVersion: 1,
+    evidenceRoot: resolve(root, 'evidence'),
+    manifestPath: resolve(root, 'manifest.json'),
+    scope: { organizationId: 'northstar', product: 'tasks', environment: 'production', domains: demoDomains },
+    policy: defaultExecutionPolicy,
+  });
 }

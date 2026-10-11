@@ -13,7 +13,7 @@ npm run draft -- status --run-id review-1
 
 The first command persists processing identity, input/evidence digests and the execution policy before any provider request. Its summary reports the actual processing state and safe stop reason; a failed processing run exits unsuccessfully even when the workflow engine completed. The second reopens local state without model calls. Its summary contains safe question IDs, routing reasons, attempts and usage. Supporting answer text and source excerpts stay in the restricted local `.runtime/vrq.db` record; they are not printed to general CLI logs. Runtime data is not encrypted by this template.
 
-A processing identity can be started once. A duplicate start is rejected, including concurrent starts. A changed source or policy requires a newly identified intake/evidence run. Opening status does not retry a failed call or spend additional tokens. Interrupted processing retains durable reservations and completed results; automatic restarting, review release and export are not provided by the current draft workflow.
+A processing identity can be started once. A duplicate start is rejected, including concurrent starts. A changed source or policy requires a newly identified intake/evidence run. Opening status does not retry a failed call or spend additional tokens. Interrupted processing retains durable reservations and completed results; automatic restarting is disabled. Use the parent questionnaire workflow for persistent review and approved export, as described in [review and exports](review.md).
 
 ## Mastra Studio
 
@@ -27,7 +27,7 @@ Run `npm run dev`, open [Mastra Studio](http://localhost:4111), and select **ven
 }
 ```
 
-The run must already have intake and approved evidence persisted through the intake CLI. Output contains original-order draft results and review reasons. `awaiting_review` means drafts are ready for human review, not approved for disclosure. There is no Studio intake upload or automated demonstration bootstrap.
+The run must already have intake and approved evidence persisted through the intake CLI. Output contains original-order draft results and review reasons. `awaiting_review` means drafts are ready for human review, not approved for disclosure. The separate **vendor-risk-intake** workflow confirms an explicitly mapped local source, and `npm run dev` prepares absent demonstration data. See [review and exports](review.md).
 
 Agent factories and prompts live under `src/mastra/agents`. The workflow composer is `src/mastra/workflows/vendor-risk-drafts.ts`; its steps, contracts and per-instance runtime live in the adjacent `vendor-risk-drafts` folder. Evidence tool builders live under `src/mastra/tools`. The lightweight Mastra index registers the guarded workflow; agent factories require a run-bound model configuration and are not registered as standalone Studio agents.
 

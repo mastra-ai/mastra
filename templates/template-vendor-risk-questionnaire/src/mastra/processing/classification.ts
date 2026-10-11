@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { createQuestionInterpretationAgent } from '../agents/question-interpretation.ts';
+import { bindQuestionInterpretationAgent } from '../agents/question-interpretation.ts';
 import { interpretationSchema } from '../contracts/answer.ts';
 import type { Interpretation } from '../contracts/answer.ts';
 import type { CanonicalQuestion } from '../contracts/question.ts';
@@ -36,13 +36,14 @@ export async function classifyQuestions(questions: CanonicalQuestion[], environm
     }
   }
 
-  // One pass if it fits; only input-size overflow splits classification into bounded batches.
+  // Bound both input size and expected structured response size when grouping classification.
   const batches: CanonicalQuestion[][] = [];
   const batchInputAllowance = Math.max(1, environment.policy.maxInputTokens - 4500);
   for (const question of screenedQuestions) {
     const currentBatch = batches.at(-1);
     if (
       currentBatch &&
+      currentBatch.length < Math.max(1, Math.floor(environment.policy.maxOutputTokens / 500)) &&
       Buffer.byteLength(canonicalJson([...currentBatch, question].map(questionPayload))) <= batchInputAllowance
     )
       currentBatch.push(question);
@@ -63,19 +64,23 @@ export async function classifyQuestions(questions: CanonicalQuestion[], environm
         'Every requested question requires one interpretation.',
       );
     const questionId = `classification-${batchIndex}`;
+    const requestContext = trustedQuestionContext(questionId, environment);
     try {
-      const interpretationAgent = createQuestionInterpretationAgent({
-        ...environment,
-        phase: 'interpretation',
-        questionId,
-        provider: environment.models('interpretation', questionId),
-        maxTurns: 1,
-        validateOutput: value => batchSchema.parse(value),
-      });
+      const interpretationAgent = bindQuestionInterpretationAgent(
+        {
+          ...environment,
+          phase: 'interpretation',
+          questionId,
+          provider: environment.models('interpretation', questionId),
+          maxTurns: 1,
+          validateOutput: value => batchSchema.parse(value),
+        },
+        requestContext,
+      );
       const interpretationResponse = await interpretationAgent.generate(
         canonicalJson({ questions: batch.map(questionPayload), scope: environment.evidence.record.scope }),
         {
-          requestContext: trustedQuestionContext(questionId, environment),
+          requestContext,
           structuredOutput: { schema: batchSchema, errorStrategy: 'strict' },
           maxSteps: 1,
           modelSettings: { maxRetries: 0 },
