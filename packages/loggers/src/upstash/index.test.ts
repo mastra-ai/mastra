@@ -160,6 +160,47 @@ describe('UpstashTransport', () => {
     expect(fetchMock).toHaveBeenCalled();
   });
 
+  describe('timestamp handling', () => {
+    const now = 1_700_000_000_000;
+
+    const getPushedLog = () => {
+      const commands = JSON.parse(fetchMock.mock.calls[0][1].body);
+      return JSON.parse(commands[0][2]);
+    };
+
+    beforeEach(() => {
+      vi.setSystemTime(now);
+    });
+
+    it('should preserve a zero timestamp from object input', async () => {
+      transport.write({ msg: 'epoch record', time: 0 } as any);
+      await transport._flush();
+
+      expect(getPushedLog().time).toBe(0);
+    });
+
+    it('should preserve a zero timestamp from JSON string input', async () => {
+      transport.write(JSON.stringify({ msg: 'epoch record', time: 0 }));
+      await transport._flush();
+
+      expect(getPushedLog().time).toBe(0);
+    });
+
+    it('should add the current time when time is null', async () => {
+      transport.write(JSON.stringify({ msg: 'null time', time: null }));
+      await transport._flush();
+
+      expect(getPushedLog().time).toBe(now);
+    });
+
+    it('should add the current time when time is missing', async () => {
+      transport.write(JSON.stringify({ msg: 'no time' }));
+      await transport._flush();
+
+      expect(getPushedLog().time).toBe(now);
+    });
+  });
+
   describe('error handling', () => {
     it('should handle Upstash API errors', async () => {
       fetchMock.mockImplementationOnce(() =>
