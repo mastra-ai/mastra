@@ -1,5 +1,15 @@
 # @mastra/hono
 
+## 1.7.18-alpha.9
+
+### Patch Changes
+
+- Fixed multipart form parsing to safely handle field names that collide with built-in object properties ([#26683](https://github.com/mastra-ai/mastra/pull/26683))
+
+- Updated dependencies [[`a65d0c7`](https://github.com/mastra-ai/mastra/commit/a65d0c788824081f36ccd95078a8d1214ff687c4), [`cb0201a`](https://github.com/mastra-ai/mastra/commit/cb0201ab41c36723b9f6e331464e5c74326865ed), [`e89310a`](https://github.com/mastra-ai/mastra/commit/e89310a8db29a663a85c6a31a8c376cc8f59c129), [`590d6ca`](https://github.com/mastra-ai/mastra/commit/590d6ca9fa6ccf8b55dcf2e98da080ee1a348f67)]:
+  - @mastra/core@1.76.0-alpha.9
+  - @mastra/server@1.76.0-alpha.9
+
 ## 1.7.18-alpha.8
 
 ### Patch Changes

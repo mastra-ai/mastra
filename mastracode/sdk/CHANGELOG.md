@@ -1,5 +1,25 @@
 # @mastra/code-sdk
 
+## 1.12.0-alpha.9
+
+### Minor Changes
+
+- Added a `--pack <id>` flag to headless mode (`mastracode -p ... --pack anthropic`). It resolves builtin pack ids and saved custom packs (`custom:<name>` or bare name), exits with the list of valid packs on unknown ids, and applies the pack like `/models` → Activate: mode models, subagent models, model route, and thread `activeModelPackId`. An explicit `--model` still wins over the pack for the active mode. ([#26691](https://github.com/mastra-ai/mastra/pull/26691))
+
+  **Example**
+
+  ```bash
+  mastracode -p "summarize this repo" --pack anthropic
+  mastracode -p "fix the tests" --pack Kimi --model openai/gpt-5.5
+  ```
+
+### Patch Changes
+
+- Fixed per-agent-type subagent model selections (`subagentModelId_explore/plan/execute`) being stripped from session state by schema validation. Pack activation (`/models` → Activate or `--pack`) assigned subagent models, but the next session state update silently dropped them, so subagents fell back to their default models. ([#26691](https://github.com/mastra-ai/mastra/pull/26691))
+
+- Updated dependencies [[`a65d0c7`](https://github.com/mastra-ai/mastra/commit/a65d0c788824081f36ccd95078a8d1214ff687c4), [`e89310a`](https://github.com/mastra-ai/mastra/commit/e89310a8db29a663a85c6a31a8c376cc8f59c129), [`590d6ca`](https://github.com/mastra-ai/mastra/commit/590d6ca9fa6ccf8b55dcf2e98da080ee1a348f67)]:
+  - @mastra/core@1.76.0-alpha.9
+
 ## 1.12.0-alpha.8
 
 ### Patch Changes

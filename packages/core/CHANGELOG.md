@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 1.76.0-alpha.9
+
+### Patch Changes
+
+- Fixed retried API errors leaking the failed attempt's partial text. ([#26654](https://github.com/mastra-ai/mastra/pull/26654))
+
+  A provider could stream some text, fail mid-stream, and then succeed when an error processor retried. The final answer came out as the failed prefix followed by the recovered answer, for example `"The answer is The answer is 42."`. The retry request also sent the failed prefix back to the model.
+
+  The failed attempt's partial text is now discarded, for both `Agent` and durable agents. The final `text` and the retry prompt no longer include it, and neither do `response.messages` and stored messages. Steps that completed before the failed attempt are kept.
+
+  Text chunks already streamed live from the failed attempt still reach `textStream` and `fullStream` consumers. The step that carries them finishes with reason `retry`.
+
+- Fixed `resumeStream` ignoring the `requestContext` and `delegation` you pass when a supervisor run is resumed in the same process that suspended it. The resumed delegation now calls the `onDelegationStart` hook from the resume call, and sub-agent tools see the resume call's `requestContext`. `DurableAgent` tools approved with `approveToolCall` in the same process now also run with the request context passed to that call. Fixes [#25960](https://github.com/mastra-ai/mastra/issues/25960). ([#26686](https://github.com/mastra-ai/mastra/pull/26686))
+
+- Fixed agent steps that start directly with a tool call being merged into the previous step in the conversation history sent to the model. Calls that ran one after another, where the second used the first's result, no longer look like parallel calls. Parallel tool calls within a single step still stay together. ([#26685](https://github.com/mastra-ai/mastra/pull/26685))
+
 ## 1.76.0-alpha.8
 
 ### Minor Changes

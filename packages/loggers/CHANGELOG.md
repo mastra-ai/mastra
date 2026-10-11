@@ -1,5 +1,16 @@
 # @mastra/loggers
 
+## 1.3.6-alpha.5
+
+### Patch Changes
+
+- Fixed `HttpTransport` log queries and `UpstashTransport` error results returning `page: 0` when called with `page: 0`. They now report page `1`, consistent with the other transports. ([#26678](https://github.com/mastra-ai/mastra/pull/26678))
+
+- Fixed HTTP and Upstash log transports replacing a supplied `time: 0` with the current time. Epoch-zero timestamps are now preserved; logs without a `time` still get the current time. ([#26679](https://github.com/mastra-ai/mastra/pull/26679))
+
+- Updated dependencies [[`a65d0c7`](https://github.com/mastra-ai/mastra/commit/a65d0c788824081f36ccd95078a8d1214ff687c4), [`e89310a`](https://github.com/mastra-ai/mastra/commit/e89310a8db29a663a85c6a31a8c376cc8f59c129), [`590d6ca`](https://github.com/mastra-ai/mastra/commit/590d6ca9fa6ccf8b55dcf2e98da080ee1a348f67)]:
+  - @mastra/core@1.76.0-alpha.9
+
 ## 1.3.6-alpha.4
 
 ### Patch Changes

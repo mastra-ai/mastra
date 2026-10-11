@@ -1,5 +1,33 @@
 # @mastra/railway
 
+## 0.10.0-alpha.0
+
+### Minor Changes
+
+- Added a `reattach` option to `RailwaySandbox`, `PlatformSandbox`, and `E2BSandbox` to control what happens when a persisted `sandboxId` can't be reattached on `start()`. ([#26675](https://github.com/mastra-ai/mastra/pull/26675))
+
+  - `'best-effort'` (default, unchanged behavior): carry on without the lost sandbox. Railway and Platform provision a replacement; E2B first looks for another sandbox with the same logical `id` and only creates a new one if none is found.
+  - `'required'`: throw a `SandboxError` with code `SANDBOX_REATTACH_FAILED` instead, so the caller can tell the user their previous sandbox (and its state) is gone rather than silently starting a fresh one.
+
+  Transient errors such as auth, rate limit, or network failures still propagate unchanged. Clones inherit the parent's `reattach` setting.
+
+  ```ts
+  const sandbox = new RailwaySandbox({ sandboxId: session.sandboxId, reattach: 'required' });
+
+  try {
+    await sandbox.start();
+  } catch (error) {
+    if (error instanceof SandboxError && error.code === 'SANDBOX_REATTACH_FAILED') {
+      // Previous sandbox is gone: ask the user to start fresh, then clear the persisted sandboxId.
+    }
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`a65d0c7`](https://github.com/mastra-ai/mastra/commit/a65d0c788824081f36ccd95078a8d1214ff687c4), [`e89310a`](https://github.com/mastra-ai/mastra/commit/e89310a8db29a663a85c6a31a8c376cc8f59c129), [`590d6ca`](https://github.com/mastra-ai/mastra/commit/590d6ca9fa6ccf8b55dcf2e98da080ee1a348f67)]:
+  - @mastra/core@1.76.0-alpha.9
+
 ## 0.9.0
 
 ### Minor Changes
