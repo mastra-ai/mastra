@@ -895,9 +895,23 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // top of it, and `removeToolMetadata`'s toolCallId -> toolName fallback could then drop a
         // concurrently suspended sibling that shares this tool name.
         if (!approvalGated && resumeData != null) {
+          // Auto-resume re-calls a plain tool under a new toolCallId, so this call's own id never
+          // matches the persisted entry. Retire the suspension the model named instead, once
+          // persisted state confirms it is a suspension of this same tool.
+          const modelResumedSuspension =
+            !needsRunIdLookup && isResumeToolCall
+              ? resolveFrameworkSuspendedToolIdentity({
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  resumeSource: 'model',
+                  modelSuppliedSuspendedToolCallId,
+                  modelSuppliedSuspendedToolRunId,
+                  messages: messageList.get.all.db(),
+                })
+              : undefined;
           const cleanupTarget = needsRunIdLookup
             ? resolvedSuspensionIdentity
-            : { toolCallId: inputData.toolCallId, toolName: inputData.toolName };
+            : (modelResumedSuspension ?? { toolCallId: inputData.toolCallId, toolName: inputData.toolName });
           const clearedEntry = cleanupTarget
             ? await removeToolMetadata(cleanupTarget, resolvedSuspensionIdentity?.type ?? 'suspension')
             : undefined;

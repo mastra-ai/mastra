@@ -2621,6 +2621,62 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
     expect(flushMessages).toHaveBeenCalled();
   });
 
+  it('clears the suspension the model names when auto-resume re-calls the tool under a new id', async () => {
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      toolCallId: 'auto-resume-call-id',
+      args: { prompt: 'do thing', resumeData: { confirmed: true }, suspendedToolCallId: 'hitl-call-id' },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toBeUndefined();
+    expect(flushMessages).toHaveBeenCalled();
+    expect(controller.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-call-resumed',
+        payload: expect.objectContaining({ toolCallId: 'hitl-call-id', kind: 'suspension' }),
+      }),
+    );
+  });
+
+  it('clears only the named suspension when same-name siblings are suspended', async () => {
+    const message = createSuspendedAssistantMessage('call-a', 'hitl-tool');
+    message.content.metadata.suspendedTools = {
+      'call-a': { toolCallId: 'call-a', toolName: 'hitl-tool', runId: 'parent-run-id' },
+      'call-b': { toolCallId: 'call-b', toolName: 'hitl-tool', runId: 'parent-run-id' },
+    };
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      toolCallId: 'auto-resume-call-id',
+      args: { prompt: 'do thing', resumeData: { confirmed: true }, suspendedToolCallId: 'call-b' },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toEqual({
+      'call-a': expect.objectContaining({ toolCallId: 'call-a' }),
+    });
+  });
+
+  it("leaves another tool's suspension intact when the model names it on auto-resume", async () => {
+    const message = createSuspendedAssistantMessage('other-call-id', 'other-tool');
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      toolCallId: 'auto-resume-call-id',
+      args: { prompt: 'do thing', resumeData: { confirmed: true }, suspendedToolCallId: 'other-call-id' },
+      message,
+      flushMessages,
+    });
+
+    expect(message.content.metadata.suspendedTools).toHaveProperty('other-call-id');
+    expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-call-resumed' }));
+  });
+
   it.each([
     ['false', false],
     ['zero', 0],

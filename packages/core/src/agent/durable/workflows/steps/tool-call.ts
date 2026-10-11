@@ -1132,7 +1132,23 @@ export function createDurableToolCallStep() {
       }
 
       if (isResumingFromSuspension) {
-        const cleanupTarget = isResumableTool ? resolvedSuspensionIdentity : { toolCallId, toolName };
+        // Auto-resume re-calls a plain tool under a new toolCallId, so this call's own id never
+        // matches the persisted entry. Retire the suspension the model named instead, once
+        // persisted state confirms it is a suspension of this same tool.
+        const modelResumedSuspension =
+          !isResumableTool && hasModelResumeData
+            ? resolveFrameworkSuspendedToolIdentity({
+                toolCallId,
+                toolName,
+                resumeSource: 'model',
+                modelSuppliedSuspendedToolCallId,
+                modelSuppliedSuspendedToolRunId,
+                messages: messageList?.get.all.db() ?? [],
+              })
+            : undefined;
+        const cleanupTarget = isResumableTool
+          ? resolvedSuspensionIdentity
+          : (modelResumedSuspension ?? { toolCallId, toolName });
         if (cleanupTarget) {
           await removeToolMetadata(cleanupTarget, resolvedSuspensionIdentity?.type ?? 'suspension');
         }

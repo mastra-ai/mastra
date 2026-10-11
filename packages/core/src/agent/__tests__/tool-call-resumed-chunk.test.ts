@@ -343,4 +343,60 @@ describe('tool-call-resumed chunk (#24280)', () => {
       second.map(c => c.type).join(','),
     ).toEqual(['sup-tc']);
   });
+
+  it('retires a suspended tool when auto-resume re-calls it under a new id', async () => {
+    const prompts: any[] = [];
+    const memoryInstance = new MockMemory();
+    const agent = new Agent({
+      id: 'auto-asker',
+      name: 'auto-asker',
+      instructions: 'Use your tools.',
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(prompt);
+          if (prompts.length === 1) {
+            return streamOf('a-1', [
+              { type: 'tool-call', toolCallId: 'tc-1', toolName: 'askUser', input: '{"question":"color?"}' },
+              { type: 'finish', finishReason: 'tool-calls', usage },
+            ]);
+          }
+          if (prompts.length === 2) {
+            return streamOf('a-2', [
+              {
+                type: 'tool-call',
+                toolCallId: 'tc-2',
+                toolName: 'askUser',
+                input: '{"question":"color?","suspendedToolCallId":"tc-1","resumeData":{"answer":"blue"}}',
+              },
+              { type: 'finish', finishReason: 'tool-calls', usage },
+            ]);
+          }
+          return streamOf(`a-${prompts.length}`, text('a-t', 'done'));
+        },
+      }),
+      tools: { askUser: buildAskUserTool() },
+      memory: memoryInstance,
+      defaultOptions: { autoResumeSuspendedTools: true },
+    });
+    new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
+    const memory = { resource: 'r-plain', thread: 't-plain' };
+
+    const first = await collect(await agent.stream('ask', { maxSteps: 3, memory }));
+    expect(first.find(c => c.type === 'tool-call-suspended')?.payload.toolCallId).toBe('tc-1');
+
+    const second = await collect(await agent.stream('blue', { maxSteps: 3, memory }));
+    const acks = second.filter(c => c.type === 'tool-call-resumed');
+    expect(
+      acks.map(c => c.payload.toolCallId),
+      second.map(c => c.type).join(','),
+    ).toEqual(['tc-1']);
+
+    const { messages } = await memoryInstance.recall({ threadId: memory.thread, resourceId: memory.resource });
+    expect(messages.filter(m => (m.content.metadata as any)?.suspendedTools)).toEqual([]);
+
+    // The next turn must not ask the model to resume the already-answered call again.
+    await collect(await agent.stream('thanks', { maxSteps: 3, memory }));
+    const systemPrompt = JSON.stringify(prompts.at(-1).filter((m: any) => m.role === 'system'));
+    expect(systemPrompt).not.toContain('suspended tools');
+  });
 });

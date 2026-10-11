@@ -324,6 +324,90 @@ describe('durable tool-call-resumed chunk (#24280)', () => {
     expect(resultIndex).toBeGreaterThan(chunks.indexOf(acks[0]));
   }, 30000);
 
+  it('retires a suspended tool when auto-resume re-calls it under a new id', async () => {
+    const memory = { thread: 'durable-auto-resume', resource: 'r' };
+    const memoryInstance = new MockMemory();
+    let step = 0;
+    const agent = new Agent({
+      id: 'auto-asker',
+      name: 'auto-asker',
+      instructions: 'ask',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          step += 1;
+          const toolCall =
+            step === 1
+              ? { toolCallId: 'tc-1', input: { question: 'color?' } }
+              : step === 2
+                ? {
+                    toolCallId: 'tc-2',
+                    input: { question: 'color?', suspendedToolCallId: 'tc-1', resumeData: { answer: 'blue' } },
+                  }
+                : undefined;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream<any>([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `m-${step}`, modelId: 'mock-model', timestamp: new Date(0) },
+              ...(toolCall
+                ? [
+                    {
+                      type: 'tool-call',
+                      toolCallType: 'function',
+                      toolCallId: toolCall.toolCallId,
+                      toolName: 'askUser',
+                      input: JSON.stringify(toolCall.input),
+                    },
+                    { type: 'finish', finishReason: 'tool-calls', usage },
+                  ]
+                : [
+                    { type: 'text-start', id: 't' },
+                    { type: 'text-delta', id: 't', delta: 'done' },
+                    { type: 'text-end', id: 't' },
+                    { type: 'finish', finishReason: 'stop', usage },
+                  ]),
+            ]),
+          };
+        },
+      }) as LanguageModelV2,
+      memory: memoryInstance,
+      tools: {
+        askUser: createTool({
+          id: 'ask-user',
+          description: 'Asks the user.',
+          inputSchema: z.object({ question: z.string() }),
+          suspendSchema: z.object({ question: z.string() }),
+          resumeSchema: z.object({ answer: z.string() }),
+          execute: async (input: { question: string }, context: any) => {
+            if (!context?.agent?.resumeData) return await context?.agent?.suspend({ question: input.question });
+            return { answer: context.agent.resumeData.answer };
+          },
+        }),
+      },
+    });
+    const durableAgent = createDurableAgent({ agent, pubsub });
+    new Mastra({ agents: { durableAgent }, storage: new InMemoryStore(), logger: false });
+    const suspendedEntries = async () => {
+      const { messages } = await memoryInstance.recall({ threadId: memory.thread, resourceId: memory.resource });
+      return messages.flatMap(m => Object.keys((m.content.metadata as any)?.suspendedTools ?? {}));
+    };
+
+    const stream = await durableAgent.stream('ask', { memory, maxSteps: 3, autoResumeSuspendedTools: true });
+    await runUntil(stream, 'tool-call-suspended');
+    await vi.waitFor(async () => expect(await suspendedEntries()).toEqual(['tc-1']));
+
+    const chunks = await drain(
+      await durableAgent.stream('blue', { memory, maxSteps: 3, autoResumeSuspendedTools: true }),
+    );
+    const acks = chunks.filter(c => c.type === 'tool-call-resumed');
+    expect(
+      acks.map(c => c.payload.toolCallId),
+      chunks.map(c => c.type).join(','),
+    ).toEqual(['tc-1']);
+    await vi.waitFor(async () => expect(await suspendedEntries()).toEqual([]));
+  }, 30000);
+
   it('preserves suspension resume data when a cold resume disables approval', async () => {
     const memory = { thread: 'durable-cold-resume', resource: 'r' };
     const store = new InMemoryStore();
