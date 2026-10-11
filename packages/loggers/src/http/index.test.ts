@@ -870,6 +870,13 @@ describe('HttpTransport', () => {
       expect(getSentLog().time).toBe(0);
     });
 
+    it('should add the current time when time is null', async () => {
+      transport.write(JSON.stringify({ msg: 'null time', time: null }));
+      await transport._flush();
+
+      expect(getSentLog().time).toBe(now);
+    });
+
     it('should add the current time when time is missing', async () => {
       transport.write(JSON.stringify({ msg: 'no time' }));
       await transport._flush();
