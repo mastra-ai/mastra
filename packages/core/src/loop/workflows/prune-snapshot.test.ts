@@ -775,6 +775,50 @@ describe('pruneAgentLoopSnapshot terminal payload iteration state', () => {
   });
 });
 
+describe('pruneAgentLoopSnapshot nested provider request strips', () => {
+  it('removes request echoes from nested llm output and last step result fields', () => {
+    const nestedRequest = requestEcho();
+    const snapshot = snapshotWith({
+      step: {
+        status: 'running',
+        payload: {
+          llmOutput: {
+            stepResult: { reason: 'stop', request: nestedRequest },
+            metadata: { request: nestedRequest, response: { headers: {} } },
+          },
+          lastStepResult: { reason: 'stop', request: nestedRequest },
+        },
+        output: {
+          llmOutput: {
+            stepResult: { reason: 'stop', request: nestedRequest },
+            metadata: { request: nestedRequest },
+          },
+          lastStepResult: { reason: 'stop', request: nestedRequest },
+        },
+      },
+    });
+
+    const pruned = (pruneAgentLoopSnapshot({ snapshot }).context as Record<string, any>).step;
+
+    expect(pruned.payload.lastStepResult).toBeDefined();
+    expect(pruned.output.lastStepResult).toBeDefined();
+
+    for (const value of [
+      pruned.payload.llmOutput.stepResult,
+      pruned.payload.llmOutput.metadata,
+      pruned.payload.lastStepResult,
+      pruned.output.llmOutput.stepResult,
+      pruned.output.llmOutput.metadata,
+      pruned.output.lastStepResult,
+    ]) {
+      expect(value).not.toHaveProperty('request');
+    }
+
+    expect(pruned.payload.llmOutput.metadata.response).toEqual({ headers: {} });
+    expect(pruned.payload.llmOutput.stepResult.reason).toBe('stop');
+  });
+});
+
 describe('pruneAgentLoopSnapshot agentSpanData instructions strip', () => {
   const prompt = 'p'.repeat(2000);
   function agentSpanData() {

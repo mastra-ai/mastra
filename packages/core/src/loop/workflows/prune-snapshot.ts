@@ -1,3 +1,4 @@
+
 import type { WorkflowRunState } from '../../workflows/types';
 import { isEntryFinished } from '../../workflows/utils';
 
@@ -29,7 +30,7 @@ import { isEntryFinished } from '../../workflows/utils';
  *    from it; resume rebuilds messages from `__streamState.messageList`.
  *  - foreach aggregation entries (`__workflow_meta.foreachOutput`) get the
  *    same per-entry treatment so still-suspended parallel tool calls keep
- *    their resume state (see foreach-suspend-payload.test.ts). The foreach
+ *    their resume state (see `foreach-suspend-payload.test.ts`). The foreach
  *    step's own `__streamState`, a mirror of its first suspended entry's, is
  *    dropped (see `isForeachStreamStateMirror`).
  *  - `context.input` is the loop's initial iteration data (another full
@@ -168,17 +169,26 @@ function stripTerminalOutputFields<T>(value: T): T {
  * step reads neither, so those copies go too.
  */
 function stripStepResultRequest<T>(value: T): T {
-  const pruned = omitRequest(value, 'stepResult');
-  if (!isPlainObject(pruned) || !isPlainObject(pruned.llmOutput)) return pruned;
-  const llmOutput = omitRequest(omitRequest(pruned.llmOutput, 'stepResult'), 'metadata');
-  return llmOutput === pruned.llmOutput ? pruned : ({ ...pruned, llmOutput } as T);
-}
+  if (!isPlainObject(value)) return value;
 
-/** Returns `value` without `value[key].request`, or `value` itself when there is none. */
-function omitRequest<T>(value: T, key: 'stepResult' | 'metadata'): T {
-  if (!isPlainObject(value) || !isPlainObject(value[key]) || !('request' in value[key])) return value;
-  const { request: _request, ...rest } = value[key];
-  return { ...value, [key]: rest } as T;
+  const pruned: Record<string, any> = { ...value };
+
+  const stripRequest = (candidate: unknown) => {
+    if (!isPlainObject(candidate) || !('request' in candidate)) return candidate;
+    const { request: _request, ...withoutRequest } = candidate;
+    return withoutRequest;
+  };
+
+  pruned.stepResult = stripRequest(pruned.stepResult);
+  pruned.lastStepResult = stripRequest(pruned.lastStepResult);
+
+  if (isPlainObject(pruned.llmOutput)) {
+    pruned.llmOutput = { ...pruned.llmOutput };
+    pruned.llmOutput.stepResult = stripRequest(pruned.llmOutput.stepResult);
+    pruned.llmOutput.metadata = stripRequest(pruned.llmOutput.metadata);
+  }
+
+  return pruned as T;
 }
 
 /**
@@ -245,9 +255,6 @@ function pruneStepResult(
   if ('prevOutput' in pruned) pruned.prevOutput = stripAgentSpanInstructions(pruned.prevOutput);
 
   if (TERMINAL_STEP_STATUSES.has(result.status)) {
-    // Completed steps are never resumed again — their old suspension state is
-    // dead weight that would otherwise be re-persisted on every later
-    // suspension of the run.
     delete pruned.suspendPayload;
     delete pruned.suspendOutput;
     delete pruned.resumePayload;
@@ -256,15 +263,8 @@ function pruneStepResult(
     return pruned;
   }
 
-  // Non-terminal: a re-suspended step can still carry the previous completed
-  // iteration's `output` (the step-result merge spreads the old result) —
-  // strip its heavy fields too. Foreach iteration-result arrays are untouched
-  // (stripHeavyIterationFields only rewrites plain objects).
   if ('output' in pruned) pruned.output = stripHeavyIterationFields(pruned.output);
 
-  // `suspendPayload` is the resume state — keep it intact, except foreach
-  // aggregation entries which get the same per-entry rules (completed
-  // iterations stripped, still-suspended ones preserved).
   if (isPlainObject(pruned.suspendPayload)) {
     const meta = pruned.suspendPayload.__workflow_meta;
     if (isPlainObject(meta)) {
@@ -353,8 +353,6 @@ function stripRunningHistoryFields<T>(value: T): T {
   if (!isPlainObject(value)) return value;
 
   const present = RUNNING_HISTORY_FIELDS.filter(key => key in value);
-  // The mapping steps wrap the same state one level down under `llmOutput`,
-  // so a top-level-only strip would leave those copies behind.
   const nested = isPlainObject(value.llmOutput) && RUNNING_HISTORY_FIELDS.some(key => key in value.llmOutput);
   if (present.length === 0 && !nested) return value;
 
@@ -451,8 +449,6 @@ function getRestartReads(
   const [targetStepId = ''] = targetStepIds;
   const targetResult = (snapshot.context as Record<string, unknown> | undefined)?.[targetStepId];
 
-  // Same decision as the default engine's `getRestartStartIndex`; if they
-  // disagree, restart reads a copy pruned here.
   const skipsTarget =
     snapshot.activePaths.length === 1 &&
     Object.keys(snapshot.activeStepsPath ?? {}).length === 0 &&
@@ -537,12 +533,6 @@ export function pruneAgentLoopSnapshot({
   const context: WorkflowRunState['context'] = {} as WorkflowRunState['context'];
   for (const [key, value] of Object.entries(snapshot.context ?? {})) {
     if (key === 'input') {
-      // `stripHeavyIterationFields` drops every `__`-prefixed key on the input
-      // object, but the durable-agent workflow input carries a
-      // `__workflowKind: 'durable-agent'` literal that identifies the snapshot
-      // as recoverable (see `DurableAgent.recover` / `listActiveRuns`). Restore
-      // it after pruning when the original input declared it — the strip is
-      // still what drops heavy state like `__streamState`.
       const strippedInput = stripHeavyIterationFields(value ?? undefined) as Record<string, any> | undefined;
       const originalKind = isPlainObject(value) ? (value as Record<string, any>).__workflowKind : undefined;
       if (strippedInput && typeof originalKind === 'string') {
@@ -556,10 +546,6 @@ export function pruneAgentLoopSnapshot({
     }
   }
 
-  // `context` is freshly built above, so this is still copy-on-write with
-  // respect to the caller's snapshot. The terminal-payload preservation above
-  // applies regardless of `retainRunningHistory` — only the historical-copy
-  // strip is engine-dependent.
   if (isRunning && !retainRunningHistory) pruneRunningHistory(context, activeStepIds, restartReads);
 
   const result =
