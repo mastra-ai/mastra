@@ -83,7 +83,7 @@ mastracode --prompt "Review this PR" --permission-mode deny --max-turns 10
 mastracode --settings ./settings-ci.json --prompt "Run tests"
 
 # Run on a custom model pack, with one mode's model overridden
-mastracode --pack custom:Kimi --model anthropic/claude-opus-4-6 --prompt "Review this PR"
+mastracode --pack custom:Kimi --model __GATEWAY_ANTHROPIC_MODEL_OPUS__ --prompt "Review this PR"
 
 # Resume the most recent thread
 mastracode -c --prompt "Continue where you left off"

@@ -197,9 +197,11 @@ export async function runMCCli(
     process.exit(1);
   }
 
-  // Resolve and activate --pack up front: an unknown pack fails fast with the
-  // valid list, before MastraCode boots. Activation mirrors /models → Activate,
-  // so it also becomes the global default pack in settings.
+  // Resolve --pack up front: an unknown pack fails fast with the valid list,
+  // before MastraCode boots. Activation (which mirrors /models → Activate and
+  // becomes the global default pack in settings) happens only after the boot,
+  // once the pack is known to have a model for the run's mode — a pack that
+  // doesn't must not change the persisted default on its way out.
   const settings = loadSettings(args.settings);
   let packId: string | undefined;
   if (args.pack !== undefined) {
@@ -209,8 +211,6 @@ export async function runMCCli(
       process.exit(1);
     }
     packId = resolved.packId;
-    activateModePackInSettings(settings, packId);
-    saveSettings(settings, args.settings);
   }
 
   const diagnosticsSetup = createProcessMemoryDiagnosticsFromEnvironment(process.env);
@@ -225,13 +225,18 @@ export async function runMCCli(
   try {
     boot = await createMastraCode({ settingsPath: args.settings, coAuthor: options?.coAuthor });
     const { controller, session, mcpManager } = boot;
-    const effectiveDefaults = resolveModelDefaults(settings, listBuiltinModePacks());
 
-    const packSelection = packId ? resolvePackSelection(settings, packId, args.mode ?? session.mode.get()) : undefined;
+    const packModeId = packId ? (args.mode ?? session.mode.get()) : undefined;
+    const packSelection = packId && packModeId ? resolvePackSelection(settings, packId, packModeId) : undefined;
     if (packId && !packSelection) {
-      process.stderr.write(`Error: Model pack "${packId}" has no model for ${args.mode ?? session.mode.get()} mode\n`);
-      process.exit(1);
+      // Thrown so the catch/finally below still runs the teardown.
+      throw new Error(`Model pack "${packId}" has no model for ${packModeId} mode`);
     }
+    if (packId) {
+      activateModePackInSettings(settings, packId);
+      saveSettings(settings, args.settings);
+    }
+    const effectiveDefaults = resolveModelDefaults(settings, listBuiltinModePacks());
 
     if (mcpManager?.hasServers()) {
       try {

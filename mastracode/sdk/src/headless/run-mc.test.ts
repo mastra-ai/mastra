@@ -288,14 +288,15 @@ describe('runMC', () => {
       prompt: 'Use the pack',
       pack: {
         id: 'custom:Test',
-        mode: 'default',
         modelId: packModel!.id,
         subagentModels: {
           explore: 'test/explore-model',
           plan: 'test/plan-model',
           execute: 'test/execute-model',
         },
-        modelRoute: { entries: [{ modelId: packModel!.id }], memoryModelId: 'test/memory-model' },
+        modelRoute: {
+          entries: [{ id: 'custom:Test', label: 'Test', modelId: packModel!.id, memoryModelId: 'test/memory-model' }],
+        },
       },
     }).result;
 
@@ -308,7 +309,9 @@ describe('runMC', () => {
     expect(session.subagents.model.get({ agentType: 'plan' })).toBe('test/plan-model');
     expect(session.subagents.model.get({ agentType: 'execute' })).toBe('test/execute-model');
     const state = session.state.get() as Record<string, unknown>;
-    expect(state.modelRoute).toEqual({ entries: [{ modelId: packModel!.id }], memoryModelId: 'test/memory-model' });
+    expect(state.modelRoute).toEqual({
+      entries: [{ id: 'custom:Test', label: 'Test', modelId: packModel!.id, memoryModelId: 'test/memory-model' }],
+    });
   });
 
   it('lets an explicit model override the pack model while the pack still applies', async () => {
@@ -333,8 +336,9 @@ describe('runMC', () => {
       model: explicitModel.id,
       pack: {
         id: 'custom:Test',
-        mode: 'default',
         modelId: packModel!.id,
+        subagentModels: {},
+        modelRoute: { entries: [] },
       },
     }).result;
 
@@ -368,7 +372,7 @@ describe('runMC', () => {
       session,
       prompt: 'Use the pack on the restored thread',
       thread: { id: restoredThreadId },
-      pack: { id: 'custom:Test', mode: 'default', modelId: packModel!.id },
+      pack: { id: 'custom:Test', modelId: packModel!.id, subagentModels: {}, modelRoute: { entries: [] } },
     }).result;
 
     expect(result.status).toBe('completed');

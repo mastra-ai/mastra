@@ -15,15 +15,21 @@ const lifecycleMocks = vi.hoisted(() => {
     stopDiagnostics: vi.fn(async () => diagnostics.stop()),
     runMC: vi.fn(),
     loadSettings: vi.fn(),
+    saveSettings: vi.fn(),
     resolveModelDefaults: vi.fn(),
     listBuiltinModePacks: vi.fn(),
   };
 });
 
 vi.mock('../index.js', () => ({ createMastraCode: lifecycleMocks.createMastraCode }));
-vi.mock('../onboarding/packs.js', () => ({ listBuiltinModePacks: lifecycleMocks.listBuiltinModePacks }));
-vi.mock('../onboarding/settings.js', () => ({
+vi.mock('../onboarding/packs.js', async () => ({
+  ...(await vi.importActual<typeof import('../onboarding/packs.js')>('../onboarding/packs.js')),
+  listBuiltinModePacks: lifecycleMocks.listBuiltinModePacks,
+}));
+vi.mock('../onboarding/settings.js', async () => ({
+  ...(await vi.importActual<typeof import('../onboarding/settings.js')>('../onboarding/settings.js')),
   loadSettings: lifecycleMocks.loadSettings,
+  saveSettings: lifecycleMocks.saveSettings,
   resolveModelDefaults: lifecycleMocks.resolveModelDefaults,
 }));
 vi.mock('../process-memory-diagnostics.js', () => ({
@@ -224,6 +230,7 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     lifecycleMocks.diagnostics.stop.mockClear();
     lifecycleMocks.runMC.mockReset();
     lifecycleMocks.loadSettings.mockReset();
+    lifecycleMocks.saveSettings.mockClear();
     lifecycleMocks.resolveModelDefaults.mockReset();
     lifecycleMocks.listBuiltinModePacks.mockReset();
     lifecycleMocks.loadSettings.mockReturnValue({ models: { activeModelPackId: null, modeDefaults: {} } });
@@ -312,6 +319,69 @@ describe('runMCCli process memory diagnostics lifecycle', () => {
     expect(at('claims-release')).toBeGreaterThan(-1);
     expect(at('claims-release')).toBeLessThan(at('providers-stop'));
     expect(at('claims-release')).toBeLessThan(at('dispatch-stop'));
+  });
+
+  it('activates a valid --pack after the boot and passes it to runMC', async () => {
+    const settings = {
+      models: { activeModelPackId: null, modeDefaults: {}, packFallbacks: {} },
+      customModelPacks: [{ name: 'review-pack', models: { build: 'anthropic/claude-opus-4-6' } }],
+    };
+    lifecycleMocks.loadSettings.mockReturnValue(settings);
+    lifecycleMocks.createMastraCode.mockImplementation(async () => ({
+      controller: {
+        getMastra: vi.fn(() => ({ stopWorkers: vi.fn(async () => {}) })),
+        stopIntervals: vi.fn(async () => {}),
+      },
+      session: { mode: { get: () => 'build' } },
+      mcpManager: { hasServers: () => false, disconnect: vi.fn(async () => {}) },
+      signalsPubSub: { async close() {} },
+    }));
+    lifecycleMocks.runMC.mockReturnValue({
+      async *[Symbol.asyncIterator]() {},
+      result: Promise.resolve({ status: 'completed', exitCode: 0 }),
+    });
+    process.argv = argv('--prompt', 'do it', '--pack', 'review-pack');
+
+    await expect(runMCCli('do it', { coAuthor: { name: 'mastracode' } })).rejects.toThrow('EXIT:0');
+
+    expect(settings.models.activeModelPackId).toBe('custom:review-pack');
+    expect(lifecycleMocks.saveSettings).toHaveBeenCalledWith(settings, undefined);
+    expect(lifecycleMocks.runMC).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pack: expect.objectContaining({ id: 'custom:review-pack', modelId: 'anthropic/claude-opus-4-6' }),
+      }),
+    );
+  });
+
+  it('rejects a --pack with no model for the run mode without saving settings', async () => {
+    lifecycleMocks.loadSettings.mockReturnValue({
+      models: { activeModelPackId: null, modeDefaults: {}, packFallbacks: {} },
+      customModelPacks: [{ name: 'plan-only', models: { plan: 'anthropic/claude-opus-4-6' } }],
+    });
+    lifecycleMocks.createMastraCode.mockImplementation(async () => ({
+      controller: {
+        getMastra: vi.fn(() => ({ stopWorkers: vi.fn(async () => {}) })),
+        stopIntervals: vi.fn(async () => {}),
+      },
+      session: { mode: { get: () => 'build' } },
+      mcpManager: { hasServers: () => false, disconnect: vi.fn(async () => {}) },
+      signalsPubSub: { async close() {} },
+    }));
+    lifecycleMocks.runMC.mockReturnValue({
+      async *[Symbol.asyncIterator]() {},
+      result: Promise.resolve({ status: 'completed', exitCode: 0 }),
+    });
+    process.argv = argv('--prompt', 'do it', '--pack', 'plan-only');
+
+    await expect(runMCCli('do it', { coAuthor: { name: 'mastracode' } })).rejects.toThrow('EXIT:1');
+
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining('Model pack "custom:plan-only" has no model for build mode'),
+    );
+    expect(lifecycleMocks.saveSettings).not.toHaveBeenCalled();
+    expect(lifecycleMocks.runMC).not.toHaveBeenCalled();
+    // The rejection throws through the existing error path, so teardown still ran.
+    expect(lifecycleMocks.order).toContain('diagnostics-stop');
   });
 
   it('exits even when notification dispatch never finishes stopping', async () => {

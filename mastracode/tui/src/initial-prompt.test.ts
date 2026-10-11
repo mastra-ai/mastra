@@ -34,6 +34,12 @@ describe('takePackFlag', () => {
     expect(takePackFlag([...node, '--pack']).error).toBe('--pack needs a value');
     expect(takePackFlag([...node, '--pack', '--acp']).error).toBe('--pack needs a value');
   });
+
+  it('rejects an empty --pack= value and a dash-prefixed value', () => {
+    expect(takePackFlag([...node, '--pack=']).error).toBe('--pack needs a value');
+    expect(takePackFlag([...node, '--pack', '-c']).error).toBe('--pack needs a value');
+    expect(takePackFlag([...node, '--pack=-c']).error).toBe('--pack needs a value');
+  });
 });
 
 describe('takeInitialPrompt', () => {

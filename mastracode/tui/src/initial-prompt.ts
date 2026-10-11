@@ -119,13 +119,18 @@ export function takePackFlag(argv: string[]): PackFlagArgs {
     const arg = argv[i]!;
     if (arg === PACK_FLAG) {
       const next = argv[++i];
-      if (next === undefined || next.startsWith('--')) {
+      if (next === undefined || next.startsWith('-')) {
         error = `${PACK_FLAG} needs a value`;
         break;
       }
       value = next;
     } else if (arg.startsWith(`${PACK_FLAG}=`)) {
-      value = arg.slice(PACK_FLAG.length + 1);
+      const inline = arg.slice(PACK_FLAG.length + 1);
+      if (inline === '' || inline.startsWith('-')) {
+        error = `${PACK_FLAG} needs a value`;
+        break;
+      }
+      value = inline;
     } else {
       rest.push(arg);
     }

@@ -8,7 +8,7 @@ import { createMastraCode } from '@mastra/code-sdk';
 import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
 import { hasHeadlessFlag, runMCCli } from '@mastra/code-sdk/headless/index';
-import { activateModePackInSettings, resolveModePackArg } from '@mastra/code-sdk/onboarding/pack-activation';
+import { activateModePackInSettings, resolveModePackArg, resolvePackSelection } from '@mastra/code-sdk/onboarding/pack-activation';
 import {
   createBrowserFromSettings,
   loadSettings,
@@ -123,6 +123,19 @@ async function tuiMain(
   threadScheduler = result.threadScheduler;
   stopNotificationDispatch = result.stopNotificationDispatch;
   releaseThreadClaims = result.releaseThreadClaims;
+
+  // --pack: fail fast when the pack has no model for the mode this session
+  // starts in (only knowable after the boot), and only then persist the
+  // activation — a rejected pack must not change the global default.
+  if (startupPackId) {
+    const startupModeId = result.session.mode.get();
+    if (!resolvePackSelection(settings, startupPackId, startupModeId)) {
+      process.stderr.write(`Error: Model pack "${startupPackId}" has no model for ${startupModeId} mode\n`);
+      await shutdownAndExit(1);
+    }
+    activateModePackInSettings(settings, startupPackId);
+    saveSettings(settings);
+  }
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
@@ -495,9 +508,11 @@ async function main() {
     });
   }
 
-  // Interactive --pack: fail fast on an unknown pack, then activate it the way
-  // /models → Activate does — the pack becomes the global default in settings
-  // and the TUI applies it to the session (and any resumed thread) at startup.
+  // Interactive --pack: fail fast on an unknown pack. Activation (which mirrors
+  // /models → Activate and becomes the global default in settings) happens in
+  // tuiMain after the boot, once the startup mode is known and the pack is
+  // confirmed to have a model for it; the TUI then applies it to the session
+  // (and any resumed thread) at startup.
   let startupPackId: string | undefined;
   if (packFlag.value !== undefined) {
     const settings = loadSettings();
@@ -507,8 +522,6 @@ async function main() {
       process.exit(1);
     }
     startupPackId = resolved.packId;
-    activateModePackInSettings(settings, startupPackId);
-    saveSettings(settings);
     if (process.env.MASTRACODE_MODEL_ID?.trim()) {
       process.stderr.write('Note: --pack takes precedence over MASTRACODE_MODEL_ID for this session.\n');
     }

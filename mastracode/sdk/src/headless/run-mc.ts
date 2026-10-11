@@ -363,6 +363,8 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
       options.model ??
       options.pack?.modelId ??
       (options.mode || !restoredThreadSelection ? configuredDefaultModelId : undefined);
+    // Where modelIdToApply came from, so validation errors name the right source.
+    const modelSource = options.model ? 'flag' : options.pack?.modelId ? 'pack' : 'mode';
     try {
       if (options.mode && !controller.listModes().some(mode => mode.id === options.mode)) {
         return fail(`Unknown mode: "${options.mode}"`);
@@ -372,15 +374,17 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
         const available = await controller.listAvailableModels();
         const match = available.find(model => model.id === modelIdToApply);
         if (!match) {
-          return options.model
-            ? fail(`Unknown model: "${modelIdToApply}"`)
-            : fail(`Unknown model "${modelIdToApply}" configured for mode "${modeIdForModel}"`);
+          if (modelSource === 'flag') return fail(`Unknown model: "${modelIdToApply}"`);
+          if (modelSource === 'pack') return fail(`Unknown model "${modelIdToApply}" from pack "${options.pack!.id}"`);
+          return fail(`Unknown model "${modelIdToApply}" configured for mode "${modeIdForModel}"`);
         }
         if (!match.hasApiKey) {
           const keyHint = match.apiKeyEnvVar ? ` Set ${match.apiKeyEnvVar} to use this model.` : '';
-          return options.model
-            ? fail(`Model "${modelIdToApply}" has no API key configured.${keyHint}`)
-            : fail(`Model "${modelIdToApply}" (mode: ${modeIdForModel}) has no API key configured.${keyHint}`);
+          if (modelSource === 'flag') return fail(`Model "${modelIdToApply}" has no API key configured.${keyHint}`);
+          if (modelSource === 'pack') {
+            return fail(`Model "${modelIdToApply}" (pack: ${options.pack!.id}) has no API key configured.${keyHint}`);
+          }
+          return fail(`Model "${modelIdToApply}" (mode: ${modeIdForModel}) has no API key configured.${keyHint}`);
         }
       }
     } catch (err) {

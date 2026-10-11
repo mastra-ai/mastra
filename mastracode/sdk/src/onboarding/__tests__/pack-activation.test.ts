@@ -123,10 +123,4 @@ describe('activateModePackInSettings', () => {
     });
     expect(settings.models?.subagentModels).toEqual({});
   });
-
-  it('is only called after resolveModePackArg validated the id', () => {
-    const settings = makeSettings();
-    const resolved = resolveModePackArg(settings, 'nope');
-    expect(resolved).toHaveProperty('error');
-  });
 });
