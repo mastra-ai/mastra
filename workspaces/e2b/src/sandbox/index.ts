@@ -26,7 +26,7 @@ import type {
  * Inlined from `@mastra/core/workspace` to avoid requiring a newer core peer dep.
  */
 type InstructionsOption = string | ((opts: { defaultInstructions: string; requestContext?: RequestContext }) => string);
-import { MastraSandbox, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
+import { MastraSandbox, SandboxError, SandboxNotReadyError, assertModesUnsupported } from '@mastra/core/workspace';
 import { Sandbox, Template } from 'e2b';
 import type {
   BuildOptions,
@@ -93,6 +93,16 @@ export interface E2BSandboxOptions extends Omit<MastraSandboxOptions, 'processes
    * creating a new sandbox.
    */
   sandboxId?: string;
+  /**
+   * What `start()` does when `sandboxId` is set but E2B reports that sandbox
+   * is gone (not found / killed / not running).
+   *
+   * - `'best-effort'` (default): fall back to logical-id discovery, then
+   *   create a new sandbox.
+   * - `'required'`: throw a `SandboxError` with code `SANDBOX_REATTACH_FAILED`
+   *   instead of discovering or creating, so the caller can surface the lost VM.
+   */
+  reattach?: 'best-effort' | 'required';
   /**
    * Sandbox template specification.
    *
@@ -988,6 +998,13 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     if (this._preferredSandboxId) {
       const preferred = await this.connectToPreferredSandbox(this._preferredSandboxId);
       if (preferred) return preferred;
+      if (this._constructorOptions.reattach === 'required') {
+        throw new SandboxError(
+          `E2B sandbox ${this._preferredSandboxId} could not be reattached (gone); refusing to provision a replacement because reattach is 'required'. Clear the persisted sandboxId to start a fresh sandbox.`,
+          'SANDBOX_REATTACH_FAILED',
+          { provider: 'e2b', sandboxId: this._preferredSandboxId, logicalId: this.id },
+        );
+      }
     }
     return this.findExistingSandbox();
   }
