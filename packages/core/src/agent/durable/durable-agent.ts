@@ -3105,7 +3105,9 @@ export class DurableAgent<
         const refresh = (current: Record<string, CoreTool>, previous: Record<string, CoreTool> | undefined) => {
           const next = { ...current };
           for (const [name, tool] of Object.entries(requestTools)) {
-            if (!(name in current) || current[name] === previous?.[name]) next[name] = tool;
+            // A name missing from current but present in previous was withheld by a processor.
+            const configured = name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
+            if (configured) next[name] = tool;
           }
           return next;
         };

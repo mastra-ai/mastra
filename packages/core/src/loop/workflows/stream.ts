@@ -340,7 +340,12 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           const previousRequestTools = runScope!.get(REQUEST_TOOLS_KEY);
           const stepTools = { ...previousStepTools };
           for (const [name, tool] of Object.entries(rest.tools ?? {})) {
-            if (!(name in previousStepTools) || previousStepTools[name] === previousRequestTools?.[name]) {
+            // A name the previous request configured but the step tools lack was withheld by a processor.
+            const refresh =
+              name in previousStepTools
+                ? previousStepTools[name] === previousRequestTools?.[name]
+                : !previousRequestTools || !(name in previousRequestTools);
+            if (refresh) {
               stepTools[name] = tool;
             }
           }

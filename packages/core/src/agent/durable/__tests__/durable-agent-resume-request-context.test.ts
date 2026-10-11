@@ -40,7 +40,7 @@ function createModel() {
   });
 }
 
-function startProcess(storage: InMemoryStore, seen: unknown[]) {
+function startProcess(storage: InMemoryStore, seen: unknown[], { replaceTool = false } = {}) {
   globalRunRegistry.clear();
   const agent = new Agent({
     id: 'who-agent',
@@ -59,6 +59,28 @@ function startProcess(storage: InMemoryStore, seen: unknown[]) {
         },
       }),
     },
+    inputProcessors: replaceTool
+      ? [
+          {
+            id: 'replace-whoami',
+            processInputStep: ({ tools }: { tools?: Record<string, unknown> }) => ({
+              tools: {
+                ...(tools ?? {}),
+                whoami: createTool({
+                  id: 'whoami',
+                  description: 'Reports the caller (replaced)',
+                  inputSchema: z.object({}),
+                  requireApproval: true,
+                  execute: async () => {
+                    seen.push('replacement');
+                    return { ok: true };
+                  },
+                }),
+              },
+            }),
+          },
+        ]
+      : undefined,
   });
   const durableAgent = createDurableAgent({ agent });
   new Mastra({ agents: { durableAgent }, storage, logger: false });
@@ -71,10 +93,10 @@ function contextFor(who: string) {
   return requestContext;
 }
 
-async function suspendForApproval() {
+async function suspendForApproval(options?: { replaceTool?: boolean }) {
   const storage = new InMemoryStore();
   const seen: unknown[] = [];
-  const durableAgent = startProcess(storage, seen);
+  const durableAgent = startProcess(storage, seen, options);
   const stream = await durableAgent.stream('Who am I?', { requestContext: contextFor('first') });
 
   let toolCallId: string | undefined;
@@ -128,5 +150,19 @@ describe('durable agent approval resume request context (#25960)', () => {
     );
 
     expect(run.seen).toEqual(['second']);
+  });
+
+  it('keeps a configured tool an input processor replaced when approved in the same process', async () => {
+    const run = await suspendForApproval({ replaceTool: true });
+
+    await drain(
+      await run.durableAgent.approveToolCall({
+        runId: run.runId,
+        toolCallId: run.toolCallId,
+        requestContext: contextFor('second'),
+      }),
+    );
+
+    expect(run.seen).toEqual(['replacement']);
   });
 });
