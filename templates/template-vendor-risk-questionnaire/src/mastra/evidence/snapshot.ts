@@ -1,7 +1,7 @@
+import { createSnapshotEvidenceTools } from '../tools/snapshot-evidence.ts';
 import { mkdir, writeFile, chmod, mkdtemp, rename, readdir, rm, lstat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
-import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { manifestSchema } from '../contracts/evidence-manifest.ts';
 import { evidenceLocatorSchema } from '../contracts/evidence-locator.ts';
@@ -209,24 +209,7 @@ export async function buildEvidenceSnapshot(options: {
     }
     return results;
   }
-  const tools = Object.freeze({
-    evidence_search: createTool({
-      id: 'evidence_search',
-      description:
-        'Search only this run’s approved LLM-permitted evidence excerpts. Scores rank retrieval and are not confidence probabilities.',
-      inputSchema: z
-        .object({ query: z.string().min(1).max(1000), topK: z.int().positive().max(10).default(5) })
-        .strict(),
-      execute: async input => search(input.query, input.topK),
-    }),
-    evidence_read: createTool({
-      id: 'evidence_read',
-      description:
-        'Read an eligible excerpt by an exact ID returned from evidence search. No path, URL or mutation arguments are accepted.',
-      inputSchema: z.object({ id: z.string().min(1).max(240) }).strict(),
-      execute: async input => read(input.id),
-    }),
-  });
+  const tools = createSnapshotEvidenceTools({ search, read });
   return Object.freeze({ record: structuredClone(record), sources, tools, read, search });
 }
 export async function resolveEvidenceLocator(

@@ -18,7 +18,8 @@
     "format:check": "oxfmt --check .",
     "test": "vitest run",
     "intake": "node scripts/intake.ts",
-    "demo": "node scripts/generate-demo.ts"
+    "demo": "node scripts/generate-demo.ts",
+    "draft": "node --env-file-if-exists=.env scripts/draft.ts"
   },
   "dependencies": {
     "@libsql/client": "0.18.0",
