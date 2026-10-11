@@ -15,8 +15,8 @@ import {
   loadSettings,
   saveSettings,
 } from '@mastra/code-sdk/onboarding/index';
-import { activateModePackInSettings, resolvePackSelection } from '@mastra/code-sdk/onboarding/pack-activation';
 import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/index';
+import { activateModePackInSettings, resolvePackSelection } from '@mastra/code-sdk/onboarding/pack-activation';
 import {
   resolveThreadActiveModelPackId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
