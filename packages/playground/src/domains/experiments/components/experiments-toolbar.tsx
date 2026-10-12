@@ -5,6 +5,7 @@ import { ButtonsGroup, ButtonsGroupText } from '@mastra/playground-ui/components
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { GitCompare, Play, XIcon, X } from 'lucide-react';
+import { MAX_COMPARED_EXPERIMENTS } from './comparison/constants';
 import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
 import type { DatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { TargetFilter } from '@/domains/shared/components/target-filter';
@@ -63,7 +64,7 @@ export function ExperimentsToolbar({
   onCompareClick,
   selection,
 }: ExperimentsToolbarProps) {
-  const canCompare = selection?.selectedCount === 2 && !selection.compareDisabledReason;
+  const canCompare = selection !== undefined && selection.selectedCount >= 2 && !selection.compareDisabledReason;
 
   return (
     <ActionRow>
@@ -117,7 +118,7 @@ export function ExperimentsToolbar({
           <ButtonsGroup className="whitespace-nowrap">
             <ButtonsGroupText className="gap-2">
               <Badge size="sm" variant={selection.selectedCount < 2 ? 'destructive' : 'success'}>
-                {selection.selectedCount} / 2
+                {selection.selectedCount} / {MAX_COMPARED_EXPERIMENTS}
               </Badge>
               selected
               {selection.compareDisabledReason && (

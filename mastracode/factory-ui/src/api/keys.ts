@@ -28,11 +28,11 @@ export const queryKeys = {
   githubStatus: () => ['github', 'status'] as const,
   githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
-  githubIssues: (githubProjectId: string | undefined, label?: string) =>
-    ['github', 'issues', githubProjectId ?? null, label ?? null] as const,
+  githubIssues: (projectRepositoryIds: readonly string[], label?: string) =>
+    ['github', 'issues', projectRepositoryIds, label ?? null] as const,
   githubIssue: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'issue', githubProjectId ?? null, number ?? null] as const,
-  githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
+  githubPulls: (projectRepositoryIds: readonly string[]) => ['github', 'prs', projectRepositoryIds] as const,
   githubPull: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
   repositorySettings: (projectRepositoryId: string | undefined) =>

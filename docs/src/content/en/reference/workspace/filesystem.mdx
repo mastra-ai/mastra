@@ -18,8 +18,8 @@ The `WorkspaceFilesystem` interface defines how workspaces interact with file st
 Read file contents.
 
 ```typescript
-const content = await filesystem.readFile('/docs/guide.md')
-const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
+const content = await filesystem.readFile('/docs/guide.md', { encoding: 'utf-8' })
+const buffer = await filesystem.readFile('/image.png') // Buffer
 ```
 
 **Parameters:**
@@ -42,10 +42,9 @@ const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
         parameters: [
           {
             name: 'encoding',
-            type: "'utf-8' | 'binary'",
-            description: 'Text or binary encoding',
+            type: 'BufferEncoding',
+            description: 'Text encoding. When omitted, the file is returned as a Buffer.',
             isOptional: true,
-            defaultValue: "'utf-8'",
           },
         ],
       },
@@ -76,7 +75,7 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
   },
   {
     name: 'content',
-    type: 'string | Buffer',
+    type: 'string | Buffer | Uint8Array',
     description: 'File content',
   },
   {
@@ -176,7 +175,7 @@ await filesystem.appendFile('/logs/app.log', 'New log entry\n')
   },
   {
     name: 'content',
-    type: 'string | Buffer',
+    type: 'string | Buffer | Uint8Array',
     description: 'Content to append',
   },
 ]}
@@ -439,7 +438,7 @@ Get filesystem metadata.
 
 ```typescript
 const info = await filesystem.getInfo?.()
-// { id, name, provider, basePath, readOnly, status, storage? }
+// { id, name, provider, status, error, readOnly, icon, metadata }
 ```
 
 **Returns:** `Promise<FilesystemInfo>`
@@ -449,14 +448,11 @@ interface FilesystemInfo {
   id: string
   name: string
   provider: string
-  basePath?: string
-  readOnly?: boolean
   status?: string
-  storage?: {
-    totalBytes?: number
-    usedBytes?: number
-    availableBytes?: number
-  }
+  error?: string // Error message when status is 'error'
+  readOnly?: boolean
+  icon?: string // Icon identifier for UI display
+  metadata?: Record<string, unknown> // Provider-specific, e.g. LocalFilesystem includes basePath
 }
 ```
 

@@ -37,6 +37,16 @@ describe('validateTraceImportTrace', () => {
     expect(validateTraceImportTrace(validTrace())).toEqual(validTrace());
   });
 
+  it('keeps the owning primitive fields on a span', () => {
+    const trace = validTrace();
+    Object.assign(trace.spans[0]!, { entityType: 'agent', entityId: 'support', entityName: 'Support Agent' });
+    expect(validateTraceImportTrace(trace).spans[0]).toMatchObject({
+      entityType: 'agent',
+      entityId: 'support',
+      entityName: 'Support Agent',
+    });
+  });
+
   it.each([
     ['duplicate span IDs', (trace: TraceImportTrace) => (trace.spans[1]!.spanId = trace.spans[0]!.spanId)],
     ['multiple roots', (trace: TraceImportTrace) => (trace.spans[1]!.parentSpanId = null)],
