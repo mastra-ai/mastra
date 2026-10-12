@@ -509,8 +509,8 @@ export const compareExperimentsBodySchema = z
     experimentIds: z
       .array(z.string().min(1))
       .min(2)
-      .max(5)
-      .describe('IDs of the experiments to compare (2 to 5). Each one gets a result entry per item.'),
+      .max(10)
+      .describe('IDs of the experiments to compare (2 to 10). Each one gets a result entry per item.'),
     baselineId: z
       .string()
       .optional()

@@ -2,7 +2,7 @@
 '@mastra/client-js': minor
 ---
 
-`client.compareExperiments()` now compares two to five experiments at once against a baseline. Pass `experimentIds` (and optionally `baselineId`) instead of `experimentIdA` and `experimentIdB`.
+`client.compareExperiments()` now compares two to ten experiments at once against a baseline. Pass `experimentIds` (and optionally `baselineId`) instead of `experimentIdA` and `experimentIdB`.
 
 **Upgrading**
 

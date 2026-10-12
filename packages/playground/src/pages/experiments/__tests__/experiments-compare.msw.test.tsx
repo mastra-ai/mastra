@@ -27,7 +27,7 @@ const sameDatasetA: DatasetExperiment = { ...experiments[0], id: 'exp-a', datase
 const sameDatasetB: DatasetExperiment = { ...experiments[1], id: 'exp-b', datasetId: 'dataset-1', name: 'run b' };
 const otherDataset: DatasetExperiment = { ...experiments[2], id: 'exp-c', datasetId: 'dataset-2', name: 'run c' };
 /** More runs of `dataset-1`, enough to fill and overflow the five compare slots. */
-const moreSameDataset: DatasetExperiment[] = ['d', 'e', 'f', 'g'].map(suffix => ({
+const moreSameDataset: DatasetExperiment[] = ['d', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'].map(suffix => ({
   ...experiments[3],
   id: `exp-${suffix}`,
   datasetId: 'dataset-1',
@@ -153,7 +153,7 @@ describe('Experiments page — compare mode', () => {
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select experiment exp-a' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select experiment exp-b' }));
-    expect(screen.getByText('2 / 5')).toBeDefined();
+    expect(screen.getByText('2 / 10')).toBeDefined();
 
     server.use(
       http.get(`${TEST_BASE_URL}/api/experiments`, () =>
@@ -163,7 +163,7 @@ describe('Experiments page — compare mode', () => {
     await queryClient.invalidateQueries();
     await waitFor(() => expect(screen.queryByText('run b')).toBeNull());
 
-    expect(screen.getByText('1 / 5')).toBeDefined();
+    expect(screen.getByText('1 / 10')).toBeDefined();
     expect(screen.getByRole('button', { name: /compare experiments/i }).hasAttribute('disabled')).toBe(true);
   });
 
@@ -184,18 +184,18 @@ describe('Experiments page — compare mode', () => {
 
     fireEvent.click(screen.getByRole('checkbox', { name: 'Select experiment exp-c' }));
 
-    expect(screen.getByText('2 / 5')).toBeDefined();
+    expect(screen.getByText('2 / 10')).toBeDefined();
   });
 
   describe('when three experiments from the same dataset are selected', () => {
     beforeEach(listManySameDatasetExperiments);
 
-    it('counts them against the five compare slots', async () => {
+    it('counts them against the ten compare slots', async () => {
       renderPage();
       await enterCompareMode();
       select('exp-a', 'exp-b', 'exp-d');
 
-      expect(screen.getByText('3 / 5')).toBeDefined();
+      expect(screen.getByText('3 / 10')).toBeDefined();
     });
 
     it('compares the first pick as baseline against the others as contenders', async () => {
@@ -212,20 +212,21 @@ describe('Experiments page — compare mode', () => {
     });
   });
 
-  describe('when five experiments are selected and a sixth is picked', () => {
+  describe('when ten experiments are selected and an eleventh is picked', () => {
     beforeEach(listManySameDatasetExperiments);
 
     it('replaces the most recent pick and keeps the baseline', async () => {
       renderPage();
       await enterCompareMode();
-      select('exp-a', 'exp-b', 'exp-d', 'exp-e', 'exp-f', 'exp-g');
+      select('exp-a', 'exp-b', 'exp-d', 'exp-e', 'exp-f', 'exp-g', 'exp-h', 'exp-i', 'exp-j', 'exp-k', 'exp-l');
 
-      expect(screen.getByText('5 / 5')).toBeDefined();
+      expect(screen.getByText('10 / 10')).toBeDefined();
       fireEvent.click(screen.getByRole('button', { name: /compare experiments/i }));
 
       await waitFor(() =>
         expect(screen.getByTestId('location').textContent).toBe(
-          '/experiments/compare?dataset=dataset-1&baseline=exp-a&contender=exp-b&contender=exp-d&contender=exp-e&contender=exp-g',
+          '/experiments/compare?dataset=dataset-1&baseline=exp-a' +
+            ['b', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'l'].map(suffix => `&contender=exp-${suffix}`).join(''),
         ),
       );
     });

@@ -1268,7 +1268,7 @@ export const COMPARE_EXPERIMENTS_ROUTE = createRoute({
   bodySchema: compareExperimentsBodySchema,
   responseSchema: comparisonResponseSchema,
   summary: 'Compare two or more experiments',
-  description: 'Compares two to five experiments item by item against a baseline experiment',
+  description: 'Compares two to ten experiments item by item against a baseline experiment',
   tags: ['Datasets'],
   requiresAuth: true,
   handler: async ({ mastra, datasetId, experimentIds, baselineId }) => {

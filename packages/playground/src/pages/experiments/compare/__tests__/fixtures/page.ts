@@ -9,8 +9,18 @@ import { experiments } from '@/domains/experiments/components/__tests__/fixtures
 export const sameDatasetA: DatasetExperiment = { ...experiments[0], id: 'exp-a', datasetId: 'dataset-1' };
 export const sameDatasetB: DatasetExperiment = { ...experiments[1], id: 'exp-b', datasetId: 'dataset-1' };
 export const otherDataset: DatasetExperiment = { ...experiments[2], id: 'exp-c', datasetId: 'dataset-2' };
-/** More experiments of `dataset-1`, to compare up to five at once and overflow that cap. */
-export const moreSameDataset: DatasetExperiment[] = ['exp-d', 'exp-e', 'exp-f', 'exp-g'].map(id => ({
+/** More experiments of `dataset-1`, to compare up to ten at once and overflow that cap. */
+export const moreSameDataset: DatasetExperiment[] = [
+  'exp-d',
+  'exp-e',
+  'exp-f',
+  'exp-g',
+  'exp-h',
+  'exp-i',
+  'exp-j',
+  'exp-k',
+  'exp-l',
+].map(id => ({
   ...experiments[3],
   id,
   datasetId: 'dataset-1',

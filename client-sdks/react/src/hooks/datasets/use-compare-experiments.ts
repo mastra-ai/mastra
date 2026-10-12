@@ -5,7 +5,7 @@ import { useMastraClient } from '../../mastra-client-context';
 import type { MastraQueryOptions } from '../shared/query-options';
 
 /**
- * Hook to compare two to five dataset experiments item by item against a baseline.
+ * Hook to compare two to ten dataset experiments item by item against a baseline.
  * @param datasetId - ID of the dataset
  * @param experimentIds - IDs of the experiments to compare
  * @param baselineId - ID of the baseline experiment; must be one of `experimentIds` (defaults to the first)

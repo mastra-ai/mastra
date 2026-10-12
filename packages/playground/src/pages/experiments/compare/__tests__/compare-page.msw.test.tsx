@@ -130,18 +130,14 @@ describe('CompareExperimentsPage', () => {
     });
   });
 
-  describe('when the URL lists more than four contenders', () => {
-    it('keeps the first four contenders', async () => {
+  describe('when the URL lists more than nine contenders', () => {
+    it('keeps the first nine contenders', async () => {
       const requests = useEchoComparison();
-      renderPage(
-        '?dataset=dataset-1&baseline=exp-a&contender=exp-b&contender=exp-d&contender=exp-e&contender=exp-f&contender=exp-g',
-      );
+      const contenders = ['b', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l'].map(suffix => `exp-${suffix}`);
+      renderPage(`?dataset=dataset-1&baseline=exp-a${contenders.map(id => `&contender=${id}`).join('')}`);
 
       await waitFor(() =>
-        expect(requests[0]).toEqual({
-          experimentIds: ['exp-a', 'exp-b', 'exp-d', 'exp-e', 'exp-f'],
-          baselineId: 'exp-a',
-        }),
+        expect(requests[0]).toEqual({ experimentIds: ['exp-a', ...contenders.slice(0, 9)], baselineId: 'exp-a' }),
       );
     });
   });
@@ -178,9 +174,9 @@ describe('CompareExperimentsPage', () => {
   });
 
   describe('when a comparison parameter is missing', () => {
-    it('asks for two to five experiments when a parameter is missing', async () => {
+    it('asks for two to ten experiments when a parameter is missing', async () => {
       renderPage('?dataset=dataset-1&baseline=exp-a');
-      expect(await screen.findByText(/select two to five experiments to compare/i)).toBeDefined();
+      expect(await screen.findByText(/select two to ten experiments to compare/i)).toBeDefined();
     });
 
     it('waits for complete parameters before requesting experiment metadata', async () => {
@@ -193,7 +189,7 @@ describe('CompareExperimentsPage', () => {
       );
       const { queryClient } = renderPage('?dataset=dataset-1&baseline=exp-a');
 
-      await screen.findByText(/select two to five experiments to compare/i);
+      await screen.findByText(/select two to ten experiments to compare/i);
       await waitForMutationsIdle(queryClient);
 
       expect(metadataRequests).toBe(0);

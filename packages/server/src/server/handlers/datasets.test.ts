@@ -286,15 +286,21 @@ describe('Datasets Handlers', () => {
       });
     });
 
+    describe('when ten experiments are compared', () => {
+      it('accepts them', () => {
+        const experimentIds = Array.from({ length: 10 }, (_, i) => `exp-${i}`);
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds }).success).toBe(true);
+      });
+    });
+
     describe('when the body is invalid', () => {
       it('rejects fewer than two experiment ids', () => {
         expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds: ['a'] }).success).toBe(false);
       });
 
-      it('rejects more than five experiment ids', () => {
-        expect(
-          COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds: ['a', 'b', 'c', 'd', 'e', 'f'] }).success,
-        ).toBe(false);
+      it('rejects more than ten experiment ids', () => {
+        const experimentIds = Array.from({ length: 11 }, (_, i) => `exp-${i}`);
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds }).success).toBe(false);
       });
 
       it('rejects a baselineId that is not one of experimentIds', () => {

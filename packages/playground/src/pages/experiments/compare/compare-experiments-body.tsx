@@ -24,7 +24,7 @@ export function CompareExperimentsBody() {
         </Txt>
         <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
           <div className="py-5 text-center text-muted-foreground">
-            <Txt as="p">Select two to five experiments to compare.</Txt>
+            <Txt as="p">Select two to ten experiments to compare.</Txt>
             <Txt className="mt-2">
               Use the URL format: /experiments/compare?dataset={'{datasetId}'}&baseline={'{experimentId}'}&contender=
               {'{experimentId}'}&contender={'{experimentId}'}

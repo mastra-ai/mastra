@@ -2,7 +2,7 @@
 '@mastra/react': minor
 ---
 
-`useCompareExperiments` now compares two to five experiments at once. Pass `experimentIds` (and optionally `baselineId`) instead of `experimentIdA` and `experimentIdB`. The `options` parameter, which no longer had any fields, is removed.
+`useCompareExperiments` now compares two to ten experiments at once. Pass `experimentIds` (and optionally `baselineId`) instead of `experimentIdA` and `experimentIdB`. The `options` parameter, which no longer had any fields, is removed.
 
 ```ts
 // Before
