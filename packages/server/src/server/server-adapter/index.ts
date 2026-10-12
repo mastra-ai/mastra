@@ -1428,10 +1428,6 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   }
 }
 
-/**
- * Check FGA authorization for an HTTP route.
- * Returns null if authorized or FGA not configured, or an error object if denied.
- */
 export interface ForbiddenResult {
   status: 403;
   error: 'Forbidden';
@@ -1449,6 +1445,10 @@ function forbidden(message: string): ForbiddenResult {
   };
 }
 
+/**
+ * Check FGA authorization for an HTTP route.
+ * Returns null if authorized or FGA not configured, or an error object if denied.
+ */
 export async function checkRouteFGA(
   mastra: any,
   route: ServerRoute,
