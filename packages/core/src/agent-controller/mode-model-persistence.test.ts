@@ -302,10 +302,12 @@ describe('AgentController single-model persistence across restarts', () => {
       events.length = 0;
       await session.respondToToolSuspension({ toolCallId: resuspended.toolCallId, resumeData: { action: 'approved' } });
 
-      expect(planCalls).toBe(2);
+      await vi.waitFor(() => expect(planCalls).toBe(3));
       expect(planResume).toHaveBeenCalledTimes(2);
       expect(buildResume).not.toHaveBeenCalled();
       expect(events.some(event => event.type === 'error')).toBe(false);
+      expect(events.some(event => event.type === 'agent_end' && event.reason === 'complete')).toBe(true);
+      expect(events.some(event => event.type === 'agent_end' && event.reason === 'aborted')).toBe(false);
     },
   );
 });
