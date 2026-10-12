@@ -32,10 +32,16 @@ export interface DefaultModelHydrationDependencies {
   modelDefaults: Pick<ModelDefaultsStorage, 'get'>;
 }
 
+export interface DefaultModelHydrationContext {
+  /** The session created its bound thread, so that thread's model settings are only creation-time defaults. */
+  threadCreated: boolean;
+}
+
 /** Seed the user's default model unless the interactive thread already selected its own model. */
 export async function hydrateSessionDefaultModel(
   session: DefaultModelHydrationSession,
   { sourceControl, workItems, modelDefaults }: DefaultModelHydrationDependencies,
+  { threadCreated }: DefaultModelHydrationContext,
 ): Promise<void> {
   const resourceId = session.identity.getResourceId();
   if (session.state.get()?.factoryProjectId || typeof session.thread.getSetting !== 'function') return;
@@ -54,13 +60,17 @@ export async function hydrateSessionDefaultModel(
     ) {
       return;
     }
-    const existingThreadSettings = await Promise.all([
-      session.thread.getSetting({ key: 'currentModelId' }),
-      session.thread.getSetting({ key: 'modeModelId_build' }),
-      session.thread.getSetting({ key: 'modeModelId_plan' }),
-      session.thread.getSetting({ key: 'modeModelId_fast' }),
-    ]);
-    if (existingThreadSettings.some(setting => typeof setting === 'string')) return;
+    // Core stamps the mode default model on every thread it creates, so a
+    // stored model only reflects a real choice on a resumed thread.
+    if (!threadCreated) {
+      const existingThreadSettings = await Promise.all([
+        session.thread.getSetting({ key: 'currentModelId' }),
+        session.thread.getSetting({ key: 'modeModelId_build' }),
+        session.thread.getSetting({ key: 'modeModelId_plan' }),
+        session.thread.getSetting({ key: 'modeModelId_fast' }),
+      ]);
+      if (existingThreadSettings.some(setting => typeof setting === 'string')) return;
+    }
 
     const modelDefault = await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId });
     if (modelDefault) await applyDefaultModel(session, modelDefault.modelId);

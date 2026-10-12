@@ -44,6 +44,8 @@ export type {
   AgentControllerRequestState,
   AgentControllerRequestStateUpdater,
   AgentControllerRequestStateUpdateResult,
+  AgentControllerSessionCreatedContext,
+  AgentControllerSessionCreatedListener,
   AgentControllerSessionDeletedListener,
   AgentControllerStateSchema,
   AgentControllerSubagent,

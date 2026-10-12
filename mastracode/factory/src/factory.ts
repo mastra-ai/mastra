@@ -1477,12 +1477,16 @@ export class MastraFactory {
     // Personal default models seed interactive user sessions only. Active Factory
     // run bindings are excluded and continue to use the project default model.
     prepared.base.controller.onSessionCreated(
-      session =>
-        hydrateSessionDefaultModel(session, {
-          sourceControl: { sessions: sourceControlSessions },
-          workItems: workItemsStorage,
-          modelDefaults: modelDefaultsStorage,
-        }),
+      (session, context) =>
+        hydrateSessionDefaultModel(
+          session,
+          {
+            sourceControl: { sessions: sourceControlSessions },
+            workItems: workItemsStorage,
+            modelDefaults: modelDefaultsStorage,
+          },
+          context,
+        ),
       { blocking: true },
     );
 

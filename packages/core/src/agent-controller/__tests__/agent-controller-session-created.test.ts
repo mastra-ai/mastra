@@ -229,6 +229,70 @@ describe('AgentController.onSessionCreated', () => {
     error.mockRestore();
   });
 
+  it('reports threadCreated for a brand-new thread and not for a resumed one', async () => {
+    const storage = new InMemoryStore();
+    const first = createController(storage);
+    await first.controller.init();
+    const firstContexts: unknown[] = [];
+    first.controller.onSessionCreated((_session, context) => {
+      firstContexts.push(context);
+    });
+    const created = await first.controller.createSession({ resourceId: 'resource-1' });
+    expect(firstContexts).toEqual([{ threadCreated: true }]);
+
+    const restarted = createController(storage);
+    await restarted.controller.init();
+    const restartedContexts: unknown[] = [];
+    restarted.controller.onSessionCreated((_session, context) => {
+      restartedContexts.push(context);
+    });
+    const resumed = await restarted.controller.createSession({ resourceId: 'resource-1' });
+    expect(resumed.thread.requireId()).toBe(created.thread.requireId());
+    expect(restartedContexts).toEqual([{ threadCreated: false }]);
+  });
+
+  it('reports threadCreated for an exact thread id only when that thread did not exist', async () => {
+    const storage = new InMemoryStore();
+    const first = createController(storage);
+    await first.controller.init();
+    const firstContexts: unknown[] = [];
+    first.controller.onSessionCreated(
+      (_session, context) => {
+        firstContexts.push(context);
+      },
+      { blocking: true },
+    );
+    await first.controller.createSession({ resourceId: 'resource-1', threadId: 'thread-new' });
+    expect(firstContexts).toEqual([{ threadCreated: true }]);
+
+    const restarted = createController(storage);
+    await restarted.controller.init();
+    const restartedContexts: unknown[] = [];
+    restarted.controller.onSessionCreated(
+      (_session, context) => {
+        restartedContexts.push(context);
+      },
+      { blocking: true },
+    );
+    const resumed = await restarted.controller.createSession({ resourceId: 'resource-1', threadId: 'thread-new' });
+    expect(resumed.thread.requireId()).toBe('thread-new');
+    expect(restartedContexts).toEqual([{ threadCreated: false }]);
+  });
+
+  it('reports threadCreated false when no initial thread is created', async () => {
+    const { controller } = createController(new InMemoryStore());
+    await controller.init();
+    const contexts: unknown[] = [];
+    controller.onSessionCreated((_session, context) => {
+      contexts.push(context);
+    });
+
+    const session = await controller.createSession({ resourceId: 'resource-1', createInitialThread: false });
+
+    expect(session.thread.getId()).toBeNull();
+    expect(contexts).toEqual([{ threadCreated: false }]);
+  });
+
   it('awaits before-agent-end listeners before exposing the terminal event', async () => {
     const { controller } = createController(new InMemoryStore());
     await controller.init();

@@ -226,7 +226,21 @@ export type BuiltinToolId =
   | 'subagent';
 
 /** Process-local listener notified after AgentController materializes a live session. */
-export type AgentControllerSessionCreatedListener<TState = {}> = (session: Session<TState>) => void | Promise<void>;
+export type AgentControllerSessionCreatedListener<TState = {}> = (
+  session: Session<TState>,
+  context: AgentControllerSessionCreatedContext,
+) => void | Promise<void>;
+
+/** Details about how a session was materialized, passed to session-created listeners. */
+export interface AgentControllerSessionCreatedContext {
+  /**
+   * `true` when materializing the session created its bound thread, so the
+   * thread's metadata holds only the defaults stamped at creation rather than
+   * choices persisted by an earlier session. `false` when an existing thread
+   * was resumed or no thread was bound.
+   */
+  threadCreated: boolean;
+}
 
 /** Options for {@link AgentController.onSessionCreated}. */
 export interface AgentControllerSessionCreatedOptions {

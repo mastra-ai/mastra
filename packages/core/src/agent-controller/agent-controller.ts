@@ -45,6 +45,7 @@ import type {
   AgentControllerMode,
   AgentControllerRequestContext,
   AgentControllerRequestStateUpdater,
+  AgentControllerSessionCreatedContext,
   AgentControllerSessionCreatedListener,
   AgentControllerSessionCreatedOptions,
   AgentControllerSessionDeletedListener,
@@ -306,7 +307,9 @@ export class AgentController<TState = {}> {
 
   /**
    * Subscribe to process-local notifications for newly materialized sessions.
-   * Cached `createSession()` calls do not notify listeners again.
+   * Cached `createSession()` calls do not notify listeners again. Listeners
+   * receive a context whose `threadCreated` flag tells a freshly created
+   * thread (metadata holds only creation-time defaults) apart from a resumed one.
    *
    * Async listeners are fire-and-forget by default. Pass `blocking: true` to
    * make `createSession()` await the listener before resolving — for setup that
@@ -332,14 +335,14 @@ export class AgentController<TState = {}> {
     };
   }
 
-  async #notifySessionCreated(session: Session<TState>): Promise<void> {
+  async #notifySessionCreated(session: Session<TState>, context: AgentControllerSessionCreatedContext): Promise<void> {
     const entries = [...this.#sessionCreatedListeners];
     // Blocking listeners complete sequentially, in registration order, before
     // fire-and-forget listeners can observe the session.
     for (const { listener, blocking } of entries) {
       if (!blocking) continue;
       try {
-        await listener(session);
+        await listener(session, context);
       } catch (error) {
         console.error('Error in session-created listener:', error);
       }
@@ -347,7 +350,7 @@ export class AgentController<TState = {}> {
     for (const { listener, blocking } of entries) {
       if (blocking) continue;
       try {
-        const result = listener(session);
+        const result = listener(session, context);
         if (result && typeof result === 'object' && 'catch' in result) {
           (result as Promise<void>).catch(error => console.error('Error in session-created listener:', error));
         }
@@ -773,6 +776,7 @@ export class AgentController<TState = {}> {
       }),
     );
 
+    let threadCreated = false;
     if (overrides?.threadId) {
       const existingThread = await session.thread.getById({ threadId: overrides.threadId });
       if (existingThread) {
@@ -785,6 +789,7 @@ export class AgentController<TState = {}> {
         await session.thread.ensureCurrentSubscription(requestContext);
       } else {
         await session.thread.create({ id: overrides.threadId, requestContext });
+        threadCreated = true;
       }
     } else {
       // Same scope `thread.create()` stamps, matched strictly: a thread outside
@@ -800,6 +805,7 @@ export class AgentController<TState = {}> {
 
       if (candidates.length === 0 && overrides?.createInitialThread !== false) {
         await session.thread.create({ requestContext });
+        threadCreated = true;
       } else if (candidates.length > 0) {
         const mostRecent = [...candidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0]!;
         await this.config.threadLock?.acquire(mostRecent.id);
@@ -809,7 +815,7 @@ export class AgentController<TState = {}> {
       }
     }
 
-    await this.#notifySessionCreated(session);
+    await this.#notifySessionCreated(session, { threadCreated });
     return session;
   }
 
