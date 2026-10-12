@@ -375,6 +375,7 @@
     "qwen/qwen3.8-max",
     "qwen/qwen3.8-max-0902",
     "scaleway/deepseek-v4-flash-0731",
+    "scaleway/deepseek-v4.1-flash",
     "scaleway/gemma-3-27b-it",
     "scaleway/gpt-oss-120b",
     "scaleway/llama-3.3-70b-instruct",
@@ -1251,6 +1252,12 @@
       }
     ],
     "scaleway/deepseek-v4-flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "scaleway/deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]

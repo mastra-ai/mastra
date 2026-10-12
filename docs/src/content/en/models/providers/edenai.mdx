@@ -7,7 +7,7 @@ description: "Browse Eden AI model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/edenai.svg" alt="Eden AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Eden AI
 
-Access 303 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
+Access 304 Eden AI models through Mastra's model router. Authentication is handled automatically using the `EDENAI_API_KEY` environment variable.
 
 Learn more in the [Eden AI documentation](https://docs.edenai.co).
 
@@ -1806,8 +1806,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 100000,
     "maxOutput": 262144,
-    "inputCost": 0.33618,
-    "outputCost": 0.44824
+    "inputCost": 0.33543,
+    "outputCost": 0.44724
   },
   {
     "model": "edenai/ionos/meta-llama/Llama-3.3-70B-Instruct",
@@ -1818,8 +1818,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 4096,
-    "inputCost": 0.72839,
-    "outputCost": 0.72839
+    "inputCost": 0.726765,
+    "outputCost": 0.726765
   },
   {
     "model": "edenai/ionos/openai/gpt-oss-120b",
@@ -1830,8 +1830,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 32768,
-    "inputCost": 0.16809,
-    "outputCost": 0.72839
+    "inputCost": 0.167715,
+    "outputCost": 0.726765
   },
   {
     "model": "edenai/ionos/Qwen/Qwen3-Coder-Next",
@@ -1842,8 +1842,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 65536,
-    "inputCost": 0.16809,
-    "outputCost": 0.89648
+    "inputCost": 0.167715,
+    "outputCost": 0.89448
   },
   {
     "model": "edenai/minimax/MiniMax-M2",
@@ -2910,8 +2910,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 256000,
     "maxOutput": 384000,
-    "inputCost": 0.44824,
-    "outputCost": 0.89648
+    "inputCost": 0.44724,
+    "outputCost": 0.89448
+  },
+  {
+    "model": "edenai/scaleway/deepseek-v4.1-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 384000,
+    "inputCost": 0.67086,
+    "outputCost": 2.012581
   },
   {
     "model": "edenai/scaleway/gemma-3-27b-it",
@@ -2934,8 +2946,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 128000,
     "maxOutput": 32768,
-    "inputCost": 0.16809,
-    "outputCost": 0.67236
+    "inputCost": 0.167715,
+    "outputCost": 0.67086
   },
   {
     "model": "edenai/scaleway/llama-3.3-70b-instruct",
@@ -2946,8 +2958,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 4096,
-    "inputCost": 1.00854,
-    "outputCost": 1.00854
+    "inputCost": 1.00629,
+    "outputCost": 1.00629
   },
   {
     "model": "edenai/scaleway/qwen3-235b-a22b-instruct-2507",
@@ -2958,8 +2970,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 250000,
     "maxOutput": 16384,
-    "inputCost": 0.84045,
-    "outputCost": 2.52135
+    "inputCost": 0.838575,
+    "outputCost": 2.515726
   },
   {
     "model": "edenai/scaleway/qwen3-coder-30b-a3b-instruct",
@@ -2970,8 +2982,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 128000,
     "maxOutput": 65536,
-    "inputCost": 0.22412,
-    "outputCost": 0.89648
+    "inputCost": 0.22362,
+    "outputCost": 0.89448
   },
   {
     "model": "edenai/tencent/deepseek-v4-pro-0813",
