@@ -643,7 +643,7 @@ Error responses keep the `error` message field and add an optional `problem` fie
 }
 ```
 
-The HTTP status gives the generic category. `problem.code` gives the business reason when Mastra knows it. Errors without a known reason use `type: "about:blank"` and omit `code`. For 5xx errors, `detail` is omitted so internal messages aren't exposed. Validation errors also include `problem.issues`.
+The HTTP status gives the generic category. `problem.code` gives the business reason when Mastra knows it. Errors without a known reason use `type: "about:blank"` and omit `code`. For 5xx errors, `problem.detail` is omitted. The `error` field is unchanged and still contains the error message. Validation errors also include `problem.issues`.
 
 Import the codes, schema, and type from `@mastra/server/http-errors`. `MASTRA_ERROR_CODES` is a plain object of string constants, so your frontend can switch on `problem.code` to show a dedicated message. This entry point depends only on `zod`, so you can use it in client code:
 
@@ -666,6 +666,8 @@ switch (parsed.success ? parsed.data.code : undefined) {
 ```
 
 ### Error codes
+
+Error codes are part of the public API. New codes can be added in minor releases. Existing codes aren't renamed or removed outside a major release. Handle unknown codes with a default case, as in the example above.
 
 | Code | Meaning |
 | - | - |

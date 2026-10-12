@@ -10,7 +10,7 @@
 
 Added an optional `problem` field to server error responses, following RFC 9457 Problem Details. The existing `error` field and the `application/json` content type are unchanged, so current clients keep working.
 
-`problem.code` carries a business error code such as `AGENT_NOT_FOUND`, `THREAD_ACCESS_DENIED`, or `DURABLE_RUN_ACTIVE`, while the HTTP status stays the generic category. For 5xx errors, `detail` is omitted so internal messages aren't exposed.
+`problem.code` carries a business error code such as `AGENT_NOT_FOUND`, `THREAD_ACCESS_DENIED`, or `DURABLE_RUN_ACTIVE`, while the HTTP status stays the generic category. For 5xx errors, `problem.detail` is omitted. The `error` field is unchanged and still contains the error message.
 
 Observability query routes (traces, spans, threads, aggregates, discovery) keep their existing top-level `code`, `message`, and `issues`, and now also include `problem`. Their codes, such as `TRACE_QUERY_INVALID` and `TRACE_QUERY_CURSOR_CONFLICT`, are part of `MASTRA_ERROR_CODES`.
 
