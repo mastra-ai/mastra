@@ -1724,6 +1724,32 @@ describe('Scorer Utils', () => {
         expect(result.matchedSteps).toBe(0);
       });
 
+      it('should match provider_tool_call ExpectedStep when toolArgs match', () => {
+        const actual: Trajectory = {
+          steps: [{ stepType: 'provider_tool_call', name: 'web_search', toolArgs: { query: 'hello' }, success: true }],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'web_search', stepType: 'provider_tool_call', toolArgs: { query: 'hello' }, success: true }],
+        };
+
+        const result = compareTrajectories(actual, expected);
+        expect(result.score).toBe(1);
+        expect(result.matchedSteps).toBe(1);
+      });
+
+      it('should fail provider_tool_call ExpectedStep when toolArgs differ', () => {
+        const actual: Trajectory = {
+          steps: [{ stepType: 'provider_tool_call', name: 'web_search', toolArgs: { query: 'different' } }],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'web_search', stepType: 'provider_tool_call', toolArgs: { query: 'hello' } }],
+        };
+
+        const result = compareTrajectories(actual, expected);
+        expect(result.matchedSteps).toBe(0);
+        expect(result.missingSteps).toEqual(['web_search']);
+      });
+
       it('should match by name+type only when no data fields are specified', () => {
         const actual: Trajectory = {
           steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'anything' } }],
