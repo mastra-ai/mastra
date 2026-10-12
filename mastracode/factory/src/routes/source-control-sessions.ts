@@ -414,14 +414,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             }
           }
           if (liveSession) {
-            const mirrored = await liveSession.thread.transferOwnership({
-              threadId: liveSession.thread.getId(),
-              expectedOwnerId: session.userId,
-              toOwnerId: userId,
-            });
-            if (!mirrored.ok && mirrored.currentOwnerId !== userId) {
-              throw new Error(`Thread ownership changed concurrently for session ${sessionId}.`);
-            }
+            await liveSession.thread.transferOwnership({ toOwnerId: userId });
           }
         } catch (mirrorError) {
           let authoritativeOwnerId: string | undefined;
@@ -455,17 +448,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
 
           if (liveSession) {
             try {
-              const currentThreadOwnerId = await liveSession.thread.getOwner();
-              if (!currentThreadOwnerId) throw new Error('The live thread has no owner to reconcile.');
-              if (currentThreadOwnerId !== authoritativeOwnerId) {
-                const reconciled = await liveSession.thread.transferOwnership({
-                  expectedOwnerId: currentThreadOwnerId,
-                  toOwnerId: authoritativeOwnerId,
-                });
-                if (!reconciled.ok && reconciled.currentOwnerId !== authoritativeOwnerId) {
-                  throw new Error(`Failed to reconcile thread ownership to ${authoritativeOwnerId}.`);
-                }
-              }
+              await liveSession.thread.transferOwnership({ toOwnerId: authoritativeOwnerId });
             } catch (reconciliationError) {
               throw new AggregateError(
                 [mirrorError, reconciliationError],

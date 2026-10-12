@@ -71,7 +71,7 @@ describe('resolveSubscriptionSession', () => {
       await controller.deleteSession({ resourceId: 'session-1' });
     });
     if (cold) {
-      await original.thread.transferOwnership({ expectedOwnerId: 'user-1', toOwnerId: 'user-2' });
+      await original.thread.transferOwnership({ toOwnerId: 'user-2' });
       await controller.deleteSession({ resourceId: 'session-1' });
     } else {
       await original.thread.create();
