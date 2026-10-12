@@ -17,7 +17,7 @@ describe('FactoryProjectsStorage', () => {
       createdBy: 'user-1',
       name: 'Platform',
       description: 'Internal platform work',
-      modelScope: 'user',
+      modelScope: 'factory',
       slackWorkItemsEnabled: false,
     });
     expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toEqual(project);
@@ -47,13 +47,13 @@ describe('FactoryProjectsStorage', () => {
     const scoped = await seed.projects.update({
       orgId: 'org-1',
       id: first.id,
-      input: { modelScope: 'factory' },
+      input: { modelScope: 'user' },
     });
-    expect(scoped?.modelScope).toBe('factory');
+    expect(scoped?.modelScope).toBe('user');
 
     const renamedAgain = await seed.projects.update({ orgId: 'org-1', id: first.id, input: { name: 'Final name' } });
-    expect(renamedAgain?.modelScope).toBe('factory');
-    expect((await seed.projects.get({ orgId: 'org-1', id: first.id }))?.modelScope).toBe('factory');
+    expect(renamedAgain?.modelScope).toBe('user');
+    expect((await seed.projects.get({ orgId: 'org-1', id: first.id }))?.modelScope).toBe('user');
 
     expect(await seed.projects.delete({ orgId: 'org-2', id: first.id })).toBeNull();
     expect(await seed.projects.delete({ orgId: 'org-1', id: first.id })).toMatchObject({ id: first.id });

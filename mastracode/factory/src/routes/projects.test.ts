@@ -45,7 +45,7 @@ describe('ProjectRoutes', () => {
     expect(created.project).toMatchObject({
       name: 'Platform',
       description: 'Core services',
-      modelScope: 'user',
+      modelScope: 'factory',
       slackWorkItemsEnabled: false,
     });
 
@@ -59,13 +59,13 @@ describe('ProjectRoutes', () => {
       body: JSON.stringify({
         name: 'Platform engineering',
         description: null,
-        modelScope: 'factory',
+        modelScope: 'user',
         slackWorkItemsEnabled: true,
       }),
     });
     expect(updatedResponse.status).toBe(200);
     expect((await updatedResponse.json()) as unknown).toMatchObject({
-      project: { name: 'Platform engineering', description: null, modelScope: 'factory', slackWorkItemsEnabled: true },
+      project: { name: 'Platform engineering', description: null, modelScope: 'user', slackWorkItemsEnabled: true },
     });
 
     expect((await app.request(`/web/factory/projects/${created.project.id}`, { method: 'DELETE' })).status).toBe(204);
