@@ -130,18 +130,35 @@ export class LangSmithExporter extends TrackingExporter<
   }
 
   /**
+   * Send everything the LangSmith Client has queued. In manual flush mode only
+   * `flush()` drains the queue (`awaitPendingTraceBatches()` just warns there);
+   * otherwise `awaitPendingTraceBatches()` waits for queued and in-flight batches.
+   */
+  async #flushClient(): Promise<void> {
+    if (!this.#client) return;
+    // `manualFlushMode` is a private field in the SDK typings; fall back to our config
+    const manualFlushMode =
+      (this.#client as unknown as { manualFlushMode?: boolean }).manualFlushMode ?? this.config.manualFlushMode;
+    if (manualFlushMode) {
+      await this.#client.flush();
+    } else {
+      await this.#client.awaitPendingTraceBatches();
+    }
+  }
+
+  /**
    * Flush pending trace batches to LangSmith.
    * The LangSmith Client internally batches API calls; this ensures
    * all queued runs are sent before the process exits or the flush
    * caller continues.
    */
   protected override async _flush(): Promise<void> {
-    if (this.#client) {
-      await this.#client.awaitPendingTraceBatches();
-    }
+    await this.#flushClient();
   }
 
+  /** Spans aborted by shutdown() were only queued on the client; send them before releasing state. */
   protected override async _postShutdown(): Promise<void> {
+    await this.#flushClient();
     this.#langsmithRunIdBySpanId.clear();
   }
 

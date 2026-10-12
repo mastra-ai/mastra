@@ -75,6 +75,8 @@ describe('TestLangSmithExporter', () => {
     mockClient = {
       createRun: vi.fn(),
       updateRun: vi.fn(),
+      flush: vi.fn().mockResolvedValue(undefined),
+      awaitPendingTraceBatches: vi.fn().mockResolvedValue(undefined),
     };
 
     MockClientClass = vi.mocked(Client);
@@ -1130,6 +1132,86 @@ describe('TestLangSmithExporter', () => {
 
       // Should not throw
       await expect(disabledExporter.shutdown()).resolves.not.toThrow();
+    });
+  });
+
+  describe('Client flushing', () => {
+    function settled(promise: Promise<void>): () => boolean {
+      let done = false;
+      promise.then(
+        () => (done = true),
+        () => (done = true),
+      );
+      return () => done;
+    }
+
+    function held(fn: any): () => void {
+      let release!: () => void;
+      fn.mockReturnValue(
+        new Promise<void>(resolve => {
+          release = resolve;
+        }),
+      );
+      return release;
+    }
+
+    it('should wait for client.flush() in manual flush mode', async () => {
+      mockClient.manualFlushMode = true;
+      const release = held(mockClient.flush);
+
+      const flush = exporter.flush();
+      const isDone = settled(flush);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(mockClient.flush).toHaveBeenCalledTimes(1);
+      expect(mockClient.awaitPendingTraceBatches).not.toHaveBeenCalled();
+      expect(isDone()).toBe(false);
+
+      release();
+      await flush;
+    });
+
+    it('should wait for awaitPendingTraceBatches() in auto flush mode', async () => {
+      const release = held(mockClient.awaitPendingTraceBatches);
+
+      const flush = exporter.flush();
+      const isDone = settled(flush);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(mockClient.awaitPendingTraceBatches).toHaveBeenCalledTimes(1);
+      expect(mockClient.flush).not.toHaveBeenCalled();
+      expect(isDone()).toBe(false);
+
+      release();
+      await flush;
+    });
+
+    it('should send the aborts of open spans before shutdown resolves', async () => {
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: createMockSpan({
+          id: 'root-span',
+          name: 'root',
+          type: SpanType.AGENT_RUN,
+          isRoot: true,
+          attributes: {},
+        }),
+      });
+      const release = held(mockClient.awaitPendingTraceBatches);
+
+      const shutdown = exporter.shutdown();
+      const isDone = settled(shutdown);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(mockRunTree.error).toBe('Observability is shutting down.');
+      expect(mockRunTree.end).toHaveBeenCalledTimes(1);
+      expect(mockRunTree.patchRun).toHaveBeenCalledTimes(1);
+      expect(mockClient.awaitPendingTraceBatches).toHaveBeenCalledTimes(1);
+      // The abort update must be queued on the client before the client is flushed
+      expect(mockClient.awaitPendingTraceBatches.mock.invocationCallOrder[0]).toBeGreaterThan(
+        mockRunTree.patchRun.mock.invocationCallOrder[0],
+      );
+      expect(isDone()).toBe(false);
+
+      release();
+      await shutdown;
     });
   });
 
