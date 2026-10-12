@@ -81,6 +81,7 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     - A dedicated worker service requires Redis for coordination. Without a usable `REDIS_URL` in the deploy env, background tasks run in-process.
     - With Redis available, the CLI uses a dedicated worker service when the environment already has one, when you pass `--yes`, or when the deploy runs headless. Otherwise it asks whether to provision one.
     - Pass `--workers dedicated` or `--workers in-process` to skip the decision. `--workers dedicated` fails if `REDIS_URL` is missing.
+    - Dedicated worker services are rolling out gradually. If your organization doesn't have access yet, the CLI omits the worker manifest and background tasks run in-process, even with Redis and `--workers dedicated`.
 
     When a dedicated worker service is chosen, the deploy artifact includes a worker manifest, and Mastra Cloud provisions or updates the worker service from the same artifact.
 

@@ -366,7 +366,7 @@ When tracing is disabled (sampling returns false), NO-OP spans are returned:
 ### `NoOpSpan`
 
 ```typescript oxfmt:false
-class NoOpSpan<TType extends SpanType> implements Span<TType>
+class NoOpSpan<TType extends SpanType> extends BaseSpan<TType>
 ```
 
 `NoOpSpan` is exported from `@mastra/observability`. It extends that package's abstract `BaseSpan` class, which implements the `Span` interface. That class is different from the `BaseSpan` interface described on this page.
