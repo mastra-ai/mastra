@@ -759,6 +759,17 @@ describe('Datasets Handlers', () => {
       } as any)) as any;
       expect(first.result.output?.text).toBe('agent answer');
       expect(first.result.error).toBeNull();
+      expect(first.result.targetType).toBe('agent');
+
+      const listed = (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        page: 0,
+        perPage: 10,
+      } as any)) as any;
+      expect(listed.results[0].targetType).toBe('agent');
+      expect(experimentResultResponseSchema.safeParse(listed.results[0]).success).toBe(true);
 
       // A retried call converges on the same row.
       const second = (await RUN_EXPERIMENT_ITEM_ROUTE.handler({
