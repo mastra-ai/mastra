@@ -63,6 +63,7 @@ describe('NestJS Adapter - auth parity with other adapters', () => {
 
     const anonymous = await executeExpressRequest(expressApp, { method: 'GET', path: '/api/agents' });
     expect(anonymous.status).toBe(401);
+    expect(anonymous.body.problem).toMatchObject({ status: 401, code: 'AUTHENTICATION_REQUIRED' });
   });
 
   it('serves registerApiRoute routes and honors requiresAuth', async () => {

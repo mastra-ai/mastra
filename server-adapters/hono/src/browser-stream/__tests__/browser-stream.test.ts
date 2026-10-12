@@ -94,7 +94,10 @@ describe('hono browser-stream routes', () => {
       });
 
       expect(response.status).toBe(404);
-      await expect(response.json()).resolves.toEqual({ error: 'No browser session for this agent' });
+      await expect(response.json()).resolves.toEqual({
+        error: 'No browser session for this agent',
+        problem: expect.objectContaining({ status: 404, code: 'BROWSER_SESSION_NOT_FOUND' }),
+      });
     });
 
     it('closes the entire toolset for shared scope', async () => {
@@ -173,7 +176,10 @@ describe('hono browser-stream routes', () => {
       });
 
       expect(response.status).toBe(500);
-      await expect(response.json()).resolves.toEqual({ error: 'Failed to close browser' });
+      await expect(response.json()).resolves.toEqual({
+        error: 'Failed to close browser',
+        problem: expect.objectContaining({ status: 500, code: 'BROWSER_OPERATION_FAILED' }),
+      });
 
       consoleErrorSpy.mockRestore();
     });

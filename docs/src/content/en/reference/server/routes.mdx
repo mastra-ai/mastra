@@ -717,6 +717,8 @@ switch (parsed.success ? parsed.data.code : undefined) {
 | `STORED_RESOURCE_NOT_FOUND` | Stored resource not found |
 | `VERSION_ACTIVE_DELETE_FORBIDDEN` | Active version cannot be deleted |
 | `AUTHENTICATION_REQUIRED` | Authentication required |
+| `PERMISSION_DENIED` | Permission denied |
+| `AUTHORIZATION_FAILED` | Authorization failed |
 | `AUTH_FEATURE_NOT_CONFIGURED` | Authentication feature not configured |
 | `SESSION_NOT_FOUND` | Session not found |
 | `SESSION_EXPIRED` | Session expired |
@@ -730,6 +732,10 @@ switch (parsed.success ? parsed.data.code : undefined) {
 | `AGENT_MODEL_LIST_EMPTY` | Agent model list empty |
 | `AGENT_VERSION_NOT_FOUND` | Agent version not found |
 | `AGENT_BUILDER_ACTION_INVALID` | Invalid agent builder action |
+| `VOICE_NOT_CONFIGURED` | Agent has no voice capabilities |
+| `VOICE_OPERATION_FAILED` | Voice operation failed |
+| `BROWSER_SESSION_NOT_FOUND` | Browser session not found |
+| `BROWSER_OPERATION_FAILED` | Browser operation failed |
 | `MODEL_CONFIG_NOT_FOUND` | Model configuration not found |
 | `MODEL_API_KEY_MISSING` | Model API key missing |
 | `MODEL_RESOLUTION_FAILED` | Model could not be resolved |
@@ -820,6 +826,8 @@ switch (parsed.success ? parsed.data.code : undefined) {
 | `SKILL_PATH_INVALID` | Invalid skill path |
 | `SKILLS_API_ERROR` | Skills registry error |
 | `REGISTRY_NOT_FOUND` | Registry not found |
+| `REQUEST_BODY_TOO_LARGE` | Request body too large |
+| `RATE_LIMITED` | Rate limited |
 | `INVALID_REQUEST_BODY` | The request body failed validation |
 | `INVALID_QUERY_PARAMS` | The query parameters failed validation |
 | `INVALID_PATH_PARAMS` | The path parameters failed validation |

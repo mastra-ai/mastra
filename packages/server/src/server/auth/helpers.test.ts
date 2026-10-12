@@ -763,7 +763,10 @@ describe('auth helpers', () => {
         expect(result).toEqual({
           action: 'error',
           status: 500,
-          body: { error: 'Failed to map authenticated user to a resource ID' },
+          body: {
+            error: 'Failed to map authenticated user to a resource ID',
+            problem: expect.objectContaining({ status: 500, code: 'RESOURCE_ID_DERIVATION_FAILED' }),
+          },
         });
         expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
       },
@@ -822,7 +825,10 @@ describe('auth helpers', () => {
       expect(result).toEqual({
         action: 'error',
         status: 500,
-        body: { error: 'Failed to map authenticated user to a resource ID' },
+        body: {
+          error: 'Failed to map authenticated user to a resource ID',
+          problem: expect.objectContaining({ status: 500, code: 'RESOURCE_ID_DERIVATION_FAILED' }),
+        },
       });
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
     });
@@ -863,7 +869,14 @@ describe('auth helpers', () => {
       ['HTTPException with 302', new HTTPException(302, { message: 'redirect' })],
     ])('redacts %s to a generic 401', async (_label, thrown) => {
       const result = await run(thrown);
-      expect(result).toMatchObject({ action: 'error', status: 401, body: { error: 'Invalid or expired token' } });
+      expect(result).toMatchObject({
+        action: 'error',
+        status: 401,
+        body: {
+          error: 'Invalid or expired token',
+          problem: expect.objectContaining({ status: 401, code: 'AUTHENTICATION_REQUIRED' }),
+        },
+      });
     });
   });
 
@@ -1046,7 +1059,10 @@ describe('auth helpers', () => {
       expect(result).toEqual({
         action: 'error',
         status: 401,
-        body: { error: 'Invalid or expired token' },
+        body: {
+          error: 'Invalid or expired token',
+          problem: expect.objectContaining({ status: 401, code: 'AUTHENTICATION_REQUIRED' }),
+        },
       });
     });
 
@@ -1074,7 +1090,10 @@ describe('auth helpers', () => {
       expect(result).toEqual({
         action: 'error',
         status: 401,
-        body: { error: 'Invalid or expired token' },
+        body: {
+          error: 'Invalid or expired token',
+          problem: expect.objectContaining({ status: 401, code: 'AUTHENTICATION_REQUIRED' }),
+        },
       });
     });
 
@@ -1098,7 +1117,10 @@ describe('auth helpers', () => {
       expect(result).toEqual({
         action: 'error',
         status: 401,
-        body: { error: 'Invalid or expired token' },
+        body: {
+          error: 'Invalid or expired token',
+          problem: expect.objectContaining({ status: 401, code: 'AUTHENTICATION_REQUIRED' }),
+        },
       });
     });
 
@@ -1126,7 +1148,10 @@ describe('auth helpers', () => {
       expect(result).toEqual({
         action: 'error',
         status: 401,
-        body: { error: 'Invalid or expired token' },
+        body: {
+          error: 'Invalid or expired token',
+          problem: expect.objectContaining({ status: 401, code: 'AUTHENTICATION_REQUIRED' }),
+        },
       });
     });
 

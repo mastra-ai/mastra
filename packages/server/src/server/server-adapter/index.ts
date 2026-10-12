@@ -22,10 +22,12 @@ import {
 } from '../constants';
 import type { MastraAuthMode } from '../constants';
 import { formatZodError } from '../handlers/error';
+import { MASTRA_ERROR_CODES } from '../http-errors';
+import type { ProblemDetails } from '../http-errors';
 import { HTTPException } from '../http-exception';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
-import { toValidationErrorBody } from './error-body';
+import { toValidationErrorBody, withProblem } from './error-body';
 import type { SetMcpRequestAuth } from './mcp-auth';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import type { ServerRoute } from './routes';
@@ -672,7 +674,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       /** Build framework-specific context for authorize() callback */
       buildAuthorizeContext?: () => unknown;
     },
-  ): Promise<{ status: number; error: string; headers?: Record<string, string> } | null> {
+  ): Promise<{
+    status: number;
+    error: string;
+    /** Wire body for error results: legacy `error` plus a coded `problem`. */
+    body?: { error: string; problem: ProblemDetails };
+    headers?: Record<string, string>;
+  } | null> {
     // Determine which auth config to use based on request type
     const effectiveAuth = this.getEffectiveAuthConfig(context.getHeader);
 
@@ -734,7 +742,17 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
     // Translate AuthResult error to the {status, error} format adapters expect
     const errorBody = result.body as { error?: string } | undefined;
-    return { status: result.status, error: errorBody?.error ?? 'Access denied', headers: result.headers };
+    const error = errorBody?.error ?? 'Access denied';
+    return {
+      status: result.status,
+      error,
+      body: withProblem(
+        { ...result.body, error },
+        result.status,
+        result.status === 403 ? MASTRA_ERROR_CODES.PERMISSION_DENIED : MASTRA_ERROR_CODES.AUTHENTICATION_REQUIRED,
+      ),
+      headers: result.headers,
+    };
   }
 
   /**
@@ -774,7 +792,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     userPermissions: string[] | undefined,
     hasPermissionFn: (userPerms: string[], required: string) => boolean,
     requestContext?: RequestContext,
-  ): { status: number; error: string; message: string } | null {
+  ): ForbiddenResult | null {
     // If RBAC is not configured, skip permission checks entirely
     // Auth-only mode = authenticated users get full access
     const rbacProvider = requestContext ? this.getEffectiveRBACProvider(requestContext) : this.mastra.getServer()?.rbac;
@@ -797,11 +815,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const hasAny = userPermissions && permissions.some(perm => hasPermissionFn(userPermissions, perm));
 
     if (!hasAny) {
-      return {
-        status: 403,
-        error: 'Forbidden',
-        message: `Missing required permission: ${permissions.join(' or ')}`,
-      };
+      return forbidden(`Missing required permission: ${permissions.join(' or ')}`);
     }
 
     return null;
@@ -1418,12 +1432,29 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
  * Check FGA authorization for an HTTP route.
  * Returns null if authorized or FGA not configured, or an error object if denied.
  */
+export interface ForbiddenResult {
+  status: 403;
+  error: 'Forbidden';
+  message: string;
+  /** Wire body: legacy `error`/`message` plus a PERMISSION_DENIED `problem`. */
+  body: { error: 'Forbidden'; message: string; problem: ProblemDetails };
+}
+
+function forbidden(message: string): ForbiddenResult {
+  return {
+    status: 403,
+    error: 'Forbidden',
+    message,
+    body: withProblem({ error: 'Forbidden' as const, message }, 403, MASTRA_ERROR_CODES.PERMISSION_DENIED),
+  };
+}
+
 export async function checkRouteFGA(
   mastra: any,
   route: ServerRoute,
   requestContext: RequestContext,
   params: Record<string, unknown>,
-): Promise<{ status: number; error: string; message: string } | null> {
+): Promise<ForbiddenResult | null> {
   // Use request context to determine which FGA provider to use (studio vs server)
   const fgaProvider = getFGAProvider(mastra, requestContext);
   if (!fgaProvider) return null;
@@ -1431,22 +1462,14 @@ export async function checkRouteFGA(
   const fgaConfig = await resolveRouteFGAConfig(fgaProvider, route, requestContext, params);
   if (!fgaConfig) {
     if (fgaProvider.requireForProtectedRoutes && isProtectedFGARoute(route)) {
-      return {
-        status: 403,
-        error: 'Forbidden',
-        message: 'FGA authorization denied: route FGA metadata is required',
-      };
+      return forbidden('FGA authorization denied: route FGA metadata is required');
     }
     return null;
   }
 
   const user = requestContext?.get('user');
   if (!user) {
-    return {
-      status: 403,
-      error: 'Forbidden',
-      message: 'FGA authorization denied: authenticated user is required',
-    };
+    return forbidden('FGA authorization denied: authenticated user is required');
   }
 
   const resourceId =
@@ -1454,11 +1477,7 @@ export async function checkRouteFGA(
       ? fgaConfig.resourceId(params, { requestContext })
       : fgaConfig.resourceId || (fgaConfig.resourceIdParam ? (params[fgaConfig.resourceIdParam] as string) : undefined);
   if (!fgaConfig.resourceType || !resourceId) {
-    return {
-      status: 403,
-      error: 'Forbidden',
-      message: 'FGA authorization denied: route FGA metadata is incomplete',
-    };
+    return forbidden('FGA authorization denied: route FGA metadata is incomplete');
   }
   const effectivePermission = route.path ? getEffectivePermission(route) : null;
   const permission =
@@ -1473,11 +1492,7 @@ export async function checkRouteFGA(
   });
 
   if (!authorized) {
-    return {
-      status: 403,
-      error: 'Forbidden',
-      message: `FGA authorization denied: cannot ${permission} on ${fgaConfig.resourceType}:${resourceId}`,
-    };
+    return forbidden(`FGA authorization denied: cannot ${permission} on ${fgaConfig.resourceType}:${resourceId}`);
   }
 
   return null;
@@ -1509,5 +1524,5 @@ function getFGAResourcePermissionSlug(resourceType: string): string {
   return resourcePermissionSlugs[resourceType] ?? resourceType;
 }
 
-export { toErrorBody, toValidationErrorBody } from './error-body';
+export { toErrorBody, toValidationErrorBody, withProblem } from './error-body';
 export type { ErrorBody, ValidationErrorBody } from './error-body';

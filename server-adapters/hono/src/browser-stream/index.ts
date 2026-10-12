@@ -1,6 +1,8 @@
 import type { createNodeWebSocket as CreateNodeWebSocket } from '@hono/node-ws';
 import { handleInputMessage, ViewerRegistry } from '@mastra/server/browser-stream';
 import type { BrowserStreamConfig, BrowserStreamResult } from '@mastra/server/browser-stream';
+import { MASTRA_ERROR_CODES } from '@mastra/server/http-errors';
+import { withProblem } from '@mastra/server/server-adapter';
 import type { Env, Hono, Schema } from 'hono';
 
 /**
@@ -110,7 +112,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   app.get(`${apiPrefix}/agents/:agentId/browser/session`, async c => {
     const agentId = c.req.param('agentId');
     if (!agentId) {
-      return c.json({ error: 'Agent ID is required' }, 400);
+      return c.json(withProblem({ error: 'Agent ID is required' }, 400, MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST), 400);
     }
 
     const threadId = c.req.query('threadId');
@@ -128,12 +130,15 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   app.post(`${apiPrefix}/agents/:agentId/browser/close`, async c => {
     const agentId = c.req.param('agentId');
     if (!agentId) {
-      return c.json({ error: 'Agent ID is required' }, 400);
+      return c.json(withProblem({ error: 'Agent ID is required' }, 400, MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST), 400);
     }
 
     const toolset = await config.getToolset(agentId);
     if (!toolset) {
-      return c.json({ error: 'No browser session for this agent' }, 404);
+      return c.json(
+        withProblem({ error: 'No browser session for this agent' }, 404, MASTRA_ERROR_CODES.BROWSER_SESSION_NOT_FOUND),
+        404,
+      );
     }
 
     try {
@@ -167,7 +172,10 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
       return c.json({ success: true });
     } catch (error) {
       console.error(`[BrowserStream] Error closing browser for ${agentId}:`, error);
-      return c.json({ error: 'Failed to close browser' }, 500);
+      return c.json(
+        withProblem({ error: 'Failed to close browser' }, 500, MASTRA_ERROR_CODES.BROWSER_OPERATION_FAILED),
+        500,
+      );
     }
   });
 

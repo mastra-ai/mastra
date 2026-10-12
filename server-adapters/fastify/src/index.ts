@@ -4,6 +4,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
+import { MASTRA_ERROR_CODES } from '@mastra/server/http-errors';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
@@ -15,6 +16,8 @@ import {
   normalizeQueryParams,
   redactStreamChunk,
   serializeStreamChunk,
+  toValidationErrorBody,
+  withProblem,
 } from '@mastra/server/server-adapter';
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler, RouteHandlerMethod } from 'fastify';
 export { createAuthMiddleware } from './auth-middleware';
@@ -581,7 +584,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         // If this is an auth error (not just a success-with-headers), return error response
         if (authError.error) {
-          return reply.status(authError.status).send({ error: authError.error });
+          return reply.status(authError.status).send(authError.body ?? { error: authError.error });
         }
       }
 
@@ -589,10 +592,15 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
       // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
       if (params.bodyParseError) {
-        return reply.status(400).send({
-          error: 'Invalid request body',
-          issues: [{ field: 'body', message: params.bodyParseError.message }],
-        });
+        return reply.status(400).send(
+          toValidationErrorBody(
+            {
+              error: 'Invalid request body',
+              issues: [{ field: 'body', message: params.bodyParseError.message }],
+            },
+            'body',
+          ),
+        );
       }
 
       if (params.queryParams) {
@@ -606,10 +614,15 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             const { status, body } = this.resolveValidationError(route, error, 'query');
             return reply.status(status).send(body);
           }
-          return reply.status(400).send({
-            error: 'Invalid query parameters',
-            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
-          });
+          return reply.status(400).send(
+            toValidationErrorBody(
+              {
+                error: 'Invalid query parameters',
+                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+              },
+              'query',
+            ),
+          );
         }
       }
 
@@ -624,10 +637,15 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             const { status, body } = this.resolveValidationError(route, error, 'body');
             return reply.status(status).send(body);
           }
-          return reply.status(400).send({
-            error: 'Invalid request body',
-            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
-          });
+          return reply.status(400).send(
+            toValidationErrorBody(
+              {
+                error: 'Invalid request body',
+                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+              },
+              'body',
+            ),
+          );
         }
       }
 
@@ -643,10 +661,15 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             const { status, body } = this.resolveValidationError(route, error, 'path');
             return reply.status(status).send(body);
           }
-          return reply.status(400).send({
-            error: 'Invalid path parameters',
-            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
-          });
+          return reply.status(400).send(
+            toValidationErrorBody(
+              {
+                error: 'Invalid path parameters',
+                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+              },
+              'path',
+            ),
+          );
         }
       }
 
@@ -676,10 +699,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
 
           if (permissionError) {
-            return reply.status(permissionError.status).send({
-              error: permissionError.error,
-              message: permissionError.message,
-            });
+            return reply.status(permissionError.status).send(permissionError.body);
           }
         }
       }
@@ -691,7 +711,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         ...(typeof params.body === 'object' ? params.body : {}),
       });
       if (fgaError) {
-        return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });
+        return reply.status(fgaError.status).send(fgaError.body);
       }
 
       try {
@@ -731,12 +751,18 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
     // and is never read by Fastify's body-parsing pipeline).
     const bodyLimit = isBodyMethod ? maxSize : undefined;
     const bodyLimitErrorHandler =
-      route.maxBodySize !== undefined
+      maxSize !== undefined
         ? (error: Error & { code?: string }, _request: FastifyRequest, reply: FastifyReply) => {
-            if (error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
-              return reply.status(413).send({ error: 'Request body too large' });
+            if (error.code !== 'FST_ERR_CTP_BODY_TOO_LARGE') throw error;
+            let errorResponse: unknown = { error: 'Request body too large' };
+            if (route.maxBodySize === undefined && this.bodyLimitOptions) {
+              try {
+                errorResponse = this.bodyLimitOptions.onError(errorResponse);
+              } catch {
+                // Fall back to the default response.
+              }
             }
-            throw error;
+            return reply.status(413).send(withProblem(errorResponse, 413, MASTRA_ERROR_CODES.REQUEST_BODY_TOO_LARGE));
           }
         : undefined;
 
@@ -809,7 +835,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             }
           }
           if (authError.error) {
-            return reply.status(authError.status).send({ error: authError.error });
+            return reply.status(authError.status).send(authError.body ?? { error: authError.error });
           }
         }
 
@@ -835,10 +861,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
               requestContext,
             );
             if (permissionError) {
-              return reply.status(permissionError.status).send({
-                error: permissionError.error,
-                message: permissionError.message,
-              });
+              return reply.status(permissionError.status).send(permissionError.body);
             }
           }
         }
@@ -852,7 +875,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             : {}),
         });
         if (fgaError) {
-          return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });
+          return reply.status(fgaError.status).send(fgaError.body);
         }
 
         const response = await this.handleCustomRouteRequest(
@@ -864,7 +887,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           request.abortSignal,
         );
         if (!response) {
-          reply.status(404).send({ error: 'Not Found' });
+          reply.status(404).send(withProblem({ error: 'Not Found' }, 404, MASTRA_ERROR_CODES.ROUTE_NOT_FOUND));
           return;
         }
         // Merge headers set by Fastify hooks/plugins (e.g. @fastify/cors) into

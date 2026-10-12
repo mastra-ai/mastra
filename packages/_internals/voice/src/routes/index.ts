@@ -36,12 +36,16 @@ const agentIdPathParams = z.object({
 
 type StatusCode = 400 | 404 | 500;
 
+// Mirrors @mastra/server's HTTPException, which this package cannot depend on.
+// `code` must be a key of MASTRA_ERROR_CODES (@mastra/server/http-errors).
 class HTTPException extends Error {
   readonly status: StatusCode;
+  readonly code?: string;
 
-  constructor(status: StatusCode, options: { message?: string; cause?: unknown; stack?: string } = {}) {
+  constructor(status: StatusCode, options: { message?: string; cause?: unknown; stack?: string; code?: string } = {}) {
     super(options.message, { cause: options.cause });
     this.status = status;
+    this.code = options.code;
     this.stack = options.stack || this.stack;
   }
 }
@@ -69,13 +73,15 @@ function handleError(error: unknown, defaultMessage: string): never {
     message: apiError.message || defaultMessage,
     stack: apiError.stack,
     cause: apiError.cause,
+    // The only 404 these routes can hit outside an HTTPException is the core agent lookup.
+    code: error instanceof HTTPException ? error.code : status === 404 ? 'AGENT_NOT_FOUND' : 'VOICE_OPERATION_FAILED',
   });
 }
 
 function validateBody(data: Record<string, unknown>): void {
   for (const [key, value] of Object.entries(data)) {
     if (value === undefined || value === null || value === '') {
-      throw new HTTPException(400, { message: `${key} is required` });
+      throw new HTTPException(400, { message: `${key} is required`, code: 'INVALID_REQUEST_BODY' });
     }
   }
 }
@@ -92,7 +98,7 @@ async function getAgentFromSystem({
   const logger = mastra.getLogger?.();
 
   if (!agentId) {
-    throw new HTTPException(400, { message: 'Agent ID is required' });
+    throw new HTTPException(400, { message: 'Agent ID is required', code: 'AGENT_INVALID_REQUEST' });
   }
 
   let agent: any;
@@ -143,7 +149,7 @@ async function getAgentFromSystem({
   }
 
   if (!agent) {
-    throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
+    throw new HTTPException(404, { message: `Agent with id ${agentId} not found`, code: 'AGENT_NOT_FOUND' });
   }
 
   return agent;
@@ -162,7 +168,7 @@ export const GET_SPEAKERS_ROUTE = createRoute({
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
       if (!agentId) {
-        throw new HTTPException(400, { message: 'Agent ID is required' });
+        throw new HTTPException(400, { message: 'Agent ID is required', code: 'AGENT_INVALID_REQUEST' });
       }
 
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
@@ -212,7 +218,7 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
   handler: async ({ mastra, agentId, text, speakerId, options, requestContext }) => {
     try {
       if (!agentId) {
-        throw new HTTPException(400, { message: 'Agent ID is required' });
+        throw new HTTPException(400, { message: 'Agent ID is required', code: 'AGENT_INVALID_REQUEST' });
       }
 
       validateBody({ text });
@@ -221,21 +227,24 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
       const voice = await agent.getVoice({ requestContext });
 
       if (!voice) {
-        throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
+        throw new HTTPException(400, {
+          message: 'Agent does not have voice capabilities',
+          code: 'VOICE_NOT_CONFIGURED',
+        });
       }
 
       const audioStream = await Promise.resolve()
         .then(() => voice.speak(text!, { ...options, speaker: options?.speaker ?? speakerId }))
         .catch(err => {
           if (isMastraVoiceError(err)) {
-            throw new HTTPException(400, { message: err.message });
+            throw new HTTPException(400, { message: err.message, code: 'VOICE_OPERATION_FAILED' });
           }
 
           throw err;
         });
 
       if (!audioStream) {
-        throw new HTTPException(500, { message: 'Failed to generate speech' });
+        throw new HTTPException(500, { message: 'Failed to generate speech', code: 'VOICE_OPERATION_FAILED' });
       }
 
       const webStream =
@@ -284,18 +293,21 @@ export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
   handler: async ({ mastra, agentId, audio, options, requestContext }) => {
     try {
       if (!agentId) {
-        throw new HTTPException(400, { message: 'Agent ID is required' });
+        throw new HTTPException(400, { message: 'Agent ID is required', code: 'AGENT_INVALID_REQUEST' });
       }
 
       if (!audio) {
-        throw new HTTPException(400, { message: 'Audio data is required' });
+        throw new HTTPException(400, { message: 'Audio data is required', code: 'INVALID_REQUEST_BODY' });
       }
 
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
       const voice = await agent.getVoice({ requestContext });
 
       if (!voice) {
-        throw new HTTPException(400, { message: 'Agent does not have voice capabilities' });
+        throw new HTTPException(400, {
+          message: 'Agent does not have voice capabilities',
+          code: 'VOICE_NOT_CONFIGURED',
+        });
       }
 
       const audioStream = new Readable();
@@ -339,13 +351,13 @@ export const GET_LISTENER_ROUTE = createRoute({
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
       if (!agentId) {
-        throw new HTTPException(400, { message: 'Agent ID is required' });
+        throw new HTTPException(400, { message: 'Agent ID is required', code: 'AGENT_INVALID_REQUEST' });
       }
 
       const agent = mastra.getAgentById(agentId);
 
       if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
+        throw new HTTPException(404, { message: 'Agent not found', code: 'AGENT_NOT_FOUND' });
       }
 
       const voice = await agent.getVoice({ requestContext });

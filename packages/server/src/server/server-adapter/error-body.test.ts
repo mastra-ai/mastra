@@ -2,7 +2,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { describe, expect, it } from 'vitest';
 import { problemDetailsSchema } from '../http-errors';
 import { HTTPException } from '../http-exception';
-import { toErrorBody, toValidationErrorBody } from './error-body';
+import { toErrorBody, toValidationErrorBody, withProblem } from './error-body';
 
 describe('toErrorBody', () => {
   describe('given an HTTPException carrying a business code', () => {
@@ -93,4 +93,65 @@ describe('toValidationErrorBody', () => {
       expect(problemDetailsSchema.safeParse(body.problem).success).toBe(true);
     },
   );
+});
+
+describe('withProblem', () => {
+  it('keeps every legacy field and adds a coded problem whose detail is the legacy error', () => {
+    const body = withProblem(
+      { error: 'Forbidden', message: 'Missing required permission: agents:read' },
+      403,
+      'PERMISSION_DENIED',
+    );
+
+    expect(body).toEqual({
+      error: 'Forbidden',
+      message: 'Missing required permission: agents:read',
+      problem: {
+        type: 'urn:mastra:error:PERMISSION_DENIED',
+        title: 'Permission denied',
+        status: 403,
+        code: 'PERMISSION_DENIED',
+        detail: 'Forbidden',
+      },
+    });
+    expect(problemDetailsSchema.safeParse(body.problem).success).toBe(true);
+  });
+
+  it('masks the detail of a 5xx problem', () => {
+    const body = withProblem({ error: 'db password is hunter2' }, 500, 'AUTHORIZATION_FAILED');
+
+    expect(body.problem).not.toHaveProperty('detail');
+    expect(JSON.stringify(body.problem)).not.toContain('hunter2');
+  });
+
+  it('does not overwrite a problem that is already present', () => {
+    const existing = { type: 'about:blank', title: 'Conflict', status: 409 };
+    const body = withProblem({ error: 'x', problem: existing }, 409, 'PERMISSION_DENIED');
+
+    expect(body.problem).toBe(existing);
+  });
+
+  it('wraps a non-object body (e.g. returned by a user onError hook) under error', () => {
+    expect(withProblem('too big', 413, 'REQUEST_BODY_TOO_LARGE')).toEqual({
+      error: 'too big',
+      problem: expect.objectContaining({ code: 'REQUEST_BODY_TOO_LARGE', status: 413 }),
+    });
+  });
+
+  it('honours a catalogue code carried by a foreign HTTPException-like error', () => {
+    const foreign = Object.assign(new Error('Agent with id x not found'), { status: 404, code: 'AGENT_NOT_FOUND' });
+    const { body } = toErrorBody(foreign);
+    expect(body.problem).toMatchObject({
+      type: 'urn:mastra:error:AGENT_NOT_FOUND',
+      code: 'AGENT_NOT_FOUND',
+      status: 404,
+    });
+  });
+
+  it('ignores a code that is not in the catalogue', () => {
+    const nodeError = Object.assign(new Error('connect refused'), { status: 502, code: 'ECONNREFUSED' });
+    const { body } = toErrorBody(nodeError);
+    expect(body.problem.type).toBe('about:blank');
+    expect(body.problem).not.toHaveProperty('code');
+  });
 });

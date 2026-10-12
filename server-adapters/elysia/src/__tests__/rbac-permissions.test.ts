@@ -111,6 +111,7 @@ describe('RBAC Permission Enforcement', () => {
       const response = await app.fetch(new Request('http://localhost/api/test/agents-read', { method: 'GET' }));
 
       expect(response.status).toBe(401);
+      expect((await response.json()).problem).toMatchObject({ status: 401, code: 'AUTHENTICATION_REQUIRED' });
     });
   });
 
@@ -179,6 +180,7 @@ describe('RBAC Permission Enforcement', () => {
       expect(response.status).toBe(403);
       const data = await response.json();
       expect(data.error).toBe('Forbidden');
+      expect(data.problem).toMatchObject({ status: 403, code: 'PERMISSION_DENIED' });
     });
 
     it('should allow member to access workflows:execute route (wildcard workflows:*)', async () => {

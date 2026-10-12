@@ -12,7 +12,9 @@ import {
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_AUTH_MODE_KEY,
 } from '../constants';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
+import { withProblem } from '../server-adapter/error-body';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
 
@@ -474,7 +476,12 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
 
     if (!user) {
-      return { action: 'error', status: 401, body: { error: 'Invalid or expired token' }, headers: refreshHeaders };
+      return {
+        action: 'error',
+        status: 401,
+        body: withProblem({ error: 'Invalid or expired token' }, 401, MASTRA_ERROR_CODES.AUTHENTICATION_REQUIRED),
+        headers: refreshHeaders,
+      };
     }
 
     requestContext.set(MASTRA_USER_KEY, user);
@@ -520,7 +527,11 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         return {
           action: 'error',
           status: 500,
-          body: { error: 'Failed to map authenticated user to a resource ID' },
+          body: withProblem(
+            { error: 'Failed to map authenticated user to a resource ID' },
+            500,
+            MASTRA_ERROR_CODES.RESOURCE_ID_DERIVATION_FAILED,
+          ),
           headers: refreshHeaders,
         };
       }
@@ -563,9 +574,26 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     // Explicit HTTP errors from auth callbacks keep their status/message; anything else is redacted.
     // The HTTPException message is sent to the client, so callers must keep it safe (no internal details).
     if (err instanceof HTTPException && err.status >= 400 && err.status <= 599) {
-      return { action: 'error', status: err.status, body: { error: err.message }, headers: refreshHeaders };
+      const code =
+        err.code ??
+        (err.status === 403
+          ? MASTRA_ERROR_CODES.PERMISSION_DENIED
+          : err.status >= 500
+            ? MASTRA_ERROR_CODES.AUTHORIZATION_FAILED
+            : MASTRA_ERROR_CODES.AUTHENTICATION_REQUIRED);
+      return {
+        action: 'error',
+        status: err.status,
+        body: withProblem({ error: err.message }, err.status, code),
+        headers: refreshHeaders,
+      };
     }
-    return { action: 'error', status: 401, body: { error: 'Invalid or expired token' }, headers: refreshHeaders };
+    return {
+      action: 'error',
+      status: 401,
+      body: withProblem({ error: 'Invalid or expired token' }, 401, MASTRA_ERROR_CODES.AUTHENTICATION_REQUIRED),
+      headers: refreshHeaders,
+    };
   }
 
   // ── Authorization ──
@@ -575,13 +603,23 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       const isAuthorized = await authConfig.authorizeUser(user, authRequest);
 
       if (!isAuthorized) {
-        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
+        return {
+          action: 'error',
+          status: 403,
+          body: withProblem({ error: 'Access denied' }, 403, MASTRA_ERROR_CODES.PERMISSION_DENIED),
+          headers: refreshHeaders,
+        };
       }
     } catch (err) {
       mastra.getLogger()?.error('Authorization error in authorizeUser', {
         error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
       });
-      return { action: 'error', status: 500, body: { error: 'Authorization error' }, headers: refreshHeaders };
+      return {
+        action: 'error',
+        status: 500,
+        body: withProblem({ error: 'Authorization error' }, 500, MASTRA_ERROR_CODES.AUTHORIZATION_FAILED),
+        headers: refreshHeaders,
+      };
     }
   } else if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
     try {
@@ -589,7 +627,12 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       const isAuthorized = await authConfig.authorize(path, method, user, authorizeCtx as any);
 
       if (!isAuthorized) {
-        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
+        return {
+          action: 'error',
+          status: 403,
+          body: withProblem({ error: 'Access denied' }, 403, MASTRA_ERROR_CODES.PERMISSION_DENIED),
+          headers: refreshHeaders,
+        };
       }
     } catch (err) {
       mastra.getLogger()?.error('Authorization error in authorize', {
@@ -597,13 +640,23 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         path,
         method,
       });
-      return { action: 'error', status: 500, body: { error: 'Authorization error' }, headers: refreshHeaders };
+      return {
+        action: 'error',
+        status: 500,
+        body: withProblem({ error: 'Authorization error' }, 500, MASTRA_ERROR_CODES.AUTHORIZATION_FAILED),
+        headers: refreshHeaders,
+      };
     }
   } else if ('rules' in authConfig && authConfig.rules && authConfig.rules.length > 0) {
     const isAuthorized = await checkRules(authConfig.rules, path, method, user);
 
     if (!isAuthorized) {
-      return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
+      return {
+        action: 'error',
+        status: 403,
+        body: withProblem({ error: 'Access denied' }, 403, MASTRA_ERROR_CODES.PERMISSION_DENIED),
+        headers: refreshHeaders,
+      };
     }
   } else {
     // No explicit authorization configured (authorizeUser, authorize, or rules)
@@ -615,10 +668,20 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);
 
         if (!isAuthorized) {
-          return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
+          return {
+            action: 'error',
+            status: 403,
+            body: withProblem({ error: 'Access denied' }, 403, MASTRA_ERROR_CODES.PERMISSION_DENIED),
+            headers: refreshHeaders,
+          };
         }
       } else {
-        return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };
+        return {
+          action: 'error',
+          status: 403,
+          body: withProblem({ error: 'Access denied' }, 403, MASTRA_ERROR_CODES.PERMISSION_DENIED),
+          headers: refreshHeaders,
+        };
       }
     }
   }

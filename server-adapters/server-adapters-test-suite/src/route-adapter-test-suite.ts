@@ -16,6 +16,20 @@ import {
 } from './test-helpers';
 
 /**
+ * Every 4xx/5xx emitted by a Mastra route must carry an RFC 9457 `problem`
+ * with a business code a frontend can switch on.
+ */
+export function expectBusinessProblem(data: unknown, status: number) {
+  const problem = (data as { problem?: Record<string, unknown> } | undefined)?.problem;
+  expect(problem, `expected a problem object on ${status} response: ${JSON.stringify(data)}`).toBeDefined();
+  expect(problem!.status).toBe(status);
+  expect(typeof problem!.code, `expected a business code on ${status} response: ${JSON.stringify(data)}`).toBe(
+    'string',
+  );
+  expect(problem!.type).toBe(`urn:mastra:error:${problem!.code}`);
+}
+
+/**
  * Creates a standardized integration test suite for server adapters (Express/Hono)
  *
  * Tests the complete HTTP request/response cycle:
@@ -600,6 +614,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
                 // Expect 404 status
                 expect(response.status).toBe(404);
+                expectBusinessProblem(response.data, 404);
               });
             }
 
@@ -619,6 +634,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
                 const response = await executeHttpRequest(app, httpRequest);
 
                 expect(response.status).toBe(404);
+                expectBusinessProblem(response.data, 404);
               });
             }
 
@@ -638,6 +654,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
                 const response = await executeHttpRequest(app, httpRequest);
 
                 expect(response.status).toBe(404);
+                expectBusinessProblem(response.data, 404);
               });
             }
 
@@ -658,6 +675,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
                 const response = await executeHttpRequest(app, httpRequest);
 
                 expect(response.status).toBe(404);
+                expectBusinessProblem(response.data, 404);
               });
             }
 
@@ -678,6 +696,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
                 const response = await executeHttpRequest(app, httpRequest);
 
                 expect(response.status).toBe(404);
+                expectBusinessProblem(response.data, 404);
               });
             }
 
@@ -698,6 +717,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
                 const response = await executeHttpRequest(app, httpRequest);
 
                 expect(response.status).toBe(404);
+                expectBusinessProblem(response.data, 404);
               });
             }
 
@@ -787,6 +807,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
                   const errorData = response.data as any;
                   expect(errorData).toBeDefined();
                   expect(errorData.error || errorData.message || errorData.details).toBeDefined();
+                  expectBusinessProblem(errorData, response.status);
                 }
               });
             }
@@ -911,6 +932,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             errorData.statusCode !== undefined;
 
           expect(hasErrorField).toBe(true);
+          expectBusinessProblem(errorData, 404);
         });
       });
 
@@ -937,6 +959,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             expect(response.type).toBe('json');
             const errorData = response.data as any;
             expect(errorData).toBeDefined();
+            expectBusinessProblem(errorData, response.status);
             // Verify error response has helpful structure when validation is explicit
             if (!(errorData.error || errorData.message || errorData.details)) {
               console.warn(`[WARN] ${route.method} ${route.path} 400 response missing error fields`, errorData);

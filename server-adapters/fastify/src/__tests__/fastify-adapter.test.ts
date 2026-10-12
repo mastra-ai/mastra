@@ -1155,7 +1155,13 @@ describe('Fastify Server Adapter', () => {
       }
 
       const response = await app.inject(injectOptions);
-      return { status: response.statusCode };
+      let data: unknown = response.body;
+      try {
+        data = response.json();
+      } catch {
+        // non-JSON body
+      }
+      return { status: response.statusCode, data };
     },
 
     cleanupApp: app => app.close(),

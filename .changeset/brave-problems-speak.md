@@ -14,6 +14,8 @@ Added an optional `problem` field to server error responses, following RFC 9457 
 
 Observability query routes (traces, spans, threads, aggregates, discovery) keep their existing top-level `code`, `message`, and `issues`, and now also include `problem`. Their codes, such as `TRACE_QUERY_INVALID` and `TRACE_QUERY_CURSOR_CONFLICT`, are part of `MASTRA_ERROR_CODES`.
 
+Errors produced outside route handlers carry a code too: authentication and permission failures (`AUTHENTICATION_REQUIRED`, `PERMISSION_DENIED`), oversized bodies (`REQUEST_BODY_TOO_LARGE`), invalid query, path, or body input, and unknown custom routes (`ROUTE_NOT_FOUND`).
+
 The new `@mastra/server/http-errors` entry point exports `MASTRA_ERROR_CODES` (a plain object of business code constants), the Zod schema, and the `ProblemDetails` type. It depends only on `zod`, so your frontend can use it to show a dedicated message per code:
 
 ```typescript

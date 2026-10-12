@@ -178,9 +178,10 @@ describe('Koa RBAC Permission Enforcement', () => {
       server = await startServer(app);
 
       // Make request without Authorization header
-      const { status } = await makeRequest(server, '/api/test/agents-read');
+      const { status, data } = await makeRequest(server, '/api/test/agents-read');
 
       expect(status).toBe(401);
+      expect(data.problem).toMatchObject({ status: 401, code: 'AUTHENTICATION_REQUIRED' });
     });
   });
 
@@ -243,6 +244,7 @@ describe('Koa RBAC Permission Enforcement', () => {
 
       expect(status).toBe(403);
       expect(data.error).toBe('Forbidden');
+      expect(data.problem).toMatchObject({ status: 403, code: 'PERMISSION_DENIED' });
     });
 
     it('should allow member to access workflows:execute route (wildcard workflows:*)', async () => {

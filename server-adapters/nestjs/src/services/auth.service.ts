@@ -103,9 +103,11 @@ export class AuthService {
 
     if (result.action === 'error') {
       const message = typeof result.body.error === 'string' ? result.body.error : 'Access denied';
-      if (result.status === 401) throw new UnauthorizedException(message);
-      if (result.status === 403) throw new ForbiddenException(message);
-      throw new HttpException(result.body, result.status);
+      // Pass the full body so the shared `problem` reaches the exception filter.
+      const body = { ...result.body, message };
+      if (result.status === 401) throw new UnauthorizedException(body);
+      if (result.status === 403) throw new ForbiddenException(body);
+      throw new HttpException(body, result.status);
     }
 
     const user = requestContext.get(MASTRA_USER_KEY);

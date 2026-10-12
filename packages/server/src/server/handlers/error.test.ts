@@ -316,6 +316,34 @@ describe('handleError', () => {
       expect(publicCodeForError(err)).toBe(code);
     });
 
+    it.each([
+      ['MASTRA_GET_AGENT_BY_NAME_NOT_FOUND', 'AGENT_NOT_FOUND'],
+      ['MASTRA_GET_AGENT_BY_AGENT_ID_NOT_FOUND', 'AGENT_NOT_FOUND'],
+      ['MASTRA_GET_WORKFLOW_BY_ID_NOT_FOUND', 'WORKFLOW_NOT_FOUND'],
+      ['MASTRA_GET_INTERNAL_WORKFLOW_BY_ID_NOT_FOUND', 'WORKFLOW_NOT_FOUND'],
+      ['MASTRA_GET_VECTOR_BY_NAME_NOT_FOUND', 'VECTOR_STORE_NOT_FOUND'],
+      ['MASTRA_GET_VECTOR_BY_ID_NOT_FOUND', 'VECTOR_STORE_NOT_FOUND'],
+      ['MASTRA_GET_WORKSPACE_BY_ID_NOT_FOUND', 'WORKSPACE_NOT_FOUND'],
+      ['MASTRA_GET_SCORER_NOT_FOUND', 'SCORER_NOT_FOUND'],
+      ['MASTRA_GET_SCORER_BY_ID_NOT_FOUND', 'SCORER_NOT_FOUND'],
+      ['MASTRA_GET_TOOL_BY_NAME_NOT_FOUND', 'TOOL_NOT_FOUND'],
+      ['MASTRA_GET_TOOL_BY_ID_NOT_FOUND', 'TOOL_NOT_FOUND'],
+      ['MASTRA_GET_PROCESSOR_BY_NAME_NOT_FOUND', 'PROCESSOR_NOT_FOUND'],
+      ['MASTRA_GET_PROCESSOR_BY_ID_NOT_FOUND', 'PROCESSOR_NOT_FOUND'],
+      ['MASTRA_GET_PROMPT_BLOCK_NOT_FOUND', 'PROMPT_BLOCK_NOT_FOUND'],
+      ['MASTRA_GET_PROMPT_BLOCK_BY_ID_NOT_FOUND', 'PROMPT_BLOCK_NOT_FOUND'],
+    ])('maps the core lookup error id %s to the public %s code', (id, code) => {
+      const err = new MastraError({
+        id,
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: id,
+        details: { status: 404 },
+      });
+      expect(publicCodeForError(err)).toBe(code);
+      expect(catchError(err).code).toBe(code);
+    });
+
     it('returns no public code for unknown internal ids', () => {
       expect(publicCodeForError(new Error('x'))).toBeUndefined();
       expect(publicCodeForError({ id: 'SOME_INTERNAL_FAILURE' })).toBeUndefined();

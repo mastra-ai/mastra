@@ -40,6 +40,15 @@ async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
 }
 
 // Wrapper describe block so the factory can call describe() inside
+const readJson = async (response: { text: () => Promise<string> }) => {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+};
+
 describe('Express Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Express Adapter Integration Tests',
@@ -1371,7 +1380,7 @@ describe('Express Server Adapter', () => {
           headers: options.headers,
           ...(options.body ? { body: options.body } : {}),
         });
-        return { status: response.status };
+        return { status: response.status, data: await readJson(response) };
       } finally {
         await new Promise<void>(resolve => server.close(() => resolve()));
       }
@@ -1388,7 +1397,7 @@ describe('Express Server Adapter', () => {
           throw new Error('Failed to get server address');
         }
         const parsedUrl = new URL(url);
-        return await new Promise<{ status: number }>((resolve, reject) => {
+        return await new Promise<{ status: number; data: unknown }>((resolve, reject) => {
           const request = createHttpRequest(
             {
               hostname: 'localhost',
@@ -1398,8 +1407,18 @@ describe('Express Server Adapter', () => {
               headers: { ...options.headers, 'Transfer-Encoding': 'chunked' },
             },
             response => {
-              response.resume();
-              response.on('end', () => resolve({ status: response.statusCode ?? 0 }));
+              let raw = '';
+              response.setEncoding('utf8');
+              response.on('data', chunk => (raw += chunk));
+              response.on('end', () => {
+                let data: unknown = raw;
+                try {
+                  data = JSON.parse(raw);
+                } catch {
+                  // non-JSON body
+                }
+                resolve({ status: response.statusCode ?? 0, data });
+              });
             },
           );
           request.on('error', reject);

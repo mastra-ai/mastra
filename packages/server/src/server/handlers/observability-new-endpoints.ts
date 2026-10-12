@@ -175,12 +175,14 @@ const traceQueryMalformedBodyErrorSchema = z
   .object({
     error: z.literal('Invalid request body'),
     issues: z.array(z.object({ field: z.literal('body'), message: z.string() }).strict()),
+    problem: problemDetailsSchema,
   })
   .strict();
 
 const traceQueryBodyTooLargeErrorSchema = z
   .object({
     error: z.literal('Request body too large'),
+    problem: problemDetailsSchema,
   })
   .strict();
 

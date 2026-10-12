@@ -66,4 +66,18 @@ describe('business error code coverage', () => {
     }
     expect(literals).toEqual([]);
   });
+
+  // Routes re-exported from internal packages that cannot depend on @mastra/server.
+  it('internal route packages throw coded HTTPExceptions with catalogue codes', async () => {
+    const { MASTRA_ERROR_CODES } = await import('../http-errors');
+    const file = join(SERVER_DIR, '../../../_internals/voice/src/routes/index.ts');
+    const source = readFileSync(file, 'utf8');
+    const calls = [...source.matchAll(/new HTTPException\(/g)].map(m =>
+      extractCall(source, m.index! + 'new HTTPException'.length),
+    );
+    expect(calls.length).toBeGreaterThan(0);
+    expect(calls.filter(call => !/code:/.test(call))).toEqual([]);
+    const codes = [...source.matchAll(/code: '([A-Z_]+)'/g)].map(m => m[1]);
+    expect(codes.filter(code => !(code in MASTRA_ERROR_CODES))).toEqual([]);
+  });
 });

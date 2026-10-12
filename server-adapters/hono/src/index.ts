@@ -4,6 +4,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
+import { MASTRA_ERROR_CODES } from '@mastra/server/http-errors';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MASTRA_FRAMEWORK_PUBLIC_KEY,
@@ -18,6 +19,8 @@ import {
   normalizeQueryParams,
   redactStreamChunk,
   serializeStreamChunk,
+  toValidationErrorBody,
+  withProblem,
 } from '@mastra/server/server-adapter';
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, ExecutionContext, HonoRequest, MiddlewareHandler } from 'hono';
@@ -492,7 +495,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
                 // Fall back to the default response.
               }
             }
-            return c.json(errorResponse, 413);
+            return c.json(withProblem(errorResponse, 413, MASTRA_ERROR_CODES.REQUEST_BODY_TOO_LARGE), 413);
           },
         }),
       );
@@ -523,7 +526,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
           // If this is an auth error (not just a success-with-headers), return error response
           if (authResult.error) {
-            return c.json({ error: authResult.error }, authResult.status as any);
+            return c.json(authResult.body ?? { error: authResult.error }, authResult.status as any);
           }
         }
 
@@ -532,10 +535,13 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         // Return 400 Bad Request if body parsing failed (e.g., malformed JSON)
         if (params.bodyParseError) {
           return c.json(
-            {
-              error: 'Invalid request body',
-              issues: [{ field: 'body', message: params.bodyParseError.message }],
-            },
+            toValidationErrorBody(
+              {
+                error: 'Invalid request body',
+                issues: [{ field: 'body', message: params.bodyParseError.message }],
+              },
+              'body',
+            ),
             400,
           );
         }
@@ -552,10 +558,13 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               return c.json(body as any, status as any);
             }
             return c.json(
-              {
-                error: 'Invalid query parameters',
-                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
-              },
+              toValidationErrorBody(
+                {
+                  error: 'Invalid query parameters',
+                  issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+                },
+                'query',
+              ),
               400,
             );
           }
@@ -573,10 +582,13 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               return c.json(body as any, status as any);
             }
             return c.json(
-              {
-                error: 'Invalid request body',
-                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
-              },
+              toValidationErrorBody(
+                {
+                  error: 'Invalid request body',
+                  issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+                },
+                'body',
+              ),
               400,
             );
           }
@@ -595,10 +607,13 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               return c.json(body as any, status as any);
             }
             return c.json(
-              {
-                error: 'Invalid path parameters',
-                issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
-              },
+              toValidationErrorBody(
+                {
+                  error: 'Invalid path parameters',
+                  issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+                },
+                'path',
+              ),
               400,
             );
           }
@@ -630,13 +645,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
 
             if (permissionError) {
-              return c.json(
-                {
-                  error: permissionError.error,
-                  message: permissionError.message,
-                },
-                permissionError.status as any,
-              );
+              return c.json(permissionError.body, permissionError.status as any);
             }
           }
         }
@@ -648,7 +657,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           ...(typeof params.body === 'object' ? params.body : {}),
         });
         if (fgaError) {
-          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
+          return c.json(fgaError.body, fgaError.status as any);
         }
 
         try {
@@ -744,7 +753,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             }
           }
           if (authError.error) {
-            return c.json({ error: authError.error }, authError.status as any);
+            return c.json(authError.body ?? { error: authError.error }, authError.status as any);
           }
         }
 
@@ -762,10 +771,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               requestContext,
             );
             if (permissionError) {
-              return c.json(
-                { error: permissionError.error, message: permissionError.message },
-                permissionError.status as any,
-              );
+              return c.json(permissionError.body, permissionError.status as any);
             }
           }
         }
@@ -805,7 +811,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           ...bodyParams,
         });
         if (fgaError) {
-          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
+          return c.json(fgaError.body, fgaError.status as any);
         }
 
         const reqHeaders: Record<string, string | string[] | undefined> = {};
@@ -832,7 +838,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           executionCtx,
         );
         if (!response) {
-          return c.json({ error: 'Not Found' }, 404);
+          return c.json(withProblem({ error: 'Not Found' }, 404, MASTRA_ERROR_CODES.ROUTE_NOT_FOUND), 404);
         }
         return response;
       };

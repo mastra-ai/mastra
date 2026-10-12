@@ -16,6 +16,7 @@ import {
   normalizeQueryParams,
   redactStreamChunk,
   serializeStreamChunk,
+  toValidationErrorBody,
 } from '@mastra/server/server-adapter';
 import type Koa from 'koa';
 import type { Context, Middleware, Next } from 'koa';
@@ -384,7 +385,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       // If this is an auth error (not just a success-with-headers), return error response
       if (authError.error) {
         ctx.status = authError.status;
-        ctx.body = { error: authError.error };
+        ctx.body = authError.body ?? { error: authError.error };
         return;
       }
     }
@@ -394,10 +395,13 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
     if (params.bodyParseError) {
       ctx.status = 400;
-      ctx.body = {
-        error: 'Invalid request body',
-        issues: [{ field: 'body', message: params.bodyParseError.message }],
-      };
+      ctx.body = toValidationErrorBody(
+        {
+          error: 'Invalid request body',
+          issues: [{ field: 'body', message: params.bodyParseError.message }],
+        },
+        'body',
+      );
       return;
     }
 
@@ -415,10 +419,13 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           return;
         }
         ctx.status = 400;
-        ctx.body = {
-          error: 'Invalid query parameters',
-          issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
-        };
+        ctx.body = toValidationErrorBody(
+          {
+            error: 'Invalid query parameters',
+            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          },
+          'query',
+        );
         return;
       }
     }
@@ -437,10 +444,13 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           return;
         }
         ctx.status = 400;
-        ctx.body = {
-          error: 'Invalid request body',
-          issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
-        };
+        ctx.body = toValidationErrorBody(
+          {
+            error: 'Invalid request body',
+            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          },
+          'body',
+        );
         return;
       }
     }
@@ -460,10 +470,13 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           return;
         }
         ctx.status = 400;
-        ctx.body = {
-          error: 'Invalid path parameters',
-          issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
-        };
+        ctx.body = toValidationErrorBody(
+          {
+            error: 'Invalid path parameters',
+            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          },
+          'path',
+        );
         return;
       }
     }
@@ -495,10 +508,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
         if (permissionError) {
           ctx.status = permissionError.status;
-          ctx.body = {
-            error: permissionError.error,
-            message: permissionError.message,
-          };
+          ctx.body = permissionError.body;
           return;
         }
       }
@@ -512,7 +522,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     });
     if (fgaError) {
       ctx.status = fgaError.status;
-      ctx.body = { error: fgaError.error, message: fgaError.message };
+      ctx.body = fgaError.body;
       return;
     }
 
@@ -968,7 +978,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
               if (authError.error) {
                 ctx.status = authError.status;
-                ctx.body = { error: authError.error };
+                ctx.body = authError.body ?? { error: authError.error };
                 return;
               }
             }
@@ -989,10 +999,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
               );
               if (permissionError) {
                 ctx.status = permissionError.status;
-                ctx.body = {
-                  error: permissionError.error,
-                  message: permissionError.message,
-                };
+                ctx.body = permissionError.body;
                 return;
               }
             }
@@ -1008,7 +1015,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           });
           if (fgaError) {
             ctx.status = fgaError.status;
-            ctx.body = { error: fgaError.error, message: fgaError.message };
+            ctx.body = fgaError.body;
             return;
           }
         }

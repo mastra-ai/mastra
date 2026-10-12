@@ -48,6 +48,15 @@ async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
 }
 
 // Wrapper describe block so the factory can call describe() inside
+const readJson = async (response: { text: () => Promise<string> }) => {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+};
+
 describe('Hono Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Hono Adapter Integration Tests',
@@ -297,6 +306,7 @@ describe('Hono Server Adapter', () => {
     await expect(response.json()).resolves.toEqual({
       error: 'Invalid request body',
       issues: [{ field: 'body', message: expect.any(String) }],
+      problem: expect.objectContaining({ status: 400, code: 'INVALID_REQUEST_BODY' }),
     });
   });
 
@@ -316,7 +326,10 @@ describe('Hono Server Adapter', () => {
 
     expect(response.status).toBe(413);
     expect(response.headers.get('content-type')).toContain('application/json');
-    await expect(response.json()).resolves.toEqual({ error: 'Request body too large' });
+    await expect(response.json()).resolves.toEqual({
+      error: 'Request body too large',
+      problem: expect.objectContaining({ status: 413, code: 'REQUEST_BODY_TOO_LARGE' }),
+    });
     expect(getStorage).not.toHaveBeenCalled();
   });
 
@@ -347,7 +360,11 @@ describe('Hono Server Adapter', () => {
         await requestTraceAggregate(new Mastra({ logger: false }), '{"timeRange":'),
         400,
       );
-      expect(body).toEqual({ error: 'Invalid request body', issues: [{ field: 'body', message: expect.any(String) }] });
+      expect(body).toEqual({
+        error: 'Invalid request body',
+        issues: [{ field: 'body', message: expect.any(String) }],
+        problem: expect.objectContaining({ status: 400, code: 'INVALID_REQUEST_BODY' }),
+      });
     });
 
     it('rejects an oversized body before storage access', async () => {
@@ -355,7 +372,10 @@ describe('Hono Server Adapter', () => {
       const getStorage = vi.spyOn(mastra, 'getStorage');
       const response = await requestTraceAggregate(mastra, JSON.stringify({ padding: 'x'.repeat(256 * 1024) }));
 
-      expect(await expectDeclaredError(response, 413)).toEqual({ error: 'Request body too large' });
+      expect(await expectDeclaredError(response, 413)).toEqual({
+        error: 'Request body too large',
+        problem: expect.objectContaining({ status: 413, code: 'REQUEST_BODY_TOO_LARGE' }),
+      });
       expect(getStorage).not.toHaveBeenCalled();
     });
 
@@ -1716,7 +1736,7 @@ describe('Hono Server Adapter', () => {
           ...(options.body ? { body: options.body } : {}),
         }),
       );
-      return { status: response.status };
+      return { status: response.status, data: await readJson(response) };
     },
 
     executeRequestWithoutContentLength: async (app, method, url, options = {}) => {
@@ -1727,7 +1747,7 @@ describe('Hono Server Adapter', () => {
       });
       expect(request.headers.has('content-length')).toBe(false);
       const response = await app.request(request);
-      return { status: response.status };
+      return { status: response.status, data: await readJson(response) };
     },
   });
 });

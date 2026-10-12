@@ -1,8 +1,11 @@
 import { formatZodError, isZodError } from '@mastra/server/handlers/error';
+import { MASTRA_ERROR_CODES } from '@mastra/server/http-errors';
+import type { MastraErrorCode, ProblemDetails } from '@mastra/server/http-errors';
 import {
   getCustomHTTPExceptionResponse,
   HTTPException as MastraHTTPException,
   toErrorBody,
+  withProblem,
 } from '@mastra/server/server-adapter';
 import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
@@ -15,7 +18,18 @@ interface NormalizedError {
   error: string;
   code?: string;
   issues?: Array<{ field?: string; path?: string[]; message: string }>;
+  /** A `problem` already attached upstream (e.g. by the shared auth helpers). */
+  problem?: ProblemDetails;
 }
+
+/** Business codes for errors NestJS raises itself (guards, middleware, routing). */
+const TRANSPORT_CODES: Partial<Record<number, MastraErrorCode>> = {
+  401: MASTRA_ERROR_CODES.AUTHENTICATION_REQUIRED,
+  403: MASTRA_ERROR_CODES.PERMISSION_DENIED,
+  404: MASTRA_ERROR_CODES.ROUTE_NOT_FOUND,
+  413: MASTRA_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
+  429: MASTRA_ERROR_CODES.RATE_LIMITED,
+};
 
 /**
  * Global exception filter that normalizes all errors to a consistent format.
@@ -90,9 +104,19 @@ export class MastraExceptionFilter implements ExceptionFilter {
       ...(normalized.code && { code: normalized.code }),
       ...(normalized.issues && { issues: normalized.issues }),
       ...(requestId && { requestId }),
-      problem: toErrorBody(Object.assign(new Error(normalized.error), { status: normalized.status })).body.problem,
+      problem: this.toProblem(exception, normalized),
       timestamp: new Date().toISOString(),
     });
+  }
+
+  private toProblem(exception: unknown, normalized: NormalizedError): ProblemDetails {
+    if (normalized.problem) return normalized.problem;
+    const code = exception instanceof HttpException ? TRANSPORT_CODES[normalized.status] : undefined;
+    if (code) return withProblem({ error: normalized.error }, normalized.status, code).problem;
+    // Keep a catalogue code carried by foreign HTTPException-like errors (e.g. internal route packages).
+    const carriedCode = (exception as { code?: unknown } | null)?.code;
+    return toErrorBody(Object.assign(new Error(normalized.error), { status: normalized.status, code: carriedCode }))
+      .body.problem;
   }
 
   /**
@@ -109,6 +133,7 @@ export class MastraExceptionFilter implements ExceptionFilter {
           status,
           error: 'An internal error occurred',
           code: this.getErrorCode(status),
+          problem: (response as { problem?: ProblemDetails } | null)?.problem,
         };
       }
 
@@ -128,6 +153,7 @@ export class MastraExceptionFilter implements ExceptionFilter {
           error: message || resp.error || exception.message,
           code: resp.code || this.getErrorCode(status),
           issues: resp.issues,
+          problem: resp.problem,
         };
       }
 

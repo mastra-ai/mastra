@@ -482,6 +482,11 @@ describe('FGA Middleware - checkRouteFGA', () => {
       status: 403,
       error: 'Forbidden',
       message: 'FGA authorization denied: route FGA metadata is required',
+      body: {
+        error: 'Forbidden',
+        message: 'FGA authorization denied: route FGA metadata is required',
+        problem: { status: 403, code: 'PERMISSION_DENIED' },
+      },
     });
     expect(fgaProvider.check).not.toHaveBeenCalled();
   });
@@ -499,6 +504,11 @@ describe('FGA Middleware - checkRouteFGA', () => {
       status: 403,
       error: 'Forbidden',
       message: 'FGA authorization denied: route FGA metadata is required',
+      body: {
+        error: 'Forbidden',
+        message: 'FGA authorization denied: route FGA metadata is required',
+        problem: { status: 403, code: 'PERMISSION_DENIED' },
+      },
     });
     expect(fgaProvider.check).not.toHaveBeenCalled();
   });
@@ -779,7 +789,11 @@ describe('FGA Middleware - checkRouteFGA', () => {
     const requestContext = new Map<string, unknown>();
 
     const result = await checkRouteFGA(mastra, route, requestContext as any, {});
-    expect(result).toMatchObject({ status: 403, error: 'Forbidden' });
+    expect(result).toMatchObject({
+      status: 403,
+      error: 'Forbidden',
+      body: { error: 'Forbidden', problem: { status: 403, code: 'PERMISSION_DENIED' } },
+    });
     expect(fgaProvider.check).not.toHaveBeenCalled();
   });
 
@@ -791,7 +805,11 @@ describe('FGA Middleware - checkRouteFGA', () => {
     requestContext.set('user', { id: 'user-1' });
 
     const result = await checkRouteFGA(mastra, route, requestContext as any, {});
-    expect(result).toMatchObject({ status: 403, error: 'Forbidden' });
+    expect(result).toMatchObject({
+      status: 403,
+      error: 'Forbidden',
+      body: { error: 'Forbidden', problem: { status: 403, code: 'PERMISSION_DENIED' } },
+    });
     expect(fgaProvider.check).not.toHaveBeenCalled();
   });
 

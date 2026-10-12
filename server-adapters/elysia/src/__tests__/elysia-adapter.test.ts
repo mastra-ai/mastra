@@ -39,6 +39,15 @@ async function waitFor(assertion: () => boolean, timeout = 500): Promise<void> {
 }
 
 // Wrapper describe block so the factory can call describe() inside
+const readJson = async (response: { text: () => Promise<string> }) => {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+};
+
 describe('Elysia Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'Elysia Adapter Integration Tests',
@@ -1229,7 +1238,7 @@ describe('Elysia Server Adapter', () => {
           ...(options.body ? { body: options.body } : {}),
         }),
       );
-      return { status: response.status };
+      return { status: response.status, data: await readJson(response) };
     },
 
     executeRequestWithoutContentLength: async (app, method, url, options = {}) => {
@@ -1240,7 +1249,7 @@ describe('Elysia Server Adapter', () => {
       });
       expect(request.headers.has('content-length')).toBe(false);
       const response = await app.fetch(request);
-      return { status: response.status };
+      return { status: response.status, data: await readJson(response) };
     },
   });
 });

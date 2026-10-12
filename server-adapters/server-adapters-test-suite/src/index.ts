@@ -1,4 +1,4 @@
-export { createRouteAdapterTestSuite } from './route-adapter-test-suite';
+export { createRouteAdapterTestSuite, expectBusinessProblem } from './route-adapter-test-suite';
 export type {
   AdapterTestSuiteConfig,
   AdapterTestContext,

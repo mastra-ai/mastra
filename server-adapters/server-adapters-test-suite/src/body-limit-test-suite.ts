@@ -2,6 +2,8 @@ import { Mastra } from '@mastra/core/mastra';
 import type { BodyLimitOptions, ServerRoute } from '@mastra/server/server-adapter';
 import { describe, it, expect } from 'vitest';
 
+import { expectBusinessProblem } from './route-adapter-test-suite';
+
 /**
  * Configuration for the body-limit test suite
  */
@@ -34,7 +36,7 @@ export interface BodyLimitTestSuiteConfig<TApp> {
     method: string,
     url: string,
     options?: { headers?: Record<string, string>; body?: string },
-  ) => Promise<{ status: number }>;
+  ) => Promise<{ status: number; data?: unknown }>;
 
   /** Execute a request whose transport does not add Content-Length. */
   executeRequestWithoutContentLength?: (
@@ -42,7 +44,7 @@ export interface BodyLimitTestSuiteConfig<TApp> {
     method: string,
     url: string,
     options?: { headers?: Record<string, string>; body?: string },
-  ) => Promise<{ status: number }>;
+  ) => Promise<{ status: number; data?: unknown }>;
 
   /** Optional teardown for the app instance (e.g. closing a listening server) */
   cleanupApp?: (app: TApp) => void | Promise<void>;
@@ -98,6 +100,8 @@ export function createBodyLimitTestSuite<TApp>(config: BodyLimitTestSuiteConfig<
 
       expect(response.status).toBe(413);
       expect(handlerCalled).toBe(false);
+      expectBusinessProblem(response.data, 413);
+      expect((response.data as any).problem.code).toBe('REQUEST_BODY_TOO_LARGE');
 
       await cleanupApp?.(wiredApp);
     });
@@ -134,6 +138,7 @@ export function createBodyLimitTestSuite<TApp>(config: BodyLimitTestSuiteConfig<
 
         expect(response.status).toBe(413);
         expect(handlerCalled).toBe(false);
+        expectBusinessProblem(response.data, 413);
 
         await cleanupApp?.(wiredApp);
       });
@@ -162,6 +167,10 @@ export function createBodyLimitTestSuite<TApp>(config: BodyLimitTestSuiteConfig<
       });
 
       expect(response.status).toBe(413);
+      // A user-provided onError body is kept, enriched with the shared problem.
+      expect((response.data as any).error).toBe('Request body too large');
+      expectBusinessProblem(response.data, 413);
+      expect((response.data as any).problem.code).toBe('REQUEST_BODY_TOO_LARGE');
 
       await cleanupApp?.(wiredApp);
     });
