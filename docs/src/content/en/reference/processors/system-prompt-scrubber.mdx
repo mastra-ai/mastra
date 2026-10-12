@@ -133,7 +133,7 @@ const processor = new SystemPromptScrubber({
   },
   {
     name: 'processOutputResult',
-    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; requestContext?: RequestContext }) => Promise<MastraDBMessage[]>',
+    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; requestContext?: RequestContext; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>',
     description: 'Processes final output results to detect and handle system prompts in non-streaming scenarios',
     isOptional: false,
   },
