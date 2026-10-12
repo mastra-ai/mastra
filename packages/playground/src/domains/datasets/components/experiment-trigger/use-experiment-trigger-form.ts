@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { buildDefaultExperimentName, createNameSuffix } from '../../utils/default-names';
 import type { TargetType } from './target-selector';
@@ -26,13 +25,15 @@ export interface ExperimentTriggerInitialValues {
   scorerIds?: string[];
 }
 
-function defaultNameFor(targetName: string | undefined, suffix: string) {
-  return targetName ? buildDefaultExperimentName(targetName, suffix) : '';
+/** The target's name plus a fresh short id, e.g. "chef-agent-a3f9"; empty until a target is picked. */
+function defaultNameFor(targetName?: string) {
+  return targetName ? buildDefaultExperimentName(targetName, createNameSuffix()) : '';
 }
 
-function buildDefaultValues(initial: ExperimentTriggerInitialValues, defaultName: string): ExperimentTriggerFormValues {
+function buildDefaultValues(initial: ExperimentTriggerInitialValues): ExperimentTriggerFormValues {
   return {
-    name: initial.name ?? defaultName,
+    // A preselected target starts from its id; its display name is only known once picked in the selector.
+    name: initial.name ?? defaultNameFor(initial.targetId),
     description: initial.description ?? '',
     datasetId: initial.datasetId ?? '',
     version: initial.version,
@@ -49,29 +50,15 @@ function buildDefaultValues(initial: ExperimentTriggerInitialValues, defaultName
  * follows the target until the user edits it. An initial name (rerun) counts as edited.
  */
 export function useExperimentTriggerForm(initial: ExperimentTriggerInitialValues) {
-  // Starts as the id for a preselected target (its display name is only known once picked in the selector).
-  const [targetName, setTargetName] = useState(initial.targetId);
-  const [suffix, setSuffix] = useState(createNameSuffix);
-  const defaultName = defaultNameFor(targetName, suffix);
+  const form = useForm<ExperimentTriggerFormValues>({ defaultValues: buildDefaultValues(initial) });
 
-  const form = useForm<ExperimentTriggerFormValues>({ defaultValues: buildDefaultValues(initial, defaultName) });
-  const nameEdited = initial.name !== undefined || Boolean(form.formState.dirtyFields.name);
-  // A cleared field still runs, under the default name it shows as its placeholder.
-  const runName = form.watch('name').trim() || defaultName;
-
-  const changeTargetName = (nextTargetName?: string) => {
-    setTargetName(nextTargetName);
-    if (!nameEdited) {
-      form.resetField('name', { defaultValue: defaultNameFor(nextTargetName, suffix) });
-    }
+  const changeTargetName = (targetName?: string) => {
+    const nameEdited = initial.name !== undefined || form.getValues('name') !== form.formState.defaultValues?.name;
+    if (nameEdited) return;
+    form.resetField('name', { defaultValue: defaultNameFor(targetName) });
   };
 
-  const resetForm = () => {
-    const nextSuffix = createNameSuffix();
-    setTargetName(initial.targetId);
-    setSuffix(nextSuffix);
-    form.reset(buildDefaultValues(initial, defaultNameFor(initial.targetId, nextSuffix)));
-  };
+  const resetForm = () => form.reset(buildDefaultValues(initial));
 
-  return { form, defaultName, runName, changeTargetName, resetForm };
+  return { form, changeTargetName, resetForm };
 }

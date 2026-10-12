@@ -130,7 +130,7 @@ export function ExperimentTriggerDialog({
   onSuccess,
 }: ExperimentTriggerDialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const { form, defaultName, runName, changeTargetName, resetForm } = useExperimentTriggerForm({
+  const { form, changeTargetName, resetForm } = useExperimentTriggerForm({
     name: initialName,
     description: initialDescription,
     datasetId: initialDatasetId,
@@ -140,15 +140,17 @@ export function ExperimentTriggerDialog({
     scorerIds: initialScorerIds,
   });
   const { register, setValue, watch } = form;
-  const [datasetId, version, targetType, targetId, selectedScorers, requestContextValues, requestContextRaw] = watch([
-    'datasetId',
-    'version',
-    'targetType',
-    'targetId',
-    'scorerIds',
-    'requestContextValues',
-    'requestContextRaw',
-  ]);
+  const [name, datasetId, version, targetType, targetId, selectedScorers, requestContextValues, requestContextRaw] =
+    watch([
+      'name',
+      'datasetId',
+      'version',
+      'targetType',
+      'targetId',
+      'scorerIds',
+      'requestContextValues',
+      'requestContextRaw',
+    ]);
 
   const { triggerExperiment } = useDatasetMutations();
   const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
@@ -165,10 +167,12 @@ export function ExperimentTriggerDialog({
 
   const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
 
+  const runName = name.trim();
   const canRun = Boolean(datasetId && targetType && targetId && runName);
   const isRunning = triggerExperiment.isPending;
 
-  const missing = [!datasetId && 'dataset', !targetId && 'target'].filter(Boolean);
+  // The name fills in with the target, so it only counts as missing once the user clears it.
+  const missing = [!datasetId && 'dataset', !targetId && 'target', targetId && !runName && 'name'].filter(Boolean);
   const hasRequestContext = hasSchema
     ? Object.values(requestContextValues).some(v => v !== undefined && v !== '')
     : requestContextRaw.trim().length > 0;
@@ -261,12 +265,7 @@ export function ExperimentTriggerDialog({
           <div className="space-y-4">
             <Field>
               <FieldLabel>Name</FieldLabel>
-              <Input
-                {...register('name')}
-                placeholder={defaultName || 'Enter experiment name'}
-                autoFocus
-                disabled={isRunning}
-              />
+              <Input {...register('name')} placeholder="Enter experiment name" autoFocus disabled={isRunning} />
             </Field>
 
             <Field>

@@ -122,6 +122,28 @@ async function pickAgentTarget() {
 }
 
 describe('ExperimentTriggerDialog', () => {
+  describe('when a target type is picked', () => {
+    it('fetches only the targets of that type', async () => {
+      // Given the workflow list is observed
+      setupHandlers();
+      const workflowsRequested = vi.fn();
+      server.use(
+        http.get(`${BASE_URL}/api/workflows`, () => {
+          workflowsRequested();
+          return HttpResponse.json({});
+        }),
+      );
+      renderDialog();
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+
+      // When agents are picked as the target type
+      await pickAgentTarget();
+
+      // Then no workflow list is requested
+      expect(workflowsRequested).not.toHaveBeenCalled();
+    });
+  });
+
   describe('when opened without an initial dataset', () => {
     it('starts with an empty dataset combobox and a disabled Run button', async () => {
       setupHandlers();
@@ -266,13 +288,12 @@ describe('ExperimentTriggerDialog', () => {
       renderDialog();
       await screen.findByRole('combobox', { name: 'Select a dataset...' });
       await pickAgentTarget();
-      const suffix = nameInput().value.replace('agent-one-', '');
 
       // When another target is picked
       selectOption('Select agent', 'agent-2');
 
-      // Then the name follows the new target and keeps its short id
-      expect(nameInput().value).toBe(`agent-two-${suffix}`);
+      // Then the name follows the new target
+      expect(nameInput().value).toMatch(/^agent-two-[0-9a-f]{4}$/);
     });
 
     it('should name the run after the target id when the target has no display name', async () => {
@@ -320,22 +341,19 @@ describe('ExperimentTriggerDialog', () => {
       expect(triggerCalls[0].body.name).toBe(defaultName);
     });
 
-    it('should fall back to the default name when the field is cleared', async () => {
+    it('should ask for a name when the user clears it', async () => {
       // Given a dataset and a target
-      const { triggerCalls } = setupHandlers();
+      setupHandlers();
       renderDialog({ initialDatasetId: 'dataset-1', initialTargetType: 'agent', initialTargetId: 'agent-1' });
       await screen.findByRole('combobox', { name: 'Select a dataset...' });
       await waitFor(() => expect(nameInput().value).toMatch(/^agent-1-[0-9a-f]{4}$/));
-      const defaultName = nameInput().value;
 
-      // When the user clears the name and runs
+      // When the user clears the name
       typeName('');
-      expect(runButton().disabled).toBe(false);
-      fireEvent.click(runButton());
 
-      // Then the default name is sent
-      await waitFor(() => expect(triggerCalls).toHaveLength(1));
-      expect(triggerCalls[0].body.name).toBe(defaultName);
+      // Then Run waits for a name
+      expect(runButton().disabled).toBe(true);
+      expect(screen.getByTestId('experiment-run-status').textContent).toContain('Missing name');
     });
 
     it('should send name and description when running', async () => {
