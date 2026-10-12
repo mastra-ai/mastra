@@ -13,6 +13,77 @@ class TestWorkflowEventProcessor extends WorkflowEventProcessor {
 }
 
 describe('evented finish payloads (COR-1454)', () => {
+  it.each(['success', 'failed', 'suspended'] as const)('preserves undefined input results on %s', async status => {
+    const pubsub = new EventEmitterPubSub();
+    const mastra = new Mastra({ logger: false, pubsub });
+    const processor = new TestWorkflowEventProcessor({ mastra });
+    const events: Event[] = [];
+    await pubsub.subscribe('workflows-finish', async event => {
+      events.push(event);
+    });
+    const stepResults = { input: undefined, child: { status, output: 42 } };
+    try {
+      await processor.finish(
+        {
+          workflowId: 'child',
+          runId: 'child-run',
+          workflow: { options: { shouldPersistSnapshot: () => false }, stepGraph: [] },
+          executionPath: [],
+          resumeSteps: [],
+          activeStepsPath: {},
+          stepResults,
+          prevResult: { status, output: 42 },
+          requestContext: {},
+          state: {},
+        },
+        status,
+      );
+      expect(events).toHaveLength(1);
+      expect(events[0]!.data.stepResults).toEqual(stepResults);
+      expect(events[0]!.data.stepResults).toHaveProperty('input', undefined);
+    } finally {
+      await mastra.shutdown();
+    }
+  });
+
+  it('publishes canceled final state once without changing user output or the source result', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const mastra = new Mastra({ logger: false, pubsub });
+    const processor = new TestWorkflowEventProcessor({ mastra });
+    const events: Event[] = [];
+    await pubsub.subscribe('workflows-finish', async event => {
+      events.push(event);
+    });
+    const state = { history: 'x'.repeat(1024 * 1024) };
+    const output = { __state: 'user output', answer: 42 };
+    const prevResult = { status: 'canceled', output, __state: state };
+    try {
+      await processor.finish(
+        {
+          workflowId: 'child',
+          runId: 'child-run',
+          workflow: { options: { shouldPersistSnapshot: () => false }, stepGraph: [] },
+          executionPath: [],
+          resumeSteps: [],
+          activeStepsPath: {},
+          stepResults: { child: prevResult, __state: state },
+          prevResult,
+          requestContext: {},
+          state,
+        },
+        'success',
+      );
+      expect(events).toHaveLength(1);
+      const data = events[0]!.data;
+      expect(data.prevResult).toEqual({ status: 'canceled', output });
+      expect(data.state).toEqual(state);
+      expect(Buffer.byteLength(JSON.stringify(data))).toBeLessThan(Buffer.byteLength(JSON.stringify(state)) + 1024);
+      expect(prevResult.__state).toBe(state);
+    } finally {
+      await mastra.shutdown();
+    }
+  });
+
   it.each(['success', 'failed', 'suspended'] as const)(
     'does not serialize parent run history or execution bookkeeping on %s',
     async status => {

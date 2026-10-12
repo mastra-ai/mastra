@@ -125,10 +125,10 @@ function finishEventData(args: ProcessorArgs, state: Record<string, any>) {
     // received redundant state copies and skipped-branch bookkeeping.
     stepResults: Object.fromEntries(
       Object.entries(args.stepResults ?? {})
-        .filter(([stepId, result]) => stepId !== '__state' && result.status !== 'skipped')
+        .filter(([stepId, result]) => stepId !== '__state' && result?.status !== 'skipped')
         .map(([stepId, result]) => [stepId, cleanStepResult(result)]),
     ),
-    prevResult: args.prevResult,
+    prevResult: cleanStepResult(args.prevResult),
     requestContext: args.requestContext,
     state,
     // The pubsub proxy needs ancestor identities to preserve process-local routing,

@@ -78,24 +78,46 @@ it.each([0, -1, NaN, Infinity])('rejects an invalid publisher queue cap (%s)', c
   );
 });
 
-it('rejects an oversized outgoing frame without breaking the broker connection', async () => {
+it.each([
+  {
+    name: 'oversized ASCII frame',
+    options: { maxInboundFrameBytes: 1024 },
+    payload: 'x'.repeat(2048),
+    error: 'outgoing frame exceeds maxInboundFrameBytes',
+    multibyte: false,
+  },
+  {
+    name: 'UTF-8 frame limit',
+    options: { maxInboundFrameBytes: 1024 },
+    payload: 'é'.repeat(512),
+    error: 'outgoing frame exceeds maxInboundFrameBytes',
+    multibyte: true,
+  },
+  {
+    name: 'UTF-8 publisher queue limit',
+    options: { maxPublisherQueuedBytes: 1024 },
+    payload: 'é'.repeat(512),
+    error: 'publisher queue exceeds maxPublisherQueuedBytes',
+    multibyte: true,
+  },
+])('enforces $name without breaking the broker connection', async ({ options, payload, error, multibyte }) => {
   const directory = await mkdtemp(join(tmpdir(), 'mastra-publisher-frame-'));
   const path = join(directory, 'events.sock');
   const broker = new UnixSocketPubSub(path);
-  const publisher = new UnixSocketPubSub(path, { maxInboundFrameBytes: 1024 });
+  const publisher = new UnixSocketPubSub(path, options);
   const received: string[] = [];
   try {
     await broker.subscribe('topic', async event => {
       received.push(event.runId);
     });
     await publisher.subscribe('topic', async () => {});
-    await expect(
-      publisher.publish('topic', {
-        type: 'test',
-        runId: 'oversized',
-        data: { payload: 'x'.repeat(2048) },
-      }),
-    ).rejects.toThrow('outgoing frame exceeds maxInboundFrameBytes');
+    const event = { type: 'test', runId: 'oversized', data: { payload } };
+    if (multibyte) {
+      const frame = JSON.stringify({ type: 'publish', topic: 'topic', event });
+      expect(frame.length).toBeLessThan(1024);
+      expect(Buffer.byteLength(frame)).toBeGreaterThan(1024);
+    }
+    await expect(publisher.publish('topic', event)).rejects.toThrow(error);
     await publisher.publish('topic', { type: 'test', runId: 'small', data: {} });
     await vi.waitFor(() => expect(received).toEqual(['small']));
   } finally {
