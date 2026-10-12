@@ -64,28 +64,29 @@ describe('DuckDB stored previews', () => {
     await storage.dangerouslyClearAll();
   });
 
-  it('sets a preview only on the event rows that carry its payload', async () => {
-    // Live span: the start row carries the input, the end row carries every payload.
+  it('writes all three previews on every event row', async () => {
+    // Live span: the start row carries the input, the end row carries every payload. A row that
+    // does not carry a payload stores '' for it, so NULL only ever marks a row from before previews.
     await storage.batchCreateSpans({ records: [span({ endedAt: null })] });
     await storage.batchCreateSpans({ records: [span()] });
 
     expect(await rowsOf('root-rows')).toEqual([
-      { eventType: 'start', inputPreview: 'the input', outputPreview: null, errorPreview: null },
+      { eventType: 'start', inputPreview: 'the input', outputPreview: '', errorPreview: '' },
       // A completed record keeps its payload on the end row only.
-      { eventType: 'start', inputPreview: null, outputPreview: null, errorPreview: null },
+      { eventType: 'start', inputPreview: '', outputPreview: '', errorPreview: '' },
       { eventType: 'end', inputPreview: 'the input', outputPreview: 'the output', errorPreview: '' },
     ]);
   });
 
-  it('takes each preview from the event row that supplies its payload', async () => {
-    // The start row (written before previews) holds the only input; the newer end row carries none.
+  it('uses the stored previews once any event row of a span has them', async () => {
+    // Upgraded mid-span: the start row predates previews, the end row stores them.
     await storage.batchCreateSpans({ records: [span({ endedAt: null })] });
     await clearPreviews('trace-rows', 'root-rows');
-    await storage.batchCreateSpans({ records: [span({ input: null })] });
+    await storage.batchCreateSpans({ records: [span({ output: { text: 'later output' } })] });
 
     const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
     expect(spans.map(s => [s.inputPreview, s.outputPreview, s.errorPreview])).toEqual([
-      ['the input', 'the output', null],
+      ['the input', 'later output', null],
     ]);
   });
 

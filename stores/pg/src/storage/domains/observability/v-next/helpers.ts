@@ -21,7 +21,7 @@ import type {
   ScoreRecord,
   SpanRecord,
 } from '@mastra/core/storage';
-import { buildStoredPreview, EntityType } from '@mastra/core/storage';
+import { buildStoredPreview, computeTraceStatus, EntityType } from '@mastra/core/storage';
 import { toPgText } from '../../../db/sanitize-json';
 import { coerceFeedbackReviewStatus } from './review-status';
 import { encodeJsonbValue } from './sql';
@@ -299,19 +299,6 @@ function spanRowEndedAt(row: Record<string, any>, startedAt: Date): Date | null 
   return toDateOrNull(row.endedAt);
 }
 
-/**
- * Stored previews a row carries, for core's `toLightSpanRecord()` to prefer over building them from
- * the payload. A NULL column (a row written before the preview columns existed) is left off, so the
- * light list falls back to building that preview from the payload.
- */
-function storedPreviews(row: Record<string, any>): Pick<SpanRecord, 'inputPreview' | 'outputPreview' | 'errorPreview'> {
-  const previews: Pick<SpanRecord, 'inputPreview' | 'outputPreview' | 'errorPreview'> = {};
-  if (typeof row.inputPreview === 'string') previews.inputPreview = row.inputPreview;
-  if (typeof row.outputPreview === 'string') previews.outputPreview = row.outputPreview;
-  if (typeof row.errorPreview === 'string') previews.errorPreview = row.errorPreview;
-  return previews;
-}
-
 export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
   const startedAt = toDate(row.startedAt);
   const endedAt = spanRowEndedAt(row, startedAt);
@@ -338,7 +325,6 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     output: parsedJson(row.output) ?? undefined,
     error: error ?? undefined,
     requestContext: (parsedJson(row.requestContext) as Record<string, unknown> | null) ?? undefined,
-    ...storedPreviews(row),
     createdAt: startedAt,
     updatedAt: null,
   };
@@ -372,6 +358,31 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
     error: (parsedJson(row.error) as Record<string, unknown> | null) ?? undefined,
     createdAt: startedAt,
     updatedAt: null,
+  };
+}
+
+/** A stored preview as lists return it: `''` (nothing to preview) and NULL become null. */
+function listPreview(value: unknown): string | null {
+  return typeof value === 'string' && value !== '' ? value : null;
+}
+
+/**
+ * Build a trace-list {@link LightSpanRecord} from a row that projected the light trace-list columns
+ * (see `TRACE_LIGHT_SELECT_COLUMNS` in traces.ts): the timeline fields plus the memory context,
+ * metadata and the stored previews. Callers fill in previews for rows written before they were
+ * stored first.
+ */
+export function rowToLightTraceRecord(row: Record<string, any>): LightSpanRecord {
+  const record = rowToLightSpanRecord(row);
+  return {
+    ...record,
+    status: computeTraceStatus({ error: record.error, endedAt: record.endedAt }),
+    threadId: row.threadId == null ? null : String(row.threadId),
+    resourceId: row.resourceId == null ? null : String(row.resourceId),
+    metadata: (parsedJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
+    inputPreview: listPreview(row.inputPreview),
+    outputPreview: listPreview(row.outputPreview),
+    errorPreview: listPreview(row.errorPreview),
   };
 }
 
