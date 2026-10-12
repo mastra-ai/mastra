@@ -6,5 +6,7 @@ Added authenticated message authors to AgentController sessions. Pass `author` t
 
 ```ts
 await session.sendMessage({ content: 'Hi', author: { id: 'user-123' } });
+const messages = await session.thread.listMessages({ threadId: session.thread.requireId() });
+const message = messages.at(-1)!;
 const author = getMessageAuthor(message);
 ```
