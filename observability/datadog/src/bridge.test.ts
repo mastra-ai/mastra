@@ -231,7 +231,7 @@ describe('DatadogBridge', () => {
 
   describe('createSpan', () => {
     it('creates a single eager APM span and returns dd-trace ids', () => {
-      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false, flushGraceMs: 0 });
 
       const result = bridge.createSpan(createMockSpanOptions({ name: 'my-agent' }));
 
@@ -244,7 +244,7 @@ describe('DatadogBridge', () => {
     });
 
     it('preserves a resumed Mastra parent instead of marking it as external', async () => {
-      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false, flushGraceMs: 0 });
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'resume-parent',
         name: 'resume-parent-instance',
@@ -267,7 +267,7 @@ describe('DatadogBridge', () => {
     });
 
     it('keeps a resumed Mastra parent instead of adopting the active dd-trace scope', async () => {
-      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false, flushGraceMs: 0 });
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'resume-under-ambient',
         name: 'resume-under-ambient-instance',
@@ -298,7 +298,7 @@ describe('DatadogBridge', () => {
     });
 
     it('marks a bridged root external when it inherits the active dd-trace scope', async () => {
-      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false, flushGraceMs: 0 });
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'bridged-root',
         name: 'bridged-root-instance',
@@ -328,7 +328,7 @@ describe('DatadogBridge', () => {
     });
 
     it('does not start a dd span for types dropped by excludeSpanTypes, so the trace still finishes', async () => {
-      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false, flushGraceMs: 0 });
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'exclude-chunks',
         name: 'exclude-chunks-instance',
@@ -356,7 +356,7 @@ describe('DatadogBridge', () => {
     });
 
     it('parents children of an excluded span to the nearest exported dd span', async () => {
-      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false, flushGraceMs: 0 });
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'exclude-middle',
         name: 'exclude-middle-instance',
@@ -383,7 +383,7 @@ describe('DatadogBridge', () => {
     });
 
     it('runs code inside an excluded span in the nearest exported dd span', async () => {
-      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false, flushGraceMs: 0 });
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'exclude-tool',
         name: 'exclude-tool-instance',
@@ -996,7 +996,7 @@ describe('DatadogBridge', () => {
     });
 
     it('does not double-decrement the open-span count on repeated release', () => {
-      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false, flushGraceMs: 0 });
       const rootResult = bridge.createSpan(createMockSpanOptions({ name: 'root', metadata: { userId: 'user-123' } }))!;
       const childResult = bridge.createSpan(
         createMockSpanOptions({
@@ -1022,7 +1022,7 @@ describe('DatadogBridge', () => {
 
   describe('shutdown', () => {
     it('force-finishes remaining spans on shutdown', async () => {
-      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false, flushGraceMs: 0 });
 
       bridge.createSpan(createMockSpanOptions({ name: 'orphan-1' }));
       bridge.createSpan(createMockSpanOptions({ name: 'orphan-2' }));

@@ -1085,7 +1085,7 @@ describe('DatadogExporter', () => {
     });
 
     it('cancels max lifetime timer when normal cleanup runs', async () => {
-      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 0 });
 
       const rootSpan = createMockSpan({
         id: 'root',
@@ -1116,7 +1116,7 @@ describe('DatadogExporter', () => {
 
   describe('shutdown', () => {
     it('flushes and disables llmobs on shutdown', async () => {
-      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 0 });
 
       await exporter.shutdown();
 
@@ -1125,7 +1125,7 @@ describe('DatadogExporter', () => {
     });
 
     it('clears traceState on shutdown', async () => {
-      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 0 });
       const span = createMockSpan({ traceId: 'trace-shutdown', isRootSpan: true });
 
       // Create some trace state
@@ -1164,7 +1164,7 @@ describe('DatadogExporter', () => {
     });
 
     it('logs warning when shutdown has pending buffered spans', async () => {
-      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key' });
+      const exporter = new DatadogExporter({ mlApp: 'test', apiKey: 'test-key', flushGraceMs: 0 });
       const loggerSpy = vi.spyOn((exporter as any).logger, 'warn');
 
       const parentSpan = createMockSpan({
@@ -1829,7 +1829,7 @@ describe('DatadogExporter', () => {
     let exporter: DatadogExporter;
 
     beforeEach(() => {
-      exporter = new DatadogExporter({ mlApp: 'test-app', apiKey: 'test-key' });
+      exporter = new DatadogExporter({ mlApp: 'test-app', apiKey: 'test-key', flushGraceMs: 0 });
     });
 
     afterEach(async () => {

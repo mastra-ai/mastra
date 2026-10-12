@@ -520,7 +520,7 @@ export class DatadogExporter extends BaseExporter {
    * during shutdown don't stack.
    */
   private async waitForBackgroundSend(): Promise<void> {
-    if (!this.pendingSend || this.flushGraceMs <= 0) return;
+    if (!this.pendingSend || !(this.flushGraceMs > 0) || !Number.isFinite(this.flushGraceMs)) return;
     this.pendingSend = false;
     await new Promise(resolve => setTimeout(resolve, this.flushGraceMs));
   }
