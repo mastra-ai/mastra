@@ -8,10 +8,11 @@ import { connectLinear } from '../../factory/services/linear';
 import type { SourceControlRepository } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import {
-  ONBOARDING_REVIEW_RETURN_KEY,
   ONBOARDING_STEPS,
   persistOnboardingDraft,
+  persistOnboardingReviewReturn,
   readOnboardingDraft,
+  readOnboardingReviewReturn,
   type OnboardingDraft,
   persistOnboardingStep,
   readOnboardingStep,
@@ -57,12 +58,9 @@ export function EmptyFactoryState() {
     const saved = readOnboardingStep();
     return saved !== 'initial' && !draft.repository ? 'vcs' : saved;
   });
-  const [returnToReview, setReviewReturn] = useState(
-    () => sessionStorage.getItem(ONBOARDING_REVIEW_RETURN_KEY) === 'true',
-  );
+  const [returnToReview, setReviewReturn] = useState(readOnboardingReviewReturn);
   const setReturnToReview = (value: boolean) => {
-    if (value) sessionStorage.setItem(ONBOARDING_REVIEW_RETURN_KEY, 'true');
-    else sessionStorage.removeItem(ONBOARDING_REVIEW_RETURN_KEY);
+    persistOnboardingReviewReturn(value);
     setReviewReturn(value);
   };
   const [githubRedirecting, setGithubRedirecting] = useState(false);

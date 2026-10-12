@@ -95,6 +95,19 @@ export function persistOnboardingFactory(factoryId: string): void {
   sessionStorage.setItem(ONBOARDING_UPDATED_AT_KEY, String(Date.now()));
 }
 
+export function readOnboardingFactory(): string | undefined {
+  return sessionStorage.getItem(ONBOARDING_FACTORY_KEY) ?? undefined;
+}
+
+export function readOnboardingReviewReturn(): boolean {
+  return sessionStorage.getItem(ONBOARDING_REVIEW_RETURN_KEY) === 'true';
+}
+
+export function persistOnboardingReviewReturn(returnToReview: boolean): void {
+  if (returnToReview) sessionStorage.setItem(ONBOARDING_REVIEW_RETURN_KEY, 'true');
+  else sessionStorage.removeItem(ONBOARDING_REVIEW_RETURN_KEY);
+}
+
 /** Read the persisted step, defaulting to the beginning of the flow. */
 export function readOnboardingStep(): OnboardingStep {
   const value = sessionStorage.getItem(ONBOARDING_STEP_KEY);

@@ -11,8 +11,14 @@ import {
   unlinkRepository,
   updateFactoryDefaultModel,
 } from '../services/github';
-import { clearOnboardingFlow, ONBOARDING_FACTORY_KEY, persistOnboardingFactory } from '../services/onboardingFlow';
+import { clearOnboardingFlow, persistOnboardingFactory, readOnboardingFactory } from '../services/onboardingFlow';
 import type { OnboardingDraft } from '../services/onboardingFlow';
+
+async function findPendingFactory(baseUrl: string, pendingId: string) {
+  const factories = await listFactoryProjects(baseUrl);
+  if (!factories) throw new Error('Unable to load your factories. Please try again.');
+  return factories.find(factory => factory.id === pendingId);
+}
 
 /** Commit once the user confirms. Keep the created id so failed saves can be retried. */
 export function useCompleteFactorySetup() {
@@ -27,10 +33,8 @@ export function useCompleteFactorySetup() {
       if (!repo) throw new Error('Choose a repository before creating your factory.');
       const factoryModel = draft.model?.modelId ?? draft.personal?.modelId;
       if (!factoryModel) throw new Error('Choose a model before creating your factory.');
-      const pendingId = sessionStorage.getItem(ONBOARDING_FACTORY_KEY);
-      const factories = await listFactoryProjects(baseUrl);
-      if (!factories) throw new Error('Unable to load your factories. Please try again.');
-      const existing = factories.find(factory => factory.id === pendingId);
+      const pendingId = readOnboardingFactory();
+      const existing = pendingId ? await findPendingFactory(baseUrl, pendingId) : undefined;
       const factory = existing ?? (await createFactoryProject(baseUrl, repo.name));
       // Linking refetches the Factory list; the marker keeps the root guard from leaving onboarding.
       persistOnboardingFactory(factory.id);
@@ -41,8 +45,11 @@ export function useCompleteFactorySetup() {
           await unlinkRepository(baseUrl, factory.id, previous.projectRepositoryId);
         }
       }
-      await updateFactoryDefaultModel(baseUrl, factory.id, factoryModel);
-      if (draft.personal?.modelId) await setPersonalDefault.mutateAsync(draft.personal.modelId);
+      const personalModel = draft.personal?.modelId;
+      await Promise.all([
+        updateFactoryDefaultModel(baseUrl, factory.id, factoryModel),
+        personalModel && setPersonalDefault.mutateAsync(personalModel),
+      ]);
       return factory.id;
     },
     onSuccess: async factoryId => {
