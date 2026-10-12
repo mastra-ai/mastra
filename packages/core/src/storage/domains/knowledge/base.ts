@@ -264,17 +264,7 @@ export interface KnowledgeCurationCursor {
   updatedAt: Date;
 }
 export type KnowledgeActivityAction =
-  | 'create'
-  | 'edit'
-  | 'delete'
-  | 'restore'
-  | 'move'
-  | 'merge'
-  | 'promote'
-  | 'demote'
-  | 'stamp'
-  | 'rebind'
-  | 'skip';
+  'create' | 'edit' | 'delete' | 'restore' | 'move' | 'merge' | 'promote' | 'demote' | 'stamp' | 'rebind' | 'skip';
 export interface KnowledgeActivityEvent {
   id: string;
   action: KnowledgeActivityAction;
@@ -395,9 +385,18 @@ export interface KnowledgeSemanticOutboxEntry {
   completedAt?: Date;
 }
 
+export interface KnowledgeImportMutationAuthority {
+  runId: string;
+  importerId: string;
+  binding: string;
+  workerId: string;
+  leaseKey: string;
+}
+
 export interface CreateKnowledgeNodeInput {
   id?: string;
   importRunId?: string;
+  importAuthority?: KnowledgeImportMutationAuthority;
   name: string;
   kind?: string;
   isScope?: boolean;
@@ -409,6 +408,7 @@ export interface UpdateKnowledgeNodeInput {
   id: string;
   version: number;
   importRunId?: string;
+  importAuthority?: KnowledgeImportMutationAuthority;
   name?: string;
   kind?: string;
   isScope?: boolean;
@@ -419,6 +419,7 @@ export interface UpdateKnowledgeNodeInput {
 export interface CreateKnowledgeRecordInput {
   id?: string;
   importRunId?: string;
+  importAuthority?: KnowledgeImportMutationAuthority;
   node: KnowledgeNodeReference;
   text: string;
   metadata?: Record<string, unknown>;
@@ -529,6 +530,12 @@ export class KnowledgeConflictError extends Error {
   constructor(id: string) {
     super(`Knowledge record version conflict: ${id}`);
     this.name = 'KnowledgeConflictError';
+  }
+}
+export class KnowledgeImportAuthorityError extends Error {
+  constructor() {
+    super('Knowledge import mutation authority is no longer valid');
+    this.name = 'KnowledgeImportAuthorityError';
   }
 }
 export class KnowledgeNotFoundError extends Error {
@@ -703,6 +710,8 @@ export abstract class KnowledgeStorage extends StorageDomain {
     binding: string;
     key: string;
     value: string;
+    importRunId?: string;
+    importAuthority?: KnowledgeImportMutationAuthority;
   }): Promise<KnowledgeImportState> {
     throw new KnowledgeUnsupportedError();
   }
@@ -781,6 +790,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
     address: string;
     scopeId: string;
     importRunId?: string;
+    importAuthority?: KnowledgeImportMutationAuthority;
   }): Promise<DeleteKnowledgeNodeAddressResult> {
     throw new KnowledgeUnsupportedError();
   }
@@ -789,6 +799,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
     source: string;
     version: number;
     importRunId?: string;
+    importAuthority?: KnowledgeImportMutationAuthority;
   }): Promise<KnowledgeRecord> {
     throw new KnowledgeUnsupportedError();
   }
@@ -904,6 +915,7 @@ export abstract class KnowledgeStorage extends StorageDomain {
     targetId: string;
     contextScopeId: string;
     importRunId: string;
+    importAuthority: KnowledgeImportMutationAuthority;
     details: Record<string, unknown>;
   }): Promise<void> {
     throw new KnowledgeUnsupportedError();

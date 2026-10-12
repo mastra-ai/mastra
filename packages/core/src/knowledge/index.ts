@@ -8,6 +8,7 @@ import type {
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
   CreateKnowledgeImportRunInput,
+  KnowledgeImportMutationAuthority,
   KnowledgeImportRunStatus,
   KnowledgeScopeIds,
   KnowledgeSemanticOutboxEntry,
@@ -346,7 +347,14 @@ export class Knowledge extends MastraBase {
     return (await this.getStorage()).getImportState(input);
   }
 
-  async setImportState(input: { importerId: string; binding: string; key: string; value: string }) {
+  async setImportState(input: {
+    importerId: string;
+    binding: string;
+    key: string;
+    value: string;
+    importRunId?: string;
+    importAuthority?: KnowledgeImportMutationAuthority;
+  }) {
     this.#assertImporter(input.importerId);
     return (await this.getStorage()).setImportState(input);
   }

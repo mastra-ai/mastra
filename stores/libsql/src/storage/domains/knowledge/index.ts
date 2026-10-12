@@ -49,6 +49,7 @@ import {
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
+  KnowledgeImportAuthorityError,
   KnowledgeNotFoundError,
   KnowledgeStorage,
   pageKnowledgeScopeNodes,
@@ -74,6 +75,7 @@ import type {
   KnowledgeActivityAction,
   KnowledgeActivityEvent,
   KnowledgeCurationCursor,
+  KnowledgeImportMutationAuthority,
   KnowledgeImportRun,
   KnowledgeImportState,
   KnowledgeNode,
@@ -711,7 +713,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
-    return this.#transaction(tx => this.#createNode(tx, input));
+    return this.#transaction(async tx => {
+      await this.#assertImportMutationAuthority(tx, input.importRunId, input.importAuthority);
+      return this.#createNode(tx, input);
+    });
   }
 
   async getNode(id: string): Promise<KnowledgeNode | null> {
@@ -763,7 +768,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
-    return this.#transaction(tx => this.#updateNode(tx, input));
+    return this.#transaction(async tx => {
+      await this.#assertImportMutationAuthority(tx, input.importRunId, input.importAuthority);
+      return this.#updateNode(tx, input);
+    });
   }
 
   async #updateNode(tx: Transaction, input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
@@ -933,7 +941,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
 
   async createRecord(input: CreateKnowledgeRecordInput): Promise<KnowledgeRecord> {
-    return this.#transaction(tx => this.#createRecord(tx, input));
+    return this.#transaction(async tx => {
+      await this.#assertImportMutationAuthority(tx, input.importRunId, input.importAuthority);
+      return this.#createRecord(tx, input);
+    });
   }
 
   async #createRecord(tx: Transaction, input: CreateKnowledgeRecordInput): Promise<KnowledgeRecord> {
@@ -1280,6 +1291,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     node: CreateKnowledgeNodeInput;
   }): Promise<KnowledgeNode> {
     return this.#transaction(async tx => {
+      await this.#assertImportMutationAuthority(tx, input.node.importRunId, input.node.importAuthority);
       const binding = await tx.execute({
         sql: `SELECT nodeId FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE source=? AND address=?`,
         args: [input.source, input.address],
@@ -1358,8 +1370,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     address: string;
     scopeId: string;
     importRunId?: string;
+    importAuthority?: KnowledgeImportMutationAuthority;
   }): Promise<{ node: KnowledgeNode; deleted: boolean }> {
     return this.#transaction(async tx => {
+      await this.#assertImportMutationAuthority(tx, input.importRunId, input.importAuthority);
       const binding = await tx.execute({
         sql: `SELECT nodeId FROM "${TABLE_KNOWLEDGE_NODE_ADDRESSES}" WHERE source=? AND address=?`,
         args: [input.source, input.address],
@@ -1398,8 +1412,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     source: string;
     version: number;
     importRunId?: string;
+    importAuthority?: KnowledgeImportMutationAuthority;
   }): Promise<KnowledgeRecord> {
     return this.#transaction(async tx => {
+      await this.#assertImportMutationAuthority(tx, input.importRunId, input.importAuthority);
       const record = await this.#getRecord(tx, input.id, true);
       if (!record || record.source !== input.source) throw new KnowledgeNotFoundError('record', input.id);
       await this.#deleteRecordPermanently(tx, record.id, input.importRunId, input.version);
@@ -1428,6 +1444,27 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     if (expectedVersion !== undefined && result.rowsAffected === 0) throw new KnowledgeConflictError(id);
   }
 
+  async #assertImportMutationAuthority(
+    tx: Transaction,
+    importRunId: string | undefined,
+    authority: KnowledgeImportMutationAuthority | undefined,
+  ): Promise<void> {
+    if (!importRunId && !authority) return;
+    if (!importRunId || !authority || authority.runId !== importRunId) throw new KnowledgeImportAuthorityError();
+    const binding = canonicalizeKnowledgeImporterBindingKey(authority.binding);
+    const result = await tx.execute({
+      sql: `SELECT s.value FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" r JOIN "${TABLE_KNOWLEDGE_IMPORT_STATE}" s ON s.importerId=r.importerId AND s.binding=r.binding WHERE r.id=? AND r.importerId=? AND r.binding=? AND r.status='running' AND s.key=?`,
+      args: [authority.runId, authority.importerId, binding, authority.leaseKey],
+    });
+    try {
+      const lease = JSON.parse(String(result.rows[0]?.value ?? '')) as { workerId?: unknown };
+      if (lease.workerId !== authority.workerId) throw new KnowledgeImportAuthorityError();
+    } catch (error) {
+      if (error instanceof KnowledgeImportAuthorityError) throw error;
+      throw new KnowledgeImportAuthorityError();
+    }
+  }
+
   async getImportState(input: {
     importerId: string;
     binding: string;
@@ -1454,9 +1491,24 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     binding: string;
     key: string;
     value: string;
+    importRunId?: string;
+    importAuthority?: KnowledgeImportMutationAuthority;
   }): Promise<KnowledgeImportState> {
-    const normalized = { ...input, binding: canonicalizeKnowledgeImporterBindingKey(input.binding) };
+    const normalized = {
+      importerId: input.importerId,
+      binding: canonicalizeKnowledgeImporterBindingKey(input.binding),
+      key: input.key,
+      value: input.value,
+    };
     await this.#transaction(async tx => {
+      if (
+        input.importAuthority &&
+        (normalized.importerId !== input.importAuthority.importerId ||
+          normalized.binding !== canonicalizeKnowledgeImporterBindingKey(input.importAuthority.binding))
+      ) {
+        throw new KnowledgeImportAuthorityError();
+      }
+      await this.#assertImportMutationAuthority(tx, input.importRunId, input.importAuthority);
       await tx.execute({
         sql: `INSERT INTO "${TABLE_KNOWLEDGE_IMPORT_STATE}" (importerId,binding,key,value) VALUES (?,?,?,?) ON CONFLICT(importerId,binding,key) DO UPDATE SET value=excluded.value`,
         args: [...importStateKey(normalized), input.value],
@@ -1809,10 +1861,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     targetId: string;
     contextScopeId: string;
     importRunId: string;
+    importAuthority: KnowledgeImportMutationAuthority;
     details: Record<string, unknown>;
   }): Promise<void> {
-    await this.#transaction(tx =>
-      this.#activity(
+    await this.#transaction(async tx => {
+      await this.#assertImportMutationAuthority(tx, input.importRunId, input.importAuthority);
+      await this.#activity(
         tx,
         'skip',
         input.targetType,
@@ -1820,8 +1874,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         input.contextScopeId,
         input.importRunId,
         input.details,
-      ),
-    );
+      );
+    });
   }
 
   async listActivity(input: {

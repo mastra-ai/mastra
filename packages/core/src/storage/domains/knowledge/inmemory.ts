@@ -10,6 +10,7 @@ import {
   knowledgeSemanticDocumentId,
   knowledgeSemanticIdempotencyKey,
   KnowledgeConflictError,
+  KnowledgeImportAuthorityError,
   KnowledgeNotFoundError,
   KnowledgeStorage,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
@@ -31,6 +32,7 @@ import type {
   EnqueueKnowledgeImportRunInput,
   FinalizeKnowledgeImportRunInput,
   HeartbeatKnowledgeImportRunInput,
+  KnowledgeImportMutationAuthority,
   KnowledgeImportRun,
   KnowledgeImportState,
   KnowledgeNode,
@@ -219,6 +221,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode> {
+    this.#assertImportMutationAuthority(input.importRunId, input.importAuthority);
     return this.#runAtomicMutation(() => this.#createNode(input));
   }
 
@@ -378,6 +381,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     address: string;
     node: CreateKnowledgeNodeInput;
   }): Promise<KnowledgeNode> {
+    this.#assertImportMutationAuthority(input.node.importRunId, input.node.importAuthority);
     return this.#runAtomicMutation(() => {
       const key = JSON.stringify([input.source, input.address]);
       const existing = this.#db.knowledgeNodeAddresses.get(key);
@@ -436,8 +440,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     address: string;
     scopeId: string;
     importRunId?: string;
+    importAuthority?: KnowledgeImportMutationAuthority;
   }): Promise<{ node: KnowledgeNode; deleted: boolean }> {
-    this.#assertImportRunExists(input.importRunId);
+    this.#assertImportMutationAuthority(input.importRunId, input.importAuthority);
     return this.#runAtomicMutation(() => {
       const key = JSON.stringify([input.source, input.address]);
       const binding = this.#db.knowledgeNodeAddresses.get(key);
@@ -479,8 +484,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     source: string;
     version: number;
     importRunId?: string;
+    importAuthority?: KnowledgeImportMutationAuthority;
   }): Promise<KnowledgeRecord> {
-    this.#assertImportRunExists(input.importRunId);
+    this.#assertImportMutationAuthority(input.importRunId, input.importAuthority);
     return this.#runAtomicMutation(() => {
       const record = this.#db.knowledgeRecords.get(input.id);
       if (!record || record.source !== input.source) throw new KnowledgeNotFoundError('record', input.id);
@@ -556,7 +562,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async updateNode(input: UpdateKnowledgeNodeInput): Promise<KnowledgeNode> {
-    this.#assertImportRunExists(input.importRunId);
+    this.#assertImportMutationAuthority(input.importRunId, input.importAuthority);
     return this.#runAtomicMutation(() => this.#updateNode(input));
   }
 
@@ -695,7 +701,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async createRecord(input: CreateKnowledgeRecordInput): Promise<KnowledgeRecord> {
-    this.#assertImportRunExists(input.importRunId);
+    this.#assertImportMutationAuthority(input.importRunId, input.importAuthority);
     return this.#runAtomicMutation(() => this.#createRecord(input));
   }
 
@@ -922,8 +928,24 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     binding: string;
     key: string;
     value: string;
+    importRunId?: string;
+    importAuthority?: KnowledgeImportMutationAuthority;
   }): Promise<KnowledgeImportState> {
-    const state = { ...input, binding: canonicalizeKnowledgeImporterBindingKey(input.binding) };
+    if (
+      input.importAuthority &&
+      (input.importerId !== input.importAuthority.importerId ||
+        canonicalizeKnowledgeImporterBindingKey(input.binding) !==
+          canonicalizeKnowledgeImporterBindingKey(input.importAuthority.binding))
+    ) {
+      throw new KnowledgeImportAuthorityError();
+    }
+    this.#assertImportMutationAuthority(input.importRunId, input.importAuthority);
+    const state = {
+      importerId: input.importerId,
+      binding: canonicalizeKnowledgeImporterBindingKey(input.binding),
+      key: input.key,
+      value: input.value,
+    };
     this.#db.knowledgeImportState.set(JSON.stringify([state.importerId, state.binding, state.key]), state);
     return { ...state };
   }
@@ -1147,9 +1169,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     targetId: string;
     contextScopeId: string;
     importRunId: string;
+    importAuthority: KnowledgeImportMutationAuthority;
     details: Record<string, unknown>;
   }): Promise<void> {
-    this.#assertImportRunExists(input.importRunId);
+    this.#assertImportMutationAuthority(input.importRunId, input.importAuthority);
     this.#recordActivity(
       'skip',
       input.targetType,
@@ -1464,6 +1487,33 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       records: page.map(cloneRecord),
       nextCursor: filtered.length > limit ? page.at(-1)?.id : undefined,
     };
+  }
+
+  #assertImportMutationAuthority(importRunId?: string, authority?: KnowledgeImportMutationAuthority): void {
+    if (!importRunId && !authority) return;
+    if (!importRunId || !authority || authority.runId !== importRunId) throw new KnowledgeImportAuthorityError();
+    const binding = canonicalizeKnowledgeImporterBindingKey(authority.binding);
+    const run = this.#db.knowledgeImportRuns.get(importRunId);
+    const lease = this.#db.knowledgeImportState.get(
+      JSON.stringify([authority.importerId, binding, authority.leaseKey]),
+    );
+    if (
+      !run ||
+      run.importerId !== authority.importerId ||
+      run.binding !== binding ||
+      run.status !== 'running' ||
+      !lease
+    ) {
+      throw new KnowledgeImportAuthorityError();
+    }
+    try {
+      if ((JSON.parse(lease.value) as { workerId?: string }).workerId !== authority.workerId) {
+        throw new KnowledgeImportAuthorityError();
+      }
+    } catch (error) {
+      if (error instanceof KnowledgeImportAuthorityError) throw error;
+      throw new KnowledgeImportAuthorityError();
+    }
   }
 
   #assertImportRunExists(importRunId?: string): void {

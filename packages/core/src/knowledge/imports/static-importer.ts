@@ -1,5 +1,5 @@
 import { knowledgeImporterBindingKey } from '../../storage/domains/knowledge';
-import type { KnowledgeNode, KnowledgeRecord } from '../../storage/domains/knowledge';
+import type { KnowledgeImportMutationAuthority, KnowledgeNode, KnowledgeRecord } from '../../storage/domains/knowledge';
 import { deepEqual } from '../../utils/deep-equal';
 import type { Knowledge } from '../index';
 import type { KnowledgeCitationHost, KnowledgeCitationTarget } from './citations';
@@ -55,6 +55,7 @@ export async function createStaticKnowledgeImporterOperations(input: {
   source: string;
   scopeAddress: string;
   importRunId: string;
+  importAuthority: KnowledgeImportMutationAuthority;
   assertLeaseOwned?: () => Promise<void>;
 }): Promise<StaticKnowledgeImporterOperations & KnowledgeCitationHost> {
   const importer = input.knowledge.getImporter(input.importerId);
@@ -107,6 +108,7 @@ export async function createStaticKnowledgeImporterOperations(input: {
       role: selected.role,
     },
     importRunId: input.importRunId,
+    importAuthority: input.importAuthority,
     assertLeaseOwned: input.assertLeaseOwned,
   });
 }
@@ -117,6 +119,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
   readonly #knowledge: Knowledge;
   readonly #importer: KnowledgeImporterBindingHandle;
   readonly #importRunId: string;
+  readonly #importAuthority: KnowledgeImportMutationAuthority;
   readonly #assertRunActive: () => Promise<void>;
 
   constructor(input: {
@@ -125,6 +128,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     knowledge: Knowledge;
     importer: KnowledgeImporterBindingHandle;
     importRunId: string;
+    importAuthority: KnowledgeImportMutationAuthority;
     assertRunActive: () => Promise<void>;
   }) {
     this.#address = input.address;
@@ -132,6 +136,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
     this.#knowledge = input.knowledge;
     this.#importer = input.importer;
     this.#importRunId = input.importRunId;
+    this.#importAuthority = input.importAuthority;
     this.#assertRunActive = input.assertRunActive;
   }
 
@@ -170,6 +175,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
       resolutionScopeIds: [...this.#importer.resolutionScopeIds],
       contextScopeId: this.#importer.scopeId,
       importRunId: this.#importRunId,
+      importAuthority: this.#importAuthority,
     });
     await this.#setTrackedRecord(record);
     return record;
@@ -227,6 +233,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
         targetId: record.id,
         contextScopeId: this.#importer.scopeId,
         importRunId: this.#importRunId,
+        importAuthority: this.#importAuthority,
         details: { reason: 'ownership-changed', source: this.#importer.source },
       });
       return null;
@@ -236,6 +243,7 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
       source: this.#importer.source,
       version: tracked.version,
       importRunId: this.#importRunId,
+      importAuthority: this.#importAuthority,
     });
     await this.#setTrackedRecord(undefined, id);
     return deleted;
@@ -302,6 +310,8 @@ class StaticKnowledgeNodeHandleImpl implements StaticKnowledgeNodeHandle {
       binding: this.#importer.binding,
       key: trackedRecordVersionKey(id),
       value: record ? JSON.stringify({ recordId: record.id, version: record.version }) : '',
+      importRunId: this.#importRunId,
+      importAuthority: this.#importAuthority,
     });
   }
 
@@ -324,17 +334,20 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
   readonly #knowledge: Knowledge;
   readonly #importer: KnowledgeImporterBindingHandle;
   readonly #importRunId: string;
+  readonly #importAuthority: KnowledgeImportMutationAuthority;
   readonly #assertLeaseOwned?: () => Promise<void>;
 
   constructor(input: {
     knowledge: Knowledge;
     importer: KnowledgeImporterBindingHandle;
     importRunId: string;
+    importAuthority: KnowledgeImportMutationAuthority;
     assertLeaseOwned?: () => Promise<void>;
   }) {
     this.#knowledge = input.knowledge;
     this.#importer = input.importer;
     this.#importRunId = input.importRunId;
+    this.#importAuthority = input.importAuthority;
     this.#assertLeaseOwned = input.assertLeaseOwned;
   }
 
@@ -414,6 +427,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
             scopeIds: [this.#importer.scopeId],
             contextScopeId: this.#importer.scopeId,
             importRunId: this.#importRunId,
+            importAuthority: this.#importAuthority,
           },
         });
     if (!existing) throw new Error(`Knowledge node address points to a missing node: ${normalized}`);
@@ -453,6 +467,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       scopeIds: [this.#importer.scopeId],
       contextScopeId: this.#importer.scopeId,
       importRunId: this.#importRunId,
+      importAuthority: this.#importAuthority,
     });
     await this.#setTrackedNode(normalized, updated);
     const handle = this.#handle(normalized, updated);
@@ -528,6 +543,8 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       binding: this.#importer.binding,
       key: pendingRecordTrackingRefreshKey(address),
       value: pending ? JSON.stringify(pending) : '',
+      importRunId: this.#importRunId,
+      importAuthority: this.#importAuthority,
     });
   }
 
@@ -555,6 +572,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
         targetId: node.id,
         contextScopeId: this.#importer.scopeId,
         importRunId: this.#importRunId,
+        importAuthority: this.#importAuthority,
         details: { reason: 'ownership-changed', source: this.#importer.source, address: normalized },
       });
       return { node, deleted: false };
@@ -564,6 +582,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       address: normalized,
       scopeId: this.#importer.scopeId,
       importRunId: this.#importRunId,
+      importAuthority: this.#importAuthority,
     });
     await this.#setTrackedNode(normalized, undefined);
     return result;
@@ -592,6 +611,8 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       binding: this.#importer.binding,
       key: trackedVersionKey(address),
       value: node ? JSON.stringify({ nodeId: node.id, version: node.version }) : '',
+      importRunId: this.#importRunId,
+      importAuthority: this.#importAuthority,
     });
   }
 
@@ -616,6 +637,7 @@ class StaticKnowledgeImporterOperationsImpl implements StaticKnowledgeImporterOp
       knowledge: this.#knowledge,
       importer: this.#importer,
       importRunId: this.#importRunId,
+      importAuthority: this.#importAuthority,
       assertRunActive: () => this.#assertRunActive(),
     });
   }

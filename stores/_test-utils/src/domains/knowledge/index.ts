@@ -84,7 +84,7 @@ export function createKnowledgeStorageTests(
           store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [OTHER_SCOPE_ID], importRunId }),
       ];
       for (const mutate of mutations) {
-        await expect(mutate()).rejects.toThrow('import run');
+        await expect(mutate()).rejects.toThrow(/import run|import mutation authority/);
         expect(await snapshot()).toEqual(before);
       }
     });
@@ -1080,13 +1080,51 @@ export function createKnowledgeStorageTests(
       const interrupted = await store.updateImportRun({ id: interruptedRun.id, status: 'interrupted' });
       expect(interrupted).toMatchObject({ status: 'interrupted' });
 
+      const activityRun = await store.createImportRun({
+        id: '01K00000000000000000000004',
+        importerId: 'calendar',
+        binding: firstBinding,
+        importKind: 'static',
+        triggerKind: 'programmatic',
+        queuedAt: new Date(queuedAt.getTime() + 3_500),
+      });
+      await store.updateImportRun({ id: activityRun.id, status: 'running' });
+      await store.setImportState({
+        importerId: 'calendar',
+        binding: firstBinding,
+        key: `lease/${activityRun.id}`,
+        value: JSON.stringify({ workerId: 'activity-worker', heartbeatAt: new Date().toISOString() }),
+      });
+      const importAuthority = {
+        runId: activityRun.id,
+        importerId: 'calendar',
+        binding: firstBinding,
+        workerId: 'activity-worker',
+        leaseKey: `lease/${activityRun.id}`,
+      };
+      await expect(
+        store.createNode({
+          name: 'Unfenced imported event',
+          scopeIds: [PROJECT_SCOPE_ID],
+          importRunId: activityRun.id,
+        }),
+      ).rejects.toThrow('Knowledge import mutation authority is no longer valid');
+      await expect(
+        store.createNode({
+          name: 'Stale imported event',
+          scopeIds: [PROJECT_SCOPE_ID],
+          importRunId: activityRun.id,
+          importAuthority: { ...importAuthority, workerId: 'stale-worker' },
+        }),
+      ).rejects.toThrow('Knowledge import mutation authority is no longer valid');
       const node = await store.createNode({
         name: 'Imported calendar event',
         scopeIds: [PROJECT_SCOPE_ID],
-        importRunId: run.id,
+        importRunId: activityRun.id,
+        importAuthority,
       });
-      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], importRunId: run.id })).toEqual([
-        expect.objectContaining({ targetId: node.id, importRunId: run.id }),
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], importRunId: activityRun.id })).toEqual([
+        expect.objectContaining({ targetId: node.id, importRunId: activityRun.id }),
       ]);
 
       const reopened = await createStore(true);
@@ -1110,7 +1148,11 @@ export function createKnowledgeStorageTests(
           after: firstPage.nextCursor,
         }),
       ).toEqual({
-        runs: [expect.objectContaining({ id: skipped.id }), expect.objectContaining({ id: run.id })],
+        runs: [
+          expect.objectContaining({ id: activityRun.id }),
+          expect.objectContaining({ id: skipped.id }),
+          expect.objectContaining({ id: run.id }),
+        ],
         nextCursor: undefined,
       });
       await expect(reopened.listImportRuns({ after: 'missing-run-cursor' })).resolves.toEqual({
@@ -1313,6 +1355,42 @@ export function createKnowledgeStorageTests(
         id: 'zzz-recovery-replacement',
         queuedAt: new Date('2019-12-31T23:59:59.999Z'),
       });
+      const staleAuthority = {
+        runId: 'recovery-original',
+        importerId: 'recovery-runner',
+        binding,
+        workerId: 'dead-worker',
+        leaseKey: 'lease/recovery-original',
+      };
+      const beforeStaleMutation = {
+        nodes: await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID] }),
+        activity: await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID] }),
+        outbox: await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] }),
+      };
+      await expect(
+        store.createNode({
+          name: 'Stale recovered mutation',
+          scopeIds: [PROJECT_SCOPE_ID],
+          importRunId: 'recovery-original',
+          importAuthority: staleAuthority,
+        }),
+      ).rejects.toThrow('Knowledge import mutation authority is no longer valid');
+      expect({
+        nodes: await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID] }),
+        activity: await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID] }),
+        outbox: await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] }),
+      }).toEqual(beforeStaleMutation);
+      await expect(
+        store.finalizeImportRun({
+          id: 'recovery-original',
+          importerId: 'recovery-runner',
+          binding,
+          workerId: 'dead-worker',
+          leaseKey: 'lease/recovery-original',
+          status: 'succeeded',
+          state: [],
+        }),
+      ).resolves.toBeNull();
       await expect(
         store.claimImportRun({ importerId: 'recovery-runner', binding, workerId: 'new-worker', leaseKey: 'lease/' }),
       ).resolves.toMatchObject({ id: 'zzz-recovery-replacement' });
@@ -1344,22 +1422,39 @@ export function createKnowledgeStorageTests(
     });
 
     it('clears only canonical Knowledge state', async () => {
+      const binding = knowledgeImporterBindingKey({ source: 'clear-test', scope: 'project:mastra' });
       const run = await store.createImportRun({
         importerId: 'clear-test',
-        binding: knowledgeImporterBindingKey({ source: 'clear-test', scope: 'project:mastra' }),
+        binding,
         importKind: 'static',
         triggerKind: 'programmatic',
       });
+      await store.updateImportRun({ id: run.id, status: 'running' });
+      await store.setImportState({
+        importerId: 'clear-test',
+        binding,
+        key: `lease/${run.id}`,
+        value: JSON.stringify({ workerId: 'clear-worker', heartbeatAt: new Date().toISOString() }),
+      });
+      const importAuthority = {
+        runId: run.id,
+        importerId: 'clear-test',
+        binding,
+        workerId: 'clear-worker',
+        leaseKey: `lease/${run.id}`,
+      };
       const node = await store.createNode({
         name: 'Temporary',
         scopeIds: [PROJECT_SCOPE_ID],
         importRunId: run.id,
+        importAuthority,
       });
       await store.createRecord({
         node,
         text: 'Temporary record',
         scopeIds: [PROJECT_SCOPE_ID],
         importRunId: run.id,
+        importAuthority,
       });
       await store.dangerouslyClearAll();
 

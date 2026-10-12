@@ -235,6 +235,13 @@ export class KnowledgeImporterRunner {
           source: binding.source,
           scopeAddress: binding.scope,
           importRunId: run.id,
+          importAuthority: {
+            runId: run.id,
+            importerId: run.importerId,
+            binding: run.binding,
+            workerId: this.#workerId,
+            leaseKey: `${LEASE_KEY_PREFIX}${run.id}`,
+          },
           assertLeaseOwned,
         });
         return operations;

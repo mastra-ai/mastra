@@ -7,7 +7,7 @@ const source = 'google-calendar:primary';
 const scopeAddress = 'project:mastra';
 const binding = knowledgeImporterBindingKey({ source, scope: scopeAddress });
 
-async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
+async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit', assertLeaseOwned?: () => Promise<void>) {
   const knowledge = new Knowledge({
     storage: new InMemoryStore({ id: `static-import-${role}` }),
     structure: {
@@ -35,20 +35,80 @@ async function createFixture(role: 'append' | 'edit' | 'owner' = 'edit') {
     triggerKind: 'programmatic',
   });
   const run = await knowledge.updateImportRun({ id: queuedRun.id, status: 'running' });
+  await storage.setImportState({
+    importerId: run.importerId,
+    binding: run.binding,
+    key: `test-lease/${run.id}`,
+    value: JSON.stringify({ workerId: 'test-worker', heartbeatAt: new Date().toISOString() }),
+  });
   const operations = await createStaticKnowledgeImporterOperations({
     knowledge,
     importerId: 'calendar',
     source,
     scopeAddress,
     importRunId: run.id,
+    importAuthority: {
+      runId: run.id,
+      importerId: run.importerId,
+      binding: run.binding,
+      workerId: 'test-worker',
+      leaseKey: `test-lease/${run.id}`,
+    },
+    assertLeaseOwned,
   });
-  return { knowledge, operations, run, orgScopeId, projectScopeId };
+  return { knowledge, storage, operations, run, orgScopeId, projectScopeId };
 }
 
 describe('static Knowledge importer operations', () => {
   it('does not expose an ad-hoc handle constructor on Knowledge', () => {
     const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'no-ad-hoc-importer-handle' }) });
     expect('createStaticImporterOperations' in knowledge).toBe(false);
+  });
+
+  it('rejects an already-authorized mutation after recovery commits before transaction entry', async () => {
+    let entered!: () => void;
+    let resume!: () => void;
+    const mutationEntered = new Promise<void>(resolve => (entered = resolve));
+    const resumed = new Promise<void>(resolve => (resume = resolve));
+    const { storage, operations, run } = await createFixture();
+    await storage.setImportState({
+      importerId: run.importerId,
+      binding: run.binding,
+      key: `test-payload/${run.id}`,
+      value: '{}',
+    });
+    const createNodeWithAddress = storage.createNodeWithAddress.bind(storage);
+    storage.createNodeWithAddress = async input => {
+      entered();
+      await resumed;
+      return createNodeWithAddress(input);
+    };
+
+    const staleMutation = operations.upsertNode('event:stale', { name: 'Stale event' });
+    await mutationEntered;
+    await storage.recoverImportRun({
+      id: run.id,
+      replacementId: 'replacement-run',
+      payloadKey: `test-payload/${run.id}`,
+      replacementPayloadKey: 'test-payload/replacement-run',
+      leaseKey: `test-lease/${run.id}`,
+      staleBefore: new Date(Date.now() + 1_000),
+    });
+    resume();
+
+    await expect(staleMutation).rejects.toThrow('Knowledge import mutation authority is no longer valid');
+    await expect(storage.getNodeAddress({ source, address: 'event:stale' })).resolves.toBeNull();
+    await expect(
+      storage.finalizeImportRun({
+        id: run.id,
+        importerId: run.importerId,
+        binding: run.binding,
+        workerId: 'test-worker',
+        leaseKey: `test-lease/${run.id}`,
+        status: 'succeeded',
+        state: [],
+      }),
+    ).resolves.toBeNull();
   });
 
   it('upserts deterministic external addresses idempotently', async () => {
@@ -89,7 +149,6 @@ describe('static Knowledge importer operations', () => {
       text: 'Curator note',
       scopeIds: [projectScopeId],
       source: 'curator',
-      importRunId: run.id,
     });
 
     expect(await node.listKnowledge()).toEqual([expect.objectContaining({ id: imported.id, source })]);
@@ -282,6 +341,13 @@ describe('static Knowledge importer operations', () => {
         source: 'google-calendar:forged',
         scopeAddress,
         importRunId: run.id,
+        importAuthority: {
+          runId: run.id,
+          importerId: run.importerId,
+          binding: run.binding,
+          workerId: 'test-worker',
+          leaseKey: `test-lease/${run.id}`,
+        },
       }),
     ).rejects.toThrow('is not active');
   });
