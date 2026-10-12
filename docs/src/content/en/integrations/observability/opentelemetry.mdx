@@ -717,7 +717,7 @@ tsx --import ./instrumentation.ts ./src/index.ts
 
 #### Flushing before exit
 
-Mastra's `flush()` and `shutdown()` ask the registered OTEL providers to flush, but a `BatchSpanProcessor` can still hold a batch it has already started exporting. In serverless or short-lived processes, also `await sdk.shutdown()` (or the provider's `forceFlush()`) after Mastra's flush, so no spans are left in your OTEL SDK when the process exits.
+Mastra's `flush()` and `shutdown()` ask the registered OTEL providers to flush, but a `BatchSpanProcessor` can still hold a batch it has already started exporting. In serverless or short-lived processes, also `await sdk.shutdown()` after Mastra's flush, so no spans are left in your OTEL SDK when the process exits. The provider's own `forceFlush()` is not enough: it does not wait for a batch the exporter is already sending.
 
 ### Semantic conventions
 
