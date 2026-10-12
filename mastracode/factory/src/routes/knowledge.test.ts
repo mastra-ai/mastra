@@ -1182,12 +1182,20 @@ describe('KnowledgeRoutes', () => {
 
     // Flood the newest end of the activity log with events whose targets are
     // invisible from the project view: records appended in-view, then rescoped
-    // into an unrelated thread. The append EVENT stays in the activity window,
-    // so only authorize-before-limit keeps them from blanking or displacing.
-    const flood = await node(h.knowledge, 'Flood Node', h.projectScope);
+    // into an unrelated thread. The subject belongs to both scopes so the
+    // record rescope preserves joint visibility without becoming project-visible.
+    // The append EVENT stays in the activity window, so only authorize-before-limit
+    // keeps them from blanking or displacing.
+    const projectScopeIds = await scopePathIds(h.knowledge, h.projectScope);
+    const hiddenScopeIds = await scopePathIds(h.knowledge, h.threadScope('other-thread'));
+    const flood = await h.knowledge.createNode({
+      name: 'Flood Node',
+      kind: 'concept',
+      scopeIds: [projectScopeIds.at(-1)!, hiddenScopeIds.at(-1)!],
+      contextScopeId: projectScopeIds.at(-1),
+    });
     for (let i = 0; i < 120; i++) {
       const flooded = await record(h.knowledge, flood, `Flood ${i}`, h.projectScope);
-      const hiddenScopeIds = await scopePathIds(h.knowledge, h.threadScope('other-thread'));
       await h.knowledge.setRecordScopes({
         id: flooded.id,
         version: flooded.version,

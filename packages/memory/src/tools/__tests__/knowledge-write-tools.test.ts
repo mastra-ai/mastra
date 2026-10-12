@@ -85,7 +85,12 @@ describe('Subconscious knowledge write tools', () => {
   });
 
   it('rejects a rescope changed after visibility validation without overwriting the new scopes', async () => {
-    const { store, source, tools } = await fixture();
+    const { store, tools } = await fixture();
+    const source = await store.createNode({
+      name: 'Rescopable source',
+      kind: 'project',
+      scopeIds: [scopeIds[1]!, scopeIds[2]!],
+    });
     const record = await store.createRecord({ node: source, text: 'Private evidence', scopeIds: [scopeIds[2]!] });
     const setScopes = store.setRecordScopes.bind(store);
     const mutation = vi.spyOn(store, 'setRecordScopes').mockImplementationOnce(async input => {
@@ -496,7 +501,12 @@ describe('Subconscious knowledge write tools', () => {
   });
 
   it('writes and rescopes at every scope level the conversation can see, even with a legacy maxScope config', async () => {
-    const { memory, store, source } = await fixture();
+    const { memory, store } = await fixture();
+    const source = await store.createNode({
+      name: 'Cross-scope source',
+      kind: 'project',
+      scopeIds: [scopeIds[0]!, scopeIds[2]!],
+    });
     // Mastra Code used to configure Subconscious with maxScope: 'resource', which blocked
     // every org-level write. The option no longer exists and must not restrict the curator.
     const legacy = new Subconscious({ defaultScope: 'resource', maxScope: 'resource' } as SubconsciousConfig);

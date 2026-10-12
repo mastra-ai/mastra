@@ -81,7 +81,7 @@ export function createKnowledgeStorageTests(
         () => store.updateNode({ id: node.id, version: node.version, name: 'Invalid run edit', importRunId }),
         () => store.createRecord({ node, text: 'Invalid [[Run mention]]', scopeIds: [PROJECT_SCOPE_ID], importRunId }),
         () =>
-          store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [OTHER_SCOPE_ID], importRunId }),
+          store.setRecordScopes({ id: record.id, version: record.version, scopeIds: [PROJECT_SCOPE_ID], importRunId }),
       ];
       for (const mutate of mutations) {
         await expect(mutate()).rejects.toThrow('import run');
@@ -431,7 +431,10 @@ export function createKnowledgeStorageTests(
     });
 
     it('rejects stale and concurrent record rescope without changing newer state', async () => {
-      const node = await store.createNode({ name: 'Rescope subject', scopeIds: [PROJECT_SCOPE_ID] });
+      const node = await store.createNode({
+        name: 'Rescope subject',
+        scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
       const record = await store.createRecord({ node, text: 'Scoped evidence', scopeIds: [PROJECT_SCOPE_ID] });
       const attempts = [PROJECT_SCOPE_ID, OTHER_SCOPE_ID].map(scopeId => ({
         id: record.id,
@@ -455,6 +458,70 @@ export function createKnowledgeStorageTests(
         activity: await store.listActivity({ scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID] }),
         outbox: await store.listSemanticOutbox({}),
       }).toEqual(before);
+    });
+
+    it('rejects record scopes disjoint from the subject while preserving overlapping broadening', async () => {
+      const node = await store.createNode({ name: 'Joint visibility subject', scopeIds: [PROJECT_SCOPE_ID] });
+      const record = await store.createRecord({
+        node,
+        text: 'Joint visibility evidence',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+
+      const unchanged = await store.setRecordScopes({
+        id: record.id,
+        version: record.version,
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      const broadened = await store.setRecordScopes({
+        id: record.id,
+        version: unchanged.version,
+        scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
+      expect(await store.getRecordScopeIds(record.id)).toEqual([OTHER_SCOPE_ID, PROJECT_SCOPE_ID].sort());
+      expect(
+        (await store.listRecords({ node, scopeIds: [PROJECT_SCOPE_ID] })).records.map(entry => entry.id),
+      ).toContain(record.id);
+      expect(
+        (await store.search({ query: 'Joint visibility', scopeIds: [PROJECT_SCOPE_ID] })).map(entry => entry.id),
+      ).toEqual(expect.arrayContaining([node.id, record.id]));
+
+      const before = {
+        record: await store.getRecord({ id: record.id }),
+        scopes: await store.getRecordScopeIds(record.id),
+        activity: await store.listActivity({ scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID] }),
+        outbox: await store.listSemanticOutbox({}),
+      };
+      await expect(
+        store.setRecordScopes({ id: record.id, version: broadened.version, scopeIds: [OTHER_SCOPE_ID] }),
+      ).rejects.toThrow('Knowledge record scopes must overlap the subject node visibility');
+      expect({
+        record: await store.getRecord({ id: record.id }),
+        scopes: await store.getRecordScopeIds(record.id),
+        activity: await store.listActivity({ scopeIds: [ORG_SCOPE_ID, PROJECT_SCOPE_ID, OTHER_SCOPE_ID] }),
+        outbox: await store.listSemanticOutbox({}),
+      }).toEqual(before);
+    });
+
+    it('includes a scope node own identity in record-subject visibility', async () => {
+      const scopeNode = await store.createNode({ name: 'Root scope subject', isScope: true, scopeIds: [] });
+      const record = await store.createRecord({
+        node: scopeNode,
+        text: 'Root-scoped evidence',
+        scopeIds: [scopeNode.id],
+      });
+
+      const moved = await store.setRecordScopes({
+        id: record.id,
+        version: record.version,
+        scopeIds: [scopeNode.id, PROJECT_SCOPE_ID],
+      });
+      expect(
+        (await store.listRecords({ node: scopeNode, scopeIds: [scopeNode.id] })).records.map(entry => entry.id),
+      ).toContain(record.id);
+      await expect(
+        store.setRecordScopes({ id: record.id, version: moved.version, scopeIds: [PROJECT_SCOPE_ID] }),
+      ).rejects.toThrow('Knowledge record scopes must overlap the subject node visibility');
     });
 
     it('accepts memberships only to live scope nodes', async () => {
@@ -694,7 +761,10 @@ export function createKnowledgeStorageTests(
 
     it('uses monotonic record versions for move and merge semantic events', async () => {
       const source = await store.createNode({ name: 'Semantic source', scopeIds: [PROJECT_SCOPE_ID] });
-      const target = await store.createNode({ name: 'Semantic target', scopeIds: [PROJECT_SCOPE_ID] });
+      const target = await store.createNode({
+        name: 'Semantic target',
+        scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
       const moved = await store.createRecord({ node: target, text: 'Move scopes', scopeIds: [PROJECT_SCOPE_ID] });
       const merged = await store.createRecord({ node: source, text: 'Merge nodes', scopeIds: [PROJECT_SCOPE_ID] });
 
@@ -1372,7 +1442,10 @@ export function createKnowledgeStorageTests(
     });
 
     it('claims semantic outbox entries for a document only after its earlier entries complete', async () => {
-      const node = await store.createNode({ name: 'Rescoped subject', scopeIds: [PROJECT_SCOPE_ID] });
+      const node = await store.createNode({
+        name: 'Rescoped subject',
+        scopeIds: [PROJECT_SCOPE_ID, OTHER_SCOPE_ID],
+      });
       const record = await store.createRecord({ node, text: 'Moves scopes', scopeIds: [PROJECT_SCOPE_ID] });
       const now = new Date(Date.now() + 60_000);
       for (let claimed; (claimed = await store.claimSemanticOutbox({ workerId: 'drain', limit: 1000, now })).length;)

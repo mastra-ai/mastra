@@ -850,6 +850,14 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const canonical = canonicalizeKnowledgeScopeIds(scopeIds);
     if (canonical.length === 0) throw new KnowledgeNotFoundError('scope', 'root');
     this.#assertScopeNodes(canonical);
+    const subject = this.#db.knowledgeNodes.get(record.nodeId);
+    if (!subject || subject.deletedAt) throw new KnowledgeNotFoundError('node', record.nodeId);
+    const subjectVisibilityIds = subject.isScope
+      ? [subject.id, ...this.#nodeScopeIds(subject.id)]
+      : this.#nodeScopeIds(subject.id);
+    if (!canonical.some(scopeId => subjectVisibilityIds.includes(scopeId))) {
+      throw new Error('Knowledge record scopes must overlap the subject node visibility');
+    }
     const oldScopeIds = this.#recordScopeIds(record.id);
     const updated = { ...record, version: record.version + 1, updatedAt: new Date() };
     this.#db.knowledgeRecords.set(id, updated);

@@ -200,8 +200,19 @@ describe('static Knowledge importer operations', () => {
   it('physically removes owned content but preserves foreign and broadened content', async () => {
     const { knowledge, operations, orgScopeId, projectScopeId } = await createFixture('owner');
     const handle = await operations.upsertNode('event:42', { name: 'Planning' });
+    const storage = await knowledge.getStorage();
     const imported = await handle.appendKnowledge({ text: 'Imported details' });
     const broadened = await handle.appendKnowledge({ text: 'Broadened imported details' });
+    const disjointScopeId = '10000000-0000-4000-8000-000000000003';
+    await storage.createNode({ id: disjointScopeId, name: 'Disjoint', isScope: true, scopeIds: [orgScopeId] });
+    await expect(
+      knowledge.setRecordScopes({
+        id: broadened.id,
+        version: broadened.version,
+        scopeIds: [disjointScopeId],
+      }),
+    ).rejects.toThrow('Knowledge record scopes must overlap the subject node visibility');
+    expect(await storage.getRecordScopeIds(broadened.id)).toEqual([projectScopeId]);
     await knowledge.setRecordScopes({
       id: broadened.id,
       version: broadened.version,

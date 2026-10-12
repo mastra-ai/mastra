@@ -1325,6 +1325,19 @@ export class KnowledgePG extends KnowledgeStorage {
       const record = await this.#getRecord(tx, input.id, true);
       if (!record) throw new KnowledgeNotFoundError('record', input.id);
       if (record.version !== input.version) throw new KnowledgeConflictError(input.id);
+      await this.#assertScopeNodes(tx, scopeIds);
+      const subjectLock = await tx.execute({
+        sql: `UPDATE "${TABLE_KNOWLEDGE_NODES}" SET id=id WHERE id=? AND deletedAt IS NULL`,
+        args: [record.nodeId],
+      });
+      if (subjectLock.rowsAffected === 0) throw new KnowledgeNotFoundError('node', record.nodeId);
+      const subject = await this.#getNode(tx, record.nodeId);
+      if (!subject) throw new KnowledgeNotFoundError('node', record.nodeId);
+      const subjectScopeIds = await this.#getNodeScopeIds(tx, subject.id);
+      const subjectVisibilityIds = subject.isScope ? [subject.id, ...subjectScopeIds] : subjectScopeIds;
+      if (!scopeIds.some(scopeId => subjectVisibilityIds.includes(scopeId))) {
+        throw new Error('Knowledge record scopes must overlap the subject node visibility');
+      }
       const oldScopeIds = await this.#getRecordScopeIds(tx, input.id);
       const now = new Date();
       const result = await tx.execute({
