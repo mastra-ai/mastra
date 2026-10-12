@@ -1258,6 +1258,14 @@ export interface ObservationalMemoryRecord {
   originType: ObservationalMemoryOriginType;
   /** Generation counter - incremented each time a reflection creates a new record */
   generationCount: number;
+  /**
+   * Liveness marker. `null`/absent means this record is live (it is the head for its
+   * thread or resource). When a reflection creates the next generation, this record's
+   * `supersededBy` is set to the successor's id in the same atomic step, and it is never
+   * cleared. A superseded record is frozen: lifecycle writes aimed at it are redirected
+   * to the head or rejected, never applied to it.
+   */
+  supersededBy?: string | null;
 
   // Observation content
   /**
@@ -1387,7 +1395,16 @@ export interface UpdateActiveObservationsInput {
    * Captured from Intl.DateTimeFormat().resolvedOptions().timeZone
    */
   observedTimezone?: string;
+  /**
+   * The `activeObservations` text this commit was composed from. When provided, the
+   * write is applied only if the stored text still equals it exactly; otherwise nothing
+   * is written and the result is `{ applied: false, reason: 'conflict' }`. When omitted,
+   * the write is last-write-wins.
+   */
+  expectedActiveObservations?: string;
 }
+
+export type { UpdateActiveObservationsResult } from '@internal/core/memory';
 
 /**
  * Input for updating buffered observations.
@@ -1401,6 +1418,8 @@ export interface UpdateBufferedObservationsInput {
   /** Timestamp cursor for the last buffered message boundary. Set to max message timestamp + 1ms. */
   lastBufferedAtTime?: Date;
 }
+
+export type { UpdateBufferedObservationsResult } from '@internal/core/memory';
 
 /**
  * Input for swapping buffered observations to active.
@@ -1478,6 +1497,11 @@ export interface SwapBufferedToActiveResult {
   suggestedContinuation?: string;
   /** Current task from the most recent activated chunk (if any) */
   currentTask?: string;
+  /**
+   * True when the target record was superseded by a newer generation. Nothing was
+   * written and nothing was activated; the caller should re-read the head and retry.
+   */
+  retired?: boolean;
 }
 
 /**
@@ -1511,15 +1535,33 @@ export interface SwapBufferedReflectionToActiveInput {
    * Computed by the processor using its token counter before calling the adapter.
    */
   tokenCount: number;
+  /**
+   * Id for the new generation. When provided, the caller can tell whether its reflection
+   * was applied: it was iff the returned record's id equals `newRecordId`. If
+   * `currentRecord` was already superseded, nothing is created and the head is returned.
+   */
+  newRecordId?: string;
 }
 
 /**
- * Input for creating a reflection generation (creates a new record, archives the old one)
+ * Input for creating a reflection generation (creates a new record, archives the old one).
+ *
+ * The new generation is built from the **stored** state of `currentRecord.id`, not from the
+ * snapshot: buffered observation chunks are moved to it (in order), and the cursor, buffering
+ * markers, flags, and counters are carried over. If observations were appended to the stored
+ * text after the snapshot was taken (activation), they are kept after the reflection. If the
+ * stored text was rewritten in any other way, nothing is created and the stored record is
+ * returned. If `currentRecord` was superseded, nothing is created and the head is returned.
  */
 export interface CreateReflectionGenerationInput {
   currentRecord: ObservationalMemoryRecord;
   reflection: string;
   tokenCount: number;
+  /**
+   * Id for the new generation. When provided, the caller can tell whether its reflection
+   * was applied: it was iff the returned record's id equals `newRecordId`.
+   */
+  newRecordId?: string;
 }
 
 /**

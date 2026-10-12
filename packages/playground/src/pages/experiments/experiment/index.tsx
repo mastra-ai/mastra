@@ -6,7 +6,7 @@ import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/se
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import { useDatasetExperiment, useDatasetExperimentResults, useExperiments } from '@mastra/react/hooks/datasets';
+import { useDatasetExperiment, useDatasetExperimentResults, useExperiment } from '@mastra/react/hooks/datasets';
 import { useExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -73,14 +73,17 @@ function ExperimentPage() {
   );
 
   // Resolve datasetId from experimentId (the URL has only the experiment id).
-  const { data: experimentsData, isLoading: experimentsListLoading } = useExperiments();
-  const matchedExperiment = experimentsData?.experiments?.find(e => e.id === experimentId);
-  const datasetId = matchedExperiment?.datasetId ?? '';
+  const {
+    data: resolvedExperiment,
+    isLoading: resolvedExperimentLoading,
+    error: resolveError,
+  } = useExperiment({ experimentId: experimentId ?? '', queryOptions: { enabled: Boolean(experimentId) } });
+  const datasetId = resolvedExperiment?.datasetId ?? '';
 
   const {
     data: experiment,
     isLoading: experimentLoading,
-    error: experimentError,
+    error: datasetExperimentError,
   } = useDatasetExperiment({
     datasetId: datasetId,
     experimentId: experimentId ?? '',
@@ -115,8 +118,10 @@ function ExperimentPage() {
     results: results ?? EMPTY_RESULTS,
   });
 
+  const experimentError = resolveError ?? datasetExperimentError;
+
   if (!experimentId) return null;
-  if (experimentsListLoading || experimentLoading) return null; // Avoid layout shift on initial load
+  if (resolvedExperimentLoading || experimentLoading) return null; // Avoid layout shift on initial load
 
   if (experimentError && is401UnauthorizedError(experimentError)) {
     return (
@@ -166,8 +171,7 @@ function ExperimentPage() {
     );
   }
 
-  // Not found: the experimentId isn't present in the full experiments listing
-  // (so we can't resolve a datasetId for it), or the fetch resolved empty.
+  // Not found: the experiment has no dataset (orphaned by dataset deletion), or the fetch resolved empty.
   if (!datasetId || !experiment) return notFound;
 
   return (

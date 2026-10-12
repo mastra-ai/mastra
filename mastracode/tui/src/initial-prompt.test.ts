@@ -6,9 +6,41 @@ import {
   initialMessageOptions,
   pipedInputConflict,
   takeInitialPrompt,
+  takePackFlag,
 } from './initial-prompt.js';
 
 const node = ['node', 'mastracode'];
+
+describe('takePackFlag', () => {
+  it('takes the pack id from --pack <id> and removes both arguments', () => {
+    const result = takePackFlag([...node, '--pack', 'openai', 'review this']);
+    expect(result.argv).toEqual([...node, 'review this']);
+    expect(result.value).toBe('openai');
+    expect(result.error).toBeUndefined();
+  });
+
+  it('takes the pack id from --pack=<id>', () => {
+    const result = takePackFlag([...node, '--pack=custom:Kimi']);
+    expect(result.argv).toEqual(node);
+    expect(result.value).toBe('custom:Kimi');
+  });
+
+  it('leaves argv untouched when --pack is absent', () => {
+    const argv = [...node, '--acp'];
+    expect(takePackFlag(argv)).toEqual({ argv });
+  });
+
+  it('reports a flag without a value', () => {
+    expect(takePackFlag([...node, '--pack']).error).toBe('--pack needs a value');
+    expect(takePackFlag([...node, '--pack', '--acp']).error).toBe('--pack needs a value');
+  });
+
+  it('rejects an empty --pack= value and a dash-prefixed value', () => {
+    expect(takePackFlag([...node, '--pack=']).error).toBe('--pack needs a value');
+    expect(takePackFlag([...node, '--pack', '-c']).error).toBe('--pack needs a value');
+    expect(takePackFlag([...node, '--pack=-c']).error).toBe('--pack needs a value');
+  });
+});
 
 describe('takeInitialPrompt', () => {
   it('takes the prompt from --tui-initial-prompt <text> and removes both arguments', () => {

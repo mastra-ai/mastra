@@ -2303,6 +2303,19 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Gets an experiment by ID regardless of dataset association, including its
+   * `datasetId` (null for experiments orphaned by dataset deletion). When tenancy
+   * fields are supplied, experiments outside the tenant are reported as not found.
+   */
+  public getExperiment(
+    experimentId: PathParams<'GET /experiments/:experimentId'>['experimentId'],
+    options?: QueryParams<'GET /experiments/:experimentId'>,
+  ): Promise<SerializedRouteResponse<'GET /experiments/:experimentId'>> {
+    const qs = buildTenancyQuery(options);
+    return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`);
+  }
+
+  /**
    * Deletes a dataset experiment and its results. Tenancy fields, when provided,
    * scope the dataset lookup on the server side.
    *

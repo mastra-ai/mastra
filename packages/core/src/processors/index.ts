@@ -1011,7 +1011,11 @@ export type LLMRequestProcessorOrWorkflow<TTripwireMetadata = unknown> =
 
 export { isProcessorWorkflow } from './is-processor-workflow';
 
-export { defaultStabilityErrorProcessors, STABILITY_ERROR_PROCESSOR_IDS } from './stability-defaults';
+export {
+  defaultStabilityErrorProcessors,
+  isMalformedFunctionCallError,
+  STABILITY_ERROR_PROCESSOR_IDS,
+} from './stability-defaults';
 
 export * from './processors';
 export { CyberRefusalHandler } from './cyber-refusal-handler';

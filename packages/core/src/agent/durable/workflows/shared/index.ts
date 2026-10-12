@@ -26,6 +26,14 @@ export type { IterationStateUpdateInput, StepRecord } from './iteration-state';
 
 export { buildDeferredStepFinishChunk, buildDurableStepContent } from '@internal/core/durable';
 
-export { readMessageListState, storeMessageListState } from './message-list-state';
+export {
+  dehydrateSnapshotTranscripts,
+  hydrateMessageListState,
+  openMessageListState,
+  readMessageListState,
+  releaseMessageListState,
+  seedMessageListState,
+  storeMessageListState,
+} from './message-list-state';
 
 export { resolveDurableToolCallConcurrency } from './tool-call-concurrency';

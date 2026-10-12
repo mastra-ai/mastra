@@ -1510,7 +1510,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // response when a tool call is followed by text, and nothing stored tells them apart.
       // Undefined on the first iteration, and on any iteration with no open assistant message to
       // append to — both roll the message back whole, which is what the rejection means there.
-      const openedBoundary = currentIteration > 1 ? messageList.openStepBoundary() : undefined;
+      // A resumed stream restarts `currentIteration`, so earlier steps also open a boundary.
+      const openedBoundary =
+        currentIteration > 1 || (inputData.output?.steps?.length ?? 0) > 0 ? messageList.openStepBoundary() : undefined;
       const iterationBoundary = openedBoundary?.boundary;
       if (openedBoundary?.appended) appendedStepBoundary = iterationBoundary;
       let transcriptStep: TranscriptStep = {
@@ -2909,6 +2911,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // If processAPIError signaled retry, return early with retry metadata
       if (apiErrorRetryResult?.retry) {
         cleanupProviderToolSpans(true);
+        // The failed attempt already streamed its partial output into the messageList.
+        // Roll it back to this iteration's boundary, as a retrying tripwire does, so the
+        // retry prompt and the recovered response do not carry the failed prefix (#26081).
+        // The attempt streamed under `transcriptStep.messageId`; processAPIError may have
+        // rotated `currentMessageId` (and `outputStream.messageId`) since. Anything an
+        // earlier discard committed under that id goes back to the carry buffer and is
+        // written again by the discard below.
+        eagerCoordinator?.recarryCommittedWork(transcriptStep.messageId);
+        messageList.rollbackToStepBoundary(transcriptStep.messageId, iterationBoundary);
         // Same discard as the thrown-error path: this attempt's tool calls are dropped
         // (the step returns `toolCalls: []`), so its eager work must not survive either.
         await discardAttemptEagerWork();

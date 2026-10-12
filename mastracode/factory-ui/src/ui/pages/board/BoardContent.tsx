@@ -48,6 +48,7 @@ import { WorkItemCard } from '../../domains/factory/components/WorkItemCard';
 import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
 import { BoardStageCandidates } from '../../domains/factory/components/BoardStageCandidates';
 import { BoardStages } from './BoardStages';
+import { cardProjectRepositoryId } from '../../domains/factory/boardRepository';
 import { isPullRequestSource } from '../../domains/factory/services/workItems';
 
 /** Count all available candidates before source filters so empty states can explain excluded cards. */
@@ -132,7 +133,7 @@ export function BoardContent({
   };
   const intake = useBoardIntake({
     factoryProjectId,
-    repository,
+    repositories: factory.repositories,
     definition,
     knownSourceKeys: items.knownSourceKeys,
     elsewhereSourceKeys: items.elsewhereSourceKeys,
@@ -313,7 +314,11 @@ export function BoardContent({
                 columnStage={stage.id}
                 relatedItems={relatedItemsFor(item)}
                 sessionStatus={sessionStatuses.get(item.id)}
-                projectRepositoryId={repository.projectRepositoryId}
+                projectRepositoryId={cardProjectRepositoryId(
+                  factory.repositories,
+                  item,
+                  repository.projectRepositoryId,
+                )}
                 activityPage={activityPage}
                 preparing={runs.preparingFor(item.id)}
                 evaluatingStage={items.evaluatingStages.get(item.id)}
@@ -343,7 +348,9 @@ export function BoardContent({
             candidates={stageCandidates}
             afterWorkItems={stageWorkItems.length > 0}
             layout={layout}
-            projectRepositoryId={repository.projectRepositoryId}
+            projectRepositoryId={candidate =>
+              cardProjectRepositoryId(factory.repositories, candidate, repository.projectRepositoryId)
+            }
             factoryProjectId={factoryProjectId}
             onRun={(candidate, move, prompt) =>
               dropWithRepository(candidatePayload(candidate, prompt), move.stage, 'card_action')
