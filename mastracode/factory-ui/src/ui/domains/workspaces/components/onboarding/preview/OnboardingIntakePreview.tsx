@@ -4,7 +4,7 @@ import { Check, CircleDashed, Code2 } from 'lucide-react';
 import { useWorkSourceConnections, WORK_SOURCE_NAME } from '../../../hooks/useWorkSourceConnections';
 import type { WorkSource } from '../../../hooks/useWorkSourceConnections';
 import { IncidentIoIcon, JiraIcon } from '../../../../../ui/icons';
-import { Sketch, SketchLabel, SketchLink, SketchPanel } from './OnboardingSketch';
+import { SketchLabel } from './SketchLabel';
 
 const SOURCES = {
   linear: {
@@ -39,12 +39,6 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
   const { Icon, example, id, previousId, previousExample, kind } = SOURCES[source];
   return (
     <section aria-label="Work intake preview" className="relative h-full">
-      <Sketch>
-        <SketchLink from={[104, 112]} to={[80, 186]} />
-        <SketchPanel x={28} y={48} width={148} height={64} highlighted />
-        <SketchPanel x={28} y={186} width={104} height={48} />
-        <SketchPanel x={148} y={186} width={104} height={48} />
-      </Sketch>
       <SketchLabel x={28} y={24} width={148}>
         <div className="flex items-center gap-2">
           <Icon className="size-3.5 shrink-0" />
@@ -96,10 +90,10 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
         </div>
       </SketchLabel>
       {[
-        { x: 36, id, title: example },
-        { x: 156, id: previousId, title: previousExample },
-      ].map(card => (
-        <SketchLabel key={card.id} x={card.x} y={194} width={88}>
+        { id, title: example },
+        { id: previousId, title: previousExample },
+      ].map((card, index) => (
+        <div key={index} className="onboarding-ticket absolute min-w-0" data-ticket={index + 1}>
           <div className="flex items-center gap-1.5">
             <Icon className="text-muted-foreground size-3 shrink-0" />
             <Txt variant="meta" tone="muted">
@@ -109,7 +103,7 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
           <Txt variant="caption" tone="muted" className="onboarding-ticket-title mt-1.5">
             {card.title}
           </Txt>
-        </SketchLabel>
+        </div>
       ))}
       <SketchLabel x={28} y={302} width={344}>
         <Txt variant="meta" tone="muted">

@@ -11,40 +11,16 @@ import {
 import { useProviderModels } from '../../../hooks/useProviderModels';
 import { ProviderBrandIcon } from '../../ProviderBrandIcon';
 import type { OnboardingPreviewProps } from './OnboardingPreview';
-import { Sketch, SketchLabel, SketchLink, SketchPanel } from './OnboardingSketch';
-
-type AccountsMode = 'shared' | 'individual' | 'hybrid';
+import { SketchLabel } from './SketchLabel';
+import type { AccountsMode } from './onboarding-drawing';
 
 const SESSION_COLUMN_LEFTS = [28, 148, 268];
 const COLUMN_WIDTH = 104;
-const COMPANY_CENTER = 200;
-const PERSONAL_CENTER = 320;
-
-function credentialSourceCenter(sessionCenter: number, mode: AccountsMode) {
-  if (mode === 'individual') return sessionCenter;
-  if (mode === 'hybrid' && sessionCenter === PERSONAL_CENTER) return PERSONAL_CENTER;
-  return COMPANY_CENTER;
-}
-
 function AccountsScene({ mode }: { mode: AccountsMode }) {
   const individual = mode === 'individual';
   const center = individual ? { Icon: UserRound, label: 'Personal' } : { Icon: Building2, label: 'Company' };
   return (
     <>
-      <Sketch>
-        {SESSION_COLUMN_LEFTS.map(left => {
-          const sessionCenter = left + COLUMN_WIDTH / 2;
-          return (
-            <SketchLink key={left} from={[credentialSourceCenter(sessionCenter, mode), 90]} to={[sessionCenter, 156]} />
-          );
-        })}
-        <SketchPanel x={148} y={48} width={COLUMN_WIDTH} height={42} />
-        {individual && <SketchPanel x={28} y={48} width={COLUMN_WIDTH} height={42} />}
-        {mode !== 'shared' && <SketchPanel x={268} y={48} width={COLUMN_WIDTH} height={42} />}
-        {SESSION_COLUMN_LEFTS.map((left, column) => (
-          <SketchPanel key={left} x={left} y={156} width={COLUMN_WIDTH} height={94} highlighted={column === 0} />
-        ))}
-      </Sketch>
       <SketchLabel x={158} y={62} width={84}>
         <div className="flex items-center gap-2">
           <center.Icon className="text-muted-foreground size-3" />

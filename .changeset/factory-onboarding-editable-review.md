@@ -15,4 +15,4 @@ Redesigned Factory onboarding around an editable draft and a final review. Repos
 - Selecting a repository no longer moves you on by itself; **Continue** does.
 - Jira and incident.io offer **Reconnect** when a connection needs to be authorized again.
 
-A contextual illustration follows each step and respects reduced-motion settings.
+A contextual illustration follows each step with smooth transitions and continuous work previews. The artwork and animation are implemented in the app, pause when offscreen, and respect reduced-motion settings.

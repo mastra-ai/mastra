@@ -44,24 +44,38 @@
 .onboarding-sketch-surface {
   fill: var(--color-card, var(--color-background));
 }
-.onboarding-sketch-surface[data-highlighted='true'] {
+.onboarding-sketch-link {
+  stroke: var(--color-border);
+}
+.onboarding-illustration:not([data-ready]) {
+  visibility: hidden;
+}
+.onboarding-illustration[data-scene='factory'],
+.onboarding-illustration[data-scene='codebase'] {
   stroke: color-mix(in oklab, var(--color-muted-foreground) 45%, var(--color-background));
 }
-.onboarding-sketch-mark {
-  stroke: var(--color-muted-foreground);
+.onboarding-sketch-detail {
+  stroke: var(--color-border);
 }
-.onboarding-sketch-link {
+.onboarding-recess {
+  fill: var(--color-background);
+  stroke: none;
+}
+.onboarding-landing {
   stroke-dasharray: 3 4;
 }
-@keyframes onboarding-flow {
-  to {
-    stroke-dashoffset: -7;
-  }
+.onboarding-ticket {
+  width: 22%;
 }
-@media (prefers-reduced-motion: no-preference) {
-  .onboarding-sketch-link {
-    animation: onboarding-flow 900ms linear infinite;
-  }
+.onboarding-ticket[data-ticket='1'] {
+  left: var(--intake-1-x, 9%);
+  top: var(--intake-1-y, 60.625%);
+  opacity: var(--intake-1-opacity, 1);
+}
+.onboarding-ticket[data-ticket='2'] {
+  left: var(--intake-2-x, 39%);
+  top: var(--intake-2-y, 60.625%);
+  opacity: var(--intake-2-opacity, 1);
 }
 
 .onboarding-preview {
@@ -86,12 +100,12 @@
 @media (prefers-reduced-motion: no-preference) {
   .onboarding-scene {
     transition:
-      opacity 100ms ease-out,
-      visibility 0s 100ms;
+      opacity 160ms ease-out,
+      visibility 0s 160ms;
   }
   .onboarding-scene[data-active='true'] {
     transition:
-      opacity 200ms ease-out 100ms,
+      opacity 240ms ease-out 540ms,
       visibility 0s;
   }
 }
