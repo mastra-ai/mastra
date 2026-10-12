@@ -19,6 +19,7 @@ import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '
 import type { DefaultExecutionEngine } from '../default';
 import type { Step, SuspendOptions } from '../step';
 import { getStepResult } from '../step';
+import { getWorkflowExecutionAddress } from './entry';
 import type {
   ExecutionContext,
   OutputWriter,
@@ -191,10 +192,22 @@ export async function executeStep(
 
   executionContext.activeStepsPath[step.id] = executionContext.executionPath;
 
+  // Each loop iteration and foreach item runs the same step again, so its durable
+  // operations need their own IDs or a replaying engine returns the first run's result.
+  const hasScopedExecutionAddress =
+    (iterationCount !== undefined && iterationCount !== 1) ||
+    (executionContext.foreachIndex !== undefined && executionContext.foreachIndex !== 0);
+  const stepOperationPrefix = hasScopedExecutionAddress
+    ? `workflow.${workflowId}.run.${runId}.${getWorkflowExecutionAddress(executionContext, iterationCount)}.step.${step.id}`
+    : `workflow.${workflowId}.run.${runId}.step.${step.id}`;
+  const stepExecutionOperationId = hasScopedExecutionAddress
+    ? `${stepOperationPrefix}.execute`
+    : `workflow.${workflowId}.step.${step.id}`;
+
   const stepSpan = await engine.createStepSpan({
     parentSpan: observabilityContext.tracingContext.currentSpan,
     stepId: step.id,
-    operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.start`,
+    operationId: `${stepOperationPrefix}.span.start`,
     options: {
       name: `workflow step: '${step.id}'`,
       type: SpanType.WORKFLOW_STEP,
@@ -213,7 +226,7 @@ export async function executeStep(
     executionContext,
   });
 
-  const operationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.running_ev`;
+  const operationId = `${stepOperationPrefix}.running_ev`;
   await engine.onStepExecutionStart({
     step,
     inputData,
@@ -239,6 +252,7 @@ export async function executeStep(
     requestContext,
     phase: 'start',
     recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
+    iterationCount,
   });
 
   // Check if this is a nested workflow that requires special handling
@@ -259,6 +273,7 @@ export async function executeStep(
       ...observabilityContext,
       outputWriter,
       stepSpan: stepSpan as Span<SpanType.WORKFLOW_STEP> | undefined,
+      iterationCount,
       perStep,
     });
 
@@ -269,7 +284,7 @@ export async function executeStep(
         if (workflowResult.status === 'failed') {
           await engine.errorStepSpan({
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
-            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
+            operationId: `${stepOperationPrefix}.span.error`,
             errorOptions: {
               error:
                 workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
@@ -284,7 +299,7 @@ export async function executeStep(
 
           await engine.endStepSpan({
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
-            operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+            operationId: `${stepOperationPrefix}.span.end`,
             endOptions: {
               output,
               attributes: { status: workflowResult.status },
@@ -331,7 +346,7 @@ export async function executeStep(
   // Default engine: internal retry loop
   // Inngest engine: throws RetryAfterError for external retry handling
   const stepRetryResult = await engine.executeStepWithRetry(
-    `workflow.${workflowId}.step.${step.id}`,
+    stepExecutionOperationId,
     async () => {
       if (validationError) {
         throw validationError;
@@ -575,7 +590,7 @@ export async function executeStep(
   delete executionContext.activeStepsPath[step.id];
 
   if (!skipEmits) {
-    const emitOperationId = `workflow.${workflowId}.run.${runId}.step.${step.id}.emit_result`;
+    const emitOperationId = `${stepOperationPrefix}.emit_result`;
     await engine.wrapDurableOperation(emitOperationId, async () => {
       await emitStepResultEvents({
         stepId: step.id,
@@ -592,7 +607,7 @@ export async function executeStep(
   if (execResults.status != 'failed') {
     await engine.endStepSpan({
       span: stepSpan,
-      operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+      operationId: `${stepOperationPrefix}.span.end`,
       endOptions: {
         output: execResults.output,
         attributes: {

@@ -33,6 +33,12 @@ function recordOperationIds() {
 
   return {
     spy,
+    /** Every durable operation id recorded since the last take, then reset. */
+    takeAll() {
+      const all = [...ids];
+      ids.length = 0;
+      return all;
+    },
     /** Step-update ids recorded since the last take, then reset. */
     take() {
       const stepUpdateIds = ids.filter(id => id.includes('.stepUpdate'));
@@ -173,5 +179,63 @@ describe('durable operation ids — persistStepUpdate (issue #21639)', () => {
     const ids = recorder.take();
     expect(ids.length).toBeGreaterThan(0);
     expect(duplicatesOf(ids)).toEqual([]);
+  });
+});
+
+describe('durable operation ids — loops and foreach', () => {
+  it('gives every dountil iteration its own step operation ids', async () => {
+    const recorder = recordOperationIds();
+    const executions: number[] = [];
+    const increment = createStep({
+      id: 'increment',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      execute: async ({ inputData }) => {
+        executions.push(inputData.n);
+        return { n: inputData.n + 1 };
+      },
+    });
+    const workflow = createWorkflow({ id: 'loop-op-id-wf', inputSchema: ioSchema, outputSchema: ioSchema })
+      .dountil(increment, async ({ inputData }) => inputData.n >= 3)
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { 'loop-op-id-wf': workflow } });
+
+    const run = await workflow.createRun({ runId: 'loop-run' });
+    const result = await run.start({ inputData: { n: 0 } });
+
+    expect(result.status).toBe('success');
+    expect(executions).toEqual([0, 1, 2]);
+    const ids = recorder.takeAll();
+    expect(duplicatesOf(ids)).toEqual([]);
+    expect(ids).toContain('workflow.loop-op-id-wf.run.loop-run.step.increment.running_ev');
+    expect(ids).toContain('workflow.loop-op-id-wf.run.loop-run.path.[0].iteration.2.step.increment.running_ev');
+    expect(ids).toContain('workflow.loop-op-id-wf.run.loop-run.path.[0].iteration.3.stepUpdate.start');
+  });
+
+  it('gives every foreach item its own step operation ids', async () => {
+    const recorder = recordOperationIds();
+    const double = createStep({
+      id: 'double',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => inputData * 2,
+    });
+    const workflow = createWorkflow({
+      id: 'foreach-op-id-wf',
+      inputSchema: z.array(z.number()),
+      outputSchema: z.array(z.number()),
+    })
+      .foreach(double, { concurrency: 3 })
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { 'foreach-op-id-wf': workflow } });
+
+    const run = await workflow.createRun({ runId: 'foreach-run' });
+    const result = await run.start({ inputData: [1, 2, 3] });
+
+    expect(result.status).toBe('success');
+    const ids = recorder.takeAll();
+    expect(duplicatesOf(ids)).toEqual([]);
+    expect(ids).toContain('workflow.foreach-op-id-wf.run.foreach-run.path.[0].stepUpdate.start');
+    expect(ids).toContain('workflow.foreach-op-id-wf.run.foreach-run.path.[0].foreach.2.stepUpdate.start');
   });
 });

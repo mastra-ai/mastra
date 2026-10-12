@@ -164,6 +164,28 @@ export interface PersistStepUpdateParams {
    * Used when a resumed step starts, so its resume data survives a crash mid-step.
    */
   recordResumedStepStart?: boolean;
+  /**
+   * Loop iteration of the step being persisted. Scopes the durable operation ID so
+   * each iteration of a dountil/dowhile body gets its own update.
+   */
+  iterationCount?: number;
+}
+
+/**
+ * Durable address of one execution of a step: its execution path, plus the loop
+ * iteration and foreach index when they are past the first. The first iteration
+ * and foreach index 0 keep the plain path so runs already in flight replay the
+ * same operation IDs.
+ */
+export function getWorkflowExecutionAddress(executionContext: ExecutionContext, iterationCount?: number): string {
+  const addressParts = [`path.${JSON.stringify(executionContext.executionPath)}`];
+  if (iterationCount !== undefined && iterationCount !== 1) {
+    addressParts.push(`iteration.${iterationCount}`);
+  }
+  if (executionContext.foreachIndex !== undefined && executionContext.foreachIndex !== 0) {
+    addressParts.push(`foreach.${executionContext.foreachIndex}`);
+  }
+  return addressParts.join('.');
 }
 
 export async function persistStepUpdate(
@@ -184,9 +206,10 @@ export async function persistStepUpdate(
     tracingContext,
     phase,
     recordResumedStepStart,
+    iterationCount,
   } = params;
 
-  const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
+  const operationId = `workflow.${workflowId}.run.${runId}.${getWorkflowExecutionAddress(executionContext, iterationCount)}.stepUpdate${phase ? `.${phase}` : ''}`;
 
   // A run-scoped override (e.g. the transient per-chunk runs of a workflow used as an
   // agent output processor, #19605) wins over the workflow-wide option and is always

@@ -277,6 +277,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       actor?: ActorSignal;
       outputWriter?: OutputWriter;
       stepSpan?: Span<SpanType.WORKFLOW_STEP>;
+      /** Loop iteration of the step, for engines that scope nested invoke IDs by it. */
+      iterationCount?: number;
       perStep?: boolean;
     },
   ): Promise<StepResult<any, any, any, any> | null> {
