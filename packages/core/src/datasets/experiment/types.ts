@@ -296,6 +296,41 @@ export type StartExperimentConfig<I = unknown, O = unknown, E = unknown> = Omit<
 >;
 
 /**
+ * Persisted output of an agent target. Fields whose shape depends on the agent
+ * (structured output, tool payloads, provider usage) are kept loose.
+ */
+export interface AgentExperimentOutput {
+  text?: string;
+  reasoningText?: string;
+  object?: unknown;
+  toolCalls?: Record<string, unknown>[];
+  toolResults?: Record<string, unknown>[];
+  sources?: Record<string, unknown>[];
+  files?: Record<string, unknown>[];
+  /** v2+ models report inputTokens/outputTokens; legacy models report promptTokens/completionTokens */
+  usage?: Record<string, unknown>;
+  traceId?: string | null;
+  error?: { message: string; stack?: string } | null;
+}
+
+/**
+ * Persisted output of a scorer target.
+ */
+export interface ScorerExperimentOutput {
+  score: number | null;
+  reason: string | null;
+  notScorable?: unknown;
+}
+
+/**
+ * Experiment result output discriminated by the parent experiment's target type.
+ */
+export type ExperimentResultOutput =
+  | { targetType: 'agent'; output: AgentExperimentOutput | null }
+  | { targetType: 'scorer'; output: ScorerExperimentOutput | null }
+  | { targetType: 'workflow' | 'processor' | null; output: unknown };
+
+/**
  * Result of executing a single dataset item.
  */
 export interface ItemResult {

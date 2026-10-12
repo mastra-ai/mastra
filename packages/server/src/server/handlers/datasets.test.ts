@@ -7,6 +7,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
+  experimentResultResponseSchema,
   listDatasetsQuerySchema,
   listExperimentResultsQuerySchema,
   listExperimentsQuerySchema,
@@ -498,6 +499,71 @@ describe('Datasets Handlers', () => {
         perPage: 10,
       } as any)) as any;
       expect(listed.results).toHaveLength(2);
+    });
+
+    it('attaches the experiment targetType to returned results', async () => {
+      const { dataset, item1 } = await setupDatasetWithItems();
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+
+      const submitted = (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        itemId: item1.id,
+        output: { a: 'ok' },
+      } as any)) as any;
+      expect(submitted.targetType).toBeNull();
+
+      const patched = (await UPDATE_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        resultId: submitted.id,
+        tags: ['a'],
+      } as any)) as any;
+      expect(patched.targetType).toBeNull();
+
+      const listed = (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        page: 0,
+        perPage: 10,
+      } as any)) as any;
+      expect(listed.results[0].targetType).toBeNull();
+      expect(listed.results[0].output).toEqual({ a: 'ok' });
+      expect(experimentResultResponseSchema.safeParse(listed.results[0]).success).toBe(true);
+    });
+
+    it('accepts agent output, including legacy empty errors, in the response schema', () => {
+      const base = {
+        id: 'r1',
+        experimentId: 'e1',
+        itemId: 'i1',
+        itemDatasetVersion: 1,
+        input: 'hi',
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+        traceId: null,
+        toolMockReport: null,
+        createdAt: new Date(),
+      };
+      const parsed = experimentResultResponseSchema.parse({
+        ...base,
+        targetType: 'agent',
+        output: { text: 'hello', toolCalls: [{ type: 'tool-call' }], usage: { inputTokens: 1 }, error: {} },
+      });
+      expect(parsed.targetType === 'agent' && parsed.output?.text).toBe('hello');
+      expect(
+        experimentResultResponseSchema.safeParse({ ...base, targetType: 'agent', output: { text: 42 } }).success,
+      ).toBe(false);
     });
 
     it('filters listed results by tags (all must match)', async () => {

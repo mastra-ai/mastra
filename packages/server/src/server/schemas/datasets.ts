@@ -603,14 +603,41 @@ export const scorerResultSchema = z.object({
   error: z.string().nullable(),
 });
 
+// Agent target output. Lenient: legacy rows persisted `error` as `{}` and arbitrary extra fields.
+export const agentExperimentOutputSchema = z
+  .object({
+    text: z.string().optional(),
+    reasoningText: z.string().optional(),
+    object: z.unknown().optional(),
+    toolCalls: z.array(z.record(z.string(), z.unknown())).optional(),
+    toolResults: z.array(z.record(z.string(), z.unknown())).optional(),
+    sources: z.array(z.record(z.string(), z.unknown())).optional(),
+    files: z.array(z.record(z.string(), z.unknown())).optional(),
+    usage: z.record(z.string(), z.unknown()).optional(),
+    traceId: z.string().nullable().optional(),
+    error: z
+      .object({ message: z.string().optional(), stack: z.string().optional() })
+      .passthrough()
+      .nullable()
+      .optional(),
+  })
+  .passthrough();
+
+export const scorerExperimentOutputSchema = z
+  .object({
+    score: z.number().nullable(),
+    reason: z.string().nullable(),
+    notScorable: z.unknown().optional(),
+  })
+  .passthrough();
+
 // Experiment result entity schema
-export const experimentResultResponseSchema = z.object({
+const experimentResultBaseSchema = z.object({
   id: z.string(),
   experimentId: z.string(),
   itemId: z.string(),
   itemDatasetVersion: z.number().int().nullable(),
   input: z.unknown(),
-  output: z.unknown().nullable(),
   groundTruth: z.unknown().nullable(),
   metadata: z.record(z.string(), z.unknown()).optional().nullable(),
   expectedTrajectory: z.unknown().optional(),
@@ -632,6 +659,22 @@ export const experimentResultResponseSchema = z.object({
   toolMockReport: toolMockReportSchema.nullable(),
   createdAt: z.coerce.date(),
 });
+
+// Discriminated by the parent experiment's targetType so clients can narrow `output`.
+export const experimentResultResponseSchema = z.union([
+  experimentResultBaseSchema.extend({
+    targetType: z.literal('agent'),
+    output: agentExperimentOutputSchema.nullable(),
+  }),
+  experimentResultBaseSchema.extend({
+    targetType: z.literal('scorer'),
+    output: scorerExperimentOutputSchema.nullable(),
+  }),
+  experimentResultBaseSchema.extend({
+    targetType: z.enum(['workflow', 'processor']).nullable(),
+    output: z.unknown().nullable(),
+  }),
+]);
 
 // Returned by the run-item route: the upserted result row plus the scorer runs.
 export const runExperimentItemResponseSchema = z.object({
