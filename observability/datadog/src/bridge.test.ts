@@ -909,6 +909,55 @@ describe('DatadogBridge', () => {
     });
   });
 
+  describe('flush grace wait', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function settled(promise: Promise<void>): Promise<boolean> {
+      let done = false;
+      void promise.then(() => {
+        done = true;
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      return done;
+    }
+
+    it('waits the grace period after a span was finished, then flushes the APM exporter', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false, flushGraceMs: 500 });
+      const spanResult = bridge.createSpan(createMockSpanOptions())!;
+      const span = createMockSpan({ id: spanResult.spanId, traceId: spanResult.traceId });
+      await bridge.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const flushing = bridge.flush();
+      expect(mockFlush).toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(499);
+      expect(await settled(flushing)).toBe(false);
+      expect(mockExporterFlush).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(await settled(flushing)).toBe(true);
+      expect(mockExporterFlush).toHaveBeenCalled();
+    });
+
+    it('does not wait when nothing new was sent since the last flush', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false, flushGraceMs: 500 });
+      const spanResult = bridge.createSpan(createMockSpanOptions())!;
+      const span = createMockSpan({ id: spanResult.spanId, traceId: spanResult.traceId });
+      await bridge.exportTracingEvent(createTracingEvent(TracingEventType.SPAN_ENDED, span));
+
+      const first = bridge.flush();
+      await vi.advanceTimersByTimeAsync(500);
+      expect(await settled(first)).toBe(true);
+
+      expect(await settled(bridge.flush())).toBe(true);
+    });
+  });
+
   describe('releaseSpan', () => {
     it('drops the span map entry and trace state without finishing the dd span', () => {
       const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });

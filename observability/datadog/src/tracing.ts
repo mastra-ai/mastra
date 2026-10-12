@@ -133,6 +133,16 @@ export interface DatadogExporterConfig extends BaseExporterConfig {
   integrationsEnabled?: boolean;
 
   /**
+   * How long `flush()` waits, in milliseconds, after handing data to dd-trace.
+   * dd-trace sends LLM Observability spans and evaluations from a background
+   * writer and offers no way to await that request, so the wait keeps a process
+   * that exits right after `flush()` from cutting the send off. The wait only
+   * happens when something was sent since the last flush. Set to 0 to disable.
+   * Defaults to 2000.
+   */
+  flushGraceMs?: number;
+
+  /**
    * Keys from the request context (set via `requestContextKeys` in the Mastra
    * Observability config) that should be promoted to flat Datadog LLM Observability
    * tags instead of being nested inside `annotations.metadata`.
@@ -163,9 +173,13 @@ export class DatadogExporter extends BaseExporter {
   private config: Required<Pick<DatadogExporterConfig, 'mlApp' | 'site'>> & DatadogExporterConfig;
   private traceContext = new Map<string, TraceContext>();
   private traceState = new Map<string, TraceState>();
+  private flushGraceMs: number;
+  /** True when spans or evaluations were handed to dd-trace since the last flush() */
+  private pendingSend = false;
 
   constructor(config: DatadogExporterConfig = {}) {
     super(config);
+    this.flushGraceMs = config.flushGraceMs ?? 2000;
 
     // Resolve configuration from config object and environment variables
     const mlApp = config.mlApp ?? process.env.DD_LLMOBS_ML_APP;
@@ -455,6 +469,7 @@ export class DatadogExporter extends BaseExporter {
     }
 
     try {
+      this.pendingSend = true;
       tracer.llmobs.submitEvaluation(
         { traceId: exported.traceId, spanId: exported.spanId },
         {
@@ -494,6 +509,20 @@ export class DatadogExporter extends BaseExporter {
         this.logger.error('Error flushing llmobs', { error: e });
       }
     }
+
+    await this.waitForBackgroundSend();
+  }
+
+  /**
+   * `llmobs.flush()` returns before the background writer's HTTP request
+   * completes and dd-trace gives nothing to await, so wait a bounded time
+   * instead. Only waits once per batch of new data, so the repeated flushes
+   * during shutdown don't stack.
+   */
+  private async waitForBackgroundSend(): Promise<void> {
+    if (!this.pendingSend || this.flushGraceMs <= 0) return;
+    this.pendingSend = false;
+    await new Promise(resolve => setTimeout(resolve, this.flushGraceMs));
   }
 
   /**
@@ -818,6 +847,7 @@ export class DatadogExporter extends BaseExporter {
 
     // Use nested llmobs.trace() calls - children are emitted INSIDE the parent's callback
     // This ensures the Datadog SDK automatically establishes parent-child relationships
+    this.pendingSend = true;
     tracer.llmobs.trace(traceOptions as any, (ddSpan: any) => {
       // Annotate this span (must happen before finish — annotate throws on finished spans)
       const annotations = this.buildAnnotations(span);
