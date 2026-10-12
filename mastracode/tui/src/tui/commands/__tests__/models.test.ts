@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   promptForApiKeyIfNeeded: vi.fn(),
   selectorOptions: undefined as any,
   showModalOverlay: vi.fn(),
+  applyPackToSession: vi.fn(),
 }));
 
 vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
@@ -13,11 +14,6 @@ vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   saveSettings: mocks.saveSettings,
   parseThreadSettings: (metadata: Record<string, unknown> | undefined) => ({
     activeModelPackId: typeof metadata?.activeModelPackId === 'string' ? (metadata.activeModelPackId as string) : null,
-    modeModelIds: Object.fromEntries(
-      Object.entries(metadata ?? {})
-        .filter(([key, value]) => key.startsWith('modeModelId_') && typeof value === 'string')
-        .map(([key, value]) => [key.slice('modeModelId_'.length), value]),
-    ),
   }),
   resolveModePackModels: (settings: any, pack: any) => ({
     ...pack.models,
@@ -69,6 +65,7 @@ vi.mock('../../components/model-selector.js', () => ({
   },
 }));
 
+vi.mock('../../model-packs/apply.js', () => ({ applyPackToSession: mocks.applyPackToSession }));
 vi.mock('../../overlay.js', () => ({ showModalOverlay: mocks.showModalOverlay }));
 vi.mock('../../prompt-api-key.js', () => ({ promptForApiKeyIfNeeded: mocks.promptForApiKeyIfNeeded }));
 
@@ -85,6 +82,16 @@ describe('handleModelCommand', () => {
     mocks.saveSettings.mockReset();
     mocks.promptForApiKeyIfNeeded.mockReset();
     mocks.showModalOverlay.mockReset();
+    mocks.applyPackToSession.mockReset();
+    mocks.applyPackToSession.mockImplementation(async (_ctx, _packId, options) => {
+      try {
+        await options?.afterApply?.();
+        return { applied: true };
+      } catch (error) {
+        await options?.onError?.(error);
+        throw error;
+      }
+    });
     mocks.selectorOptions = undefined;
   });
 
@@ -342,58 +349,57 @@ describe('handleModelCommand', () => {
     expect(ctx.showError).not.toHaveBeenCalled();
   });
 
-  it('clears a pending pack-fallback marker on manual model switch', async () => {
+  it('updates the active pack override and clears a pending model-route fallback', async () => {
     const model = {
       id: 'openai/gpt-5.4',
       provider: 'openai',
-      modelName: 'gpt-5.6-sol',
+      modelName: 'gpt-5.4',
       hasApiKey: true,
       apiKeyEnvVar: 'OPENAI_API_KEY',
     };
-    const pendingHop = { fromPackId: 'anthropic', toModelId: 'anthropic/claude-opus-4-6' };
     const threadSettings: Record<string, unknown> = {
       activeModelPackId: 'openai',
-      mastracodePendingPackFallback: pendingHop,
+      mastracodePendingModelFallback: { fromEntryId: 'anthropic', toEntryId: 'openai' },
     };
     const setSetting = vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
       threadSettings[key] = value;
     });
-    const getSetting = vi.fn(async ({ key }: { key: string }) => threadSettings[key]);
     const stateSet = vi.fn(async () => undefined);
-    const modes = [{ id: 'build', defaultModelId: 'openai/gpt-5.6-sol' }];
-    mocks.loadSettings.mockReturnValue({
+    const settings = {
       customProviders: [],
       customModelPacks: [],
       models: { activeModelPackId: 'openai', modeDefaults: {}, modePackOverrides: {} },
-    });
+    };
+    mocks.loadSettings.mockReturnValue(settings);
     mocks.promptForApiKeyIfNeeded.mockResolvedValue('ready');
-
     const ctx = {
       authStorage: {},
       state: {
         controller: {
           listAvailableModels: vi.fn(async () => [model]),
           invalidateAvailableModelsCache: vi.fn(),
-          listModes: vi.fn(() => modes),
+          listModes: vi.fn(() => [
+            { id: 'build', defaultModelId: 'openai/gpt-5.6-sol' },
+            { id: 'plan', defaultModelId: 'openai/gpt-5.6-sol' },
+            { id: 'fast', defaultModelId: 'openai/gpt-5.4-mini' },
+          ]),
         },
         session: {
           mode: { get: vi.fn(() => 'build') },
           model: { get: vi.fn(() => 'openai/gpt-5.6-sol'), switch: vi.fn(async () => undefined) },
-          state: {
-            get: vi.fn(() => ({ activeModelPackId: 'openai', mastracodePendingPackFallback: pendingHop })),
-            set: stateSet,
-          },
+          state: { get: vi.fn(() => ({})), set: stateSet },
           thread: {
             getId: vi.fn(() => 'thread-1'),
             list: vi.fn(async () => [{ id: 'thread-1', metadata: { ...threadSettings } }]),
             setSetting,
-            getSetting,
+            getSetting: vi.fn(async ({ key }: { key: string }) => threadSettings[key]),
           },
         },
         ui: { hideOverlay: vi.fn() },
       },
       updateStatusLine: vi.fn(),
       showInfo: vi.fn(),
+      showError: vi.fn(),
     } as any;
 
     const command = handleModelCommand(ctx);
@@ -401,268 +407,72 @@ describe('handleModelCommand', () => {
     await mocks.selectorOptions.onSelect(model);
     await command;
 
-    expect(setSetting).toHaveBeenCalledWith({ key: 'mastracodePendingPackFallback', value: undefined });
-    expect(stateSet).toHaveBeenCalledWith({ mastracodePendingPackFallback: null });
-    expect(threadSettings.mastracodePendingPackFallback).toBeUndefined();
+    expect(mocks.saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        models: expect.objectContaining({
+          activeModelPackId: 'openai',
+          modePackOverrides: { openai: { build: model.id } },
+        }),
+      }),
+    );
+    expect(mocks.applyPackToSession).toHaveBeenCalledWith(
+      ctx,
+      'openai',
+      expect.objectContaining({ modeId: 'build', afterApply: expect.any(Function) }),
+    );
+    expect(setSetting).toHaveBeenCalledWith({ key: 'mastracodeFallbackStatus', value: undefined });
+    expect(Object.keys(threadSettings).some(key => key.startsWith('modeModelId_'))).toBe(false);
   });
 
-  it('stores a same-provider override without replacing the built-in pack', async () => {
+  it('writes a selection into the shared custom pack instead of thread mode metadata', async () => {
     const model = {
-      id: 'openai/gpt-5.4',
-      provider: 'openai',
-      modelName: 'gpt-5.6-sol',
+      id: 'provider/new-plan',
+      provider: 'provider',
+      modelName: 'new-plan',
       hasApiKey: true,
-      apiKeyEnvVar: 'OPENAI_API_KEY',
+      apiKeyEnvVar: 'PROVIDER_API_KEY',
     };
-    const invalidateAvailableModelsCache = vi.fn();
-    const switchModel = vi.fn(async () => undefined);
-    const threadSettings: Record<string, unknown> = {
-      activeModelPackId: 'openai',
-      mastracodeFallbackStatus: { usingPack: 'OpenAI', failedPack: 'Anthropic' },
-    };
-    const setSetting = vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
-      threadSettings[key] = value;
-    });
-    const getSetting = vi.fn(async ({ key }: { key: string }) => threadSettings[key]);
-    const modes = [
-      { id: 'build', defaultModelId: 'anthropic/stale-build' },
-      { id: 'plan', defaultModelId: 'anthropic/stale-plan' },
-      { id: 'fast', defaultModelId: 'anthropic/stale-fast' },
-    ];
-    const mode = modes[0]!;
     const settings = {
       customProviders: [],
-      customModelPacks: [] as Array<{ name: string; models: Record<string, string>; createdAt: string }>,
-      models: {
-        activeModelPackId: 'openai',
-        modeDefaults: {
-          build: 'anthropic/stale-build',
-          plan: 'anthropic/stale-plan',
-          fast: 'anthropic/stale-fast',
-        } as Record<string, string>,
-      },
+      customModelPacks: [
+        {
+          name: 'Team',
+          models: { build: 'provider/build', plan: 'provider/old-plan', fast: 'provider/fast' },
+          createdAt: '2026-10-05T00:00:00.000Z',
+        },
+      ],
+      models: { activeModelPackId: 'custom:Team', modeDefaults: {}, modePackOverrides: {} },
     };
     mocks.loadSettings.mockReturnValue(settings);
     mocks.promptForApiKeyIfNeeded.mockResolvedValue('ready');
-
+    const setSetting = vi.fn(async (_setting: { key: string; value: unknown }) => undefined);
     const ctx = {
       authStorage: {},
       state: {
         controller: {
           listAvailableModels: vi.fn(async () => [model]),
-          invalidateAvailableModelsCache,
-          listModes: vi.fn(() => modes),
+          invalidateAvailableModelsCache: vi.fn(),
+          listModes: vi.fn(() => [
+            { id: 'build', defaultModelId: 'provider/build' },
+            { id: 'plan', defaultModelId: 'provider/old-plan' },
+            { id: 'fast', defaultModelId: 'provider/fast' },
+          ]),
         },
         session: {
-          mode: { get: vi.fn(() => 'build') },
-          model: { get: vi.fn(() => 'anthropic/claude-sonnet-4-6'), switch: switchModel },
-          state: { set: vi.fn(async () => undefined) },
+          mode: { get: vi.fn(() => 'plan') },
+          model: { get: vi.fn(() => 'provider/old-plan'), switch: vi.fn(async () => undefined) },
+          state: { get: vi.fn(() => ({})), set: vi.fn(async () => undefined) },
           thread: {
             getId: vi.fn(() => 'thread-1'),
-            list: vi.fn(async () => [{ id: 'thread-1', metadata: { ...threadSettings } }]),
+            list: vi.fn(async () => [{ id: 'thread-1', metadata: { activeModelPackId: 'custom:Team' } }]),
             setSetting,
-            getSetting,
+            getSetting: vi.fn(async () => 'custom:Team'),
           },
         },
         ui: { hideOverlay: vi.fn() },
-        fallbackStatus: { usingPack: 'OpenAI', failedPack: 'Anthropic' },
       },
       updateStatusLine: vi.fn(),
       showInfo: vi.fn(),
-    } as any;
-
-    const command = handleModelCommand(ctx);
-    await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
-    await mocks.selectorOptions.onSelect(model);
-    await command;
-
-    expect(mocks.promptForApiKeyIfNeeded).toHaveBeenCalledWith(ctx.state.ui, model, ctx.authStorage);
-    expect(invalidateAvailableModelsCache).toHaveBeenCalledTimes(1);
-    expect(mocks.promptForApiKeyIfNeeded.mock.invocationCallOrder[0]!).toBeLessThan(
-      invalidateAvailableModelsCache.mock.invocationCallOrder[0]!,
-    );
-    expect(switchModel).toHaveBeenCalledWith({ modelId: model.id, scope: 'global' });
-    expect(mode.defaultModelId).toBe('anthropic/stale-build');
-    const savedSettings = mocks.saveSettings.mock.calls[0]![0];
-    expect(savedSettings.models.activeModelPackId).toBe('openai');
-    expect(savedSettings.models.modePackOverrides).toEqual({ openai: { build: model.id } });
-    expect(savedSettings.models.modeDefaults).toEqual({});
-    expect(savedSettings.customModelPacks).toEqual([]);
-    expect(setSetting).toHaveBeenNthCalledWith(1, { key: 'modeModelId_build', value: model.id });
-    expect(setSetting).toHaveBeenNthCalledWith(2, { key: 'activeModelPackId', value: 'openai' });
-    expect(setSetting).toHaveBeenNthCalledWith(3, { key: 'mastracodeFallbackStatus', value: undefined });
-    expect(ctx.state.fallbackStatus).toBeUndefined();
-  });
-
-  it('keeps mode selections isolated between threads', async () => {
-    const buildModel = {
-      id: 'openai/thread-a-build-next',
-      provider: 'openai',
-      modelName: 'thread-a-build-next',
-      hasApiKey: true,
-    };
-    const planModel = {
-      id: 'openai/thread-b-plan-next',
-      provider: 'openai',
-      modelName: 'thread-b-plan-next',
-      hasApiKey: true,
-    };
-    const modes = [
-      { id: 'build', defaultModelId: 'openai/shared-build' },
-      { id: 'plan', defaultModelId: 'openai/shared-plan' },
-      { id: 'fast', defaultModelId: 'openai/shared-fast' },
-    ];
-    let settings = {
-      customProviders: [],
-      customModelPacks: [] as Array<{ name: string; models: Record<string, string>; createdAt: string }>,
-      models: {
-        activeModelPackId: 'openai',
-        modeDefaults: {
-          build: 'openai/shared-build',
-          plan: 'openai/shared-plan',
-          fast: 'openai/shared-fast',
-        },
-      },
-    };
-    mocks.loadSettings.mockImplementation(() => settings);
-    mocks.saveSettings.mockImplementation(nextSettings => {
-      settings = structuredClone(nextSettings);
-    });
-    mocks.promptForApiKeyIfNeeded.mockResolvedValue('ready');
-
-    const threadAMetadata: Record<string, unknown> = {
-      activeModelPackId: 'openai',
-      modeModelId_build: 'openai/thread-a-build',
-      modeModelId_plan: 'openai/thread-a-plan',
-      modeModelId_fast: 'openai/thread-a-fast',
-    };
-    const threadBMetadata: Record<string, unknown> = {
-      activeModelPackId: 'openai',
-      modeModelId_build: 'openai/thread-b-build',
-      modeModelId_plan: 'openai/thread-b-plan',
-      modeModelId_fast: 'openai/thread-b-fast',
-    };
-
-    const createCtx = (threadId: string, modeId: string, metadata: Record<string, unknown>, model: any) => {
-      let currentModelId = String(metadata[`modeModelId_${modeId}`]);
-      return {
-        state: {
-          controller: {
-            listAvailableModels: vi.fn(async () => [model]),
-            invalidateAvailableModelsCache: vi.fn(),
-            listModes: vi.fn(() => modes),
-          },
-          session: {
-            mode: { get: vi.fn(() => modeId) },
-            state: { set: vi.fn(async () => undefined) },
-            model: {
-              get: vi.fn(() => currentModelId),
-              switch: vi.fn(async ({ modelId }: { modelId: string }) => {
-                currentModelId = modelId;
-              }),
-            },
-            thread: {
-              getId: vi.fn(() => threadId),
-              list: vi.fn(async () => [{ id: threadId, metadata: { ...metadata } }]),
-              setSetting: vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
-                metadata[key] = value;
-              }),
-              getSetting: vi.fn(async ({ key }: { key: string }) => metadata[key]),
-            },
-          },
-          ui: { hideOverlay: vi.fn() },
-        },
-        updateStatusLine: vi.fn(),
-        showInfo: vi.fn(),
-        showError: vi.fn(),
-      } as any;
-    };
-
-    const threadA = createCtx('thread-a', 'build', threadAMetadata, buildModel);
-    const threadACommand = handleModelCommand(threadA);
-    await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
-    await mocks.selectorOptions.onSelect(buildModel);
-    await threadACommand;
-
-    mocks.selectorOptions = undefined;
-    const threadB = createCtx('thread-b', 'plan', threadBMetadata, planModel);
-    const threadBCommand = handleModelCommand(threadB);
-    await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
-    await mocks.selectorOptions.onSelect(planModel);
-    await threadBCommand;
-
-    expect(settings.models.modePackOverrides).toEqual({
-      openai: { build: buildModel.id, plan: planModel.id },
-    });
-    expect(threadAMetadata).toMatchObject({
-      modeModelId_build: buildModel.id,
-      modeModelId_plan: 'openai/thread-a-plan',
-      modeModelId_fast: 'openai/thread-a-fast',
-    });
-    expect(threadBMetadata).toMatchObject({
-      modeModelId_build: 'openai/thread-b-build',
-      modeModelId_plan: planModel.id,
-      modeModelId_fast: 'openai/thread-b-fast',
-    });
-    expect(modes).toEqual([
-      { id: 'build', defaultModelId: 'openai/shared-build' },
-      { id: 'plan', defaultModelId: 'openai/shared-plan' },
-      { id: 'fast', defaultModelId: 'openai/shared-fast' },
-    ]);
-  });
-
-  it('rolls back thread settings when global settings persistence fails', async () => {
-    const model = {
-      id: 'openai/gpt-5.6-sol',
-      provider: 'openai',
-      modelName: 'gpt-5.6-sol',
-      hasApiKey: true,
-    };
-    const previousModelId = 'openai/gpt-5.5';
-    const threadSettings: Record<string, unknown> = {
-      modeModelId_build: previousModelId,
-      activeModelPackId: 'openai',
-    };
-    const setSetting = vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
-      threadSettings[key] = value;
-    });
-    const getSetting = vi.fn(async ({ key }: { key: string }) => threadSettings[key]);
-    const switchModel = vi.fn(async () => undefined);
-    const settings = {
-      customProviders: [],
-      customModelPacks: [],
-      models: { activeModelPackId: 'openai', modeDefaults: {} },
-    };
-    mocks.loadSettings.mockReturnValue(settings);
-    mocks.promptForApiKeyIfNeeded.mockResolvedValue('ready');
-    mocks.saveSettings.mockImplementationOnce(() => {
-      throw new Error('settings write failed');
-    });
-
-    const ctx = {
-      state: {
-        controller: {
-          listAvailableModels: vi.fn(async () => [model]),
-          invalidateAvailableModelsCache: vi.fn(),
-          listModes: vi.fn(() => [{ id: 'build', defaultModelId: previousModelId }]),
-        },
-        session: {
-          mode: { get: vi.fn(() => 'build') },
-          model: { get: vi.fn(() => previousModelId), switch: switchModel },
-          thread: {
-            getId: vi.fn(() => 'thread-1'),
-            list: vi.fn(async () => [
-              {
-                id: 'thread-1',
-                metadata: { ...threadSettings },
-              },
-            ]),
-            setSetting,
-            getSetting,
-          },
-        },
-        ui: { hideOverlay: vi.fn() },
-      },
       showError: vi.fn(),
     } as any;
 
@@ -671,50 +481,65 @@ describe('handleModelCommand', () => {
     await mocks.selectorOptions.onSelect(model);
     await command;
 
-    expect(setSetting).toHaveBeenNthCalledWith(1, { key: 'modeModelId_build', value: model.id });
-    expect(setSetting).toHaveBeenNthCalledWith(2, { key: 'activeModelPackId', value: 'openai' });
-    expect(setSetting).toHaveBeenNthCalledWith(3, { key: 'activeModelPackId', value: 'openai' });
-    expect(setSetting).toHaveBeenNthCalledWith(4, { key: 'modeModelId_build', value: previousModelId });
-    expect(mocks.saveSettings).toHaveBeenNthCalledWith(2, settings);
-    expect(switchModel).not.toHaveBeenCalled();
-    expect(settings.models.activeModelPackId).toBe('openai');
-    expect(ctx.showError).toHaveBeenCalledWith('Failed to switch model: settings write failed');
+    expect(mocks.saveSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customModelPacks: [
+          expect.objectContaining({ name: 'Team', models: expect.objectContaining({ plan: model.id }) }),
+        ],
+      }),
+    );
+    expect(mocks.applyPackToSession).toHaveBeenCalledWith(
+      ctx,
+      'custom:Team',
+      expect.objectContaining({ modeId: 'plan', afterApply: expect.any(Function) }),
+    );
+    expect(setSetting.mock.calls.some(([setting]) => String(setting.key).startsWith('modeModelId_'))).toBe(false);
   });
 
-  it('does not switch when thread persistence silently drops the update', async () => {
+  it('restores settings and the current model when pack application fails', async () => {
     const model = {
-      id: 'openai/gpt-5.6-sol',
+      id: 'openai/gpt-5.4',
       provider: 'openai',
-      modelName: 'gpt-5.6-sol',
+      modelName: 'gpt-5.4',
       hasApiKey: true,
+      apiKeyEnvVar: 'OPENAI_API_KEY',
     };
-    const switchModel = vi.fn(async () => undefined);
-    mocks.promptForApiKeyIfNeeded.mockResolvedValue('ready');
-    mocks.loadSettings.mockReturnValue({
+    const settings = {
       customProviders: [],
       customModelPacks: [],
-      models: { activeModelPackId: 'openai', modeDefaults: {} },
+      models: { activeModelPackId: 'openai', modeDefaults: {}, modePackOverrides: {} },
+    };
+    mocks.loadSettings.mockReturnValue(settings);
+    mocks.promptForApiKeyIfNeeded.mockResolvedValue('ready');
+    mocks.applyPackToSession.mockImplementationOnce(async (_ctx, _packId, options) => {
+      const error = new Error('apply failed');
+      await options?.onError?.(error);
+      throw error;
     });
-
+    const switchModel = vi.fn(async () => undefined);
     const ctx = {
+      authStorage: {},
       state: {
         controller: {
           listAvailableModels: vi.fn(async () => [model]),
           invalidateAvailableModelsCache: vi.fn(),
-          listModes: vi.fn(() => [{ id: 'build', defaultModelId: 'openai/gpt-5.5' }]),
+          listModes: vi.fn(() => [{ id: 'build', defaultModelId: 'openai/gpt-5.6-sol' }]),
         },
         session: {
           mode: { get: vi.fn(() => 'build') },
-          model: { get: vi.fn(() => 'openai/gpt-5.5'), switch: switchModel },
+          model: { get: vi.fn(() => 'openai/gpt-5.6-sol'), switch: switchModel },
+          state: { get: vi.fn(() => ({})), set: vi.fn(async () => undefined) },
           thread: {
             getId: vi.fn(() => 'thread-1'),
             list: vi.fn(async () => [{ id: 'thread-1', metadata: { activeModelPackId: 'openai' } }]),
             setSetting: vi.fn(async () => undefined),
-            getSetting: vi.fn(async () => undefined),
+            getSetting: vi.fn(async () => 'openai'),
           },
         },
         ui: { hideOverlay: vi.fn() },
       },
+      updateStatusLine: vi.fn(),
+      showInfo: vi.fn(),
       showError: vi.fn(),
     } as any;
 
@@ -723,68 +548,8 @@ describe('handleModelCommand', () => {
     await mocks.selectorOptions.onSelect(model);
     await command;
 
-    expect(switchModel).not.toHaveBeenCalled();
-    expect(mocks.saveSettings).not.toHaveBeenCalled();
-    expect(ctx.showError).toHaveBeenCalledWith('Failed to switch model: Could not save the build mode model');
-  });
-
-  it.each([
-    { failure: 'API-key setup', promptFails: true },
-    { failure: 'model switching', promptFails: false },
-  ])('settles and reports an error when $failure fails', async ({ promptFails }) => {
-    const model = {
-      id: 'openai/gpt-5.6-sol',
-      provider: 'openai',
-      modelName: 'gpt-5.6-sol',
-      hasApiKey: true,
-    };
-    const switchModel = vi.fn(async () => {
-      throw new Error('switch failed');
-    });
-    const threadSettings: Record<string, unknown> = {};
-    const setSetting = vi.fn(async ({ key, value }: { key: string; value: unknown }) => {
-      threadSettings[key] = value;
-    });
-    const getSetting = vi.fn(async ({ key }: { key: string }) => threadSettings[key]);
-    mocks.promptForApiKeyIfNeeded.mockImplementation(async () => {
-      if (promptFails) throw new Error('setup failed');
-      return 'ready';
-    });
-    mocks.loadSettings.mockReturnValue({
-      customProviders: [],
-      customModelPacks: [],
-      models: { activeModelPackId: null, modeDefaults: {} },
-    });
-
-    const ctx = {
-      state: {
-        controller: {
-          listAvailableModels: vi.fn(async () => [model]),
-          invalidateAvailableModelsCache: vi.fn(),
-          listModes: vi.fn(() => [{ id: 'build', defaultModelId: model.id }]),
-        },
-        session: {
-          mode: { get: vi.fn(() => 'build') },
-          model: { get: vi.fn(() => model.id), switch: switchModel },
-          thread: {
-            getId: vi.fn(() => 'thread-1'),
-            list: vi.fn(async () => [{ id: 'thread-1', metadata: { ...threadSettings } }]),
-            setSetting,
-            getSetting,
-          },
-        },
-        ui: { hideOverlay: vi.fn() },
-      },
-      showError: vi.fn(),
-    } as any;
-
-    const command = handleModelCommand(ctx);
-    await vi.waitFor(() => expect(mocks.selectorOptions).toBeDefined());
-    await mocks.selectorOptions.onSelect(model);
-
-    await expect(command).resolves.toBeUndefined();
-    expect(ctx.showError).toHaveBeenCalledWith(
-      `Failed to switch model: ${promptFails ? 'setup failed' : 'switch failed'}`,
-    );
+    expect(mocks.saveSettings).toHaveBeenLastCalledWith(settings);
+    expect(switchModel).toHaveBeenCalledWith('openai/gpt-5.6-sol');
+    expect(ctx.showError).toHaveBeenCalledWith('Failed to switch model: apply failed');
   });
 });

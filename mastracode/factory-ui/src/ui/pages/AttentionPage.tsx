@@ -202,7 +202,7 @@ export function AttentionContent({ factoryId }: { factoryId: string }) {
                       as="span"
                       variant="meta"
                       tone="muted"
-                      className="bg-fill min-w-5 rounded-full px-1.5 py-0.5 text-center leading-none tabular-nums"
+                      className="bg-fill min-w-5 rounded-full px-1.5 py-0.5 text-center tabular-nums"
                     >
                       {unread}
                     </Txt>

@@ -172,33 +172,6 @@ describe('TabbedContainer', () => {
     expect(screen.getByText('run_1')).toBeTruthy();
   });
 
-  it('uses the inset frame by default and honors an explicit frame', () => {
-    const { rerender } = render(
-      <TabbedContainer defaultTab="runs" className="custom-root">
-        <TabbedContainer.DataList value="runs" label="Runs" columns="auto">
-          <DataList.RowStatic>
-            <DataList.Cell>run_1</DataList.Cell>
-          </DataList.RowStatic>
-        </TabbedContainer.DataList>
-      </TabbedContainer>,
-    );
-    const root = () => screen.getByRole('tab', { name: 'Runs' }).closest('[data-slot="tabs"]');
-    expect(root()?.getAttribute('data-frame')).toBe('inset');
-    expect(root()?.getAttribute('data-appearance')).toBe('contained');
-    expect(root()?.classList.contains('tabbed-container')).toBe(true);
-    expect(root()?.classList.contains('custom-root')).toBe(true);
-    rerender(
-      <TabbedContainer defaultTab="runs" frame="stroke" className="custom-root">
-        <TabbedContainer.DataList value="runs" label="Runs" columns="auto">
-          <DataList.RowStatic>
-            <DataList.Cell>run_1</DataList.Cell>
-          </DataList.RowStatic>
-        </TabbedContainer.DataList>
-      </TabbedContainer>,
-    );
-    expect(root()?.getAttribute('data-frame')).toBe('stroke');
-  });
-
   it('mixes arbitrary panels with DataLists and ignores unrelated children', () => {
     render(
       <TabbedContainer defaultTab="overview">

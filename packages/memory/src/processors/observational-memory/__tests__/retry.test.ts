@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { computeDelay, isTransientLLMError, RETRY_CONFIG, withRetry } from '../retry';
+import {
+  assertCompleteModelResponse,
+  computeDelay,
+  isTransientLLMError,
+  OmIncompleteResponseError,
+  RETRY_CONFIG,
+  withRetry,
+} from '../retry';
 
 describe('isTransientLLMError', () => {
   it('matches undici "terminated" error messages', () => {
@@ -228,5 +235,24 @@ describe('withRetry', () => {
     await expect(promise).rejects.toThrow(/aborted/);
     // Exactly one attempt happened before we aborted the backoff wait.
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('assertCompleteModelResponse', () => {
+  it.each(['other', 'unknown'])('throws a transient error for finishReason %s', finishReason => {
+    let thrown: unknown;
+    try {
+      assertCompleteModelResponse({ finishReason, text: 'partial' }, 'OM observer');
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(OmIncompleteResponseError);
+    expect(thrown).toMatchObject({ name: 'OmIncompleteResponseError', finishReason });
+    expect(isTransientLLMError(thrown)).toBe(true);
+  });
+
+  it.each(['stop', 'length'])('returns the output for finishReason %s', finishReason => {
+    const output = { finishReason, text: 'done' };
+    expect(assertCompleteModelResponse(output, 'OM observer')).toBe(output);
   });
 });

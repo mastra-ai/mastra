@@ -61,7 +61,13 @@ import type {
   ToolInvocationUIPartWithMeta,
 } from '../types';
 
-import { mergeAbortSignals, parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
+import {
+  isTerminalReconnectError,
+  mergeAbortSignals,
+  parseClientRequestContext,
+  requestContextQueryString,
+  toQueryParams,
+} from '../utils';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
@@ -617,30 +623,18 @@ export class Agent extends BaseResource {
     });
   }
 
-  /**
-   * @experimental Agent message APIs are experimental and may change in a future release.
-   */
   sendMessage(params: SendAgentMessageParams): Promise<RouteResponse<'POST /agents/:agentId/send-message'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/send-message`, params);
   }
 
-  /**
-   * @experimental Agent message APIs are experimental and may change in a future release.
-   */
   queueMessage(params: QueueAgentMessageParams): Promise<RouteResponse<'POST /agents/:agentId/queue-message'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/queue-message`, params);
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   sendSignal(params: SendAgentSignalParams): Promise<RouteResponse<'POST /agents/:agentId/signals'>> {
     return this.requestSignalRoute(`/agents/${this.agentId}/signals`, params);
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
     Response & {
       processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
@@ -958,8 +952,10 @@ export class Agent extends BaseResource {
               response = await requestSubscription();
               break;
             } catch (error) {
-              if (isClosed() || attempts >= reconnectOptions.maxRetries) {
-                if (isClosed()) return;
+              if (isClosed()) return;
+              // Auth denials and other client errors won't resolve by resubscribing;
+              // 408/429 stay retryable.
+              if (isTerminalReconnectError(error) || attempts >= reconnectOptions.maxRetries) {
                 throw error;
               }
             }
@@ -977,9 +973,6 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
-  /**
-   * @experimental Agent signals are experimental and may change in a future release.
-   */
   async abortThread(params: AbortAgentThreadParams): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
     const { resourceId, threadId, clearPendingSignals, expectedRunId } = params;
     return this.request<RouteResponse<'POST /agents/:agentId/threads/abort'>>(`/agents/${this.agentId}/threads/abort`, {
@@ -993,7 +986,7 @@ export class Agent extends BaseResource {
     });
   }
 
-  /** @experimental Cancels pending thread signals and propagates requested IDs through shared PubSub. */
+  /** Cancels pending thread signals and propagates requested IDs through shared PubSub. */
   cancelQueuedMessages(params: CancelQueuedAgentMessagesParams): Promise<CancelQueuedAgentMessagesResponse> {
     const { resourceId, threadId, signalIds } = params;
     return this.request<CancelQueuedAgentMessagesResponse>(`/agents/${this.agentId}/threads/signals/cancel`, {
@@ -3290,6 +3283,10 @@ export class Agent extends BaseResource {
    * Only supported when the target agent is a durable agent (createDurableAgent).
    * The server rebuilds the runtime state from the persisted snapshot, replays
    * past chunks, and continues the loop to completion.
+   *
+   * Responds with 409 when the run is not orphaned: another execution still
+   * owns it (retry once its lease lapses), it is already being recovered, or it
+   * is suspended (use `resumeStream` instead). To follow a live run, use `observe`.
    */
   async recover(params: RecoverParams): Promise<
     Response & {

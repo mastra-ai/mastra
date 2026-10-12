@@ -1,7 +1,8 @@
 import { Agent } from '@mastra/core/agent';
-import { createDurableAgent } from '@mastra/core/agent/durable';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, createDurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgent } from '@mastra/core/agent/durable';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
@@ -12,7 +13,9 @@ import {
   RequestContext,
 } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import {
   abortAgentThreadBodySchema,
@@ -48,6 +51,7 @@ import {
   ABORT_AGENT_THREAD_ROUTE,
   CANCEL_AGENT_PENDING_SIGNALS_ROUTE,
   SUBSCRIBE_AGENT_THREAD_ROUTE,
+  OBSERVE_AGENT_STREAM_ROUTE,
   isProviderConnected,
   extractVersionOptions,
 } from './agents';
@@ -1773,6 +1777,30 @@ describe('Agent Routes Authorization', () => {
       expect(execution).toHaveBeenCalled();
     });
 
+    it.each([
+      { route: APPROVE_TOOL_CALL_ROUTE, method: 'approveToolCall' },
+      { route: DECLINE_TOOL_CALL_ROUTE, method: 'declineToolCall' },
+    ] as const)('$method forwards providerOptions and modelSettings', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+      const providerOptions = { anthropic: { thinking: { type: 'enabled', budgetTokens: 32000 } } };
+      const modelSettings = { temperature: 0.2 };
+
+      await (route.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId: 'tool-call-1',
+        providerOptions,
+        modelSettings,
+      });
+      expect(execution).toHaveBeenCalledWith(expect.objectContaining({ providerOptions, modelSettings }));
+    });
+
     it('waits for the snapshot to move to the next suspended tool call', async () => {
       await persistSuspendedDurableRun({ resourceId: 'user-a', toolCallId: 'tool-call-1' });
       const execution = vi.spyOn(mockAgent as any, 'approveToolCall').mockResolvedValue({
@@ -2145,6 +2173,121 @@ describe('Agent Routes Authorization', () => {
     });
   });
 
+  describe('OBSERVE_AGENT_STREAM_ROUTE', () => {
+    beforeEach(() => {
+      mockAgent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test-instructions',
+        model: { specificationVersion: 'v2' } as any,
+      });
+      mockDurableAgent = createDurableAgent({ agent: mockAgent, id: 'test-durable-agent', name: 'test-durable-agent' });
+      mastra = new Mastra({ agents: { 'test-durable-agent': mockDurableAgent }, storage, logger: false });
+    });
+
+    it('drops what a superseded execution publishes after another execution claims the run, and does not forward the claim marker', async () => {
+      const runId = 'observe-takeover-run';
+      const publish = (event: Record<string, unknown>) =>
+        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
+      const text = (value: string, generation: number) =>
+        publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: value } }, generation });
+
+      await text('before takeover ', 1);
+      await publish({ type: AgentStreamEventTypes.OWNERSHIP_CLAIMED, generation: 2 });
+      await text('stale', 1);
+      await publish({ type: 'finish', data: {}, generation: 1 });
+      await text('recovered', 2);
+      await publish({ type: 'finish', data: {}, generation: 2 });
+
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<any>;
+
+      const events: any[] = [];
+      for await (const event of stream as any) events.push(event);
+
+      expect(events.map(event => [event.type, event.data?.payload?.text, event.generation])).toEqual([
+        ['chunk', 'before takeover ', 1],
+        ['chunk', 'recovered', 2],
+        ['finish', undefined, 2],
+      ]);
+    });
+
+    it("follows the run's current claim when it resumes from an offset past the takeover marker", async () => {
+      const runId = 'observe-offset-takeover-run';
+      const publish = (event: Record<string, unknown>) =>
+        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
+      const text = (value: string, generation: number) =>
+        publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: value } }, generation });
+
+      const workflows = (await storage.getStore('workflows'))!;
+      const lost = await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
+      const successor = await workflows.claimRunOwnership({
+        runId,
+        ownerId: 'successor',
+        leaseMs: 30_000,
+        force: true,
+      });
+      const stale = lost.record!.generation;
+      const current = successor.record!.generation;
+
+      await text('before takeover ', stale);
+      await publish({ type: AgentStreamEventTypes.OWNERSHIP_CLAIMED, generation: current });
+      await text('seen ', current);
+      // Published after the marker by the execution that lost the run.
+      await publish({ type: 'finish', data: {}, generation: stale });
+      await text('recovered', current);
+      await publish({ type: 'finish', data: {}, generation: current });
+
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId,
+        offset: 3,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<any>;
+
+      const events: any[] = [];
+      for await (const event of stream as any) events.push(event);
+
+      expect(events.map(event => [event.type, event.data?.payload?.text, event.generation])).toEqual([
+        ['chunk', 'recovered', current],
+        ['finish', undefined, current],
+      ]);
+    });
+
+    it('observes the topic directly for an agent that cannot subscribe for it', async () => {
+      const runId = 'observe-fallback-run';
+      // As with a durable agent from an older @mastra/core.
+      (mockDurableAgent as any).__subscribeToRunStream = undefined;
+      const subscribeWithReplay = vi.spyOn(mockDurableAgent.pubsub, 'subscribeWithReplay');
+      const publish = (event: Record<string, unknown>) =>
+        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
+
+      await publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: 'answer' } } });
+      await publish({ type: 'finish', data: {} });
+
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<any>;
+
+      const events: any[] = [];
+      for await (const event of stream as any) events.push(event);
+
+      expect(subscribeWithReplay).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId), expect.any(Function));
+      expect(events.map(event => [event.type, event.data?.payload?.text])).toEqual([
+        ['chunk', 'answer'],
+        ['finish', undefined],
+      ]);
+    });
+  });
+
   describe('SIGNAL_ROUTES', () => {
     it('should register subscription approval routes with execute permissions', () => {
       const routeMetadata = AGENTS_ROUTES.map(route => ({
@@ -2453,6 +2596,15 @@ describe('Agent Routes Authorization', () => {
       expect(abortAgentThreadBodySchema.safeParse({ ...body, clearPendingSignals: 'true' }).success).toBe(false);
       expect(approveToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
       expect(declineToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
+      const modelOptions = {
+        providerOptions: { anthropic: { thinking: { type: 'enabled', budgetTokens: 32000 } } },
+        modelSettings: { temperature: 0.2 },
+      };
+      expect(approveToolCallBodySchema.parse({ ...toolCallBody, ...modelOptions })).toMatchObject(modelOptions);
+      expect(declineToolCallBodySchema.parse({ ...toolCallBody, ...modelOptions, reason: 'no' })).toMatchObject({
+        ...modelOptions,
+        reason: 'no',
+      });
       expect(sendToolApprovalBodySchema.safeParse(subscriptionToolCallBody).success).toBe(true);
       expect(sendToolApprovalBodySchema.safeParse(toolCallBody).success).toBe(false);
     });
@@ -2492,6 +2644,221 @@ describe('Agent Routes Authorization', () => {
       expect(forwardedOptions).not.toHaveProperty('actor');
       expect(forwardedOptions.requestContext.get('organizationId')).toBeUndefined();
     });
+
+    it('should process consecutive durable tool approvals through the real agent path', async () => {
+      const pubsub = new EventEmitterPubSub();
+      const localStorage = new InMemoryStore();
+      const threadId = 'durable-handler-approval-thread';
+      const resourceId = 'durable-handler-approval-resource';
+      const chunks: any[] = [];
+      const model = {
+        specificationVersion: 'v2' as const,
+        provider: 'test',
+        modelId: 'queued-approval-model',
+        supportedUrls: {},
+        doStream: async ({ prompt }: any) => {
+          const toolResultIds = new Set<string>();
+          const visit = (value: unknown) => {
+            if (!value || typeof value !== 'object') return;
+            if (
+              'type' in value &&
+              value.type === 'tool-result' &&
+              'toolCallId' in value &&
+              typeof value.toolCallId === 'string'
+            ) {
+              toolResultIds.add(value.toolCallId);
+            }
+            for (const nested of Object.values(value)) visit(nested);
+          };
+          visit(prompt);
+          const parts =
+            toolResultIds.size >= 2
+              ? [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'text-start', id: 'final-text' },
+                  { type: 'text-delta', id: 'final-text', delta: 'Both done.' },
+                  { type: 'text-end', id: 'final-text' },
+                  { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1 } },
+                ]
+              : [
+                  { type: 'stream-start', warnings: [] },
+                  {
+                    type: 'tool-call',
+                    toolCallType: 'function',
+                    toolCallId: 'call-a',
+                    toolName: 'suspendingTool',
+                    input: JSON.stringify({ item: 'A' }),
+                    providerExecuted: false,
+                  },
+                  {
+                    type: 'tool-call',
+                    toolCallType: 'function',
+                    toolCallId: 'call-b',
+                    toolName: 'suspendingTool',
+                    input: JSON.stringify({ item: 'B' }),
+                    providerExecuted: false,
+                  },
+                  { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1 } },
+                ];
+          return {
+            stream: new ReadableStream({
+              start(controller) {
+                for (const part of parts) controller.enqueue(part);
+                controller.close();
+              },
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+      };
+      const suspendingTool = createTool({
+        id: 'suspendingTool',
+        description: 'Suspends until resumed',
+        inputSchema: z.object({ item: z.string() }),
+        execute: async ({ item }, context) => {
+          if (!context?.agent?.resumeData) return context?.agent?.suspend({ item });
+          return { item, resumed: true };
+        },
+      });
+      const baseAgent = new Agent({
+        id: 'durable-handler-agent',
+        name: 'Durable handler agent',
+        instructions: 'Run both tool calls.',
+        model: model as any,
+        memory: new MockMemory({ storage: localStorage }),
+        tools: { suspendingTool },
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const localMastra = new Mastra({
+        agents: { 'durable-handler-agent': durableAgent },
+        storage: localStorage,
+        logger: false,
+      });
+      const subscription = await durableAgent.subscribeToThread({ threadId, resourceId });
+      const consumeSubscription = (async () => {
+        for await (const chunk of subscription.stream) chunks.push(chunk);
+      })();
+      const initial = await durableAgent.stream('Run both tool calls.', {
+        maxSteps: 6,
+        memory: { thread: threadId, resource: resourceId },
+      });
+      const approve = async (toolCallId: string) => {
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          return await Promise.race([
+            SEND_TOOL_APPROVAL_ROUTE.handler({
+              mastra: localMastra,
+              agentId: 'durable-handler-agent',
+              requestContext: new RequestContext(),
+              abortSignal: new AbortController().signal,
+              resourceId,
+              threadId,
+              toolCallId,
+              approved: true,
+              resumeData: { confirmed: true },
+            } as any),
+            new Promise<never>((_, reject) => {
+              timeout = setTimeout(() => reject(new Error(`approval ${toolCallId} timed out`)), 5_000);
+            }),
+          ]);
+        } finally {
+          clearTimeout(timeout);
+        }
+      };
+
+      try {
+        await vi.waitFor(() => expect(chunks.filter(chunk => chunk.type === 'tool-call-suspended')).toHaveLength(2), {
+          timeout: 10_000,
+        });
+
+        await expect(approve('call-a')).resolves.toEqual({
+          accepted: true,
+          runId: initial.runId,
+          toolCallId: 'call-a',
+        });
+        await expect(approve('call-b')).resolves.toEqual({
+          accepted: true,
+          runId: initial.runId,
+          toolCallId: 'call-b',
+        });
+
+        await vi.waitFor(
+          () => {
+            expect(
+              new Set(chunks.filter(chunk => chunk.type === 'tool-result').map(chunk => chunk.payload.toolCallId)),
+            ).toEqual(new Set(['call-a', 'call-b']));
+            expect(
+              chunks
+                .filter(chunk => chunk.type === 'text-delta')
+                .map(chunk => chunk.payload.text)
+                .join(''),
+            ).toContain('Both done.');
+            expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+          },
+          { timeout: 10_000 },
+        );
+      } finally {
+        initial.cleanup();
+        subscription.unsubscribe();
+        await consumeSubscription;
+        await pubsub.close();
+      }
+    }, 30_000);
+
+    it.each([true, false])(
+      'should strip nested credential headers from tool approval (approved=%s)',
+      async approved => {
+        const sendToolApproval = vi.fn(async params => ({
+          accepted: true,
+          runId: 'run-123',
+          toolCallId: params.toolCallId,
+        }));
+        (mockAgent as any).sendToolApproval = sendToolApproval;
+        const requestContext = new RequestContext();
+        const streamOptions = {
+          maxSteps: 4,
+          modelSettings: {
+            temperature: 0.3,
+            headers: {
+              aUtHoRiZaTiOn: 'Bearer client-token',
+              'Proxy-Authorization': 'Basic proxy-token',
+              'X-API-Key': 'client-key',
+              'Api-Key': 'client-key',
+              'X-Goog-Api-Key': 'client-key',
+              COOKIE: 'session=client-token',
+              'X-Trace-Id': 'trace-123',
+            },
+          },
+        };
+
+        const result = await SEND_TOOL_APPROVAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          ...sendToolApprovalBodySchema.parse({
+            resourceId: 'resource-123',
+            threadId: 'thread-123',
+            toolCallId: 'tool-call-123',
+            approved,
+            streamOptions,
+          }),
+        });
+
+        expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+        expect(sendToolApproval).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            approved,
+            streamOptions: {
+              maxSteps: 4,
+              modelSettings: { temperature: 0.3, headers: { 'X-Trace-Id': 'trace-123' } },
+              requestContext,
+            },
+          }),
+        );
+      },
+    );
 
     it('should decline a tool call for thread subscriptions with a JSON ack', async () => {
       (mockAgent as any).sendToolApproval = vi.fn(async params => ({
@@ -2836,6 +3203,19 @@ describe('Agent Routes Authorization', () => {
           attributes: { delivery: 'queued' },
           streamOptions: {
             instructions: 'Use the fixture.',
+            maxSteps: 4,
+            modelSettings: {
+              temperature: 0.3,
+              headers: {
+                aUtHoRiZaTiOn: 'Bearer client-token',
+                'Proxy-Authorization': 'Basic proxy-token',
+                'X-API-Key': 'client-key',
+                'Api-Key': 'client-key',
+                'X-Goog-Api-Key': 'client-key',
+                COOKIE: 'session=client-token',
+                'X-Trace-Id': 'trace-123',
+              },
+            },
             actor: { actorKind: 'system', agentId: 'forged-agent' },
             requestContext: {
               fixture: 'text-stream',
@@ -2854,6 +3234,11 @@ describe('Agent Routes Authorization', () => {
       expect(result).toEqual({ accepted: true, runId: 'queued-message-run-id' });
       expect(capturedTarget.ifIdle.attributes).toEqual({ delivery: 'queued' });
       expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
+      expect(capturedTarget.ifIdle.streamOptions.maxSteps).toBe(4);
+      expect(capturedTarget.ifIdle.streamOptions.modelSettings).toEqual({
+        temperature: 0.3,
+        headers: { 'X-Trace-Id': 'trace-123' },
+      });
       expect(capturedTarget.ifIdle.streamOptions).not.toHaveProperty('actor');
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
@@ -2893,6 +3278,19 @@ describe('Agent Routes Authorization', () => {
         ifIdle: {
           streamOptions: {
             instructions: 'Use the fixture.',
+            maxSteps: 4,
+            modelSettings: {
+              temperature: 0.3,
+              headers: {
+                aUtHoRiZaTiOn: 'Bearer client-token',
+                'Proxy-Authorization': 'Basic proxy-token',
+                'X-API-Key': 'client-key',
+                'Api-Key': 'client-key',
+                'X-Goog-Api-Key': 'client-key',
+                COOKIE: 'session=client-token',
+                'X-Trace-Id': 'trace-123',
+              },
+            },
             actor: { actorKind: 'system', agentId: 'forged-agent' },
             requestContext: {
               fixture: 'text-stream',
@@ -2905,6 +3303,11 @@ describe('Agent Routes Authorization', () => {
 
       expect(result).toMatchObject({ accepted: true, runId: 'signal-run-with-context' });
       expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
+      expect(capturedTarget.ifIdle.streamOptions.maxSteps).toBe(4);
+      expect(capturedTarget.ifIdle.streamOptions.modelSettings).toEqual({
+        temperature: 0.3,
+        headers: { 'X-Trace-Id': 'trace-123' },
+      });
       expect(capturedTarget.ifIdle.streamOptions).not.toHaveProperty('actor');
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');

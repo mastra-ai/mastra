@@ -55,6 +55,15 @@ describe('getStepId', () => {
     }
   });
 
+  it('resolves sleep entry ids', () => {
+    const workflow = createWorkflow('workflow');
+    workflow.stepGraph[0] = { type: 'sleep', id: 'sleep-step', duration: 100 } as any;
+    workflow.stepGraph[1] = { type: 'sleepUntil', id: 'sleep-until-step', date: new Date() } as any;
+
+    expect(getStepId(workflow as any, [0])).toBe('sleep-step');
+    expect(getStepId(workflow as any, [1])).toBe('sleep-until-step');
+  });
+
   it('resolves the body entry id for loop and foreach', () => {
     const workflow = createWorkflow('workflow');
     workflow.stepGraph[0] = {
@@ -88,9 +97,9 @@ describe('getStepId', () => {
     expect(getStepId(workflow as any, [])).toBeNull();
   });
 
-  it('returns null for non-step-like entries', () => {
+  it('returns null for container entries without a child path', () => {
     const workflow = createWorkflow('workflow');
-    workflow.stepGraph[0] = { type: 'sleep', id: 'sleep-step', duration: 10 } as any;
+    workflow.stepGraph[0] = { type: 'parallel', steps: [createStepEntry('innerStep')] } as any;
 
     expect(getStepId(workflow as any, [0])).toBeNull();
   });

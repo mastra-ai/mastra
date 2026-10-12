@@ -218,20 +218,24 @@ describe('ProjectRoutes', () => {
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({
         modelId: 'anthropic/claude-opus-4-6',
-        applied: ['thread-applied'],
+        applied: ['thread-applied', 'thread-mode-unknown'],
         skipped: [
           { threadId: 'thread-no-item', reason: 'work-item-missing' },
           { threadId: 'thread-inactive', reason: 'stage-inactive' },
           { threadId: 'thread-not-running', reason: 'not-running' },
           { threadId: 'thread-missing', reason: 'thread-missing' },
-          { threadId: 'thread-mode-unknown', reason: 'mode-unknown' },
           { threadId: 'thread-apply-failed', reason: 'apply-failed' },
         ],
       });
-      expect(setSettingOn).toHaveBeenCalledTimes(1);
-      expect(setSettingOn).toHaveBeenCalledWith({
+      expect(setSettingOn).toHaveBeenCalledTimes(2);
+      expect(setSettingOn).toHaveBeenNthCalledWith(1, {
         threadId: 'thread-applied',
-        key: 'modeModelId_plan',
+        key: 'currentModelId',
+        value: 'anthropic/claude-opus-4-6',
+      });
+      expect(setSettingOn).toHaveBeenNthCalledWith(2, {
+        threadId: 'thread-mode-unknown',
+        key: 'currentModelId',
         value: 'anthropic/claude-opus-4-6',
       });
     });
@@ -575,6 +579,66 @@ describe('ProjectRoutes', () => {
   // because projects.ts iterates connections.list (which does not filter by
   // installation existence) and then calls projectRepositories.list, which
   // calls requireConnection, which throws when the installation is gone.
+  it.each([
+    ['notifies the repository-linked hook', () => undefined],
+    [
+      'still links when the repository-linked hook throws',
+      () => {
+        throw new Error('backlog import unavailable');
+      },
+    ],
+  ])('%s', async (_name, behavior) => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const github = seed.sourceControl.forIntegration('github');
+    const installation = await github.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'gh-1',
+      accountName: 'acme',
+    });
+    const repository = await github.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: 'repo-1', slug: 'acme/api', defaultBranch: 'main' },
+    });
+    const onProjectRepositoryLinked = vi.fn(behavior);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed, ['github'], undefined, undefined, { onProjectRepositoryLinked }));
+    const connectResponse = await app.request(`/web/factory/projects/${project.id}/source-control-connections`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ integrationId: 'github', installationId: installation.id }),
+    });
+    const { connection } = (await connectResponse.json()) as { connection: { id: string } };
+
+    const linkResponse = await app.request(
+      `/web/factory/projects/${project.id}/source-control-connections/${connection.id}/repositories`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          repositoryId: repository.id,
+          branch: 'main',
+          sandboxProvider: 'local',
+          sandboxWorkdir: '/workspace/acme/api',
+        }),
+      },
+    );
+
+    expect(linkResponse.status).toBe(201);
+    expect(onProjectRepositoryLinked).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      projectRepository: expect.objectContaining({ repositoryId: repository.id, connectionId: connection.id }),
+    });
+    warn.mockRestore();
+  });
+
   it('does not 500 when a linked GitHub installation was pruned (uninstalled)', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });

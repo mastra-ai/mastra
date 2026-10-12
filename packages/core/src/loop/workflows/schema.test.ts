@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toolCallOutputSchema } from './schema';
+import { llmIterationOutputSchema, toolCallOutputSchema } from './schema';
 
 // Guards the `aborted` field on toolCallOutputSchema (#17995). Note: no engine actually
 // validates step outputs against this schema today — the workflows engine has no
@@ -35,5 +35,26 @@ describe('toolCallOutputSchema aborted field survival', () => {
     });
     expect(withResult.aborted).toBeUndefined();
     expect(withResult.result).toEqual({ ok: true });
+  });
+});
+
+describe('private signal-preemption continuation', () => {
+  it('survives schema and JSON boundaries without becoming a processor retry or contaminating accepted steps', () => {
+    const input = {
+      messageId: 'message',
+      messages: { all: [], user: [], nonUser: [] },
+      output: { text: '', toolCalls: [], usage: {}, steps: [] },
+      metadata: {},
+      stepResult: { reason: 'other', warnings: [], isContinued: true, signalPreempted: true },
+      processorRetryCount: 0,
+    };
+    const parsed = llmIterationOutputSchema.parse(JSON.parse(JSON.stringify(input)));
+    expect(parsed.stepResult).toEqual(input.stepResult);
+    expect(parsed.processorRetryCount).toBe(0);
+    const accepted = llmIterationOutputSchema.parse({
+      ...parsed,
+      stepResult: { reason: 'stop', warnings: [], isContinued: false },
+    });
+    expect(accepted.stepResult.signalPreempted).toBeUndefined();
   });
 });

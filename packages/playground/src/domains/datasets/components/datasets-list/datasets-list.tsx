@@ -2,19 +2,19 @@ import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { useMemo, useRef } from 'react';
 import type { ReactNode, SyntheticEvent } from 'react';
+import { DATASETS_LIST_COLUMNS } from './helpers';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 export interface DatasetsListProps {
   datasets: DatasetRecord[];
   experiments: Pick<DatasetExperiment, 'datasetId' | 'status'>[];
-  isLoading: boolean;
   search?: string;
   experimentFilter?: string;
   tagFilter?: string;
@@ -41,8 +41,6 @@ export interface DatasetsListProps {
 }
 
 export type DatasetsSortKey = 'name' | 'updatedAt';
-
-const COLUMNS = 'auto 1fr auto 5rem 10rem 7rem';
 
 function getExperimentsBadgeVariant(successPct: number | null): BadgeVariant {
   if (successPct !== null && successPct >= 70) return 'success';
@@ -124,16 +122,25 @@ function SelectableDatasetRow({
  * link and the trailing experiments button stop propagation to avoid double
  * activation.
  */
-function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowProps: RowProps }) {
+function DatasetRow({
+  dataset: ds,
+  rowProps,
+  trailingCell,
+}: {
+  dataset: EnrichedDataset;
+  rowProps: RowProps;
+  trailingCell: ReactNode | null;
+}) {
   const { paths, Link } = useLinkComponent();
   const linkRef = useRef<HTMLAnchorElement>(null);
-  const hasExperimentsAction = ds.experimentCount > 0;
+  const hasExperimentsAction = trailingCell === null && ds.experimentCount > 0;
+  const hasTrailingCell = hasExperimentsAction || trailingCell !== null;
 
   return (
     <DataList.RowWrapper {...rowProps} onSelectRow={() => linkRef.current?.click()}>
       <DataList.RowLink
         ref={linkRef}
-        colEnd={hasExperimentsAction ? -2 : -1}
+        colEnd={hasTrailingCell ? -2 : -1}
         to={paths.datasetLink(ds.id)}
         LinkComponent={Link}
         tabIndex={-1}
@@ -144,10 +151,11 @@ function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowPr
         <TagsCell tags={ds.tags} />
         <DataList.TextCell>v{ds.version ?? 1}</DataList.TextCell>
         <DataList.TextCell>{formatDate(ds.updatedAt, 'date-time') ?? '—'}</DataList.TextCell>
-        {hasExperimentsAction ? null : <DataList.Cell className="justify-center" />}
+        {hasTrailingCell ? null : <DataList.Cell className="justify-center" />}
       </DataList.RowLink>
 
-      {hasExperimentsAction ? (
+      {trailingCell !== null && <DataList.Cell>{trailingCell}</DataList.Cell>}
+      {hasExperimentsAction && (
         <Button
           render={<Link href={`/experiments?dataset=${ds.id}`} />}
 
@@ -158,7 +166,7 @@ function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowPr
         >
           <ExperimentsBadge dataset={ds} />
         </Button>
-      ) : null}
+      )}
     </DataList.RowWrapper>
   );
 }
@@ -166,7 +174,6 @@ function DatasetRow({ dataset: ds, rowProps }: { dataset: EnrichedDataset; rowPr
 export function DatasetsList({
   datasets,
   experiments,
-  isLoading,
   search = '',
   experimentFilter = 'all',
   tagFilter = 'all',
@@ -205,12 +212,8 @@ export function DatasetsList({
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: keyboardGlobal });
 
-  if (isLoading) {
-    return <DataListSkeleton columns={COLUMNS} />;
-  }
-
   return (
-    <DataList columns={COLUMNS} scrollRef={containerRef}>
+    <DataList columns={DATASETS_LIST_COLUMNS} scrollRef={containerRef}>
       <DataList.Top>
         {onSortChange ? (
           <DataList.SortableTopCell
@@ -251,7 +254,12 @@ export function DatasetsList({
             trailingCell={renderTrailingCell?.(ds) ?? null}
           />
         ) : (
-          <DatasetRow key={ds.id} dataset={ds} rowProps={getRowProps(index)} />
+          <DatasetRow
+            key={ds.id}
+            dataset={ds}
+            rowProps={getRowProps(index)}
+            trailingCell={renderTrailingCell?.(ds) ?? null}
+          />
         ),
       )}
 

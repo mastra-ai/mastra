@@ -59,13 +59,13 @@ let resultRequests: URL[] = [];
 beforeEach(() => {
   resultRequests = [];
   server.use(
-    http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(renamedPostgresWithMetrics)),
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(renamedPostgresWithMetrics)),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, () => HttpResponse.json({ value: null })),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
-    http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json(experimentsResponse)),
+    http.get(`${TEST_BASE_URL}/api/experiments/${EXPERIMENT_ID}`, () => HttpResponse.json(experiment)),
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () =>
       HttpResponse.json({ error: 'not found' }, { status: 404 }),
     ),

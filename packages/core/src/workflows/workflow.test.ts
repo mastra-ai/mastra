@@ -14,7 +14,7 @@ import { MastraNonRetryableError } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
-import { RequestContext } from '../request-context';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../request-context';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools/tool';
 import { PUBSUB_SYMBOL } from './constants';
@@ -344,6 +344,38 @@ describe('Workflow (Default Engine Specifics)', () => {
       });
       expect(dispatchSnapshot.serializedStepGraph).toBeDefined();
       expect((snapshotAfterStartReturned?.snapshot as any)?.status).not.toBe('pending');
+    });
+
+    it('does not persist the auth token in the durable dispatch snapshot', async () => {
+      const workflow = createWorkflow({
+        id: 'token-startAsync-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      })
+        .then(
+          createStep({
+            id: 'step',
+            inputSchema: z.object({}),
+            outputSchema: z.object({}),
+            execute: vi.fn().mockResolvedValue({}),
+          }),
+        )
+        .commit();
+      const storage = new MockStore();
+      new Mastra({ storage, workflows: { 'token-startAsync-workflow': workflow } });
+      const workflowsStore = await storage.getStore('workflows');
+      const persistSnapshot = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'live-bearer-token');
+      requestContext.set('tenant', 'acme');
+      const run = await workflow.createRun();
+      await run.startAsync({ inputData: {}, requestContext });
+
+      const dispatchSnapshot = persistSnapshot.mock.calls.find(
+        ([args]) => (args.snapshot as any).status === 'waiting',
+      )?.[0].snapshot as any;
+      expect(dispatchSnapshot.requestContext).toEqual({ tenant: 'acme' });
     });
 
     it('preserves null input in the durable dispatch snapshot', async () => {
@@ -972,7 +1004,53 @@ describe('Workflow (Default Engine Specifics)', () => {
     });
   });
 
-  describe('tool step cancellation', () => {
+  describe('workflow cancellation', () => {
+    it('leaves an executor-aborted run recoverable without invoking onFinish', async () => {
+      let notifyStepStarted!: () => void;
+      const stepStarted = new Promise<void>(resolve => {
+        notifyStepStarted = resolve;
+      });
+      const onFinish = vi.fn();
+
+      const blockingStep = createStep({
+        id: 'blocking-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ abortSignal }) => {
+          notifyStepStarted();
+          await new Promise<void>(resolve => abortSignal?.addEventListener('abort', () => resolve(), { once: true }));
+          return {};
+        },
+      });
+      const workflow = createWorkflow({
+        id: 'executor-abort-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        steps: [blockingStep],
+        options: { onFinish },
+      });
+      workflow.then(blockingStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'executor-abort-workflow': workflow },
+      });
+
+      const run = await workflow.createRun();
+      const resultPromise = run.start({ inputData: {} });
+      await stepStarted;
+
+      run.abortController.abort();
+
+      const result = await resultPromise;
+      const snapshot = await workflow.getWorkflowRunById(run.runId);
+
+      expect(result.status).toBe('waiting');
+      expect(snapshot?.status).toBe('waiting');
+      expect(onFinish).not.toHaveBeenCalled();
+    });
+
     it('forwards abortSignal to tool-wrapped steps so run.cancel() can stop cooperative tools', async () => {
       let capturedAbortSignal: AbortSignal | undefined;
       let toolStoppedEarly = false;

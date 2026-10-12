@@ -5,12 +5,12 @@ import { Entity, EntityContent, EntityName, EntityDescription } from '@mastra/pl
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Switch } from '@mastra/playground-ui/components/Switch';
+import { useStoredSkills } from '@mastra/react/hooks/agents';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
-import { useStoredSkills } from '../../hooks/use-stored-skills';
 import { SkillEditDialog } from './skill-edit-dialog';
 import { SectionHeader } from '@/domains/cms';
 

@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Link2 } from 'lucide-react';
@@ -9,6 +10,7 @@ import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
+import { rememberedBoardPath } from '../services/boardViews';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 import { isPullRequestSource } from '../services/workItems';
@@ -72,30 +74,31 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
   const isReview = currentItem ? isPullRequestSource(currentItem.source) : false;
 
-  const crumbs = currentItem ? (
-    <>
-      <Crumb as={Link} to={`/factories/${factoryId}/${isReview ? 'review' : 'work'}`}>
-        {isReview ? 'Review' : 'Work'}
-      </Crumb>
-      <Crumb as="span" isCurrent>
-        {sessionTitle(currentItem)}
-      </Crumb>
-    </>
-  ) : isUserThread && session ? (
-    <>
-      <Crumb as="span">User sessions</Crumb>
-      <Crumb as="span" isCurrent>
-        {getUserSessionLabel(session)}
-      </Crumb>
-    </>
-  ) : workspaceTitle ? (
-    <>
-      <Crumb as="span">Sessions</Crumb>
-      <Crumb as="span" isCurrent>
-        {workspaceTitle}
-      </Crumb>
-    </>
-  ) : undefined;
+  const crumbs =
+    currentItem && factoryId ? (
+      <>
+        <Crumb as={Link} to={rememberedBoardPath(factoryId, isReview ? 'review' : 'work')}>
+          {isReview ? 'Review' : 'Work'}
+        </Crumb>
+        <Crumb as="span" isCurrent>
+          {sessionTitle(currentItem)}
+        </Crumb>
+      </>
+    ) : isUserThread && session ? (
+      <>
+        <Crumb as="span">User sessions</Crumb>
+        <Crumb as="span" isCurrent>
+          {getUserSessionLabel(session)}
+        </Crumb>
+      </>
+    ) : workspaceTitle ? (
+      <>
+        <Crumb as="span">Sessions</Crumb>
+        <Crumb as="span" isCurrent>
+          {workspaceTitle}
+        </Crumb>
+      </>
+    ) : undefined;
 
   return (
     <ChatPageLayout
@@ -167,13 +170,15 @@ function WorkItemActions({
         if (!session) {
           return (
             <Link
-              key={related.id}
               to={relationshipPath(related, factoryId)}
-              className="text-caption text-muted-foreground hover:bg-fill hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1"
               aria-label={`Open ${label}: ${related.title}`}
+              key={related.id}
+              className="text-muted-foreground hover:bg-fill hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1"
             >
               <Link2 size={13} aria-hidden />
-              {label}
+              <Txt as="span" variant="caption" className="block">
+                {label}
+              </Txt>
             </Link>
           );
         }

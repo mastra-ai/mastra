@@ -158,6 +158,18 @@ export function getFactoryAuthOrgId(user: FactoryAuthUser | undefined): string |
 }
 
 /**
+ * The org rung a user's rows are keyed by: the organization they belong to, or a
+ * per-user rung for personal (no-org) accounts so their rows never land in the
+ * shared `local` scope. Every writer and reader of a `(org, user)` row must
+ * agree on this, so it lives here rather than being re-derived per call site.
+ */
+export function factoryUserOrgId(user: FactoryAuthUser | undefined): string | undefined {
+  const userId = getFactoryAuthUserId(user);
+  if (!userId) return undefined;
+  return getFactoryAuthOrgId(user) ?? `user:${userId}`;
+}
+
+/**
  * Resolve the tenant identity `(orgId, userId)` from the authenticated user on
  * the context. Returns `undefined` when there is no signed-in user (auth
  * disabled or unauthenticated). `orgId` is `undefined` for personal accounts;
@@ -393,6 +405,19 @@ export function getWorkOSProvider(provider: IMastraAuthProvider | undefined): Ma
  *
  * Returns `undefined` when there is no valid session (or auth is disabled).
  */
+function forwardPendingResponseHeaders(provider: IMastraAuthProvider, c: Context): void {
+  // Forward a renewed session cookie (e.g. rotated by the shared API during
+  // verification) so the browser's cookie stays current. Best-effort.
+  try {
+    const pending = provider.consumePendingResponseHeaders?.(c.req.raw);
+    for (const [name, value] of Object.entries(pending ?? {})) {
+      c.header(name, value, { append: true });
+    }
+  } catch {
+    // never fail a request over header forwarding
+  }
+}
+
 export async function ensureFactoryAuthUser(
   provider: IMastraAuthProvider | undefined,
   c: Context,
@@ -403,6 +428,9 @@ export async function ensureFactoryAuthUser(
 
   const token = getBearerToken(c.req.header('Authorization'));
   const user = await authenticateRequest(provider, token, c.req.raw);
+  // Routes declared `requiresAuth: false` skip the gate, so this is their only
+  // authentication — forward a renewed session cookie from here too.
+  forwardPendingResponseHeaders(provider, c);
   if (!user) return undefined;
 
   const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
@@ -862,6 +890,7 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     const user = await timedAboveThreshold('auth.gate.authenticate', 1_000, () =>
       authenticateRequest(provider, token, c.req.raw),
     );
+    forwardPendingResponseHeaders(provider, c);
 
     if (user) {
       const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;

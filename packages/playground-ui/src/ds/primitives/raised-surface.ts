@@ -12,9 +12,10 @@
  * never clipped, has to separate from arbitrary content beneath it, and so
  * carries the long falloff.
  *
- * Both tokens carry the rim as well as the elevation (the rim is `--border`
- * itself, plus a top inset highlight in dark), so neither draws a border of its
- * own: adding `border` on top doubles the edge.
+ * Both recipes carry a `--surface-rim` inset edge, a top highlight in dark,
+ * and elevation drops. Adding a CSS border on that same edge doubles it.
+ * Content dividers use `--border`; frame headers use `border-surface-rim`
+ * and stay inside the inset pixel reserved by MainCard.
  *
  * Radius is deliberately absent — it belongs to the family (`rounded-xl` for a
  * popup, `rounded-studio-frame` for the app frame).

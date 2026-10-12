@@ -20,13 +20,15 @@ import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 import { getCustomProviderId, loadSettings, MASTRA_GATEWAY_PROVIDER } from '../onboarding/settings.js';
+import type { AnthropicPromptCacheScope } from '../providers/anthropic-prompt-cache.js';
 import {
   buildAnthropicOAuthFetch,
   claudeCodeMiddleware,
   createAnthropicThinkingMiddleware,
+  createPromptCacheMiddleware,
   opencodeClaudeMaxProvider,
-  promptCacheMiddleware,
 } from '../providers/claude-max.js';
+import { deepseekThinkingOptions } from '../providers/deepseek-thinking.js';
 import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
 import { createGoogleThinkingMiddleware } from '../providers/google-thinking.js';
 import { KIMI_CODING_MODELS, kimiCodingProvider } from '../providers/kimi-coding.js';
@@ -45,6 +47,7 @@ import {
   THINKING_LEVEL_TO_REASONING_EFFORT,
 } from '../providers/openai-codex.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
+import { ModelRouterLanguageModelWithThinking } from '../providers/provider-thinking.js';
 import { xaiProvider } from '../providers/xai.js';
 import { getAppDataDir } from '../utils/project.js';
 import { resolveCustomProviders } from './custom-provider-source.js';
@@ -67,6 +70,8 @@ export type MastraCodeGatewayOptions = {
   mastraGatewayApiKey?: string;
   routeThroughMastraGateway: boolean;
   thinkingLevel?: ThinkingLevel;
+  /** Anthropic prompt-cache breakpoints to write. Defaults to `conversation`. */
+  anthropicPromptCacheScope?: AnthropicPromptCacheScope;
   customProviders?: MastraCodeCustomProvider[];
   settingsPath?: string;
   /**
@@ -138,14 +143,15 @@ export function getOpenAIApiKey(credentials: CredentialStore = getGlobalAuthStor
 function anthropicApiKeyProvider(
   modelId: string,
   apiKey: string,
-  headers?: ModelRequestHeaders,
-  thinkingLevel?: ThinkingLevel,
+  headers: ModelRequestHeaders | undefined,
+  thinkingLevel: ThinkingLevel | undefined,
+  promptCacheScope: AnthropicPromptCacheScope,
 ) {
   const anthropic = createAnthropic({ apiKey, headers });
   const thinkingMiddleware = createAnthropicThinkingMiddleware(modelId, thinkingLevel);
   return wrapLanguageModel({
     model: anthropic(modelId),
-    middleware: [promptCacheMiddleware, ...(thinkingMiddleware ? [thinkingMiddleware] : [])],
+    middleware: [createPromptCacheMiddleware(promptCacheScope), ...(thinkingMiddleware ? [thinkingMiddleware] : [])],
   });
 }
 
@@ -279,6 +285,7 @@ export class MastraCodeGateway extends MastraModelGateway {
   readonly #mastraGatewayApiKey?: string;
   readonly #routeThroughMastraGateway: boolean;
   readonly #thinkingLevel?: ThinkingLevel;
+  readonly #anthropicPromptCacheScope: AnthropicPromptCacheScope;
   readonly #customProviders?: MastraCodeCustomProvider[];
   readonly #settingsPath?: string;
   readonly #credentials: CredentialStore;
@@ -288,6 +295,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     mastraGatewayApiKey,
     routeThroughMastraGateway,
     thinkingLevel,
+    anthropicPromptCacheScope,
     customProviders,
     settingsPath,
     credentialStore,
@@ -298,6 +306,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     this.#mastraGatewayApiKey = mastraGatewayApiKey;
     this.#routeThroughMastraGateway = routeThroughMastraGateway;
     this.#thinkingLevel = thinkingLevel;
+    this.#anthropicPromptCacheScope = anthropicPromptCacheScope ?? 'conversation';
     this.#customProviders = customProviders;
     this.#settingsPath = settingsPath;
     this.#credentials = credentialStore ?? getGlobalAuthStorage();
@@ -486,12 +495,12 @@ export class MastraCodeGateway extends MastraModelGateway {
       const reasoningEffort = this.#thinkingLevel ? THINKING_LEVEL_TO_REASONING_EFFORT[this.#thinkingLevel] : undefined;
       const middleware = createReasoningEffortMiddleware(args.providerId, reasoningEffort);
       if (!middleware) {
-        return provider.chatModel(args.modelId) as unknown as GatewayLanguageModel;
+        return provider.chatModel(args.modelId);
       }
       return wrapLanguageModel({
         model: provider.chatModel(args.modelId),
         middleware: [middleware],
-      }) as unknown as GatewayLanguageModel;
+      });
     }
 
     if (args.providerId === 'github-copilot') {
@@ -515,7 +524,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         baseURL: 'https://api.moonshot.ai/anthropic/v1',
         name: 'moonshotai.anthropicv1',
         headers: args.headers,
-      })(args.modelId) as unknown as GatewayLanguageModel;
+      })(args.modelId);
     }
 
     if (args.providerId === 'anthropic') {
@@ -539,7 +548,7 @@ export class MastraCodeGateway extends MastraModelGateway {
     }
 
     if (this.#routeThroughMastraGateway) {
-      return this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel;
+      return this.#mastraGateway.resolveLanguageModel(args);
     }
 
     if (args.providerId === 'kimi-for-coding') {
@@ -550,11 +559,13 @@ export class MastraCodeGateway extends MastraModelGateway {
       }) as unknown as GatewayLanguageModel;
     }
 
-    return new ModelRouterLanguageModel({
-      id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
-      apiKey: args.apiKey,
-      headers: args.headers,
-    }) as unknown as GatewayLanguageModel;
+    const routedModelId: `${string}/${string}` = `${args.providerId}/${args.modelId}`;
+    const thinking =
+      args.providerId === 'deepseek' ? deepseekThinkingOptions(routedModelId, this.#thinkingLevel) : undefined;
+    return new ModelRouterLanguageModelWithThinking(
+      { id: routedModelId, apiKey: args.apiKey, headers: args.headers },
+      thinking,
+    ) as unknown as GatewayLanguageModel;
   }
 
   #resolveAnthropicModel(args: {
@@ -578,28 +589,28 @@ export class MastraCodeGateway extends MastraModelGateway {
             [GATEWAY_AUTH_HEADER]: `Bearer ${args.apiKey}`,
             ...args.headers,
           },
-          fetch: buildAnthropicOAuthFetch({ authStorage: this.#credentials }) as any,
+          fetch: buildAnthropicOAuthFetch({ authStorage: this.#credentials }),
         });
 
         return wrapLanguageModel({
           model: anthropic(bareModelId),
           middleware: [
             claudeCodeMiddleware,
-            promptCacheMiddleware,
+            createPromptCacheMiddleware(this.#anthropicPromptCacheScope),
             ...(thinkingMiddleware ? [thinkingMiddleware] : []),
           ],
-        }) as unknown as GatewayLanguageModel;
+        });
       }
 
       const gatewayModel = this.#mastraGateway.resolveLanguageModel({
         ...args,
         modelId: bareModelId,
-      }) as GatewayLanguageModel;
+      });
       if (!thinkingMiddleware) return gatewayModel;
       return wrapLanguageModel({
         model: gatewayModel as any,
         middleware: [thinkingMiddleware],
-      }) as unknown as GatewayLanguageModel;
+      });
     }
 
     if (storedCred?.type === 'oauth') {
@@ -607,6 +618,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         headers: args.headers,
         authStorage: this.#credentials,
         thinkingLevel: this.#thinkingLevel,
+        promptCacheScope: this.#anthropicPromptCacheScope,
       }) as unknown as GatewayLanguageModel;
     }
 
@@ -616,7 +628,8 @@ export class MastraCodeGateway extends MastraModelGateway {
         storedCred.key.trim(),
         args.headers,
         this.#thinkingLevel,
-      ) as unknown as GatewayLanguageModel;
+        this.#anthropicPromptCacheScope,
+      );
     }
 
     const apiKey = getAnthropicApiKey(this.#credentials);
@@ -626,7 +639,8 @@ export class MastraCodeGateway extends MastraModelGateway {
         apiKey,
         args.headers,
         this.#thinkingLevel,
-      ) as unknown as GatewayLanguageModel;
+        this.#anthropicPromptCacheScope,
+      );
     }
 
     // No stored credentials: use the OAuth-backed provider so the first request can trigger login.
@@ -634,6 +648,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       headers: args.headers,
       authStorage: this.#credentials,
       thinkingLevel: this.#thinkingLevel,
+      promptCacheScope: this.#anthropicPromptCacheScope,
     }) as unknown as GatewayLanguageModel;
   }
 
@@ -651,8 +666,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       if (storedCred?.type === 'oauth') {
         const resolvedModelId = remapOpenAIModelForCodexOAuth(`openai/${args.modelId}`);
         const resolvedBareModelId = resolvedModelId.substring(OPENAI_PREFIX.length);
-        const requestedLevel: ThinkingLevel = this.#thinkingLevel ?? 'medium';
-        const effectiveLevel = getEffectiveThinkingLevel(resolvedBareModelId, requestedLevel);
+        const effectiveLevel = getEffectiveThinkingLevel(args.modelId, this.#thinkingLevel ?? 'medium');
         const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
         const middleware = createCodexMiddleware(reasoningEffort);
         const openai = createOpenAI({
@@ -662,22 +676,22 @@ export class MastraCodeGateway extends MastraModelGateway {
             [GATEWAY_AUTH_HEADER]: `Bearer ${args.apiKey}`,
             ...args.headers,
           },
-          fetch: buildOpenAICodexOAuthFetch({ authStorage: this.#credentials, rewriteUrl: false }) as any,
+          fetch: buildOpenAICodexOAuthFetch({ authStorage: this.#credentials, rewriteUrl: false }),
         });
 
         return wrapLanguageModel({
           model: openai.responses(resolvedBareModelId),
           middleware: [middleware],
-        }) as unknown as GatewayLanguageModel;
+        });
       }
 
-      return this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel;
+      return this.#mastraGateway.resolveLanguageModel(args);
     }
 
     if (storedCred?.type === 'oauth') {
       const resolvedModelId = remapOpenAIModelForCodexOAuth(`openai/${args.modelId}`);
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
-        thinkingLevel: this.#thinkingLevel,
+        thinkingLevel: this.#thinkingLevel && getEffectiveThinkingLevel(args.modelId, this.#thinkingLevel),
         headers: args.headers,
         authStorage: this.#credentials,
       }) as unknown as GatewayLanguageModel;
@@ -685,12 +699,7 @@ export class MastraCodeGateway extends MastraModelGateway {
 
     const apiKey = getOpenAIApiKey(this.#credentials);
     if (apiKey) {
-      return openaiApiKeyProvider(
-        args.modelId,
-        apiKey,
-        args.headers,
-        this.#thinkingLevel,
-      ) as unknown as GatewayLanguageModel;
+      return openaiApiKeyProvider(args.modelId, apiKey, args.headers, this.#thinkingLevel);
     }
 
     return undefined;
@@ -705,9 +714,9 @@ export class MastraCodeGateway extends MastraModelGateway {
     responsesWebSocket?: any;
   }): GatewayLanguageModel {
     const baseModel = this.#routeThroughMastraGateway
-      ? (this.#mastraGateway.resolveLanguageModel(args) as GatewayLanguageModel)
+      ? this.#mastraGateway.resolveLanguageModel(args)
       : (new ModelRouterLanguageModel({
-          id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
+          id: `${args.providerId}/${args.modelId}`,
           apiKey: args.apiKey,
           headers: args.headers,
         }) as unknown as GatewayLanguageModel);
@@ -718,6 +727,6 @@ export class MastraCodeGateway extends MastraModelGateway {
     return wrapLanguageModel({
       model: baseModel as any,
       middleware: [thinkingMiddleware],
-    }) as unknown as GatewayLanguageModel;
+    });
   }
 }

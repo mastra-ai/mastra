@@ -2,17 +2,12 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Sun } from 'lucide-react';
 import { createRef } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Field, FieldLabel } from '../Field';
 import { SegmentedControl, SegmentedControlItem } from './segmented-control';
 
 // Base UI synthesizes a PointerEvent on click, which jsdom does not implement.
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    Object.defineProperty(window, 'PointerEvent', { configurable: true, value: window.MouseEvent });
-  }
-});
 
 afterEach(() => {
   cleanup();

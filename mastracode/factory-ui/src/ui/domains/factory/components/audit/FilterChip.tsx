@@ -1,3 +1,4 @@
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
@@ -18,7 +19,7 @@ export function FilterChip({
       aria-pressed={pressed}
       onClick={onClick}
       className={cn(
-        'text-meta flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 font-semibold transition-colors',
+        'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full px-2.5 py-1 transition-colors',
         focusRing,
         pressed
           ? 'bg-fill-active text-foreground'
@@ -26,7 +27,9 @@ export function FilterChip({
       )}
     >
       {dotClass ? <span aria-hidden="true" className={cn('size-1.5 rounded-full', dotClass)} /> : null}
-      {label}
+      <Txt as="span" variant="meta" className="block">
+        {label}
+      </Txt>
     </button>
   );
 }

@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { useState } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../test/msw-server';
 import type { TraceSignalManagement } from '../../trace-intelligence-context';
@@ -12,12 +12,6 @@ import { TraceIntelligenceProvider } from '../../trace-intelligence-provider';
 import { TraceIntelligenceEntityIndex } from '../trace-intelligence-entity-index';
 import type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from '../trace-intelligence-entity-index';
 import { customSignalEntityResponse, entityIndexResponse } from './fixtures/entity-index';
-
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
-  }
-});
 
 afterEach(() => cleanup());
 

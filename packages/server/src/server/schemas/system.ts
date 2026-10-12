@@ -46,6 +46,7 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .describe('Trace query field discovery (POST /observability/traces/query/fields and /values)'),
   traceQueryTenantScope: z.boolean().describe('Trusted tenant scoping of trace and thread queries'),
   threadQuery: z.boolean().describe('Advanced thread queries (POST /observability/threads/query)'),
+  spanQuery: z.boolean().describe('Span queries (POST /observability/spans/query)'),
   feedback: z
     .boolean()
     .describe(
@@ -75,6 +76,8 @@ export const systemPackagesResponseSchema = z.object({
   cmsEnabled: z.boolean(),
   /** Whether the default LiveKit connection-details route is registered — not whether credentials or a worker exist. */
   liveKitConnectionRouteEnabled: z.boolean(),
+  /** True when the default LiveKit trace recording review route is registered. */
+  liveKitRecordingRouteEnabled: z.boolean().optional(),
   /**
    * The editor's configured source, when set. `'code'` swaps Studio's
    * Save/Publish UI for Download JSON + Open PR. `'db'` keeps the standard

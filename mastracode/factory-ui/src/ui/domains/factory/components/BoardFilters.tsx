@@ -1,21 +1,90 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@mastra/playground-ui/components/FilterBar';
-import { ListFilter, Search, Tag, UsersRound } from 'lucide-react';
-import { useMemo } from 'react';
+import { FolderKanban, Inbox, ListFilter, Search, Tag, UsersRound } from 'lucide-react';
 
 import { BOARD_FILTER_FIELD, boardFilterItems, boardFilterStateFromItems } from '../boardFilters';
 import type { BoardFilterState } from '../boardFilters';
 import { boardRelevanceOptions } from '../boardRelevance';
 import type { BoardParticipant } from '../boardRelevance';
 import type { BoardKind } from '../boardStages';
+import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
+import type { LinearProject } from '../services/linear';
 
 /** `contains` carries the free-text search; the closed dimensions pick one or several values. */
-const OPERATORS: FilterBarOperator[] = [
+export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [
   { id: 'contains', label: 'contains' },
   { id: 'is', label: 'is' },
   { id: 'in', label: 'is any of', arity: 'many' },
 ];
+
+interface BoardFilterFieldsOptions {
+  kind: BoardKind;
+  participants: readonly BoardParticipant[];
+  availableLabels: readonly string[];
+  currentUserId?: string;
+  teammateSelected: boolean;
+  linearProjects?: readonly LinearProject[];
+}
+
+export function boardFilterFields({
+  kind,
+  participants,
+  availableLabels,
+  currentUserId,
+  teammateSelected,
+  linearProjects = [],
+}: BoardFilterFieldsOptions): FilterBarField[] {
+  return [
+    {
+      id: BOARD_FILTER_FIELD.source,
+      label: 'Intake source',
+      icon: Inbox,
+      operators: ['in'],
+      strict: true,
+      suggestions: BOARD_SOURCE_OPTIONS,
+    },
+    {
+      id: BOARD_FILTER_FIELD.linearProject,
+      label: 'Linear project',
+      icon: FolderKanban,
+      operators: ['in'],
+      strict: true,
+      suggestions: linearProjects.map(project => ({ value: project.id, label: project.name })),
+    },
+    { id: BOARD_FILTER_FIELD.text, label: 'Text', icon: Search, search: true, operators: ['contains'] },
+    {
+      id: BOARD_FILTER_FIELD.teammate,
+      label: 'Teammate',
+      icon: UsersRound,
+      operators: ['in'],
+      strict: true,
+      suggestions: participants.map(participant => ({
+        value: participant.id,
+        label: participant.id === `factory:${currentUserId}` ? `${participant.name} (you)` : participant.name,
+        start: <Avatar src={participant.avatarUrl} name={participant.name} size="sm" />,
+      })),
+    },
+    {
+      id: BOARD_FILTER_FIELD.relevance,
+      label: 'Relevant because',
+      icon: ListFilter,
+      operators: ['in'],
+      strict: true,
+      // Relevance narrows the picked teammates' cards: with nobody picked there is nothing to be relevant to.
+      hidden: !teammateSelected,
+      suggestions: boardRelevanceOptions(kind).map(option => ({ value: option.id, label: option.label })),
+    },
+    {
+      id: BOARD_FILTER_FIELD.label,
+      label: 'Label',
+      icon: Tag,
+      operators: ['in'],
+      strict: true,
+      suggestions: availableLabels.map(label => ({ value: label })),
+    },
+  ];
+}
 
 /**
  * Board narrowing as one filter bar: typing goes straight to a text search, and teammate,
@@ -23,70 +92,32 @@ const OPERATORS: FilterBarOperator[] = [
  */
 export function BoardFilters({
   kind,
-  participants,
-  availableLabels,
-  currentUserId,
+  fields,
   filters,
   onFiltersChange,
+  removable,
+  'aria-label': ariaLabel = 'Board filters',
 }: {
   kind: BoardKind;
-  participants: readonly BoardParticipant[];
-  availableLabels: readonly string[];
-  currentUserId?: string;
+  fields: FilterBarField[];
   filters: BoardFilterState;
   onFiltersChange: (filters: BoardFilterState) => void;
+  removable: boolean;
+  'aria-label'?: string;
 }) {
-  const teammateSelected = filters.participantId !== undefined;
-  const fields = useMemo<FilterBarField[]>(
-    () => [
-      { id: BOARD_FILTER_FIELD.text, label: 'Text', icon: Search, search: true, operators: ['contains'] },
-      {
-        id: BOARD_FILTER_FIELD.teammate,
-        label: 'Teammate',
-        icon: UsersRound,
-        operators: ['is'],
-        strict: true,
-        suggestions: participants.map(participant => ({
-          value: participant.id,
-          label: participant.id === `factory:${currentUserId}` ? `${participant.name} (you)` : participant.name,
-          start: <Avatar src={participant.avatarUrl} name={participant.name} size="sm" />,
-        })),
-      },
-      {
-        id: BOARD_FILTER_FIELD.relevance,
-        label: 'Relevant because',
-        icon: ListFilter,
-        operators: ['in'],
-        strict: true,
-        // Relevance narrows one teammate's cards: with nobody picked there is nothing to be relevant to.
-        hidden: !teammateSelected,
-        suggestions: boardRelevanceOptions(kind).map(option => ({ value: option.id, label: option.label })),
-      },
-      {
-        id: BOARD_FILTER_FIELD.label,
-        label: 'Label',
-        icon: Tag,
-        operators: ['in'],
-        strict: true,
-        suggestions: availableLabels.map(label => ({ value: label })),
-      },
-    ],
-    [availableLabels, currentUserId, kind, participants, teammateSelected],
-  );
-
   return (
     <FilterBar
       fields={fields}
-      operators={OPERATORS}
+      operators={BOARD_FILTER_OPERATORS}
       value={boardFilterItems(filters, kind)}
       onValueChange={(items: FilterBarItem[]) => onFiltersChange(boardFilterStateFromItems(items, kind))}
       // Items are rebuilt from the URL with `id: fieldId`, so the draft chip is the committed chip.
       createItemId={fieldId => fieldId}
-      aria-label="Board filters"
+      aria-label={ariaLabel}
       className="w-full max-w-full sm:w-auto"
     >
-      <FilterBar.Chips />
-      <FilterBar.Input placeholder="Filter cards…" />
+      <FilterBar.Chips renderChip={item => <FilterBar.Chip item={item} removable={removable} />} />
+      <FilterBar.Input placeholder="Add filter…" />
     </FilterBar>
   );
 }

@@ -7,8 +7,12 @@ import {
   categorizeFileData,
   createDataUri,
   imageContentToString,
+  isAbsoluteUrl,
+  isBase64DataUri,
+  isBase64Like,
   parseDataUri,
   resolveFilePartMediaTypeAndData,
+  toBase64DataUri,
 } from '../prompt/image-utils';
 import type {
   MastraDBMessage,
@@ -21,7 +25,7 @@ import type { AIV5Type } from '../types';
 import { findToolCallArgs } from '../utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from '../utils/response-item-metadata';
 import { sanitizeToolName } from '../utils/tool-name';
-import { unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
+import { normalizeToolOutput, unwrapLegacyToolOutput } from '../utils/unwrap-legacy-tool-output';
 
 /**
  * Compact malformed entries and filter out empty text parts from message parts arrays.
@@ -419,8 +423,14 @@ export class AIV5Adapter {
               : { type: 'raw' as const, mimeType: fileMimeType, data: fileData };
 
           // Provider file IDs (e.g. OpenAI "file-...") ride the url branch untouched so
-          // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API.
-          if ((categorized.type === 'url' || categorized.type === 'providerFileId') && typeof fileData === 'string') {
+          // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API. So do raw
+          // strings that aren't base64 (relative paths), instead of becoming undecodable data URLs.
+          if (
+            typeof fileData === 'string' &&
+            (categorized.type === 'url' ||
+              categorized.type === 'providerFileId' ||
+              (categorized.type === 'raw' && !isBase64Like(fileData)))
+          ) {
             const v5UIPart: AIV5Type.FileUIPart = {
               type: 'file' as const,
               url: fileData,
@@ -436,7 +446,11 @@ export class AIV5Adapter {
             if (typeof fileData === 'string') {
               const parsed = parseDataUri(fileData);
 
-              if (parsed.isDataUri) {
+              if (parsed.isDataUri && !isBase64DataUri(fileData)) {
+                // Percent-encoded data URLs (`data:image/svg+xml,%3Csvg...`) are converted to
+                // base64 rather than having their payload re-wrapped as if it already were.
+                filePartData = toBase64DataUri(fileData) ?? fileData;
+              } else if (parsed.isDataUri) {
                 filePartData = parsed.base64Content;
                 if (parsed.mimeType) {
                   extractedMimeType = extractedMimeType || parsed.mimeType;
@@ -853,6 +867,36 @@ export class AIV5Adapter {
       });
     }
 
+    if (
+      data &&
+      typeof data === 'object' &&
+      !(data instanceof URL) &&
+      !(data instanceof Uint8Array) &&
+      !(data instanceof ArrayBuffer) &&
+      typeof (data as { type?: unknown }).type === 'string'
+    ) {
+      // AI SDK v7 tagged FileData: { type: 'url' | 'data' | 'text' | 'reference', ... }
+      const tagged = data as { type: string; url?: unknown; data?: unknown; text?: unknown };
+      if (tagged.type === 'url' && (typeof tagged.url === 'string' || tagged.url instanceof URL)) {
+        data = tagged.url;
+      } else if (tagged.type === 'data' && tagged.data != null) {
+        data = tagged.data as typeof data;
+      } else if (tagged.type === 'text' && typeof tagged.text === 'string') {
+        return `data:${mimeType};base64,${Buffer.from(tagged.text, 'utf8').toString('base64')}`;
+      } else {
+        throw new MastraError({
+          id: 'MASTRA_AIV5_DATA_PART_INVALID',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text:
+            tagged.type === 'reference'
+              ? 'Provider file references are not supported as message input.'
+              : `Invalid "${tagged.type}" file data in message part.`,
+          details: { type: tagged.type },
+        });
+      }
+    }
+
     if (data instanceof URL) {
       return data.toString();
     } else {
@@ -860,11 +904,15 @@ export class AIV5Adapter {
         const base64 = data.toString('base64');
         return `data:${mimeType};base64,${base64}`;
       } else if (typeof data === 'string') {
-        // OpenAI Files API file IDs (e.g. "file-abc123") must pass through as-is so
-        // @ai-sdk/openai can forward them as { file_id: "file-..." } to the API.
-        return data.startsWith('data:') || data.startsWith('http') || data.startsWith('file-')
-          ? data
-          : `data:${mimeType};base64,${data}`;
+        // Absolute URLs of any scheme (https:, gs:, s3:, ...) pass through. So do OpenAI
+        // Files API file IDs (e.g. "file-abc123"), which @ai-sdk/openai forwards as
+        // { file_id: "file-..." }. Only base64 is wrapped as a data URL; anything else
+        // (e.g. a relative path) is kept as-is, and the prompt build treats it as an
+        // attachment that can't be downloaded.
+        if (data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || !isBase64Like(data)) {
+          return data;
+        }
+        return `data:${mimeType};base64,${data}`;
       } else if (data instanceof Uint8Array) {
         const base64 = Buffer.from(data).toString('base64');
         return `data:${mimeType};base64,${base64}`;
@@ -872,7 +920,13 @@ export class AIV5Adapter {
         const base64 = Buffer.from(data).toString('base64');
         return `data:${mimeType};base64,${base64}`;
       } else {
-        return '';
+        throw new MastraError({
+          id: 'MASTRA_AIV5_DATA_PART_INVALID',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'Unrecognized file data in message part',
+          details: { dataType: typeof data },
+        });
       }
     }
   }
@@ -949,11 +1003,13 @@ export class AIV5Adapter {
         );
 
         const updateMatchingCallInvocationResult = (toolResultPart: AIV5Type.ToolResultPart, matchingCall: any) => {
-          matchingCall.state = 'result';
-          matchingCall.result =
-            typeof toolResultPart.output === 'object' && toolResultPart.output && 'value' in toolResultPart.output
-              ? toolResultPart.output.value
-              : toolResultPart.output;
+          const normalized = normalizeToolOutput(toolResultPart.output);
+          matchingCall.state = normalized.isError ? 'output-error' : 'result';
+          matchingCall.result = normalized.output;
+          if (normalized.isError) {
+            matchingCall.errorText =
+              typeof normalized.output === 'string' ? normalized.output : JSON.stringify(normalized.output);
+          }
         };
 
         // When the matching tool-call isn't in this same model message (e.g. the

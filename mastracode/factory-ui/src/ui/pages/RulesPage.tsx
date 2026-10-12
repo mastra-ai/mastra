@@ -28,7 +28,6 @@ import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHead
 import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout';
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { supervisorAskPath } from '../domains/supervisor/services/supervisor';
-import { TIMESTAMP } from '../domains/factory/components/panel';
 import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE, RAIL_ROW_BODY } from '../domains/factory/components/Timeline';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
 import { SkeletonRows } from '../ui/SkeletonRows';
@@ -98,7 +97,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-2" aria-labelledby="rule-decisions-heading">
       <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-center lg:justify-between">
-        <Txt as="h2" variant="column" className="text-foreground m-0" id="rule-decisions-heading">
+        <Txt tone="ink" as="h2" variant="column" className="m-0" id="rule-decisions-heading">
           Rule decisions
         </Txt>
         <div className="w-full lg:hidden">
@@ -234,7 +233,7 @@ function DecisionRow({
 
   return (
     <div className={cn('flex min-h-7 min-w-0 items-center gap-2 py-0.5', RAIL_ROW_BODY)}>
-      <Txt as="span" variant="column" className="text-foreground shrink-0 truncate">
+      <Txt tone="ink" as="span" variant="column" className="shrink-0 truncate">
         {decision.type}
       </Txt>
       <Badge size="xs" variant={tone} emphasis="subtle" {...(live ? { indicator: 'pulse' as const } : {})}>
@@ -246,12 +245,7 @@ function DecisionRow({
         </Badge>
       ) : null}
       {decision.lastError ? (
-        <Txt
-          as="span"
-          variant="meta"
-          className="text-muted-foreground min-w-0 flex-1 truncate"
-          title={decision.lastError}
-        >
+        <Txt tone="muted" as="span" variant="meta" className="min-w-0 flex-1 truncate" title={decision.lastError}>
           {decision.lastError}
         </Txt>
       ) : null}
@@ -288,9 +282,17 @@ function DecisionRow({
             {retrying ? 'Retrying…' : 'Retry'}
           </Button>
         ) : null}
-        <time dateTime={decision.createdAt} className={cn(TIMESTAMP, 'shrink-0')} title={progress}>
+        <Txt
+          as="time"
+          variant="meta"
+          tone="muted"
+          font="mono"
+          dateTime={decision.createdAt}
+          className={cn('shrink-0')}
+          title={progress}
+        >
           {relativeTime(decision.createdAt)}
-        </time>
+        </Txt>
       </div>
     </div>
   );

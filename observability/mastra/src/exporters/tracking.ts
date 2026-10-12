@@ -245,6 +245,13 @@ export class TraceData<TRootData, TSpanData, TEventData, TMetadata> {
   }
 
   /**
+   * Get the span IDs that have events waiting on them.
+   */
+  getWaitingForSpanIds(): string[] {
+    return [...this.#waitingForParent.keys()];
+  }
+
+  /**
    * Get total count of events in all waiting queues.
    */
   waitingQueueSize(): number {
@@ -481,6 +488,8 @@ export abstract class TrackingExporter<
   #hardCapEnforcementInProgress = false;
   /** Map of traceId to scheduled cleanup timeout */
   #pendingCleanups = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Waiting-queue replays started by setImmediate that haven't finished yet */
+  #activeReplays = new Set<Promise<void>>();
   // Note: #traceMap maintains insertion order (JS Map spec), so we use
   // #traceMap.keys() to iterate traces oldest-first for cap enforcement.
 
@@ -519,9 +528,15 @@ export abstract class TrackingExporter<
    */
   #scheduleProcessWaitingForRoot(traceId: string): void {
     setImmediate(() => {
-      this.#processWaitingForRoot(traceId).catch(error => {
-        this.logger.error(`${this.name}: Error processing waiting-for-root queue`, { error, traceId });
-      });
+      if (this.#shutdownStarted) return;
+      this.#trackReplay(
+        this.#processWaitingForRoot(traceId).then(
+          () => {},
+          error => {
+            this.logger.error(`${this.name}: Error processing waiting-for-root queue`, { error, traceId });
+          },
+        ),
+      );
     });
   }
 
@@ -531,23 +546,72 @@ export abstract class TrackingExporter<
    */
   #scheduleProcessWaitingFor(traceId: string, spanId: string): void {
     setImmediate(() => {
-      this.#processWaitingFor(traceId, spanId).catch(error => {
-        this.logger.error(`${this.name}: Error processing waiting queue`, { error, traceId, spanId });
-      });
+      if (this.#shutdownStarted) return;
+      this.#trackReplay(
+        this.#processWaitingFor(traceId, spanId).then(
+          () => {},
+          error => {
+            this.logger.error(`${this.name}: Error processing waiting queue`, { error, traceId, spanId });
+          },
+        ),
+      );
     });
   }
 
   /**
-   * Process all events waiting for root span.
+   * Track a running replay so flush() and shutdown() can wait for it.
    */
-  async #processWaitingForRoot(traceId: string): Promise<void> {
-    if (this.#shutdownStarted) return;
+  #trackReplay(replay: Promise<void>): void {
+    this.#activeReplays.add(replay);
+    void replay.finally(() => this.#activeReplays.delete(replay));
+  }
 
+  /**
+   * Process every queued event whose dependency has been built, without waiting for the
+   * setImmediate-scheduled replays (which never fire under fake timers). Waits for replays
+   * that are already running, then repeats until a pass makes no progress, so cascades
+   * (root -> parent -> child -> end) are fully drained.
+   */
+  async #drainWaitingQueues(): Promise<void> {
+    while (true) {
+      while (this.#activeReplays.size > 0) {
+        await Promise.all(this.#activeReplays);
+      }
+
+      let progressed = false;
+      for (const [traceId, traceData] of this.#traceMap) {
+        try {
+          if (traceData.isRootProcessed() && (await this.#processWaitingForRoot(traceId)) > 0) {
+            progressed = true;
+          }
+          for (const spanId of traceData.getWaitingForSpanIds()) {
+            if (!traceData.hasSpan({ spanId })) continue;
+            if ((await this.#processWaitingFor(traceId, spanId)) > 0) {
+              progressed = true;
+            }
+          }
+        } catch (error) {
+          this.logger.error(`${this.name}: Error draining waiting queues`, { error, traceId });
+        }
+      }
+
+      // A replay that started during this pass may have unblocked more events
+      if (!progressed && this.#activeReplays.size === 0) return;
+    }
+  }
+
+  /**
+   * Process all events waiting for root span.
+   * Takes the queue before processing, so a concurrent call can't process the same events.
+   * @returns The number of events that left the queue (processed, moved or dropped)
+   */
+  async #processWaitingForRoot(traceId: string): Promise<number> {
     const traceData = this.#traceMap.get(traceId);
-    if (!traceData) return;
+    if (!traceData) return 0;
 
     const queue = traceData.getEventsWaitingForRoot();
-    if (queue.length === 0) return;
+    if (queue.length === 0) return 0;
+    traceData.clearWaitingForRoot();
 
     this.logger.debug(`${this.name}: Processing ${queue.length} events waiting for root`, { traceId });
 
@@ -600,8 +664,7 @@ export abstract class TrackingExporter<
       }
     }
 
-    // Update the queue with remaining events
-    traceData.clearWaitingForRoot();
+    // Put back the events that are still waiting
     for (const event of toKeep) {
       // Preserve attempts and queuedAt when re-adding to queue
       traceData.addToWaitingQueue({
@@ -611,19 +674,22 @@ export abstract class TrackingExporter<
         queuedAt: event.queuedAt,
       });
     }
+
+    return queue.length - toKeep.length;
   }
 
   /**
    * Process events waiting for a specific parent span.
+   * Takes the queue before processing, so a concurrent call can't process the same events.
+   * @returns The number of events that left the queue (processed, moved or dropped)
    */
-  async #processWaitingFor(traceId: string, spanId: string): Promise<void> {
-    if (this.#shutdownStarted) return;
-
+  async #processWaitingFor(traceId: string, spanId: string): Promise<number> {
     const traceData = this.#traceMap.get(traceId);
-    if (!traceData) return;
+    if (!traceData) return 0;
 
     const queue = traceData.getEventsWaitingFor({ spanId });
-    if (queue.length === 0) return;
+    if (queue.length === 0) return 0;
+    traceData.clearWaitingFor({ spanId });
 
     this.logger.debug(`${this.name}: Processing ${queue.length} events waiting for span`, { traceId, spanId });
 
@@ -663,8 +729,7 @@ export abstract class TrackingExporter<
       }
     }
 
-    // Update the queue
-    traceData.clearWaitingFor({ spanId });
+    // Put back the events that are still waiting
     for (const event of toKeep) {
       // Preserve attempts and queuedAt when re-adding to queue
       traceData.addToWaitingQueue({
@@ -674,6 +739,8 @@ export abstract class TrackingExporter<
         queuedAt: event.queuedAt,
       });
     }
+
+    return queue.length - toKeep.length;
   }
 
   /**
@@ -728,6 +795,16 @@ export abstract class TrackingExporter<
         }
 
         case 'handleSpanEnd': {
+          if (!traceData.hasSpan({ spanId: exportedSpan.id })) {
+            // The span's start is still queued (e.g. moved on to wait for its parent): wait for the span itself
+            traceData.addToWaitingQueue({
+              event,
+              waitingFor: exportedSpan.id,
+              attempts: queuedEvent.attempts,
+              queuedAt: queuedEvent.queuedAt,
+            });
+            return true;
+          }
           traceData.endSpan({ spanId: exportedSpan.id });
           await this._finishSpan({ span: exportedSpan, traceData });
           // Check if we should schedule cleanup
@@ -1177,6 +1254,16 @@ export abstract class TrackingExporter<
             traceId: exportedSpan.traceId,
             spanId: exportedSpan.id,
           });
+          if (!traceData.hasSpan({ spanId: exportedSpan.id })) {
+            // The span's start hasn't been built yet (still in flight, or queued for its
+            // parent). Replay the end once it is, so the span isn't left open.
+            this.logger.debug(`${this.name}: adding span end to waiting queue`, {
+              traceId: exportedSpan.traceId,
+              waitingFor: exportedSpan.id,
+            });
+            traceData.addToWaitingQueue({ event, waitingFor: exportedSpan.id });
+            break;
+          }
           traceData.endSpan({ spanId: exportedSpan.id });
           await this._finishSpan({ span: exportedSpan, traceData });
           // Schedule cleanup when all spans have ended
@@ -1262,6 +1349,9 @@ export abstract class TrackingExporter<
    * This is useful in serverless environments where you need to ensure spans
    * are exported before the runtime instance is terminated.
    *
+   * Queued events whose dependencies have been built are processed first, so
+   * a shutdown() right after flush() only aborts spans that are still open.
+   *
    * Subclasses should override _flush() to implement vendor-specific flush logic.
    */
   async flush(): Promise<void> {
@@ -1270,6 +1360,9 @@ export abstract class TrackingExporter<
     }
 
     this.logger.debug(`${this.name}: Flushing`);
+    if (!this.#shutdownStarted) {
+      await this.#drainWaitingQueues();
+    }
     await this._flush();
   }
 
@@ -1295,6 +1388,9 @@ export abstract class TrackingExporter<
     }
 
     this.#shutdownStarted = true;
+    // Finish replaying queued events that can still be processed, so spans that
+    // already ended aren't aborted below
+    await this.#drainWaitingQueues();
     await this._preShutdown();
 
     // Cancel all pending cleanup timers

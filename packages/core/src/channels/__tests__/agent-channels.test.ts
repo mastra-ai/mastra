@@ -16,6 +16,7 @@ import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
+import type { ChannelHandler } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -2670,8 +2671,10 @@ describe('AgentChannels', () => {
         registeredDMWrapper = handler;
       });
 
+      const contexts: any[] = [];
       const onDirectMessage = vi.fn((thread: any, msg: any, defaultHandler: any, ctx: any) => {
-        ctx.requestContext.set('tenant', 'current-sender');
+        contexts.push(ctx);
+        ctx.requestContext.set('tenant', msg.author.userId ?? 'anon');
         return defaultHandler(thread, msg);
       });
       const channels = new AgentChannels({
@@ -2704,14 +2707,184 @@ describe('AgentChannels', () => {
         },
       );
 
+      // One handler call per sender run, each with its own fresh context.
+      expect(onDirectMessage.mock.calls.map(c => c[1].id)).toEqual(['a', 'anon1', 'anon2', 'c']);
+      expect(new Set(contexts.map(c => c.requestContext)).size).toBe(4);
+      for (const ctx of contexts) expect(ctx.skipped).toEqual([]);
       expect(calls).toEqual([
-        { id: 'a', tenant: undefined },
-        { id: 'anon1', tenant: undefined },
-        { id: 'anon2', tenant: undefined },
-        { id: 'c', tenant: 'current-sender' },
+        { id: 'a', tenant: 'user-a' },
+        { id: 'anon1', tenant: 'anon' },
+        { id: 'anon2', tenant: 'anon' },
+        { id: 'c', tenant: 'user-c' },
       ]);
 
       spy.mockRestore();
+    });
+
+    function registerDM(
+      handlers: Record<string, unknown>,
+      method: 'onDirectMessage' | 'onNewMention' = 'onDirectMessage',
+    ) {
+      return (async () => {
+        const chatMod = await getChatModule();
+        let wrapper: ((...args: any[]) => Promise<unknown>) | undefined;
+        const spy = vi.spyOn(chatMod.Chat.prototype as any, method).mockImplementation((handler: any) => {
+          wrapper = handler;
+        });
+        const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') }, handlers });
+        channels.__setAgent(mockAgent);
+        await channels.initialize(makeMastra());
+        const processed: any[][] = [];
+        vi.spyOn(channels as any, 'processChatMessage').mockImplementation(async (...args: any[]) => {
+          processed.push(args);
+        });
+        const thread = makeChatThread({ adapter: channels.adapters.discord });
+        const batch = (current: any, skipped: any[]) =>
+          method === 'onDirectMessage'
+            ? wrapper!(thread, current, {}, { skipped, totalSinceLastHandler: skipped.length + 1 })
+            : wrapper!(thread, current, { skipped, totalSinceLastHandler: skipped.length + 1 });
+        return { channels, processed, batch, restore: () => spy.mockRestore() };
+      })();
+    }
+    const from = (id: string, userId: string | undefined, extra: Record<string, unknown> = {}) => ({
+      ...message,
+      id,
+      author: { userId, userName: userId ?? 'anon' },
+      ...extra,
+    });
+
+    it('gives each sender run its own skipped messages and run-bound defaultHandler', async () => {
+      const onDirectMessage = vi.fn((thread: any, msg: any, defaultHandler: any) => defaultHandler(thread, msg));
+      const h = await registerDM({ onDirectMessage });
+      const [A1, B1, B2, A2] = [from('A1', 'user-a'), from('B1', 'user-b'), from('B2', 'user-b'), from('A2', 'user-a')];
+      await h.batch(A2, [A1, B1, B2]);
+
+      expect(onDirectMessage.mock.calls.map(c => [c[1].id, c[3].skipped.map((m: any) => m.id)])).toEqual([
+        ['A1', []],
+        ['B2', ['B1']],
+        ['A2', []],
+      ]);
+      // processChatMessage(thread, message, mastra, requestContext, signalMetadata, skipped, batchIds)
+      expect(h.processed.map(a => [a[1].id, a[5].map((m: any) => m.id), [...a[6]]])).toEqual([
+        ['A1', [], ['A1', 'B1', 'B2', 'A2']],
+        ['B2', ['B1'], ['A1', 'B1', 'B2', 'A2']],
+        ['A2', [], ['A1', 'B1', 'B2', 'A2']],
+      ]);
+      h.restore();
+    });
+
+    it('logs a throwing handler, keeps going with later senders, and re-throws the first error', async () => {
+      const onDirectMessage = vi.fn(async (thread: any, msg: any, defaultHandler: any) => {
+        if (msg.id === 'A1') throw new Error('host boom');
+        await defaultHandler(thread, msg);
+      });
+      const h = await registerDM({ onDirectMessage });
+      const log = vi.spyOn(h.channels as any, 'log');
+      await expect(h.batch(from('B1', 'user-b'), [from('A1', 'user-a')])).rejects.toThrow('host boom');
+
+      expect(onDirectMessage).toHaveBeenCalledTimes(2);
+      expect(h.processed.map(a => a[1].id)).toEqual(['B1']);
+      expect(log).toHaveBeenCalledExactlyOnceWith(
+        'error',
+        'Custom channel handler failed; continuing with later senders',
+        {
+          platform: 'discord',
+          threadId: 'channel-1:thread-1',
+          messageId: 'A1',
+          authorId: 'user-a',
+          error: expect.objectContaining({ message: 'host boom' }),
+        },
+      );
+      h.restore();
+    });
+
+    it('logs every later handler error since only the first is re-thrown', async () => {
+      const onDirectMessage = vi.fn(async (_thread: any, msg: any) => {
+        throw new Error(msg.id === 'A1' ? 'boom1' : 'boom2');
+      });
+      const h = await registerDM({ onDirectMessage });
+      const log = vi.spyOn(h.channels as any, 'log');
+      await expect(h.batch(from('B1', 'user-b'), [from('A1', 'user-a')])).rejects.toThrow('boom1');
+
+      expect(log.mock.calls.map(c => [c[1], (c[2] as any).error.message])).toEqual([
+        ['Custom channel handler failed; continuing with later senders', 'boom1'],
+        ['Custom channel handler failed for another sender in the batch', 'boom2'],
+      ]);
+      h.restore();
+    });
+
+    it('still rejects when a handler throws undefined', async () => {
+      const onDirectMessage = vi.fn(async () => {
+        throw undefined;
+      });
+      const h = await registerDM({ onDirectMessage });
+      await expect(h.batch(from('B1', 'user-b'), [from('A1', 'user-a')])).rejects.toBeUndefined();
+      expect(onDirectMessage).toHaveBeenCalledTimes(2);
+      h.restore();
+    });
+
+    it('propagates an unbatched handler throw without logging', async () => {
+      const onDirectMessage = vi.fn(async () => {
+        throw new Error('solo boom');
+      });
+      const h = await registerDM({ onDirectMessage });
+      const log = vi.spyOn(h.channels as any, 'log');
+      await expect(h.batch(from('A1', 'user-a'), [])).rejects.toThrow('solo boom');
+      expect(onDirectMessage).toHaveBeenCalledTimes(1);
+      expect(log).not.toHaveBeenCalled();
+      h.restore();
+    });
+
+    it('dispatches an unbatched message through the handler exactly once', async () => {
+      const onDirectMessage = vi.fn((thread: any, msg: any, defaultHandler: any) => defaultHandler(thread, msg));
+      const h = await registerDM({ onDirectMessage });
+      await h.batch(from('A1', 'user-a'), []);
+      expect(onDirectMessage).toHaveBeenCalledTimes(1);
+      expect(h.processed).toHaveLength(1);
+      expect(onDirectMessage.mock.calls[0]![3].skipped).toEqual([]);
+      h.restore();
+    });
+
+    it('never groups messages without a userId', async () => {
+      const onDirectMessage = vi.fn((thread: any, msg: any, defaultHandler: any) => defaultHandler(thread, msg));
+      const h = await registerDM({ onDirectMessage });
+      await h.batch(from('anon3', undefined), [from('anon1', undefined), from('anon2', undefined)]);
+      expect(onDirectMessage.mock.calls.map(c => [c[1].id, c[3].skipped])).toEqual([
+        ['anon1', []],
+        ['anon2', []],
+        ['anon3', []],
+      ]);
+      h.restore();
+    });
+
+    it('gives each run fresh signal metadata and continues past a run that skips defaultHandler', async () => {
+      const seen: unknown[] = [];
+      const onDirectMessage = vi.fn(async (thread: any, msg: any, defaultHandler: any, ctx: any) => {
+        seen.push(ctx.signalMetadata.x);
+        ctx.signalMetadata.x = msg.id;
+        if (msg.id === 'B1') return; // host refuses the middle sender
+        await defaultHandler(thread, msg);
+      });
+      const h = await registerDM({ onDirectMessage });
+      await h.batch(from('C1', 'user-c'), [from('A1', 'user-a'), from('B1', 'user-b')]);
+      expect(seen).toEqual([undefined, undefined, undefined]);
+      expect(h.processed.map(a => [a[1].id, a[4]])).toEqual([
+        ['A1', { x: 'A1' }],
+        ['C1', { x: 'C1' }],
+      ]);
+      h.restore();
+    });
+
+    it('runs the custom onMention handler once per sender in a mention batch', async () => {
+      const onMention = vi.fn((thread: any, msg: any, defaultHandler: any) => defaultHandler(thread, msg));
+      const h = await registerDM({ onMention }, 'onNewMention');
+      await h.batch(from('A1', 'user-a', { isMention: true }), [from('B1', 'user-b', { isMention: false })]);
+      expect(onMention.mock.calls.map(c => [c[1].id, c[1].isMention])).toEqual([
+        ['B1', false],
+        ['A1', true],
+      ]);
+      expect(h.processed.map(a => a[1].id)).toEqual(['B1', 'A1']);
+      h.restore();
     });
 
     it('gives a custom handler the request context for the run', async () => {
@@ -3608,4 +3781,134 @@ describe('thread history end to end', () => {
     expect(historyRows).toHaveLength(11);
     expect(state.isSubscribed).toHaveBeenCalled();
   });
+});
+
+describe('per-sender handler runs end to end', () => {
+  const BASE_TIME = Date.UTC(2026, 9, 2, 12, 0, 0);
+  const THREAD_ID = 'C9:1700000000.000900';
+  const userA: Author = { userId: 'user-a', userName: 'ann', fullName: 'Ann', isBot: false, isMe: false };
+  const userB: Author = { userId: 'user-b', userName: 'ben', fullName: 'Ben', isBot: false, isMe: false };
+
+  function deferred() {
+    let resolve!: () => void;
+    const promise = new Promise<void>(r => (resolve = r));
+    return { promise, resolve };
+  }
+
+  async function createHarness() {
+    const { MockLanguageModelV2, convertArrayToReadableStream } = await import('@internal/ai-sdk-v5/test');
+    const { Mastra } = await import('../../mastra');
+    const { InMemoryStore } = await import('../../storage/mock');
+    const { MockMemory } = await import('../../memory/mock');
+
+    const prompts: LanguageModelV2Prompt[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        prompts.push(prompt);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: 't-1' },
+            { type: 'text-delta', id: 't-1', delta: 'Hello' },
+            { type: 'text-end', id: 't-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        };
+      },
+    });
+    const storage = new InMemoryStore();
+    const adapter = createMockAdapter('slack');
+    adapter.isDM = () => false;
+    adapter.fetchMessages = vi.fn().mockResolvedValue({ messages: [], nextCursor: undefined });
+
+    const invocations: [wrapper: 'mention' | 'subscribed', id: string][] = [];
+    const held = deferred();
+    const entered = deferred();
+    const handle =
+      (wrapper: 'mention' | 'subscribed'): ChannelHandler =>
+      async (thread, message, defaultHandler, ctx) => {
+        invocations.push([wrapper, message.id]);
+        // Host refusal: sender B gets nothing dispatched, nothing thrown.
+        if (message.author.userId === 'user-b') return;
+        ctx.requestContext.set('tenant', message.author.userId);
+        if (wrapper === 'mention') {
+          entered.resolve();
+          await held.promise; // keep the SDK lock held so later messages queue
+        }
+        await defaultHandler(thread, message);
+        // The default handler subscribes fire-and-forget; await it so the
+        // queue drain routes the batch to onSubscribedMessage deterministically.
+        if (wrapper === 'mention') await thread.subscribe();
+      };
+
+    const channels = new AgentChannels({
+      adapters: { slack: adapter },
+      chatOptions: { concurrency: { strategy: 'queue' } },
+      handlers: { onMention: handle('mention'), onSubscribedMessage: handle('subscribed') },
+    });
+    const agent = new Agent({
+      id: 'runs-agent',
+      name: 'runs-agent',
+      instructions: ({ requestContext }) => `tenant=${requestContext.get('tenant') ?? 'none'}`,
+      model,
+      memory: new MockMemory({ storage, options: { lastMessages: 50 } }),
+      channels,
+    });
+    const mastra = new Mastra({ storage, agents: { agent } });
+    await channels.initialize(mastra);
+
+    const msg = (id: string, text: string, author: Author, offset: number) =>
+      makeMessage({
+        id,
+        threadId: THREAD_ID,
+        text,
+        author,
+        metadata: { dateSent: new Date(BASE_TIME + offset), edited: false },
+      });
+    return {
+      prompts,
+      invocations,
+      held,
+      entered,
+      msg,
+      deliver: (m: Message) => (channels.sdk as any).processMessage(adapter, THREAD_ID, m) as Promise<void>,
+    };
+  }
+
+  it("calls the custom handler once per sender turn with that turn's context", async () => {
+    const h = await createHarness();
+    try {
+      const first = h.deliver(h.msg('A1', '@TestBot start', userA, 0));
+      await h.entered.promise;
+      await h.deliver(h.msg('B1', 'b text', userB, 1000));
+      await h.deliver(h.msg('A2', 'a follow-up', userA, 2000));
+      expect(h.invocations).toEqual([['mention', 'A1']]);
+      h.held.resolve();
+      await first;
+    } finally {
+      h.held.resolve();
+    }
+
+    expect(h.invocations).toEqual([
+      ['mention', 'A1'],
+      ['subscribed', 'B1'],
+      ['subscribed', 'A2'],
+    ]);
+    const lastUserText = (p: LanguageModelV2Prompt) => {
+      const user = p.filter(m => m.role === 'user').at(-1);
+      return user?.content.map(part => (part.type === 'text' ? part.text : '')).join('') ?? '';
+    };
+    const systemText = (p: LanguageModelV2Prompt) =>
+      p
+        .filter(m => m.role === 'system')
+        .map(m => m.content)
+        .join('\n');
+    expect(h.prompts.some(p => lastUserText(p).includes('b text'))).toBe(false);
+    const followUp = h.prompts.find(p => lastUserText(p).includes('a follow-up'));
+    expect(followUp).toBeDefined();
+    expect(systemText(followUp!)).toContain('tenant=user-a');
+  }, 20_000);
 });

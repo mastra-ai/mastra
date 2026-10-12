@@ -143,7 +143,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
           // Fill the field and push the value left / chevron right (Button's
           // base centers its content with `justify-center`).
           fieldTriggerWidthStyle,
-          'justify-between text-body-sm',
+          'justify-between',
           // Read as "active" while the menu is open, per variant (see map above).
           controlTriggerOpenState[visualVariant],
           'data-[placeholder]:text-muted-foreground',

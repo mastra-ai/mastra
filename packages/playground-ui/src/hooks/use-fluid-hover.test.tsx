@@ -25,6 +25,7 @@ function layoutRow(element: HTMLElement, index: number) {
     offsetWidth: { value: 200, configurable: true },
     offsetHeight: { value: ROW_HEIGHT, configurable: true },
   });
+  element.getBoundingClientRect = () => new DOMRect(0, index * ROW_HEIGHT, 200, ROW_HEIGHT);
 }
 
 function Row({
@@ -151,6 +152,17 @@ describe('useFluidHover', () => {
 
       expect(screen.getByTestId('row-1').hasAttribute(ACTIVE_ATTR)).toBe(false);
       expect(screen.getByTestId('list').hasAttribute('data-fluid-hover-active-index')).toBe(true);
+    });
+
+    it('ignores a click on that row instead of routing it to the lit neighbour', async () => {
+      const onRowClick = vi.fn();
+      render(<List options={options} onRowClick={onRowClick} />);
+      await flushFrames();
+      await moveTo(1);
+
+      fireEvent.click(screen.getByTestId('list'), { clientX: 10, clientY: ROW_HEIGHT + ROW_HEIGHT / 2 });
+
+      expect(onRowClick).not.toHaveBeenCalled();
     });
   });
 

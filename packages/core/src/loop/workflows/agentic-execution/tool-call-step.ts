@@ -1,12 +1,11 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import { z } from 'zod/v4';
 import { stopGoalActivity } from '../../../agent/goal';
+import { MemoryMessageRefs } from '../../../agent/message-list/memory-message-refs';
 import { resolveDeclineReason } from '../../../agent/tool-approval';
 import { executeAdoptedBackgroundOperation } from '../../../background-tasks/adoption';
 import type { BackgroundTaskProgressChunk, ToolBackgroundConfig } from '../../../background-tasks/types';
 import type { MastraDBMessage } from '../../../memory';
 import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../processors/background-work-signals';
-import { toStandardSchema, standardSchemaToJSONSchema } from '../../../schema';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
@@ -29,6 +28,7 @@ import {
   BACKGROUND_TASK_MANAGER_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
   EAGER_TOOL_EXECUTION_KEY,
+  FIXED_MEMORY_KEY,
   GENERATE_ID_KEY,
   MEMORY_CONFIG_KEY,
   MEMORY_KEY,
@@ -44,12 +44,14 @@ import {
   TOOL_APPROVAL_VERDICTS_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
+import { approvalResumeSchema } from '../../shared/approval-schema';
 import { dispatchBackgroundTool } from '../../shared/steps/background-dispatch-core';
 import { applyBackgroundToolResult } from '../../shared/steps/background-task-result-core';
 import { executeToolCall } from '../../shared/steps/execute-tool-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
+import { dehydrateStreamState } from '../../suspended-stream-state';
 import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
@@ -103,6 +105,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   actor,
   mcp,
 }: OuterLLMRun<Tools, OUTPUT>) {
+  // Shared by every suspension of the run, so parallel suspends verify recalled messages once.
+  const memoryMessageRefs = new MemoryMessageRefs();
   return createStep({
     id: 'toolCallStep',
     inputSchema: toolCallInputSchema,
@@ -395,6 +399,18 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
       };
 
+      // Recalled messages become refs only when memory is a fixed instance: a resume may not
+      // repeat the request context that function or inherited memory resolved against.
+      const serializeStreamStateForSuspend = () =>
+        dehydrateStreamState(
+          streamState.serialize(),
+          memoryMessageRefs,
+          readScoped(scopeCtx, FIXED_MEMORY_KEY, 'fixedMemory')
+            ? readScoped(scopeCtx, MEMORY_KEY, 'memory')
+            : undefined,
+          logger,
+        );
+
       // Provider-executed tools are handled entirely by the stream path
       // (tool-call and tool-result chunks in llm-execution-step), so skip client execution.
       if (inputData.providerExecuted) {
@@ -521,21 +537,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const approvalGated =
           !isDelegatedApproval && (suspendedForApproval || (toolRequiresApproval && suspendData === undefined));
 
-        // Schema for tool call approval - used for both streaming and metadata
-        const approvalSchema = toStandardSchema(
-          z.object({
-            approved: z
-              .boolean()
-              .describe(
-                'Controls if the tool call is approved or not, should be true when approved and false when declined',
-              ),
-            reason: z
-              .string()
-              .optional()
-              .describe('Optional explanation for the decision, surfaced to the model when the tool call is declined'),
-          }),
-        );
-
         // The real suspension sequence, extracted so it has exactly one implementation with
         // two entry points: the tool's own `suspend()` closure below, and the hand-back of an
         // eager attempt that suspended at runtime. Defined here because it closes over
@@ -566,7 +567,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolCallId: inputData.toolCallId,
                 toolName: approvalToolName,
                 args: approvalArgs,
-                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+                resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
               },
             });
@@ -586,19 +587,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 : {}),
               type: 'approval',
               suspendedToolRunId: options.runId,
-              resumeSchema: JSON.stringify(
-                standardSchemaToJSONSchema(
-                  toStandardSchema(
-                    z.object({
-                      approved: z
-                        .boolean()
-                        .describe(
-                          'Controls if the tool call is approved or not, should be true when approved and false when declined',
-                        ),
-                    }),
-                  ),
-                ),
-              ),
+              resumeSchema: approvalResumeSchema,
               metadata: approvalChunk.metadata,
             });
 
@@ -613,7 +602,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: approvalToolName,
                   args: approvalArgs,
                 },
-                __streamState: streamState.serialize(),
+                __streamState: await serializeStreamStateForSuspend(),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
                 // Persist the inner suspended run id in the workflow snapshot, partitioned per
@@ -659,7 +648,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             return await suspend(
               {
                 toolCallSuspended: suspendPayload,
-                __streamState: streamState.serialize(),
+                __streamState: await serializeStreamStateForSuspend(),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
                 toolCallId: inputData.toolCallId,
@@ -701,7 +690,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 args: inputData.args,
-                resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+                resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
               },
             });
@@ -717,7 +706,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               toolName: inputData.toolName,
               args: inputData.args,
               type: 'approval',
-              resumeSchema: JSON.stringify(standardSchemaToJSONSchema(approvalSchema)),
+              resumeSchema: approvalResumeSchema,
               metadata: approvalChunk.metadata,
             });
 
@@ -731,7 +720,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: inputData.toolName,
                   args: inputData.args,
                 },
-                __streamState: streamState.serialize(),
+                __streamState: await serializeStreamStateForSuspend(),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
               },
@@ -1147,6 +1136,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       );
                       emittedReplayedToolCalls.add(replayKey);
                     }
+
+                    // Awaited calls return their authoritative outcome through the
+                    // normal mapping step, which emits the terminal tool chunk.
+                    // Synthetic terminal chunks are only needed for deferred calls.
+                    if (info.disposition === 'awaited') return;
 
                     if (chunk.type === 'background-task-completed') {
                       safeEnqueue(

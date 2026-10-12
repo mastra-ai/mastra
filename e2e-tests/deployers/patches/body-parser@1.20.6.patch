@@ -1,0 +1,12 @@
+diff --git a/lib/read.js b/lib/read.js
+--- a/lib/read.js
++++ b/lib/read.js
+@@ -13,7 +13,7 @@
+ 
+ var createError = require('http-errors')
+ var destroy = require('destroy')
+-var getBody = require('raw-body')
++var getBody = require('raw-body').default || require('raw-body')
+ var iconv = require('iconv-lite')
+ var onFinished = require('on-finished')
+ var unpipe = require('unpipe')

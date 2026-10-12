@@ -151,8 +151,7 @@ If your provider URL contains placeholders such as `${ACCOUNT_ID}`, resolve them
   {
     name: 'envVars',
     type: 'Record<string, string>',
-    isOptional: true,
-    description: 'Optional environment variables',
+    description: 'Environment variables available to the gateway',
   },
 ]}
 />
@@ -221,14 +220,34 @@ Creates a language model instance.
     type: 'string',
     description: 'The API key for authentication',
   },
+  {
+    name: 'headers',
+    type: 'Record<string, string>',
+    isOptional: true,
+    description: 'Additional headers to send with model requests',
+  },
+  {
+    name: 'transport',
+    type: "'auto' | 'websocket' | 'fetch'",
+    isOptional: true,
+    description: 'Transport for OpenAI Responses API requests',
+  },
+  {
+    name: 'responsesWebSocket',
+    type: 'ResponsesWebSocketOptions',
+    isOptional: true,
+    description: 'WebSocket options used when transport is websocket',
+  },
 ]}
 />
 
-**Returns:** `Promise<LanguageModelV2> | LanguageModelV2`
+**Returns:** `GatewayLanguageModel | Promise<GatewayLanguageModel>`, where `GatewayLanguageModel` is `LanguageModelV2 | LanguageModelV3 | LanguageModelV4` (AI SDK v5, v6, and v7 models).
 
 ## Instance methods
 
 ### `getId()`
+
+**Deprecated**: Use the `id` property instead.
 
 Returns the gateway's unique identifier.
 

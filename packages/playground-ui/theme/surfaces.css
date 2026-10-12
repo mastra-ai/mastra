@@ -64,8 +64,8 @@
    * Boundary ladder — the four states of a control's 1px edge, as alphas of
    * `--fill-tint` so an edge reads the same on any surface and in either theme.
    *
-   * border         rim of a filled control, divider, and the rim of a raised
-   *                surface (the `shadow-raised` utility draws it from this token)
+   * border         rim of a filled control and content divider
+   *                (raised surfaces use `--surface-rim` below)
    * border-strong  the only affordance of a transparent control (outline
    *                button/field at rest, selection control at rest)
    * border-hover   hover on either of those. Deliberately nearer rest than focus: it
@@ -109,9 +109,9 @@
    * the whole surface behind it and needs 9% to read; the rim sits on the
    * boundary between two surfaces that already differ in fill and elevation,
    * so the same 9% overshoots and the surface reads as framed. The reference
-   * skin uses its highlight colour for the rim in dark — 3%, the same alpha as
-   * the lip — and a 6% black ring in light, where no lip exists. Both are
-   * below the divider, on purpose.
+   * rim uses white at 5% in dark and black at 8% in light, where no lip exists.
+   * `border-surface-rim` exposes the same color for CSS borders, including a
+   * frame header that meets the inset rim. Do not add opacity at call sites.
    *
    * Focus moves that one edge to `--border-focus` instead of adding a
    * `border` beside it, which would read as two lines — and is why a field and
@@ -122,8 +122,8 @@
    * The rim is inset, so it cannot be clipped: the app frame and every
    * ScrollArea viewport are `overflow-hidden`, and an outer ring on a surface
    * sitting flush inside one is shaved off entirely. The cost is the mirror
-   * case — a child flush against the edge paints over it — which is why a panel
-   * holding a sticky header keeps a gutter (`p-1`) instead.
+   * case — a child flush against the edge paints over it. MainCard reserves
+   * the rim with `p-px`; other panels may keep a larger content gutter.
    *
    * In-flow surfaces keep the bleed short for the same reason. The drops fall
    * outside the box and a scroller does clip those, so a tile reaching further
@@ -162,11 +162,9 @@ html.light {
   --scrim: oklch(20.8% 0 0deg / 45%);
 
   /* No lip: light does not catch one on a near-white surface, and the utility
-   * needs a value in that slot for the shadow list to stay valid. The rim is a
-   * shade here, and shade at equal alpha carries more weight than light, so it
-   * sits twice as low as the divider rather than level with the lip. Shorter
-   * falloff too — a shadow has room to darken here, so it reads as the same
-   * height over less distance. */
+   * needs a value in that slot for the shadow list to stay valid. The rim uses
+   * black at 8%. Drops have a shorter falloff because a shadow has more room
+   * to darken on a light surface. */
   --elevation-lip: 0 0 #0000;
   --inset-highlight: oklch(100% 0 0deg / 55%);
   --inset-rim: oklch(0% 0 0deg / 8%);
@@ -204,6 +202,7 @@ html.light {
   --color-fill-destructive-disabled: var(--fill-destructive-disabled);
   --color-fill-destructive-foreground: var(--fill-destructive-foreground);
   --color-fill-destructive-disabled-foreground: var(--fill-destructive-disabled-foreground);
+  --color-surface-rim: var(--surface-rim);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-border-hover: var(--border-hover);

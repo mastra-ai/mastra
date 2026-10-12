@@ -1,6 +1,9 @@
+import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ThreadsPanelProvider } from '../../context/threads-panel-context';
+import { useThreadsPanel } from '../../context/use-threads-panel';
 import { writeAllowedCapabilities, writeDeniedCapabilities } from '../../hooks/__tests__/fixtures/auth';
 import type { ChatThreadsProps } from '../chat-threads';
 import { ChatThreads } from '../chat-threads';
@@ -14,19 +17,76 @@ beforeEach(() => {
   server.use(http.get(`${TEST_BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(writeAllowedCapabilities)));
 });
 
-const renderThreads = (onHidePanel?: () => void) =>
+const fakePanel = (): CollapsiblePanelHandle => ({ collapse: vi.fn(), expand: vi.fn(), toggle: vi.fn() });
+
+const RegisterPanel = ({ panel }: { panel: CollapsiblePanelHandle }) => {
+  const threadsPanel = useThreadsPanel();
+  return <div ref={() => threadsPanel?.registerPanel(panel)} />;
+};
+
+const threadsList = (
+  <ChatThreads
+    threads={[
+      { ...namedThread, createdAt: new Date(namedThread.createdAt), updatedAt: new Date(namedThread.updatedAt) },
+    ]}
+    threadId="thread-1"
+    onDelete={() => {}}
+    resourceId="agent-1"
+    resourceType="agent"
+  />
+);
+
+const renderThreads = (panel?: CollapsiblePanelHandle) =>
   renderWithProviders(
     <TestLinkProvider>
-      <ChatThreads
-        threads={[]}
-        threadId="thread-1"
-        onDelete={() => {}}
-        resourceId="agent-1"
-        resourceType="agent"
-        onHidePanel={onHidePanel}
-      />
+      {panel ? (
+        <ThreadsPanelProvider>
+          <RegisterPanel panel={panel} />
+          {threadsList}
+        </ThreadsPanelProvider>
+      ) : (
+        threadsList
+      )}
     </TestLinkProvider>,
   );
+
+describe('ChatThreads — first visit', () => {
+  describe('when the agent has no threads yet', () => {
+    it('folds the threads panel away once so the landing fills the page', () => {
+      const panel = fakePanel();
+      const { rerender } = renderWithProviders(
+        <TestLinkProvider>
+          <ThreadsPanelProvider>
+            <RegisterPanel panel={panel} />
+            <ChatThreads
+              threads={[]}
+              threadId="thread-1"
+              onDelete={() => {}}
+              resourceId="agent-1"
+              resourceType="agent"
+            />
+          </ThreadsPanelProvider>
+        </TestLinkProvider>,
+      );
+      rerender(
+        <TestLinkProvider>
+          <ThreadsPanelProvider>
+            <RegisterPanel panel={panel} />
+            <ChatThreads
+              threads={[]}
+              threadId="thread-1"
+              onDelete={() => {}}
+              resourceId="agent-1"
+              resourceType="agent"
+            />
+          </ThreadsPanelProvider>
+        </TestLinkProvider>,
+      );
+
+      expect(panel.collapse).toHaveBeenCalledTimes(1);
+    });
+  });
+});
 
 describe('ChatThreads — hide threads panel', () => {
   it('offers no hide control when the panel cannot be hidden', () => {
@@ -36,9 +96,9 @@ describe('ChatThreads — hide threads panel', () => {
     expect(screen.queryByRole('button', { name: 'Hide threads panel' })).toBeNull();
   });
 
-  it('places a hide control on the New Chat row and reports the click', () => {
-    const onHidePanel = vi.fn();
-    renderThreads(onHidePanel);
+  it('places a hide control on the New Chat row and collapses the panel on click', () => {
+    const panel = fakePanel();
+    renderThreads(panel);
 
     const hideButton = screen.getByRole('button', { name: 'Hide threads panel' });
     const newChat = screen.getByRole('link', { name: 'New Thread' });
@@ -46,11 +106,11 @@ describe('ChatThreads — hide threads panel', () => {
 
     fireEvent.click(hideButton);
 
-    expect(onHidePanel).toHaveBeenCalledTimes(1);
+    expect(panel.collapse).toHaveBeenCalledTimes(1);
   });
 
   it('advertises the { shortcut in the hide control tooltip', async () => {
-    renderThreads(vi.fn());
+    renderThreads(fakePanel());
 
     fireEvent.focus(screen.getByRole('button', { name: 'Hide threads panel' }));
 

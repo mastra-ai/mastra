@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -49,7 +49,7 @@ function stubBoard({ items, factory }: { items: unknown[]; factory: Record<strin
       HttpResponse.json({ error: 'Metrics unavailable in this scenario' }, { status: 500 }),
     ),
     http.patch(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, async ({ request }) => {
-      const body = (await request.json()) as Record<string, unknown>;
+      const body: unknown = await request.json();
       patchBodies.push(body);
       Object.assign(factory, body);
       return HttpResponse.json({ project: factory });
@@ -87,17 +87,25 @@ function renderBoard(board: 'work' | 'review') {
 }
 
 describe('Board automation settings', () => {
-  it('turns plan auto-approval on with its own switch', async () => {
+  it('edits plan auto-approval in a dismissible settings popover', async () => {
     stubBoard({ items: [], factory: project() });
     const user = userEvent.setup();
     const { client } = renderBoard('review');
 
+    const settings = await screen.findByRole('button', { name: 'Automation settings' });
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    await user.click(settings);
     const autoApprove = await screen.findByRole('switch', { name: 'Auto-approve plans' });
     expect(autoApprove).not.toBeChecked();
     await user.click(autoApprove);
 
     await waitForMutationsIdle(client);
     expect(patchBodies).toEqual([{ autoApprovePlans: true }]);
+    expect(await screen.findByRole('switch', { name: 'Auto-approve plans' })).toBeChecked();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Automation settings' })).not.toBeInTheDocument());
+    expect(settings).toHaveFocus();
+    await user.click(settings);
     expect(await screen.findByRole('switch', { name: 'Auto-approve plans' })).toBeChecked();
   });
 
@@ -106,6 +114,7 @@ describe('Board automation settings', () => {
     const user = userEvent.setup();
     const { client } = renderBoard('review');
 
+    await user.click(await screen.findByRole('button', { name: 'Automation settings' }));
     await user.click(await screen.findByRole('switch', { name: 'Auto-start runs' }));
 
     await waitForMutationsIdle(client);

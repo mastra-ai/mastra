@@ -51,7 +51,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
       aria-label={`New work item in ${stageLabel}`}
       aria-busy={submitting}
       className={cn(
-        'relative flex flex-col gap-3 rounded-card border border-border/50 bg-fill-subtle p-2 outline-none transition-colors focus-within:border-border-focus motion-reduce:transition-none',
+        'relative flex flex-col gap-3 rounded-card border border-surface-rim bg-fill-subtle p-2 outline-none transition-colors focus-within:border-border-focus motion-reduce:transition-none',
         error !== undefined && 'border-destructive-indicator',
       )}
       onSubmit={event => void submit(event)}
@@ -67,7 +67,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
           autoFocus
           aria-label="Work item title"
           autoComplete="off"
-          className="text-label text-foreground placeholder:text-muted-foreground h-auto min-w-0 flex-1 p-0 font-semibold"
+          className="text-foreground placeholder:text-muted-foreground text-card-title-strong h-auto min-w-0 flex-1 p-0"
           value={title}
           onChange={event => {
             setTitle(event.target.value);

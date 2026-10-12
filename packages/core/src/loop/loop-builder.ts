@@ -1,4 +1,5 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
+import { normalizeToolOutput } from '../agent/message-list/utils/unwrap-legacy-tool-output';
 import type { MastraDBMessage } from '../memory';
 import { InternalSpans } from '../observability';
 import { safeEnqueue } from '../stream/base';
@@ -471,7 +472,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       }
 
       const drainOutcome = await drainSignalsToTranscript({
-        drainPendingSignals: rt.drainPendingSignals,
+        drainPendingSignals: rest.options?.abortSignal?.aborted ? undefined : rt.drainPendingSignals,
         rotateResponseMessageId: sealMessageId => rest.rotateResponseMessageId(sealMessageId),
         addSignal: signal => messageList.addSignal(signal),
         emitChunk: chunk => this.emitChunk(rt, chunk),
@@ -494,7 +495,13 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         };
       }
 
-      const allContent: StepResult<Tools>['content'] = typedInputData.messages.nonUser.flatMap(
+      // A signal replaces the physical request, not the logical step or its budget.
+      if (typedInputData.stepResult?.signalPreempted && typedInputData.stepResult.reason !== 'abort') {
+        return typedInputData.stepResult.isContinued;
+      }
+
+      const responseMessages = typedInputData.messages.nonUser;
+      const allContent: StepResult<Tools>['content'] = responseMessages.flatMap(
         message => message.content as unknown as StepResult<Tools>['content'],
       );
 
@@ -534,6 +541,42 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         providerMetadata: typedInputData.metadata?.providerMetadata,
       };
 
+      const buildIterationContext = (isFinal: boolean, iteration = state.accumulatedSteps.length) => ({
+        iteration,
+        maxIterations: rt.maxSteps,
+        text: typedInputData.output.text || '',
+        toolCalls: (typedInputData.output.toolCalls || []).map((tc: any) => ({
+          id: tc.toolCallId || tc.id || '',
+          name: tc.toolName || tc.name || '',
+          args: (tc.args || {}) as Record<string, unknown>,
+        })),
+        toolResults: toolResultParts.map(tr => ({
+          id: tr.toolCallId,
+          name: tr.toolName,
+          result: normalizeToolOutput(tr.output).output,
+        })),
+        isFinal,
+        finishReason: typedInputData.stepResult?.reason || 'unknown',
+        runId,
+        threadId: rt.threadId,
+        resourceId: rt.resourceId,
+        agentId: rt.agentId,
+        agentName: rt.agentName || rt.agentId,
+        messages: messageList.get.all.db(),
+      });
+
+      if (typedInputData.stepResult?.reason === 'abort') {
+        typedInputData.stepResult.isContinued = false;
+        if (rt.onIterationComplete && !typedInputData.backgroundTaskPending) {
+          try {
+            await rt.onIterationComplete(buildIterationContext(true, state.accumulatedSteps.length + 1));
+          } catch (error) {
+            rt.logger?.error('Error in onIterationComplete hook:', error);
+          }
+        }
+        return false;
+      }
+
       state.accumulatedSteps.push(currentStep);
 
       // Shared continuation decision: two-phase feedback stop, stopWhen,
@@ -550,7 +593,11 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         policy: { mode: 'default', hasFiniteMaxSteps: !!rt.maxSteps },
         pendingFeedbackStop: state.pendingFeedbackStop,
         llmWantsToContinue: typedInputData.stepResult?.isContinued === true,
-        underMaxSteps: !rt.maxSteps || state.accumulatedSteps.length < rt.maxSteps,
+        // Processor retry steps re-run the same step, so only real LLM steps count against maxSteps.
+        // Retries stay bounded by maxProcessorRetries.
+        underMaxSteps:
+          !rt.maxSteps ||
+          state.accumulatedSteps.filter(s => (s.finishReason as string) !== 'retry').length < rt.maxSteps,
         steps: state.accumulatedSteps,
         stopWhen: rt.stopWhen,
         consumeDelegationBail: () => {
@@ -562,29 +609,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         },
         backgroundTaskPending: typedInputData.backgroundTaskPending,
         onIterationComplete: rt.onIterationComplete,
-        buildIterationContext: isFinal => ({
-          iteration: state.accumulatedSteps.length,
-          maxIterations: rt.maxSteps,
-          text: typedInputData.output.text || '',
-          toolCalls: (typedInputData.output.toolCalls || []).map((tc: any) => ({
-            id: tc.toolCallId || tc.id || '',
-            name: tc.toolName || tc.name || '',
-            args: (tc.args || {}) as Record<string, unknown>,
-          })),
-          toolResults: toolResultParts.map(tr => ({
-            id: tr.toolCallId,
-            name: tr.toolName,
-            result: unwrapToolResultOutput(tr.output),
-          })),
-          isFinal,
-          finishReason: typedInputData.stepResult?.reason || 'unknown',
-          runId: runId,
-          threadId: rt.threadId,
-          resourceId: rt.resourceId,
-          agentId: rt.agentId,
-          agentName: rt.agentName || rt.agentId,
-          messages: messageList.get.all.db(),
-        }),
+        buildIterationContext,
         injectFeedback: feedback => {
           messageList.add(
             {
@@ -645,6 +670,12 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         return false;
       }
 
+      // A processor tripwire ends the run; the iteration hook cannot resume it.
+      if (reason === 'tripwire') {
+        typedInputData.stepResult!.isContinued = false;
+        return false;
+      }
+
       return typedInputData.stepResult?.isContinued ?? false;
     };
   }
@@ -687,27 +718,5 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     })
       .dowhile(this.buildIterationWorkflow(), this.buildContinuationPredicate())
       .commit();
-  }
-}
-
-function unwrapToolResultOutput(output: unknown): unknown {
-  if (!output || typeof output !== 'object' || Array.isArray(output)) {
-    return output;
-  }
-
-  const record = output as Record<string, unknown>;
-  if (!('value' in record)) {
-    return output;
-  }
-
-  switch (record.type) {
-    case 'text':
-    case 'json':
-    case 'error-text':
-    case 'error-json':
-    case 'content':
-      return record.value;
-    default:
-      return output;
   }
 }

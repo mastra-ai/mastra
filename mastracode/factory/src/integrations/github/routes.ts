@@ -43,6 +43,8 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './config.js
 import type { GithubIntegration } from './integration.js';
 import { clearGithubPat, getGithubPat, getGithubPatStatus, setGithubPat } from './pat.js';
 import type { GithubPatKind } from './pat.js';
+import { polledPullRequestEvent } from './rules.js';
+import type { PolledPullRequestState, ReconcileRepository } from './rules.js';
 
 import { reclaimDeletedSessionSandbox } from './sandbox-release.js';
 import {
@@ -312,42 +314,52 @@ function polledIssueEvent(
   };
 }
 
-function polledPullRequestEvent(
+interface ListedPullRequest {
+  number: number;
+  title: string;
+  url: string;
+  author: string | null;
+  assignees: string[];
+  requestedReviewers: string[];
+  labels: string[];
+  headBranch: string;
+  baseBranch: string;
+  createdAt: string;
+}
+
+function listedPullRequestEvent(
   project: ResolvedProjectRepository,
-  pullRequest: {
-    number: number;
-    title: string;
-    url: string;
-    author: string | null;
-    assignees: string[];
-    requestedReviewers: string[];
-    headBranch: string;
-    baseBranch: string;
-    createdAt: string;
-  },
+  pullRequest: ListedPullRequest,
 ): ParsedGithubWebhook {
-  const repositoryId = Number(project.repository.externalId);
+  return polledPullRequestEvent(
+    reconcileRepositoryOf(project),
+    pullRequest.number,
+    listedOpenPullRequestState(pullRequest),
+  );
+}
+
+function reconcileRepositoryOf(project: ResolvedProjectRepository): ReconcileRepository {
   return {
-    event: 'pull_request',
-    deliveryId: `poll:${repositoryId}:pull-request:${pullRequest.number}:${pullRequest.createdAt}`,
-    payload: {
-      action: 'opened',
-      installation: { id: Number(project.installation.externalId) },
-      repository: { id: repositoryId, full_name: project.repository.slug },
-      sender: { login: pullRequest.author ?? '__unknown__' },
-      pull_request: {
-        number: pullRequest.number,
-        title: pullRequest.title,
-        html_url: pullRequest.url,
-        created_at: pullRequest.createdAt,
-        state: 'open',
-        merged: false,
-        assignees: pullRequest.assignees.map(login => ({ login })),
-        requested_reviewers: pullRequest.requestedReviewers.map(login => ({ login })),
-        head: { ref: pullRequest.headBranch },
-        base: { ref: pullRequest.baseBranch },
-      },
-    },
+    id: Number(project.repository.externalId),
+    fullName: project.repository.slug,
+    installationId: Number(project.installation.externalId),
+  };
+}
+
+function listedOpenPullRequestState(pullRequest: ListedPullRequest): PolledPullRequestState {
+  return {
+    title: pullRequest.title,
+    url: pullRequest.url,
+    state: 'open',
+    draft: false,
+    merged: false,
+    assignees: pullRequest.assignees,
+    requestedReviewers: pullRequest.requestedReviewers,
+    labels: pullRequest.labels,
+    headBranch: pullRequest.headBranch,
+    baseBranch: pullRequest.baseBranch,
+    author: pullRequest.author ?? undefined,
+    createdAt: pullRequest.createdAt,
   };
 }
 
@@ -361,6 +373,83 @@ async function ingestPolledEvents(
   // Best-effort: a rule-ingress failure must not fail the GitHub list response it piggybacks on.
   if (rejected) {
     console.warn('[Mastra Factory] Failed to ingest polled GitHub events', { error: rejected.reason });
+  }
+}
+
+const LINKED_BACKLOG_MAX_PAGES = 5;
+
+function listedIssueOf(issue: Awaited<ReturnType<GithubIntegration['intake']['listIssues']>>['issues'][number]) {
+  return {
+    number: Number(issue.id),
+    title: issue.title,
+    url: issue.url,
+    author: issue.author,
+    assignee: issue.assignee,
+    assignees: issue.assignees,
+    labels: issue.labels,
+    createdAt: issue.createdAt,
+  };
+}
+
+function listedPullRequestOf(
+  pr: Awaited<ReturnType<GithubIntegration['versionControl']['listPullRequests']>>['pullRequests'][number],
+): ListedPullRequest {
+  return {
+    number: Number(pr.id),
+    title: pr.title,
+    url: pr.url,
+    author: pr.author,
+    assignees: pr.assignees ?? [],
+    requestedReviewers: pr.requestedReviewers ?? [],
+    labels: pr.labels ?? [],
+    headBranch: pr.headBranch,
+    baseBranch: pr.baseBranch,
+    createdAt: pr.createdAt,
+  };
+}
+
+/**
+ * Feed a just-linked repository's open issues and pull requests through the
+ * same rules ingress the list routes use, so its backlog reaches the board
+ * without anyone browsing it. Rows owned by another integration don't resolve
+ * through this integration's storage handle and are skipped.
+ */
+export async function ingestLinkedRepositoryBacklog(args: {
+  github: GithubIntegration;
+  orgId: string;
+  projectRepositoryId: string;
+  ingestFactoryEvent: MountGithubRoutesOptions['ingestFactoryEvent'];
+}): Promise<void> {
+  if (!args.ingestFactoryEvent) return;
+  const project = await resolveProjectRepository(args);
+  if (!project) return;
+  const connection = { type: 'app-installation' as const, installationId: Number(project.installation.externalId) };
+  const sourceId = project.repository.slug;
+
+  for (let page = 1; page <= LINKED_BACKLOG_MAX_PAGES; page += 1) {
+    const { issues, nextCursor } = await args.github.intake.listIssues({
+      connection,
+      sourceIds: [sourceId],
+      cursor: String(page),
+    });
+    await ingestPolledEvents(
+      issues.map(issue => polledIssueEvent(project, listedIssueOf(issue))),
+      args.ingestFactoryEvent,
+    );
+    if (nextCursor === null) break;
+  }
+  for (let page = 1; page <= LINKED_BACKLOG_MAX_PAGES; page += 1) {
+    const { pullRequests, nextCursor } = await args.github.versionControl.listPullRequests({
+      connection,
+      sourceId,
+      includeDrafts: false,
+      cursor: String(page),
+    });
+    await ingestPolledEvents(
+      pullRequests.map(pr => listedPullRequestEvent(project, listedPullRequestOf(pr))),
+      args.ingestFactoryEvent,
+    );
+    if (nextCursor === null) break;
   }
 }
 
@@ -700,6 +789,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             cursor: String(page),
           });
           const responseIssues = issues.map(issue => ({
+            repositoryId: Number(loaded.project.repository.externalId),
             number: Number(issue.id),
             title: issue.title,
             url: issue.url,
@@ -791,6 +881,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             cursor: String(page),
           });
           const responsePullRequests = pullRequests.map(pr => ({
+            repositoryId: Number(loaded.project.repository.externalId),
             number: Number(pr.id),
             title: pr.title,
             url: pr.url,
@@ -804,7 +895,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             updatedAt: pr.updatedAt,
           }));
           await ingestPolledEvents(
-            responsePullRequests.map(pullRequest => polledPullRequestEvent(loaded.project, pullRequest)),
+            responsePullRequests.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
             options.ingestFactoryEvent,
           );
           return c.json({
@@ -1438,6 +1529,7 @@ function buildProjectGitRoutes({
         const stored = await memorySettings.get({ orgId: row.orgId, userId: row.userId });
         const requestContext = new RequestContext();
         requestContext.set('user', { workosId: row.userId, organizationId: row.orgId });
+        requestContext.set('mastra__factoryMemorySettings', stored);
 
         try {
           const title = await nameSession(sessionId, async () => {

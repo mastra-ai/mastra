@@ -79,9 +79,11 @@ describe('getContentPadding', () => {
 
   it('falls back to the physical padding when there is no block padding', () => {
     const element = document.createElement('div');
-    element.style.paddingTop = '12px';
-    element.style.paddingBottom = '8px';
     document.body.appendChild(element);
+    const physicalPaddingOnly = document.createElement('div').style;
+    physicalPaddingOnly.paddingTop = '12px';
+    physicalPaddingOnly.paddingBottom = '8px';
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue(physicalPaddingOnly);
 
     expect(getContentPadding(element)).toEqual({ start: 12, end: 8 });
   });

@@ -144,11 +144,11 @@ type FieldErrorProps = Omit<FieldPrimitive.Error.Props, 'className' | 'match' | 
   className?: string;
 };
 
-const fieldErrorClassName = '-mt-1 flex gap-1 text-caption text-destructive-foreground';
+const fieldErrorClassName = '-mt-1 flex gap-1 text-body-sm text-destructive-foreground';
 
 function FieldErrorIcon() {
   return (
-    <Icon size="xs" className="mt-0.75 shrink-0" aria-hidden>
+    <Icon size="xs" className="mt-1 shrink-0" aria-hidden>
       <CircleAlertIcon />
     </Icon>
   );

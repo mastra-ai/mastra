@@ -118,6 +118,81 @@ describe('planTraceAggregate', () => {
       ]);
       expect(result.orderBy).toEqual({ target: 'measure', measure: 'count', direction: 'desc' });
     });
+
+    it('plans example 4: daily token spend and cost per agent, most expensive first', () => {
+      const request = {
+        timeRange: { from: '2026-06-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        groupBy: ['entityName'],
+        interval: '1d',
+        measures: ['count', 'tokens.input.sum', 'tokens.output.sum', 'cost.sum'],
+        orderBy: { field: 'cost.sum', direction: 'desc' },
+        limit: 20,
+      };
+      expect(plan(request)).toEqual<TrustedTraceAggregatePlan>({
+        result: 'aggregate',
+        timeRange: { from: '2026-06-01T00:00:00.000Z', to: '2026-09-01T00:00:00.000Z' },
+        where: undefined,
+        scope: undefined,
+        dimensions: ['entityName'],
+        interval: '1d',
+        measures: [
+          { type: 'canonical', name: 'count' },
+          { type: 'canonical', name: 'tokens.input.sum' },
+          { type: 'canonical', name: 'tokens.output.sum' },
+          { type: 'canonical', name: 'cost.sum' },
+        ],
+        having: undefined,
+        orderBy: { target: 'measure', measure: 'cost.sum', direction: 'desc' },
+        limit: 20,
+      });
+      const buckets = countTraceAggregateBuckets(
+        Date.parse(request.timeRange.from),
+        Date.parse(request.timeRange.to),
+        '1d',
+      );
+      expect(buckets).toBe(92);
+      expect(request.limit * buckets).toBe(1840);
+    });
+  });
+
+  describe('token and cost measures', () => {
+    it('accepts having and orderBy on requested token and cost measures', () => {
+      const result = plan({
+        timeRange,
+        groupBy: ['entityName'],
+        measures: ['tokens.total.sum', 'cost.avg'],
+        having: {
+          op: 'and',
+          args: [gt('tokens.total.sum', 1000), { op: 'lte', left: { path: 'cost.avg' }, right: { literal: 2.5 } }],
+        },
+        orderBy: { field: 'tokens.total.sum', direction: 'asc' },
+      });
+      expect(result.having).toEqual({
+        type: 'boolean',
+        operator: 'and',
+        args: [
+          { type: 'comparison', measure: 'tokens.total.sum', operator: 'gt', value: 1000 },
+          { type: 'comparison', measure: 'cost.avg', operator: 'lte', value: 2.5 },
+        ],
+      });
+      expect(result.orderBy).toEqual({ target: 'measure', measure: 'tokens.total.sum', direction: 'asc' });
+    });
+
+    it('rejects having and orderBy on token and cost measures that were not requested', () => {
+      expectIssue({ ...baseRequest, having: gt('cost.sum', 1) }, 'field_not_allowed', ['having', 'left', 'path']);
+      expectIssue({ ...baseRequest, orderBy: { field: 'tokens.input.avg', direction: 'desc' } }, 'field_not_allowed', [
+        'orderBy',
+        'field',
+      ]);
+    });
+
+    it('rejects having and orderBy on row cost fields', () => {
+      const request = { timeRange, measures: ['cost.sum'] };
+      for (const field of ['cost.coverage', 'cost.unit', 'costUnit']) {
+        expectIssue({ ...request, having: gt(field, 0.5) }, 'field_not_allowed', ['having', 'left', 'path']);
+        expectIssue({ ...request, orderBy: { field, direction: 'desc' } }, 'field_not_allowed', ['orderBy', 'field']);
+      }
+    });
   });
 
   describe('defaults and scope', () => {
@@ -151,7 +226,7 @@ describe('planTraceAggregate', () => {
     });
   });
 
-  describe('dimensions (Decision 4)', () => {
+  describe('dimensions', () => {
     it('accepts every canonical dimension and top-level metadata keys', () => {
       for (const dimension of Object.keys(TRACE_AGGREGATE_DIMENSION_REGISTRY)) {
         expect(plan({ ...baseRequest, groupBy: [dimension] }).dimensions).toEqual([dimension]);
@@ -179,7 +254,7 @@ describe('planTraceAggregate', () => {
     });
   });
 
-  describe('measures (Decision 3)', () => {
+  describe('measures', () => {
     it('accepts countDistinct over traceId and groupable fields', () => {
       expect(
         plan({ timeRange, measures: ['countDistinct.traceId', 'countDistinct.metadata.tenant'] }).measures,
@@ -211,7 +286,7 @@ describe('planTraceAggregate', () => {
     });
   });
 
-  describe('having (Decision 5)', () => {
+  describe('having', () => {
     const measures = ['count', 'duration.p95'];
 
     it('compiles boolean, comparison and membership predicates over requested measures', () => {
@@ -328,7 +403,7 @@ describe('planTraceAggregate', () => {
     });
   });
 
-  describe('orderBy (Decision 5)', () => {
+  describe('orderBy', () => {
     it('targets requested dimensions, including metadata keys', () => {
       expect(
         plan({ ...baseRequest, groupBy: ['metadata.tenant'], orderBy: { field: 'metadata.tenant', direction: 'asc' } })
@@ -374,7 +449,7 @@ describe('planTraceAggregate', () => {
     });
   });
 
-  describe('time range and buckets (Decision 6)', () => {
+  describe('time range and buckets', () => {
     const day = TRACE_AGGREGATE_INTERVAL_MS['1d'];
     const range = (ms: number) => ({
       from: '2026-01-01T00:00:00Z',
@@ -422,7 +497,7 @@ describe('planTraceAggregate', () => {
       ).toContain('1h');
     });
 
-    it('caps limit × buckets at 10,000 rows when interval is present (Decision 5)', () => {
+    it('caps limit × buckets at 10,000 rows when interval is present', () => {
       // Canonical example 1: default limit 100 × 62 daily buckets = 6,200.
       expect(plan({ timeRange: range(62 * day), interval: '1d', measures: ['count'] }).limit).toBe(100);
       const hours16 = 16 * TRACE_AGGREGATE_INTERVAL_MS['1h'];

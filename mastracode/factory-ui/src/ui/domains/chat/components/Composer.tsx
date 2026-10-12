@@ -295,6 +295,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
                 disabled={attachDisabled}
                 onClick={() => fileInputRef.current?.click()}
                 aria-label="Attach image"
+                tooltip="Images only"
               >
                 <ImagePlus size={14} />
               </Button>

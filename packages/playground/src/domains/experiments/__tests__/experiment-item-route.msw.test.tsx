@@ -17,6 +17,7 @@ import {
   experimentTraceFeedback,
   experimentTraceScores,
   experimentTraceSpans,
+  experimentTraceSpansWithMetadata,
   experimentsResponse,
   noAgents,
   noProcessors,
@@ -24,7 +25,6 @@ import {
   noWorkflows,
   resultsResponse,
 } from './fixtures/experiment-item-route';
-import { renamedPostgresWithMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import ExperimentPage from '@/pages/experiments/experiment';
 import ReviewQueuePage from '@/pages/experiments/review-queue';
 import { legacyTraceCapabilities, traceQueryCapabilities } from '@/pages/traces/__tests__/fixtures/trace-query';
@@ -97,7 +97,6 @@ const metricAggregateByAggregation: Record<string, GetMetricAggregateResponse> =
 beforeEach(() => {
   metricRequests = [];
   server.use(
-    http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(renamedPostgresWithMetrics)),
     http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceQueryCapabilities)),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, async ({ request }) => {
       const body = (await request.json()) as GetMetricAggregateArgs;
@@ -108,7 +107,7 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
-    http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json(experimentsResponse)),
+    http.get(`${TEST_BASE_URL}/api/experiments/${EXPERIMENT_ID}`, () => HttpResponse.json(experiment)),
     // The meta bar resolves the dataset name; a 404 falls back to the raw id.
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () =>
       HttpResponse.json({ error: 'not found' }, { status: 404 }),
@@ -200,22 +199,26 @@ describe('experiment item sub-route', () => {
   });
 
   describe('when the user selects results for review', () => {
-    it('shows the selected count in the review action without a separate selection label', async () => {
+    it('shows the selected count and reveals the actions once something is selected', async () => {
+      renderExperimentRoute();
+
+      expect((await screen.findByRole('button', { name: '0 selected' })).hasAttribute('disabled')).toBe(true);
+      expect(screen.queryByRole('button', { name: 'Flag for review' })).toBeNull();
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select result item-1' }));
+
+      expect(await screen.findByRole('button', { name: '1 selected' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Flag for review' })).toBeDefined();
+    });
+
+    it('clears the selection and hides the actions when the count button is clicked', async () => {
       renderExperimentRoute();
 
       fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
+      fireEvent.click(await screen.findByRole('button', { name: '1 selected' }));
 
-      expect(await screen.findByRole('button', { name: 'Flag 1 to review' })).toBeDefined();
-      expect(screen.queryByText('1 selected')).toBeNull();
-    });
-
-    it('only shows the selection actions once something is selected', async () => {
-      renderExperimentRoute();
-
-      // Selecting is what reveals the actions, so no bulk-selection affordance is needed beforehand.
-      expect(await screen.findByRole('checkbox', { name: 'Select result item-1' })).toBeDefined();
-      expect(screen.queryByRole('button', { name: /Flag \d+ to review/ })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+      expect(await screen.findByRole('button', { name: '0 selected' })).toBeDefined();
+      expect(screen.queryByRole('button', { name: 'Flag for review' })).toBeNull();
     });
   });
 
@@ -521,7 +524,7 @@ describe('experiment item sub-route', () => {
 
       const traceSection = screen.getByText('Experiment agent run').closest('section');
       if (!traceSection) throw new Error('Expected trace section');
-      fireEvent.click(within(traceSection).getByLabelText('Close Panel'));
+      fireEvent.click(within(traceSection).getByLabelText('Close trace'));
 
       await waitFor(() => expect(screen.queryByText('Experiment agent run')).toBeNull());
       expect(dialog.isConnected).toBe(true);
@@ -593,6 +596,28 @@ describe('experiment item sub-route', () => {
 
       expect(within(dialog).queryByRole('button', { name: /^review$/i })).toBeNull();
       expect(within(dialog).getByRole('button', { name: /mark as reviewed/i })).toBeDefined();
+    });
+  });
+
+  describe('when the opened trace has a span whose metadata holds the searched term', { timeout: 15_000 }, () => {
+    it('keeps only the span matching the metadata text in the trace drawer search', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/light`, () =>
+          HttpResponse.json(experimentTraceSpansWithMetadata),
+        ),
+      );
+      renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
+      await findResultDialog('res-1');
+      fireEvent.click(await screen.findByRole('button', { name: 'See trace' }));
+      const traceDialog = await screen.findByRole('dialog', { name: 'Trace experiment-trace-1' });
+      expect(await within(traceDialog).findByText('Experiment model call')).toBeDefined();
+
+      fireEvent.change(within(traceDialog).getByPlaceholderText('Search spans...'), {
+        target: { value: 'zanzibar-payload-term' },
+      });
+
+      await waitFor(() => expect(within(traceDialog).queryByText('Experiment model call')).toBeNull());
+      expect(within(traceDialog).getAllByText('Experiment tool call').length).toBeGreaterThan(0);
     });
   });
 });

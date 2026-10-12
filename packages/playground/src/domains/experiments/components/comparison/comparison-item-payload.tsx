@@ -1,3 +1,4 @@
+import { Code } from '@mastra/playground-ui/components/Code';
 import { ComparisonSection } from './comparison-section';
 
 export interface ComparisonItemPayloadProps {
@@ -15,9 +16,10 @@ export function ComparisonItemPayload({ label, value }: ComparisonItemPayloadPro
 
   return (
     <ComparisonSection title={label} defaultOpen={false}>
-      <pre className="max-h-40 overflow-auto rounded-md bg-card p-3 text-caption whitespace-pre-wrap text-muted-foreground">
-        {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
-      </pre>
+      <Code
+        className="max-h-40 overflow-auto rounded-md bg-card p-3 text-caption whitespace-pre-wrap text-muted-foreground"
+        code={typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+      />
     </ComparisonSection>
   );
 }

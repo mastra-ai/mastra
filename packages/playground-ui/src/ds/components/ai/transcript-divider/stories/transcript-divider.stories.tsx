@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { TranscriptDivider } from '../transcript-divider';
+import { Button } from '@/ds/components/Button';
 
 const meta = {
   title: 'AI/Transcript divider',
@@ -28,3 +29,15 @@ type Story = StoryObj<typeof meta>;
 export const TimeGap: Story = {};
 
 export const WithoutTimestamp: Story = { args: { title: undefined, label: 'Earlier today' } };
+
+export const WithActions: Story = {
+  args: {
+    title: undefined,
+    label: 'Turn 1',
+    children: (
+      <Button variant="ghost" size="sm">
+        Messages
+      </Button>
+    ),
+  },
+};

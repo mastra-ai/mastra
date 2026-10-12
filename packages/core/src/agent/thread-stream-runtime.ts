@@ -48,7 +48,41 @@ import type {
   SendAgentStateSignalResult,
 } from './types';
 
+/**
+ * DurableAgent.stream() resolves to a wrapper whose `output` is the model output;
+ * Agent.stream() resolves to the model output itself. Normalize to the latter.
+ */
+function toModelOutput<OUTPUT>(result: unknown): MastraModelOutput<OUTPUT> {
+  const inner = (result as { output?: unknown } | null)?.output;
+  if (inner && typeof inner === 'object' && 'fullStream' in inner) {
+    return inner as MastraModelOutput<OUTPUT>;
+  }
+  return result as MastraModelOutput<OUTPUT>;
+}
+
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
+
+/**
+ * Formats a thread key for use in error messages.
+ *
+ * Thread keys are `resourceId + NUL + threadId`. Never put a raw key in an
+ * error message: these errors flow back to senders (e.g. `agent_signal_send`)
+ * and into a notification's `lastDeliveryError`, and anything that treats the
+ * string as NUL-terminated (SQLite text binding, terminals, the TUI) silently
+ * drops everything after the resource id, including the thread id and the rest
+ * of the message. Ids themselves may contain NUL, so it is escaped as well.
+ */
+function describeThreadKey(key: string): string {
+  const separator = key.indexOf(AGENT_THREAD_KEY_SEPARATOR);
+  // An id containing NUL makes the split ambiguous: show the whole key, escaped.
+  if (separator === -1 || key.lastIndexOf(AGENT_THREAD_KEY_SEPARATOR) !== separator) {
+    return `thread ${key.replaceAll(AGENT_THREAD_KEY_SEPARATOR, '\\0')}`;
+  }
+  const resourceId = key.slice(0, separator);
+  const threadId = key.slice(separator + AGENT_THREAD_KEY_SEPARATOR.length);
+  return resourceId ? `thread ${threadId} (resource ${resourceId})` : `thread ${threadId}`;
+}
+
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 const AGENT_THREAD_OWNER_DISCOVERY_TOPIC = 'agent.thread-owner-discovery';
 /**
@@ -142,6 +176,13 @@ export class AgentThreadLeaseConflictError extends Error {
   }
 }
 
+export class AgentThreadLeaseLostError extends Error {
+  constructor(runId: string) {
+    super(`Thread run ${runId} lost its lease before publishing a terminal event`);
+    this.name = 'AgentThreadLeaseLostError';
+  }
+}
+
 export let defaultAgentThreadPubSub: PubSub = new EventEmitterPubSub();
 
 /**
@@ -217,6 +258,7 @@ type AgentThreadRunSuspension = {
 type AgentThreadRunContinuation<OUTPUT = unknown> = {
   sourceOutput: MastraModelOutput<OUTPUT>;
   canContinue: () => boolean;
+  didPublishTerminal: () => boolean;
 };
 
 type AgentThreadRunRecord<OUTPUT = unknown> = {
@@ -228,6 +270,16 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   runId: string;
   streamId: string;
   streamSeq: number;
+  /** Claim generation of the durable execution producing this stream, if fenced. */
+  generation?: number;
+  /** Registered by a recovering process: the run's streams under earlier generations are superseded. */
+  supersedes?: boolean;
+  /** See {@link AgentThreadRunClaim.ownershipLost}. */
+  ownershipLost?: () => boolean;
+  /** This process read the record's own `run-registered` back from the thread topic. */
+  registrationSeen?: boolean;
+  /** Another process registered the run after this record did, so it executes the run now. */
+  registeredElsewhere?: boolean;
   lifecycle: AgentThreadRunLifecycle;
   suspensions?: Map<string | undefined, AgentThreadRunSuspension>;
   /** When the record was parked as suspended (ms epoch); drives the TTL sweep. */
@@ -248,13 +300,21 @@ type ThreadControlSubscription = {
   observers: number;
   ownedRunIds: Set<string>;
   admittedSignalIds: Set<string>;
+  /**
+   * Runs this process lost to an execution elsewhere while idle messages or
+   * continuations stayed queued here, keyed to the lost execution's stream.
+   * The successor's terminal event drains those queues; the lost stream's own
+   * terminal event does not, since the run is still executing elsewhere.
+   */
+  successorRunIds: Map<string, string>;
   unsubscribe: () => void;
 };
 
 type PreparedThreadRun = {
-  threadKey: string;
+  threadKey?: string;
   abortController: AbortController;
   cleanup: () => void;
+  finalizerToken?: object;
 };
 
 type PendingIdleSignal<OUTPUT = unknown> = {
@@ -347,6 +407,8 @@ type AgentThreadRuntimeState = {
   threadRunsByStreamId: Map<string, AgentThreadRunRecord<any>>;
   threadKeysByRunId: Map<string, string>;
   remoteThreadKeysByRunId: Map<string, string>;
+  remoteAgentIdsByRunId: Map<string, string>;
+  unobservedRemoteRunIds: Set<string>;
   activeThreadRunIds: Map<string, string>;
   activeThreadStreamIds: Map<string, string>;
   streamSeqByRunId: Map<string, number>;
@@ -354,10 +416,21 @@ type AgentThreadRuntimeState = {
   suspendedRunIds: Set<string>;
   suspensionMetadataByRunId: Map<string, Map<string | undefined, AgentThreadRunSuspension>>;
   pendingSignalsByThread: Map<string, CreatedAgentSignal[]>;
+  // Signal IDs this runtime queued locally before publishing them, mapped to the owner run they were
+  // later forwarded to (if any). Replays of these are echoes, except one addressed to that forwarded owner.
+  locallyQueuedSignalIdsByThread: Map<string, Map<string, string | undefined>>;
+  pendingSignalListenersByRunId: Map<string, Set<() => void>>;
   // Signals queued for a run that is starting but has not made its first model
   // request yet. The first LLM step drains these and folds them into that
   // request; `pendingSignalsByThread` follow-ups instead become their own turn.
   preRunSignalsByThread: Map<string, CreatedAgentSignal[]>;
+  /**
+   * Threads whose queued signals belong to a run whose execution here lost it
+   * before the run's next execution registered, keyed by thread key to that
+   * execution's record. The next registration takes the queues: one in this
+   * process adopts them, one of the same run elsewhere gets them re-published.
+   */
+  lostRunsByThread: Map<string, AgentThreadRunRecord<any>>;
   pendingIdleSignalsByThread: Map<string, PendingIdleSignal<any>[]>;
   /** A dequeued idle message retains its cancellation identity until execution begins. */
   drainingIdleSignalsByThread: Map<string, PendingIdleSignal<any>>;
@@ -402,7 +475,18 @@ export type ActiveThreadRun = { runId: string; resourceId?: string; threadId: st
 
 type AgentThreadRunContinuationMode = 'across-suspension';
 
-export type AgentThreadStrictRegistrationOptions = {
+/** The durable execution claim producing a run, when the run is fenced. */
+type AgentThreadRunClaim = {
+  /**
+   * Whether the execution producing the run lost its claim to another
+   * execution. That execution holds the run's thread lease under the same
+   * runId, so a run that ends after losing its claim leaves the lease alone
+   * and leaves the follow-ups queued for it to the run's next execution.
+   */
+  ownershipLost?: () => boolean;
+};
+
+export type AgentThreadStrictRegistrationOptions = AgentThreadRunClaim & {
   strict: true;
   continuation?: AgentThreadRunContinuationMode;
   /**
@@ -411,11 +495,23 @@ export type AgentThreadStrictRegistrationOptions = {
    * deliberately leaves the same-run thread lease intact for the new owner.
    */
   validate?: () => void | Promise<void>;
+  /**
+   * Claim generation of the durable execution producing this run. A recovering
+   * process strictly re-registers the run under a later generation, and
+   * subscribers stop following the run's streams under earlier generations.
+   */
+  generation?: number;
 };
 
-type AgentThreadStreamRegistrationOptions = {
+type AgentThreadStreamRegistrationOptions = AgentThreadRunClaim & {
   strict?: false;
   continuation?: AgentThreadRunContinuationMode;
+  /**
+   * Claim generation of the durable execution producing this run. Stamped on
+   * the stream; unlike a strict registration's, it supersedes nothing — a
+   * resume claims a later generation but follows a cleanly suspended half.
+   */
+  generation?: number;
 };
 
 export type AgentThreadRunRegistration = {
@@ -429,13 +525,24 @@ export type AgentThreadRunRegistration = {
 type SerializableAgentSignal = AgentSignal & Pick<CreatedAgentSignal, 'id' | 'createdAt'>;
 
 type AgentThreadStreamRuntimeEvent =
-  | { type: 'run-registered'; runId: string; streamId: string; streamSeq: number; sourceId?: string }
+  | {
+      type: 'run-registered';
+      runId: string;
+      streamId: string;
+      streamSeq: number;
+      sourceId?: string;
+      agentId?: string;
+      generation?: number;
+      /** See {@link AgentThreadRunRecord.supersedes}. */
+      supersedes?: boolean;
+    }
   | {
       type: 'stream-part';
       runId: string;
       streamId: string;
       part: unknown;
       sourceId: string;
+      generation?: number;
       /** Epoch ms the part was produced; publishing can lag behind it. */
       producedAt?: number;
       /** Kept by save-time trims; removed only when the whole run is trimmed. */
@@ -511,12 +618,16 @@ function createThreadPeerId(agentId: string, resourceId: string, threadId: strin
   return [agentId, resourceId, threadId].map(part => encodeURIComponent(part)).join(':');
 }
 
+const MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD = 1000;
+
 function createRuntimeState(): AgentThreadRuntimeState {
   return {
     threadRunsById: new Map(),
     threadRunsByStreamId: new Map(),
     threadKeysByRunId: new Map(),
     remoteThreadKeysByRunId: new Map(),
+    remoteAgentIdsByRunId: new Map(),
+    unobservedRemoteRunIds: new Set(),
     activeThreadRunIds: new Map(),
     activeThreadStreamIds: new Map(),
     streamSeqByRunId: new Map(),
@@ -524,7 +635,10 @@ function createRuntimeState(): AgentThreadRuntimeState {
     suspendedRunIds: new Set(),
     suspensionMetadataByRunId: new Map(),
     pendingSignalsByThread: new Map(),
+    locallyQueuedSignalIdsByThread: new Map(),
+    pendingSignalListenersByRunId: new Map(),
     preRunSignalsByThread: new Map(),
+    lostRunsByThread: new Map(),
     pendingIdleSignalsByThread: new Map(),
     drainingIdleSignalsByThread: new Map(),
     drainingPendingSignalsByThread: new Map(),
@@ -548,6 +662,21 @@ function createRuntimeState(): AgentThreadRuntimeState {
 export class AgentThreadStreamRuntime {
   #id?: string;
   #statesByPubSub = new WeakMap<PubSub, AgentThreadRuntimeState>();
+  #preparedRunsByAbortSignal = new WeakMap<AbortSignal, PreparedThreadRun>();
+  // Some runtimes, such as Cloudflare Workers with a compatibility date before 2025-05-05, do not provide
+  // FinalizationRegistry. There, an abandoned output that is never consumed keeps its prepared run until the
+  // run finishes, is aborted, or the runtime state is reset; every other cleanup path is unchanged.
+  #threadlessRunFinalizer =
+    typeof FinalizationRegistry === 'function'
+      ? new FinalizationRegistry<{
+          state: AgentThreadRuntimeState;
+          runId: string;
+          token: object;
+        }>(({ state, runId, token }) => {
+          if (state.preparedRunsById.get(runId)?.finalizerToken !== token) return;
+          this.#cleanupPreparedRun(state, runId);
+        })
+      : undefined;
 
   #getPubSub(pubsub?: PubSub): PubSub {
     return pubsub ?? defaultAgentThreadPubSub;
@@ -587,6 +716,27 @@ export class AgentThreadStreamRuntime {
       .getLeaseOwner(key)
       .then(owner => owner === runId)
       .catch(() => false);
+  }
+
+  /**
+   * Whether `runId` still holds its thread's lease, which it renews for as
+   * long as it is live in some process. `false` without a lease backend.
+   * Throws when the backend can't answer.
+   */
+  async isRunHoldingThreadLease(
+    pubsub: PubSub | undefined,
+    runId: string,
+    threadId: string,
+    resourceId?: string,
+  ): Promise<boolean> {
+    const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
+    if (isFallback) return false;
+    return (await provider.getLeaseOwner(this.#threadKey(resourceId, threadId))) === runId;
+  }
+
+  /** How long a thread lease outlives the process that stopped renewing it. */
+  get threadLeaseTtlMs(): number {
+    return AGENT_THREAD_LEASE_TTL_MS;
   }
 
   #getSourceId(): string {
@@ -630,7 +780,7 @@ export class AgentThreadStreamRuntime {
           if (!renewed) {
             // If renewLease reports the lease is gone, stop renewing; the current stream may still finish,
             // but another process can now claim the thread until this run completes or errors.
-            this.#stopLeaseRenewal(pubsub, runId);
+            this.#stopLeaseRenewal(pubsub, runId, timer);
           }
         })
         .catch(() => {});
@@ -642,10 +792,11 @@ export class AgentThreadStreamRuntime {
     state.leaseRenewalTimers.set(runId, timer);
   }
 
-  #stopLeaseRenewal(pubsub: PubSub, runId: string): void {
+  /** Pass `only` to stop that timer alone, never one a later registration of the run started. */
+  #stopLeaseRenewal(pubsub: PubSub, runId: string, only?: ReturnType<typeof setInterval>): void {
     const state = this.#getState(pubsub);
     const timer = state.leaseRenewalTimers.get(runId);
-    if (!timer) return;
+    if (!timer || (only && timer !== only)) return;
     clearInterval(timer);
     state.leaseRenewalTimers.delete(runId);
   }
@@ -759,7 +910,11 @@ export class AgentThreadStreamRuntime {
       if (!active) return;
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (data?.type === 'signal-enqueued') {
-        if (data.sourceId === this.#id || subscription.admittedSignalIds.has(data.signal.id)) return;
+        if (
+          (data.sourceId === this.#id && this.#isLocalSignalEcho(state, key, data.signal.id, data.runId)) ||
+          subscription.admittedSignalIds.has(data.signal.id)
+        )
+          return;
         // Keep predecessor routing through a handoff, but never promote observer copies into execution.
         if (state.threadKeysByRunId.get(data.runId) !== key && !subscription.ownedRunIds.has(data.runId)) {
           return;
@@ -775,6 +930,7 @@ export class AgentThreadStreamRuntime {
         queue.push(createSignal(data.signal));
         queues.set(key, queue);
         subscription.admittedSignalIds.add(data.signal.id);
+        this.#notifyPendingSignals(state, key);
       } else if (data?.type === 'signals-cancelled') {
         // A backend retry can deliver the original enqueue after its cancellation.
         for (const id of data.signalIds) subscription.admittedSignalIds.add(id);
@@ -799,11 +955,43 @@ export class AgentThreadStreamRuntime {
           }
           if (data.clearPendingSignals) this.#notifyThreadEvents(state);
         }
+      } else if (data?.type === 'run-registered') {
+        const lost = state.lostRunsByThread.get(key);
+        if (data.sourceId === this.#id) {
+          const record =
+            state.threadRunsByStreamId.get(data.streamId) ?? (lost?.streamId === data.streamId ? lost : undefined);
+          if (record) record.registrationSeen = true;
+          return;
+        }
+        // Registrations of the run read before this process's own are history
+        // (e.g. a replayed backlog); one read after it is a later execution.
+        const current = state.threadRunsById.get(data.runId);
+        if (current?.registrationSeen) current.registeredElsewhere = true;
+        if (lost?.runId === data.runId && lost.registrationSeen) {
+          state.lostRunsByThread.delete(key);
+          this.#handOffQueuedSignals(state, resolvedPubSub, key, data.runId, lost.streamId);
+        }
+      } else if (data?.type === 'run-completed' || data?.type === 'run-failed') {
+        const lostStreamId = subscription.successorRunIds.get(data.runId);
+        if (lostStreamId === undefined || data.streamId === lostStreamId) return;
+        subscription.successorRunIds.delete(data.runId);
+        if (await this.#drainPendingContinuations(state, resolvedPubSub, key, data.runId)) return;
+        await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
       }
     };
     const onEvent: EventCallback = (event, ack) => {
       const type = (event.data as AgentThreadStreamRuntimeEvent | undefined)?.type;
-      if (type !== 'signal-enqueued' && type !== 'signals-cancelled' && type !== 'run-abort-requested') return ack?.();
+      if (
+        type !== 'signal-enqueued' &&
+        type !== 'signals-cancelled' &&
+        type !== 'run-abort-requested' &&
+        type !== 'run-registered' &&
+        !(
+          (type === 'run-completed' || type === 'run-failed') &&
+          subscription.successorRunIds.has((event.data as { runId: string }).runId)
+        )
+      )
+        return ack?.();
       // Finish acknowledging the delivery before an empty queue can release its listener.
       subscription.references++;
       const handled = tail.then(() => handleEvent(event));
@@ -821,6 +1009,7 @@ export class AgentThreadStreamRuntime {
       observers: 0,
       ownedRunIds,
       admittedSignalIds: new Set(),
+      successorRunIds: new Map(),
       unsubscribe: () => {
         active = false;
         void subscription.ready.then(() => resolvedPubSub.unsubscribe(topic, onEvent)).catch(() => {});
@@ -852,6 +1041,7 @@ export class AgentThreadStreamRuntime {
       return;
     subscription.ownedRunIds.clear();
     subscription.admittedSignalIds.clear();
+    state.locallyQueuedSignalIdsByThread.delete(key);
     if (subscription.observers) return;
     state.threadControlSubscriptions.delete(key);
     subscription.unsubscribe();
@@ -1212,7 +1402,7 @@ export class AgentThreadStreamRuntime {
             requestId: data.requestId,
             runId: data.runId,
             sourceId,
-            error: `Claimed thread owner could not acquire the execution lease for ${key}`,
+            error: `Claimed thread owner could not acquire the execution lease for ${describeThreadKey(key)}`,
           });
         } else if (accepted.error) {
           await reply({
@@ -1574,12 +1764,12 @@ export class AgentThreadStreamRuntime {
       else failMessageIdentity?.(failure);
     };
     if (!isOwnerActive()) {
-      releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
-      return { runId, error: `Claimed thread owner was released for ${key}` };
+      releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
+      return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
     }
     if (Date.now() >= expiresAt) {
-      releaseMessageIdentity(`Claimed thread owner acceptance expired for ${key}`);
-      return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+      releaseMessageIdentity(`Claimed thread owner acceptance expired for ${describeThreadKey(key)}`);
+      return { runId, error: `Claimed thread owner acceptance expired for ${describeThreadKey(key)}` };
     }
     // Resolving the owner's stream options can reject. A later retry of the same
     // logical message must be free to route instead of being told this message was
@@ -1613,12 +1803,12 @@ export class AgentThreadStreamRuntime {
       subscription.references++;
       await subscription.ready;
       if (!isOwnerActive()) {
-        releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
-        return { runId, error: `Claimed thread owner was released for ${key}` };
+        releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
+        return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
       }
       if (Date.now() >= expiresAt) {
-        releaseMessageIdentity(`Claimed thread owner acceptance expired for ${key}`);
-        return { runId, error: `Claimed thread owner acceptance expired for ${key}` };
+        releaseMessageIdentity(`Claimed thread owner acceptance expired for ${describeThreadKey(key)}`);
+        return { runId, error: `Claimed thread owner acceptance expired for ${describeThreadKey(key)}` };
       }
 
       const activeRunId = state.activeThreadRunIds.get(key);
@@ -1650,8 +1840,8 @@ export class AgentThreadStreamRuntime {
       }
 
       if (!isOwnerActive()) {
-        releaseMessageIdentity(`Claimed thread owner was released for ${key}`);
-        return { runId, error: `Claimed thread owner was released for ${key}` };
+        releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
+        return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
       }
       state.activeThreadRunIds.set(key, runId);
       state.threadKeysByRunId.set(runId, key);
@@ -1676,8 +1866,8 @@ export class AgentThreadStreamRuntime {
         state.threadKeysByRunId.delete(runId);
         if (!ownerActive || expired) {
           const error = !ownerActive
-            ? `Claimed thread owner was released for ${key}`
-            : `Claimed thread owner acceptance expired for ${key}`;
+            ? `Claimed thread owner was released for ${describeThreadKey(key)}`
+            : `Claimed thread owner acceptance expired for ${describeThreadKey(key)}`;
           releaseMessageIdentity(error);
           const drained = await this.#drainPendingIdleSignals(state, pubsub, key, lease.acquired ? runId : undefined);
           if (lease.acquired && !drained) this.#releaseThreadLease(pubsub, key, runId);
@@ -1696,17 +1886,21 @@ export class AgentThreadStreamRuntime {
           settleMessageIdentity?.({ runId: lease.owner }, false);
           return { runId: lease.owner };
         }
-        releaseMessageIdentity(new Error(`Claimed thread owner could not acquire the execution lease for ${key}`));
+        releaseMessageIdentity(
+          new Error(`Claimed thread owner could not acquire the execution lease for ${describeThreadKey(key)}`),
+        );
         await this.#drainPendingIdleSignals(state, pubsub, key);
         return undefined;
       }
 
       try {
-        const output = await owner.agent.stream(signal, {
-          ...(streamOptions as any),
-          runId,
-          memory: withThreadMemory(streamOptions?.memory, owner.resourceId, owner.threadId),
-        });
+        const output = toModelOutput<OUTPUT>(
+          await owner.agent.stream(signal, {
+            ...(streamOptions as any),
+            runId,
+            memory: withThreadMemory(streamOptions?.memory, owner.resourceId, owner.threadId),
+          }),
+        );
         // The run started, so the admission a duplicate is waiting on succeeded.
         settleMessageIdentity?.({ runId });
         return { runId, output };
@@ -1739,13 +1933,29 @@ export class AgentThreadStreamRuntime {
       // never became ready, for example) must not leave a duplicate waiting on an
       // outcome that will never arrive.
       if (!admissionSettled) {
-        failMessageIdentity?.(new Error(`Claimed thread owner admission for ${key} did not complete`));
+        failMessageIdentity?.(
+          new Error(`Claimed thread owner admission for ${describeThreadKey(key)} did not complete`),
+        );
       }
       if (control) {
         control.references--;
         this.#releaseUnusedThreadControlSubscription(state, key);
       }
     }
+  }
+
+  #recordLocallyQueuedSignal(state: AgentThreadRuntimeState, key: string, signalId: string) {
+    const ids = state.locallyQueuedSignalIdsByThread.get(key) ?? new Map<string, string | undefined>();
+    ids.delete(signalId);
+    ids.set(signalId, undefined);
+    // Bound memory: retained replays of very old local signals are vanishingly rare, so evict oldest first.
+    if (ids.size > MAX_LOCALLY_QUEUED_SIGNAL_IDS_PER_THREAD) ids.delete(ids.keys().next().value!);
+    state.locallyQueuedSignalIdsByThread.set(key, ids);
+  }
+
+  #isLocalSignalEcho(state: AgentThreadRuntimeState, key: string, signalId: string, runId: string) {
+    const ids = state.locallyQueuedSignalIdsByThread.get(key);
+    return !!ids?.has(signalId) && ids.get(signalId) !== runId;
   }
 
   #publish(pubsub: PubSub | undefined, key: string, event: AgentThreadStreamRuntimeEvent) {
@@ -1799,7 +2009,7 @@ export class AgentThreadStreamRuntime {
       // this caller has already reported as timed out.
       const expiresAt = Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS;
       const timeout = setTimeout(
-        () => finish({ error: new Error(`Claimed thread owner did not accept signal for ${key}`) }),
+        () => finish({ error: new Error(`Claimed thread owner did not accept signal for ${describeThreadKey(key)}`) }),
         AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
       );
 
@@ -1847,7 +2057,7 @@ export class AgentThreadStreamRuntime {
     const claimedOwnerSourceId = await discovery;
     if (!claimedOwnerSourceId) {
       throw new Error(
-        `No claimed thread owner responded for ${key} within ${AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS}ms`,
+        `No claimed thread owner responded for ${describeThreadKey(key)} within ${AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS}ms`,
       );
     }
     const acceptedRunId = await this.#deliverToClaimedThreadOwner(pubsub, key, runId, signal, claimedOwnerSourceId);
@@ -1944,6 +2154,8 @@ export class AgentThreadStreamRuntime {
     key: string,
     streamId: string,
     resumed = false,
+    // Read per part: a run continued across suspension takes the resuming claim's generation.
+    getGeneration?: () => number | undefined,
   ) {
     const runtime = this;
 
@@ -1958,8 +2170,10 @@ export class AgentThreadStreamRuntime {
     let done = false;
     let cancelled = false;
     let failed = false;
+    let publishedTerminal = false;
     let error: unknown;
     let cancelSource: (() => Promise<void>) | undefined;
+    let suspensionBoundaryHandler: (() => Promise<void>) | undefined;
     // Resolves once the broadcast pump has drained the source stream AND every
     // stream-part publish has completed. Terminal events (`run-completed` /
     // `run-suspended`) must wait on this: publishing the terminal event while
@@ -1993,9 +2207,11 @@ export class AgentThreadStreamRuntime {
           });
         }
       }
+      let isSuspensionBoundary = false;
       if (rawPart && typeof rawPart === 'object' && 'type' in rawPart) {
         const typedPart = rawPart as { type?: string; payload?: { toolCallId?: string; toolName?: string } };
         if (typedPart.type === 'tool-call-approval' || typedPart.type === 'tool-call-suspended') {
+          isSuspensionBoundary = true;
           runtime.#markRunSuspending(runtime.#getState(pubsub), output.runId, streamId, {
             toolCallId: typedPart.payload?.toolCallId,
             toolName: typedPart.payload?.toolName,
@@ -2015,6 +2231,7 @@ export class AgentThreadStreamRuntime {
         streamId,
         part,
         sourceId: runtime.#getSourceId(),
+        generation: getGeneration?.(),
         producedAt,
         // `start` and prompts stay on the topic until the run is trimmed as a
         // whole, so a subscriber joining mid-run still sees the run begin.
@@ -2022,9 +2239,22 @@ export class AgentThreadStreamRuntime {
           ? { pinned: true }
           : {}),
       });
+      const typedPart = part as { type?: string; finishReason?: string; payload?: { finishReason?: string } };
+      const finishReason = typedPart.finishReason ?? typedPart.payload?.finishReason;
+      if (
+        typedPart.type === 'error' ||
+        typedPart.type === 'abort' ||
+        typedPart.type === 'tripwire' ||
+        (typedPart.type === 'finish' && finishReason !== 'tool-calls')
+      ) {
+        publishedTerminal = true;
+      }
       published++;
       if (savedAt !== undefined) trimSaved();
       wake();
+      if (isSuspensionBoundary) {
+        await suspensionBoundaryHandler?.().catch(() => {});
+      }
       // An error chunk settles `_waitUntilFinished()` without closing
       // `fullStream` (durable error-recovery keeps consuming), so the pump can
       // stay blocked on `read()` forever. The error chunk is the last part
@@ -2229,6 +2459,10 @@ export class AgentThreadStreamRuntime {
       startBroadcast: start,
       cancelBroadcast: cancel,
       canContinueBroadcast: () => started && !done && !cancelled && !failed,
+      setSuspensionBoundaryHandler: (handler: () => Promise<void>) => {
+        suspensionBoundaryHandler = handler;
+      },
+      didPublishTerminal: () => publishedTerminal,
       broadcastFinished,
     };
   }
@@ -2245,9 +2479,9 @@ export class AgentThreadStreamRuntime {
   }
 
   prepareRunOptions<OUTPUT>(options: AgentExecutionOptions<OUTPUT>, pubsub?: PubSub): AgentExecutionOptions<OUTPUT> {
+    if (!options.runId) return options;
     const { threadId, resourceId } = this.#getThreadTarget(options);
-    if (!threadId || !options.runId) return options;
-    const key = this.#threadKey(resourceId, threadId);
+    const key = threadId ? this.#threadKey(resourceId, threadId) : undefined;
 
     const state = this.#getState(pubsub);
     const abortController = new AbortController();
@@ -2259,12 +2493,14 @@ export class AgentThreadStreamRuntime {
       upstreamAbortSignal?.addEventListener('abort', abort, { once: true });
     }
 
-    state.preparedRunsById.set(options.runId, {
-      threadKey: key,
+    const preparedRun: PreparedThreadRun = {
+      ...(key ? { threadKey: key } : {}),
       abortController,
       cleanup: () => upstreamAbortSignal?.removeEventListener('abort', abort),
-    });
-    this.#ensureThreadControlSubscription(state, pubsub, key);
+    };
+    state.preparedRunsById.set(options.runId, preparedRun);
+    this.#preparedRunsByAbortSignal.set(abortController.signal, preparedRun);
+    if (key) this.#ensureThreadControlSubscription(state, pubsub, key);
 
     if (state.abortedRunIds.has(options.runId)) {
       abort();
@@ -2321,6 +2557,11 @@ export class AgentThreadStreamRuntime {
    * evicted from `preparedRunsById` by {@link #cleanupPreparedRun}), but its
    * record remains the thread's blocking run until it is resumed or released.
    */
+  /** Whether `runId` is parked on a tool suspension in this process. */
+  isRunParked(runId: string, pubsub?: PubSub): boolean {
+    return this.#isParkedRun(this.#getState(pubsub), runId);
+  }
+
   #isParkedRun(state: AgentThreadRuntimeState, runId: string): boolean {
     const record = state.threadRunsById.get(runId);
     return state.suspendedRunIds.has(runId) || record?.lifecycle === 'suspended' || record?.lifecycle === 'suspending';
@@ -2333,10 +2574,9 @@ export class AgentThreadStreamRuntime {
    * resume, and nothing sent after Stop is answered. The run is released the
    * way a finished run is: its records and thread reservation are dropped, then
    * the thread's pending work starts or its lease is given up. A run parked on
-   * a tool approval is left alone; its decline path releases it.
+   * a tool approval is released the same way: the abort is the decision.
    */
   #releaseParkedRun(state: AgentThreadRuntimeState, pubsub: PubSub | undefined, runId: string): boolean {
-    if (state.approvalSuspendedRunIds.has(runId)) return false;
     const record = state.threadRunsById.get(runId);
     if (!this.#isParkedRun(state, runId) || !record) return false;
     const key = state.threadKeysByRunId.get(runId) ?? this.#threadKey(record.resourceId, record.threadId);
@@ -2383,6 +2623,54 @@ export class AgentThreadStreamRuntime {
 
   hasThreadRun(runId: string, pubsub?: PubSub): boolean {
     return this.#getState(pubsub).threadRunsById.has(runId);
+  }
+
+  /** Whether the run's original stream is still live and carries its resumed segments. */
+  hasRunContinuation(runId: string, pubsub?: PubSub): boolean {
+    return this.#getState(pubsub).threadRunsById.get(runId)?.continuation?.canContinue() === true;
+  }
+
+  /** Capture whether the currently registered continuation publishes its terminal stream part. */
+  captureThreadRunTerminalPublish(runId: string, pubsub?: PubSub): (() => boolean) | undefined {
+    return this.#getState(pubsub).threadRunsById.get(runId)?.continuation?.didPublishTerminal;
+  }
+
+  getResumableThreadRunSuspension(
+    options: AgentSubscribeToThreadOptions & { runId: string; toolCallId?: string },
+    pubsub?: PubSub,
+  ): AgentThreadRunSuspension | undefined {
+    const state = this.#getState(pubsub);
+    const key = this.#threadKey(options.resourceId, options.threadId);
+    const record = state.threadRunsById.get(options.runId);
+    const isSuspended = this.#isSuspendedRun(state, options.runId);
+    if (!record || state.threadKeysByRunId.get(options.runId) !== key || !isSuspended) {
+      return undefined;
+    }
+
+    const suspensions = state.suspensionMetadataByRunId.get(options.runId);
+    return options.toolCallId ? suspensions?.get(options.toolCallId) : suspensions?.values().next().value;
+  }
+
+  /** @internal Restore a suspension consumed while attaching a second observer. */
+  __restoreThreadRunSuspension(
+    options: AgentSubscribeToThreadOptions & { runId: string },
+    suspension: AgentThreadRunSuspension,
+    pubsub?: PubSub,
+  ): boolean {
+    const state = this.#getState(pubsub);
+    const key = this.#threadKey(options.resourceId, options.threadId);
+    const record = state.threadRunsById.get(options.runId);
+    if (
+      !record ||
+      state.threadKeysByRunId.get(options.runId) !== key ||
+      (record.lifecycle !== 'suspending' && record.lifecycle !== 'suspended')
+    ) {
+      return false;
+    }
+    const lifecycle = record.lifecycle;
+    this.#markRunSuspending(state, options.runId, record.streamId, suspension);
+    record.lifecycle = lifecycle;
+    return true;
   }
 
   getResumableThreadRun(
@@ -2514,12 +2802,16 @@ export class AgentThreadStreamRuntime {
     state.threadRunsByStreamId.clear();
     state.threadKeysByRunId.clear();
     state.remoteThreadKeysByRunId.clear();
+    state.remoteAgentIdsByRunId.clear();
+    state.unobservedRemoteRunIds.clear();
     state.activeThreadRunIds.clear();
     state.approvalSuspendedRunIds.clear();
     state.suspendedRunIds.clear();
     state.suspensionMetadataByRunId.clear();
     state.pendingSignalsByThread.clear();
+    state.locallyQueuedSignalIdsByThread.clear();
     state.preRunSignalsByThread.clear();
+    state.lostRunsByThread.clear();
     state.pendingIdleSignalsByThread.clear();
     state.drainingPendingSignalsByThread.clear();
     state.pendingContinuationsByThread.clear();
@@ -2537,14 +2829,27 @@ export class AgentThreadStreamRuntime {
     state.activeThreadStreamIds.clear();
     state.streamSeqByRunId.clear();
     state.watchedThreadStreamIds.clear();
+    for (const preparedRun of state.preparedRunsById.values()) {
+      if (preparedRun.finalizerToken) this.#threadlessRunFinalizer?.unregister(preparedRun.finalizerToken);
+    }
     state.preparedRunsById.clear();
     state.resumeTailsByRunId.clear();
     state.abortedRunIds.clear();
   }
 
-  #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string) {
-    state.preparedRunsById.get(runId)?.cleanup();
+  #cleanupPreparedRun(state: AgentThreadRuntimeState, runId: string, expectedPreparedRun?: PreparedThreadRun) {
+    const preparedRun = state.preparedRunsById.get(runId);
+    if (expectedPreparedRun && preparedRun !== expectedPreparedRun) {
+      expectedPreparedRun.cleanup();
+      if (expectedPreparedRun.finalizerToken) {
+        this.#threadlessRunFinalizer?.unregister(expectedPreparedRun.finalizerToken);
+      }
+      return;
+    }
+    preparedRun?.cleanup();
+    if (preparedRun?.finalizerToken) this.#threadlessRunFinalizer?.unregister(preparedRun.finalizerToken);
     state.preparedRunsById.delete(runId);
+    state.pendingSignalListenersByRunId.delete(runId);
     state.abortedRunIds.delete(runId);
   }
 
@@ -2646,6 +2951,7 @@ export class AgentThreadStreamRuntime {
       streamId,
       streamSeq,
       sourceId: this.#getSourceId(),
+      agentId,
     });
     void registered.then(startBroadcast, startBroadcast);
     // Wait for the local stream to finish AND for every stream-part publish to
@@ -2743,6 +3049,7 @@ export class AgentThreadStreamRuntime {
     output: MastraModelOutput<OUTPUT>,
     streamOptions: AgentExecutionOptions<OUTPUT>,
     pubsub?: PubSub,
+    claim?: AgentThreadRunClaim & { generation?: number },
   ): boolean {
     const { threadId, resourceId } = this.#getThreadTarget(streamOptions);
     if (!threadId) return false;
@@ -2772,6 +3079,8 @@ export class AgentThreadStreamRuntime {
     existing.lifecycle = 'running';
     existing.streamOptions = streamOptions;
     existing.currentSegmentOutput = output;
+    if (claim?.generation !== undefined) existing.generation = claim.generation;
+    if (claim?.ownershipLost) existing.ownershipLost = claim.ownershipLost;
     // Resume callers may only send an approval and never read this segment.
     // Drain its native output so completion and subsequent approvals advance.
     void output.consumeStream();
@@ -2812,7 +3121,23 @@ export class AgentThreadStreamRuntime {
     registrationOptions?: AgentThreadStrictRegistrationOptions | AgentThreadStreamRegistrationOptions,
   ): Promise<void | AgentThreadRunRegistration> | undefined {
     const { threadId, resourceId } = this.#getThreadTarget(streamOptions);
-    if (!threadId) return;
+    if (!threadId) {
+      if (registrationOptions?.strict) return;
+      const state = this.#getState(pubsub);
+      const runId = output.runId;
+      const finalizerToken = {};
+      const preparedRun = streamOptions.abortSignal
+        ? this.#preparedRunsByAbortSignal.get(streamOptions.abortSignal)
+        : undefined;
+      if (preparedRun) {
+        preparedRun.finalizerToken = finalizerToken;
+        this.#threadlessRunFinalizer?.register(output, { state, runId, token: finalizerToken }, finalizerToken);
+        void Promise.allSettled([output._waitUntilFinished()]).then(() => {
+          this.#cleanupPreparedRun(state, runId, preparedRun);
+        });
+      }
+      return;
+    }
 
     if (registrationOptions?.strict) {
       return this.#registerRunStrict(agent, output, streamOptions, pubsub, threadId, resourceId, registrationOptions);
@@ -2827,8 +3152,10 @@ export class AgentThreadStreamRuntime {
       createSubscriberStream,
       startBroadcast,
       canContinueBroadcast,
+      setSuspensionBoundaryHandler,
+      didPublishTerminal,
       broadcastFinished,
-    } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1);
+    } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1, () => record.generation);
     const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
     if (resumedToolCallId) {
       this.#clearSuspendedToolCall(state, output.runId, resumedToolCallId);
@@ -2843,6 +3170,8 @@ export class AgentThreadStreamRuntime {
       runId: output.runId,
       streamId,
       streamSeq,
+      generation: registrationOptions?.generation,
+      ownershipLost: registrationOptions?.ownershipLost,
       lifecycle: 'running',
       threadId,
       resourceId,
@@ -2852,7 +3181,7 @@ export class AgentThreadStreamRuntime {
       broadcastFinished,
       continuation:
         registrationOptions?.continuation === 'across-suspension'
-          ? { sourceOutput: output, canContinue: canContinueBroadcast }
+          ? { sourceOutput: output, canContinue: canContinueBroadcast, didPublishTerminal }
           : undefined,
     };
 
@@ -2861,6 +3190,7 @@ export class AgentThreadStreamRuntime {
     state.threadKeysByRunId.set(output.runId, key);
     state.activeThreadRunIds.set(key, output.runId);
     state.activeThreadStreamIds.set(key, streamId);
+    state.lostRunsByThread.delete(key);
     const resolvedPubSub = this.#getPubSub(pubsub);
     const registered = (async () => {
       await this.#ensureThreadControlSubscription(state, resolvedPubSub, key).ready;
@@ -2889,6 +3219,8 @@ export class AgentThreadStreamRuntime {
         streamId,
         streamSeq,
         sourceId: this.#getSourceId(),
+        agentId: agent.id,
+        generation: registrationOptions?.generation,
       });
     })();
     // Always drive the run's stream to completion, even when no caller consumes
@@ -2897,6 +3229,9 @@ export class AgentThreadStreamRuntime {
     // full stream; without this pump the run never reaches a terminal state and
     // its active-run record + thread lease would never release, permanently
     // wedging the thread.
+    if (record.continuation) {
+      setSuspensionBoundaryHandler(() => this.#publishRunSuspended(pubsub, key, record));
+    }
     void registered.then(startBroadcast, startBroadcast);
     this.#watchThreadRunCompletion(state, pubsub, key, record, registered);
     return registered;
@@ -2941,8 +3276,10 @@ export class AgentThreadStreamRuntime {
       startBroadcast,
       cancelBroadcast,
       canContinueBroadcast,
+      setSuspensionBoundaryHandler,
+      didPublishTerminal,
       broadcastFinished,
-    } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1);
+    } = this.#withBroadcastStream(output, pubsub, key, streamId, streamSeq > 1, () => record.generation);
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
       output: outputForSubscribers,
@@ -2950,6 +3287,9 @@ export class AgentThreadStreamRuntime {
       runId: output.runId,
       streamId,
       streamSeq,
+      generation: registrationOptions.generation,
+      supersedes: registrationOptions.generation !== undefined,
+      ownershipLost: registrationOptions.ownershipLost,
       lifecycle: 'running',
       threadId,
       resourceId,
@@ -2959,7 +3299,7 @@ export class AgentThreadStreamRuntime {
       broadcastFinished,
       continuation:
         registrationOptions.continuation === 'across-suspension'
-          ? { sourceOutput: output, canContinue: canContinueBroadcast }
+          ? { sourceOutput: output, canContinue: canContinueBroadcast, didPublishTerminal }
           : undefined,
     };
 
@@ -3025,6 +3365,9 @@ export class AgentThreadStreamRuntime {
         streamId,
         streamSeq,
         sourceId: this.#getSourceId(),
+        agentId: agent.id,
+        generation: registrationOptions.generation,
+        supersedes: record.supersedes,
       });
       registrationPublished = true;
       await registrationOptions.validate?.();
@@ -3044,6 +3387,8 @@ export class AgentThreadStreamRuntime {
       }
       throw error;
     }
+    // Adopt only once registered: a rolled-back registration leaves them for the run's next execution.
+    state.lostRunsByThread.delete(key);
 
     const resumedToolCallId = (streamOptions as AgentExecutionOptions<OUTPUT> & { toolCallId?: string }).toolCallId;
     if (resumedToolCallId) {
@@ -3051,9 +3396,28 @@ export class AgentThreadStreamRuntime {
     } else {
       this.#clearSuspendedRun(state, output.runId);
     }
+    if (record.continuation) {
+      setSuspensionBoundaryHandler(() => this.#publishRunSuspended(pubsub, key, record));
+    }
     this.#watchThreadRunCompletion(state, pubsub, key, record, undefined, () => completionWatcherDisabled);
     startBroadcast();
     return { rollback };
+  }
+
+  async #publishRunSuspended(
+    pubsub: PubSub | undefined,
+    key: string,
+    record: AgentThreadRunRecord<any>,
+  ): Promise<void> {
+    record.lifecycle = 'suspended';
+    // Keep the record intact for resume routing while bounding how long a parked
+    // run remains cached in this process.
+    record.suspendedAt = Date.now();
+    await this.#publishAndWait(pubsub, key, {
+      type: 'run-suspended',
+      runId: record.runId,
+      streamId: record.streamId,
+    });
   }
 
   #watchThreadRunCompletion(
@@ -3074,20 +3438,29 @@ export class AgentThreadStreamRuntime {
     // which subscribers cannot reconcile (and would release a lease that is
     // still being acquired).
     const finished = record.output._waitUntilFinished();
-    void Promise.allSettled(registered ? [finished, registered] : [finished]).then(() => {
-      state.watchedThreadStreamIds.delete(record.streamId);
-      if (isDisabled?.()) return;
+    void Promise.allSettled(registered ? [finished, registered] : [finished]).then(async () => {
+      if (isDisabled?.()) {
+        state.watchedThreadStreamIds.delete(record.streamId);
+        return;
+      }
       this.#cleanupPreparedRun(state, record.runId);
 
+      // The output settles ahead of the broadcast pump, which awaits one publish
+      // per part. Only the pump marks the run suspended (when it reads the
+      // approval/suspend part), so with pubsub latency the check below would
+      // misread a suspended run as completed. Wait for the pump to drain; a
+      // suspended stream has ended, so it settles. Continuation runs keep their
+      // stream open across the suspension and publish `run-suspended` from the pump.
+      // The stream stays marked as watched while waiting so no second watcher
+      // can attach to this record and publish its terminal event again.
+      if (record.output.status === 'suspended' && !record.continuation && !this.#isSuspendedRun(state, record.runId)) {
+        await Promise.resolve(record.broadcastFinished);
+      }
+      state.watchedThreadStreamIds.delete(record.streamId);
+      if (isDisabled?.()) return;
+
       if (record.output.status === 'suspended' && this.#isSuspendedRun(state, record.runId)) {
-        record.lifecycle = 'suspended';
-        // Leak fix: stamp when the run parked so the lazy TTL sweep
-        // (#sweepStaleSuspendedRecords) can evict it. The record stays fully intact
-        // for resume routing / thread-blocking / subscriber replay exactly as before
-        // — it is simply no longer retained for the life of the process. Mirrors the
-        // internal-workflow registry, which already bounds parked runs this way.
-        record.suspendedAt = Date.now();
-        this.#publish(pubsub, key, { type: 'run-suspended', runId: record.runId, streamId: record.streamId });
+        void this.#publishRunSuspended(pubsub, key, record).catch(() => {});
         return;
       }
 
@@ -3143,13 +3516,60 @@ export class AgentThreadStreamRuntime {
                 : undefined,
           )
           .catch(() => {});
-        if (this.#hasPendingThreadWork(state, key)) {
+        if (record.ownershipLost?.()) {
+          // The execution that took the run over holds its lease under the same
+          // runId, so neither release it nor hand it to queued work here. Queued
+          // follow-ups go to that execution instead. One in this process already
+          // shares this thread's queues and the run's lease renewal.
+          if (!state.threadRunsById.has(record.runId)) {
+            this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
+            if (record.registeredElsewhere) {
+              this.#handOffQueuedSignals(state, pubsub, key, record.runId, record.streamId);
+            } else if (this.#hasPendingThreadWork(state, key)) {
+              // It has not registered yet; its registration takes the queues.
+              state.lostRunsByThread.set(key, record);
+            }
+            this.#releaseUnusedThreadControlSubscription(state, key);
+          }
+        } else if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
         } else {
           this.#releaseThreadLease(pubsub, key, record.runId);
         }
       });
     });
+  }
+
+  /**
+   * Re-publish the thread's queued signals for `runId` to its execution in
+   * another process, which ignores ones it already admitted. Never awaited:
+   * this can run inside a delivery of the thread topic it publishes to.
+   */
+  #handOffQueuedSignals(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+    lostStreamId: string,
+  ) {
+    // Idle messages and continuations start new runs once the thread is idle,
+    // so they stay here and start when that execution's run ends.
+    if (state.pendingIdleSignalsByThread.get(key)?.length || state.pendingContinuationsByThread.get(key)?.length) {
+      this.#ensureThreadControlSubscription(state, pubsub, key).successorRunIds.set(runId, lostStreamId);
+    }
+    for (const preRun of [true, false]) {
+      const queues = preRun ? state.preRunSignalsByThread : state.pendingSignalsByThread;
+      for (const signal of queues.get(key) ?? []) {
+        void this.#publishAndWait(pubsub, key, {
+          type: 'signal-enqueued',
+          runId,
+          signal: this.#serializeSignal(signal),
+          sourceId: this.#getSourceId(),
+          preRun,
+        }).catch(() => {});
+      }
+      queues.delete(key);
+    }
   }
 
   /**
@@ -3249,6 +3669,10 @@ export class AgentThreadStreamRuntime {
           state.preRunSignalsByThread.delete(key);
           if (owns.owner) {
             // Forwarding is a handoff: the signal is no longer locally cancellable.
+            // Echoes of the original enqueue stay suppressed, but the forwarded event must be
+            // queued if this runtime later takes over the owner run.
+            const ids = state.locallyQueuedSignalIdsByThread.get(key);
+            if (ids?.has(signal.id)) ids.set(signal.id, owns.owner);
             await this.#publishAndWait(pubsub, key, {
               type: 'signal-enqueued',
               runId: owns.owner,
@@ -3260,6 +3684,16 @@ export class AgentThreadStreamRuntime {
             state.pendingSignalsByThread.set(key, [signal, ...restored]);
           }
           return;
+        }
+
+        // Every signal sent to the finished run belongs in one follow-up turn, so
+        // fold the rest of the queue into this run's first model request instead
+        // of starting one run per signal. Read the map, not `queue`: cancellation
+        // during the lease await replaces the array.
+        const batched = state.pendingSignalsByThread.get(key) ?? [];
+        if (batched.length > 0) {
+          state.pendingSignalsByThread.delete(key);
+          state.preRunSignalsByThread.set(key, [...batched, ...(state.preRunSignalsByThread.get(key) ?? [])]);
         }
 
         state.startingQueuedRunIds.add(nextRunId);
@@ -3275,7 +3709,9 @@ export class AgentThreadStreamRuntime {
           ),
         });
 
-        if (queue.length > 0) {
+        // If the follow-up stops before its first model request, its completion
+        // must drain the batched signals left in the pre-run queue.
+        if (batched.length > 0) {
           const nextRecord = state.threadRunsById.get(output.runId);
           if (nextRecord) {
             this.#watchThreadRunCompletion(state, pubsub, key, nextRecord);
@@ -3300,12 +3736,18 @@ export class AgentThreadStreamRuntime {
           state.activeThreadRunIds.delete(key);
         }
       }
-      if (signal && !draining?.cancelled) {
-        // Restore through the map, not the local `queue` array: the shift above
-        // deletes the map entry when it empties the queue, so the local array
-        // may be detached from the map by the time we get here.
-        state.pendingSignalsByThread.set(key, [signal, ...(state.pendingSignalsByThread.get(key) ?? [])]);
-      }
+      // Restore through the map, not the local `queue` array: the shift above
+      // deletes the map entry when it empties the queue, so the local array
+      // may be detached from the map by the time we get here. Signals batched
+      // into the failed run's pre-run queue go back behind the drained signal.
+      const batchedLeftover = state.preRunSignalsByThread.get(key) ?? [];
+      state.preRunSignalsByThread.delete(key);
+      const restored = [
+        ...(signal && !draining?.cancelled ? [signal] : []),
+        ...batchedLeftover,
+        ...(state.pendingSignalsByThread.get(key) ?? []),
+      ];
+      if (restored.length > 0) state.pendingSignalsByThread.set(key, restored);
       this.#publish(pubsub, key, {
         type: 'run-failed',
         runId: failedRunId,
@@ -3654,6 +4096,34 @@ export class AgentThreadStreamRuntime {
     return true;
   }
 
+  /** @internal Listen only to input actually admitted to this process's owning run. */
+  subscribePendingSignals(runId: string, listener: () => void, pubsub?: PubSub): () => void {
+    const state = this.#getState(pubsub);
+    if (!state.threadKeysByRunId.has(runId)) return () => {};
+    const listeners = state.pendingSignalListenersByRunId.get(runId) ?? new Set();
+    listeners.add(listener);
+    state.pendingSignalListenersByRunId.set(runId, listeners);
+    return () => {
+      listeners.delete(listener);
+      if (listeners.size === 0 && state.pendingSignalListenersByRunId.get(runId) === listeners) {
+        state.pendingSignalListenersByRunId.delete(runId);
+      }
+    };
+  }
+
+  #notifyPendingSignals(state: AgentThreadRuntimeState, key: string): void {
+    const runId = state.activeThreadRunIds.get(key);
+    if (
+      !runId ||
+      state.threadKeysByRunId.get(runId) !== key ||
+      state.abortedRunIds.has(runId) ||
+      state.preparedRunsById.get(runId)?.abortController.signal.aborted
+    ) {
+      return;
+    }
+    for (const listener of [...(state.pendingSignalListenersByRunId.get(runId) ?? [])]) listener();
+  }
+
   /**
    * Drains queued signals for a run.
    *
@@ -3770,12 +4240,24 @@ export class AgentThreadStreamRuntime {
     runId: string,
     pubsub?: PubSub,
     failedRun?: Pick<AgentThreadRunRecord<any>, 'agent' | 'streamOptions'>,
+    expectedAbortSignal?: AbortSignal,
   ) {
     const state = this.#getState(pubsub);
     // Queued startups have their own catch path, which must restore input before draining anything else.
     if (state.threadRunsById.has(runId) || state.startingQueuedRunIds.has(runId)) return;
-    const key = state.threadKeysByRunId.get(runId) ?? state.preparedRunsById.get(runId)?.threadKey;
-    if (!key) return;
+    const preparedRun = state.preparedRunsById.get(runId);
+    const expectedPreparedRun = expectedAbortSignal
+      ? this.#preparedRunsByAbortSignal.get(expectedAbortSignal)
+      : undefined;
+    if (expectedAbortSignal && preparedRun !== expectedPreparedRun) {
+      if (expectedPreparedRun) this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
+      return;
+    }
+    const key = state.threadKeysByRunId.get(runId) ?? preparedRun?.threadKey;
+    if (!key) {
+      this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
+      return;
+    }
     try {
       state.threadKeysByRunId.delete(runId);
       const activeRunId = state.activeThreadRunIds.get(key);
@@ -3786,7 +4268,7 @@ export class AgentThreadStreamRuntime {
       const target = failedRun ? this.#getThreadTarget(failedRun.streamOptions) : undefined;
       if (wasAborted && failedRun && target?.threadId) {
         // Failed preparation never registers a completion watcher. Recover pending input before idle work.
-        this.#cleanupPreparedRun(state, runId);
+        this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
         void this.#drainPendingSignals(state, pubsub, key, {
           ...failedRun,
           threadId: target.threadId,
@@ -3797,7 +4279,7 @@ export class AgentThreadStreamRuntime {
         void this.#drainPendingIdleSignals(state, pubsub, key);
       }
     } finally {
-      this.#cleanupPreparedRun(state, runId);
+      this.#cleanupPreparedRun(state, runId, expectedPreparedRun);
       this.#releaseUnusedThreadControlSubscription(state, key);
     }
   }
@@ -3823,7 +4305,11 @@ export class AgentThreadStreamRuntime {
       }
       state.activeThreadRunIds.delete(key);
       state.activeThreadStreamIds.delete(key);
-      if (state.remoteThreadKeysByRunId.get(runId) === key) state.remoteThreadKeysByRunId.delete(runId);
+      if (state.remoteThreadKeysByRunId.get(runId) === key) {
+        state.remoteThreadKeysByRunId.delete(runId);
+        state.remoteAgentIdsByRunId.delete(runId);
+        state.unobservedRemoteRunIds.delete(runId);
+      }
     };
     const finish = () => {
       if (settled) return;
@@ -3898,7 +4384,12 @@ export class AgentThreadStreamRuntime {
       orderBy: { field: 'createdAt', direction: 'DESC' },
       hideSignals: options.hideSignals,
     });
-    return { messages: [...result.messages].reverse(), hasMore: result.hasMore };
+    // DESC selects the newest page; implementations differ in the order they
+    // return it (Memory sorts chronologically, storage-backed mocks keep DESC).
+    const messages = [...result.messages].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+    return { messages, hasMore: result.hasMore };
   }
 
   async subscribeToThread<OUTPUT = unknown>(
@@ -4017,7 +4508,13 @@ export class AgentThreadStreamRuntime {
     // once its terminal control event proves it finished cleanly; failed,
     // aborted, or never-terminated (process crash) runs are dropped.
     const deferredRunsByStreamId = new Map<string, AgentThreadRunRecord<any>>();
+    // Earlier segments of a run retired by a newer live segment or a later
+    // recovery generation (the original process died or lost the run and
+    // recovery took over). Redeliveries for them are ignored.
+    const supersededStreamIds = new Set<string>();
     const remoteRunLeaseTimers = new Map<string, ReturnType<typeof setTimeout>>();
+    const remoteRunLeaseWatchTokens = new Map<string, symbol>();
+    const remoteRunSuspensionPrompts = new Set<string>();
     let currentReader: ReadableStreamDefaultReader<any> | null = null;
     let activeReaderRunId: string | null = null;
     let activeReaderStreamId: string | null = null;
@@ -4028,7 +4525,11 @@ export class AgentThreadStreamRuntime {
       if (!local && !(await this.#hasLiveThreadLease(resolvedPubSub, key, runId))) return;
       state.activeThreadRunIds.set(key, runId);
       state.activeThreadStreamIds.set(key, streamId);
-      if (!local) state.remoteThreadKeysByRunId.set(runId, key);
+      if (!local) {
+        state.remoteThreadKeysByRunId.set(runId, key);
+        // The lease check awaited; only trust the run if someone still observes the thread.
+        if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(runId);
+      }
     };
 
     // A deferred run may be flushed only when its replayed chunks ended with a
@@ -4052,6 +4553,8 @@ export class AgentThreadStreamRuntime {
 
     const discardDeferredRun = (streamId: string) => {
       deferredRunsByStreamId.delete(streamId);
+      remoteRunSuspensionPrompts.delete(streamId);
+      remoteRunLeaseWatchTokens.delete(streamId);
       const timer = remoteRunLeaseTimers.get(streamId);
       if (timer) clearTimeout(timer);
       remoteRunLeaseTimers.delete(streamId);
@@ -4073,69 +4576,208 @@ export class AgentThreadStreamRuntime {
       }
       state.activeThreadRunIds.delete(key);
       state.activeThreadStreamIds.delete(key);
-      if (state.remoteThreadKeysByRunId.get(runId) === key) state.remoteThreadKeysByRunId.delete(runId);
+      if (state.remoteThreadKeysByRunId.get(runId) === key) {
+        state.remoteThreadKeysByRunId.delete(runId);
+        state.remoteAgentIdsByRunId.delete(runId);
+        state.unobservedRemoteRunIds.delete(runId);
+      }
     };
 
     const stopRemoteRunLeaseWatch = (streamId: string) => {
+      remoteRunLeaseWatchTokens.delete(streamId);
       const timer = remoteRunLeaseTimers.get(streamId);
       if (timer) clearTimeout(timer);
       remoteRunLeaseTimers.delete(streamId);
     };
 
     const startRemoteRunLeaseWatch = (runId: string, streamId: string) => {
-      if (hasFallbackLeaseProvider || remoteRunLeaseTimers.has(streamId)) return;
+      if (hasFallbackLeaseProvider || remoteRunLeaseWatchTokens.has(streamId)) return;
 
+      const watchToken = Symbol(streamId);
+      remoteRunLeaseWatchTokens.set(streamId, watchToken);
+      const scheduleCheck = () => {
+        if (remoteRunLeaseWatchTokens.get(streamId) !== watchToken) return;
+        remoteRunLeaseTimers.set(
+          streamId,
+          setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS),
+        );
+      };
       const checkLease = async () => {
         remoteRunLeaseTimers.delete(streamId);
         const remoteRun = remoteRuns.get(streamId);
-        if (done || !remoteRun || remoteRun.done) return;
+        if (done || remoteRunLeaseWatchTokens.get(streamId) !== watchToken || !remoteRun || remoteRun.done) return;
 
         let owner: string | undefined;
         try {
           owner = await leaseProvider.getLeaseOwner(key);
         } catch {
-          if (done || remoteRuns.get(streamId) !== remoteRun || remoteRun.done) return;
-          remoteRunLeaseTimers.set(
-            streamId,
-            setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS),
-          );
+          if (
+            done ||
+            remoteRunLeaseWatchTokens.get(streamId) !== watchToken ||
+            remoteRuns.get(streamId) !== remoteRun ||
+            remoteRun.done
+          ) {
+            return;
+          }
+          scheduleCheck();
           return;
         }
-        if (done || remoteRuns.get(streamId) !== remoteRun || remoteRun.done) return;
+        if (
+          done ||
+          remoteRunLeaseWatchTokens.get(streamId) !== watchToken ||
+          remoteRuns.get(streamId) !== remoteRun ||
+          remoteRun.done
+        ) {
+          return;
+        }
         if (owner === runId) {
-          remoteRunLeaseTimers.set(
-            streamId,
-            setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS),
-          );
+          scheduleCheck();
           return;
         }
 
-        clearActiveIfCurrent(runId, streamId);
-        remoteRun.parts.push({
-          type: 'error',
-          payload: { error: new Error(`Thread run ${runId} lost its lease before publishing a terminal event`) },
-        });
+        stopRemoteRunLeaseWatch(streamId);
+        const parked = remoteRunSuspensionPrompts.delete(streamId);
+        if (parked) {
+          const deferredRecord = deferredRunsByStreamId.get(streamId);
+          if (deferredRecord) {
+            deferredRunsByStreamId.delete(streamId);
+            enqueueRun(deferredRecord);
+          }
+          suspendedStreamIdsByRunId.set(runId, streamId);
+          noteRunHalf(runId);
+          state.suspendedRunIds.add(runId);
+          const record = state.threadRunsByStreamId.get(streamId) ?? state.threadRunsById.get(runId);
+          if (record) record.lifecycle = 'suspended';
+        } else {
+          clearActiveIfCurrent(runId, streamId);
+          remoteRun.parts.push({
+            type: 'error',
+            payload: { error: new AgentThreadLeaseLostError(runId) },
+          });
+        }
         remoteRun.done = true;
         while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
         while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
         remoteRuns.delete(streamId);
         seenStreamIds.delete(streamId);
-        await this.#drainPendingIdleSignals(state, resolvedPubSub, key, runId);
+        if (!parked) {
+          await this.#drainPendingIdleSignals(state, resolvedPubSub, key, runId);
+        }
         wake();
       };
 
-      remoteRunLeaseTimers.set(
-        streamId,
-        setTimeout(() => void checkLease(), AGENT_THREAD_LEASE_TTL_MS),
-      );
+      scheduleCheck();
+    };
+
+    const resolveTerminalEventStreamId = (
+      runId: string,
+      type: 'run-failed' | 'run-completed' | 'run-aborted' | 'run-suspended',
+      streamId?: string,
+    ) => {
+      if (streamId) {
+        terminalEventStreamIds.add(streamId);
+        return streamId;
+      }
+
+      const registered = registeredSeqsByRunId.get(runId);
+      let oldestUnmatched: { streamId: string; streamSeq: number } | undefined;
+      let newestTracked: { streamId: string; streamSeq: number } | undefined;
+      for (const [registeredStreamId, streamSeq] of registered ?? []) {
+        if (terminalEventStreamIds.has(registeredStreamId)) continue;
+        if (oldestUnmatched === undefined || streamSeq < oldestUnmatched.streamSeq) {
+          oldestUnmatched = { streamId: registeredStreamId, streamSeq };
+        }
+        const tracked =
+          remoteRuns.has(registeredStreamId) ||
+          deferredRunsByStreamId.has(registeredStreamId) ||
+          remoteRunLeaseWatchTokens.has(registeredStreamId);
+        if (tracked && (newestTracked === undefined || streamSeq > newestTracked.streamSeq)) {
+          newestTracked = { streamId: registeredStreamId, streamSeq };
+        }
+      }
+      const resolvedStreamId =
+        (type === 'run-suspended' ? oldestUnmatched?.streamId : newestTracked?.streamId) ??
+        oldestUnmatched?.streamId ??
+        runId;
+      terminalEventStreamIds.add(resolvedStreamId);
+      return resolvedStreamId;
+    };
+
+    const discardStream = (runId: string, streamId: string) => {
+      stopRemoteRunLeaseWatch(streamId);
+      remoteRunSuspensionPrompts.delete(streamId);
+      clearActiveIfCurrent(runId, streamId);
+      localStreamIds.delete(streamId);
+      replayedStreamIds.delete(streamId);
+      for (let index = pendingRuns.length - 1; index >= 0; index--) {
+        if (pendingRuns[index]?.streamId === streamId) pendingRuns.splice(index, 1);
+      }
+      discardDeferredRun(streamId);
+      const remoteRun = remoteRuns.get(streamId);
+      if (remoteRun) {
+        remoteRun.done = true;
+        while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
+        while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
+        remoteRuns.delete(streamId);
+      }
+      seenStreamIds.delete(streamId);
+      if (activeReaderRunId === runId && activeReaderStreamId === streamId && currentReader) {
+        try {
+          void currentReader.cancel();
+        } catch {}
+      }
+      wake();
+    };
+
+    // A process recovering a durable run re-registers it under a later claim
+    // generation. Streams of the run under an earlier generation belong to a
+    // superseded execution: the original process may have died mid-stream (its
+    // stream never terminates) or may still be relaying output it no longer owns.
+    // A resume also claims a later generation, but its suspended half ended
+    // cleanly and stays readable, so only a recovery registration supersedes.
+    // A superseded stream's own terminal event (its abort, failure, or
+    // completion once it notices the loss) must not end the recovered stream.
+    const supersededBelowByRunId = new Map<string, number>();
+    const generationsByStreamId = new Map<string, { runId: string; generation: number }>();
+    const isSuperseded = (runId: string, generation: number | undefined) =>
+      generation !== undefined && generation < (supersededBelowByRunId.get(runId) ?? -Infinity);
+    const noteGeneration = (
+      runId: string,
+      streamId: string,
+      generation: number | undefined,
+      supersedes: boolean | undefined,
+    ) => {
+      if (generation === undefined) return;
+      generationsByStreamId.set(streamId, { runId, generation });
+      if (!supersedes || generation <= (supersededBelowByRunId.get(runId) ?? -Infinity)) return;
+      supersededBelowByRunId.set(runId, generation);
+      for (const [olderStreamId, older] of generationsByStreamId) {
+        if (older.runId !== runId || older.generation >= generation) continue;
+        generationsByStreamId.delete(olderStreamId);
+        supersededStreamIds.add(olderStreamId);
+        discardStream(runId, olderStreamId);
+      }
     };
 
     const handleEvent = async (event: Parameters<EventCallback>[0]) => {
       if (done) return;
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
+      if ('streamId' in data && data.streamId !== undefined && supersededStreamIds.has(data.streamId)) return;
       if (data.type === 'run-registered') {
+        if (isSuperseded(data.runId, data.generation)) return;
+        noteGeneration(data.runId, data.streamId, data.generation, data.supersedes);
+        const registrationRedelivery = handledRegistrationEventIds.has(event.id);
+        handledRegistrationEventIds.add(event.id);
+        const firstRegistration = !registeredSeqsByRunId.get(data.runId)?.has(data.streamId);
         noteRunHalf(data.runId, { streamId: data.streamId, streamSeq: data.streamSeq });
+        // A redelivered registration for a stream that already ended must not
+        // restore the finished run as the thread's active run.
+        if (registrationRedelivery && terminalEventStreamIds.has(data.streamId)) {
+          discardDeferredRun(data.streamId);
+          wake();
+          return;
+        }
         const localRecord = state.threadRunsByStreamId.get(data.streamId);
         if (localRecord) {
           localStreamIds.add(data.streamId);
@@ -4153,14 +4795,56 @@ export class AgentThreadStreamRuntime {
         // covers runs that complete before the event is delivered in-process
         // (record cleaned up, lease released) where deferral would strand the
         // run because its terminal event was already processed.
+        // A finished local record must not displace a different active run.
+        // Without a record (already cleaned up), a redelivered registration
+        // must not displace a different local run that still blocks the thread.
+        const currentActiveRunId = state.activeThreadRunIds.get(key);
+        const currentActiveRecord = currentActiveRunId ? state.threadRunsById.get(currentActiveRunId) : undefined;
+        const displacesActiveRun =
+          currentActiveRunId !== undefined &&
+          currentActiveRunId !== data.runId &&
+          (localRecord !== undefined ||
+            (currentActiveRecord !== undefined && this.#isThreadBlockingRun(state, currentActiveRecord)));
+        const sameSourceLive =
+          !backlog && !displacesActiveRun && data.sourceId !== undefined && data.sourceId === this.#getSourceId();
+        // A nonblocking local record is never live via the lease: fallback lease
+        // providers report every run as leased.
         const live =
-          local ||
-          (!backlog && data.sourceId !== undefined && data.sourceId === this.#getSourceId()) ||
-          (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId));
+          localRecord !== undefined
+            ? this.#isThreadBlockingRun(state, localRecord) || sameSourceLive
+            : !displacesActiveRun &&
+              (sameSourceLive || (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId)));
         if (live) {
           state.activeThreadRunIds.set(key, data.runId);
           state.activeThreadStreamIds.set(key, data.streamId);
-          if (!local) state.remoteThreadKeysByRunId.set(data.runId, key);
+          if (!local) {
+            state.remoteThreadKeysByRunId.set(data.runId, key);
+            if (state.threadControlSubscriptions.get(key)?.observers) state.unobservedRemoteRunIds.delete(data.runId);
+            if (data.agentId) state.remoteAgentIdsByRunId.set(data.runId, data.agentId);
+          }
+          // A live new segment of a run supersedes any earlier segment of the
+          // same run that never saw a terminal event: that segment's process
+          // died (e.g. recovery took the run over), and the lease now held
+          // under the same runId would otherwise keep it looking alive and
+          // queue the new segment behind it forever. Order by arrival, not
+          // streamSeq: sequences restart at 1 in a recovering process, and
+          // redeliveries of a segment never retire others.
+          for (const staleStreamId of firstRegistration ? (registeredSeqsByRunId.get(data.runId)?.keys() ?? []) : []) {
+            if (staleStreamId === data.streamId || terminalEventStreamIds.has(staleStreamId)) continue;
+            const staleRun = remoteRuns.get(staleStreamId);
+            if (!staleRun || staleRun.done) continue;
+            supersededStreamIds.add(staleStreamId);
+            if (deferredRunsByStreamId.has(staleStreamId)) {
+              discardDeferredRun(staleStreamId);
+              continue;
+            }
+            stopRemoteRunLeaseWatch(staleStreamId);
+            remoteRunSuspensionPrompts.delete(staleStreamId);
+            staleRun.done = true;
+            while (staleRun.waiters.length) staleRun.waiters.shift()?.();
+            while (staleRun.finishWaiters.length) staleRun.finishWaiters.shift()?.();
+            remoteRuns.delete(staleStreamId);
+          }
         }
         // Reuse a proxy that a stream-part-first delivery already created for
         // this stream — creating a fresh record here would orphan its
@@ -4181,12 +4865,15 @@ export class AgentThreadStreamRuntime {
         return;
       }
       if (data.type === 'stream-part') {
+        if (supersededStreamIds.has(data.streamId)) return;
         if (
           data.sourceId === this.#id &&
           (localStreamIds.has(data.streamId) || !replayedStreamIds.has(data.streamId))
         ) {
           return;
         }
+        if (isSuperseded(data.runId, data.generation)) return;
+        noteGeneration(data.runId, data.streamId, data.generation, false);
         if (
           state.activeThreadRunIds.get(key) !== data.runId ||
           state.activeThreadStreamIds.get(key) !== data.streamId
@@ -4208,13 +4895,20 @@ export class AgentThreadStreamRuntime {
           if (!remoteRun) return;
         }
         stampPartProducedAt(data.part, data.producedAt ?? new Date(event.createdAt ?? Date.now()).getTime());
+        const typedPart = data.part as { type?: string } | undefined;
+        if (typedPart?.type === 'tool-call-approval' || typedPart?.type === 'tool-call-suspended') {
+          remoteRunSuspensionPrompts.add(data.streamId);
+        } else {
+          remoteRunSuspensionPrompts.delete(data.streamId);
+        }
         remoteRun.parts.push(data.part);
         while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
         return;
       }
       if (data.type === 'run-failed') {
-        const eventStreamId = data.streamId ?? data.runId;
+        const eventStreamId = resolveTerminalEventStreamId(data.runId, data.type, data.streamId);
         stopRemoteRunLeaseWatch(eventStreamId);
+        remoteRunSuspensionPrompts.delete(eventStreamId);
         clearActiveIfCurrent(data.runId, data.streamId);
         if (deferredRunsByStreamId.has(eventStreamId)) {
           // Replayed failure of a run that never persisted anything — drop it.
@@ -4244,33 +4938,13 @@ export class AgentThreadStreamRuntime {
         return;
       }
       if (data.type === 'run-discarded') {
-        stopRemoteRunLeaseWatch(data.streamId);
-        clearActiveIfCurrent(data.runId, data.streamId);
-        localStreamIds.delete(data.streamId);
-        replayedStreamIds.delete(data.streamId);
-        for (let index = pendingRuns.length - 1; index >= 0; index--) {
-          if (pendingRuns[index]?.streamId === data.streamId) pendingRuns.splice(index, 1);
-        }
-        discardDeferredRun(data.streamId);
-        const remoteRun = remoteRuns.get(data.streamId);
-        if (remoteRun) {
-          remoteRun.done = true;
-          while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
-          while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
-          remoteRuns.delete(data.streamId);
-        }
-        seenStreamIds.delete(data.streamId);
-        if (activeReaderRunId === data.runId && activeReaderStreamId === data.streamId && currentReader) {
-          try {
-            void currentReader.cancel();
-          } catch {}
-        }
-        wake();
+        discardStream(data.runId, data.streamId);
         return;
       }
       if (data.type === 'run-completed' || data.type === 'run-aborted' || data.type === 'run-suspended') {
-        const eventStreamId = data.streamId ?? data.runId;
+        const eventStreamId = resolveTerminalEventStreamId(data.runId, data.type, data.streamId);
         stopRemoteRunLeaseWatch(eventStreamId);
+        remoteRunSuspensionPrompts.delete(eventStreamId);
         const deferredRecord = deferredRunsByStreamId.get(eventStreamId);
         if (options.withInitialHistory && data.type === 'run-completed' && data.status === 'success') {
           // Judge by publish time, not delivery time: backends such as Redis
@@ -4323,7 +4997,12 @@ export class AgentThreadStreamRuntime {
         }
         // When a run is aborted, cancel the current subscriber stream reader so
         // the generator's inner loop unblocks and can yield the synthetic abort.
-        if (data.type === 'run-aborted' && activeReaderRunId === data.runId && currentReader) {
+        if (
+          data.type === 'run-aborted' &&
+          activeReaderRunId === data.runId &&
+          (data.streamId === undefined || activeReaderStreamId === data.streamId) &&
+          currentReader
+        ) {
           cancelledByAbort = true;
           try {
             void currentReader.cancel();
@@ -4343,6 +5022,12 @@ export class AgentThreadStreamRuntime {
     const suspendedStreamIdsByRunId = new Map<string, string>();
     /** streamSeq of each registered stream, per run. */
     const registeredSeqsByRunId = new Map<string, Map<string, number>>();
+    /** Registered streams already matched to an explicit or legacy terminal event. */
+    const terminalEventStreamIds = new Set<string>();
+    /** Terminal deliveries whose lifecycle side effects completed successfully. */
+    const handledTerminalEventIds = new Set<string>();
+    /** Registration deliveries already handled by this subscription. */
+    const handledRegistrationEventIds = new Set<string>();
     /** Suspended halves whose run has since resumed: their prompts are already answered. */
     const answeredStreamIds = new Set<string>();
     // A run registering a later stream means its suspension was answered. A
@@ -4382,7 +5067,17 @@ export class AgentThreadStreamRuntime {
       // has been inspected — including events this subscriber filters out —
       // because a persistent backend (Redis consumer groups) keeps unacked
       // deliveries pending for the lifetime of the subscription.
-      const processed = eventTail.then(() => handleEvent(event));
+      const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
+      const terminal =
+        data?.type === 'run-failed' ||
+        data?.type === 'run-completed' ||
+        data?.type === 'run-aborted' ||
+        data?.type === 'run-suspended';
+      const processed = eventTail.then(async () => {
+        if (terminal && handledTerminalEventIds.has(event.id)) return;
+        await handleEvent(event);
+        if (terminal) handledTerminalEventIds.add(event.id);
+      });
       // The tail must survive a failed event so later events still run.
       eventTail = processed.then(
         () => {},
@@ -4447,8 +5142,17 @@ export class AgentThreadStreamRuntime {
       done = true;
       for (const timer of remoteRunLeaseTimers.values()) clearTimeout(timer);
       remoteRunLeaseTimers.clear();
+      remoteRunLeaseWatchTokens.clear();
+      remoteRunSuspensionPrompts.clear();
       control.references--;
       control.observers--;
+      // With no observer left, remote terminal events go unseen: stop trusting
+      // these runs as signal targets until a live registration confirms them.
+      if (!control.observers) {
+        for (const [runId, runKey] of state.remoteThreadKeysByRunId) {
+          if (runKey === key) state.unobservedRemoteRunIds.add(runId);
+        }
+      }
       this.#releaseUnusedThreadControlSubscription(state, key);
       void resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
       // Cancel current reader so the generator's inner loop breaks.
@@ -4477,7 +5181,9 @@ export class AgentThreadStreamRuntime {
               continue;
             }
             const run = pendingRuns.shift()!;
+            if (isSuperseded(run.runId, run.generation)) continue;
             // A local run can be read before its `run-registered` event arrives.
+            noteGeneration(run.runId, run.streamId, run.generation, run.supersedes);
             noteRunHalf(run.runId, { streamId: run.streamId, streamSeq: run.streamSeq });
             // Local registered runs expose createSubscriberStream, while remote runs are
             // already per-subscription streams. Do not silently skip locked streams here:
@@ -4528,6 +5234,7 @@ export class AgentThreadStreamRuntime {
                 const terminalBoundary =
                   typedPart.type === 'error' ||
                   typedPart.type === 'abort' ||
+                  typedPart.type === 'tripwire' ||
                   (typedPart.type === 'finish' && finishReason !== 'tool-calls');
                 if (terminalBoundary) {
                   // After a final terminal chunk, drain any non-visible trailing
@@ -4845,6 +5552,7 @@ export class AgentThreadStreamRuntime {
     const idleBehavior = target.ifIdle?.behavior ?? 'wake';
 
     let activeRecord: AgentThreadRunRecord<any> | undefined;
+    let remoteCrossAgent = false;
     if (target.resourceId && target.threadId) {
       key = this.#threadKey(target.resourceId, target.threadId);
       const activeRunId = state.activeThreadRunIds.get(key);
@@ -4859,7 +5567,15 @@ export class AgentThreadStreamRuntime {
       if (activeRecord && activeRecord.agent.id === agent.id) {
         runId = activeRecord.runId;
       } else if (activeRunId && !activeRecord) {
-        if (state.threadKeysByRunId.get(activeRunId) === key) {
+        if (
+          state.threadKeysByRunId.get(activeRunId) === key ||
+          (state.remoteThreadKeysByRunId.get(activeRunId) === key && !state.unobservedRemoteRunIds.has(activeRunId))
+        ) {
+          // A remote run whose owner agent is unknown (e.g. seen via a stream part
+          // before its registration) is not a safe target for this agent.
+          remoteCrossAgent =
+            state.threadKeysByRunId.get(activeRunId) !== key &&
+            state.remoteAgentIdsByRunId.get(activeRunId) !== agent.id;
           // A run can be reserved before its stream record is registered. Keep the reserved
           // id so early follow-ups still attach to the run that is starting.
           runId = activeRunId;
@@ -4898,6 +5614,13 @@ export class AgentThreadStreamRuntime {
       signal,
       isActiveTarget ? target.ifActive?.attributes : target.ifIdle?.attributes,
     );
+
+    if (remoteCrossAgent) {
+      return {
+        signal,
+        accepted: Promise.resolve({ action: 'blocked' as const, reason: 'thread-blocked' as const, runId: runId! }),
+      };
+    }
 
     if (isActiveTarget && activeBehavior !== 'deliver') {
       if (activeBehavior === 'persist') {
@@ -4945,6 +5668,8 @@ export class AgentThreadStreamRuntime {
           const queue = state.pendingSignalsByThread.get(key) ?? [];
           queue.push(signal);
           state.pendingSignalsByThread.set(key, queue);
+          this.#recordLocallyQueuedSignal(state, key, signal.id);
+          this.#notifyPendingSignals(state, key);
           this.#publish(pubsub, key, {
             type: 'signal-enqueued',
             runId,
@@ -4991,6 +5716,8 @@ export class AgentThreadStreamRuntime {
           const queue = state.preRunSignalsByThread.get(key) ?? [];
           queue.push(signal);
           state.preRunSignalsByThread.set(key, queue);
+          this.#recordLocallyQueuedSignal(state, key, signal.id);
+          this.#notifyPendingSignals(state, key);
         }
         this.#publish(pubsub, key, {
           type: 'signal-enqueued',
@@ -5105,7 +5832,9 @@ export class AgentThreadStreamRuntime {
           target.ifIdle?.streamOptions,
         );
         if (!localAcceptance) {
-          throw new Error(`Claimed thread owner could not acquire the execution lease for ${reservedKey}`);
+          throw new Error(
+            `Claimed thread owner could not acquire the execution lease for ${describeThreadKey(reservedKey)}`,
+          );
         }
         if (localAcceptance.error) throw new Error(localAcceptance.error);
         if (!localAcceptance.output) {
@@ -5187,12 +5916,14 @@ export class AgentThreadStreamRuntime {
       // that outlive the TTL, then kick off the stream.
       this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId);
       try {
-        const output = await agent.stream(signal, {
-          ...(target.ifIdle?.streamOptions as any),
-          untilIdle: true,
-          runId: reservedRunId,
-          memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
-        });
+        const output = toModelOutput<OUTPUT>(
+          await agent.stream(signal, {
+            ...(target.ifIdle?.streamOptions as any),
+            untilIdle: true,
+            runId: reservedRunId,
+            memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
+          }),
+        );
         return { action: 'wake' as const, runId: reservedRunId, output };
       } catch (error) {
         state.threadKeysByRunId.delete(reservedRunId);

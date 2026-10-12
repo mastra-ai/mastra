@@ -11,7 +11,7 @@ import { renderWithProviders } from '@/test/render';
 const renderList = (props: Partial<DatasetsListProps> = {}) =>
   renderWithProviders(
     <TestLinkProvider>
-      <DatasetsList datasets={datasets} experiments={experiments} isLoading={false} {...props} />
+      <DatasetsList datasets={datasets} experiments={experiments} {...props} />
     </TestLinkProvider>,
   );
 
@@ -72,6 +72,16 @@ describe('DatasetsList', () => {
     it('counts only its own experiments and rounds the completion percentage', () => {
       renderList({ experiments: mixedExperiments });
       expect(screen.getByRole('link', { name: '3 (67%)' }).getAttribute('href')).toBe('/experiments?dataset=ds-a');
+    });
+  });
+
+  describe('when the caller supplies a trailing cell for a navigable row', () => {
+    it('shows that cell instead of the experiments action and keeps dataset navigation', () => {
+      renderList({ renderTrailingCell: ds => (ds.id === 'ds-a' ? <span>Summary unavailable</span> : null) });
+
+      expect(screen.getByText('Summary unavailable')).toBeTruthy();
+      expect(screen.queryByRole('link', { name: '2 (100%)' })).toBeNull();
+      expect(screen.getByRole('link', { name: /Dataset A/ }).getAttribute('href')).toBe('/datasets/ds-a');
     });
   });
 

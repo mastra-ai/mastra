@@ -37,12 +37,8 @@ export type TraceColumnPreferences = {
   readonly metadataKeys: readonly string[];
 };
 
-export type TraceUsageSummary = {
-  inputTokens?: number;
-  outputTokens?: number;
-  estimatedCost?: number;
-  costUnit?: string;
-};
+import type { TraceUsageSummary } from '@mastra/react/hooks/traces';
+export type { TraceUsageSummary };
 
 export const DEFAULT_TRACE_COLUMN_PREFERENCES: TraceColumnPreferences = {
   visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],
@@ -114,6 +110,22 @@ export function serializeTraceColumnPreferences(preferences: TraceColumnPreferen
     customColumns: preferences.customColumns,
     metadataKeys: preferences.metadataKeys,
   });
+}
+
+/** Stable key per column of `buildTraceListColumns`, in the same order. Used to persist the column order. */
+export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): string[] {
+  const visible = new Set(preferences.visibleColumns);
+  const keys = ['startTime'];
+  if (visible.has('type')) keys.push('type');
+  keys.push('name');
+  if (visible.has('input')) keys.push('input');
+  keys.push('status');
+  for (const column of ['duration', 'endTime', 'environment', ...TRACE_USAGE_COLUMNS] as const) {
+    if (visible.has(column)) keys.push(column);
+  }
+  keys.push(...preferences.customColumns.map(field => `custom:${field}`));
+  keys.push(...preferences.metadataKeys.map(key => `metadata:${key}`));
+  return keys;
 }
 
 export function buildTraceListColumns(preferences: TraceColumnPreferences): string {

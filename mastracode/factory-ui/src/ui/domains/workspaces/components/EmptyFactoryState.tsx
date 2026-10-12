@@ -171,7 +171,7 @@ export function EmptyFactoryState() {
                   Back
                 </Button>
               )}
-              <ol className="flex gap-2" aria-label="Factory setup progress">
+              <ol className="flex min-w-0 gap-2" aria-label="Factory setup progress">
                 {steps.map((item, index) => (
                   <li
                     key={item}
@@ -184,16 +184,11 @@ export function EmptyFactoryState() {
               </ol>
             </div>
 
-            <h1 className="max-w-xl text-[clamp(2rem,3.9vw,3.25rem)] leading-[1.1] font-[520] tracking-[0.01em] text-balance [font-stretch:112%]">
+            <Txt as="h1" variant="hero" className="max-w-xl text-balance">
               {STEP_META[step].title}
-            </h1>
+            </Txt>
             {STEP_META[step].description && (
-              <Txt
-                as="p"
-                variant="body"
-                tone="muted"
-                className="mt-6 max-w-lg text-[clamp(1rem,1.5vw,1.25rem)] leading-[1.4] tracking-[0.01em]"
-              >
+              <Txt as="p" variant="lead" tone="muted" className="mt-6 max-w-lg">
                 {STEP_META[step].description}
               </Txt>
             )}

@@ -8376,14 +8376,14 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                   "text": "Hello",
                   "toolCalls": [],
                   "usage": {
-                    "inputTokens": 0,
-                    "outputTokens": 0,
-                    "totalTokens": 0,
+                    "inputTokens": undefined,
+                    "outputTokens": undefined,
+                    "totalTokens": undefined,
                   },
                 },
                 "stepResult": {
                   "isContinued": false,
-                  "reason": "tripwire",
+                  "reason": "abort",
                   "warnings": undefined,
                 },
               },
@@ -9051,7 +9051,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "stepResult": {
                   "isContinued": false,
-                  "reason": "tripwire",
+                  "reason": "abort",
                   "warnings": undefined,
                 },
               },

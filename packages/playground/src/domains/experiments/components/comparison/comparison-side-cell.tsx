@@ -1,20 +1,20 @@
+import { Code } from '@mastra/playground-ui/components/Code';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { ClockIcon } from 'lucide-react';
-import type { ComparisonRow, ComparisonSide } from './build-comparison-rows';
+import type { ComparisonColumn, ComparisonSide } from './build-comparison-rows';
 import { ComparisonScoreRow } from './comparison-score-row';
 import { ComparisonSection } from './comparison-section';
 
 export interface ComparisonSideCellProps {
-  side: 'baseline' | 'contender';
-  row: ComparisonRow;
-  /** Only the contender renders deltas, so a difference is stated once. */
-  showDeltas?: boolean;
+  /** One experiment's side of the row. Contenders carry their deltas against the baseline. */
+  column: ComparisonColumn;
   isLoading?: boolean;
 }
 
@@ -32,15 +32,14 @@ function sideDuration(side: ComparisonSide): string | null {
 
 const codeBoxClass = cn(
   raisedSurfaceStyle,
-  'max-h-[30vh] overflow-y-auto rounded-xl p-4 text-body break-all whitespace-pre-wrap text-muted-foreground',
+  'max-h-[30vh] overflow-y-auto rounded-xl p-4 break-all whitespace-pre-wrap',
 );
 
 /**
- * One side of a single item row. Baseline and contender render the exact same
+ * One experiment's side of a single item row. Every column renders the exact same
  * sections in the same order so the row can be read as a visual diff.
  */
-export function ComparisonSideCell({ side, row, showDeltas, isLoading }: ComparisonSideCellProps) {
-  const data = row[side];
+export function ComparisonSideCell({ column: data, isLoading }: ComparisonSideCellProps) {
   const duration = sideDuration(data);
 
   if (isLoading) {
@@ -87,7 +86,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         </ComparisonSection>
       ) : (
         <ComparisonSection title="Output" actions={<CopyButton content={outputStr} />}>
-          <pre className={codeBoxClass}>{outputStr}</pre>
+          <Code className={cn(codeBoxClass, 'font-mono text-body text-muted-foreground')} code={outputStr} />
         </ComparisonSection>
       )}
 
@@ -99,7 +98,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
                 key={score.scorerId}
                 scorerId={score.scorerId}
                 value={score.value}
-                delta={showDeltas ? row.deltas[score.scorerId] : null}
+                delta={data.deltas?.[score.scorerId]}
                 reason={score.reason}
               />
             ))}
@@ -117,12 +116,10 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
         <ComparisonSection title="Metadata" defaultOpen={false}>
           <dl className="grid gap-1">
             {Object.entries(data.metadata).map(([key, value]) => (
-              <div key={key} className="flex items-start justify-between gap-4 text-body">
-                <dt className="text-muted-foreground">{key}</dt>
-                <dd className="break-all text-foreground">
-                  <Txt as="span" variant="body" font="mono">
-                    {formatValue(value)}
-                  </Txt>
+              <div key={key} className="flex items-start justify-between gap-4">
+                <dt className={textStyle({ tone: 'muted', variant: 'body' })}>{key}</dt>
+                <dd className={cn(textStyle({ tone: 'ink', variant: 'body', font: 'mono' }), 'break-all')}>
+                  {formatValue(value)}
                 </dd>
               </div>
             ))}

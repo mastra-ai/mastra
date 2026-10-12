@@ -220,6 +220,23 @@ describe('CloudflareSandboxBridgeClient', () => {
     expect(events.at(-1)).toEqual({ type: 'exit', exitCode: 3 });
   });
 
+  it.each([
+    ['an empty payload', '{}'],
+    ['a non-numeric exit_code', '{"exit_code":"0"}'],
+    ['invalid JSON', 'not-json'],
+  ])('treats an exit event with %s as a failure', async (_label, payload) => {
+    const fetch = (async () =>
+      new Response(`event: exit\ndata: ${payload}\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      })) as unknown as typeof globalThis.fetch;
+    const client = new CloudflareSandboxBridgeClient({ baseUrl: BASE_URL, apiToken: 'secret', fetch });
+
+    const events: CloudflareCommandEvent[] = [];
+    await client.exec('sbx', { argv: ['true'] }, { onEvent: event => events.push(event) });
+
+    expect(events).toEqual([{ type: 'exit', exitCode: -1 }]);
+  });
+
   it('surfaces terminal error events', async () => {
     const bridge = createFakeBridge({ apiToken: 'secret' });
     bridge.onExec = () => ({ error: { error: 'command timed out', code: 'TIMEOUT' } });

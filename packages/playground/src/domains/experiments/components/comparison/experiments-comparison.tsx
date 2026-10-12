@@ -3,102 +3,107 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import {
+  useAllDatasetExperimentResultsQueries,
+  useCompareExperiments,
+  useDatasetExperimentsQueries,
+  useScoresByExperimentIdsQueries,
+} from '@mastra/react/hooks/datasets';
 import { useMemo } from 'react';
+import type { CSSProperties } from 'react';
 import { buildComparisonRows } from './build-comparison-rows';
+import type { ComparisonRow } from './build-comparison-rows';
 import { ComparisonItemPayload } from './comparison-item-payload';
 import { ComparisonSideCell } from './comparison-side-cell';
 import { ComparisonSideHeader } from './comparison-side-header';
-import { ScoreDelta } from './score-delta';
-import { useCompareExperiments } from '@/domains/datasets/hooks/use-compare-experiments';
-import {
-  useDatasetExperiment,
-  useDatasetExperimentResults,
-  useScoresByExperimentId,
-} from '@/domains/datasets/hooks/use-dataset-experiments';
+import type { ScorerSummary } from './comparison-side-header';
 
 interface ExperimentsComparisonProps {
   datasetId: string;
-  experimentIdA: string;
-  experimentIdB: string;
+  baselineId: string;
+  /** Experiments compared against the baseline, in column order. */
+  contenderIds: string[];
+  /** Makes the given contender the baseline. */
+  onSetBaseline?: (experimentId: string) => void;
 }
 
 const cell = 'min-w-0 px-4 py-3';
 
+/** Items column plus one column per experiment. N is dynamic, so it goes through a CSS variable. */
+const gridRow =
+  'grid border-border xl:grid-cols-[minmax(20rem,24rem)_repeat(var(--compare-cols),minmax(22rem,1fr))] xl:divide-x xl:divide-border';
+
+const columnLabel = (index: number) => (index === 0 ? 'Baseline' : `Contender ${index}`);
+
+const average = (rows: ComparisonRow[], index: number, scorerId: string) => {
+  const values = rows
+    .map(row => row.sides[index]?.scores.find(score => score.scorerId === scorerId)?.value)
+    .filter((value): value is number => value != null);
+  return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
+};
+
 /**
- * Three-column comparison table of two dataset experiments. Every item is a
- * row, with the baseline and contender side by side so a change reads as a diff.
+ * Comparison table of a baseline and one or more contender experiments. Every item is a
+ * row, with each experiment side by side so a change reads as a diff against the baseline.
  */
-export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB }: ExperimentsComparisonProps) {
+export function ExperimentsComparison({
+  datasetId,
+  baselineId,
+  contenderIds,
+  onSetBaseline,
+}: ExperimentsComparisonProps) {
   const { Link, paths } = useLinkComponent();
-  const { data: comparison, isLoading, error } = useCompareExperiments(datasetId, experimentIdA, experimentIdB);
+  const experimentIds = useMemo(() => [baselineId, ...contenderIds], [baselineId, contenderIds]);
 
-  const { data: expA } = useDatasetExperiment(datasetId, experimentIdA);
-  const { data: expB } = useDatasetExperiment(datasetId, experimentIdB);
-
-  const versionMismatch = expA && expB && expA.datasetVersion !== expB.datasetVersion;
-
-  const baselineId = comparison?.baselineId ?? experimentIdA;
-  const contenderId = experimentIdA === baselineId ? experimentIdB : experimentIdA;
-
-  const baselineExperiment = expA?.id === baselineId ? expA : expB;
-  const contenderExperiment = expA?.id === contenderId ? expA : expB;
-
-  const { data: baselineResults, isLoading: isBaselineLoading } = useDatasetExperimentResults({
+  const {
+    data: comparison,
+    isLoading,
+    error,
+  } = useCompareExperiments({
     datasetId,
-    experimentId: baselineId,
-    experimentStatus: baselineExperiment?.status,
-  });
-  const { data: contenderResults, isLoading: isContenderLoading } = useDatasetExperimentResults({
-    datasetId,
-    experimentId: contenderId,
-    experimentStatus: contenderExperiment?.status,
+    experimentIds,
+    baselineId,
+    queryOptions: { enabled: Boolean(datasetId) && Boolean(baselineId) && contenderIds.length > 0 },
   });
 
-  // Scorer reasons live in the scores store, not on the result rows.
-  const { data: baselineScores } = useScoresByExperimentId(baselineId, baselineExperiment?.status);
-  const { data: contenderScores } = useScoresByExperimentId(contenderId, contenderExperiment?.status);
+  const { data: experimentsById, isLoading: isExperimentsLoading } = useDatasetExperimentsQueries({
+    datasetId,
+    experimentIds,
+  });
 
-  const rows = useMemo(
-    () =>
-      buildComparisonRows({
-        comparison,
-        baselineId,
-        contenderId,
-        baselineResults,
-        contenderResults,
-        baselineScores,
-        contenderScores,
-      }),
-    [comparison, baselineId, contenderId, baselineResults, contenderResults, baselineScores, contenderScores],
+  const experimentRefs = useMemo(
+    () => experimentIds.map(id => ({ id, status: experimentsById[id]?.status })),
+    [experimentIds, experimentsById],
   );
 
-  const scorerIds = useMemo(() => [...new Set(rows.flatMap(row => Object.keys(row.deltas)))].sort(), [rows]);
+  const { data: resultsById, isLoading: isResultsLoading } = useAllDatasetExperimentResultsQueries({
+    datasetId,
+    experiments: experimentRefs,
+  });
+  // Scorer reasons live in the scores store, not on the result rows.
+  const { data: scoresById } = useScoresByExperimentIdsQueries({ experiments: experimentRefs });
 
-  /** Per-scorer averages for each side, rendered in its own header cell. */
-  const summaries = useMemo(() => {
-    const average = (side: 'baseline' | 'contender', scorerId: string) => {
-      const values = rows
-        .map(row => row[side].scores.find(score => score.scorerId === scorerId)?.value)
-        .filter((value): value is number => value != null);
-      return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
-    };
+  const rows = useMemo(
+    () => buildComparisonRows({ comparison, experimentIds, resultsById, scoresById }),
+    [comparison, experimentIds, resultsById, scoresById],
+  );
 
-    const baseline = scorerIds.map(scorerId => ({
-      scorerId,
-      average: average('baseline', scorerId),
-      delta: null,
-    }));
+  /** Per-scorer averages for each column; contenders also carry their delta against the baseline. */
+  const summaries = useMemo((): ScorerSummary[][] => {
+    const scorerIds = [
+      ...new Set(rows.flatMap(row => row.sides.flatMap(side => side.scores.map(s => s.scorerId)))),
+    ].sort();
+    return experimentIds.map((_, index) =>
+      scorerIds.map(scorerId => {
+        const value = average(rows, index, scorerId);
+        const baseline = average(rows, 0, scorerId);
+        const delta = index > 0 && value != null && baseline != null ? value - baseline : null;
+        return { scorerId, average: value, delta };
+      }),
+    );
+  }, [rows, experimentIds]);
 
-    const contender = scorerIds.map(scorerId => {
-      const avgA = average('baseline', scorerId);
-      const avgB = average('contender', scorerId);
-      return { scorerId, average: avgB, delta: avgA != null && avgB != null ? avgB - avgA : null };
-    });
-
-    return { baseline, contender };
-  }, [rows, scorerIds]);
-
-  if (isLoading) {
+  if (isLoading || isExperimentsLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Spinner />
@@ -115,90 +120,78 @@ export function ExperimentsComparison({ datasetId, experimentIdA, experimentIdB 
   }
 
   if (!comparison || comparison.items.length === 0) {
-    return <div className="py-5 text-center text-body text-muted-foreground">No comparison data</div>;
+    return (
+      <Txt as="p" variant="body" tone="muted" className="py-5 text-center">
+        No comparison data
+      </Txt>
+    );
   }
 
+  const baselineExperiment = experimentsById[baselineId];
+
   return (
-    <div className="grid gap-4">
-      <div role="table" aria-label="Experiments comparison" className="grid">
-        {/* Header row: Items / Baseline / Contender */}
-        <div
-          role="row"
-          className="grid border-y border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-border"
-        >
-          <div
-            role="columnheader"
-            aria-label="Items"
-            className={`${cell} text-caption text-muted-foreground uppercase`}
-          >
-            Items
+    <div className="overflow-x-auto">
+      <div
+        role="table"
+        aria-label="Experiments comparison"
+        className="grid"
+        style={{ '--compare-cols': experimentIds.length } as CSSProperties}
+      >
+        <div role="row" className={cn(gridRow, 'border-y')}>
+          <div role="columnheader" aria-label="Items" className={cn('text-muted-foreground', `${cell} uppercase`)}>
+            <Txt as="span" variant="caption" className="block">
+              Items
+            </Txt>
           </div>
-          <div role="columnheader" aria-label="Baseline" className={cell}>
-            <ComparisonSideHeader
-              side="baseline"
-              experiment={baselineExperiment ?? undefined}
-              summary={summaries.baseline}
-              versionMismatch={versionMismatch ?? undefined}
-            />
-          </div>
-          <div role="columnheader" aria-label="Contender" className={cell}>
-            <ComparisonSideHeader
-              side="contender"
-              experiment={contenderExperiment ?? undefined}
-              summary={summaries.contender}
-              versionMismatch={versionMismatch ?? undefined}
-              showDeltas
-            />
-          </div>
+          {experimentIds.map((experimentId, index) => {
+            const experiment = experimentsById[experimentId] ?? undefined;
+            return (
+              <div key={experimentId} role="columnheader" aria-label={columnLabel(index)} className={cell}>
+                <ComparisonSideHeader
+                  role={index === 0 ? 'baseline' : 'contender'}
+                  label={columnLabel(index)}
+                  experiment={experiment}
+                  summary={summaries[index]}
+                  versionMismatch={
+                    index > 0 && Boolean(experiment) && Boolean(baselineExperiment)
+                      ? experiment?.datasetVersion !== baselineExperiment?.datasetVersion
+                      : undefined
+                  }
+                  onSetBaseline={index > 0 && onSetBaseline ? () => onSetBaseline(experimentId) : undefined}
+                />
+              </div>
+            );
+          })}
         </div>
 
-        {rows.map(row => {
-          const deltas = Object.entries(row.deltas).flatMap(([scorerId, delta]) =>
-            delta == null || delta === 0 ? [] : [{ scorerId, delta }],
-          );
-
-          return (
-            <div
-              key={row.itemId}
-              role="row"
-              aria-label={row.itemId}
-              className="grid border-b border-border xl:grid-cols-[minmax(20rem,24rem)_1fr_1fr] xl:divide-x xl:divide-border"
-            >
-              <div role="cell" className={`${cell} grid content-start gap-1`}>
-                <Link
-                  href={paths.datasetItemLink(datasetId, row.itemId)}
-                  aria-label={`Open item ${row.itemId}`}
-                  className={cn(
-                    'flex items-start gap-1.5 text-caption break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
-                    row.baseline.present && row.contender.present ? 'text-muted-foreground' : 'text-placeholder',
-                  )}
-                >
-                  <Txt as="span" variant="caption" font="mono" className="min-w-0">
-                    {row.itemId}
-                  </Txt>
-                </Link>
-                {deltas.length > 0 && (
-                  <span className="flex flex-wrap items-center gap-2">
-                    {deltas.map(({ scorerId, delta }) => (
-                      <ScoreDelta key={scorerId} delta={delta} />
-                    ))}
-                  </span>
+        {rows.map(row => (
+          <div key={row.itemId} role="row" aria-label={row.itemId} className={cn(gridRow, 'border-b')}>
+            <div role="cell" className={`${cell} grid content-start gap-1`}>
+              <Link
+                href={paths.datasetItemLink(datasetId, row.itemId)}
+                aria-label={`Open item ${row.itemId}`}
+                className={cn(
+                  row.sides.every(side => side.present) ? 'text-muted-foreground' : 'text-placeholder',
+                  'flex items-start gap-1.5 break-all hover:underline [&>svg]:mt-0.5 [&>svg]:size-3.5 [&>svg]:shrink-0',
                 )}
-                <div className="grid pt-3">
-                  <ComparisonItemPayload label="Input" value={row.input} />
-                  <ComparisonItemPayload label="Ground truth" value={row.groundTruth} />
-                </div>
-              </div>
-
-              <div role="cell" aria-label="Baseline" className={cell}>
-                <ComparisonSideCell side="baseline" row={row} isLoading={isBaselineLoading} />
-              </div>
-              <div role="cell" aria-label="Contender" className={cell}>
-                <ComparisonSideCell side="contender" row={row} isLoading={isContenderLoading} showDeltas />
+              >
+                <Txt as="span" variant="caption" font="mono" className="min-w-0">
+                  {row.itemId}
+                </Txt>
+              </Link>
+              <div className="grid pt-3">
+                <ComparisonItemPayload label="Input" value={row.input} />
+                <ComparisonItemPayload label="Ground truth" value={row.groundTruth} />
               </div>
             </div>
-          );
-        })}
+
+            {row.sides.map((side, index) => (
+              <div key={side.experimentId} role="cell" aria-label={columnLabel(index)} className={cell}>
+                <ComparisonSideCell column={side} isLoading={isResultsLoading} />
+              </div>
+            ))}
+          </div>
+        ))}
       </div>
     </div>
   );

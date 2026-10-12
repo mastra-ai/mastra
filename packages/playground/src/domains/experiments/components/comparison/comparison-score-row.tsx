@@ -24,10 +24,12 @@ export function ComparisonScoreRow({ scorerId, value, delta, reason }: Compariso
         <Link
           href={paths.scorerLink(scorerId)}
           aria-label={`Open ${scorerId}`}
-          className="flex min-w-0 items-center gap-1.5 text-subheading text-foreground hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
+          className="flex min-w-0 items-center gap-1.5 text-foreground hover:underline [&>svg]:size-3.5 [&>svg]:shrink-0"
         >
           <ScorersIcon />
-          <span className="min-w-0 truncate">{scorerId}</span>
+          <Txt as="span" variant="subheading" className="min-w-0 truncate">
+            {scorerId}
+          </Txt>
         </Link>
         <div className="flex items-center gap-3">
           <Txt as="span" tone="muted" className="tabular-nums">

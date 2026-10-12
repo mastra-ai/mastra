@@ -46,6 +46,8 @@ export function isProviderConfigured(provider: ProviderInfo): boolean {
 }
 
 function hasScopedCredential(provider: ProviderInfo, scope: ProviderCredentialScope): boolean {
+  // Runs on the server's own credentials, so it covers every account and scope.
+  if (provider.source === 'deployment') return true;
   if (scope === 'org') {
     return (
       provider.orgCredential !== undefined ||

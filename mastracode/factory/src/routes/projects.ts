@@ -155,13 +155,6 @@ interface ModelApplyController {
   getSessionByResource: (resourceId: string) => Promise<ModelApplySession | undefined>;
 }
 
-function persistedThreadMode(metadata: Record<string, unknown> | null | undefined): string | undefined {
-  if (typeof metadata?.currentModeId === 'string' && metadata.currentModeId) return metadata.currentModeId;
-  const modeKeys = Object.keys(metadata ?? {}).filter(key => key.startsWith('modeModelId_'));
-  if (modeKeys.length !== 1) return undefined;
-  return modeKeys[0]?.slice('modeModelId_'.length) || undefined;
-}
-
 export interface ProjectRoutesDeps extends RouteDependencies {
   /** Factory projects domain backing the CRUD surface. */
   projects: FactoryProjectsStorage;
@@ -405,15 +398,11 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               skipped.push({ threadId: binding.threadId, reason: 'thread-missing' });
               continue;
             }
-            const modeId = persistedThreadMode(thread.metadata);
-            if (!modeId) {
-              skipped.push({ threadId: binding.threadId, reason: 'mode-unknown' });
-              continue;
-            }
             try {
+              // This route targets inactive bound threads, so persist the controller-owned key through the session gateway.
               await session.thread.setSettingOn({
                 threadId: binding.threadId,
-                key: `modeModelId_${modeId}`,
+                key: 'currentModelId',
                 value: modelId,
               });
               applied.push(binding.threadId);

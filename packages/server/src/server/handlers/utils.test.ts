@@ -1,7 +1,26 @@
 import { describe, it, expect } from 'vitest';
-import { sanitizeBody } from './utils';
+import { sanitizeBody, stripClientCredentialHeaders } from './utils';
 
 describe('utils', () => {
+  describe('stripClientCredentialHeaders', () => {
+    it('removes credential headers from modelSettings.headers and keeps the rest', () => {
+      const body: Record<string, unknown> = {
+        modelSettings: {
+          temperature: 0.2,
+          headers: { Authorization: 'Bearer app-user-token', 'x-api-key': 'leak', 'x-trace-id': 'trace-1' },
+        },
+      };
+      stripClientCredentialHeaders(body);
+      expect(body.modelSettings).toEqual({ temperature: 0.2, headers: { 'x-trace-id': 'trace-1' } });
+    });
+
+    it('leaves bodies without modelSettings headers untouched', () => {
+      const body: Record<string, unknown> = { messages: [], modelSettings: { temperature: 0.2 } };
+      stripClientCredentialHeaders(body);
+      expect(body).toEqual({ messages: [], modelSettings: { temperature: 0.2 } });
+    });
+  });
+
   describe('sanitizeBody', () => {
     it('should remove disallowed keys from the body', () => {
       const body = {
