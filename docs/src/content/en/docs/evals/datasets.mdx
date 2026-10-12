@@ -282,7 +282,7 @@ for (const row of history) {
 Fetch the exact items that existed at a past version:
 
 ```typescript title="src/mastra/datasets/pin-version.ts"
-const items = await dataset.listItems({ version: 2 })
+const { items } = await dataset.listItems({ version: 2, page: 0, perPage: 100 })
 ```
 
 You can also pin experiments to a version, see [running experiments](/docs/evals/experiments). Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list of methods and parameters.
