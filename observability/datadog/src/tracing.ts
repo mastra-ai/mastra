@@ -27,7 +27,7 @@ import type { BaseExporterConfig } from '@mastra/observability';
 import tracer from 'dd-trace';
 import { isModelInferenceEnabled } from './features';
 import { formatUsageMetrics } from './metrics';
-import { ensureTracer, kindFor, toDate, formatInput, formatOutput } from './utils';
+import { ensureTracer, kindFor, toDate, formatInput, formatOutput, toDatadogLinks } from './utils';
 import type { DatadogSpanKind } from './utils';
 
 /**
@@ -44,6 +44,8 @@ interface LLMObsSpanOptions {
   modelName?: string;
   modelProvider?: string;
   startTime?: Date;
+  /** Links to spans in other traces, forwarded by llmobs.trace() to the APM span. */
+  links?: { context: any }[];
 }
 
 /**
@@ -773,6 +775,7 @@ export class DatadogExporter extends BaseExporter {
     };
 
     const startTime = toDate(span.startTime);
+    const links = toDatadogLinks(span.links);
     // Event spans are point-in-time markers; use startTime for endTime if not set (zero duration)
     // Regular spans fall back to current time if endTime is not set
     const endTime = span.endTime ? toDate(span.endTime) : span.isEvent ? startTime : new Date();
@@ -786,6 +789,7 @@ export class DatadogExporter extends BaseExporter {
         startTime,
         ...(kind === 'llm' && attrs?.model ? { modelName: attrs.model } : {}),
         ...(kind === 'llm' && attrs?.provider ? { modelProvider: attrs.provider } : {}),
+        ...(links.length > 0 ? { links } : {}),
       },
       // endTime as milliseconds for ddSpan.finish() — dd-trace's llmobs.trace() does not
       // honor endTime in options, so we must call finish(ms) explicitly on the span.

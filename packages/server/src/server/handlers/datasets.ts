@@ -59,6 +59,23 @@ import {
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
+// Result rows don't store targetType; attach the parent experiment's so clients can narrow `output`.
+type ExperimentResultResponse = z.infer<typeof experimentResultResponseSchema>;
+type TypedResultOutput = ExperimentResultResponse extends infer R
+  ? R extends ExperimentResultResponse
+    ? Pick<R, 'targetType' | 'output'>
+    : never
+  : never;
+
+// The executor persists `output` in the shape of the experiment's target, so the
+// stored row's target type is the discriminant for its output.
+function withTargetType<T extends { output: unknown }>(
+  result: T,
+  targetType: TargetType | null | undefined,
+): Omit<T, 'output'> & TypedResultOutput {
+  return { ...result, targetType: targetType ?? null } as Omit<T, 'output'> & TypedResultOutput;
+}
+
 // ============================================================================
 // Feature gate + local type guards
 // ============================================================================
@@ -995,7 +1012,11 @@ export const RUN_EXPERIMENT_ITEM_ROUTE = createRoute({
       };
       const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;
       const ds = await mastra.datasets.get({ id: datasetId });
-      return await ds.runExperimentItem({ experimentId, itemId, attempt, requestContext });
+      const [run, experiment] = await Promise.all([
+        ds.runExperimentItem({ experimentId, itemId, attempt, requestContext }),
+        ds.getExperiment({ experimentId }),
+      ]);
+      return { ...run, result: withTargetType(run.result, experiment?.targetType) };
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
@@ -1040,7 +1061,8 @@ export const SUBMIT_EXPERIMENT_RESULT_ROUTE = createRoute({
           }[];
         };
       const ds = await mastra.datasets.get({ id: datasetId });
-      return await ds.submitExperimentResult({
+      const experiment = await ds.getExperiment({ experimentId });
+      const submitted = await ds.submitExperimentResult({
         experimentId,
         itemId,
         attempt,
@@ -1053,6 +1075,7 @@ export const SUBMIT_EXPERIMENT_RESULT_ROUTE = createRoute({
         traceId,
         scores,
       });
+      return withTargetType(submitted, experiment?.targetType);
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
@@ -1203,7 +1226,9 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
         orderBy,
       });
       return {
-        results: result.results.map(({ experimentId: _eid, ...rest }) => ({ experimentId, ...rest })),
+        results: result.results.map(({ experimentId: _eid, ...rest }) =>
+          withTargetType({ experimentId, ...rest }, run.targetType),
+        ),
         pagination: result.pagination,
       };
     } catch (error) {
@@ -1245,8 +1270,9 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
         tags: params.tags,
         comment: params.comment,
       });
+      const experiment = await experimentsStore.getExperimentById({ id: experimentId });
 
-      return result;
+      return withTargetType(result, experiment?.targetType);
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });
