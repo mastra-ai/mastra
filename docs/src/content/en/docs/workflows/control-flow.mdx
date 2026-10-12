@@ -598,7 +598,9 @@ export const testWorkflow = createWorkflow({})
 
 ### Passing data between iterations
 
-Each iteration of `.dountil()` or `.dowhile()` receives the previous iteration's output as its `inputData`. Before the loop body runs, that output is validated against the body's `inputSchema`, and any keys the schema doesn't declare are removed. This also applies when the loop body is a nested workflow. Values produced by steps inside the nested workflow, such as feedback from a step that suspended and resumed, aren't available on the next iteration unless the body's output includes them and its `inputSchema` declares them.
+Each iteration of `.dountil()` or `.dowhile()` receives the previous iteration's output as its `inputData`. When input validation is enabled (the default), that output is validated against the loop body's `inputSchema` before the body runs. With an object schema such as `z.object()`, keys the schema doesn't declare are removed. Schemas that allow unknown keys, such as `.passthrough()`, keep them.
+
+When the loop body is a nested workflow, the output is validated against the nested workflow's `inputSchema` and then against its first step's `inputSchema`. A value is only available on the next iteration if the nested workflow returns it and both schemas declare it. This includes values produced inside the nested workflow, such as feedback from a step that suspended and resumed.
 
 To carry data across iterations, declare it in the body's `inputSchema` and return it from the body's last step:
 
