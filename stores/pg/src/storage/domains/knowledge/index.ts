@@ -1149,6 +1149,8 @@ export class KnowledgePG extends KnowledgeStorage {
     record: Omit<CreateKnowledgeRecordInput, 'node'>;
   }): Promise<{ node: KnowledgeNode; record: KnowledgeRecord }> {
     return this.#transaction(async tx => {
+      await this.#assertImportMutationAuthority(tx, input.node.importRunId, input.node.importAuthority);
+      await this.#assertImportMutationAuthority(tx, input.record.importRunId, input.record.importAuthority);
       const node = await this.#createNode(tx, input.node);
       const record = await this.#createRecord(tx, { ...input.record, node });
       return { node, record };
@@ -1162,6 +1164,8 @@ export class KnowledgePG extends KnowledgeStorage {
   }): Promise<KnowledgeRecord> {
     const scopeIds = canonicalizeKnowledgeScopeIds(input.visibilityScopeIds);
     return this.#transaction(async tx => {
+      await this.#assertImportMutationAuthority(tx, input.node.importRunId, input.node.importAuthority);
+      await this.#assertImportMutationAuthority(tx, input.record.importRunId, input.record.importAuthority);
       const node = await this.#updateNode(tx, input.node);
       let after = '';
       while (true) {
@@ -1696,8 +1700,16 @@ export class KnowledgePG extends KnowledgeStorage {
     importRunId: string | undefined,
     authority: KnowledgeImportMutationAuthority | undefined,
   ): Promise<void> {
-    if (!importRunId && !authority) return;
-    if (!importRunId || !authority || authority.runId !== importRunId) throw new KnowledgeImportAuthorityError();
+    if (!authority) {
+      if (!importRunId) return;
+      const run = await tx.execute({
+        sql: `SELECT 1 FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" WHERE id=?`,
+        args: [importRunId],
+      });
+      if (!run.rows.length) throw new KnowledgeNotFoundError('import run', importRunId);
+      return;
+    }
+    if (!importRunId || authority.runId !== importRunId) throw new KnowledgeImportAuthorityError();
     const binding = canonicalizeKnowledgeImporterBindingKey(authority.binding);
     const result = await tx.execute({
       sql: `SELECT s.value FROM "${TABLE_KNOWLEDGE_IMPORT_RUNS}" r JOIN "${TABLE_KNOWLEDGE_IMPORT_STATE}" s ON s.importerId=r.importerId AND s.binding=r.binding WHERE r.id=? AND r.importerId=? AND r.binding=? AND r.status='running' AND s.key=? FOR UPDATE OF r,s`,

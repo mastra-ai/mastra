@@ -1102,19 +1102,50 @@ export function createKnowledgeStorageTests(
         workerId: 'activity-worker',
         leaseKey: `lease/${activityRun.id}`,
       };
+      const ordinaryNode = await store.createNode({
+        name: 'Ordinary event',
+        scopeIds: [PROJECT_SCOPE_ID],
+      });
+      const legacyNode = await store.createNode({
+        name: 'Legacy imported event',
+        scopeIds: [PROJECT_SCOPE_ID],
+        importRunId: activityRun.id,
+      });
+      const mismatchedAuthority = { ...importAuthority, runId: interruptedRun.id };
       await expect(
         store.createNode({
-          name: 'Unfenced imported event',
+          name: 'Mismatched imported event',
           scopeIds: [PROJECT_SCOPE_ID],
           importRunId: activityRun.id,
+          importAuthority: mismatchedAuthority,
         }),
       ).rejects.toThrow('Knowledge import mutation authority is no longer valid');
       await expect(
-        store.createNode({
-          name: 'Stale imported event',
-          scopeIds: [PROJECT_SCOPE_ID],
-          importRunId: activityRun.id,
-          importAuthority: { ...importAuthority, workerId: 'stale-worker' },
+        store.createNodeWithRecord({
+          node: {
+            name: 'Mismatched composite event',
+            scopeIds: [PROJECT_SCOPE_ID],
+            importRunId: activityRun.id,
+            importAuthority: mismatchedAuthority,
+          },
+          record: { text: 'Blocked composite record', scopeIds: [PROJECT_SCOPE_ID], importRunId: activityRun.id },
+        }),
+      ).rejects.toThrow('Knowledge import mutation authority is no longer valid');
+      await expect(
+        store.replaceNodeRecords({
+          node: {
+            id: legacyNode.id,
+            version: legacyNode.version,
+            importRunId: activityRun.id,
+            importAuthority: mismatchedAuthority,
+          },
+          record: {
+            text: 'Blocked replacement record',
+            source: 'blocked-replacement',
+            scopeIds: [PROJECT_SCOPE_ID],
+            importRunId: activityRun.id,
+          },
+          visibilityScopeIds: [PROJECT_SCOPE_ID],
         }),
       ).rejects.toThrow('Knowledge import mutation authority is no longer valid');
       const node = await store.createNode({
@@ -1125,7 +1156,11 @@ export function createKnowledgeStorageTests(
       });
       expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID], importRunId: activityRun.id })).toEqual([
         expect.objectContaining({ targetId: node.id, importRunId: activityRun.id }),
+        expect.objectContaining({ targetId: legacyNode.id, importRunId: activityRun.id }),
       ]);
+      expect(await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID] })).toContainEqual(
+        expect.objectContaining({ targetId: ordinaryNode.id, importRunId: undefined }),
+      );
 
       const reopened = await createStore(true);
       await reopened.init();

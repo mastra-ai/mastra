@@ -230,7 +230,8 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     record: Omit<CreateKnowledgeRecordInput, 'node'>;
   }): Promise<{ node: KnowledgeNode; record: KnowledgeRecord }> {
     return this.#runAtomicMutation(() => {
-      this.#assertImportRunExists(input.record.importRunId);
+      this.#assertImportMutationAuthority(input.node.importRunId, input.node.importAuthority);
+      this.#assertImportMutationAuthority(input.record.importRunId, input.record.importAuthority);
       const node = this.#createNode(input.node);
       const record = this.#createRecord({ ...input.record, node });
       return { node, record };
@@ -668,10 +669,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     record: Omit<CreateKnowledgeRecordInput, 'node'> & { source: string };
     visibilityScopeIds: KnowledgeScopeIds;
   }): Promise<KnowledgeRecord> {
-    this.#assertImportRunExists(input.node.importRunId);
-    this.#assertImportRunExists(input.record.importRunId);
     const scopeIds = canonicalizeKnowledgeScopeIds(input.visibilityScopeIds);
     return this.#runAtomicMutation(() => {
+      this.#assertImportMutationAuthority(input.node.importRunId, input.node.importAuthority);
+      this.#assertImportMutationAuthority(input.record.importRunId, input.record.importAuthority);
       const node = this.#updateNode(input.node);
       let after = '';
       while (true) {
@@ -1490,8 +1491,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   #assertImportMutationAuthority(importRunId?: string, authority?: KnowledgeImportMutationAuthority): void {
-    if (!importRunId && !authority) return;
-    if (!importRunId || !authority || authority.runId !== importRunId) throw new KnowledgeImportAuthorityError();
+    if (!authority) {
+      this.#assertImportRunExists(importRunId);
+      return;
+    }
+    if (!importRunId || authority.runId !== importRunId) throw new KnowledgeImportAuthorityError();
     const binding = canonicalizeKnowledgeImporterBindingKey(authority.binding);
     const run = this.#db.knowledgeImportRuns.get(importRunId);
     const lease = this.#db.knowledgeImportState.get(
