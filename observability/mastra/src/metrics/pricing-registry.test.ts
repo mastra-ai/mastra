@@ -2,16 +2,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MIN_MODELS_DEV_PRICING_ROWS, modelsDevToPricingRows } from './models-dev';
+import { MIN_PRICED_MODELS, modelsDevToPricingModels, pickModelsDevCosts } from './models-dev';
 import { PricingRegistry } from './pricing-registry';
-import type { MinifiedPricingModelRow } from './pricing-registry';
 
 const NEW_MODEL = { provider: 'openai', model: 'brand-new-model' };
 
 /** A models.dev payload big enough to pass validation, with one model the bundled snapshot does not have. */
 function catalog(newModelInput = 7): Record<string, unknown> {
   const models: Record<string, unknown> = { 'brand-new-model': { cost: { input: newModelInput, output: 21 } } };
-  for (let i = 0; i < MIN_MODELS_DEV_PRICING_ROWS; i++) {
+  for (let i = 0; i < MIN_PRICED_MODELS; i++) {
     models[`filler-${i}`] = { cost: { input: 1, output: 2 } };
   }
   return { openai: { models } };
@@ -19,16 +18,11 @@ function catalog(newModelInput = 7): Record<string, unknown> {
 
 // The bot regenerates the snapshot from models.dev without CI, so this checks its shape, not specific models.
 describe('PricingRegistry bundled snapshot', () => {
-  it('has enough models, each with input and output prices', () => {
-    const text = fs.readFileSync(path.join(import.meta.dirname, 'pricing-data.jsonl'), 'utf-8');
-    const rows = text
-      .trim()
-      .split('\n')
-      .map(line => JSON.parse(line) as MinifiedPricingModelRow);
+  it('is models.dev costs with enough priced models', () => {
+    const costs = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'pricing-data.json'), 'utf-8'));
 
-    expect(rows.length).toBeGreaterThanOrEqual(MIN_MODELS_DEV_PRICING_ROWS);
-    expect(rows.filter(row => !(row.s.d.t[0]!.r.it!.c > 0 && row.s.d.t[0]!.r.ot!.c > 0))).toEqual([]);
-    expect(() => PricingRegistry.fromText(text)).not.toThrow();
+    expect(pickModelsDevCosts(costs)).toEqual(costs);
+    expect(modelsDevToPricingModels(costs).size).toBeGreaterThanOrEqual(MIN_PRICED_MODELS);
   });
 });
 
@@ -42,9 +36,9 @@ describe('PricingRegistry.getGlobal refresh', () => {
     return (await import('./pricing-registry')).PricingRegistry;
   }
 
-  function writeCache(rows: unknown[], etag: string, ageMs: number, version = 1): void {
+  function writeCache(costs: unknown, etag: string, ageMs: number, version = 1): void {
     fs.mkdirSync(path.dirname(cacheFile()), { recursive: true });
-    fs.writeFileSync(cacheFile(), JSON.stringify({ version, etag, rows }));
+    fs.writeFileSync(cacheFile(), JSON.stringify({ version, etag, costs }));
     const mtime = new Date(Date.now() - ageMs);
     fs.utimesSync(cacheFile(), mtime, mtime);
   }
@@ -81,7 +75,7 @@ describe('PricingRegistry.getGlobal refresh', () => {
   });
 
   it('ignores a cache file written in another format', async () => {
-    writeCache(modelsDevToPricingRows(catalog(9)), 'W/"v1"', 0, 2);
+    writeCache(catalog(9), 'W/"v1"', 0, 2);
     const Registry = await loadRegistry();
 
     expect(Registry.getGlobal()?.get(NEW_MODEL)).toBeNull();
@@ -93,7 +87,7 @@ describe('PricingRegistry.getGlobal refresh', () => {
   });
 
   it('starts from a stale cache and revalidates it with its ETag', async () => {
-    writeCache(modelsDevToPricingRows(catalog(9)), 'W/"v1"', 2 * 24 * 60 * 60 * 1000);
+    writeCache(catalog(9), 'W/"v1"', 2 * 24 * 60 * 60 * 1000);
     fetchMock.mockImplementation(async () => new Response(null, { status: 304 }));
     const Registry = await loadRegistry();
 
@@ -106,7 +100,7 @@ describe('PricingRegistry.getGlobal refresh', () => {
   });
 
   it('does not refresh a fresh cache until a model has no price', async () => {
-    writeCache(modelsDevToPricingRows(catalog()), 'W/"v1"', 0);
+    writeCache(catalog(), 'W/"v1"', 0);
     const Registry = await loadRegistry();
 
     expect(Registry.getGlobal()?.get(NEW_MODEL)).not.toBeNull();
@@ -118,7 +112,7 @@ describe('PricingRegistry.getGlobal refresh', () => {
 
   it('refreshes on a missing model at most once an hour, even if the last refresh failed', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    writeCache(modelsDevToPricingRows(catalog()), 'W/"v1"', 0);
+    writeCache(catalog(), 'W/"v1"', 0);
     fetchMock.mockImplementationOnce(() => Promise.reject(new TypeError('fetch failed')));
     const Registry = await loadRegistry();
     const registry = Registry.getGlobal()!;
@@ -164,7 +158,7 @@ describe('PricingRegistry.getGlobal refresh', () => {
     for (const [name, value] of Object.entries(env)) {
       vi.stubEnv(name, value);
     }
-    writeCache(modelsDevToPricingRows(catalog()), 'W/"v1"', 2 * 24 * 60 * 60 * 1000);
+    writeCache(catalog(), 'W/"v1"', 2 * 24 * 60 * 60 * 1000);
     const Registry = await loadRegistry();
 
     expect(Registry.getGlobal()?.get(NEW_MODEL)).toBeNull();

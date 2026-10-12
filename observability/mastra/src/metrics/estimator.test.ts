@@ -5,16 +5,16 @@ import { estimateCosts } from './estimator';
 import { PricingRegistry } from './pricing-registry';
 import { TokenMetrics } from './types';
 
-const fixturePath = path.join(import.meta.dirname, '__fixtures__', 'pricing-data-test.jsonl');
-const pricingRegistry = PricingRegistry.fromText(fs.readFileSync(fixturePath, 'utf-8'));
+const fixturePath = path.join(import.meta.dirname, '__fixtures__', 'pricing-data-test.json');
+const pricingRegistry = PricingRegistry.fromModelsDev(JSON.parse(fs.readFileSync(fixturePath, 'utf-8')));
 
 describe('estimateCosts', () => {
   it.each([
-    ['gpt-5.6', '02673ef8836dfa48', 0.004, 0.0004, 0.005, 0.02, 0.000008, 0.00003],
-    ['gpt-5.6-sol', '20d0cde775d1441d', 0.004, 0.0004, 0.005, 0.02, 0.000008, 0.00003],
-    ['gpt-5.6-terra', 'd39bbd4dbe73180a', 0.002, 0.0002, 0.0025, 0.012, 0.000004, 0.000018],
-    ['gpt-5.6-luna', '3ad0e58759c048c0', 0.0002, 0.00002, 0.00025, 0.0012, 0.0000004, 0.0000018],
-    ['gpt-6-luna', 'e07d69e66a4bdabd', 0.0001, 0.00001, 0.000125, 0.0005, 0.0000002, 0.00000075],
+    ['gpt-5.6', 'openai/gpt-5-6', 0.004, 0.0004, 0.005, 0.02, 0.000008, 0.00003],
+    ['gpt-5.6-sol', 'openai/gpt-5-6-sol', 0.004, 0.0004, 0.005, 0.02, 0.000008, 0.00003],
+    ['gpt-5.6-terra', 'openai/gpt-5-6-terra', 0.002, 0.0002, 0.0025, 0.012, 0.000004, 0.000018],
+    ['gpt-5.6-luna', 'openai/gpt-5-6-luna', 0.0002, 0.00002, 0.00025, 0.0012, 0.0000004, 0.0000018],
+    ['gpt-6-luna', 'openai/gpt-6-luna', 0.0001, 0.00001, 0.000125, 0.0005, 0.0000002, 0.00000075],
   ])(
     'estimates OpenAI pricing for %s',
     (
@@ -66,9 +66,9 @@ describe('estimateCosts', () => {
   );
 
   it.each([
-    ['claude-fable-5', '00de3426817c9886', 0.01, 0.001, 0.0125, 0.05],
-    ['claude-opus-4-8', '93c628c3a9d22500', 0.005, 0.0005, 0.00625, 0.025],
-    ['claude-sonnet-5', '916837951831cfe5', 0.002, 0.0002, 0.0025, 0.01],
+    ['claude-fable-5', 'anthropic/claude-fable-5', 0.01, 0.001, 0.0125, 0.05],
+    ['claude-opus-4-8', 'anthropic/claude-opus-4-8', 0.005, 0.0005, 0.00625, 0.025],
+    ['claude-sonnet-5', 'anthropic/claude-sonnet-5', 0.002, 0.0002, 0.0025, 0.01],
   ])('estimates Anthropic pricing for %s', (model, pricingId, inputCost, cacheReadCost, cacheWriteCost, outputCost) => {
     const costs = estimateCosts(
       {
@@ -188,14 +188,14 @@ describe('estimateCosts', () => {
     expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(0.00015);
     expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(0.009);
     expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({
-      pricing_id: 'f13bc1ec3f88b97d',
+      pricing_id: 'google/gemini-3-5-flash',
       tier_index: 0,
     });
   });
 
   it.each([
-    ['grok-4.5', 'ec1c2a95e38faa9b', 0.002, 0.0003, 0.006, 0.000004, 0.0000006, 0.000012],
-    ['grok-build-0.1', 'd03e4214108e83a2', 0.001, 0.0002, 0.002, 0.000002, 0.0000004, 0.000004],
+    ['grok-4.5', 'xai/grok-4-5', 0.002, 0.0003, 0.006, 0.000004, 0.0000006, 0.000012],
+    ['grok-build-0.1', 'xai/grok-build-0-1', 0.001, 0.0002, 0.002, 0.000002, 0.0000004, 0.000004],
   ])(
     'estimates xAI pricing for %s',
     (model, pricingId, inputCost, cacheReadCost, outputCost, longInputRate, longCacheReadRate, longOutputRate) => {
@@ -319,7 +319,7 @@ describe('estimateCosts', () => {
       estimatedCost: 0.00125,
       costUnit: 'USD',
       costMetadata: {
-        pricing_id: 'google-gemini-2-5-pro',
+        pricing_id: 'google/gemini-2-5-pro',
         tier_index: 0,
       },
     });
@@ -345,7 +345,7 @@ describe('estimateCosts', () => {
       estimatedCost: 0.0025,
       costUnit: 'USD',
       costMetadata: {
-        pricing_id: 'google-gemini-2-5-pro',
+        pricing_id: 'google/gemini-2-5-pro',
         tier_index: 1,
       },
     });
@@ -375,24 +375,26 @@ describe('estimateCosts', () => {
     expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.000075);
     expect(costs.get(TokenMetrics.TOTAL_OUTPUT)?.estimatedCost).toBeCloseTo(0.00012);
     expect(costs.get(TokenMetrics.INPUT_AUDIO)?.costMetadata).toEqual({
-      pricing_id: 'openai-gpt-4o-mini',
+      pricing_id: 'openai/gpt-4o-mini',
       tier_index: 0,
       error: 'no_pricing_for_usage_type',
     });
     expect(costs.get(TokenMetrics.OUTPUT_AUDIO)?.costMetadata).toEqual({
-      pricing_id: 'openai-gpt-4o-mini',
+      pricing_id: 'openai/gpt-4o-mini',
       tier_index: 0,
       error: 'no_pricing_for_usage_type',
     });
   });
 
   it('prices reasoning tokens at the reasoning rate, or the output rate when the model has none', () => {
-    const registry = PricingRegistry.fromText(
-      [
-        '{"i":"with-rate","p":"openai","m":"with-rate","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1e-6},"ot":{"c":4e-6},"ort":{"c":2e-6}}}]}}}',
-        '{"i":"without-rate","p":"openai","m":"without-rate","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1e-6},"ot":{"c":4e-6}}}]}}}',
-      ].join('\n'),
-    );
+    const registry = PricingRegistry.fromModelsDev({
+      openai: {
+        models: {
+          'with-rate': { cost: { input: 1, output: 4, reasoning: 2 } },
+          'without-rate': { cost: { input: 1, output: 4 } },
+        },
+      },
+    });
     const usage = { inputTokens: 0, outputTokens: 1_000, outputDetails: { text: 400, reasoning: 600 } };
 
     const withRate = estimateCosts({ provider: 'openai', model: 'with-rate', usage }, registry);
@@ -403,7 +405,7 @@ describe('estimateCosts', () => {
     expect(withoutRate.get(TokenMetrics.OUTPUT_REASONING)?.estimatedCost).toBeCloseTo(600 * 4e-6, 10);
     expect(withoutRate.get(TokenMetrics.TOTAL_OUTPUT)?.estimatedCost).toBeCloseTo(1_000 * 4e-6, 10);
     expect(withoutRate.get(TokenMetrics.TOTAL_OUTPUT)?.costMetadata).toEqual({
-      pricing_id: 'without-rate',
+      pricing_id: 'openai/without-rate',
       tier_index: 0,
     });
   });
@@ -436,13 +438,13 @@ describe('estimateCosts', () => {
 
     expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.00006375);
     expect(costs.get(TokenMetrics.TOTAL_INPUT)?.costMetadata).toEqual({
-      pricing_id: 'openai-gpt-4o-mini',
+      pricing_id: 'openai/gpt-4o-mini',
       tier_index: 0,
       error: 'partial_cost',
     });
     expect(costs.get(TokenMetrics.TOTAL_OUTPUT)?.estimatedCost).toBeCloseTo(0.000108, 10);
     expect(costs.get(TokenMetrics.TOTAL_OUTPUT)?.costMetadata).toEqual({
-      pricing_id: 'openai-gpt-4o-mini',
+      pricing_id: 'openai/gpt-4o-mini',
       tier_index: 0,
       error: 'partial_cost',
     });
@@ -498,7 +500,7 @@ describe('estimateCosts', () => {
       estimatedCost: 0,
       costUnit: 'USD',
       costMetadata: {
-        pricing_id: 'openai-gpt-4o-mini',
+        pricing_id: 'openai/gpt-4o-mini',
         tier_index: 0,
       },
     });
@@ -508,7 +510,7 @@ describe('estimateCosts', () => {
       estimatedCost: 0,
       costUnit: 'USD',
       costMetadata: {
-        pricing_id: 'openai-gpt-4o-mini',
+        pricing_id: 'openai/gpt-4o-mini',
         tier_index: 0,
       },
     });
@@ -535,7 +537,7 @@ describe('estimateCosts', () => {
       estimatedCost: 0.00015,
       costUnit: 'USD',
       costMetadata: {
-        pricing_id: 'openai-gpt-4o-mini',
+        pricing_id: 'openai/gpt-4o-mini',
         tier_index: 0,
       },
     });
@@ -564,7 +566,7 @@ describe('estimateCosts', () => {
       estimatedCost: 0.00015,
       costUnit: 'USD',
       costMetadata: {
-        pricing_id: 'openai-gpt-4o-mini',
+        pricing_id: 'openai/gpt-4o-mini',
         tier_index: 0,
       },
     });
@@ -590,7 +592,7 @@ describe('estimateCosts', () => {
       estimatedCost: 0.003,
       costUnit: 'USD',
       costMetadata: {
-        pricing_id: 'anthropic-claude-sonnet-4-5',
+        pricing_id: 'anthropic/claude-sonnet-4-5',
         tier_index: 0,
       },
     });
@@ -640,7 +642,7 @@ describe('estimateCosts', () => {
       estimatedCost: 0.001,
       costUnit: 'USD',
       costMetadata: {
-        pricing_id: 'openrouter-xiaomi-mimo-v2-pro',
+        pricing_id: 'openrouter/xiaomi-mimo-v2-pro',
         tier_index: 0,
       },
     });
@@ -667,7 +669,7 @@ describe('estimateCosts', () => {
       estimatedCost: 0.00025,
       costUnit: 'USD',
       costMetadata: {
-        pricing_id: 'openrouter-gpt-5-mini',
+        pricing_id: 'openrouter/gpt-5-mini',
         tier_index: 0,
       },
     });
@@ -695,15 +697,15 @@ describe('estimateCosts', () => {
       estimatedCost: 0.001,
       costUnit: 'USD',
       costMetadata: {
-        pricing_id: 'openrouter-gemini-2-5-flash',
+        pricing_id: 'openrouter/gemini-2-5-flash',
         tier_index: 0,
       },
     });
   });
 
   it.each([
-    ['anthropic/claude-haiku-4.5', 'vercel-claude-haiku-4-5', 0.001],
-    ['amazon/nova-micro', 'vercel-amazon-nova-micro', 0.000035],
+    ['anthropic/claude-haiku-4.5', 'vercel/claude-haiku-4-5', 0.001],
+    ['amazon/nova-micro', 'vercel/amazon-nova-micro', 0.000035],
   ])('resolves Vercel AI Gateway model id %s against Vercel pricing', (model, pricingId, estimatedCost) => {
     const costs = estimateCosts(
       {
@@ -742,10 +744,10 @@ describe('estimateCosts', () => {
   );
 
   it('prefers exact Gateway pricing before the Vercel fallback', () => {
-    const registry = PricingRegistry.fromText(`
-{"i":"gateway-openai-gpt-4o-mini","p":"gateway","m":"openai/gpt-4o-mini","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":2e-7}}}]}}}
-{"i":"vercel-gpt-4o-mini","p":"vercel","m":"gpt-4o-mini","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1.5e-7}}}]}}}
-`);
+    const registry = PricingRegistry.fromModelsDev({
+      gateway: { models: { 'openai/gpt-4o-mini': { cost: { input: 0.2, output: 0.8 } } } },
+      vercel: { models: { 'gpt-4o-mini': { cost: { input: 0.15, output: 0.6 } } } },
+    });
     const costs = estimateCosts(
       {
         provider: 'gateway',
@@ -757,15 +759,15 @@ describe('estimateCosts', () => {
 
     expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
       provider: 'gateway',
-      model: 'openai/gpt-4o-mini',
-      costMetadata: { pricing_id: 'gateway-openai-gpt-4o-mini' },
+      model: 'openai-gpt-4o-mini',
+      costMetadata: { pricing_id: 'gateway/openai/gpt-4o-mini' },
     });
     expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(0.0002);
   });
 
   it.each([
-    ['openai.chat', 'gpt-4o-mini', 'openai', 'openai-gpt-4o-mini'],
-    ['google.generative-ai', 'gemini-2.0-flash', 'google', 'google-gemini-2-0-flash'],
+    ['openai.chat', 'gpt-4o-mini', 'openai', 'openai/gpt-4o-mini'],
+    ['google.generative-ai', 'gemini-2.0-flash', 'google', 'google/gemini-2-0-flash'],
   ])('falls back from AI SDK provider %s to %s pricing', (provider, model, pricingProvider, pricingId) => {
     const costs = estimateCosts(
       {
@@ -783,13 +785,19 @@ describe('estimateCosts', () => {
   });
 
   it.each([
-    ['google.vertex.chat', 'gemini-2.0-flash', 'google-vertex', 'google-vertex-gemini-2-0-flash', 0.00015],
-    ['vertex.maas.chat', 'deepseek-ai/deepseek-v3.1-maas', 'google-vertex', 'google-vertex-deepseek-v3-1-maas', 0.0006],
+    ['google.vertex.chat', 'gemini-2.0-flash', 'google-vertex', 'google-vertex/gemini-2-0-flash', 0.00015],
+    [
+      'vertex.maas.chat',
+      'deepseek-ai/deepseek-v3.1-maas',
+      'google-vertex',
+      'google-vertex/deepseek-ai-deepseek-v3-1-maas',
+      0.0006,
+    ],
     [
       'vertex.anthropic.messages',
       'claude-sonnet-4-5@20250929',
       'google-vertex-anthropic',
-      'google-vertex-anthropic-claude-sonnet-4-5',
+      'google-vertex-anthropic/claude-sonnet-4-5',
       0.003,
     ],
   ])('resolves AI SDK provider %s against %s pricing', (provider, model, pricingProvider, pricingId, estimatedCost) => {
@@ -851,18 +859,18 @@ describe('estimateCosts', () => {
       expect(costs.get(metric)).toMatchObject({
         provider: 'amazon-bedrock',
         model: 'claude-sonnet-4-6',
-        costMetadata: { pricing_id: 'amazon-bedrock-claude-sonnet-4-6' },
+        costMetadata: { pricing_id: 'amazon-bedrock/claude-sonnet-4-6' },
       });
       expect(costs.get(metric)?.estimatedCost).toBeCloseTo(estimatedCost);
     }
   });
 
   it.each([
-    ['anthropic.claude-sonnet-4-6-v1', 'amazon-bedrock-claude-sonnet-4-6', 0.0033],
-    ['global.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock-claude-sonnet-4-5', 0.003],
-    ['jp.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock-claude-sonnet-4-5', 0.003],
-    ['au.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock-claude-sonnet-4-5', 0.003],
-    ['us.amazon.nova-pro-v1:0', 'amazon-bedrock-amazon-nova-pro', 0.0008],
+    ['anthropic.claude-sonnet-4-6-v1', 'amazon-bedrock/claude-sonnet-4-6', 0.0033],
+    ['global.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock/claude-sonnet-4-5', 0.003],
+    ['jp.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock/claude-sonnet-4-5', 0.003],
+    ['au.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock/claude-sonnet-4-5', 0.003],
+    ['us.amazon.nova-pro-v1:0', 'amazon-bedrock/amazon-nova-pro', 0.0008],
   ])('resolves Bedrock model id %s', (model, pricingId, estimatedCost) => {
     const costs = estimateCosts(
       {

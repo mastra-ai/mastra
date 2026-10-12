@@ -1,24 +1,30 @@
 /**
- * Regenerate the bundled pricing snapshot (`src/metrics/pricing-data.jsonl`) from models.dev.
- * The "Regenerate Providers & Docs" workflow runs this every 6 hours, next to the model router's
- * provider registry. At runtime the package also refreshes from models.dev (see `pricing-registry.ts`);
- * this snapshot is the starting point and the offline fallback.
+ * Regenerate the bundled pricing snapshot (`src/metrics/pricing-data.json`) from models.dev. It keeps
+ * each model's `cost` in the models.dev shape. The "Regenerate Providers & Docs" workflow runs this
+ * every 6 hours, next to the model router's provider registry. The snapshot is what cost estimates use
+ * unless the runtime refresh is on (see `pricing-registry.ts`).
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { MIN_MODELS_DEV_PRICING_ROWS, MODELS_DEV_API_URL, modelsDevToPricingRows } from '../src/metrics/models-dev';
+import {
+  MIN_PRICED_MODELS,
+  MODELS_DEV_API_URL,
+  modelsDevToPricingModels,
+  pickModelsDevCosts,
+} from '../src/metrics/models-dev';
 
-const OUTPUT_FILE = path.join(import.meta.dirname, '..', 'src', 'metrics', 'pricing-data.jsonl');
+const OUTPUT_FILE = path.join(import.meta.dirname, '..', 'src', 'metrics', 'pricing-data.json');
 
 const response = await fetch(MODELS_DEV_API_URL);
 if (!response.ok) {
   throw new Error(`models.dev responded with ${response.status}`);
 }
 
-const rows = modelsDevToPricingRows(await response.json());
-if (rows.length < MIN_MODELS_DEV_PRICING_ROWS) {
-  throw new Error(`models.dev returned ${rows.length} pricing rows, expected at least ${MIN_MODELS_DEV_PRICING_ROWS}`);
+const costs = pickModelsDevCosts(await response.json());
+const prices = modelsDevToPricingModels(costs).size;
+if (prices < MIN_PRICED_MODELS) {
+  throw new Error(`models.dev returned ${prices} prices, expected at least ${MIN_PRICED_MODELS}`);
 }
 
-fs.writeFileSync(OUTPUT_FILE, rows.map(row => JSON.stringify(row)).join('\n') + '\n');
-console.info(`✓ Wrote ${rows.length} pricing rows to ${path.relative(process.cwd(), OUTPUT_FILE)}`);
+fs.writeFileSync(OUTPUT_FILE, JSON.stringify(costs, null, 2) + '\n');
+console.info(`✓ Wrote ${prices} prices to ${path.relative(process.cwd(), OUTPUT_FILE)}`);

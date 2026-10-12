@@ -1,20 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { estimateCosts } from './estimator';
-import { modelsDevToPricingRows } from './models-dev';
+import { pickModelsDevCosts } from './models-dev';
 import { PricingRegistry } from './pricing-registry';
 import { TokenMetrics } from './types';
 
-function registryFrom(catalog: unknown): PricingRegistry {
-  return PricingRegistry.fromText(
-    modelsDevToPricingRows(catalog)
-      .map(row => JSON.stringify(row))
-      .join('\n'),
-  );
-}
+const registryFrom = (catalog: unknown) => PricingRegistry.fromModelsDev(catalog);
 
-describe('modelsDevToPricingRows', () => {
+describe('pickModelsDevCosts', () => {
+  it('keeps only each model cost, in the models.dev shape', () => {
+    expect(
+      pickModelsDevCosts({
+        openai: {
+          name: 'OpenAI',
+          models: {
+            'gpt-5-mini': { name: 'GPT-5 mini', limit: { context: 400_000 }, cost: { input: 0.25, output: 2 } },
+            'no-cost': { name: 'No cost' },
+          },
+        },
+        'no-models': { name: 'Empty' },
+      }),
+    ).toEqual({ openai: { models: { 'gpt-5-mini': { cost: { input: 0.25, output: 2 } } } } });
+  });
+});
+
+describe('PricingRegistry.fromModelsDev', () => {
   it('converts models.dev prices per 1M tokens into per-token meter rates', () => {
-    const [row] = modelsDevToPricingRows({
+    const pricingModel = registryFrom({
       openai: {
         models: {
           'gpt-6-luna': {
@@ -30,36 +41,24 @@ describe('modelsDevToPricingRows', () => {
           },
         },
       },
-    });
+    }).get({ provider: 'openai', model: 'gpt-6-luna' });
 
-    expect(row).toEqual({
-      i: 'e07d69e66a4bdabd',
-      p: 'openai',
-      m: 'gpt-6-luna',
-      s: {
-        v: 'model_pricing/v1',
-        d: {
-          u: 'USD',
-          t: [
-            {
-              r: {
-                it: { c: 1e-7 },
-                ot: { c: 5e-7 },
-                icrt: { c: 1e-8 },
-                icwt: { c: 1.25e-7 },
-                ort: { c: 4e-7 },
-                iat: { c: 3e-6 },
-                oat: { c: 6e-6 },
-              },
-            },
-          ],
-        },
+    expect(pricingModel).toMatchObject({ id: 'openai/gpt-6-luna', provider: 'openai', model: 'gpt-6-luna' });
+    expect(pricingModel?.tiers.map(tier => tier.rates)).toEqual([
+      {
+        input_tokens: 1e-7,
+        output_tokens: 5e-7,
+        input_cache_read_tokens: 1e-8,
+        input_cache_write_tokens: 1.25e-7,
+        output_reasoning_tokens: 4e-7,
+        input_audio_tokens: 3e-6,
+        output_audio_tokens: 6e-6,
       },
-    });
+    ]);
   });
 
   it('drops zero prices and models without both input and output prices', () => {
-    const rows = modelsDevToPricingRows({
+    const registry = registryFrom({
       openrouter: {
         models: {
           'free/model': { cost: { input: 0, output: 0 } },
@@ -72,8 +71,13 @@ describe('modelsDevToPricingRows', () => {
       'not-a-provider': 42,
     });
 
-    expect(rows.map(row => row.m)).toEqual(['paid-model']);
-    expect(rows[0]!.s.d.t[0]!.r).toEqual({ it: { c: 1e-6 }, ot: { c: 2e-6 } });
+    expect(registry.get({ provider: 'openrouter', model: 'free/model' })).toBeNull();
+    expect(registry.get({ provider: 'openrouter', model: 'input-only' })).toBeNull();
+    expect(registry.get({ provider: 'openrouter', model: 'no-cost' })).toBeNull();
+    expect(registry.get({ provider: 'openrouter', model: 'paid/model' })?.tiers[0]?.rates).toEqual({
+      input_tokens: 1e-6,
+      output_tokens: 2e-6,
+    });
   });
 
   it('uses the highest matching context tier, starting at the tier size', () => {

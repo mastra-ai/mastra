@@ -2278,9 +2278,9 @@ describe('ModelSpanTracker', () => {
       it('falls back to pricing estimates when the aggregate Gateway cost is non-finite', () => {
         onTestFinished(() => vi.restoreAllMocks());
         vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(
-          PricingRegistry.fromText(
-            '{"i":"vercel-claude-haiku-4-5","p":"vercel","m":"claude-haiku-4-5","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1e-6},"ot":{"c":5e-6}}}]}}}',
-          ),
+          PricingRegistry.fromModelsDev({
+            vercel: { models: { 'claude-haiku-4-5': { cost: { input: 1, output: 5 } } } },
+          }),
         );
         const span = endGeneration({
           attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },

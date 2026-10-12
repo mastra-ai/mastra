@@ -82,7 +82,7 @@ jobs:
             echo "providers_changed=true" >> $GITHUB_OUTPUT
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
-          if ! git diff --quiet observability/mastra/src/metrics/pricing-data.jsonl; then
+          if ! git diff --quiet observability/mastra/src/metrics/pricing-data.json; then
             echo "pricing_changed=true" >> $GITHUB_OUTPUT
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
@@ -148,7 +148,7 @@ jobs:
           # changes that abort the rebase below and never make it onto main.
           git add packages/core/src/llm/model/capabilities/
           git add docs/src/content/en/models/
-          git add observability/mastra/src/metrics/pricing-data.jsonl
+          git add observability/mastra/src/metrics/pricing-data.json
           if [ -n "${CHANGESET_FILE}" ]; then
             git add "${CHANGESET_FILE}"
           fi
