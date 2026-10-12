@@ -84,6 +84,8 @@ vi.mock('@mastra/otel-exporter', () => {
       if (attrs.mode) out[`${prefix}mode`] = attrs.mode;
       if (attrs.dimensions !== undefined) out[`${prefix}dimensions`] = attrs.dimensions;
       if (attrs.inputCount !== undefined) out[`${prefix}input_count`] = attrs.inputCount;
+      // Test-only key that collides with the existing operationName metadata.
+      if (attrs.operationName !== undefined) out[`${prefix}operation_name`] = attrs.operationName;
     }
     return out;
   }
@@ -797,13 +799,20 @@ describe('LangfuseExporter', () => {
       expect(attrs['langfuse.observation.input']).toBeDefined();
     });
 
-    it('promotes embedding span attributes without touching existing observation metadata', async () => {
+    it('keeps existing observation metadata when a promoted key collides', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       await exportSpan(
         exporter,
         makeSpan({
           type: SpanType.RAG_EMBEDDING,
-          attributes: { model: 'text-embedding-3-small', mode: 'batch', dimensions: 1536, inputCount: 3 },
+          operationName: 'embed',
+          attributes: {
+            model: 'text-embedding-3-small',
+            mode: 'batch',
+            dimensions: 1536,
+            inputCount: 3,
+            operationName: 'collision',
+          },
         } as any),
       );
 
@@ -812,6 +821,9 @@ describe('LangfuseExporter', () => {
       expect(attrs['langfuse.observation.metadata.dimensions']).toBe('1536');
       expect(attrs['langfuse.observation.metadata.inputCount']).toBe('3');
       expect(attrs['langfuse.observation.metadata.spanType']).toBe(SpanType.RAG_EMBEDDING);
+      // gen_ai.operation.name wins over the colliding mastra.rag_embedding.operation_name.
+      expect(attrs['mastra.rag_embedding.operation_name']).toBe('collision');
+      expect(attrs['langfuse.observation.metadata.operationName']).toBe('embed');
     });
 
     it('does not set observation metadata when source attributes are absent', async () => {

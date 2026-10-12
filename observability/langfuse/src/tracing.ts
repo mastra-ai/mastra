@@ -512,20 +512,27 @@ function mapMastraToLangfuseAttributes(
 
   // Span-type attributes (mastra.<span_type>.<snake_key>, e.g.
   // mastra.model_step.step_index) are promoted the same way, as camelCase keys,
-  // so every span attribute is filterable in observation-level evaluator rules
-  // without a per-key mapping. Input/output have their own mapping below.
-  // Values are sent as strings; Langfuse restores numbers and booleans on ingestion.
+  // so scalar span attributes are filterable in observation-level evaluator
+  // rules without a per-key mapping. Input/output have their own mapping below.
+  // Attributes whose raw value is an object or array (entryMetadata,
+  // truthyIndexes, ...) are already JSON strings here and make no useful
+  // filter, so they stay in the nested attributes only. Values are sent as strings.
   if (span.type) {
     const spanAttrPrefix = `mastra.${String(span.type).toLowerCase()}.`;
+    const rawAttributes = (span.attributes ?? {}) as Record<string, unknown>;
     for (const [key, value] of Object.entries(attributes)) {
       if (!key.startsWith(spanAttrPrefix) || value === null || value === undefined) {
         continue;
       }
-      const name = key.slice(spanAttrPrefix.length);
+      const name = snakeToCamel(key.slice(spanAttrPrefix.length));
       if (name === 'input' || name === 'output') {
         continue;
       }
-      const metadataKey = `langfuse.observation.metadata.${snakeToCamel(name)}`;
+      const raw = rawAttributes[name];
+      if (typeof raw === 'object' && raw !== null && !(raw instanceof Date)) {
+        continue;
+      }
+      const metadataKey = `langfuse.observation.metadata.${name}`;
       if (attributes[metadataKey] === undefined) {
         attributes[metadataKey] = typeof value === 'string' ? value : JSON.stringify(value);
       }
