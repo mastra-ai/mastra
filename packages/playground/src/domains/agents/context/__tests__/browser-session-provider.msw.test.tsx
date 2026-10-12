@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { browserStreamTicketResponse } from '../../utils/__tests__/fixtures/browser-stream-ticket';
 import { BrowserSessionProvider } from '../browser-session-provider';
 import { liveBrowserSession } from './fixtures/browser-session';
 import { StudioConfigContext } from '@/domains/configuration/context/studio-config-state';
@@ -62,6 +63,9 @@ describe('BrowserSessionProvider', () => {
     vi.stubGlobal('WebSocket', FakeWebSocket);
     server.use(
       http.get(`${BASE_URL}/api/agents/:agentId/browser/session`, () => HttpResponse.json(liveBrowserSession)),
+      http.post(`${BASE_URL}/api/agents/:agentId/browser/stream-ticket`, () =>
+        HttpResponse.json(browserStreamTicketResponse),
+      ),
     );
   });
 
@@ -70,7 +74,7 @@ describe('BrowserSessionProvider', () => {
   });
 
   describe('when studio authenticates every request with an Authorization header', () => {
-    it('presents that token as the apiKey query parameter on the stream socket', async () => {
+    it('connects with an upgrade ticket instead of the reusable token', async () => {
       server.use(
         http.get(`${BASE_URL}/api/agents/:agentId/browser/session`, ({ request }) =>
           request.headers.has('authorization')
@@ -83,13 +87,30 @@ describe('BrowserSessionProvider', () => {
 
       await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
       expect(FakeWebSocket.instances[0].url).toBe(
-        'wss://studio.example.com/browser/support-bot/stream?threadId=thread-1&apiKey=abc123',
+        `wss://studio.example.com/browser/support-bot/stream?threadId=thread-1&ticket=${browserStreamTicketResponse.ticket}`,
       );
+      expect(FakeWebSocket.instances[0].url).not.toContain('abc123');
     });
   });
 
   describe('when studio authenticates with a session cookie', () => {
-    it('opens the stream without a token', async () => {
+    it('opens the stream with an upgrade ticket', async () => {
+      render(<Wrapper headers={{}}>{null}</Wrapper>);
+
+      await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));
+      expect(FakeWebSocket.instances[0].url).toBe(
+        `wss://studio.example.com/browser/support-bot/stream?threadId=thread-1&ticket=${browserStreamTicketResponse.ticket}`,
+      );
+    });
+
+    it('opens the stream without a ticket when the route is unavailable', async () => {
+      server.use(
+        http.post(
+          `${BASE_URL}/api/agents/:agentId/browser/stream-ticket`,
+          () => new HttpResponse(null, { status: 404 }),
+        ),
+      );
+
       render(<Wrapper headers={{}}>{null}</Wrapper>);
 
       await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1));

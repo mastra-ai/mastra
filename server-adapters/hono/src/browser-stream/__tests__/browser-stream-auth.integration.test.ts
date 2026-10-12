@@ -90,7 +90,11 @@ async function startBrowserStreamServer(options: { mastra?: Mastra; allowedOrigi
     throw new Error('Failed to get server address');
   }
 
-  return { server, streamUrl: `ws://localhost:${address.port}/browser/agent-1/stream?threadId=thread-1` };
+  return {
+    server,
+    streamUrl: `ws://localhost:${address.port}/browser/agent-1/stream?threadId=thread-1`,
+    baseUrl: `http://localhost:${address.port}`,
+  };
 }
 
 describe('hono browser-stream WebSocket authentication', () => {
@@ -226,6 +230,111 @@ describe('hono browser-stream WebSocket authentication with a configured provide
 
   it('refuses to upgrade a connection carrying an invalid provider session cookie', async () => {
     const result = await handshake(streamUrl, { Cookie: 'mastra-token=wrong-token' });
+
+    expect(result.opened).toBe(false);
+    expect(result.status).toBe(401);
+  });
+});
+
+describe('hono browser-stream upgrade tickets', () => {
+  // A header-authenticated Studio can't put its `Authorization` header on a
+  // WebSocket upgrade, and putting the reusable token in the URL would leak it to
+  // proxy and access logs. It exchanges the token for a single-use ticket over an
+  // ordinary authenticated HTTP request instead.
+  let server: Server;
+  let streamUrl: string;
+  let baseUrl: string;
+
+  beforeEach(async () => {
+    ({ server, streamUrl, baseUrl } = await startBrowserStreamServer());
+  });
+
+  afterEach(async () => {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  });
+
+  async function mintTicket(init?: RequestInit) {
+    return fetch(`${baseUrl}/api/agents/agent-1/browser/stream-ticket`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer valid-token', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ threadId: 'thread-1' }),
+      ...init,
+    });
+  }
+
+  async function issueTicket() {
+    const response = await mintTicket();
+    expect(response.status).toBe(200);
+    const { ticket } = (await response.json()) as { ticket: string };
+    return ticket;
+  }
+
+  it('requires authentication to mint a ticket', async () => {
+    const response = await mintTicket({ headers: { 'Content-Type': 'application/json' } });
+
+    expect(response.status).toBe(401);
+  });
+
+  it('never returns the caller credential as the ticket', async () => {
+    const ticket = await issueTicket();
+
+    expect(ticket).not.toBe('valid-token');
+    expect(ticket).not.toContain('valid-token');
+  });
+
+  it('upgrades a connection authenticated with a ticket', async () => {
+    const ticket = await issueTicket();
+
+    const result = await handshake(`${streamUrl}&ticket=${encodeURIComponent(ticket)}`);
+
+    expect(result).toEqual({ opened: true });
+  });
+
+  it('upgrades a ticket without any reusable credential on the handshake', async () => {
+    // The ticket alone is the credential - no cookie, no Authorization header, and
+    // nothing reusable in the URL.
+    const ticket = await issueTicket();
+    const url = `${streamUrl}&ticket=${encodeURIComponent(ticket)}`;
+
+    expect(url).not.toContain('valid-token');
+
+    const result = await handshake(url);
+
+    expect(result).toEqual({ opened: true });
+  });
+
+  it('refuses a replay of a consumed ticket', async () => {
+    const ticket = await issueTicket();
+    const url = `${streamUrl}&ticket=${encodeURIComponent(ticket)}`;
+
+    const first = await handshake(url);
+    const replay = await handshake(url);
+
+    expect(first).toEqual({ opened: true });
+    expect(replay.opened).toBe(false);
+    expect(replay.status).toBe(401);
+  });
+
+  it('refuses a ticket minted for another thread', async () => {
+    const ticket = await issueTicket();
+
+    const result = await handshake(
+      `ws://localhost:${new URL(baseUrl).port}/browser/agent-1/stream?threadId=thread-2&ticket=${encodeURIComponent(ticket)}`,
+    );
+
+    expect(result.opened).toBe(false);
+    expect(result.status).toBe(401);
+  });
+
+  it('refuses an unknown ticket', async () => {
+    const result = await handshake(`${streamUrl}&ticket=not-a-real-ticket`);
+
+    expect(result.opened).toBe(false);
+    expect(result.status).toBe(401);
+  });
+
+  it('does not fall back to the apiKey when an invalid ticket is also presented', async () => {
+    const result = await handshake(`${streamUrl}&ticket=not-a-real-ticket&apiKey=valid-token`);
 
     expect(result.opened).toBe(false);
     expect(result.status).toBe(401);

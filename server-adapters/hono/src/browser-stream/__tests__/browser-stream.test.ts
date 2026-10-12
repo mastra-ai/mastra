@@ -519,4 +519,161 @@ describe('hono browser-stream routes', () => {
       expect(response.status).toBe(403);
     });
   });
+
+  describe('upgrade tickets', () => {
+    const authConfig: MastraAuthConfig = {
+      authenticateToken: async token => (token === 'valid-token' ? { id: 'user-1', role: 'user' } : null),
+    };
+
+    const mintPath = 'http://localhost/api/agents/agent-1/browser/stream-ticket';
+    const streamPath = 'http://localhost/browser/agent-1/stream?threadId=thread-1';
+
+    let ticketApp: Hono;
+
+    beforeEach(async () => {
+      ticketApp = new Hono();
+      await setupBrowserStream(ticketApp, {
+        mastra: createStubMastra(authConfig),
+        getToolset: () => undefined,
+      });
+    });
+
+    async function mint(init?: RequestInit) {
+      const response = await ticketApp.request(mintPath, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer valid-token', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ threadId: 'thread-1' }),
+        ...init,
+      });
+      return response;
+    }
+
+    it('rejects an unauthenticated ticket request', async () => {
+      const response = await ticketApp.request(mintPath, { method: 'POST' });
+
+      expect(response.status).toBe(401);
+    });
+
+    it('issues a ticket for an authenticated request', async () => {
+      const response = await mint();
+
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as { ticket: string; expiresIn: number };
+      expect(typeof body.ticket).toBe('string');
+      expect(body.ticket.length).toBeGreaterThan(20);
+      expect(body.expiresIn).toBeGreaterThan(0);
+    });
+
+    it('does not return the caller credential as the ticket', async () => {
+      const response = await mint();
+      const body = (await response.json()) as { ticket: string };
+
+      expect(body.ticket).not.toContain('valid-token');
+    });
+
+    it('authenticates the upgrade with a ticket instead of a reusable credential', async () => {
+      const { ticket } = (await (await mint()).json()) as { ticket: string };
+
+      const response = await ticketApp.request(`${streamPath}&ticket=${encodeURIComponent(ticket)}`);
+
+      // A plain request carries no upgrade headers, so `upgradeWebSocket` declines
+      // it. The point is that the gate passed (not 401/403).
+      expect(response.status).toBe(404);
+    });
+
+    it('rejects an upgrade with an unknown ticket', async () => {
+      const response = await ticketApp.request(`${streamPath}&ticket=not-a-real-ticket`);
+
+      expect(response.status).toBe(401);
+      await expect(response.json()).resolves.toEqual({ error: 'Invalid or expired upgrade ticket' });
+    });
+
+    it('rejects an upgrade with no ticket and no other credential', async () => {
+      const response = await ticketApp.request(streamPath);
+
+      expect(response.status).toBe(401);
+    });
+
+    it('does not fall back to the apiKey when a presented ticket is invalid', async () => {
+      // A client that sends both should not be able to turn a bad ticket into an
+      // authenticated session by also presenting a token.
+      const response = await ticketApp.request(`${streamPath}&ticket=not-a-real-ticket&apiKey=valid-token`);
+
+      expect(response.status).toBe(401);
+    });
+
+    it('still accepts the apiKey when no ticket is presented', async () => {
+      const response = await ticketApp.request(`${streamPath}&apiKey=valid-token`);
+
+      expect(response.status).toBe(404);
+    });
+
+    it('consumes a ticket so it cannot be replayed', async () => {
+      const { ticket } = (await (await mint()).json()) as { ticket: string };
+
+      const first = await ticketApp.request(`${streamPath}&ticket=${encodeURIComponent(ticket)}`);
+      const replay = await ticketApp.request(`${streamPath}&ticket=${encodeURIComponent(ticket)}`);
+
+      expect(first.status).toBe(404);
+      expect(replay.status).toBe(401);
+    });
+
+    it('rejects a ticket minted for a different agent', async () => {
+      const { ticket } = (await (await mint()).json()) as { ticket: string };
+
+      const response = await ticketApp.request(
+        `http://localhost/browser/agent-2/stream?threadId=thread-1&ticket=${encodeURIComponent(ticket)}`,
+      );
+
+      expect(response.status).toBe(401);
+    });
+
+    it('rejects a ticket minted for a different thread', async () => {
+      const { ticket } = (await (await mint()).json()) as { ticket: string };
+
+      const response = await ticketApp.request(
+        `http://localhost/browser/agent-1/stream?threadId=thread-2&ticket=${encodeURIComponent(ticket)}`,
+      );
+
+      expect(response.status).toBe(401);
+    });
+
+    it('rejects a thread-bound ticket presented without a threadId', async () => {
+      const { ticket } = (await (await mint()).json()) as { ticket: string };
+
+      const response = await ticketApp.request(
+        `http://localhost/browser/agent-1/stream?ticket=${encodeURIComponent(ticket)}`,
+      );
+
+      expect(response.status).toBe(401);
+    });
+
+    it('accepts a threadId sent as a query param instead of a body', async () => {
+      const response = await ticketApp.request(`${mintPath}?threadId=thread-1`, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+
+      expect(response.status).toBe(200);
+      const { ticket } = (await response.json()) as { ticket: string };
+
+      const upgrade = await ticketApp.request(`${streamPath}&ticket=${encodeURIComponent(ticket)}`);
+
+      expect(upgrade.status).toBe(404);
+    });
+
+    it('mints an agent-scoped ticket when no threadId is sent', async () => {
+      const response = await ticketApp.request(mintPath, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer valid-token' },
+      });
+      const { ticket } = (await response.json()) as { ticket: string };
+
+      const upgrade = await ticketApp.request(
+        `http://localhost/browser/agent-1/stream?ticket=${encodeURIComponent(ticket)}`,
+      );
+
+      expect(upgrade.status).toBe(404);
+    });
+  });
 });

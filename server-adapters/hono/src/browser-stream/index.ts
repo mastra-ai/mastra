@@ -5,6 +5,7 @@ import type { BrowserStreamConfig, BrowserStreamResult } from '@mastra/server/br
 import type { Context, Env, Hono, MiddlewareHandler, Schema } from 'hono';
 
 import { createAuthMiddleware } from '../auth-middleware';
+import { UpgradeTicketStore } from './upgrade-tickets';
 
 /**
  * Allowed `Origin` values for browser WebSocket upgrades. Accepts the same shape
@@ -23,10 +24,10 @@ export interface HonoBrowserStreamConfig extends BrowserStreamConfig {
    * Mastra instance used to authenticate requests to the browser stream routes.
    *
    * Every route registered by {@link setupBrowserStream} — the WebSocket upgrade,
-   * the session probe, and the close endpoint — is gated by the server auth
-   * middleware. Without this, an unauthenticated caller could watch and drive an
-   * agent's browser. When the instance has no `server.auth` configured the
-   * middleware is a no-op.
+   * the session probe, the close endpoint, and the upgrade-ticket endpoint — is
+   * gated by the server auth middleware. Without this, an unauthenticated caller
+   * could watch and drive an agent's browser. When the instance has no
+   * `server.auth` configured the middleware is a no-op.
    */
   mastra: Mastra;
 
@@ -106,9 +107,13 @@ function isSameOrigin(origin: string, requestHost: string | undefined): boolean 
  * All routes are authenticated with the server's auth configuration. Browsers
  * cannot attach an `Authorization` header to a WebSocket upgrade, so
  * session-cookie providers authenticate from the upgrade request's cookies.
- * Non-browser clients can pass the token as the `apiKey` query parameter — use a
- * short-lived token, since a URL can be retained in proxy and access logs, and
- * prefer the `Authorization` header on the HTTP routes where the client can set one.
+ * Clients that authenticate with a header token instead request a short-lived,
+ * single-use ticket from `POST ${apiPrefix}/agents/:agentId/browser/stream-ticket`
+ * and pass it to the upgrade as `?ticket=`, which keeps the reusable credential
+ * out of the URL. Non-browser clients can pass the token as the `apiKey` query
+ * parameter — use a short-lived token, since a URL can be retained in proxy and
+ * access logs, and prefer the `Authorization` header on the HTTP routes where the
+ * client can set one.
  *
  * **Note**: Requires `ws` package to be installed. If not available, returns null
  * and logs a warning. Browser streaming will be disabled but everything else works.
@@ -175,6 +180,35 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   // request's cookies and token-based clients pass `?apiKey=`.
   const authenticate = createAuthMiddleware({ mastra: config.mastra });
 
+  // Neither of the paths above works for a browser that authenticates with an
+  // `Authorization` header: it can't set that header on the handshake, and it
+  // doesn't own a session cookie. Putting the token in the handshake URL would
+  // leak a reusable credential into proxy and access logs, so such a client
+  // instead trades its token for a ticket over an ordinary authenticated HTTP
+  // request and presents the ticket on the upgrade.
+  //
+  // Tickets are per-process, like the viewer registry and browser sessions they
+  // authorize: a screencast is served by the process that owns the browser, so a
+  // ticket never needs to be understood by another instance.
+  const upgradeTickets = new UpgradeTicketStore();
+
+  // Authenticate an upgrade with a ticket when one is presented, and with the
+  // regular server auth otherwise. An unusable ticket is rejected outright rather
+  // than falling back, so a client can't silently downgrade to another credential.
+  const authorizeUpgrade: MiddlewareHandler = async (c, next) => {
+    const ticket = c.req.query('ticket');
+    if (!ticket) {
+      return authenticate(c, next);
+    }
+
+    const agentId = c.req.param('agentId')!;
+    if (!upgradeTickets.consume(ticket, agentId, c.req.query('threadId'))) {
+      return c.json({ error: 'Invalid or expired upgrade ticket' }, 401);
+    }
+
+    return next();
+  };
+
   // Reject browser WebSocket upgrades from origins that aren't explicitly
   // allow-listed. Browsers send `Origin` automatically and attach cookies to the
   // handshake, so without this a page on any origin could open a
@@ -203,7 +237,7 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
   app.get(
     '/browser/:agentId/stream',
     checkOrigin,
-    authenticate,
+    authorizeUpgrade,
     upgradeWebSocket(c => {
       const agentId = c.req.param('agentId')!;
       const threadId = c.req.query('threadId');
@@ -242,6 +276,31 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
       };
     }),
   );
+
+  // Trade an authenticated request for a single-use ticket the browser can put
+  // on the WebSocket upgrade. This is an ordinary HTTP route, so a
+  // header-authenticated client can send its `Authorization` header here and
+  // keep that reusable credential out of every URL.
+  app.post(`${apiPrefix}/agents/:agentId/browser/stream-ticket`, authenticate, async c => {
+    const agentId = c.req.param('agentId');
+    if (!agentId) {
+      return c.json({ error: 'Agent ID is required' }, 400);
+    }
+
+    // Studio sends `{ threadId }`; the query string is accepted as well so the
+    // route is usable from clients that can't send a body.
+    let threadId = c.req.query('threadId');
+    try {
+      const body = await c.req.json();
+      if (!threadId && typeof body?.threadId === 'string') {
+        threadId = body.threadId;
+      }
+    } catch {
+      // No body or invalid JSON - mint an agent-scoped ticket.
+    }
+
+    return c.json(upgradeTickets.issue(agentId, threadId));
+  });
 
   // Browser session probe endpoint - tells the client whether to open a WS.
   // Returns:
