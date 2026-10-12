@@ -264,7 +264,17 @@ export interface KnowledgeCurationCursor {
   updatedAt: Date;
 }
 export type KnowledgeActivityAction =
-  'create' | 'edit' | 'delete' | 'restore' | 'move' | 'merge' | 'promote' | 'demote' | 'stamp' | 'rebind' | 'skip';
+  | 'create'
+  | 'edit'
+  | 'delete'
+  | 'restore'
+  | 'move'
+  | 'merge'
+  | 'promote'
+  | 'demote'
+  | 'stamp'
+  | 'rebind'
+  | 'skip';
 export interface KnowledgeActivityEvent {
   id: string;
   action: KnowledgeActivityAction;
