@@ -121,6 +121,22 @@ describe('gateSingleConnectionClient', () => {
     client.close();
   });
 
+  it('queues sync behind an open transaction', async () => {
+    const raw = createClient({ url: ':memory:' });
+    const client = gateSingleConnectionClient(raw);
+    const syncSpy = vi.spyOn(raw, 'sync').mockResolvedValue(undefined);
+    const tx = await client.transaction('write');
+
+    const sync = client.sync();
+    await new Promise<void>(resolve => queueMicrotask(resolve));
+    expect(syncSpy).not.toHaveBeenCalled();
+
+    await tx.commit();
+    await sync;
+    expect(syncSpy).toHaveBeenCalledOnce();
+    client.close();
+  });
+
   it('passes non-gated members through to the underlying client', async () => {
     const raw = createClient({ url: ':memory:' });
     const client = gateSingleConnectionClient(raw);

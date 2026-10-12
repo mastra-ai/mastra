@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
+import { factoryDispatchFailureMetadata } from '../../../rules/dispatch-errors.js';
 import { externalSourceForWorkItem } from '../../../rules/types.js';
 import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
 import type { FactoryHealthFinding } from '../../../supervisor/health.js';
@@ -20,6 +21,13 @@ import {
   WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
   WORK_ITEM_COMMENTS_SCHEMA,
 } from '../comments/schema.js';
+import {
+  BoardScopes,
+  bumpBoardVersions,
+  FACTORY_BOARD_VERSIONS_SCHEMA,
+  readBoardVersion,
+  trackBoardWrites,
+} from './board-version.js';
 
 export type WorkItemStage = string;
 
@@ -128,7 +136,9 @@ export interface CommitFactoryRuleEvaluationInput {
 export type CommitFactoryRuleEvaluationResult =
   | { status: 'committed'; result: Record<string, unknown> }
   | { status: 'replayed'; result: Record<string, unknown> }
-  | { status: 'missing' };
+  | { status: 'missing' }
+  /** The work item's revision moved; nothing was persisted, so the caller may re-read and retry. */
+  | { status: 'stale' };
 
 export interface FactoryToolResultCursorRecord {
   bindingId: string;
@@ -927,6 +937,7 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       causal_chain: { type: 'json' },
       created_at: { type: 'timestamp' },
     },
+    indexes: [{ name: 'factory_rule_evaluations_ingress_idx', columns: ['ingress_id'] }],
   },
   {
     name: 'factory_deferred_decisions',
@@ -973,6 +984,10 @@ const FACTORY_GOVERNANCE_SCHEMAS: CollectionSchema[] = [
       {
         name: 'factory_deferred_decisions_tenant_status_failed_idx',
         columns: ['org_id', 'factory_project_id', 'status', 'updated_at', 'id'],
+      },
+      {
+        name: 'factory_deferred_decisions_tenant_evaluation_idx',
+        columns: ['org_id', 'factory_project_id', 'evaluation_id'],
       },
     ],
   },
@@ -1247,7 +1262,13 @@ export interface FactoryAttentionScope {
   factoryProjectId: string;
 }
 
+/** A safety net, not the invalidation path: a missed version bump can't hide a change for longer. */
+const LIST_CACHE_TTL_MS = 60_000;
+const LIST_CACHE_MAX_PROJECTS = 100;
+
 export class WorkItemsStorage extends FactoryStorageDomain {
+  /** Last full card list per project, valid while the project's board version is unchanged. */
+  readonly #listCache = new Map<string, { version: string; takenAt: number; items: WorkItemRow[] }>();
   #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
   // Storage does not know boards. Until the host says which phases are terminal,
   // no card counts as finished, so the boot sweep never supersedes on a guess.
@@ -1303,6 +1324,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     // purge feed rows regardless of domain init order.
     await this.ensureCollections([
       WORK_ITEMS_SCHEMA,
+      FACTORY_BOARD_VERSIONS_SCHEMA,
       ...FACTORY_GOVERNANCE_SCHEMAS,
       WORK_ITEM_COMMENTS_SCHEMA,
       WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
@@ -1313,10 +1335,29 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.ops.deleteMany('work_items', {});
+    // A project with no version row is never served from cache, so this invalidates every replica.
+    await super.ops.deleteMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, {});
+    this.#listCache.clear();
   }
 
   get #db(): FactoryStorageOps {
     return this.ops;
+  }
+
+  protected override get ops(): FactoryStorageOps {
+    const ops = super.ops;
+    return trackBoardWrites(ops, scope => bumpBoardVersions(ops, [scope]));
+  }
+
+  /** `storage.withTransaction`, bumping the board version of every project it wrote once it commits. */
+  async #withTransaction<T>(
+    fn: (ops: FactoryStorageOps) => Promise<T>,
+    options?: { isolationLevel?: 'serializable' },
+  ): Promise<T> {
+    const changed = new BoardScopes();
+    const result = await this.storage.withTransaction(ops => fn(trackBoardWrites(ops, changed.add)), options);
+    await bumpBoardVersions(super.ops, changed.values());
+    return result;
   }
 
   async #countRows(collection: string, where: CollectionWhere): Promise<number> {
@@ -1424,7 +1465,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     fn: (ops: FactoryStorageOps) => Promise<T>,
   ): Promise<T> {
     const key = `work-items:${orgId}:${factoryProjectId}`;
-    return withInProcessProjectLock(key, () => this.storage.withTransaction(fn, { isolationLevel: 'serializable' }));
+    return withInProcessProjectLock(key, () => this.#withTransaction(fn, { isolationLevel: 'serializable' }));
   }
 
   async #claimLeases<T>(
@@ -1434,7 +1475,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     accept?: (row: GovernanceDbRow) => boolean,
   ): Promise<T[]> {
     const claim = () =>
-      this.storage.withTransaction(async ops => {
+      this.#withTransaction(async ops => {
         // Bounded candidate window: only rows in claimable/expirable statuses,
         // oldest first. Terminal rows (sent/succeeded/failed) accumulate over a
         // deployment's lifetime and must never be scanned per dispatch tick.
@@ -1589,7 +1630,23 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * as a cursor and non-deterministic for the callers that iterate this list.
    */
   async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
-    return this.#listWithOps(this.#db, orgId, factoryProjectId);
+    const key = `${orgId}\u0000${factoryProjectId}`;
+    // Read the version before the rows: a write that lands in between bumps it again afterwards,
+    // so the next call refetches instead of trusting a snapshot taken before that write.
+    const version = await readBoardVersion(super.ops, orgId, factoryProjectId);
+    const cached = this.#listCache.get(key);
+    if (version && cached?.version === version && Date.now() - cached.takenAt < LIST_CACHE_TTL_MS) {
+      return structuredClone(cached.items);
+    }
+    const items = await this.#listWithOps(super.ops, orgId, factoryProjectId);
+    this.#listCache.delete(key);
+    if (version) {
+      this.#listCache.set(key, { version, takenAt: Date.now(), items: structuredClone(items) });
+      if (this.#listCache.size > LIST_CACHE_MAX_PROJECTS) {
+        this.#listCache.delete(this.#listCache.keys().next().value!);
+      }
+    }
+    return items;
   }
 
   async listByIds({
@@ -1744,7 +1801,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async commitTransition(input: CommitFactoryTransitionInput): Promise<CommitFactoryTransitionResult> {
     const commit = (): Promise<CommitFactoryTransitionResult> =>
-      this.storage.withTransaction<CommitFactoryTransitionResult>(async ops => {
+      this.#withTransaction<CommitFactoryTransitionResult>(async ops => {
         const prior = await ops.findOne<GovernanceDbRow>('factory_rule_ingress', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
@@ -1907,7 +1964,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async commitRuleEvaluation(input: CommitFactoryRuleEvaluationInput): Promise<CommitFactoryRuleEvaluationResult> {
     const commit = () =>
-      this.storage.withTransaction<CommitFactoryRuleEvaluationResult>(async ops => {
+      this.#withTransaction<CommitFactoryRuleEvaluationResult>(async ops => {
         const prior = await ops.findOne<GovernanceDbRow>('factory_rule_ingress', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,
@@ -1976,12 +2033,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           : null;
         if (input.workItemId !== null && !itemRow) return { status: 'missing' as const };
         const item = itemRow ? toRow(itemRow) : null;
-        const stale = item !== null && item.revision !== input.expectedRevision;
-        const outcome = stale ? 'rejected' : input.outcome.status;
-        const code = stale ? 'stale' : (input.outcome.code ?? null);
-        const reason = stale
-          ? 'The work item changed before this rule evaluation committed.'
-          : (input.outcome.reason ?? null);
+        // A lost revision race is not a verdict on the event: persisting it would
+        // make every redelivery replay an empty result, so record nothing.
+        if (item !== null && item.revision !== input.expectedRevision) return { status: 'stale' as const };
+        const outcome = input.outcome.status;
+        const code = input.outcome.code ?? null;
+        const reason = input.outcome.reason ?? null;
         const decisions = outcome === 'accepted' ? input.decisions : [];
         const result = {
           status: outcome,
@@ -2081,11 +2138,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     });
   }
 
-  async listDeferredDecisions(orgId: string, factoryProjectId: string): Promise<FactoryDeferredDecisionRecord[]> {
+  async listDeferredDecisions(
+    orgId: string,
+    factoryProjectId: string,
+    filter: { statuses?: readonly string[]; workItemId?: string } = {},
+  ): Promise<FactoryDeferredDecisionRecord[]> {
     return (
       await this.#db.findMany<GovernanceDbRow>(
         'factory_deferred_decisions',
-        { org_id: orgId, factory_project_id: factoryProjectId },
+        {
+          org_id: orgId,
+          factory_project_id: factoryProjectId,
+          ...(filter.statuses ? { status: { in: [...filter.statuses] } } : {}),
+          ...(filter.workItemId ? { work_item_id: filter.workItemId } : {}),
+        },
         { orderBy: [['created_at', 'asc']] },
       )
     ).map(toDeferredDecision);
@@ -2269,7 +2335,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async setAttentionReceipt(input: SetAttentionReceiptInput): Promise<FactoryAttentionReceiptRecord | null> {
     return this.#retryAttentionReceiptWrite(() =>
-      this.storage.withTransaction(ops => this.#setAttentionReceiptWithOps(ops, input)),
+      this.#withTransaction(ops => this.#setAttentionReceiptWithOps(ops, input)),
     );
   }
 
@@ -2429,7 +2495,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     for (let index = 0; index < uniqueIdentities.length; index += ATTENTION_RECEIPT_WRITE_BATCH_SIZE) {
       const batch = uniqueIdentities.slice(index, index + ATTENTION_RECEIPT_WRITE_BATCH_SIZE);
       await this.#retryAttentionReceiptWrite(() =>
-        this.storage.withTransaction(async ops => {
+        this.#withTransaction(async ops => {
           for (const identity of batch) {
             await this.#setAttentionReceiptWithOps(ops, {
               orgId,
@@ -2522,7 +2588,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     now: Date,
     approvedBy?: string,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const approved = await this.storage.withTransaction(async ops => {
+    const approved = await this.#withTransaction(async ops => {
       let settled = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -2614,7 +2680,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     { orgId, factoryProjectId, decisionId }: { orgId: string; factoryProjectId: string; decisionId: string },
     patch: Partial<GovernanceDbRow>,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const settled = await this.storage.withTransaction(async ops => {
+    const settled = await this.#withTransaction(async ops => {
       let updated = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -2646,7 +2712,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     status: 'succeeded' | 'superseded';
     now: Date;
   }): Promise<FactoryDeferredDecisionRecord | null> {
-    const resolved = await this.storage.withTransaction(async ops => {
+    const resolved = await this.#withTransaction(async ops => {
       let resolved = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
@@ -2740,20 +2806,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
   }
 
-  /** Requeue the same idempotent terminal effect; non-failed decisions are never rerun. */
+  /** Requeue the same idempotent terminal effect; non-failed or non-retryable decisions are never rerun. */
   async retryDeferredDecision(
     orgId: string,
     factoryProjectId: string,
     decisionId: string,
     now: Date,
   ): Promise<FactoryDeferredDecisionRecord | null> {
-    const retriedRecord = await this.storage.withTransaction(async ops => {
+    const retriedRecord = await this.#withTransaction(async ops => {
       let retried = false;
       const row = await ops.updateAtomic<GovernanceDbRow>(
         'factory_deferred_decisions',
         { id: decisionId, org_id: orgId, factory_project_id: factoryProjectId },
         current => {
           if (current.status !== 'failed') return null;
+          const failureCode = isStoredFactoryDispatchFailureCode(current.failure_code) ? current.failure_code : null;
+          if (!factoryDispatchFailureMetadata(failureCode).canRetry) return null;
           retried = true;
           return {
             status: 'retry',
@@ -2983,7 +3051,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async prepareRunStart(input: PrepareFactoryRunStartInput): Promise<PrepareFactoryRunStartResult> {
     const prepare = () =>
-      this.storage.withTransaction(async ops => {
+      this.#withTransaction(async ops => {
         const prior = await ops.findOne<GovernanceDbRow>('factory_pending_starts', {
           org_id: input.orgId,
           factory_project_id: input.factoryProjectId,

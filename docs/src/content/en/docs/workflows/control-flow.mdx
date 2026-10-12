@@ -596,6 +596,34 @@ export const testWorkflow = createWorkflow({})
   .commit();
 ```
 
+### Passing data between iterations
+
+Each iteration of `.dountil()` or `.dowhile()` receives the previous iteration's output as its `inputData`. When input validation is enabled (the default), that output is validated against the loop body's `inputSchema` before the body runs. With an object schema such as `z.object()`, keys the schema doesn't declare are removed. Schemas that allow unknown keys, such as `.passthrough()`, keep them.
+
+When the loop body is a nested workflow, the output is validated against the nested workflow's `inputSchema` and then against its first step's `inputSchema`. A value is only available on the next iteration if the nested workflow returns it and both schemas declare it. This includes values produced inside the nested workflow, such as feedback from a step that suspended and resumed.
+
+To carry data across iterations, declare it in the body's `inputSchema` and return it from the body's last step:
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const loopSchema = z.object({
+  draft: z.string(),
+  feedback: z.string().optional(),
+  attempts: z.number(),
+})
+
+const reviewStep = createStep({
+  id: 'review',
+  inputSchema: loopSchema,
+  outputSchema: loopSchema,
+  execute: async ({ inputData }) => {
+    // ...
+    return { draft, feedback, attempts: inputData.attempts + 1 }
+  },
+})
+```
+
+For values that don't belong in the step's input, such as counters or audit data, use [workflow state](/docs/workflows/workflow-state) instead.
+
 ### Looping with `.foreach()`
 
 Use `.foreach()` to run the same step for each item in an array. The input must be of type `array` so the loop can iterate over its values, applying the step's logic to each one. See [Choosing the right pattern](#choosing-the-right-pattern) for guidance on when to use `.foreach()` vs other methods.

@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { defaultGithubRules, resolveGithubRules } from './default-rules.js';
 
 describe('GitHub issue re-triage', () => {
-  const comment = (stages: string[]) =>
+  const comment = (stages: string[], board = 'work') =>
     ({
       event: 'issueCommentCreated',
+      board,
       ingress: { id: 'ingress-1' },
       actor: { type: 'github', login: 'someone', trusted: true, factoryAuthored: false },
       item: { source: 'github-issue', url: 'https://github.com/mastra-ai/mastra/issues/1', stages },
@@ -20,6 +21,13 @@ describe('GitHub issue re-triage', () => {
       skillName: 'factory-triage',
     });
   });
+
+  it.each([['shipping'], ['plan-review'], ['queued'], ['shipped']])(
+    'does not re-triage a custom-board card in %s',
+    stage => {
+      expect(defaultGithubRules.issueCommentCreated?.(comment([stage], 'release'))).toBeUndefined();
+    },
+  );
 });
 
 describe('GitHub rule resolution', () => {

@@ -3,6 +3,7 @@ import { cleanup, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { ExperimentResultsList } from '../experiment-results-list';
+import { agentFailedResult, agentMarkdownResult } from './fixtures/experiment-results';
 import { expectComputedTag } from '@/test/computed-tag';
 import { TestLinkProvider } from '@/test/link-provider';
 import { renderWithProviders } from '@/test/render';
@@ -106,6 +107,59 @@ describe('ExperimentResultsList', () => {
 
       expect(screen.getByText('Tags')).toBeDefined();
       expect(screen.getByTestId('result-tags-r-1').textContent).toBe('');
+    });
+  });
+
+  describe('when the output column is requested', () => {
+    const outputColumns = [...columns, { name: 'output', label: 'Output', size: '1fr' }];
+
+    it('renders the Output header', () => {
+      renderWithProviders(
+        <ExperimentResultsList
+          results={[agentMarkdownResult]}
+          isLoading={false}
+          featuredResultId={null}
+          onResultClick={() => {}}
+          columns={outputColumns}
+        />,
+      );
+
+      expect(screen.getByText('Output')).toBeDefined();
+    });
+
+    it('renders the raw agent text without rendering markdown', () => {
+      renderWithProviders(
+        <ExperimentResultsList
+          results={[agentMarkdownResult]}
+          isLoading={false}
+          featuredResultId={null}
+          onResultClick={() => {}}
+          columns={outputColumns}
+        />,
+      );
+
+      expect(screen.getByTestId('result-output-res-agent-ok').textContent).toBe('# Title\n\n**bold**');
+      expect(screen.queryByRole('heading', { name: 'Title' })).toBeNull();
+    });
+  });
+
+  describe('when the error column is requested', () => {
+    const errorColumns = [...columns, { name: 'error', label: 'Error', size: '1fr' }];
+
+    it('renders the error message in the destructive color', () => {
+      renderWithProviders(
+        <ExperimentResultsList
+          results={[agentFailedResult]}
+          isLoading={false}
+          featuredResultId={null}
+          onResultClick={() => {}}
+          columns={errorColumns}
+        />,
+      );
+
+      const cell = screen.getByTestId('result-error-res-agent-fail');
+      expect(cell.textContent).toBe('model exploded');
+      expect(cell.className).toContain('text-destructive-foreground');
     });
   });
 

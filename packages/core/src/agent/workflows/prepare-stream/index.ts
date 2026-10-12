@@ -64,6 +64,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
    */
   skipBgTaskWait?: boolean;
   drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  subscribePendingSignals?: (runId: string, listener: () => void) => () => void;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -96,6 +97,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   toolPayloadTransform,
   skipBgTaskWait,
   drainPendingSignals,
+  subscribePendingSignals,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   // Per-run scope shared between prepare-stream steps. Class instances
   // (MessageList, Tools), Maps, and closures live here instead of step
@@ -187,6 +189,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     toolPayloadTransform,
     skipBgTaskWait,
     drainPendingSignals,
+    subscribePendingSignals,
     runScope,
   });
 

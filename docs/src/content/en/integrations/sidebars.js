@@ -245,6 +245,15 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'sandboxes/sprites',
+          label: 'Fly.io Sprites',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/flydotio/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/flydotio/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'sandboxes/vercel',
           label: 'Vercel',
           customProps: {
