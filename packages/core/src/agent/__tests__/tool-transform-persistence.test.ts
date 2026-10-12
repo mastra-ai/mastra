@@ -78,10 +78,13 @@ describe('tool transform persistence', () => {
       .flatMap(message => message.content.parts ?? [])
       .find(part => part.type === 'tool-invocation' && part.toolInvocation.toolCallId === 'call-1');
 
-    expect(invocation?.type === 'tool-invocation' && invocation.toolInvocation).toMatchObject({
-      state: 'result',
-      args: { query: 'first' },
-      result: { query: 'first' },
+    if (invocation?.type !== 'tool-invocation') {
+      throw new Error('expected a stored tool invocation for call-1');
+    }
+    expect(invocation.toolInvocation.state).toBe('result');
+    expect(invocation.toolInvocation.args).toEqual({ query: 'first' });
+    expect(invocation.toolInvocation.state === 'result' && invocation.toolInvocation.result).toEqual({
+      query: 'first',
     });
   });
 });
