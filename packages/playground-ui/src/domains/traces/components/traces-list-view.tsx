@@ -1,6 +1,4 @@
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { ListFilterIcon } from 'lucide-react';
-import { useRef } from 'react';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,
   TRACE_CUSTOM_COLUMN_LABELS,
@@ -10,8 +8,14 @@ import {
 } from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceCustomColumn, TraceUsageSummary } from '../trace-list-columns';
 import { getInputPreview, getSpanDurationMs } from '../utils/span-utils';
-import { DataList, DataListSkeletonRows, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
-import type { DataListSort } from '@/ds/components/DataList';
+import {
+  DataList,
+  DataListSkeletonRows,
+  TracesDataList,
+  useDataListKeyboard,
+  useDataListPageVirtualizer,
+} from '@/ds/components/DataList';
+import type { DataListSort, DataListVariant } from '@/ds/components/DataList';
 import { splitColumns } from '@/ds/components/DataList/shared';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Txt } from '@/ds/components/Txt/Txt';
@@ -99,6 +103,8 @@ export type TracesListViewProps = {
   onSortChange?: (direction: DataListSort, key: 'startedAt') => void;
   /** When provided, custom column headers offer an `is <value>` filter for every value currently listed. */
   onFilterByField?: (field: TraceCustomColumn, value: string) => void;
+  /** `light` drops the card panel when the list fills a panel of its own. */
+  variant?: DataListVariant;
 };
 
 /**
@@ -122,32 +128,31 @@ export function TracesListView({
   createdSort,
   onSortChange,
   onFilterByField,
+  variant,
 }: TracesListViewProps) {
-  const scrollRef = useRef<HTMLDivElement | null>(null);
   const columns = buildTraceListColumns(columnPreferences);
-
-  const virtualizer = useVirtualizer({
+  const { listRef, attachList, virtualizer, virtualItems, paddingTop, paddingBottom } = useDataListPageVirtualizer({
     count: traces.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    rowHeight: ROW_HEIGHT,
     overscan: OVERSCAN,
   });
 
   const { getRowProps } = useDataListKeyboard({
     count: traces.length,
-    containerRef: scrollRef,
+    containerRef: listRef,
     onNavigate: index => virtualizer.scrollToIndex(index),
     global: true,
   });
 
-  const virtualItems = virtualizer.getVirtualItems();
-  const totalSize = virtualizer.getTotalSize();
-  const paddingTop = virtualItems[0]?.start ?? 0;
-  const paddingBottom =
-    virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
-
   return (
-    <TracesDataList columns={columns} fit="container" scrollRef={scrollRef} className="min-w-0">
+    <TracesDataList
+      columns={columns}
+      fit="container"
+      scroll="page"
+      scrollRef={attachList}
+      variant={variant}
+      className="min-w-0"
+    >
       <TracesDataList.Top>
         {onSortChange ? (
           <TracesDataList.SortableTopCell sortKey="startedAt" sort={createdSort} onSortChange={onSortChange}>

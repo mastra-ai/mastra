@@ -23,7 +23,6 @@ import {
   workspaceSkillFileLink,
 } from './lib/app-routing';
 import { Link } from './lib/link';
-import { isSamePageHref } from './lib/same-page-href';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
 import { AgentBuilderRoot } from './pages/agent-builder';
 import AgentBuilderAgents from './pages/agent-builder/agents';
@@ -40,6 +39,7 @@ import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
 import AgentSession from './pages/agents/agent/session';
 import AgentThread from './pages/agents/agent/thread';
+import AgentEvals from './pages/agents/agent-evals';
 import AgentPlayground from './pages/agents/agent-playground';
 import AgentTraces from './pages/agents/agent-traces';
 import CmsAgentAgentsPage from './pages/cms/agents/agents';
@@ -86,6 +86,7 @@ import Workflows from './pages/workflows';
 import SchedulePage from './pages/workflows/schedule';
 import SchedulesPage from './pages/workflows/schedules';
 import { Workflow } from './pages/workflows/workflow';
+import WorkflowEvals from './pages/workflows/workflow-evals';
 import WorkflowSchedules from './pages/workflows/workflow-schedules';
 import WorkflowTraces from './pages/workflows/workflow-traces';
 import Workspace from './pages/workspace';
@@ -97,12 +98,10 @@ import { StudioShell } from '@/components/studio-shell';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
 import { AgentDetailShell } from '@/domains/agents/agent-detail-shell';
 import { AgentShell } from '@/domains/agents/agent-shell';
-import { AgentConfiguration } from '@/domains/agents/components/agent-configuration';
 import { AgentMetrics } from '@/domains/agents/components/agent-metrics';
 import { AgentOverview } from '@/domains/agents/components/agent-overview';
-import { AgentResourcePage } from '@/domains/agents/components/agent-resource-page';
+import { AgentConfigurationRedirect, AgentResourcePage } from '@/domains/agents/components/agent-resource-page';
 import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
-import { ChatAgentPicker } from '@/domains/chat/components/chat-agent-picker';
 import { ChatLanding } from '@/domains/chat/components/chat-landing';
 
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
@@ -146,8 +145,7 @@ declare global {
 
 const RootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) =>
-    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
+  const frameworkNavigate = (path: string) => navigate(path);
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
@@ -167,8 +165,7 @@ const RootLayout = () => {
 
 const MinimalRootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) =>
-    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
+  const frameworkNavigate = (path: string) => navigate(path);
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
@@ -301,7 +298,7 @@ export const routes: RouteObject[] = [
     element: <RootLayout />,
     children: [
       { path: '/chat', handle: { navigationLabel: 'Agent navigation' }, element: <ChatLanding /> },
-      { path: '/chat/agents', element: <ChatAgentPicker /> },
+      { path: '/chat/agents', loader: () => redirect('/chat') },
       { path: '/chat/:agentId', handle: { navigationLabel: 'Agent navigation' }, element: <ChatLanding /> },
       {
         path: '/agents/:agentId',
@@ -321,11 +318,12 @@ export const routes: RouteObject[] = [
             children: [
               { path: 'threads/:threadId', element: <AgentThread /> },
               { path: 'overview', element: <AgentOverview /> },
-              { path: 'configuration', element: <AgentConfiguration /> },
+              { path: 'configuration', element: <AgentConfigurationRedirect /> },
               { path: 'resources/:resource', element: <AgentResourcePage /> },
               { path: 'metrics', element: <AgentMetrics /> },
               ...(isExperimentalFeatures ? [{ path: 'editor', element: <AgentPlayground /> }] : []),
               { path: 'traces', element: <AgentTraces /> },
+              ...(isExperimentalFeatures ? [{ path: 'evals', element: <AgentEvals /> }] : []),
               {
                 // Channels is configuration, not a tool tab: it now lives in the
                 // agent overview side panel. Keep old links working.
@@ -351,6 +349,7 @@ export const routes: RouteObject[] = [
             element: <Workflow />,
           },
           { path: 'traces', element: <WorkflowTraces /> },
+          ...(isExperimentalFeatures ? [{ path: 'evals', element: <WorkflowEvals /> }] : []),
           { path: 'schedules', element: <WorkflowSchedules /> },
         ],
       },
@@ -390,47 +389,32 @@ export const routes: RouteObject[] = [
                 },
               ]),
 
-          {
-            handle: { navigationLabel: 'Monitor navigation' },
-            element: <StudioAreaShell areaId="monitor" />,
-            children: [
-              { path: '/logs', element: <Logs /> },
-              { path: '/metrics', element: <Metrics /> },
-              {
-                path: '/intelligence',
-                element: <SignalsOverviewPage />,
-              },
-              {
-                path: '/intelligence/entities/:entityType/:entityId',
-                element: <SignalsEntityDetailPage />,
-              },
-              { path: '/traces', element: <Traces /> },
-              {
-                path: '/traces/:traceId',
-                loader: ({ params, request }: LoaderFunctionArgs) => {
-                  const search = new URL(request.url).searchParams;
-                  search.set('traceId', params.traceId ?? '');
-                  return redirect(`/traces?${search.toString()}`);
-                },
-              },
-              {
-                path: '/observability',
-                loader: ({ request }: LoaderFunctionArgs) => redirect(`/traces${new URL(request.url).search}`),
-              },
-            ],
-          },
+          { path: '/logs', element: <Logs /> },
           { path: '/resources', element: <Resources /> },
+          { path: '/traces', element: <Traces /> },
           {
-            handle: { navigationLabel: 'Build navigation' },
-            element: <StudioAreaShell areaId="build" />,
+            path: '/traces/:traceId',
+            loader: ({ params, request }: LoaderFunctionArgs) => {
+              const search = new URL(request.url).searchParams;
+              search.set('traceId', params.traceId ?? '');
+              return redirect(`/traces?${search.toString()}`);
+            },
+          },
+          {
+            path: '/observability',
+            loader: ({ request }: LoaderFunctionArgs) => redirect(`/traces${new URL(request.url).search}`),
+          },
+          { path: '/workflows', element: <Workflows /> },
+          { path: '/workflows/schedules', element: <SchedulesPage /> },
+          { path: '/workflows/schedules/:scheduleId', element: <SchedulePage /> },
+          {
+            handle: { navigationLabel: 'Agents navigation' },
+            element: <StudioAreaShell areaId="agents" />,
             children: [
               { path: '/agents', element: <Agents /> },
-              { path: '/tools', element: <Tools /> },
-              { path: '/processors', element: <Processors /> },
-              { path: '/prompts', element: <PromptBlocks /> },
-              { path: '/workflows', element: <Workflows /> },
-              { path: '/workflows/schedules', element: <SchedulesPage /> },
-              { path: '/workflows/schedules/:scheduleId', element: <SchedulePage /> },
+              { path: '/metrics', element: <Metrics /> },
+              { path: '/intelligence', element: <SignalsOverviewPage /> },
+              { path: '/intelligence/entities/:entityType/:entityId', element: <SignalsEntityDetailPage /> },
             ],
           },
 
@@ -450,14 +434,15 @@ export const routes: RouteObject[] = [
             ],
           },
 
-          {
-            handle: { navigationLabel: 'Resources navigation' },
-            element: <StudioAreaShell areaId="resources" />,
-            children: [
-              { path: '/mcps', element: <MCPs /> },
-              { path: '/integrations', element: <IntegrationsPage /> },
-            ],
-          },
+          { path: '/prompts', element: <PromptBlocks /> },
+          { path: '/tools', element: <Tools /> },
+          { path: '/processors', element: <Processors /> },
+          { path: '/scorers', element: <Scorers /> },
+          { path: '/scorers/:scorerId', element: <Scorer /> },
+          { path: '/cms/scorers/create', element: <CmsScorersCreatePage /> },
+          { path: '/cms/scorers/:scorerId/edit', element: <CmsScorersEditPage /> },
+          { path: '/mcps', element: <MCPs /> },
+          { path: '/integrations', element: <IntegrationsPage /> },
 
           {
             handle: { navigationLabel: 'Processors navigation' },
@@ -499,10 +484,6 @@ export const routes: RouteObject[] = [
             handle: { navigationLabel: 'Evaluate navigation' },
             element: <StudioAreaShell areaId="evaluate" />,
             children: [
-              { path: '/scorers', element: <Scorers /> },
-              { path: '/scorers/:scorerId', element: <Scorer /> },
-              { path: '/cms/scorers/create', element: <CmsScorersCreatePage /> },
-              { path: '/cms/scorers/:scorerId/edit', element: <CmsScorersEditPage /> },
               ...(isExperimentalFeatures
                 ? [
                     { path: '/datasets', element: <Datasets /> },
@@ -521,6 +502,7 @@ export const routes: RouteObject[] = [
                         },
                       ],
                     },
+                    { path: '/datasets/:datasetId/experiments', element: <Experiments /> },
                     {
                       path: '/datasets/:datasetId/edit',
                       element: <EditDatasetPage />,

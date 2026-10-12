@@ -1,5 +1,5 @@
 import { useMatch } from 'react-router';
-import { getStudioAreaItems, studioAreas } from '../studio-areas';
+import { getStudioAreaItems, INTEGRATIONS_PATH, libraryPaths, studioAreas } from '../studio-areas';
 import { useStudioNavigation } from './use-studio-navigation';
 import type { NavItem } from '@/lib/nav/nav-items';
 
@@ -24,5 +24,7 @@ export function useStudioDestinations() {
       },
     ];
   });
-  return { items, bottomItems };
+  const libraryItems = libraryPaths.flatMap(path => authorizedItems.filter(item => item.url === path));
+  const integrations = authorizedItems.filter(item => item.url === INTEGRATIONS_PATH);
+  return { items, libraryItems, bottomItems: [...integrations, ...bottomItems] };
 }

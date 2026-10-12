@@ -112,32 +112,36 @@ export function serializeTraceColumnPreferences(preferences: TraceColumnPreferen
   });
 }
 
+function shrinkableTrack(maxWidth: string): string {
+  return `minmax(0,${maxWidth})`;
+}
+
 export function buildTraceListColumns(preferences: TraceColumnPreferences): string {
   const visible = new Set(preferences.visibleColumns);
   // Name is bounded when Input is visible so Input (1fr) absorbs the free space;
   // without Input, Name is the flexible track that fills the grid.
-  const columns = ['11rem'];
+  const columns = [shrinkableTrack('11rem')];
 
-  if (visible.has('type')) columns.push('7rem');
-  columns.push(visible.has('input') ? '14rem' : 'minmax(8rem,1fr)');
+  if (visible.has('type')) columns.push(shrinkableTrack('7rem'));
+  columns.push(visible.has('input') ? shrinkableTrack('14rem') : 'minmax(8rem,1fr)');
   if (visible.has('input')) columns.push('minmax(8rem,1fr)');
 
-  columns.push('6rem');
+  columns.push(shrinkableTrack('6rem'));
 
-  if (visible.has('duration')) columns.push('7rem');
-  if (visible.has('endTime')) columns.push('11rem');
-  if (visible.has('environment')) columns.push('8rem');
-  if (visible.has('inputTokens')) columns.push('8rem');
-  if (visible.has('outputTokens')) columns.push('8rem');
-  if (visible.has('totalTokens')) columns.push('8rem');
-  if (visible.has('estimatedCost')) columns.push('8rem');
+  if (visible.has('duration')) columns.push(shrinkableTrack('7rem'));
+  if (visible.has('endTime')) columns.push(shrinkableTrack('11rem'));
+  if (visible.has('environment')) columns.push(shrinkableTrack('8rem'));
+  if (visible.has('inputTokens')) columns.push(shrinkableTrack('8rem'));
+  if (visible.has('outputTokens')) columns.push(shrinkableTrack('8rem'));
+  if (visible.has('totalTokens')) columns.push(shrinkableTrack('8rem'));
+  if (visible.has('estimatedCost')) columns.push(shrinkableTrack('8rem'));
 
   for (const _field of preferences.customColumns) {
-    columns.push('minmax(8rem,14rem)');
+    columns.push(shrinkableTrack('14rem'));
   }
 
   for (const _key of preferences.metadataKeys) {
-    columns.push('minmax(8rem,14rem)');
+    columns.push(shrinkableTrack('14rem'));
   }
 
   return columns.join(' ');

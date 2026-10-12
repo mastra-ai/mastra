@@ -1,109 +1,134 @@
-import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
+import type { GetAgentResponse } from '@mastra/client-js';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { DataListSkeleton } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { MetricsIcon } from '@mastra/playground-ui/icons/MetricsIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useAgents } from '@mastra/react/hooks/agents';
-import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { AgentHeaderCreateAction } from '@/domains/agents/agent-header-actions';
-import { AgentsCompactGrid } from '@/domains/agents/components/agent-list/agents-compact-grid';
-import { AgentsList } from '@/domains/agents/components/agent-list/agents-list';
-import { sortAgents } from '@/domains/agents/components/agent-list/agents-sort';
-import type { AgentsSort } from '@/domains/agents/components/agent-list/agents-sort';
-import { AgentsViewToggle } from '@/domains/agents/components/agent-list/agents-view-toggle';
-import type { AgentsView } from '@/domains/agents/components/agent-list/agents-view-toggle';
 import { NoAgentsInfo } from '@/domains/agents/components/agent-list/no-agents-info';
-import { extractPrompt } from '@/domains/agents/utils/extractPrompt';
+import { agentSortKeys, defaultAgentSort } from '@/domains/agents/components/agents-overview/agent-roster-row';
+import { AgentsRoster } from '@/domains/agents/components/agents-overview/agents-roster';
+import { useAgentsOverview } from '@/domains/agents/hooks/use-agents-overview';
 import { navCrumb } from '@/domains/navigation/crumbs';
+import { OverviewPageLayout } from '@/domains/overview/components/overview-page-layout';
+import { RunActivityErrorNotice, RunMetricsOffNotice } from '@/domains/overview/components/run-metrics-notices';
+import { useOverviewUrlState } from '@/domains/overview/use-overview-url-state';
+import { useRunMetricsAvailability } from '@/domains/overview/use-run-metrics-availability';
 
 const crumbs = [navCrumb('/agents')];
+const skeletonColumns = 'minmax(12rem,2fr) minmax(8rem,1.2fr) 4.5rem 4.5rem 9rem';
+
+function AgentsPageState({ children }: { children: ReactNode }) {
+  return (
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <h1 className="sr-only">Agents</h1>
+      {children}
+    </PageLayout>
+  );
+}
 
 function Agents() {
-  const { data: agents = {}, isLoading, error } = useAgents();
-  const [search, setSearch] = useState('');
-  const [view, setView] = useState<AgentsView>('list');
-  const [sort, setSort] = useState<AgentsSort>('default');
+  const { data: agents, isLoading, error } = useAgents();
+  const availability = useRunMetricsAvailability();
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <h1 className="sr-only">Agents</h1>
+      <AgentsPageState>
         <SessionExpired variant="fill" />
-      </PageLayout>
+      </AgentsPageState>
     );
   }
-
   if (error && is403ForbiddenError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <h1 className="sr-only">Agents</h1>
+      <AgentsPageState>
         <PermissionDenied variant="fill" resource="agents" />
-      </PageLayout>
+      </AgentsPageState>
     );
   }
-
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <h1 className="sr-only">Agents</h1>
+      <AgentsPageState>
         <EmptyState tone="error" variant="fill" titleSlot="Failed to load agents" descriptionSlot={error.message} />
-      </PageLayout>
+      </AgentsPageState>
     );
   }
-
-  if (Object.keys(agents).length === 0 && !isLoading) {
+  if (agents && Object.keys(agents).length === 0) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
-        <h1 className="sr-only">Agents</h1>
+      <AgentsPageState>
         <NoAgentsInfo />
-      </PageLayout>
+      </AgentsPageState>
     );
   }
-
-  const term = search.toLowerCase();
-  const filteredAgents = Object.values(agents).filter(agent => {
-    const instructions = extractPrompt(agent.instructions);
-    return agent.name.toLowerCase().includes(term) || instructions.toLowerCase().includes(term);
-  });
-  const visibleAgents = sortAgents(filteredAgents, sort);
-
-  let agentsView = (
-    <AgentsList
-      agents={visibleAgents}
-      isLoading={isLoading}
-      hasSearch={Boolean(search)}
-      sort={sort}
-      onSortChange={setSort}
-    />
-  );
-  if (view === 'compact') {
-    agentsView = <AgentsCompactGrid agents={visibleAgents} isLoading={isLoading} hasSearch={Boolean(search)} />;
+  if (isLoading || !agents || availability.isChecking) {
+    return (
+      <AgentsPageState>
+        <DataListSkeleton scroll="page" columns={skeletonColumns} />
+      </AgentsPageState>
+    );
   }
+  return <AgentsOverview agents={agents} showsActivity={availability.showsActivity} />;
+}
+
+function AgentsOverview({
+  agents,
+  showsActivity,
+}: {
+  agents: Record<string, GetAgentResponse>;
+  showsActivity: boolean;
+}) {
+  const { Link } = useLinkComponent();
+  const url = useOverviewUrlState({ sortKeys: agentSortKeys, defaultSort: defaultAgentSort });
+  const overview = useAgentsOverview({
+    agents,
+    range: url.range,
+    search: url.search,
+    sort: url.sort,
+    showsActivity,
+  });
 
   return (
-    <PageLayout
-      variant="catalog"
+    <OverviewPageLayout
+      title="Agents"
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      headerActions={<AgentHeaderCreateAction />}
-      actionRow={
-        <ActionRow>
-          <ActionRow.Start>
-            <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
-            </div>
-          </ActionRow.Start>
-          <ActionRow.End>
-            <AgentsViewToggle view={view} onViewChange={setView} />
-          </ActionRow.End>
-        </ActionRow>
+      headerLinks={
+        <Button size="sm" variant="ghost" icon={<MetricsIcon />} render={<Link href="/metrics" />}>
+          Metrics
+        </Button>
+      }
+      search={url.search}
+      onSearchChange={url.onSearchChange}
+      searchLabel="Filter agents"
+      period={
+        showsActivity
+          ? {
+              range: url.range,
+              onRangeChange: url.onRangeChange,
+              totals: overview.totals,
+              regressions: overview.regressions,
+            }
+          : undefined
+      }
+      notice={
+        showsActivity ? overview.error && <RunActivityErrorNotice error={overview.error} /> : <RunMetricsOffNotice />
       }
     >
-      <h1 className="sr-only">Agents</h1>
-      {agentsView}
-    </PageLayout>
+      {overview.isLoading ? (
+        <DataListSkeleton scroll="page" columns={skeletonColumns} />
+      ) : (
+        <AgentsRoster
+          rows={overview.rows}
+          activity={overview.rosterActivity}
+          sort={url.sort}
+          onSortChange={url.onSortChange}
+        />
+      )}
+    </OverviewPageLayout>
   );
 }
 

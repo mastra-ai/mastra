@@ -9,7 +9,7 @@ import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/se
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
-import { ArrowLeft, Copy, FlaskConical, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, MoreVertical, Pencil, Play, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
@@ -23,6 +23,7 @@ import {
   AddItemDialog,
   DeleteDatasetDialog,
 } from '@/domains/datasets';
+import { DatasetViewTabs } from '@/domains/datasets/components/dataset-view-tabs';
 import { DatasetItemDrawer } from '@/domains/datasets/components/items/dataset-item-drawer';
 import { DatasetItemPanelProvider } from '@/domains/datasets/context/dataset-item-panel-context';
 import { useDatasetItemsUrlState } from '@/domains/datasets/hooks/use-dataset-items-url-state';
@@ -137,7 +138,11 @@ function DatasetPage() {
   return (
     <DatasetItemPanelProvider datasetId={datasetId} items={unfilteredItems} isLoadingItems={isUnfilteredLoading}>
       <div className="h-full">
-        <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        <PageLayout
+          variant="fit"
+          breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+          actionRow={<DatasetViewTabs datasetId={datasetId} />}
+        >
           <h1 className="sr-only">{datasetId}</h1>
           <div>
             <DatasetItemsView
@@ -151,9 +156,6 @@ function DatasetPage() {
               }
               rightSlot={
                 <div className="flex items-center gap-2">
-                  <Button render={<Link to={`/experiments?dataset=${datasetId}`} />} icon={<FlaskConical />}>
-                    View experiments
-                  </Button>
                   <DatasetVersions
                     datasetId={datasetId}
                     value={activeVersion}

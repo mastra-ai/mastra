@@ -22,6 +22,7 @@ export type TraceSpanTreeProps = {
   revealSpanId?: string;
   /** Rendered full-width above the span type legend row. */
   leadingSlot?: ReactNode;
+  withLegend?: boolean;
   /** Optional end-of-row cell. By default rows have no trailing cell; the duration is shown under the span name. */
   renderTrailing?: (ctx: SpanRowContext) => ReactNode;
 };
@@ -48,6 +49,7 @@ export function TraceSpanTree({
   featuredSpanIds,
   revealSpanId,
   leadingSlot,
+  withLegend = true,
   renderTrailing,
 }: TraceSpanTreeProps) {
   if (isLoading) return <TraceSpanTreeLoading />;
@@ -55,7 +57,7 @@ export function TraceSpanTree({
   return (
     <>
       {leadingSlot}
-      <SpanTypeLegend spans={hierarchicalSpans} />
+      {withLegend && <SpanTypeLegend spans={hierarchicalSpans} />}
       <div
         className={cn('grid content-start items-start gap-y-px overflow-hidden pb-1', {
           'grid-cols-[minmax(0,1fr)]': !renderTrailing,

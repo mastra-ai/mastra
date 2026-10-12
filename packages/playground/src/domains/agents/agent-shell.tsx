@@ -3,10 +3,12 @@ import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-c
 import { KeyboardScope } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { useAgent } from '@mastra/react/hooks/agents';
 import { Outlet, useParams } from 'react-router';
+import { AgentListNavigation } from './components/agent-navigation';
 import { AgentShortcuts } from './components/agent-shortcuts';
 import { ThreadsPanelShortcuts } from './components/threads-panel-shortcuts';
 import { PlaygroundModelProvider } from './context/playground-model-context';
 import { ThreadsPanelProvider } from './context/threads-panel-context';
+import { FeatureNavigationContent } from '@/components/feature-navigation-content';
 
 /** Shared agent scope; child routes compose the navigation appropriate to their view. */
 export function AgentShell() {
@@ -20,18 +22,20 @@ export function AgentShell() {
   const defaultModel = agent?.modelId ?? '';
 
   return (
-    <PlaygroundModelProvider
-      key={`${agentId}:${defaultProvider}/${defaultModel}`}
-      defaultProvider={defaultProvider}
-      defaultModel={defaultModel}
+    <FeatureNavigationContent
+      navigationId="agents"
+      label="Agent navigation"
+      sidebar={<AgentListNavigation agentId={agentId!} />}
     >
-      <KeyboardScope>
-        <AgentShortcuts agentId={agentId!} />
-        <ThreadsPanelProvider key={agentId}>
-          <ThreadsPanelShortcuts />
-          <Outlet />
-        </ThreadsPanelProvider>
-      </KeyboardScope>
-    </PlaygroundModelProvider>
+      <PlaygroundModelProvider key={agentId} defaultProvider={defaultProvider} defaultModel={defaultModel}>
+        <KeyboardScope>
+          <AgentShortcuts agentId={agentId!} />
+          <ThreadsPanelProvider key={agentId}>
+            <ThreadsPanelShortcuts />
+            <Outlet />
+          </ThreadsPanelProvider>
+        </KeyboardScope>
+      </PlaygroundModelProvider>
+    </FeatureNavigationContent>
   );
 }

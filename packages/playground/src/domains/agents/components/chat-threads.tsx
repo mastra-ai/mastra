@@ -2,7 +2,6 @@ import type { StorageThreadType } from '@mastra/core/memory';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
-import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import {
   ThreadList,
   ThreadListEmpty,
@@ -10,14 +9,9 @@ import {
   ThreadListItems,
   ThreadListSeparator,
 } from '@mastra/playground-ui/components/ThreadList';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
-import { panelIconButtonClass } from '@mastra/playground-ui/resize/panel-icon-button';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { ChevronRight, Plus } from 'lucide-react';
 import { useId, useState } from 'react';
@@ -61,8 +55,6 @@ export const ChatThreads = ({
   const { isCollapsed, toggle } = useCollapsedThreadSections();
   const threadsPanel = useThreadsPanel();
   // The mobile drawer has its own close control, so no hide button there.
-  const isMobile = useIsMobile();
-  const canHidePanel = Boolean(threadsPanel) && !isMobile;
 
   const threadsById = new Map(threads.map(thread => [thread.id, thread]));
   const pinnedThreads = pinnedIds.flatMap(id => threadsById.get(id) ?? []);
@@ -102,39 +94,17 @@ export const ChatThreads = ({
   return (
     <>
       <ThreadList embedded={embedded}>
-        <div className="flex items-center gap-1 py-1">
+        <div className="py-1">
           <Button
             variant="ghost"
             render={<Link href={newThreadLink} />}
-            className="min-w-0 flex-1 justify-start rounded-xl px-3"
+            className="w-full justify-start rounded-xl px-3"
           >
             <Icon>
               <Plus />
             </Icon>
             New Thread
           </Button>
-          {canHidePanel && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label="Hide threads panel"
-                  className={cn(panelIconButtonClass, 'shrink-0')}
-                  onClick={() => threadsPanel?.collapse()}
-                >
-                  <Icon>
-                    <PanelEdgeIcon side="left" />
-                  </Icon>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right">
-                <span className="inline-flex items-center gap-1.5">
-                  Hide threads panel
-                  <Kbd size="xs">{'{'}</Kbd>
-                </span>
-              </TooltipContent>
-            </Tooltip>
-          )}
         </div>
 
         <ThreadListSeparator />

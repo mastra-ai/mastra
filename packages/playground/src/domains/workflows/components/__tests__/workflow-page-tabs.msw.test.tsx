@@ -81,7 +81,7 @@ describe('WorkflowPageTabs', () => {
       await waitFor(() =>
         expect(queryClient.getQueryState(['schedules', { workflowId: WORKFLOW_ID }])?.status).toBe('success'),
       );
-      expect(tabNames()).toEqual(['Graph', 'Traces']);
+      expect(tabNames()).toEqual(['Graph', 'Traces', 'Evals']);
       expect(screen.getByRole('button', { name: 'Schedules' }).getAttribute('aria-disabled')).toBe('true');
       expect(traces.getAttribute('aria-selected')).toBe('true');
       expect(screen.getByRole('tab', { name: 'Graph' }).getAttribute('aria-selected')).toBe('false');
@@ -206,7 +206,7 @@ describe('WorkflowPageTabs', () => {
       renderLayout();
 
       await screen.findByRole('tab', { name: 'Schedules (2)' });
-      expect(tabNames()).toEqual(['Graph', 'Schedules (2)']);
+      expect(tabNames()).toEqual(['Graph', 'Evals', 'Schedules (2)']);
       expect(screen.getByRole('button', { name: 'Traces' }).getAttribute('aria-disabled')).toBe('true');
     });
   });

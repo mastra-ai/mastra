@@ -14,15 +14,16 @@ import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
 /** Persistent desktop destinations; contextual sidebars belong to the route shells. */
 export function StudioRail() {
   const { pathname } = useLocation();
-  const { items, bottomItems } = useStudioDestinations();
+  const { items, libraryItems, bottomItems } = useStudioDestinations();
   const visibilityStorageKey = useStudioAreaVisibility();
   const { setOpen } = useNavigationCommand({ enableShortcut: false });
-  const moreLinks = items.map(item => ({
+  const destinations = [...items, ...libraryItems];
+  const moreLinks = destinations.map(item => ({
     name: item.name,
     url: item.url,
     icon: <item.Icon />,
-    isActive: getIsLinkActive(item, pathname, items),
-    defaultVisible: true,
+    isActive: getIsLinkActive(item, pathname, destinations),
+    defaultVisible: items.includes(item),
   }));
 
   return (

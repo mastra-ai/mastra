@@ -330,7 +330,10 @@ function ScrollArea({
   const callerRendersViewport = callerViewportCount === 1;
 
   return (
-    <ScrollAreaPrimitive.Root className={cn('group/scroll-area relative overflow-hidden', className)} {...props}>
+    <ScrollAreaPrimitive.Root
+      className={cn('group/scroll-area relative isolate overflow-hidden', className)}
+      {...props}
+    >
       <ScrollAreaViewportContext value={viewport}>
         {callerRendersViewport ? children : <ScrollAreaViewport>{children}</ScrollAreaViewport>}
       </ScrollAreaViewportContext>
@@ -357,7 +360,7 @@ function ScrollBar({
       data-slot="scroll-area-scrollbar"
       orientation={orientation}
       className={cn(
-        'flex touch-none transition-opacity duration-normal ease-out-custom select-none',
+        'z-40 flex touch-none transition-opacity duration-normal ease-out-custom select-none',
         'opacity-0 data-[scrolling]:opacity-100 data-[scrolling]:duration-0',
         revealOnHover && 'data-[hovering]:opacity-100',
         orientation === 'vertical' && 'h-full w-1.5 p-px',

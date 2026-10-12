@@ -28,7 +28,6 @@ export interface WorkflowInputDataProps {
   isProcessorWorkflow?: boolean;
   submitActions?: React.ReactNode;
   leftActions?: React.ReactNode;
-  headingSlot?: ReactNode;
   collapsible?: boolean;
   submitButtonIcon?: ReactNode;
   submitButtonVariant?: React.ComponentProps<typeof Button>['variant'];
@@ -66,7 +65,6 @@ export const WorkflowInputData = ({
   isProcessorWorkflow,
   submitActions,
   leftActions,
-  headingSlot,
   collapsible = true,
   submitButtonIcon = defaultSubmitIcon,
   submitButtonVariant = 'primary',
@@ -110,13 +108,12 @@ export const WorkflowInputData = ({
     return formShapeError ? setErrors([formShapeError]) : setDraft({ type, value: current.value });
   }
 
-  const defaultHeading = (
+  const heading = (
     <Txt as="span" variant="subheading" tone="ink">
       Trigger a run
     </Txt>
   );
-  const toggleSitsInLabelRow = !collapsible && !hideHeading;
-  const toggleSitsAboveInput = collapsible || hideHeading || hideInputTypeLabel;
+  const toggleSitsInLabelRow = !collapsible && !hideInputTypeLabel;
   const inputTypeToggle = (
     <WorkflowInputTypeToggle
       value={draft.type}
@@ -139,7 +136,7 @@ export const WorkflowInputData = ({
       )}
 
       <div className="px-5">
-        {toggleSitsAboveInput && <div className="pb-4">{inputTypeToggle}</div>}
+        {!toggleSitsInLabelRow && <div className="pb-4">{inputTypeToggle}</div>}
 
         <div
           className={cn('pb-4', {
@@ -208,7 +205,7 @@ export const WorkflowInputData = ({
   if (!collapsible) {
     return (
       <>
-        {!hideHeading && <div className="border-b border-border pb-3">{headingSlot ?? defaultHeading}</div>}
+        {!hideHeading && <div className="border-b border-border pb-3">{heading}</div>}
         <div>{body}</div>
       </>
     );
@@ -218,7 +215,7 @@ export const WorkflowInputData = ({
     <Collapsible defaultOpen>
       <CollapsibleTrigger className="flex w-full items-center gap-2 pb-3 text-left">
         <ChevronRight className="size-4 shrink-0 text-muted-foreground" />
-        {headingSlot ?? defaultHeading}
+        {heading}
       </CollapsibleTrigger>
 
       <CollapsibleContent keepMounted>{body}</CollapsibleContent>

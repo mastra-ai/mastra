@@ -133,27 +133,12 @@ describe('WorkflowInformation', () => {
     });
   });
 
-  describe('when the run panel is collapsed', () => {
-    it('keeps the input draft mounted and restores its edited value', async () => {
+  describe('when preparing a new run', () => {
+    it('shows the run input without anything to expand', async () => {
       renderInformation({ runId: '' });
-      const input = await screen.findByRole('textbox', { name: /Title/ });
-      fireEvent.change(input, { target: { value: 'My draft' } });
-      const trigger = screen.getByRole('button', { name: /Workflow run/ });
-      fireEvent.click(trigger);
-      await waitFor(() => expect(screen.queryByRole('textbox', { name: /Title/ })).toBeNull());
-      expect(trigger.getAttribute('aria-expanded')).toBe('false');
-      expect(input.isConnected).toBe(true);
-      fireEvent.click(trigger);
-      expect(await screen.findByRole('textbox', { name: /Title/ })).toBe(input);
-      expect(screen.getByDisplayValue('My draft')).toBe(input);
-    });
 
-    it('opens the panel when creating a new run', async () => {
-      renderInformation();
-      const newRunButton = await screen.findByRole('link', { name: 'New workflow run' });
-      fireEvent.click(screen.getByRole('button', { name: /Workflow run/ }));
-      fireEvent.click(newRunButton);
-      expect(screen.getByRole('button', { name: /Workflow run/ }).getAttribute('aria-expanded')).toBe('true');
+      expect(await screen.findByRole('textbox', { name: /Title/ })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /Workflow run/ })).toBeNull();
     });
   });
 });

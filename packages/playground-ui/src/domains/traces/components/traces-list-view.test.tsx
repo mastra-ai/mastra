@@ -37,14 +37,28 @@ afterEach(() => {
   scrollToIndex.mockClear();
 });
 
-describe('TracesListView horizontal overflow', () => {
-  it('fades the left and right edges of the scroll viewport when columns overflow', () => {
-    const { container } = render(<TracesListView traces={[makeTrace(0)]} onTraceClick={vi.fn()} />);
-    const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
-    const viewport = grid?.closest<HTMLElement>('[data-slot="scroll-area-viewport"], [class*="mask-"]');
+describe('TracesListView scrolling', () => {
+  it('leaves scrolling to the page so the header can stick to it', () => {
+    const { container } = render(
+      <div data-testid="page-scroller" style={{ overflowY: 'auto' }}>
+        <TracesListView traces={[makeTrace(0)]} onTraceClick={vi.fn()} />
+      </div>,
+    );
+    const pageScroller = screen.getByTestId('page-scroller');
+    const header = container.querySelector<HTMLElement>('.data-list-top');
 
-    expect(viewport?.style.getPropertyValue('--scroll-area-fade-right')).toBe('2rem');
-    expect(viewport?.style.getPropertyValue('--scroll-area-fade-left')).toBe('2rem');
+    const scrollingAncestors: HTMLElement[] = [];
+    for (
+      let ancestor = header?.parentElement;
+      ancestor && ancestor !== pageScroller;
+      ancestor = ancestor.parentElement
+    ) {
+      if (ancestor.style.overflow || ancestor.style.overflowX || ancestor.style.overflowY)
+        scrollingAncestors.push(ancestor);
+    }
+
+    expect(header).toBeTruthy();
+    expect(scrollingAncestors).toEqual([]);
   });
 });
 

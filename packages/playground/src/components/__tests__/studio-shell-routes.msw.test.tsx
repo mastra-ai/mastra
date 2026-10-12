@@ -25,8 +25,12 @@ import { noMcpServers, noWorkspaces } from '@/components/ui/__tests__/fixtures/n
 import { adminSidebarCapabilities } from '@/components/ui/__tests__/fixtures/sidebar-permissions';
 import { authHandler, BASE_URL, builderHandler, systemPackagesHandler } from '@/components/ui/__tests__/render-sidebar';
 import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
-import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
-import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
+import { emptyDatasetItems } from '@/domains/datasets/components/__tests__/fixtures/dataset-items';
+import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
+import {
+  buildListExperimentsResponse,
+  emptyReviewSummary,
+} from '@/domains/experiments/components/__tests__/fixtures/experiments';
 import { legacyServer, toolList } from '@/domains/mcps/components/__tests__/fixtures/mcp-servers';
 import { weatherWorkflow, WORKFLOW_ID, noSchedules } from '@/domains/workflows/__tests__/fixtures/workflow';
 import { agentsList } from '@/pages/agents/__tests__/fixtures/agents';
@@ -103,6 +107,12 @@ function renderAt(path: string) {
   );
 }
 
+async function findOnlyRail() {
+  const rail = await screen.findByRole('complementary', { name: 'Studio navigation' });
+  expect(screen.getAllByRole('complementary')).toEqual([rail]);
+  return rail;
+}
+
 async function selectOption(name: string) {
   const option = await screen.findByRole('option', { name, exact: true });
   fireEvent.pointerDown(option, { pointerType: 'mouse' });
@@ -148,80 +158,117 @@ describe('Studio route shells', () => {
       expect(within(header).getByRole('button', { name: 'Prompt navigation' })).toBeTruthy();
     });
   });
-  describe('when switching from prompts to agents', () => {
-    it('keeps the same sidebar frame mounted while changing its navigation', async () => {
+  describe('when moving between library pages', () => {
+    it('opens the next page from More, full width', async () => {
+      server.use(http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(packagesWithPromptEditing)));
       renderAt('/prompts');
-      const sidebar = await screen.findByRole('complementary', { name: 'Build navigation' });
       await screen.findByText('Prompt Block 1');
-      const navigation = within(sidebar).getByRole('navigation', { name: 'Build features' });
-      fireEvent.click(within(sidebar).getByRole('link', { name: 'Agents', exact: true }));
-      expect(within(sidebar).getByRole('navigation', { name: 'Build features' })).toBe(navigation);
-      const agents = await screen.findByRole('complementary', { name: 'Build navigation' });
-      await screen.findByText('Research Agent');
-      expect(within(agents).queryByText('Research Agent')).toBeNull();
-      expect(agents).toBe(sidebar);
+      const rail = await findOnlyRail();
+      expect(within(rail).getByRole('link', { name: 'Prompts' }).getAttribute('aria-current')).toBe('page');
+      fireEvent.click(within(rail).getByRole('button', { name: 'More' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Tools' }));
+      await waitFor(() =>
+        expect(within(rail).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page'),
+      );
+      expect(screen.getAllByRole('complementary')).toEqual([rail]);
     });
   });
   describe('when moving through evaluation features', () => {
-    it('keeps the navigator mounted across datasets, scorers, experiments and review', async () => {
+    beforeEach(() => {
+      server.use(
+        http.get(`${BASE_URL}/api/experiments/review-summary`, () => HttpResponse.json(emptyReviewSummary)),
+        http.get(`${BASE_URL}/api/datasets/:datasetId`, () => HttpResponse.json(buildDataset())),
+        http.get(`${BASE_URL}/api/datasets/:datasetId/items`, () => HttpResponse.json(emptyDatasetItems)),
+      );
+    });
+
+    it('opens a dataset from the list below the experiments and review queue', async () => {
       renderAt('/datasets');
       const sidebar = await screen.findByRole('complementary', { name: 'Evaluate navigation' });
-      const navigation = within(sidebar).getByRole('navigation', { name: 'Evaluate features' });
-      await screen.findByText('Dataset 1');
-      for (const name of ['Scorers', 'Experiments', 'Review Queue']) {
-        fireEvent.click(within(sidebar).getByRole('link', { name }));
+      const datasets = await within(sidebar).findByRole('navigation', { name: 'Datasets list' });
+      await waitFor(() =>
+        expect(within(datasets).getByRole('link', { name: 'Dataset 1' }).getAttribute('aria-current')).toBe('page'),
+      );
+      const features = within(sidebar).getByRole('navigation', { name: 'Evaluate features' });
+      expect(within(features).queryByRole('link', { name: 'Datasets' })).toBeNull();
+      expect(within(features).queryByRole('link', { name: 'Scorers' })).toBeNull();
+      expect(await screen.findByRole('navigation', { name: 'Dataset views' })).toBeTruthy();
+    });
+
+    it('keeps the navigator mounted across experiments and review', async () => {
+      renderAt('/experiments');
+      const sidebar = await screen.findByRole('complementary', { name: 'Evaluate navigation' });
+      const features = within(sidebar).getByRole('navigation', { name: 'Evaluate features' });
+      for (const name of [/^Review Queue/, /^Experiments/]) {
+        fireEvent.click(within(features).getByRole('link', { name }));
         await waitFor(() =>
-          expect(within(sidebar).getByRole('link', { name }).getAttribute('aria-current')).toBe('page'),
+          expect(within(features).getByRole('link', { name }).getAttribute('aria-current')).toBe('page'),
         );
         expect(screen.getByRole('complementary', { name: 'Evaluate navigation' })).toBe(sidebar);
-        expect(within(sidebar).getByRole('navigation', { name: 'Evaluate features' })).toBe(navigation);
       }
-      expect(
-        within(sidebar).getByRole('link', { name: 'Experiments', exact: true }).getAttribute('aria-current'),
-      ).toBeNull();
       expect(screen.queryByText('Something went wrong')).toBeNull();
     });
   });
-  describe('when moving from logs to traces', () => {
-    it('keeps Monitor navigation and the resizable frame mounted', async () => {
+  describe('when opening logs', () => {
+    it('uses the full frame without a contextual sidebar', async () => {
       renderAt('/logs');
-      const sidebar = await screen.findByRole('complementary', { name: 'Monitor navigation' });
-      const navigation = within(sidebar).getByRole('navigation', { name: 'Monitor features' });
-      fireEvent.click(within(sidebar).getByRole('link', { name: 'Traces' }));
+      const rail = await findOnlyRail();
       await waitFor(() =>
-        expect(within(sidebar).getByRole('link', { name: 'Traces' }).getAttribute('aria-current')).toBe('page'),
+        expect(within(rail).getByRole('link', { name: 'Logs' }).getAttribute('aria-current')).toBe('page'),
       );
-      expect(screen.getByRole('complementary', { name: 'Monitor navigation' })).toBe(sidebar);
-      expect(within(sidebar).getByRole('navigation', { name: 'Monitor features' })).toBe(navigation);
-      expect(within(sidebar).getByRole('link', { name: 'Metrics' })).toBeTruthy();
-      expect(screen.queryByText('Something went wrong')).toBeNull();
+    });
+  });
+  describe('when opening metrics', () => {
+    it('lives at the top of the agents sidebar without repeating the area name', async () => {
+      renderAt('/metrics');
+      const sidebar = await screen.findByRole('complementary', { name: 'Agents navigation' });
+      await waitFor(() =>
+        expect(
+          within(sidebar)
+            .getByRole('link', { name: /^Metrics/ })
+            .getAttribute('aria-current'),
+        ).toBe('page'),
+      );
+      expect(within(sidebar).queryByRole('link', { name: 'Agents', exact: true })).toBeNull();
+      expect(await within(sidebar).findByRole('navigation', { name: 'Agents list' })).toBeTruthy();
+    });
+  });
+  describe('when opening traces', () => {
+    it('uses the full frame without a contextual sidebar', async () => {
+      renderAt('/traces');
+      const rail = await screen.findByRole('complementary', { name: 'Studio navigation' });
+      await waitFor(() =>
+        expect(within(rail).getByRole('link', { name: 'Traces' }).getAttribute('aria-current')).toBe('page'),
+      );
+      expect(screen.queryByRole('complementary', { name: 'Monitor navigation' })).toBeNull();
     });
   });
   describe('when only scores are permitted', () => {
-    it('offers scorers without evaluation features the user cannot access', async () => {
+    it('opens scorers without evaluation features the user cannot access', async () => {
       server.use(
         authHandler({ ...adminSidebarCapabilities, access: { roles: ['scorer-user'], permissions: ['scores:read'] } }),
       );
       renderAt('/scorers');
-      const sidebar = await screen.findByRole('complementary', { name: 'Evaluate navigation' });
-      expect(await within(sidebar).findByRole('link', { name: 'Scorers' })).toBeTruthy();
-      for (const name of ['Experiments', 'Datasets', 'Review Queue']) {
-        expect(within(sidebar).queryByRole('link', { name })).toBeNull();
+      const rail = await findOnlyRail();
+      expect((await within(rail).findByRole('link', { name: 'Scorers' })).getAttribute('aria-current')).toBe('page');
+      for (const name of ['Evaluate', 'Experiments', 'Datasets', 'Review Queue']) {
+        expect(screen.queryByRole('link', { name })).toBeNull();
       }
     });
   });
   describe('when browsing MCP servers', () => {
-    it('offers resource categories without repeating the server list', async () => {
+    it('lists servers once, with Integrations pinned in the rail', async () => {
       server.use(
         http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(packagesWithPromptEditing)),
         http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [legacyServer] })),
       );
       renderAt('/mcps');
-      const sidebar = await screen.findByRole('complementary', { name: 'Resources navigation' });
       await screen.findByText('Legacy Server');
       expect(screen.getAllByText('Legacy Server')).toHaveLength(1);
-      expect(await within(sidebar).findByRole('link', { name: 'Integrations' })).toBeTruthy();
-      expect(within(sidebar).getByRole('link', { name: 'Workspaces' }).getAttribute('href')).toBe('/workspaces');
+      const rail = await findOnlyRail();
+      expect((await within(rail).findByRole('link', { name: 'Integrations' })).getAttribute('href')).toBe(
+        '/integrations',
+      );
     });
   });
   describe('when opening a workspace', () => {
@@ -238,68 +285,47 @@ describe('Studio route shells', () => {
       expect(within(sidebar).getByRole('combobox', { name: 'Workspace' })).toBeTruthy();
       expect(within(sidebar).getByRole('button', { name: 'New folder' })).toBeTruthy();
       expect(screen.getAllByText('notes')).toHaveLength(1);
-      const categories = within(sidebar).getByRole('navigation', { name: 'Resources features' });
-      expect(within(categories).getByRole('link', { name: 'Workspaces' }).getAttribute('aria-current')).toBe('page');
-      fireEvent.click(within(categories).getByRole('link', { name: 'MCP Servers' }));
-      expect(await screen.findByRole('complementary', { name: 'Resources navigation' })).toBeTruthy();
+      const rail = screen.getByRole('complementary', { name: 'Studio navigation' });
+      expect(within(rail).getByRole('link', { name: 'Workspaces' }).getAttribute('aria-current')).toBe('page');
     });
   });
   describe('when browsing scorers', () => {
-    it('keeps all evaluation features together and lists scorers only once', async () => {
+    it('lists scorers once, full width', async () => {
       server.use(http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json(availableScorers)));
       renderAt('/scorers');
-      const sidebar = await screen.findByRole('complementary', { name: 'Evaluate navigation' });
       await screen.findByText('quality');
       expect(screen.getAllByText('quality')).toHaveLength(1);
-      for (const name of ['Experiments', 'Datasets', 'Scorers', 'Review Queue']) {
-        expect(within(sidebar).getByRole('link', { name })).toBeTruthy();
-      }
-      expect(within(sidebar).queryByText('Primitives')).toBeNull();
+      const rail = await findOnlyRail();
+      expect(within(rail).getByRole('link', { name: 'Scorers' }).getAttribute('aria-current')).toBe('page');
     });
   });
   describe('when browsing processors', () => {
-    it('lists processors only in the content, with one search', async () => {
+    it('lists processors once, with one search', async () => {
       server.use(http.get(`${BASE_URL}/api/processors`, () => HttpResponse.json(availableProcessors)));
       renderAt('/processors');
-      const sidebar = await screen.findByRole('complementary', { name: 'Build navigation' });
       await screen.findByText('PII redactor');
       expect(screen.getAllByText('PII redactor')).toHaveLength(1);
-      expect(within(sidebar).queryByText('PII redactor')).toBeNull();
-      expect(within(sidebar).getByRole('link', { name: 'Processors' }).getAttribute('aria-current')).toBe('page');
-      expect(within(sidebar).getByRole('link', { name: 'Tools' })).toBeTruthy();
+      const rail = await findOnlyRail();
+      expect(within(rail).getByRole('link', { name: 'Processors' }).getAttribute('aria-current')).toBe('page');
       expect(screen.getAllByRole('searchbox')).toHaveLength(1);
     });
   });
   describe('when tool access is denied', () => {
-    it('keeps collection navigation and explains the error in the content', async () => {
+    it('explains the error in the content', async () => {
       server.use(http.get(`${BASE_URL}/api/tools`, () => HttpResponse.json({ error: 'Forbidden' }, { status: 403 })));
       renderAt('/tools');
       await screen.findByText(/permission to access/i);
-      expect(screen.getByRole('complementary', { name: 'Build navigation' })).toBeTruthy();
+      await findOnlyRail();
     });
   });
   describe('when browsing tools', () => {
-    it('closes the navigation drawer after selecting another collection', async () => {
-      const matchMedia = window.matchMedia;
-      vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
-        ...matchMedia(query),
-        matches: query === '(max-width: 1023px)',
-      }));
-      server.use(http.get(`${BASE_URL}/api/tools`, () => HttpResponse.json(availableTools)));
-      renderAt('/tools');
-      fireEvent.click(await screen.findByRole('button', { name: 'Build navigation' }));
-      const drawer = await screen.findByRole('dialog', { name: 'Build navigation' });
-      fireEvent.click(await within(drawer).findByRole('link', { name: 'Processors' }));
-      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Build navigation' })).toBeNull());
-    });
     it('lists registered and agent tools once in the content', async () => {
       server.use(http.get(`${BASE_URL}/api/tools`, () => HttpResponse.json(availableTools)));
       renderAt('/tools');
-      const sidebar = await screen.findByRole('complementary', { name: 'Build navigation' });
       await screen.findByText('weather');
       expect(screen.getAllByText('weather')).toHaveLength(1);
       expect(screen.getAllByText('search')).toHaveLength(1);
-      expect(within(sidebar).queryByText('weather')).toBeNull();
+      await findOnlyRail();
       expect(screen.getAllByRole('searchbox')).toHaveLength(1);
     });
   });
@@ -495,9 +521,9 @@ describe('Studio route shells', () => {
       );
       renderAt('/tools');
       await screen.findByText('weather');
-      const sidebar = screen.getByRole('complementary', { name: 'Build navigation' });
-      expect(within(sidebar).getByRole('link', { name: 'Tools' })).toBeTruthy();
-      expect(within(sidebar).queryByRole('link', { name: 'Agents' })).toBeNull();
+      const rail = await findOnlyRail();
+      expect(within(rail).getByRole('link', { name: 'Tools' }).getAttribute('aria-current')).toBe('page');
+      expect(within(rail).queryByRole('link', { name: 'Agents' })).toBeNull();
       expect(agents).not.toHaveBeenCalled();
     });
   });
@@ -516,21 +542,51 @@ describe('Studio route shells', () => {
     });
   });
   describe('when loading the agents collection', () => {
-    it('renders agent data alongside agent navigation', async () => {
+    it('opens the overview from its sidebar card and keeps every agent listed below it', async () => {
       renderAt('/agents');
-      await screen.findAllByText('Research Agent');
-      expect(screen.getByRole('complementary', { name: 'Build navigation' })).toBeTruthy();
-      expect(screen.queryByRole('complementary', { name: 'Browse navigation' })).toBeNull();
+      const sidebar = await screen.findByRole('complementary', { name: 'Agents navigation' });
+      const overviewCard = await within(sidebar).findByRole('link', { name: /^Overview/ });
+      expect(overviewCard.getAttribute('href')).toBe('/agents');
+      expect(overviewCard.getAttribute('aria-current')).toBe('page');
+      expect(within(sidebar).queryByRole('button', { name: 'Expand agents' })).toBeNull();
+      const list = await within(sidebar).findByRole('navigation', { name: 'Agents list' });
+      expect(within(list).getByRole('link', { name: 'Research Agent' }).getAttribute('href')).toBe(
+        '/agents/researcher/overview',
+      );
+      expect(await screen.findByRole('heading', { name: 'Agents' })).toBeTruthy();
+      expect(within(sidebar).queryByRole('link', { name: 'Workflows' })).toBeNull();
+      expect(within(sidebar).queryByRole('link', { name: 'Tools' })).toBeNull();
+    });
+    it('moves a pinned agent above the rest', async () => {
+      renderAt('/agents');
+      const sidebar = await screen.findByRole('complementary', { name: 'Agents navigation' });
+      fireEvent.click(await within(sidebar).findByRole('button', { name: 'Pin Analysis Agent' }));
+      const list = within(sidebar).getByRole('navigation', { name: 'Agents list' });
+      expect(
+        within(list)
+          .getAllByRole('link')
+          .map(link => link.textContent)[0],
+      ).toBe('Analysis Agent');
+      expect(within(sidebar).getByRole('button', { name: 'Unpin Analysis Agent' })).toBeTruthy();
     });
   });
   describe('when loading the workflows collection', () => {
-    it('offers workflow destinations without duplicating primitive navigation', async () => {
+    it('opens the workflows overview, each row opening its workflow', async () => {
       renderAt('/workflows');
-      const sidebar = await screen.findByRole('complementary', { name: 'Build navigation' });
-      expect(within(sidebar).getByRole('link', { name: 'Workflows' }).getAttribute('aria-current')).toBe('page');
-      expect(screen.getByRole('link', { name: 'Schedules' }).getAttribute('href')).toBe('/workflows/schedules');
-      expect(within(sidebar).queryByText(WORKFLOW_ID)).toBeNull();
-      expect(screen.getAllByText(WORKFLOW_ID)).toHaveLength(1);
+      expect(await screen.findByRole('heading', { name: 'Workflows' })).toBeTruthy();
+      expect((await screen.findByRole('link', { name: 'Schedules' })).getAttribute('href')).toBe(
+        '/workflows/schedules',
+      );
+      expect((await screen.findByRole('link', { name: new RegExp(WORKFLOW_ID) })).getAttribute('href')).toBe(
+        `/workflows/${WORKFLOW_ID}`,
+      );
+      expect(screen.queryByRole('complementary', { name: 'Workflow navigation' })).toBeNull();
+    });
+    it('leads from an open workflow back to the overview instead of expanding the switcher', async () => {
+      renderAt(`/workflows/${WORKFLOW_ID}/graph`);
+      const sidebar = await screen.findByRole('complementary', { name: 'Workflow navigation' });
+      expect(within(sidebar).getByRole('link', { name: 'All workflows' }).getAttribute('href')).toBe('/workflows');
+      expect(within(sidebar).queryByRole('button', { name: 'Expand workflow list' })).toBeNull();
     });
   });
   describe('when loading a workflow graph directly', () => {
@@ -538,11 +594,11 @@ describe('Studio route shells', () => {
       renderAt(`/workflows/${WORKFLOW_ID}/graph`);
       await screen.findByRole('tab', { name: 'Graph' });
       const rail = screen.getByRole('complementary', { name: 'Studio navigation' });
-      expect(within(rail).getByRole('link', { name: 'Build' }).getAttribute('aria-current')).toBe('page');
+      expect(within(rail).getByRole('link', { name: 'Workflows' }).getAttribute('aria-current')).toBe('page');
       expect(screen.queryByRole('complementary', { name: 'Browse navigation' })).toBeNull();
       const sidebar = screen.getByRole('complementary', { name: 'Workflow navigation' });
       expect(await within(sidebar).findByTestId('workflow-information-panel')).toBeTruthy();
-      expect(within(sidebar).getByRole('link', { name: WORKFLOW_ID }).getAttribute('aria-current')).toBe('page');
+      expect(within(sidebar).getByLabelText('Switch workflow').textContent).toContain(WORKFLOW_ID);
       expect(screen.getAllByTestId('workflow-information-panel')).toHaveLength(1);
     });
   });

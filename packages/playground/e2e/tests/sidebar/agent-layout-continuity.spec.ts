@@ -3,7 +3,7 @@ import type { Page } from '@playwright/test';
 
 async function geometry(page: Page) {
   const navigation = page.getByRole('complementary', { name: 'Agent navigation', exact: true });
-  const views = navigation.getByRole('navigation', { name: 'Agent views' });
+  const views = page.getByRole('navigation', { name: 'Agent views' });
   const breadcrumb = page
     .getByRole('navigation', { name: 'Breadcrumb' })
     .getByRole('link', { name: 'Agents', exact: true });
@@ -15,21 +15,26 @@ async function geometry(page: Page) {
 }
 
 test.describe('Agent route layout', () => {
-  test.describe('when opening an agent from the collection', () => {
+  test.describe('when opening an agent from the agents overview sidebar', () => {
     test('keeps navigation full height with the page header beside it', async ({ page }) => {
       await page.goto('/agents');
-      const collection = page.getByRole('complementary', { name: 'Build navigation', exact: true });
-      await expect(
-        page.getByRole('link').filter({ has: page.getByText('Weather Agent', { exact: true }) }),
-      ).toBeVisible();
+      await expect(page).toHaveURL(/\/agents$/);
+      const collection = page.getByRole('complementary', { name: 'Agents navigation', exact: true });
+      await expect(collection.getByRole('link', { name: /^Overview/ })).toHaveAttribute('aria-current', 'page');
       const collectionBox = await collection.boundingBox();
-      if (!collectionBox) throw new Error('Collection navigation is not visible');
-      await page
-        .getByRole('link')
-        .filter({ has: page.getByText('Weather Agent', { exact: true }) })
+      if (!collectionBox) throw new Error('Agents navigation is not visible');
+      await collection
+        .getByRole('navigation', { name: 'Agents list' })
+        .getByRole('link', { name: 'Weather Agent', exact: true })
         .click();
       const navigation = page.getByRole('complementary', { name: 'Agent navigation', exact: true });
-      await expect(navigation.getByRole('link', { name: 'Editor', exact: true })).toBeVisible();
+      const weatherAgent = navigation
+        .getByRole('navigation', { name: 'Agents list' })
+        .getByRole('link', { name: 'Weather Agent', exact: true });
+      await expect(weatherAgent).toHaveAttribute('aria-current', 'page');
+      await expect(
+        page.getByRole('navigation', { name: 'Agent views' }).getByRole('link', { name: 'Editor', exact: true }),
+      ).toBeVisible();
       await expect(page.locator('[data-slot="page-layout"] > header').first()).toBeVisible();
       const sidebarBox = await navigation.boundingBox();
       const frameBox = await page.locator('[data-slot="studio-frame-content"]').boundingBox();
@@ -58,9 +63,10 @@ test.describe('Agent route layout', () => {
         .getByRole('link', { name: 'Agents', exact: true });
       await breadcrumb.evaluate(element => element.setAttribute('data-continuity-check', 'original'));
       await navigation.evaluate(element => element.setAttribute('data-continuity-check', 'original'));
+      const views = page.getByRole('navigation', { name: 'Agent views' });
       for (const view of ['Editor', 'Overview']) {
-        await navigation.getByRole('link', { name: view, exact: true }).click();
-        await expect(navigation.getByRole('link', { name: view, exact: true })).toHaveAttribute('aria-current', 'page');
+        await views.getByRole('link', { name: view, exact: true }).click();
+        await expect(views.getByRole('link', { name: view, exact: true })).toHaveAttribute('aria-current', 'page');
         await expect(breadcrumb).toHaveAttribute('data-continuity-check', 'original');
         await expect(navigation).toHaveAttribute('data-continuity-check', 'original');
         await expect

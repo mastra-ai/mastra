@@ -11,4 +11,6 @@ export type {
 } from './TabbedContainer/tabbed-container';
 export { TracesDataList } from './TracesDataList/traces-data-list';
 export { useDataListKeyboard } from './use-data-list-keyboard';
+export { useDataListPageVirtualizer } from './use-data-list-page-virtualizer';
+export type { UseDataListPageVirtualizerArgs } from './use-data-list-page-virtualizer';
 export type { UseDataListKeyboardArgs } from './use-data-list-keyboard';

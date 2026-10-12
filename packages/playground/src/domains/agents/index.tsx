@@ -26,6 +26,5 @@ export * from './hooks/use-agent-cms-form';
 export * from './components/agent-cms-form-shell';
 export * from './components/agent-version-panel';
 export * from './components/agent-playground';
-export * from './components/agent-view-navigation';
-export * from './components/agent-list/agents-list';
+export * from './components/agent-view-tabs';
 export * from './components/agent-list/no-agents-info';

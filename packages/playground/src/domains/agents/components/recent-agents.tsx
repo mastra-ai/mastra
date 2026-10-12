@@ -1,25 +1,14 @@
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { useAgents } from '@mastra/react/hooks/agents';
 import { isAuthenticated, useAuthCapabilities } from '@mastra/react/hooks/auth';
-import { RecentAgentsList } from './recent-agents-list';
+import { useRecentAgentIds } from '../hooks/use-recent-agent-ids';
 
-export function RecentAgents({ agentId, view = 'chat' }: { agentId: string; view?: 'chat' | 'agent' }) {
-  const { data: agents, isLoading } = useAgents();
+function RecentAgentVisit({ agentId, userId }: { agentId: string; userId?: string }) {
+  useRecentAgentIds(agentId, userId);
+  return null;
+}
+
+export function RememberRecentAgent({ agentId }: { agentId: string }) {
   const { data: auth } = useAuthCapabilities();
-
-  if (isLoading || !auth) {
-    return <Skeleton className="m-3 h-24 shrink-0" />;
-  }
-  if (!agents || (auth.enabled && !isAuthenticated(auth))) return null;
-
+  if (!auth || (auth.enabled && !isAuthenticated(auth))) return null;
   const userId = isAuthenticated(auth) ? auth.user.id : undefined;
-  return (
-    <RecentAgentsList
-      key={`${agentId}:${userId ?? ''}`}
-      agentId={agentId}
-      userId={userId}
-      agents={agents}
-      view={view}
-    />
-  );
+  return <RecentAgentVisit key={`${agentId}:${userId ?? ''}`} agentId={agentId} userId={userId} />;
 }

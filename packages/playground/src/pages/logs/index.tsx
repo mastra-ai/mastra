@@ -198,7 +198,7 @@ export default function LogsPage() {
   }
 
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
+    <PageLayout variant="catalog" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} actionRow={actionRow}>
       <h1 className="sr-only">Logs</h1>
       <LogsListView
         logs={logs}
@@ -211,6 +211,7 @@ export default function LogsPage() {
         onLogClick={handleLogClick}
         timestampSort={sort?.direction}
         onSortChange={onSortChange}
+        variant="light"
       />
       <LogDataPanel
         log={featuredLog ?? undefined}

@@ -1,12 +1,11 @@
-import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef } from 'react';
 import type { LogRecord } from '../types';
-import { useDataListKeyboard } from '@/ds/components/DataList';
-import type { DataListSort } from '@/ds/components/DataList';
+import { useDataListKeyboard, useDataListPageVirtualizer } from '@/ds/components/DataList';
+import type { DataListSort, DataListVariant } from '@/ds/components/DataList';
 import { LogsDataList, LogsDataListSkeleton } from '@/ds/components/LogsDataList';
 
-// Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
-const COLUMNS = '6rem 9rem 5rem 10rem minmax(8rem,1fr) minmax(8rem,1fr)';
+// Content-independent widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
+const COLUMNS = 'minmax(0,6rem) minmax(0,9rem) minmax(0,5rem) minmax(0,10rem) minmax(8rem,1fr) minmax(8rem,1fr)';
 
 const ROW_HEIGHT = 36;
 const OVERSCAN = 8;
@@ -27,6 +26,8 @@ export interface LogsListViewProps {
   /** Current timestamp sort direction. When `onSortChange` is provided the Date/Time headers become sortable. */
   timestampSort?: DataListSort;
   onSortChange?: (direction: DataListSort, key: 'timestamp') => void;
+  /** `light` drops the card panel when the list fills a panel of its own. */
+  variant?: DataListVariant;
 }
 
 /**
@@ -45,53 +46,46 @@ export function LogsListView({
   onLogClick,
   timestampSort,
   onSortChange,
+  variant,
 }: LogsListViewProps) {
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-
-  const virtualizer = useVirtualizer({
+  const { listRef, attachList, virtualizer, virtualItems, paddingTop, paddingBottom } = useDataListPageVirtualizer({
     count: logs.length,
-    getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    rowHeight: ROW_HEIGHT,
     overscan: OVERSCAN,
   });
 
   const { getRowProps } = useDataListKeyboard({
     count: logs.length,
-    containerRef: scrollRef,
+    containerRef: listRef,
     onNavigate: index => virtualizer.scrollToIndex(index),
     global: true,
   });
 
-  // Reset scroll to top whenever a fresh query resolves (filter / date range change).
-  // `isLoading` only flips on initial fetches — `fetchNextPage` keeps it `false`, so this
-  // effect doesn't fire during pagination.
-  //
-  // Why the manual scroll event: when the skeleton-vs-list branch swaps in the new scroll
-  // container, it mounts at `scrollTop = 0`. The virtualizer rebinds its listener but
-  // doesn't re-read `scrollTop`, so it keeps the stale `scrollOffset` from the previous
-  // element. `scrollToOffset(0)` no-ops because the new element is already at 0 (no scroll
-  // event fires). Dispatching a synthetic `scroll` forces the virtualizer's handler to
-  // read the fresh `scrollTop` and recompute `virtualItems` with `paddingTop = 0`.
+  // The virtualizer does not re-read scrollTop when it rebinds after the skeleton, so a fresh query
+  // scrolls the page back to the top and replays a scroll event for it.
   const wasLoadingRef = useRef(isLoading);
   useEffect(() => {
-    if (wasLoadingRef.current && !isLoading) {
-      scrollRef.current?.dispatchEvent(new Event('scroll'));
+    const pageScroller = virtualizer.scrollElement;
+    if (wasLoadingRef.current && !isLoading && pageScroller) {
+      pageScroller.scrollTop = 0;
+      pageScroller.dispatchEvent(new Event('scroll'));
     }
     wasLoadingRef.current = isLoading;
-  }, [isLoading]);
+  }, [isLoading, virtualizer]);
 
   if (isLoading) {
-    return <LogsDataListSkeleton columns={COLUMNS} fit="container" />;
+    return <LogsDataListSkeleton columns={COLUMNS} fit="container" scroll="page" variant={variant} />;
   }
 
-  const virtualItems = virtualizer.getVirtualItems();
-  const totalSize = virtualizer.getTotalSize();
-  const paddingTop = virtualItems[0]?.start ?? 0;
-  const paddingBottom =
-    virtualItems.length > 0 ? Math.max(0, totalSize - (virtualItems[virtualItems.length - 1]?.end ?? 0)) : 0;
-
   return (
-    <LogsDataList columns={COLUMNS} scrollRef={scrollRef} className="min-w-0" fit="container">
+    <LogsDataList
+      columns={COLUMNS}
+      scrollRef={attachList}
+      variant={variant}
+      className="min-w-0"
+      fit="container"
+      scroll="page"
+    >
       <LogsDataList.Top>
         {onSortChange ? (
           <LogsDataList.SortableTopCell sortKey="timestamp" sort={timestampSort} onSortChange={onSortChange}>

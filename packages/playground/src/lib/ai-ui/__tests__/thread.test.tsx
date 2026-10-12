@@ -11,9 +11,11 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
+import { MessageTracesContext } from '../message-traces-context';
 import { Thread } from '../thread';
 import { emptyMcpServers, memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
 import { attachmentMessages } from './fixtures/attachment-messages';
+import { recordedRunTrace, RUN_TRACE_ID } from './fixtures/message-trace';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ThreadInputProvider } from '@/domains/conversation';
@@ -112,6 +114,7 @@ interface RenderThreadOptions {
   isHistoryLoading?: boolean;
   isLoadingPrevious?: boolean;
   onLoadPrevious?: () => void | Promise<void>;
+  showsMessageTraces?: boolean;
 }
 
 const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThreadOptions = {}) => {
@@ -122,6 +125,7 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
     isHistoryLoading,
     isLoadingPrevious,
     onLoadPrevious,
+    showsMessageTraces = false,
   } = options;
 
   return (
@@ -135,16 +139,18 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
           supportsMemory={true}
           settings={{ modelSettings: { chatWithLegacyStream: false } }}
         >
-          <Thread
-            agentId="agent-1"
-            agentName="Helper"
-            threadId={threadId}
-            suggestedPrompts={suggestedPrompts}
-            hasModelList={hasModelList}
-            isHistoryLoading={isHistoryLoading}
-            isLoadingPrevious={isLoadingPrevious}
-            onLoadPrevious={onLoadPrevious}
-          />
+          <MessageTracesContext value={showsMessageTraces}>
+            <Thread
+              agentId="agent-1"
+              agentName="Helper"
+              threadId={threadId}
+              suggestedPrompts={suggestedPrompts}
+              hasModelList={hasModelList}
+              isHistoryLoading={isHistoryLoading}
+              isLoadingPrevious={isLoadingPrevious}
+              onLoadPrevious={onLoadPrevious}
+            />
+          </MessageTracesContext>
         </ChatProvider>
       </ThreadInputProvider>
     </Wrapper>
@@ -463,6 +469,46 @@ describe('Thread', () => {
       });
 
       expect(screen.queryByRole('button', { name: 'Check the weather' })).toBeFalsy();
+    });
+  });
+
+  describe('when the advanced view shows message traces', () => {
+    const runMessages = [
+      userMessage('hey'),
+      assistantMessage('Looking it up', { traceId: RUN_TRACE_ID }),
+      assistantMessage('Here is a simple meal', { traceId: RUN_TRACE_ID }),
+    ];
+
+    it('sets the run spans once, under the last message of that run', async () => {
+      server.use(
+        ...baseHandlers(),
+        http.get(`${BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(recordedRunTrace)),
+      );
+
+      renderThread(runMessages, { showsMessageTraces: true });
+
+      const trace = await screen.findByRole('region', { name: 'Trace' });
+      expect(await within(trace).findByText("llm: 'gpt-5.4-mini'")).toBeTruthy();
+      expect(screen.getAllByRole('region', { name: 'Trace' })).toHaveLength(1);
+      const lastReply = screen.getByText('Here is a simple meal');
+      expect(lastReply.compareDocumentPosition(trace) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('leaves the conversation untouched while the advanced view is off', async () => {
+      const onTrace = vi.fn<() => void>();
+      server.use(
+        ...baseHandlers(),
+        http.get(`${BASE_URL}/api/observability/traces/:traceId`, () => {
+          onTrace();
+          return HttpResponse.json(recordedRunTrace);
+        }),
+      );
+
+      renderThread(runMessages);
+
+      expect(await screen.findByText('Here is a simple meal')).toBeTruthy();
+      expect(screen.queryByRole('region', { name: 'Trace' })).toBeNull();
+      expect(onTrace).not.toHaveBeenCalled();
     });
   });
 

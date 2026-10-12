@@ -11,6 +11,7 @@ export type MetricsDateRange = { from?: Date; to?: Date };
  *  array field (matched via `has()` / equivalent on backends). */
 export type MetricsDimensionalFilter = {
   rootEntityType?: EntityType;
+  entityType?: EntityType;
   entityName?: string;
   tags?: string[];
   serviceName?: string;

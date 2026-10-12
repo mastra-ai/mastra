@@ -1,7 +1,6 @@
-import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
+import { CrumbSkeleton } from '@mastra/playground-ui/components/Breadcrumb';
 import { useDatasets } from '@mastra/react/hooks/datasets';
 import { useParams } from 'react-router';
-import { DatasetCombobox } from './components/dataset-combobox';
 
 export function DatasetCrumb() {
   const { datasetId } = useParams<{ datasetId: string }>();
@@ -11,11 +10,4 @@ export function DatasetCrumb() {
   if (isLoading) return <CrumbSkeleton />;
 
   return data?.datasets?.find(d => d.id === datasetId)?.name ?? datasetId;
-}
-
-export function DatasetSwitcher() {
-  const { datasetId } = useParams<{ datasetId: string }>();
-  if (!datasetId) return null;
-
-  return <DatasetCombobox value={datasetId} {...crumbSwitcherTriggerProps} aria-label="Switch dataset" />;
 }

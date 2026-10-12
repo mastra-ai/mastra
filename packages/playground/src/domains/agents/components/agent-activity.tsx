@@ -11,21 +11,14 @@ import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
-export function AgentActivity({ agentId, variant }: { agentId: string; variant: 'sidebar' | 'overview' }) {
+export function AgentActivity({ agentId }: { agentId: string }) {
   const { hasPermission, isLoading } = usePermissions();
   const { hasObservability } = useHasObservability();
   const [requestContext] = useEntityRequestContext('agent', agentId);
   const { data: agent } = useAgent({ agentId, requestContext });
   if (!agent || isLoading || !hasPermission('observability:read') || !coreFeatures.has('datasets')) return null;
   return (
-    <section
-      aria-label="Agent activity"
-      className={
-        variant === 'sidebar'
-          ? 'mt-auto shrink-0 border-t border-border p-4'
-          : 'min-w-0 rounded-xl border border-border bg-card p-4'
-      }
-    >
+    <section aria-label="Agent activity" className="min-w-0">
       {hasObservability ? (
         <ActivityStorageGate agentId={agentId} agentName={agent.name} />
       ) : (

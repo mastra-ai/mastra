@@ -43,16 +43,17 @@ export function AppSidebar() {
     setNavigationCommandOpen(true);
   };
 
-  const { items, bottomItems: filteredBottom } = useStudioDestinations();
+  const { items, libraryItems, bottomItems: filteredBottom } = useStudioDestinations();
+  const destinations = [...items, ...libraryItems];
   const visibilityStorageKey = useStudioAreaVisibility();
   const sections = [
     {
       key: STUDIO_AREA_SECTION_KEY,
       links: [],
-      moreLinks: items.map(item => ({
+      moreLinks: destinations.map(item => ({
         ...toSidebarLink(item),
-        isActive: getIsLinkActive(item, pathname, items),
-        defaultVisible: true,
+        isActive: getIsLinkActive(item, pathname, destinations),
+        defaultVisible: items.includes(item),
       })),
     },
   ];

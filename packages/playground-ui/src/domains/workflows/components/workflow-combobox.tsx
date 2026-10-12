@@ -2,6 +2,7 @@ import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { useEffect } from 'react';
 import { Combobox } from '@/ds/components/Combobox';
 import type { ComboboxProps } from '@/ds/components/Combobox';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/utils/toast';
 
@@ -47,6 +48,7 @@ export function WorkflowCombobox({
   const workflowOptions = Object.keys(workflows).map(key => ({
     label: workflows[key]?.name || key,
     value: key,
+    start: <WorkflowIcon className="size-4 shrink-0" />,
   }));
 
   const handleValueChange = (newWorkflowId: string) => {

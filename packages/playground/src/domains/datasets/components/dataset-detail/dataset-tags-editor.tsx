@@ -5,7 +5,7 @@ import { useDatasetMutations, useDataset, useDatasets } from '@mastra/react/hook
 import { Check, Tag, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-import { getAllDatasetTags } from '../datasets-list/helpers';
+import { getAllDatasetTags } from './dataset-tags';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 const CREATE_TAG_VALUE = '__create_tag__';

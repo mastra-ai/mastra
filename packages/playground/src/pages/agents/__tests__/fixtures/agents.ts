@@ -82,48 +82,4 @@ export const builderDisabled = {
   enabled: false,
 } satisfies BuilderSettingsResponse;
 
-export const longAgentInstructions =
-  'Investigate every available source and reconcile contradictory evidence before writing the final research summary.';
-
-export const agentsListWithLongInstructions: Record<string, GetAgentResponse> = {
-  researcher: {
-    ...agentsList.researcher,
-    instructions: longAgentInstructions,
-  },
-};
-
-export const unicodeBoundaryInstructions = `${'a'.repeat(79)}👩‍💻tail`;
-
-export const agentsListWithUnicodeBoundaryInstructions: Record<string, GetAgentResponse> = {
-  researcher: {
-    ...agentsList.researcher,
-    instructions: unicodeBoundaryInstructions,
-  },
-};
-
-export const agentsListWithoutInstructions: Record<string, GetAgentResponse> = {
-  researcher: {
-    ...agentsList.researcher,
-    instructions: '',
-  },
-};
-
-export const agentsListWithoutConfiguration: Record<string, GetAgentResponse> = {
-  researcher: {
-    ...agentsList.researcher,
-    instructions: '',
-    tools: {},
-    provider: undefined,
-    modelId: undefined,
-  },
-};
-
-export const longAgentName =
-  'Agent with an intentionally long descriptive name that should stay within its compact card';
-
-export const agentsListWithLongName: Record<string, GetAgentResponse> = {
-  researcher: {
-    ...agentsList.researcher,
-    name: longAgentName,
-  },
-};
+export const noAgents: Record<string, GetAgentResponse> = {};

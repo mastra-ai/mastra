@@ -1,5 +1,6 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Pause, Timer } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import type { WorkflowRunTiming } from '../context/workflow-step-timing';
@@ -71,12 +72,14 @@ export function RunWorkflowHeader({
   result,
   timestamp,
   resourceId,
+  action,
 }: {
   runId: string;
   status?: WorkflowRunStatus;
   result: WorkflowRunStreamResult | null;
   timestamp?: number;
   resourceId?: string;
+  action?: ReactNode;
 }) {
   const timing = resolveRunTiming(result?.steps, status);
 
@@ -96,6 +99,7 @@ export function RunWorkflowHeader({
         <div className="flex items-center gap-3">
           {timing?.waitingSince !== undefined && <RunWaiting since={timing.waitingSince} />}
           {timing && <RunDuration span={timing.span} spansSuspension={timing.spansSuspension} />}
+          {action}
         </div>
       </div>
       <div className="flex min-w-0 items-center gap-1 text-muted-foreground">

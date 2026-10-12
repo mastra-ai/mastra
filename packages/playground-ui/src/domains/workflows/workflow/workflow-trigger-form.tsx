@@ -15,8 +15,7 @@ export interface WorkflowTriggerFormProps {
   isProcessorWorkflow?: boolean;
   submitActions?: ReactNode;
   leftActions?: ReactNode;
-  headingSlot?: ReactNode;
-  collapsible?: boolean;
+  runHeading?: ReactNode;
   submitButtonLabel?: string;
 }
 
@@ -29,12 +28,11 @@ export function WorkflowTriggerForm({
   isProcessorWorkflow,
   submitActions,
   leftActions,
-  headingSlot,
-  collapsible,
+  runHeading,
   submitButtonLabel = 'Run',
 }: WorkflowTriggerFormProps) {
   if (isViewingRun) {
-    return headingSlot && <div className="pb-3">{headingSlot}</div>;
+    return runHeading && <div className="pb-3">{runHeading}</div>;
   }
 
   if (zodSchema) {
@@ -55,33 +53,30 @@ export function WorkflowTriggerForm({
         isProcessorWorkflow={isProcessorWorkflow}
         submitActions={submitActions}
         leftActions={leftActions}
-        headingSlot={headingSlot}
-        collapsible={collapsible}
+        collapsible={false}
+        hideHeading
       />
     );
   }
 
   return (
-    <>
-      {headingSlot && <div className="border-b border-border pb-3">{headingSlot}</div>}
-      <div className="flex items-center justify-between gap-1 pt-3">
-        {leftActions ?? <div />}
-        <div className="flex items-center gap-1">
-          {submitActions}
-          <Button variant="primary" disabled={isStreaming} onClick={() => onExecute(null)}>
-            {isStreaming ? (
-              <Icon>
-                <Loader2 className="animate-spin" />
-              </Icon>
-            ) : (
-              <Icon>
-                <Play />
-              </Icon>
-            )}
-            {submitButtonLabel}
-          </Button>
-        </div>
+    <div className="flex items-center justify-between gap-1 px-5 pt-3">
+      {leftActions ?? <div />}
+      <div className="flex items-center gap-1">
+        {submitActions}
+        <Button variant="primary" disabled={isStreaming} onClick={() => onExecute(null)}>
+          {isStreaming ? (
+            <Icon>
+              <Loader2 className="animate-spin" />
+            </Icon>
+          ) : (
+            <Icon>
+              <Play />
+            </Icon>
+          )}
+          {submitButtonLabel}
+        </Button>
       </div>
-    </>
+    </div>
   );
 }

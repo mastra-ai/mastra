@@ -6,9 +6,9 @@ test.afterEach(async () => {
 });
 
 /**
- * FEATURE: Datasets list infinite scroll
- * USER STORY: As a user with many datasets, I want the list to load more entries as I scroll
- *             so I can browse all datasets without manual pagination.
+ * FEATURE: Evaluate sidebar datasets list infinite scroll
+ * USER STORY: As a user with many datasets, I want the sidebar list to load more entries as I scroll
+ *             so I can open any dataset without manual pagination.
  * BEHAVIOR UNDER TEST: The list loads 20 datasets per page, fetches the next page when the
  *                      end-of-list sentinel scrolls into view, and search filters loaded rows.
  */
@@ -22,7 +22,9 @@ test.describe('Datasets list infinite scroll', () => {
 
       await page.goto('/datasets');
 
-      const datasetLinks = page.getByRole('link', { name: /E2E Dataset/ });
+      const datasetLinks = page
+        .getByRole('navigation', { name: 'Datasets list' })
+        .getByRole('link', { name: /E2E Dataset/ });
       await expect(datasetLinks).toHaveCount(20);
       for (const name of seededNames.slice(5)) {
         await expect(page.getByRole('link', { name: new RegExp(`^${name}\\b`) })).toHaveCount(1);
@@ -46,13 +48,15 @@ test.describe('Datasets list infinite scroll', () => {
 
       await page.goto('/datasets');
 
-      const datasetLinks = page.getByRole('link', { name: /E2E Dataset/ });
+      const datasetLinks = page
+        .getByRole('navigation', { name: 'Datasets list' })
+        .getByRole('link', { name: /E2E Dataset/ });
       await expect(datasetLinks).toHaveCount(12);
       for (const name of seededNames) {
         await expect(page.getByRole('link', { name: new RegExp(`^${name}\\b`) })).toHaveCount(1);
       }
 
-      await page.getByPlaceholder('Filter by dataset name').fill('E2E Dataset 12');
+      await page.getByPlaceholder('Search datasets…').fill('E2E Dataset 12');
 
       await expect(datasetLinks).toHaveCount(1);
       await expect(datasetLinks).toHaveText([/^E2E Dataset 12\b/]);

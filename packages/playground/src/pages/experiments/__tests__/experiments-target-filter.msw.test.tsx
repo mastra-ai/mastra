@@ -116,3 +116,20 @@ describe('Experiments page — target filter from URL', () => {
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/experiments'));
   });
 });
+
+describe('Experiments page — opened from a workflow', () => {
+  it('lists only that workflow’s experiments, without a target filter to change', async () => {
+    const calls = setupHandlers();
+    renderWithProviders(
+      <TestLinkProvider>
+        <ExperimentsPage scopedTarget={{ targetType: 'workflow', targetId: 'wf-1' }} />
+      </TestLinkProvider>,
+      { router: { initialEntries: ['/workflows/wf-1/evals'] } },
+    );
+
+    expect(await screen.findByText('entity-extraction / model-b')).toBeDefined();
+    expect(screen.queryByText('entity-extraction / model-a')).toBeNull();
+    expect(calls.globalQueries.at(-1)?.get('targetId')).toBe('wf-1');
+    expect(screen.queryByText('All targets')).toBeNull();
+  });
+});

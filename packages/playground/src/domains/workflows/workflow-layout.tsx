@@ -1,3 +1,4 @@
+import { coreFeatures } from '@mastra/core/features';
 import { ErrorBoundary } from '@mastra/playground-ui/components/ErrorBoundary';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
@@ -36,7 +37,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
 };
 
 const isWorkflowPageTab = (segment: string | undefined): segment is WorkflowPageTab =>
-  segment === 'graph' || segment === 'traces' || segment === 'schedules';
+  segment === 'graph' || segment === 'traces' || segment === 'evals' || segment === 'schedules';
 
 /** Shadows the global "go to" sequences with workflow-scoped targets while a workflow page is mounted. */
 const WorkflowShortcuts = ({ workflowId }: { workflowId: string }) => {
@@ -91,7 +92,12 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
     <PageLayout variant="fit" breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={<WorkflowHeader />}>
       <h1 className="sr-only">{workflowId}</h1>
       <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] grid-rows-[auto_minmax(0,1fr)]">
-        <WorkflowPageTabs workflowId={workflowId} activeTab={activeTab} showObservability={hasObservability} />
+        <WorkflowPageTabs
+          workflowId={workflowId}
+          activeTab={activeTab}
+          showObservability={hasObservability}
+          showEvals={coreFeatures.has('datasets')}
+        />
         {content}
       </div>
     </PageLayout>

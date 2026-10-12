@@ -2,22 +2,25 @@ import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { createContext, useContext } from 'react';
-import { createMemoryRouter, RouterProvider } from 'react-router';
+import { createContext, use, useContext } from 'react';
+import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { AgentDetailShell } from '../../agent-detail-shell';
-import { ThreadsPanelProvider } from '../../context/threads-panel-context';
+import { AgentShell } from '../../agent-shell';
 import { AgentWorkspaceView } from '../agent-workspace-view';
 import { semanticRecallConfig } from '../memory-sidebar/__tests__/fixtures/memory';
 import { workspacePackages } from './fixtures/agent-workspace';
 import { emptyPlatforms } from './fixtures/channels';
+import { FeatureWorkspaceLayout } from '@/components/feature-workspace-layout';
 import { writeDeniedCapabilities } from '@/domains/agents/hooks/__tests__/fixtures/auth';
 import { chatMemory, chatThreads } from '@/domains/chat/components/__tests__/fixtures/chat';
+import { MessageTracesContext } from '@/lib/ai-ui/message-traces-context';
 import { paths } from '@/lib/app-routing';
 import { Link } from '@/lib/link';
 import { agentsList, builderDisabled } from '@/pages/agents/__tests__/fixtures/agents';
 import { draftAuthDisabled } from '@/pages/agents/agent/__tests__/fixtures/drafts';
-import { aggregate, supportedStorage, unsupportedStorage } from '@/pages/metrics/__tests__/fixtures/metrics';
+import { aggregate, supportedStorage } from '@/pages/metrics/__tests__/fixtures/metrics';
+import { legacyTraceCapabilities } from '@/pages/traces/__tests__/fixtures/trace-query';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -30,6 +33,7 @@ function ChatView() {
     <ViewContext.Provider value="Thread-scoped settings">
       <AgentWorkspaceView navigation={<WorkingSection />}>
         <p>Chat content</p>
+        {use(MessageTracesContext) && <p>Message traces shown</p>}
       </AgentWorkspaceView>
     </ViewContext.Provider>
   );
@@ -45,17 +49,28 @@ function renderWorkspace(path = '/agents/researcher/threads/new') {
   const router = createMemoryRouter(
     [
       {
-        path: '/agents/:agentId',
         element: (
-          <ThreadsPanelProvider>
-            <AgentDetailShell />
-          </ThreadsPanelProvider>
+          <FeatureWorkspaceLayout>
+            <Outlet />
+          </FeatureWorkspaceLayout>
         ),
         children: [
-          { path: 'threads/new', element: <ChatView /> },
-          { path: 'overview', element: <ChatView /> },
-          { path: 'configuration', element: <ChatView /> },
-          { path: 'editor', element: <EditorView /> },
+          {
+            path: '/agents/:agentId',
+            handle: { navigationLabel: 'Agent navigation' },
+            element: <AgentShell />,
+            children: [
+              {
+                element: <AgentDetailShell />,
+                children: [
+                  { path: 'threads/new', element: <ChatView /> },
+                  { path: 'threads/:threadId', element: <ChatView /> },
+                  { path: 'overview', element: <ChatView /> },
+                  { path: 'editor', element: <EditorView /> },
+                ],
+              },
+            ],
+          },
         ],
       },
     ],
@@ -110,73 +125,71 @@ describe('Agent workspace composition', () => {
       expect(requests).toEqual([]);
     });
   });
-  describe('when metrics storage is unsupported', () => {
-    it('explains availability instead of querying or inventing zero metrics', async () => {
-      const requests: string[] = [];
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(unsupportedStorage)),
-        http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, ({ request }) => {
-          requests.push(request.url);
-          return HttpResponse.json(aggregate);
-        }),
-      );
-      renderWorkspace('/agents/researcher/overview');
-      expect(await screen.findByText('Activity metrics are not available with this storage.')).toBeTruthy();
-      expect(requests).toEqual([]);
-    });
-  });
   describe('when inspecting an agent', () => {
-    it('shows its recent chats and scopes its activity metrics to that agent', async () => {
-      const filters: unknown[] = [];
-      const threadQueries: URLSearchParams[] = [];
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/memory/threads`, ({ request }) => {
-          threadQueries.push(new URL(request.url).searchParams);
-          return HttpResponse.json(chatThreads);
-        }),
-        http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, async ({ request }) => {
-          filters.push(await request.json());
-          return HttpResponse.json({ ...aggregate, value: 12 });
-        }),
-      );
+    it('keeps every agent in the sidebar with the open one current', async () => {
       renderWorkspace('/agents/researcher/overview');
-      const navigation = await screen.findByRole('complementary', { name: 'Agent navigation' });
-      const chat = await within(navigation).findByRole('link', { name: 'Research notes' });
-      expect(chat.getAttribute('href')).toBe('/agents/researcher/threads/last-chat');
-      expect(threadQueries[0].get('agentId')).toBe('researcher');
-      expect(threadQueries[0].get('resourceId')).toBe('researcher');
-      expect(threadQueries[0].get('orderBy[field]')).toBe('updatedAt');
-      await within(navigation).findByText('12');
-      expect(filters.length).toBeGreaterThan(0);
-      for (const request of filters)
-        expect(request).toMatchObject({ filters: { rootEntityType: 'agent', entityName: 'Research Agent' } });
-      expect(within(navigation).queryByRole('navigation', { name: 'Agent resources' })).toBeNull();
+      const agents = await screen.findByRole('navigation', { name: 'Agents list' });
+      const openAgent = await within(agents).findByRole('link', { name: 'Research Agent' });
+      expect(openAgent.getAttribute('href')).toBe('/agents/researcher/overview');
+      expect(openAgent.getAttribute('aria-current')).toBe('page');
+      expect(within(agents).getByRole('link', { name: 'Analysis Agent' }).getAttribute('aria-current')).toBeNull();
+    });
+    it('keeps the same agents list when opening another agent', async () => {
+      server.use(http.get(`${TEST_BASE_URL}/api/agents/analyst`, () => HttpResponse.json(agentsList.analyst)));
+      renderWorkspace('/agents/researcher/overview');
+      const agents = await screen.findByRole('navigation', { name: 'Agents list' });
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search agents' }), { target: { value: 'a' } });
+      fireEvent.click(await within(agents).findByRole('link', { name: 'Analysis Agent' }));
+      await waitFor(() =>
+        expect(within(agents).getByRole('link', { name: 'Analysis Agent' }).getAttribute('aria-current')).toBe('page'),
+      );
+      expect(screen.getByRole('navigation', { name: 'Agents list' })).toBe(agents);
+      expect(screen.getByRole('searchbox', { name: 'Search agents' })).toHaveProperty('value', 'a');
     });
   });
   describe('when inspecting chat configuration', () => {
-    it('starts closed, opens in the chat and links to advanced agent configuration', async () => {
+    it('starts closed, docks beside the conversation and links to the agent overview', async () => {
       renderWorkspace();
       await screen.findByText('Chat content');
-      expect(screen.queryByRole('dialog', { name: 'Config' })).toBeNull();
+      expect(screen.queryByRole('complementary', { name: 'Config' })).toBeNull();
 
       fireEvent.click(screen.getByRole('button', { name: 'Config', exact: true }));
-      const config = await screen.findByRole('dialog', { name: 'Config' });
+      const config = await screen.findByRole('complementary', { name: 'Config' });
       expect(config.closest('main')).toBeTruthy();
+      expect(screen.getByText('Chat content')).toBeTruthy();
       expect(await within(config).findByText('System Prompt')).toBeTruthy();
-      fireEvent.click(within(config).getByRole('link', { name: 'Advanced config' }));
+      fireEvent.click(within(config).getByRole('link', { name: 'Open overview' }));
 
       await screen.findByRole('navigation', { name: 'Agent views' });
-      expect(screen.queryByRole('dialog', { name: 'Config' })).toBeNull();
-      expect(screen.getByRole('link', { name: 'Configuration', exact: true }).getAttribute('aria-current')).toBe(
-        'page',
-      );
+      expect(screen.queryByRole('complementary', { name: 'Config' })).toBeNull();
+      expect(screen.getByRole('link', { name: 'Overview', exact: true }).getAttribute('aria-current')).toBe('page');
     });
 
     it('can be dismissed without leaving the conversation', async () => {
       renderWorkspace();
       fireEvent.click(await screen.findByRole('button', { name: 'Config', exact: true }));
       fireEvent.click(await screen.findByRole('button', { name: 'Close Config' }));
-      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Config' })).toBeNull());
+      await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Config' })).toBeNull());
+      expect(screen.getByText('Chat content')).toBeTruthy();
+    });
+  });
+  describe('when turning on the advanced view', () => {
+    it('shows each message trace inside the conversation and keeps Config open', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(legacyTraceCapabilities)),
+      );
+      renderWorkspace('/agents/researcher/threads/thread-1');
+      fireEvent.click(await screen.findByRole('button', { name: 'Config', exact: true }));
+      await screen.findByRole('complementary', { name: 'Config' });
+
+      fireEvent.click(await screen.findByRole('switch', { name: 'Advanced view' }));
+
+      expect(await screen.findByText('Message traces shown')).toBeTruthy();
+      expect(screen.getByRole('complementary', { name: 'Config' })).toBeTruthy();
+      expect(screen.queryByRole('complementary', { name: 'Traces' })).toBeNull();
+
+      fireEvent.click(screen.getByRole('switch', { name: 'Advanced view' }));
+      await waitFor(() => expect(screen.queryByText('Message traces shown')).toBeNull());
       expect(screen.getByText('Chat content')).toBeTruthy();
     });
   });
@@ -191,21 +204,17 @@ describe('Agent workspace composition', () => {
     });
   });
   describe('when switching from Overview to Editor', () => {
-    it('keeps one sidebar and breadcrumb while replacing the working sections', async () => {
+    it('keeps the breadcrumb and view tabs while the Editor takes over the sidebar', async () => {
       renderWorkspace('/agents/researcher/overview');
-      const navigation = await screen.findByRole('complementary', { name: 'Agent navigation' });
-      await within(navigation).findByText('Thread-scoped settings');
-      const activeAgent = await within(navigation).findByRole('link', { name: 'Research Agent', exact: true });
-      expect(activeAgent.getAttribute('href')).toBe('/agents/researcher/overview');
-      expect(activeAgent.getAttribute('aria-current')).toBe('page');
-      expect(within(navigation).getByRole('link', { name: 'All agents' }).getAttribute('href')).toBe('/agents');
+      await screen.findByRole('navigation', { name: 'Agents list' });
       const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
-      fireEvent.click(await within(navigation).findByRole('link', { name: 'Editor', exact: true }));
+      const views = await screen.findByRole('navigation', { name: 'Agent views' });
+      expect(within(views).getByRole('link', { name: 'Overview' }).getAttribute('aria-current')).toBe('page');
+      fireEvent.click(within(views).getByRole('link', { name: 'Editor' }));
+      const navigation = await screen.findByRole('complementary', { name: 'Agent navigation' });
       expect(await within(navigation).findByText('Editor settings')).toBeTruthy();
-      expect(screen.queryByText('Thread-scoped settings')).toBeNull();
-      expect(screen.getByRole('complementary', { name: 'Agent navigation' })).toBe(navigation);
+      expect(screen.queryByRole('navigation', { name: 'Agents list' })).toBeNull();
       expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toBe(breadcrumb);
-      expect(within(navigation).getByRole('link', { name: 'Research Agent', exact: true })).toBe(activeAgent);
       expect(screen.getAllByRole('navigation', { name: 'Agent views' })).toHaveLength(1);
       expect(screen.getByText('Editor content').closest('aside')).toBeNull();
     });

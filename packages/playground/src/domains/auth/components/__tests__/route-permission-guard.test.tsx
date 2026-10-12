@@ -140,14 +140,14 @@ describe('RoutePermissionGuard', () => {
 
   it('redirects a denied user to their first accessible route', async () => {
     // User can only read agents but lands on /workflows, which they cannot
-    // access. The guard must redirect to /agents (their first accessible route)
+    // access. The guard must redirect to /chat (their first accessible route)
     // instead of leaking the denied route's children.
     server.use(authHandler(agentsOnlyCapabilities));
 
     renderGuard('/workflows');
 
     await waitFor(() => {
-      expect(navigateSpy).toHaveBeenCalledWith('/agents');
+      expect(navigateSpy).toHaveBeenCalledWith('/chat');
     });
     expect(screen.queryByTestId('protected-content')).toBeNull();
   });

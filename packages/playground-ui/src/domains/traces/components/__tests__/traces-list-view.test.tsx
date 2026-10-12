@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render as renderOutsidePage, screen } from '@testing-library/react';
+import type { ReactElement, ReactNode } from 'react';
 import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { TracesListView } from '../traces-list-view';
@@ -36,6 +37,12 @@ beforeAll(() => {
   // Base UI waits for the menu's exit animations; jsdom has no Web Animations API.
   Element.prototype.getAnimations ??= () => [];
 });
+
+function PageScroller({ children }: { children: ReactNode }) {
+  return <div style={{ overflowY: 'auto' }}>{children}</div>;
+}
+
+const render = (ui: ReactElement) => renderOutsidePage(ui, { wrapper: PageScroller });
 
 const timestamp = new Date('2026-06-10T00:00:00.000Z');
 
@@ -79,7 +86,9 @@ describe('TracesListView columns', () => {
       ]);
       expect(screen.queryByText('Created')).toBeNull();
       expect(screen.queryByText('Entity')).toBeNull();
-      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
+      expect(grid.style.gridTemplateColumns).toBe(
+        'minmax(0,11rem) minmax(0,7rem) minmax(0,14rem) minmax(8rem,1fr) minmax(0,6rem) minmax(0,7rem) minmax(0,8rem)',
+      );
     });
   });
 
@@ -107,7 +116,9 @@ describe('TracesListView columns', () => {
 
       const grid = container.querySelector<HTMLElement>('[style*="grid-template-columns"]');
       assert(grid);
-      expect(grid.style.gridTemplateColumns).toBe('11rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
+      expect(grid.style.gridTemplateColumns).toBe(
+        'minmax(0,11rem) minmax(8rem,1fr) minmax(0,6rem) minmax(0,7rem) minmax(0,8rem) minmax(0,8rem) minmax(0,8rem) minmax(0,14rem)',
+      );
     });
   });
 });

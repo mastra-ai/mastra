@@ -15,18 +15,6 @@ function getPlacement(placements: Placements, ...names: string[]) {
   return undefined;
 }
 
-function resourcesPlacement(placements: Placements) {
-  const canonical = getPlacement(placements, 'Resources');
-  if (canonical) return canonical;
-  const connections = getPlacement(placements, 'Connections');
-  const workspaces = getPlacement(placements, 'Workspaces');
-  if (!connections && !workspaces) return undefined;
-  // An uncustomized former area was visible by default. Preserve either visible entry.
-  if (!connections || !workspaces || connections === 'sidebar' || workspaces === 'sidebar') return 'sidebar';
-  if (connections === 'more' || workspaces === 'more') return 'more';
-  return 'hidden';
-}
-
 /** Migrate once before Sidebar.Sections reads storage; desktop and mobile share one namespace. */
 export function migrateStudioAreaVisibility() {
   try {
@@ -34,12 +22,15 @@ export function migrateStudioAreaVisibility() {
     const parsed = placementsSchema.safeParse(JSON.parse(localStorage.getItem(LEGACY_STORAGE_KEY) ?? '{}'));
     const legacy = parsed.success ? parsed.data : {};
     const placements: Placements = {};
+    const build = getPlacement(legacy, 'Build', 'Agents');
+    const monitor = getPlacement(legacy, 'Monitor', 'Observe');
     const choices = {
       Chat: getPlacement(legacy, 'Chat'),
-      Build: getPlacement(legacy, 'Build', 'Agents'),
+      Agents: build,
+      Workflows: build,
+      Traces: monitor,
       Evaluate: getPlacement(legacy, 'Evaluate'),
-      Monitor: getPlacement(legacy, 'Monitor', 'Observe'),
-      Resources: resourcesPlacement(legacy),
+      Logs: monitor,
     };
     for (const [name, placement] of Object.entries(choices)) {
       if (placement) placements[`${STUDIO_AREA_SECTION_KEY}:${name}`] = placement;

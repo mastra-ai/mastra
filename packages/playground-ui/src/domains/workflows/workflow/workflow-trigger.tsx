@@ -15,7 +15,6 @@ import { WorkflowRunError } from './workflow-run-error';
 import { RunWorkflowHeader } from './workflow-run-header';
 import { WorkflowTriggerForm } from './workflow-trigger-form';
 import type { WorkflowTriggerFormProps } from './workflow-trigger-form';
-import { InitialWorkflowHeader } from './workflow-trigger-header';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Txt } from '@/ds/components/Txt';
@@ -40,6 +39,7 @@ export type WorkflowTriggerProps = Pick<
   observeWorkflowStream?: (params: { workflowId: string; runId: string }) => void;
   requestContext: Record<string, any>;
   runActionsSlot?: (ctx: WorkflowRunActionsContext) => ReactNode;
+  runHeaderAction?: ReactNode;
   canExecute: boolean;
 };
 
@@ -62,6 +62,7 @@ export function WorkflowTrigger({
   cancelWorkflowRun,
   requestContext,
   runActionsSlot,
+  runHeaderAction,
   canExecute: canExecuteWorkflow,
 }: WorkflowTriggerProps) {
   const {
@@ -180,16 +181,15 @@ export function WorkflowTrigger({
       disabled={!canExecuteWorkflow}
     />
   );
-  const headingSlot = isViewingRun ? (
+  const runHeading = isViewingRun && (
     <RunWorkflowHeader
       runId={activeRunId}
       status={runStatus}
       result={streamResultToUse}
       timestamp={runSnapshot?.timestamp}
       resourceId={getRunResourceId(runSnapshot)}
+      action={runHeaderAction}
     />
-  ) : (
-    <InitialWorkflowHeader workflow={workflow} workflowId={workflowId} />
   );
 
   return (
@@ -216,8 +216,7 @@ export function WorkflowTrigger({
             }}
             isViewingRun={isViewingRun}
             isProcessorWorkflow={workflow?.isProcessorWorkflow}
-            collapsible={false}
-            headingSlot={headingSlot}
+            runHeading={runHeading}
             leftActions={!paramsRunId ? <WorkflowDebugModeSwitch /> : undefined}
             submitButtonLabel={isStarting ? 'Starting…' : 'Run'}
             submitActions={runActionsSlot?.({ resourceId, setResourceId })}

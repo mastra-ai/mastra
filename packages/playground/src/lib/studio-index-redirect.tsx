@@ -22,9 +22,8 @@ export const StudioIndexRedirect = () => {
 
   if (isPermissionsLoading) return null;
 
-  // If RBAC is disabled or not authenticated, go to /agents (default behavior)
   if (!rbacEnabled || !isAuthenticated) {
-    return <Navigate to="/agents" replace />;
+    return <Navigate to="/chat" replace />;
   }
 
   // Find the first route the user has permission to access

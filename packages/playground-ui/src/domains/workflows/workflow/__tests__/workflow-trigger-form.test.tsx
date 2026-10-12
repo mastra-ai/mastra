@@ -19,8 +19,7 @@ describe('WorkflowTriggerForm', () => {
           onExecute={vi.fn()}
           defaultValues={{ request: true }}
           isViewingRun
-          collapsible={false}
-          headingSlot={<div data-testid="heading-slot">heading</div>}
+          runHeading={<div data-testid="heading-slot">heading</div>}
           leftActions={<div data-testid="left-actions">debug</div>}
           submitActions={<div data-testid="submit-actions">options</div>}
         />,
@@ -42,7 +41,6 @@ describe('WorkflowTriggerForm', () => {
           isStreaming={false}
           onExecute={onExecute}
           defaultValues={{ request: true }}
-          collapsible={false}
         />,
       );
 
@@ -53,17 +51,12 @@ describe('WorkflowTriggerForm', () => {
   });
 
   describe('when preparing a new run without an input schema', () => {
-    it('keeps the workflow header above the Run button', () => {
-      render(
-        <WorkflowTriggerForm
-          zodSchema={null}
-          isStreaming={false}
-          onExecute={vi.fn()}
-          headingSlot={<div>Workflow header</div>}
-        />,
-      );
-      expect(screen.getByText('Workflow header')).not.toBeNull();
-      expect(screen.getByRole('button', { name: /^run$/i })).not.toBeNull();
+    it('runs the workflow without input', () => {
+      const onExecute = vi.fn();
+      render(<WorkflowTriggerForm zodSchema={null} isStreaming={false} onExecute={onExecute} />);
+
+      fireEvent.click(screen.getByRole('button', { name: /^run$/i }));
+      expect(onExecute).toHaveBeenCalledWith(null);
     });
   });
 
@@ -75,7 +68,7 @@ describe('WorkflowTriggerForm', () => {
           isStreaming={false}
           onExecute={vi.fn()}
           isViewingRun
-          headingSlot={<div>Paused run</div>}
+          runHeading={<div>Paused run</div>}
         />,
       );
       expect(screen.getByText('Paused run')).not.toBeNull();

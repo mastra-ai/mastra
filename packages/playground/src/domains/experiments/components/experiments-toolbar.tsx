@@ -6,8 +6,8 @@ import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { GitCompare, Play, XIcon, X } from 'lucide-react';
 import { EXPERIMENT_STATUS_OPTIONS } from './experiments-list-options';
-import type { DatasetTargetType } from '@/domains/datasets/components/target-type-options';
 import { TargetFilter } from '@/domains/shared/components/target-filter';
+import type { TargetFilterProps } from '@/domains/shared/components/target-filter';
 
 export interface ExperimentsToolbarDatasetOption {
   value: string;
@@ -19,13 +19,10 @@ export interface ExperimentsToolbarProps {
   onSearchChange: (query: string) => void;
   statusFilter: string;
   onStatusFilterChange: (value: string) => void;
-  datasetFilter: string;
-  onDatasetFilterChange: (value: string) => void;
-  datasetOptions: ExperimentsToolbarDatasetOption[];
-  targetType: DatasetTargetType | '';
-  onTargetTypeChange: (type: DatasetTargetType | '') => void;
-  targetId: string;
-  onTargetIdChange: (id: string) => void;
+  /** Omitted when the list already belongs to one dataset. */
+  datasetFilter?: ExperimentsToolbarDatasetFilter;
+  /** Omitted when the list already belongs to one agent or workflow. */
+  targetFilter?: TargetFilterProps;
   onReset?: () => void;
   hasActiveFilters?: boolean;
   onRunClick?: () => void;
@@ -34,6 +31,12 @@ export interface ExperimentsToolbarProps {
   onCompareClick?: () => void;
   /** When provided, the comparison selection controls replace the Compare/Run actions. */
   selection?: ExperimentsToolbarSelection;
+}
+
+export interface ExperimentsToolbarDatasetFilter {
+  value: string;
+  onChange: (value: string) => void;
+  options: ExperimentsToolbarDatasetOption[];
 }
 
 export interface ExperimentsToolbarSelection {
@@ -50,12 +53,7 @@ export function ExperimentsToolbar({
   statusFilter,
   onStatusFilterChange,
   datasetFilter,
-  onDatasetFilterChange,
-  datasetOptions,
-  targetType,
-  onTargetTypeChange,
-  targetId,
-  onTargetIdChange,
+  targetFilter,
   onReset,
   hasActiveFilters,
   onRunClick,
@@ -88,24 +86,21 @@ export function ExperimentsToolbar({
             ))}
           </SelectContent>
         </Select>
-        <Select value={datasetFilter} onValueChange={onDatasetFilterChange}>
-          <SelectTrigger aria-label="Dataset" size="md" className="whitespace-nowrap">
-            <SelectValue placeholder="Select an option" />
-          </SelectTrigger>
-          <SelectContent>
-            {datasetOptions.map(option => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <TargetFilter
-          targetType={targetType}
-          targetId={targetId}
-          onTargetTypeChange={onTargetTypeChange}
-          onTargetIdChange={onTargetIdChange}
-        />
+        {datasetFilter && (
+          <Select value={datasetFilter.value} onValueChange={datasetFilter.onChange}>
+            <SelectTrigger aria-label="Dataset" size="md" className="whitespace-nowrap">
+              <SelectValue placeholder="Select an option" />
+            </SelectTrigger>
+            <SelectContent>
+              {datasetFilter.options.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {targetFilter && <TargetFilter {...targetFilter} />}
         {onReset && hasActiveFilters && (
           <Button onClick={onReset} size="sm" variant="default" icon={<XIcon />}>
             Reset

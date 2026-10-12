@@ -480,7 +480,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   }
 
   return (
-    <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+    <PageLayout variant="catalog" breadcrumbs={breadcrumbs} actionRow={actionRow}>
       <h1 className="sr-only">Traces</h1>
       <TracesListView
         traces={traces}
@@ -496,6 +496,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         createdSort={sortDirection}
         onSortChange={onSortChange}
         onFilterByField={handleFilterByField}
+        variant="light"
         onTraceClick={trace => {
           const isBranches = url.listMode === 'branches';
           const isSameRow = isBranches

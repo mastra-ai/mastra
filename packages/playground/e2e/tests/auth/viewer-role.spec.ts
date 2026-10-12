@@ -73,7 +73,7 @@ test.describe('Viewer Role', () => {
       await expectCurrentBreadcrumb(page, 'Agents');
 
       // Should see agents in the list
-      await expect(page.getByText('Weather Agent')).toBeVisible();
+      await expect(page.locator('[data-slot=data-list]').getByRole('link', { name: /^Weather Agent/ })).toBeVisible();
     });
 
     test('viewer can access agent details page', async ({ page }) => {
@@ -81,7 +81,10 @@ test.describe('Viewer Role', () => {
       await page.goto('/agents');
 
       // Click on the weather agent
-      await page.getByText('Weather Agent').click();
+      await page
+        .locator('[data-slot=data-list]')
+        .getByRole('link', { name: /^Weather Agent/ })
+        .click();
 
       // Should be on agent details page
       await expect(page).toHaveURL(/\/agents\/weather-agent/);

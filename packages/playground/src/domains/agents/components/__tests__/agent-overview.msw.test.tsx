@@ -1,11 +1,10 @@
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { AgentConfiguration } from '../agent-configuration';
 import { AgentOverview } from '../agent-overview';
-import { AgentResourcePage } from '../agent-resource-page';
+import { AgentConfigurationRedirect, AgentResourcePage } from '../agent-resource-page';
 import { semanticRecallConfig } from '../memory-sidebar/__tests__/fixtures/memory';
 import { workspacePackages } from './fixtures/agent-workspace';
 import { emptyPlatforms } from './fixtures/channels';
@@ -50,7 +49,7 @@ describe('Agent overview', () => {
       const router = createMemoryRouter(
         [
           { path: '/agents/:agentId/overview', element: <AgentOverview /> },
-          { path: '/agents/:agentId/configuration', element: <AgentConfiguration /> },
+          { path: '/agents/:agentId/configuration', element: <AgentConfigurationRedirect /> },
           { path: '/agents/:agentId/resources/:resource', element: <AgentResourcePage /> },
         ],
         { initialEntries: ['/agents/researcher/resources/tools?tool=search'] },
@@ -66,39 +65,37 @@ describe('Agent overview', () => {
       expect(screen.getByRole('link', { name: 'Inspect and test search' }).getAttribute('href')).toContain(
         'tool=search',
       );
-      await waitFor(() => expect(router.state.location.pathname).toBe('/agents/researcher/configuration'));
+      expect(screen.getByRole('link', { name: 'Browse all tools' }).getAttribute('href')).toBe('/tools');
+      await waitFor(() => expect(router.state.location.pathname).toBe('/agents/researcher/overview'));
       expect(router.state.location.search).toBe('?tool=search');
       expect(router.state.location.hash).toBe('#tools');
     });
   });
   describe('when opening the agent overview', () => {
-    it('summarizes named capabilities and keeps detailed configuration in its own workspace view', async () => {
+    it('shows the model, tools, prompt and delegated agents on one page with section anchors', async () => {
       server.use(
         http.get(`${TEST_BASE_URL}/api/agents/researcher`, () => HttpResponse.json(agentsListWithSubagent.researcher)),
       );
-      const router = createMemoryRouter(
-        [
-          { path: '/agents/:agentId/overview', element: <AgentOverview /> },
-          { path: '/agents/:agentId/configuration', element: <AgentConfiguration /> },
-          { path: '/agents/:agentId/metrics', element: <Destination /> },
-        ],
-        { initialEntries: ['/agents/researcher/overview'] },
-      );
+      const router = createMemoryRouter([{ path: '/agents/:agentId/overview', element: <AgentOverview /> }], {
+        initialEntries: ['/agents/researcher/overview'],
+      });
       renderWithProviders(
         <LinkComponentProvider Link={Link} paths={paths} navigate={to => void router.navigate(to)}>
           <RouterProvider router={router} />
         </LinkComponentProvider>,
       );
       expect(await screen.findByText('gpt-4o-mini')).toBeTruthy();
-      expect(screen.getByRole('link', { name: /search Search the web/ }).getAttribute('href')).toBe(
-        '/agents/researcher/configuration?tool=search#tools',
+      expect(screen.getByRole('link', { name: 'Inspect and test search' }).getAttribute('href')).toContain(
+        'tool=search',
       );
       expect(screen.getByRole('link', { name: /Analysis Agent/ }).getAttribute('href')).toBe(
         '/agents/analyst/overview',
       );
-      expect(screen.queryByRole('navigation', { name: 'Configuration sections' })).toBeNull();
-      fireEvent.click(screen.getByRole('link', { name: 'Configuration', exact: true }));
-      expect(await screen.findByRole('navigation', { name: 'Configuration sections' })).toBeTruthy();
+      const sections = screen.getByRole('navigation', { name: 'Configuration sections' });
+      expect(within(sections).getByRole('link', { name: 'Tools' }).getAttribute('href')).toBe(
+        '/agents/researcher/overview#tools',
+      );
+      expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     });
   });
   describe('when activity data is available', () => {
@@ -148,38 +145,38 @@ describe('Agent overview', () => {
       expect(requests).toEqual([]);
     });
   });
-  describe('when opening a legacy overview configuration bookmark', () => {
-    it('preserves the inspection query and navigates to the corresponding configuration section', async () => {
+  describe('when opening a legacy configuration bookmark', () => {
+    it('lands on the overview section with the inspection query intact', async () => {
       server.use(
         http.get(`${TEST_BASE_URL}/api/agents/researcher`, () => HttpResponse.json(agentsListWithWorkflow.researcher)),
       );
       const router = createMemoryRouter(
         [
           { path: '/agents/:agentId/overview', element: <AgentOverview /> },
-          { path: '/agents/:agentId/configuration', element: <AgentConfiguration /> },
+          { path: '/agents/:agentId/configuration', element: <AgentConfigurationRedirect /> },
         ],
-        { initialEntries: ['/agents/researcher/overview?tool=search#tools'] },
+        { initialEntries: ['/agents/researcher/configuration?tool=search#tools'] },
       );
       renderWithProviders(
         <LinkComponentProvider Link={Link} paths={paths} navigate={to => void router.navigate(to)}>
           <RouterProvider router={router} />
         </LinkComponentProvider>,
       );
-      await waitFor(() => expect(router.state.location.pathname).toBe('/agents/researcher/configuration'));
+      await waitFor(() => expect(router.state.location.pathname).toBe('/agents/researcher/overview'));
       expect(router.state.location.search).toBe('?tool=search');
       expect(router.state.location.hash).toBe('#tools');
       expect(await screen.findByRole('link', { name: 'Inspect and test search' })).toBeTruthy();
     });
   });
   describe('when the agent has attached workflows', () => {
-    it('opens the selected workflow from its visual resource card', async () => {
+    it('opens the selected workflow from its row', async () => {
       server.use(
         http.get(`${TEST_BASE_URL}/api/agents/researcher`, () => HttpResponse.json(agentsListWithWorkflow.researcher)),
       );
       const router = createMemoryRouter(
         [
           { path: '/agents/:agentId/overview', element: <AgentOverview /> },
-          { path: '/agents/:agentId/configuration', element: <AgentConfiguration /> },
+          { path: '/agents/:agentId/configuration', element: <AgentConfigurationRedirect /> },
           { path: '/workflows/:workflowId', element: <Destination /> },
         ],
         { initialEntries: ['/agents/researcher/overview'] },
@@ -189,7 +186,7 @@ describe('Agent overview', () => {
           <RouterProvider router={router} />
         </LinkComponentProvider>,
       );
-      fireEvent.click(await screen.findByRole('link', { name: 'Open workflow Summary workflow' }));
+      fireEvent.click(await screen.findByRole('link', { name: /^Summary workflow/ }));
       expect(await screen.findByText('/workflows/summarize')).toBeTruthy();
     });
   });

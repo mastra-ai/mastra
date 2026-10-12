@@ -1,10 +1,10 @@
 import type { ComponentType, ReactNode, SVGProps } from 'react';
 import { AgentCrumb, AgentSwitcher } from '@/domains/agents/agent-crumb';
-import { DatasetCrumb, DatasetSwitcher } from '@/domains/datasets/dataset-crumb';
+import { DatasetCrumb } from '@/domains/datasets/dataset-crumb';
 import { McpServerCrumb, McpServerSwitcher } from '@/domains/mcps/mcp-crumbs';
 import { ProcessorCrumb, ProcessorSwitcher } from '@/domains/processors/processor-crumb';
 import { ScorerCrumb, ScorerSwitcher } from '@/domains/scores/scorer-crumb';
-import { WorkflowCrumb, WorkflowSwitcher } from '@/domains/workflows/workflow-crumbs';
+import { WorkflowCrumb } from '@/domains/workflows/workflow-crumbs';
 import { findNavItem } from '@/lib/nav/nav-items';
 
 export type CrumbIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -72,10 +72,8 @@ export const mcpServerCrumb = {
 export const workflowCrumb = {
   id: 'workflow',
   Component: WorkflowCrumb,
-  Switcher: WorkflowSwitcher,
 } satisfies CrumbDef;
 export const datasetCrumb = {
   id: 'dataset',
   Component: DatasetCrumb,
-  Switcher: DatasetSwitcher,
 } satisfies CrumbDef;

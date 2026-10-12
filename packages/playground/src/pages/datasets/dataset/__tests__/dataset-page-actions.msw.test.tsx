@@ -41,15 +41,16 @@ function renderPage() {
   );
 }
 
-describe('DatasetPage actions', () => {
-  it('places "View experiments" next to "Run Experiment" in the header actions', async () => {
+describe('DatasetPage views', () => {
+  it('shows the items and links the experiments run on this dataset', async () => {
     renderPage();
 
-    const runButton = await screen.findByRole('button', { name: /run experiment/i });
-    const link = within(runButton.parentElement as HTMLElement).getByRole('link', { name: /view experiments/i });
+    const views = await screen.findByRole('navigation', { name: 'Dataset views' });
 
-    expect(link.getAttribute('href')).toBe(`/experiments?dataset=${DATASET_ID}`);
-    // Order: View experiments → version selector → Run Experiment.
-    expect(link.compareDocumentPosition(runButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(views).getByRole('link', { name: 'Items' }).getAttribute('aria-current')).toBe('page');
+    expect(within(views).getByRole('link', { name: 'Experiments' }).getAttribute('href')).toBe(
+      `/datasets/${DATASET_ID}/experiments`,
+    );
+    expect(screen.queryByRole('link', { name: /view experiments/i })).toBeNull();
   });
 });

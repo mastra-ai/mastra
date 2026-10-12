@@ -1,6 +1,7 @@
 import { DisabledFeatureButton } from '@mastra/playground-ui/components/DisabledFeatureButton';
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
@@ -8,13 +9,14 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useSchedules } from '@mastra/react/hooks/schedules';
 import { CalendarClockIcon } from 'lucide-react';
 
-export type WorkflowPageTab = 'graph' | 'traces' | 'schedules';
+export type WorkflowPageTab = 'graph' | 'traces' | 'evals' | 'schedules';
 
 interface WorkflowPageTabsProps {
   workflowId: string;
   /** `'none'` leaves the bar unhighlighted. */
   activeTab: WorkflowPageTab | 'none';
   showObservability?: boolean;
+  showEvals?: boolean;
 }
 
 function WorkflowTab({ value, icon, label }: { value: WorkflowPageTab; icon: React.ReactNode; label: string }) {
@@ -28,7 +30,12 @@ function WorkflowTab({ value, icon, label }: { value: WorkflowPageTab; icon: Rea
   );
 }
 
-export function WorkflowPageTabs({ workflowId, activeTab, showObservability = false }: WorkflowPageTabsProps) {
+export function WorkflowPageTabs({
+  workflowId,
+  activeTab,
+  showObservability = false,
+  showEvals = false,
+}: WorkflowPageTabsProps) {
   const { navigate } = useLinkComponent();
   const { data: schedules, isSuccess: schedulesLoaded } = useSchedules({ workflowId });
   const scheduleCount = schedules?.length ?? 0;
@@ -37,6 +44,7 @@ export function WorkflowPageTabs({ workflowId, activeTab, showObservability = fa
   const hrefMap: Record<WorkflowPageTab, string> = {
     graph: `/workflows/${encodedWorkflowId}/graph`,
     traces: `/workflows/${encodedWorkflowId}/traces`,
+    evals: `/workflows/${encodedWorkflowId}/evals`,
     schedules: `/workflows/${encodedWorkflowId}/schedules`,
   };
 
@@ -53,6 +61,7 @@ export function WorkflowPageTabs({ workflowId, activeTab, showObservability = fa
         <TabList variant="pill-ghost">
           <WorkflowTab value="graph" icon={<WorkflowIcon />} label="Graph" />
           {showObservability && <WorkflowTab value="traces" icon={<TraceIcon />} label="Traces" />}
+          {showEvals && <WorkflowTab value="evals" icon={<ExperimentsIcon />} label="Evals" />}
           {!schedulesDisabled && (
             <WorkflowTab
               value="schedules"

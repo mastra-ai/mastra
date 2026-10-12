@@ -30,11 +30,7 @@ export function PlaygroundModelProvider({
   defaultProvider = '',
   defaultModel = '',
 }: PlaygroundModelProviderProps) {
-  const [selection, setSelection] = useState<ModelSelection>({
-    provider: defaultProvider,
-    model: defaultModel,
-    explicit: false,
-  });
+  const [selection, setSelection] = useState<ModelSelection>();
 
   const selectProvider = (nextProvider: string) => {
     setSelection({ provider: nextProvider, model: '', explicit: false });
@@ -44,7 +40,11 @@ export function PlaygroundModelProvider({
     setSelection({ provider: nextProvider, model: nextModel, explicit: true });
   };
 
-  const { provider, model, explicit } = selection;
+  const { provider, model, explicit } = selection ?? {
+    provider: defaultProvider,
+    model: defaultModel,
+    explicit: false,
+  };
   const modelOverride = explicit ? `${provider}/${model}` : undefined;
 
   return (

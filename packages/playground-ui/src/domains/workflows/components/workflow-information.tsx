@@ -1,20 +1,18 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { useWorkflow } from '@mastra/react/hooks/workflows';
-import { ChevronRight, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import type { ContextType, ReactNode } from 'react';
-import { useEffect, useContext, useState } from 'react';
+import { useEffect, useContext } from 'react';
 
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowRunDetail } from '../runs/workflow-run-details';
 import { WorkflowRecentRuns } from '../runs/workflow-run-list';
-import { WorkflowRunStatusBadge } from '../workflow/workflow-run-header';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
 import type { WorkflowRunActionsContext } from '../workflow/workflow-trigger';
 import { panelSurfaceStyle, WorkflowPanelResizeHandle } from './workflow-layout';
 
 import { Button } from '@/ds/components/Button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
@@ -45,6 +43,7 @@ type InitialWorkflowSidebarProps = WorkflowActionProps & {
   workflowId: string;
   requestContext: Record<string, any>;
   runActionsSlot?: (ctx: WorkflowRunActionsContext) => ReactNode;
+  runHeaderAction?: ReactNode;
   canExecute: boolean;
   workflow?: GetWorkflowResponse;
   isLoading: boolean;
@@ -80,9 +79,8 @@ function NewWorkflowRunButton({ workflowId, onClick }: { workflowId: string; onC
   return (
     <Button
       render={<Link href={`${paths.workflowLink(workflowId)}/graph`} />}
-
       variant="ghost"
-      size="icon-md"
+      size="icon-sm"
       tooltip="New workflow run"
       onClick={onClick}
     >
@@ -91,59 +89,24 @@ function NewWorkflowRunButton({ workflowId, onClick }: { workflowId: string; onC
   );
 }
 
-function WorkflowInformationTopSection({
-  children,
-  workflowId,
-  showNewRunButton,
-  onNewRun,
-  embedded,
-}: {
-  children: ReactNode;
-  workflowId: string;
-  showNewRunButton: boolean;
-  onNewRun: () => void;
-  embedded: boolean;
-}) {
-  const { result } = useContext(WorkflowRunContext);
-  const [isOpen, setIsOpen] = useState(true);
+function WorkflowInformationTopSection({ children, embedded }: { children: ReactNode; embedded: boolean }) {
   return (
     <FloatingPanel embedded={embedded} className={embedded ? 'min-h-0 flex-1' : 'max-h-[75%] flex-initial'}>
-      <Collapsible
-        render={<section />}
-        open={isOpen}
-        onOpenChange={setIsOpen}
+      <section
         data-testid="workflow-information-top-section"
         className={cn(
           embedded ? 'pointer-events-auto border-b border-border bg-card' : FLOATING_PANEL_SURFACE,
           'flex min-h-0 min-w-0 flex-col overflow-hidden',
         )}
       >
-        <div className="flex shrink-0 items-center gap-1 pr-2">
-          <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-column text-muted-foreground">
-            <ChevronRight aria-hidden className="size-4 shrink-0 text-muted-foreground motion-reduce:transition-none" />
-            <span>Workflow run</span>
-            {!isOpen && result?.status && <WorkflowRunStatusBadge status={result.status} />}
-          </CollapsibleTrigger>
-          {showNewRunButton && (
-            <NewWorkflowRunButton
-              workflowId={workflowId}
-              onClick={() => {
-                setIsOpen(true);
-                onNewRun();
-              }}
-            />
-          )}
-        </div>
-        <CollapsibleContent keepMounted fill className="flex min-h-0 flex-col">
-          <ScrollArea
-            data-testid="workflow-information-top-scroll-area"
-            className="min-h-0 flex-1 border-t border-border"
-            mask={{ top: false, bottom: false }}
-          >
-            <ScrollAreaViewport className="h-full">{children}</ScrollAreaViewport>
-          </ScrollArea>
-        </CollapsibleContent>
-      </Collapsible>
+        <ScrollArea
+          data-testid="workflow-information-top-scroll-area"
+          className="min-h-0 flex-1"
+          mask={{ top: false, bottom: false }}
+        >
+          <ScrollAreaViewport className="h-full">{children}</ScrollAreaViewport>
+        </ScrollArea>
+      </section>
     </FloatingPanel>
   );
 }
@@ -216,6 +179,11 @@ export function WorkflowInformation({
 
   const activeRunId = initialRunId || contextRunId;
 
+  const resetToNewRun = () => {
+    clearData();
+    setSelectedStepId(null);
+  };
+
   const actionProps = {
     workflowId,
     workflow: workflow ?? undefined,
@@ -229,6 +197,7 @@ export function WorkflowInformation({
     requestContext,
     runActionsSlot,
     canExecute,
+    runHeaderAction: <NewWorkflowRunButton workflowId={workflowId} onClick={resetToNewRun} />,
   };
 
   useEffect(() => {
@@ -251,11 +220,6 @@ export function WorkflowInformation({
     );
   }
 
-  const resetToNewRun = () => {
-    clearData();
-    setSelectedStepId(null);
-  };
-
   return (
     <div
       data-testid="workflow-information-panel"
@@ -264,12 +228,7 @@ export function WorkflowInformation({
         !embedded && 'pointer-events-none gap-2 p-2',
       )}
     >
-      <WorkflowInformationTopSection
-        embedded={embedded}
-        workflowId={workflowId}
-        showNewRunButton={Boolean(activeRunId)}
-        onNewRun={resetToNewRun}
-      >
+      <WorkflowInformationTopSection embedded={embedded}>
         {initialRunId ? (
           <RunWorkflowSidebar {...actionProps} runId={initialRunId} observeWorkflowStream={observeWorkflowStream} />
         ) : (

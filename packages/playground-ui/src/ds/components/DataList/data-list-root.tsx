@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode, RefObject } from 'react';
+import type { CSSProperties, ReactNode, Ref } from 'react';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea/scroll-area';
 import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
 import { FluidMenuItems, useFluidMenu } from '@/ds/primitives/fluid-menu';
@@ -25,7 +25,11 @@ export type DataListFit = 'content' | 'container';
  */
 export type DataListVariant = 'default' | 'light';
 
-/** Self-contained lists scroll both axes; page lists grow vertically and only scroll horizontally. */
+/**
+ * Self-contained lists scroll both axes; page lists grow vertically and only scroll horizontally.
+ * A page list with `fit="container"` never overflows, so it has no scroll container of its own
+ * and its sticky header pins to the page scroller (virtualize with `useDataListPageVirtualizer`).
+ */
 export type DataListScroll = 'self' | 'page';
 
 export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation' | 'mask'> & {
@@ -44,10 +48,10 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
   mask?: ScrollAreaMask;
   /**
    * Ref to the scroll container — pass this to TanStack Virtual's
-   * `getScrollElement` when virtualizing. Without it, the ScrollArea viewport
-   * scrolls normally.
+   * `getScrollElement` when virtualizing. Page lists with `fit="container"`
+   * have none, so it points at the list itself.
    */
-  scrollRef?: RefObject<HTMLDivElement | null>;
+  scrollRef?: Ref<HTMLDivElement>;
 };
 
 type DataListRootStyle = CSSProperties & {
@@ -155,6 +159,20 @@ export function DataListRoot({
     </div>
   );
 
+  if (scroll === 'page' && fit === 'container') {
+    return (
+      <div
+        ref={scrollRef}
+        data-slot="data-list"
+        data-scroll={scroll}
+        data-pins-to-page=""
+        className={cn('w-full self-start rounded-xl p-1', dataListVariantClasses[variant], className)}
+      >
+        {grid}
+      </div>
+    );
+  }
+
   // DataList uses the DS ScrollArea: an overlay scrollbar, so the sticky header
   // spans the full width. Masks default to every overflowing edge except the
   // top — a top fade would fade the opaque sticky header.
@@ -171,7 +189,7 @@ export function DataListRoot({
       // compact and long ones shrink the viewport and scroll. `self-start` stops
       // a grid/flex parent from stretching the root to the full row height.
       className={cn(
-        'flex w-full flex-col self-start rounded-xl p-1',
+        'flex w-full flex-col self-start rounded-xl p-1 [--page-layout-sticky-top:0px]',
         scroll === 'self' && 'max-h-full',
         dataListVariantClasses[variant],
         className,

@@ -1,445 +1,205 @@
-// @vitest-environment jsdom
+import type { MastraClient } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
-import type { LinkComponentProviderProps } from '@mastra/playground-ui/lib/framework';
-import { MastraReactProvider } from '@mastra/react';
-import type { AuthCapabilities } from '@mastra/react/hooks/auth';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { forwardRef } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { createMemoryRouter, RouterProvider } from 'react-router';
+import { beforeEach, describe, expect, it } from 'vitest';
 import AgentsPage from '..';
+import { noAgents } from './fixtures/agents';
 import {
-  agentsList,
-  agentsListWithSubagent,
-  agentsListWithWorkflow,
-  agentsListWithLongInstructions,
-  agentsListWithLongName,
-  agentsListWithoutConfiguration,
-  agentsListWithoutInstructions,
-  agentsListWithUnicodeBoundaryInstructions,
-  builderDisabled,
-  longAgentInstructions,
-  longAgentName,
-  unicodeBoundaryInstructions,
-} from './fixtures/agents';
+  agentLatencyByName,
+  agentLatencyTotal,
+  agentRunsOverTime,
+  currentAgentRuns,
+  currentQuality,
+  noScorers,
+  observabilityOff,
+  observabilityOn,
+  previousAgentRunsWithFewerErrors,
+  previousQuality,
+  qualityScorer,
+  storageWithMetrics,
+  threeAgents,
+  tokensByAgent,
+  tokenTotals,
+} from './fixtures/agents-overview';
+import { paths } from '@/lib/app-routing';
+import { Link } from '@/lib/link';
 import { server } from '@/test/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
-const BASE_URL = 'http://localhost:4111';
+type Breakdown = Awaited<ReturnType<MastraClient['getMetricBreakdown']>>;
 
-const StubLink = forwardRef<HTMLAnchorElement, React.AnchorHTMLAttributes<HTMLAnchorElement>>(
-  function StubLink(props, ref) {
-    return <a ref={ref} {...props} />;
-  },
-);
+const ONE_HOUR_MS = 60 * 60 * 1000;
+const agentNames = ['Writer Agent', 'Research Agent', 'Analysis Agent'];
 
-const paths = {
-  agentLink: (agentId: string) => `/agents/${agentId}`,
-  agentsLink: () => '/agents',
-  agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
-  agentSkillLink: (agentId: string, skillName: string) => `/agents/${agentId}/skills/${skillName}`,
-  agentThreadLink: (agentId: string, threadId: string) => `/agents/${agentId}/chat/${threadId}`,
-  agentNewThreadLink: (agentId: string) => `/agents/${agentId}/chat/new`,
-  workflowsLink: () => '/workflows',
-  workflowLink: (workflowId: string) => `/workflows/${workflowId}`,
-  schedulesLink: () => '/schedules',
-  scheduleLink: (scheduleId: string) => `/schedules/${scheduleId}`,
-  networkLink: (networkId: string) => `/networks/${networkId}`,
-  networkNewThreadLink: (networkId: string) => `/networks/${networkId}/chat/new`,
-  networkThreadLink: (networkId: string, threadId: string) => `/networks/${networkId}/chat/${threadId}`,
-  scorerLink: (scorerId: string) => `/scorers/${scorerId}`,
-  cmsScorersCreateLink: () => '/cms/scorers/create',
-  cmsScorerEditLink: (scorerId: string) => `/cms/scorers/${scorerId}`,
-  cmsAgentCreateLink: () => '/cms/agents/create',
-  cmsAgentEditLink: (agentId: string) => `/cms/agents/${agentId}`,
-  promptBlockLink: (promptBlockId: string) => `/prompt-blocks/${promptBlockId}`,
-  promptBlocksLink: () => '/prompt-blocks',
-  cmsPromptBlockCreateLink: () => '/cms/prompt-blocks/create',
-  cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompt-blocks/${promptBlockId}`,
-  toolLink: (toolId: string) => `/tools/${toolId}`,
-  skillLink: (skillName: string) => `/skills/${skillName}`,
-  workspacesLink: () => '/workspaces',
-  workspaceLink: (workspaceId?: string) => `/workspaces/${workspaceId ?? ''}`,
-  workspaceSkillLink: (skillName: string) => `/workspace/skills/${skillName}`,
-  processorsLink: () => '/processors',
-  processorLink: (processorId: string) => `/processors/${processorId}`,
-  mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
-  mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/${toolId}`,
-  workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/runs/${runId}`,
-  datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
-  datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,
-  experimentLink: (experimentId: string) => `/experiments/${experimentId}`,
-} satisfies LinkComponentProviderProps['paths'];
-
-const authDisabled = { enabled: false } satisfies AuthCapabilities;
-
-function renderPage() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-
-  return render(
-    <MastraReactProvider baseUrl={BASE_URL}>
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <LinkComponentProvider Link={StubLink} navigate={() => {}} paths={paths}>
-            <AgentsPage />
-          </LinkComponentProvider>
-        </TooltipProvider>
-      </QueryClientProvider>
-    </MastraReactProvider>,
-  );
+function endsInThePast(body: unknown) {
+  const end = JSON.stringify(body).match(/"(?:end|to)":"([^"]+)"/)?.[1];
+  return end !== undefined && new Date(end).getTime() < Date.now() - ONE_HOUR_MS;
 }
 
-function useAgentsResponse(response = agentsList) {
+function serveRunMetrics({ previousRuns }: { previousRuns: Breakdown }) {
   server.use(
-    http.get(`${BASE_URL}/api/agents`, () => HttpResponse.json(response)),
-    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authDisabled)),
-    http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(builderDisabled)),
+    http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, async ({ request }) => {
+      const body = await request.json();
+      if (JSON.stringify(body).includes('tokens')) return HttpResponse.json(tokensByAgent);
+      return HttpResponse.json(endsInThePast(body) ? previousRuns : currentAgentRuns);
+    }),
+    http.post(`${TEST_BASE_URL}/api/observability/metrics/timeseries`, () => HttpResponse.json(agentRunsOverTime)),
+    http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, () => HttpResponse.json(tokenTotals)),
+    http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, async ({ request }) =>
+      HttpResponse.json(
+        JSON.stringify(await request.json()).includes('entityName') ? agentLatencyByName : agentLatencyTotal,
+      ),
+    ),
   );
 }
 
-afterEach(() => cleanup());
+function renderAgents(initialEntry = '/agents') {
+  const router = createMemoryRouter(
+    [
+      { path: '/agents', element: <AgentsPage /> },
+      { path: '/agents/:agentId/overview', element: <output>agent</output> },
+    ],
+    { initialEntries: [initialEntry] },
+  );
+  renderWithProviders(
+    <TooltipProvider>
+      <LinkComponentProvider Link={Link} paths={paths} navigate={to => void router.navigate(to)}>
+        <RouterProvider router={router} />
+      </LinkComponentProvider>
+    </TooltipProvider>,
+  );
+  return router;
+}
 
-describe('Agents page', () => {
-  describe('when list view is selected', () => {
-    it('shows the agent purpose in the table', async () => {
-      useAgentsResponse();
-      renderPage();
+function rosterOrder() {
+  return screen
+    .getAllByRole('link')
+    .filter(link => link.closest('[data-slot=data-list]'))
+    .map(link => agentNames.find(name => link.textContent?.includes(name)));
+}
 
-      fireEvent.click(await screen.findByRole('button', { name: 'List view' }));
+function rosterRow(agentName: string) {
+  const row = screen
+    .getAllByRole('link')
+    .find(link => link.closest('[data-slot=data-list]') && link.textContent?.includes(agentName));
+  if (!row) throw new Error(`No roster row for ${agentName}`);
+  return row;
+}
 
-      expect(await screen.findByText('Purpose')).not.toBeNull();
-      expect(await screen.findByText('Find reliable sources and summarize the evidence.')).not.toBeNull();
+beforeEach(() => {
+  server.use(
+    http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(threeAgents)),
+    http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(observabilityOn)),
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(storageWithMetrics)),
+    http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
+  );
+  serveRunMetrics({ previousRuns: currentAgentRuns });
+});
+
+describe('Agents overview', () => {
+  describe('when agents ran in the period', () => {
+    it('lists the busiest agents first and idle agents last', async () => {
+      renderAgents();
+      await waitFor(() => expect(rosterOrder()).toEqual(['Writer Agent', 'Research Agent', 'Analysis Agent']));
+      expect(rosterRow('Writer Agent').getAttribute('href')).toBe('/agents/writer/overview');
+      expect(rosterRow('Analysis Agent').textContent).toContain('No runs in last 24 hours');
+      expect(rosterRow('Research Agent').textContent).toContain('gpt-4o-mini · 1 tool · 0 workflows');
     });
 
-    it('links each table row to a new chat thread for the agent', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'List view' }));
-
-      const row = await screen.findByRole('link', { name: /Research Agent/ });
-      expect(row.getAttribute('href')).toBe(paths.agentNewThreadLink('researcher'));
+    it('keeps idle agents last when sorting by name', async () => {
+      const router = renderAgents();
+      fireEvent.click(await screen.findByRole('button', { name: /^Agent, not sorted/ }));
+      await waitFor(() => expect(rosterOrder()).toEqual(['Research Agent', 'Writer Agent', 'Analysis Agent']));
+      expect(router.state.location.search).toContain('sort=name');
     });
 
-    it('shows model details when the provider is hovered', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      const providerButton = await screen.findByRole('button', {
-        name: 'Show model details for Research Agent',
-      });
-      expect(screen.queryByText('gpt-4o-mini')).toBeNull();
-
-      fireEvent.mouseEnter(providerButton);
-
-      const modelDetails = await screen.findByRole('dialog', { name: 'Model' });
-      expect(within(modelDetails).getByText('openai')).not.toBeNull();
-      expect(within(modelDetails).getByText('gpt-4o-mini')).not.toBeNull();
-    });
-
-    it('shows configured tools when the tool count is hovered', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      const toolsButton = await screen.findByRole('button', {
-        name: 'Show 1 tool for Research Agent',
-      });
-      expect(screen.queryByText('Search the web')).toBeNull();
-
-      fireEvent.mouseEnter(toolsButton);
-
-      const toolsDetails = await screen.findByRole('dialog', { name: 'Tools' });
-      expect(within(toolsDetails).getByText('search')).not.toBeNull();
-      expect(within(toolsDetails).getByText('Search the web')).not.toBeNull();
-    });
-
-    it('shows configured workflows when the workflow count is hovered', async () => {
-      useAgentsResponse(agentsListWithWorkflow);
-      renderPage();
-
-      const workflowsButton = await screen.findByRole('button', {
-        name: 'Show 2 workflows for Research Agent',
-      });
-
-      fireEvent.mouseEnter(workflowsButton);
-
-      const workflowsDetails = await screen.findByRole('dialog', { name: 'Workflows' });
-      expect(within(workflowsDetails).getByText('Research workflow')).not.toBeNull();
-      expect(within(workflowsDetails).getByText('Summarize the collected research')).not.toBeNull();
-      expect(within(workflowsDetails).queryByText('No description provided.')).toBeNull();
-    });
-
-    it('shows configured agents when the agent count is hovered', async () => {
-      useAgentsResponse(agentsListWithSubagent);
-      renderPage();
-
-      const agentsButton = await screen.findByRole('button', {
-        name: 'Show 1 agent for Research Agent',
-      });
-
-      fireEvent.mouseEnter(agentsButton);
-
-      const agentsDetails = await screen.findByRole('dialog', { name: 'Agents' });
-      expect(within(agentsDetails).getByText('Analysis Agent')).not.toBeNull();
-    });
-
-    it('does not show metadata controls when configuration is absent', async () => {
-      useAgentsResponse(agentsListWithoutConfiguration);
-      renderPage();
-
-      await screen.findByText('Research Agent');
-
-      expect(screen.queryByRole('button', { name: 'Show model details for Research Agent' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Show 0 tools for Research Agent' })).toBeNull();
-      expect(screen.queryByText('No instructions provided.')).not.toBeNull();
+    it('shows each total next to its change from the previous period', async () => {
+      renderAgents();
+      const totals = await screen.findByLabelText('Period totals');
+      await waitFor(() => expect(within(totals).getByText('Tokens').closest('div')?.textContent).toContain('4.00K'));
+      expect(within(totals).getByText('Cost').closest('div')?.textContent).toMatch(/\+100/);
+      expect(within(totals).getByText('p95 latency').closest('div')?.textContent).toContain('1.1');
     });
   });
 
-  describe('when view controls are shown', () => {
-    it('shows list before compact', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      const viewControls = await screen.findByRole('group', { name: 'Agents view' });
-      const listButton = within(viewControls).getByRole('button', { name: 'List view' });
-      const compactButton = within(viewControls).getByRole('button', { name: 'Compact view' });
-
-      expect(within(viewControls).getAllByRole('button')).toEqual([listButton, compactButton]);
-    });
-
-    it('selects list view by default', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      const listButton = await screen.findByRole('button', { name: 'List view' });
-
-      expect(listButton.getAttribute('aria-pressed')).toBe('true');
-      expect(await screen.findByText('Purpose')).not.toBeNull();
+  describe('when nothing got worse than the previous period', () => {
+    it('shows no attention strip', async () => {
+      renderAgents();
+      await waitFor(() => expect(rosterOrder()).toHaveLength(3));
+      expect(screen.queryByRole('region', { name: 'Needs attention' })).toBeNull();
     });
   });
 
-  describe('when compact view is selected', () => {
-    it('shows the agents in a compact grid', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
-
-      expect(await screen.findByRole('list', { name: 'Agents compact grid' })).not.toBeNull();
-      expect((await screen.findByRole('link', { name: /Research Agent/ })).getAttribute('href')).toBe(
-        '/agents/researcher',
+  describe('when an agent fails more often than in the previous period', () => {
+    it('flags it with the old and new error rates', async () => {
+      serveRunMetrics({ previousRuns: previousAgentRunsWithFewerErrors });
+      renderAgents();
+      const attention = await screen.findByRole('region', { name: 'Needs attention' });
+      expect(within(attention).getByRole('link', { name: 'Research Agent' }).getAttribute('href')).toBe(
+        '/agents/researcher/overview',
       );
-    });
-
-    it('uses the instruction preview as the primary card description', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
-
-      const link = await screen.findByRole('link', { name: 'Open Research Agent' });
-      const descriptionIds = link.getAttribute('aria-describedby')?.split(' ') ?? [];
-      const primaryDescription = document.getElementById(descriptionIds[0] ?? '');
-
-      expect(primaryDescription?.textContent).toBe('Find reliable sources and summarize the evidence.');
-    });
-
-    it('describes provider and capability labels without the model ID', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
-
-      const link = await screen.findByRole('link', { name: 'Open Research Agent' });
-      const descriptionIds = link.getAttribute('aria-describedby')?.split(' ') ?? [];
-      const metadata = document.getElementById(descriptionIds[1] ?? '');
-
-      expect(metadata?.textContent).toBe('openai provider. 0 workflows, 0 agents, 1 tool.');
-      expect(within(link).queryByText('gpt-4o-mini')).toBeNull();
-    });
-    it('shows model details from a compact card provider', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
-      const providerButton = await screen.findByRole('button', {
-        name: 'Show model details for Research Agent',
-      });
-
-      fireEvent.mouseEnter(providerButton);
-
-      const modelDetails = await screen.findByRole('dialog', { name: 'Model' });
-      expect(within(modelDetails).getByText('gpt-4o-mini')).not.toBeNull();
-    });
-
-    it('shows configured tools from a compact card tool count', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
-      const toolsButton = await screen.findByRole('button', {
-        name: 'Show 1 tool for Research Agent',
-      });
-
-      fireEvent.mouseEnter(toolsButton);
-
-      const toolsDetails = await screen.findByRole('dialog', { name: 'Tools' });
-      expect(within(toolsDetails).getByText('Search the web')).not.toBeNull();
-    });
-
-    it('does not open metadata hover cards from the full compact card', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
-      fireEvent.mouseEnter(await screen.findByRole('link', { name: 'Open Research Agent' }));
-
-      expect(screen.queryByRole('dialog')).toBeNull();
-    });
-
-    it('shows configured workflows from a compact card workflow count', async () => {
-      useAgentsResponse(agentsListWithWorkflow);
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
-      const workflowsButton = await screen.findByRole('button', {
-        name: 'Show 2 workflows for Research Agent',
-      });
-
-      fireEvent.mouseEnter(workflowsButton);
-
-      const workflowsDetails = await screen.findByRole('dialog', { name: 'Workflows' });
-      expect(within(workflowsDetails).getByText('Research workflow')).not.toBeNull();
-    });
-
-    it('shows configured agents from a compact card agent count', async () => {
-      useAgentsResponse(agentsListWithSubagent);
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
-      const agentsButton = await screen.findByRole('button', {
-        name: 'Show 1 agent for Research Agent',
-      });
-
-      fireEvent.mouseEnter(agentsButton);
-
-      const agentsDetails = await screen.findByRole('dialog', { name: 'Agents' });
-      expect(within(agentsDetails).getByText('Analysis Agent')).not.toBeNull();
+      expect(attention.textContent).toMatch(/error rate 40.*was 10/);
+      expect(attention.textContent).not.toContain('Writer Agent');
     });
   });
 
-  describe('when a compact card has a long agent name', () => {
-    it('keeps the complete name available from the constrained heading', async () => {
-      useAgentsResponse(agentsListWithLongName);
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
-
-      const heading = await screen.findByTitle(longAgentName);
-
-      expect(heading.textContent).toBe(longAgentName);
-    });
-  });
-
-  describe('when a compact card has no instructions', () => {
-    it('shows an instructional fallback', async () => {
-      useAgentsResponse(agentsListWithoutInstructions);
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
-
-      expect(await screen.findByText('No instructions provided.')).not.toBeNull();
-    });
-  });
-
-  describe('when a compact card has long instructions', () => {
-    it('shows a word-safe preview while retaining the complete instructions', async () => {
-      useAgentsResponse(agentsListWithLongInstructions);
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
-
-      const description = await screen.findByTitle(longAgentInstructions);
-
-      expect(description.textContent).toBe(
-        'Investigate every available source and reconcile contradictory evidence before…',
+  describe('when agents are scored', () => {
+    it('shows the average eval score and flags a score drop', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(qualityScorer)),
+        http.post(`${TEST_BASE_URL}/api/observability/scores/breakdown`, async ({ request }) =>
+          HttpResponse.json(endsInThePast(await request.json()) ? previousQuality : currentQuality),
+        ),
       );
-      expect(description.getAttribute('title')).toBe(longAgentInstructions);
+      renderAgents();
+      expect(await screen.findByRole('button', { name: /^Eval, not sorted/ })).toBeTruthy();
+      expect(rosterRow('Writer Agent').textContent).toContain('0.70');
+      const attention = await screen.findByRole('region', { name: 'Needs attention' });
+      expect(attention.textContent).toContain('Quality 0.70, was 0.90');
     });
   });
 
-  describe('when a compact card truncates a multi-code-point character', () => {
-    it('keeps the complete grapheme in the instruction preview', async () => {
-      useAgentsResponse(agentsListWithUnicodeBoundaryInstructions);
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Compact view' }));
-
-      const description = await screen.findByTitle(unicodeBoundaryInstructions);
-
-      expect(description.textContent).toBe(`${'a'.repeat(79)}👩‍💻…`);
+  describe('when the storage cannot aggregate traces', () => {
+    it('drops the p95 column', async () => {
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, () =>
+          HttpResponse.json({ error: 'Not implemented' }, { status: 501 }),
+        ),
+      );
+      renderAgents();
+      await waitFor(() => expect(rosterOrder()).toHaveLength(3));
+      await waitFor(() => expect(screen.queryByRole('button', { name: /^p95,/ })).toBeNull());
     });
   });
 
-  describe('when a list row has a long agent name', () => {
-    it('keeps the complete name available from the constrained cell', async () => {
-      useAgentsResponse(agentsListWithLongName);
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'List view' }));
-      const name = await screen.findByTitle(longAgentName);
-
-      expect(name.textContent).toBe(longAgentName);
+  describe('when observability is off', () => {
+    it('still lists every agent with its composition', async () => {
+      server.use(http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(observabilityOff)));
+      renderAgents();
+      expect(await screen.findByText('Run activity is off')).toBeTruthy();
+      expect(rosterOrder()).toEqual(['Analysis Agent', 'Research Agent', 'Writer Agent']);
+      expect(screen.queryByLabelText('Period totals')).toBeNull();
     });
   });
 
-  describe('when agents are sorted from the Name column', () => {
-    it('shows agents from A to Z in the list view', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Name, not sorted, sort ascending' }));
-
-      const rowNames = [screen.getByTitle('Analysis Agent'), screen.getByTitle('Research Agent')];
-      const orderedNames = rowNames
-        .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
-        .map(el => el.textContent);
-
-      expect(orderedNames).toEqual(['Analysis Agent', 'Research Agent']);
+  describe('when the project has no agents', () => {
+    it('explains how to add one', async () => {
+      server.use(http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)));
+      renderAgents();
+      expect(await screen.findByText('No Agents yet')).toBeTruthy();
     });
+  });
 
-    it('keeps the A to Z order when switching to the compact view', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Name, not sorted, sort ascending' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Compact view' }));
-
-      const grid = screen.getByRole('list', { name: 'Agents compact grid' });
-      const cardLabels = within(grid)
-        .getAllByRole('link')
-        .map(link => link.getAttribute('aria-label'));
-
-      expect(cardLabels).toEqual(['Open Analysis Agent', 'Open Research Agent']);
-    });
-
-    it('shows agents from Z to A after a second click', async () => {
-      useAgentsResponse();
-      renderPage();
-
-      fireEvent.click(await screen.findByRole('button', { name: 'Name, not sorted, sort ascending' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Name, sorted ascending, sort descending' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Compact view' }));
-
-      const grid = screen.getByRole('list', { name: 'Agents compact grid' });
-      const cardLabels = within(grid)
-        .getAllByRole('link')
-        .map(link => link.getAttribute('aria-label'));
-
-      expect(cardLabels).toEqual(['Open Research Agent', 'Open Analysis Agent']);
+  describe('when agents cannot be read', () => {
+    it('explains the missing permission', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json({ error: 'Forbidden' }, { status: 403 })),
+      );
+      renderAgents();
+      expect((await screen.findAllByText(/permission/i)).length).toBeGreaterThan(0);
     });
   });
 });

@@ -49,6 +49,7 @@ export function systemPackagesHandler() {
 
 const noopPaths = {
   agentLink: () => '',
+  cmsAgentCreateLink: () => '',
   agentMessageLink: () => '',
   workflowLink: () => '',
   toolLink: () => '',

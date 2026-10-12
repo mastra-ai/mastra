@@ -6,7 +6,7 @@ import { LoadingBadge } from '@mastra/playground-ui/domains/chat/components/load
 import { WORKSPACE_TOOLS_PREFIX } from '@mastra/playground-ui/domains/chat/tools/workspace-tool-constants';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useLocation, useParams } from 'react-router';
-import { AgentResourceCard } from '../agent-resource-cards';
+import { AgentResourceCard, AgentResourceList } from '../agent-resource-cards';
 import { AgentMetadataExpandableList } from './agent-metadata-expandable-list';
 import { AgentMetadataList, AgentMetadataListEmpty, AgentMetadataListItem } from './agent-metadata-list';
 import { useScorers } from '@/domains/scores';
@@ -129,7 +129,7 @@ export const AgentMetadataScorerList = ({ entityId, entityType, detailed = false
 
   if (detailed)
     return (
-      <div className="grid gap-3 @3xl:grid-cols-2">
+      <AgentResourceList>
         {scorerList.map(scorer => (
           <AgentResourceCard
             key={scorer.id}
@@ -138,7 +138,7 @@ export const AgentMetadataScorerList = ({ entityId, entityType, detailed = false
             href={paths.scorerLink(scorer.id)}
           />
         ))}
-      </div>
+      </AgentResourceList>
     );
 
   return (

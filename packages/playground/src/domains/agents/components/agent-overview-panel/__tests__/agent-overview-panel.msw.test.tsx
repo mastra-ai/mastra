@@ -1,5 +1,4 @@
 import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
-import { Popover } from '@mastra/playground-ui/components/Popover';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
@@ -46,11 +45,9 @@ function renderPanel() {
   return renderWithProviders(
     <TestLinkProvider>
       <TooltipProvider>
-        <Popover defaultOpen>
-          <ActivatedSkillsProvider>
-            <AgentOverviewPanel agentId={AGENT_ID} container={document.body} onClose={() => {}} />
-          </ActivatedSkillsProvider>
-        </Popover>
+        <ActivatedSkillsProvider>
+          <AgentOverviewPanel agentId={AGENT_ID} open onClose={() => {}} />
+        </ActivatedSkillsProvider>
       </TooltipProvider>
     </TestLinkProvider>,
     { router: true },

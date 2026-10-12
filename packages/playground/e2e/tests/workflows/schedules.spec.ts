@@ -19,15 +19,10 @@ test.afterEach(async () => {
 });
 
 test.describe('Workflow schedules', () => {
-  test.describe('when the Schedules link on /workflows is clicked', () => {
+  test.describe('when the Schedules link on the workflows overview is clicked', () => {
     test('navigates to the dedicated /workflows/schedules route', async ({ page }) => {
       await page.goto('/workflows');
-
-      // The Schedules entry point is rendered next to the docs button on the workflows index.
-      const schedulesLink = page.getByRole('link', { name: /Schedules/ });
-      await expect(schedulesLink.first()).toBeVisible();
-
-      await schedulesLink.first().click();
+      await page.getByRole('link', { name: 'Schedules' }).click();
 
       await expect(page).toHaveURL(/\/workflows\/schedules$/);
     });

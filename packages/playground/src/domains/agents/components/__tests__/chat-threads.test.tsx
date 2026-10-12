@@ -110,38 +110,6 @@ describe('ChatThreads — first visit', () => {
   });
 });
 
-describe('ChatThreads — hide threads panel', () => {
-  it('offers no hide control when the panel cannot be hidden', () => {
-    renderThreads();
-
-    expect(screen.getByRole('link', { name: 'New Thread' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Hide threads panel' })).toBeNull();
-  });
-
-  it('places a hide control on the New Chat row and collapses the panel on click', () => {
-    const panel = fakePanel();
-    renderThreads(panel);
-
-    const hideButton = screen.getByRole('button', { name: 'Hide threads panel' });
-    const newChat = screen.getByRole('link', { name: 'New Thread' });
-    expect(hideButton.parentElement).toBe(newChat.parentElement);
-
-    fireEvent.click(hideButton);
-
-    expect(panel.collapse).toHaveBeenCalledTimes(1);
-  });
-
-  it('advertises the { shortcut in the hide control tooltip', async () => {
-    renderThreads(fakePanel());
-
-    fireEvent.focus(screen.getByRole('button', { name: 'Hide threads panel' }));
-
-    const tooltip = await screen.findByRole('tooltip');
-    expect(tooltip.textContent).toContain('Hide threads panel');
-    expect(tooltip.querySelector('kbd')?.textContent).toBe('{');
-  });
-});
-
 const renderWithThread = (props: Partial<ChatThreadsProps> = {}) =>
   renderWithProviders(
     <TestLinkProvider>

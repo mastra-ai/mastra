@@ -2,12 +2,12 @@
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Link, MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { DatasetCrumb, DatasetSwitcher } from '../dataset-crumb';
+import { DatasetCrumb } from '../dataset-crumb';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 
@@ -32,12 +32,7 @@ const renderCrumb = ({ isCurrent }: { isCurrent: boolean }) => {
   });
   const crumb = (
     <Breadcrumb>
-      <Crumb
-        as={isCurrent ? 'span' : Link}
-        to={isCurrent ? undefined : '/datasets/ds-1'}
-        isCurrent={isCurrent}
-        switcher={<DatasetSwitcher />}
-      >
+      <Crumb as={isCurrent ? 'span' : Link} to={isCurrent ? undefined : '/datasets/ds-1'} isCurrent={isCurrent}>
         <DatasetCrumb />
       </Crumb>
     </Breadcrumb>
@@ -71,17 +66,5 @@ describe('DatasetCrumb', () => {
     const label = await screen.findByText('Weather evals', { ignore: '.sr-only' });
     expect(label.closest('[aria-current="page"]')).not.toBeNull();
     expect(screen.queryByRole('link')).toBeNull();
-  });
-
-  it('opens the dataset switcher only from the arrow trigger', async () => {
-    renderCrumb({ isCurrent: false });
-
-    await screen.findByRole('link', { name: 'Weather evals' });
-    expect(screen.queryByPlaceholderText('Search datasets...')).toBeNull();
-
-    fireEvent.click(screen.getByRole('combobox', { name: 'Switch dataset' }));
-
-    expect(await screen.findByPlaceholderText('Search datasets...')).toBeDefined();
-    expect(screen.getByText('Support evals')).toBeDefined();
   });
 });

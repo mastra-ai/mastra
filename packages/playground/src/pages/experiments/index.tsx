@@ -8,8 +8,9 @@ import { useDatasets } from '@mastra/react/hooks/datasets';
 import { useInfiniteExperiments } from '@mastra/react/hooks/experiments';
 import { useReviewSummary } from '@mastra/react/hooks/review';
 import { useCallback, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { DatasetViewTabs } from '@/domains/datasets/components/dataset-view-tabs';
 import { ExperimentTriggerDialog } from '@/domains/datasets/components/experiment-trigger/experiment-trigger-dialog';
 import {
   ExperimentsList,
@@ -17,7 +18,7 @@ import {
   getExperimentDatasetOptions,
   NoExperimentsInfo,
 } from '@/domains/experiments';
-import { navCrumb } from '@/domains/navigation/crumbs';
+import { datasetCrumb, navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
 import {
   TARGET_ID_PARAM,
@@ -25,10 +26,28 @@ import {
   useTargetFilterParams,
 } from '@/domains/shared/hooks/use-target-filter-params';
 
-const crumbs = [navCrumb('/experiments')];
+const allExperimentsCrumbs = [navCrumb('/experiments')];
+
+function datasetExperimentsCrumbs(datasetId: string): CrumbDef[] {
+  return [
+    navCrumb('/datasets'),
+    { ...datasetCrumb, to: `/datasets/${encodeURIComponent(datasetId)}` },
+    { id: 'dataset-experiments', label: 'Experiments' },
+  ];
+}
 const EXPERIMENTS_SORT_KEYS = ['createdAt', 'status'] as const;
 
-export default function Experiments() {
+export interface ExperimentsTarget {
+  targetType: 'agent' | 'workflow';
+  targetId: string;
+}
+
+/** Every experiment; a dataset's route or an agent or workflow view shows only the experiments run on it. */
+export default function Experiments({ scopedTarget }: { scopedTarget?: ExperimentsTarget } = {}) {
+  const { datasetId: openDatasetId } = useParams();
+  const crumbs = openDatasetId ? datasetExperimentsCrumbs(openDatasetId) : allExperimentsCrumbs;
+  const breadcrumbs = scopedTarget ? undefined : <PageBreadcrumbs crumbs={crumbs} />;
+  const datasetViewTabs = openDatasetId && <DatasetViewTabs datasetId={openDatasetId} />;
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [runDialogOpen, setRunDialogOpen] = useState(false);
@@ -45,7 +64,8 @@ export default function Experiments() {
     [sort],
   );
 
-  const datasetFilter = searchParams.get('dataset') ?? 'all';
+  const datasetFilterParam = searchParams.get('dataset');
+  const datasetFilter = openDatasetId ?? datasetFilterParam ?? 'all';
   const setDatasetFilter = useCallback(
     (value: string) => {
       setSearchParams(
@@ -64,7 +84,8 @@ export default function Experiments() {
     [setSearchParams],
   );
 
-  const { targetType, targetId, setTargetType, setTargetId } = useTargetFilterParams();
+  const targetFilterParams = useTargetFilterParams();
+  const { targetType, targetId } = scopedTarget ?? targetFilterParams;
 
   const { data: datasetsData, isLoading: isLoadingDatasets, error: errorDatasets } = useDatasets();
   const {
@@ -126,7 +147,7 @@ export default function Experiments() {
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout breadcrumbs={breadcrumbs}>
         <h1 className="sr-only">Experiments</h1>
         <SessionExpired variant="fill" />
       </PageLayout>
@@ -135,7 +156,7 @@ export default function Experiments() {
 
   if (errorExperiments && is403ForbiddenError(errorExperiments)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout breadcrumbs={breadcrumbs}>
         <h1 className="sr-only">Experiments</h1>
         <PermissionDenied variant="fill" resource="experiments" />
       </PageLayout>
@@ -144,7 +165,7 @@ export default function Experiments() {
 
   if (errorDatasets && is403ForbiddenError(errorDatasets)) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout breadcrumbs={breadcrumbs}>
         <h1 className="sr-only">Experiments</h1>
         <PermissionDenied variant="fill" resource="datasets" />
       </PageLayout>
@@ -153,7 +174,7 @@ export default function Experiments() {
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout breadcrumbs={breadcrumbs}>
         <h1 className="sr-only">Experiments</h1>
         <EmptyState
           tone="error"
@@ -167,6 +188,9 @@ export default function Experiments() {
 
   const runDialog = (
     <ExperimentTriggerDialog
+      initialDatasetId={openDatasetId}
+      initialTargetType={scopedTarget?.targetType}
+      initialTargetId={scopedTarget?.targetId}
       open={runDialogOpen}
       onOpenChange={setRunDialogOpen}
       onSuccess={experimentId => void navigate(`/experiments/${experimentId}`)}
@@ -174,9 +198,9 @@ export default function Experiments() {
   );
 
   // With a dataset or target filter active, keep the toolbar so the user can reset it.
-  if (experiments.length === 0 && !isLoading && datasetFilter === 'all' && !targetType) {
+  if (experiments.length === 0 && !isLoading && !datasetFilterParam && !targetFilterParams.targetType) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={datasetViewTabs}>
         <h1 className="sr-only">Experiments</h1>
         <NoExperimentsInfo onRunExperiment={() => setRunDialogOpen(true)} />
         {runDialog}
@@ -184,7 +208,8 @@ export default function Experiments() {
     );
   }
 
-  const hasFilters = statusFilter !== 'all' || datasetFilter !== 'all' || search !== '' || targetType !== '';
+  const hasFilters =
+    statusFilter !== 'all' || Boolean(datasetFilterParam) || search !== '' || targetFilterParams.targetType !== '';
 
   const resetFilters = () => {
     setSearch('');
@@ -205,35 +230,46 @@ export default function Experiments() {
   return (
     <PageLayout
       variant="catalog"
-      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+      breadcrumbs={breadcrumbs}
       actionRow={
-        <ExperimentsToolbar
-          search={search}
-          onSearchChange={setSearch}
-          statusFilter={statusFilter}
-          onStatusFilterChange={setStatusFilter}
-          datasetFilter={datasetFilter}
-          onDatasetFilterChange={setDatasetFilter}
-          datasetOptions={experimentDatasetOptions}
-          targetType={targetType}
-          onTargetTypeChange={setTargetType}
-          targetId={targetId}
-          onTargetIdChange={setTargetId}
-          onReset={resetFilters}
-          hasActiveFilters={hasFilters}
-          onRunClick={() => setRunDialogOpen(true)}
-          onCompareClick={() => setIsSelectionActive(true)}
-          selection={
-            isSelectionActive
-              ? {
-                  selectedCount: selectedIds.length,
-                  onExecuteCompare: executeCompare,
-                  onCancelSelection: cancelSelection,
-                  compareDisabledReason,
-                }
-              : undefined
-          }
-        />
+        <>
+          {datasetViewTabs}
+          <ExperimentsToolbar
+            search={search}
+            onSearchChange={setSearch}
+            statusFilter={statusFilter}
+            onStatusFilterChange={setStatusFilter}
+            datasetFilter={
+              openDatasetId
+                ? undefined
+                : { value: datasetFilter, onChange: setDatasetFilter, options: experimentDatasetOptions }
+            }
+            targetFilter={
+              scopedTarget
+                ? undefined
+                : {
+                    targetType: targetFilterParams.targetType,
+                    onTargetTypeChange: targetFilterParams.setTargetType,
+                    targetId: targetFilterParams.targetId,
+                    onTargetIdChange: targetFilterParams.setTargetId,
+                  }
+            }
+            onReset={resetFilters}
+            hasActiveFilters={hasFilters}
+            onRunClick={() => setRunDialogOpen(true)}
+            onCompareClick={() => setIsSelectionActive(true)}
+            selection={
+              isSelectionActive
+                ? {
+                    selectedCount: selectedIds.length,
+                    onExecuteCompare: executeCompare,
+                    onCancelSelection: cancelSelection,
+                    compareDisabledReason,
+                  }
+                : undefined
+            }
+          />
+        </>
       }
     >
       <h1 className="sr-only">Experiments</h1>

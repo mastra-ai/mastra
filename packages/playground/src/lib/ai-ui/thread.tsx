@@ -24,12 +24,13 @@ import { SaveFullConversationAction } from '@mastra/playground-ui/domains/chat';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { MessageTrace } from '@mastra/playground-ui/domains/traces/components/message-trace';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { useSpeechRecognition } from '@mastra/react';
 import { useReadAloud } from '@mastra/react/hooks/voice';
 import type { MessageFactoryPart } from '@mastra/react/ui';
 import { ArrowUp, Mic } from 'lucide-react';
-import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, use, useEffect, useMemo, useRef, useState } from 'react';
 
 import { toast } from 'sonner';
 import { AttachFilePopover } from './attachments/attach-file-popover';
@@ -38,6 +39,7 @@ import { ComposerAttachmentsProvider, useComposerAttachments } from './attachmen
 import { ComposerFileDrop } from './attachments/composer-file-drop';
 import { BracketOverlay } from './components/bracket-overlay';
 import { useComposerAutofocus } from './hooks/use-composer-autofocus';
+import { MessageTracesContext } from './message-traces-context';
 import { SuggestedPromptList } from './suggested-prompt-list';
 import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
@@ -75,6 +77,11 @@ const useDelayedFlag = (flag: boolean, delayMs: number) => {
  * streaming output. Completed tool calls are excluded so the pending indicator
  * stays visible during quiet moments (e.g. server-side retries).
  */
+const traceIdOf = (message: MastraDBMessage) => {
+  const traceId = message.role === 'assistant' ? message.content.metadata?.traceId : undefined;
+  return typeof traceId === 'string' ? traceId : undefined;
+};
+
 const hasStreamingPart = (message: MastraDBMessage | undefined) => {
   if (!message) return false;
   const parts: MessageFactoryPart[] = message.content.parts;
@@ -148,6 +155,7 @@ export const Thread = ({
 
   const messages = useChatMessages();
   const { isRunning } = useChatRunning();
+  const showsMessageTraces = use(MessageTracesContext);
   const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
   const {
     isSpeaking,
@@ -256,21 +264,28 @@ export const Thread = ({
                           holdsRoom={holdsRoom}
                           className="gap-4"
                         >
-                          {group.entries.map(message => (
-                            <MessageScrollerItem
-                              key={getClientMessageKey(message)}
-                              messageId={message.id}
-                              scrollAnchor={threadRailAnchorIds.has(message.id)}
-                            >
-                              <MessageRow
-                                message={message}
-                                hasModelList={hasModelList}
-                                isSpeaking={isSpeaking}
-                                onReadAloud={readAloud}
-                                onStopSpeaking={stopSpeaking}
-                              />
-                            </MessageScrollerItem>
-                          ))}
+                          {group.entries.map((message, entryIndex) => {
+                            const traceId = showsMessageTraces ? traceIdOf(message) : undefined;
+                            const isRunsLastMessage =
+                              traceId !== undefined &&
+                              !group.entries.slice(entryIndex + 1).some(next => traceIdOf(next) === traceId);
+                            return (
+                              <MessageScrollerItem
+                                key={getClientMessageKey(message)}
+                                messageId={message.id}
+                                scrollAnchor={threadRailAnchorIds.has(message.id)}
+                              >
+                                <MessageRow
+                                  message={message}
+                                  hasModelList={hasModelList}
+                                  isSpeaking={isSpeaking}
+                                  onReadAloud={readAloud}
+                                  onStopSpeaking={stopSpeaking}
+                                />
+                                {isRunsLastMessage && <MessageTrace traceId={traceId} className="mt-3" />}
+                              </MessageScrollerItem>
+                            );
+                          })}
                           {isLiveTurn && delayedPending && <PendingIndicator />}
                         </ChatShell.Turn>
                       );

@@ -3,6 +3,9 @@ import type { ReactNode } from 'react';
 import { ScrollArea, ScrollAreaViewport } from '../ScrollArea';
 import { cn } from '@/lib/utils';
 
+/** Where sticky content in the results starts: the bottom of the sticky toolbar. */
+const PAGE_LAYOUT_STICKY_TOP = '--page-layout-sticky-top';
+
 /** Catalogs share one vertical viewport, including the search toolbar and results. */
 export function PageLayoutCatalogBody({
   children,
@@ -21,16 +24,18 @@ export function PageLayoutCatalogBody({
     const toolbar = toolbarRef.current;
     const viewport = viewportRef.current;
     if (!viewport) return;
+    const pinToolbarHeight = (height: number) => {
+      viewport.style.scrollPaddingTop = `${height}px`;
+      viewport.style.setProperty(PAGE_LAYOUT_STICKY_TOP, `${height}px`);
+    };
     if (!toolbar) {
-      viewport.style.scrollPaddingTop = '0px';
+      pinToolbarHeight(0);
       return;
     }
 
-    // Keyboard row navigation must reveal items below the sticky controls,
+    // Keyboard row navigation and sticky list headers sit below the sticky controls,
     // including when filters wrap after resizing the sidebar or viewport.
-    const updateScrollPadding = () => {
-      viewport.style.scrollPaddingTop = `${toolbar.getBoundingClientRect().height}px`;
-    };
+    const updateScrollPadding = () => pinToolbarHeight(toolbar.getBoundingClientRect().height);
     updateScrollPadding();
     if (typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(updateScrollPadding);
@@ -46,7 +51,7 @@ export function PageLayoutCatalogBody({
           <div
             ref={toolbarRef}
             data-slot="page-layout-action-row"
-            className="sticky top-0 z-30 flex flex-col gap-2 bg-background p-4 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-4 after:bg-linear-to-b after:from-background after:to-transparent after:content-['']"
+            className="sticky top-0 z-30 flex flex-col gap-2 bg-background p-4 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-4 after:bg-linear-to-b after:from-background after:to-transparent after:content-[''] [[data-slot=page-layout-scroll]:has([data-pins-to-page])_&]:after:hidden"
           >
             {actionRow}
           </div>

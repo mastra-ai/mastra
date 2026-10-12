@@ -503,8 +503,9 @@ export const useChat = ({
       // its approvals, or trigger its completion callback.
       if (isTerminal && liveRunId.current && chunk.runId !== liveRunId.current) return;
       const runId = 'runId' in chunk && typeof chunk.runId === 'string' ? chunk.runId : undefined;
+      const traceId = 'traceId' in chunk && typeof chunk.traceId === 'string' ? chunk.traceId : undefined;
       setMessages(prev => {
-        const metadata = { mode: 'stream' as const, runId };
+        const metadata = { mode: 'stream' as const, runId, ...(traceId && { traceId }) };
         const next = accumulateChunk({ chunk, conversation: prev, metadata });
         // A resumed response can already exist in history; explicit framing
         // establishes ownership even when the accumulator deduplicates it.

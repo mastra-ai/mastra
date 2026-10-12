@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
-import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useAgent } from '@mastra/react/hooks/agents';
 import { Check, Link as LinkIcon, Pencil, MessageSquare } from 'lucide-react';
@@ -36,14 +35,16 @@ export function AgentDetailHeaderActions({ agentId }: AgentDetailHeaderActionsPr
 
   return (
     <>
-      <Button
-        variant="ghost"
-        size="sm"
-        icon={isChat ? <AgentIcon /> : <MessageSquare />}
-        render={<FrameworkLink href={isChat ? paths.agentLink(agentId) : `/chat/${encodeURIComponent(agentId)}`} />}
-      >
-        {isChat ? 'Agent details' : 'Open chat'}
-      </Button>
+      {!isChat && (
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<MessageSquare />}
+          render={<FrameworkLink href={`/chat/${encodeURIComponent(agentId)}`} />}
+        >
+          Open chat
+        </Button>
+      )}
       {showEditButton && (
         <Button variant="ghost" size="sm" render={<FrameworkLink href={editPath} />} icon={<Pencil />}>
           Edit

@@ -15,6 +15,7 @@ import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import type { CSSProperties } from 'react';
 import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import { useLocation } from 'react-router';
+import { FeaturePageHeader } from './feature-page-header';
 import { MobileHeaderProvider } from './mobile-header-provider';
 import { MobileNavbar } from './mobile-navbar';
 import { MobilePageHeader } from './mobile-page-header';
@@ -24,7 +25,6 @@ import { ImpersonationBanner } from '@/domains/auth/components/impersonation-ban
 import { ExperimentalUIProvider } from '@/domains/experimental-ui/experimental-ui-context';
 import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
-import { RememberBuildResource } from '@/domains/navigation/components/remember-build-resource';
 import { NavigationCommand } from '@/lib/command';
 import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { cn } from '@/lib/utils';
@@ -103,7 +103,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
   const shouldShowSidebar = !shouldHideSidebar;
 
   return (
-    <PageLayoutHeaderContext.Provider value={isMobile && shouldShowSidebar ? MobilePageHeader : undefined}>
+    <PageLayoutHeaderContext.Provider value={isMobile && shouldShowSidebar ? MobilePageHeader : FeaturePageHeader}>
       <NavigationCommand />
       <AppShell
         className="[--border:var(--surface-rim)] [--studio-frame-radius:1rem] max-lg:[&_[data-slot=app-shell-body]]:p-0 lg:[&_[data-slot=app-shell-body]]:py-1 lg:[&_[data-slot=app-shell-body]]:pr-1"
@@ -118,7 +118,6 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
             >
               <ImpersonationBanner />
               <AuthRequired>
-                <RememberBuildResource />
                 <ErrorBoundary resetKeys={[pathname]}>{children}</ErrorBoundary>
               </AuthRequired>
             </div>

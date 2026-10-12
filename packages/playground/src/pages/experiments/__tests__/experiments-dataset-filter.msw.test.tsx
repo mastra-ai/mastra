@@ -2,7 +2,7 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { EXPERIMENTS_PER_PAGE } from '@mastra/react/hooks/experiments';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { useLocation } from 'react-router';
+import { Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import ExperimentsPage from '..';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
@@ -134,5 +134,24 @@ describe('Experiments page — dataset filter from URL', () => {
 
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/experiments'));
     expect(screen.getByText('entity-extraction / model-b')).toBeDefined();
+  });
+});
+
+describe('Experiments page — opened from a dataset', () => {
+  it('lists only that dataset’s experiments, without a dataset filter to change', async () => {
+    setupHandlers();
+    renderWithProviders(
+      <TestLinkProvider>
+        <Routes>
+          <Route path="/datasets/:datasetId/experiments" element={<ExperimentsPage />} />
+        </Routes>
+      </TestLinkProvider>,
+      { router: { initialEntries: ['/datasets/dataset-1/experiments'] } },
+    );
+
+    expect(await screen.findByText('entity-extraction / model-a')).toBeDefined();
+    expect(screen.queryByText('entity-extraction / model-b')).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Dataset' })).toBeNull();
+    expect(screen.getByRole('link', { name: 'Experiments' }).getAttribute('aria-current')).toBe('page');
   });
 });

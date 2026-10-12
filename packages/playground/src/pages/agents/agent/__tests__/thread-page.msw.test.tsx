@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
+import { PageLayoutHeaderContext } from '@mastra/playground-ui/components/PageLayout';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -31,6 +32,7 @@ import {
 } from './fixtures/thread-preferences';
 import { emptyHistory, liveChunks, staleHistory } from './fixtures/thread-recovery';
 import { emptyThreadTracesList } from './fixtures/thread-traces';
+import { FeaturePageHeader } from '@/components/feature-page-header';
 import { AgentDetailShell } from '@/domains/agents/agent-detail-shell';
 import { ThreadsPanelProvider } from '@/domains/agents/context/threads-panel-context';
 import { readThreadDraft } from '@/domains/conversation/context/thread-draft-storage';
@@ -171,9 +173,11 @@ const LocationProbe = () => {
 function ThreadRouteShell() {
   const { agentId } = useParams();
   return (
-    <ThreadsPanelProvider key={agentId}>
-      <AgentDetailShell />
-    </ThreadsPanelProvider>
+    <PageLayoutHeaderContext.Provider value={FeaturePageHeader}>
+      <ThreadsPanelProvider key={agentId}>
+        <AgentDetailShell />
+      </ThreadsPanelProvider>
+    </PageLayoutHeaderContext.Provider>
   );
 }
 
@@ -956,14 +960,14 @@ describe('Standalone thread page', () => {
 
     // Given the thread list is visible next to the chat
     await screen.findByText('Sushi ideas');
-    expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Expand navigation' })).toBeNull();
 
     // When I hide the threads panel
-    fireEvent.click(screen.getByRole('button', { name: 'Hide threads panel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse navigation' }));
 
     // Then the list is gone and only the restore affordance remains
     await waitFor(() => expect(isHiddenFromUser(screen.getByText('Sushi ideas'))).toBe(true));
-    expect(screen.queryByRole('button', { name: 'Hide threads panel' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Collapse navigation' })).toBeNull();
 
     // And the collapsed state is remembered for this agent
     await waitFor(() => {
@@ -975,12 +979,12 @@ describe('Standalone thread page', () => {
     });
 
     // When I expand it again from the page edge
-    fireEvent.click(screen.getByRole('button', { name: 'Toggle agent navigation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Expand navigation' }));
 
     // Then the thread list is back
     await waitFor(() => expect(isHiddenFromUser(screen.getByText('Sushi ideas'))).toBe(false));
-    expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Collapse navigation' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Expand navigation' })).toBeNull();
   });
 
   it('does not carry a hidden threads panel over to another agent', async () => {
@@ -1012,7 +1016,7 @@ describe('Standalone thread page', () => {
 
     // Given I hid the threads panel for the first agent
     await screen.findByText('Sushi ideas');
-    fireEvent.click(screen.getByRole('button', { name: 'Hide threads panel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse navigation' }));
     await waitFor(() => expect(isHiddenFromUser(screen.getByText('Sushi ideas'))).toBe(true));
 
     // When I switch to another agent without leaving the page
@@ -1021,8 +1025,8 @@ describe('Standalone thread page', () => {
     // Then its threads panel is visible and its own layout is not marked collapsed
     const otherThread = await screen.findByText('Wine pairing');
     await waitFor(() => expect(isHiddenFromUser(otherThread)).toBe(false));
-    expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
-    expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Collapse navigation' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Expand navigation' })).toBeNull();
     const otherLayout = window.localStorage.getItem(
       `react-resizable-panels:mastra:studio:feature-navigation:v1:agent:${OTHER_AGENT_ID}`,
     );
@@ -1044,7 +1048,6 @@ describe('Standalone thread page', () => {
       renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
       expect(await screen.findByRole('link', { name: /New Thread/ })).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
       expect(screen.queryByTestId('agent-route-sidebar-skeleton')).toBeNull();
       expect(screen.queryByText(/Your conversations will appear here/)).toBeNull();
 
@@ -1091,17 +1094,18 @@ describe('Standalone thread page', () => {
       renderAt(`/agents/${AGENT_ID}/threads/new`);
 
       expect(await screen.findByText(/Your conversations will appear here/)).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Hide threads panel' })).not.toBeNull();
-      expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Collapse navigation' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Expand navigation' })).toBeNull();
     });
   });
 
-  it('uses the Chat breadcrumb without configuration navigation', async () => {
+  it('switches agents from the sidebar instead of breadcrumbs, without configuration navigation', async () => {
     installHandlers();
     renderAt(`/agents/${AGENT_ID}/threads/${THREAD_ID}`);
 
     await screen.findByText('Tonight we cook carbonara.');
-    expect(screen.getByRole('link', { name: 'Chat', exact: true }).getAttribute('href')).toBe('/chat');
+    expect(await screen.findByLabelText('Switch agent')).toBeTruthy();
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Editor', exact: true })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Overview' })).toBeNull();
   });
@@ -1111,7 +1115,7 @@ describe('Standalone thread page', () => {
     renderAt(`/agents/${AGENT_ID}/threads/new`);
 
     await screen.findByText('Sushi ideas');
-    expect(screen.getByRole('link', { name: 'Chat', exact: true }).getAttribute('href')).toBe('/chat');
+    expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Editor', exact: true })).toBeNull();
   });
 

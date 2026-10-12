@@ -49,7 +49,7 @@ test.describe('Admin Role', () => {
       await expectCurrentBreadcrumb(page, 'Agents');
 
       // Should see at least the weather-agent in the list
-      await expect(page.getByText('Weather Agent')).toBeVisible();
+      await expect(page.locator('[data-slot=data-list]').getByRole('link', { name: /^Weather Agent/ })).toBeVisible();
     });
 
     test('admin can access agent details page', async ({ page }) => {
@@ -57,7 +57,10 @@ test.describe('Admin Role', () => {
       await page.goto('/agents');
 
       // Click on the weather agent
-      await page.getByText('Weather Agent').click();
+      await page
+        .locator('[data-slot=data-list]')
+        .getByRole('link', { name: /^Weather Agent/ })
+        .click();
 
       // Should be on agent chat page
       await expect(page).toHaveURL(/\/agents\/weather-agent/);

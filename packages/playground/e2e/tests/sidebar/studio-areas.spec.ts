@@ -23,19 +23,17 @@ test.describe('Studio task areas', () => {
       await page.setViewportSize({ width: 1440, height: 900 });
       await page.goto('/agents');
       const rail = page.getByRole('complementary', { name: 'Studio navigation' });
-      const build = page.getByRole('complementary', { name: 'Build navigation', exact: true });
-      await expect(build).toBeVisible();
-      const initial = await sidebarWidth(build);
-      await resizeSidebar(page, 'Build');
-      await expect.poll(() => sidebarWidth(build)).toBeGreaterThan(initial + 60);
-      const resized = await sidebarWidth(build);
-      const frame = await build.elementHandle();
-      for (const area of ['Evaluate', 'Monitor', 'Resources', 'Build']) {
+      const agents = page.getByRole('complementary', { name: 'Agents navigation', exact: true });
+      await expect(agents).toBeVisible();
+      const initial = await sidebarWidth(agents);
+      await resizeSidebar(page, 'Agents');
+      await expect.poll(() => sidebarWidth(agents)).toBeGreaterThan(initial + 60);
+      const resized = await sidebarWidth(agents);
+      const frame = await agents.elementHandle();
+      for (const area of ['Evaluate', 'Agents']) {
         await rail.getByRole('link', { name: area, exact: true }).click();
-        const sidebar = page.getByRole('complementary', {
-          name: `${area === 'Resources' ? 'Workspace' : area} navigation`,
-          exact: true,
-        });
+        const label = `${area} navigation`;
+        const sidebar = page.getByRole('complementary', { name: label, exact: true });
         await expect(sidebar).toBeVisible();
         expect(await sidebar.evaluate((element, previous) => element === previous, frame)).toBe(true);
         await expect.poll(async () => Math.abs((await sidebarWidth(sidebar)) - resized)).toBeLessThan(2);
@@ -46,23 +44,22 @@ test.describe('Studio task areas', () => {
         expect(Math.abs(bounds.height - shell.height)).toBeLessThan(2);
         await expect(page.getByText('Something went wrong', { exact: true })).toHaveCount(0);
       }
-      await build.getByRole('link', { name: 'Prompts', exact: true }).click();
-      await expect(page).toHaveURL(/\/prompts$/);
       await page.reload();
-      await expect(build).toBeVisible();
-      await expect.poll(async () => Math.abs((await sidebarWidth(build)) - resized)).toBeLessThan(2);
+      await expect(agents).toBeVisible();
+      await expect.poll(async () => Math.abs((await sidebarWidth(agents)) - resized)).toBeLessThan(2);
     });
   });
 
   test.describe('when opening evaluation on a phone', () => {
     test('navigates the shared drawer and closes it after selecting a feature', async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
-      await page.goto('/scorers');
+      await page.goto('/experiments');
       await page.getByRole('button', { name: 'Evaluate navigation', exact: true }).click();
       const drawer = page.getByRole('dialog', { name: 'Evaluate navigation', exact: true });
-      for (const name of ['Experiments', 'Datasets', 'Scorers', 'Review Queue']) {
+      for (const name of ['Experiments', 'Review Queue']) {
         await expect(drawer.getByRole('link', { name, exact: true })).toBeVisible();
       }
+      await expect(drawer.getByRole('navigation', { name: 'Datasets list' })).toBeVisible();
       await drawer.getByRole('link', { name: 'Review Queue' }).click();
       await expect(page).toHaveURL(/\/experiments\/review-queue$/);
       await expect(drawer).toHaveCount(0);
