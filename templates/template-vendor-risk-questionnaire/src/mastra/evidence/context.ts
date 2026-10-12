@@ -16,7 +16,7 @@ const sourceContextSchema = z
 export type SourceContext = z.infer<typeof sourceContextSchema>;
 const projections = new WeakMap<EvidenceExcerpt, SourceContext>();
 const metadata = /^(?:scope|date|asOf|environment|product|organization|status|record)$/i;
-export function sourceTerms(value: string) {
+function sourceTerms(value: string) {
   return value
     .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
@@ -215,7 +215,7 @@ export function bindSourceContext(excerpt: EvidenceExcerpt, context: SourceConte
   projections.set(excerpt, sourceContextSchema.parse(context));
   return excerpt;
 }
-export function modelSourceContext(excerpt: EvidenceExcerpt) {
+function modelSourceContext(excerpt: EvidenceExcerpt) {
   const context = projections.get(excerpt);
   return context && (context.field || context.relations.length) ? structuredClone(context) : undefined;
 }

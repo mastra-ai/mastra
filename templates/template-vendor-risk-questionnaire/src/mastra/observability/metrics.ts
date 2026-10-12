@@ -107,7 +107,7 @@ export async function readDomainMetrics(url: string, runId: string) {
         activeProcessingMs:
           started && finished ? unionMs([...processingInterval, ...reviewIntervals, ...exportIntervals]) : null,
         reviewWaitMs: reviewElapsed === null ? null : Math.max(0, reviewElapsed - unionMs(reviewIntervals)),
-        historicalTimingMissing: !started || !finished,
+        incompleteTiming: !started || !finished,
       },
       usage: {
         physicalCalls: usage.length,

@@ -31,9 +31,6 @@ const checkpointSchema = z
 export type RespondCheckpoint = z.infer<typeof checkpointSchema>;
 export async function openRespondStore(url: string) {
   const client = await openDatabase(url);
-  await client.execute(
-    'CREATE TABLE IF NOT EXISTS vrq_respond (run_id TEXT PRIMARY KEY, checkpoint_json TEXT NOT NULL, source_bytes BLOB NOT NULL)',
-  );
   return {
     read: async (runId: string) => {
       const r = await client.execute({

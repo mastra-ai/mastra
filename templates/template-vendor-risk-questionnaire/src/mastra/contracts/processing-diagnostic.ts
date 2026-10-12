@@ -23,7 +23,6 @@ export const processingDiagnosticSchema = z
       'REQUEST_GROUNDING',
       'MODEL_STREAM',
       'NATIVE_STRUCTURED_OUTPUT',
-      'NATIVE_TOOL_EXHAUSTION',
     ]),
     reason: reasonSchema,
     inputBytes: count,

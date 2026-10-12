@@ -391,7 +391,7 @@ async function processQuestionImpl(
   }
 }
 
-export function unknownDraft(questionId: string, domain: string): AnswerDraft {
+function unknownDraft(questionId: string, domain: string): AnswerDraft {
   return draftSchema.parse({
     questionId,
     domain,

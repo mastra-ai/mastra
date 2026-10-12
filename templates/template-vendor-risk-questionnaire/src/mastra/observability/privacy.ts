@@ -12,12 +12,13 @@ import type {
   FeedbackEvent,
 } from '@mastra/core/observability';
 import { Observability, MastraStorageExporter } from '@mastra/observability';
+import { defaultExecutionPolicy } from '../contracts/execution-policy.ts';
 import { sha256 } from '../intake/source.ts';
 import { telemetryHealth, TelemetryHealth } from '../persistence/database.ts';
 
 // Hash identifiers even when their schemas admit text. A syntactically valid ID can contain a secret.
 export const telemetryId = (value: unknown) => (typeof value === 'string' ? sha256(value).slice(0, 24) : undefined);
-export function safeMetadata(raw: Record<string, unknown> = {}) {
+function safeMetadata(raw: Record<string, unknown> = {}) {
   const safe: Record<string, string | number | boolean> = {};
   for (const key of ['runId', 'questionId', 'workflowRunId', 'organizationId']) {
     const value = telemetryId(raw[key]);
@@ -37,10 +38,10 @@ export function safeMetadata(raw: Record<string, unknown> = {}) {
   }
   return safe;
 }
-export function safeAttributes(value: object = {}) {
+function safeAttributes(value: object = {}) {
   const raw = value as Record<string, unknown>;
   const safe: Record<string, unknown> = {};
-  if (raw.model === 'gpt-6.1-sol') safe.model = raw.model;
+  if (raw.model === defaultExecutionPolicy.model.slice('openai/'.length)) safe.model = raw.model;
   if (raw.provider === 'openai') safe.provider = raw.provider;
   if (typeof raw.usageIncomplete === 'boolean') safe.usageIncomplete = raw.usageIncomplete;
   if (raw.usage && typeof raw.usage === 'object') {
@@ -53,7 +54,7 @@ export function safeAttributes(value: object = {}) {
   }
   return safe;
 }
-export function allowlistedSpan(span: AnyExportedSpan): AnyExportedSpan {
+function allowlistedSpan(span: AnyExportedSpan): AnyExportedSpan {
   return {
     id: sha256(span.id).slice(0, 16),
     traceId: sha256(span.traceId).slice(0, 32),
@@ -69,7 +70,7 @@ export function allowlistedSpan(span: AnyExportedSpan): AnyExportedSpan {
     attributes: safeAttributes(span.attributes),
   };
 }
-export class MetadataOnlyProcessor implements SpanOutputProcessor {
+class MetadataOnlyProcessor implements SpanOutputProcessor {
   name = 'vrq-metadata-only';
   private wrapped = new WeakSet<AnySpan>();
   private sanitized = new WeakMap<AnySpan, Record<string, string | number | boolean>>();

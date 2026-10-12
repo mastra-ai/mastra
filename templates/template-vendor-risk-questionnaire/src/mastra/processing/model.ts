@@ -68,7 +68,7 @@ export function boundedModel(options: {
   beforeCall?: () => void;
   validateOutput?: (value: unknown) => unknown;
   boundary?: ProcessingDiagnostic['boundary'];
-  onFinish?: (event: { tools: boolean; turn: number }) => void;
+  onFinish?: (event: { turn: number }) => void;
 }) {
   const { policy, store, runId, questionId, phase, provider } = options;
   const detector = phase === 'injection' || phase === 'pii';
@@ -245,7 +245,7 @@ export function boundedModel(options: {
             throw new ProcessingFailure('INVALID_MODEL_OUTPUT');
           }
         }
-        options.onFinish?.({ tools: false, turn: turns });
+        options.onFinish?.({ turn: turns });
         return {
           stream: new ReadableStream<ModelPart>({
             start(streamController) {

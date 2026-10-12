@@ -2,7 +2,7 @@ import { it, expect, beforeEach, afterEach } from 'vitest';
 import { unzipSync, strFromU8 } from 'fflate';
 import { temporaryDirectory, cleanupDirectory, alterZip, addZipMember } from '../fixtures/support.ts';
 import { documentFixture } from '../support/completion.ts';
-import { draftingFixture, controlledProvider } from '../support/drafting.ts';
+import { draftingFixture } from '../support/drafting.ts';
 import { screenRetainedPackage, writeDocument } from '../../src/mastra/completion/document.ts';
 
 let root: string;
@@ -61,9 +61,8 @@ it('blocks_unsafe_original_content_and_preserves_explicit_gaps', async () => {
       ),
     ).rejects.toThrow('SECURITY_BLOCKED');
 });
-it('rejects_uninspectable_package_content_without_external_transfer', async () => {
+it('rejects_uninspectable_package_content', async () => {
   const fixture = await draftingFixture(root),
-    provider = controlledProvider(fixture),
     evidence = fixture.snapshot.record,
     f = await documentFixture('xlsx');
   for (const [part, value] of [
@@ -83,8 +82,6 @@ it('rejects_uninspectable_package_content_without_external_transfer', async () =
     await expect(screenRetainedPackage(addZipMember(f.bytes, part!, value!), 'xlsx', evidence)).rejects.toThrow(
       'UNINSPECTABLE_PACKAGE_CONTENT',
     );
-  // This local-only entry point accepts no provider/model factory; no external transport is constructed.
-  expect(provider.calls).toHaveLength(0);
 });
 it('writes_formula_like_answers_as_literal_strings', async () => {
   const evidence = (await draftingFixture(root)).snapshot.record,
@@ -102,7 +99,7 @@ it('writes_formula_like_answers_as_literal_strings', async () => {
   expect(sheet).not.toContain('<hyperlink');
 });
 
-it('generated_technical_ids_avoid_numeric_pii_false_positives_without_exempting_content', async () => {
+it('screens_technical_identifiers_with_the_same_content_rules', async () => {
   const { checkLocalContent } = await import('../../src/mastra/processing/local-filter.ts');
   await expect(checkLocalContent('review-123456789012', 'technical-id')).rejects.toMatchObject({
     code: 'SECURITY_BLOCKED',

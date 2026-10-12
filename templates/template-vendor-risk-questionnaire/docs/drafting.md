@@ -4,16 +4,9 @@ Drafting consumes a persisted questionnaire intake and approved evidence snapsho
 
 ## Start and inspect
 
-Set `OPENAI_API_KEY` in `.env`, then run:
+Run `npm run respond -- /absolute/path/to/questionnaire.xlsx` (or `.docx`) for intake, drafting and review. Resume with `npm run respond -- --resume <run-id>`. The command retains completed results and usage reservations across interruptions.
 
-```text
-npm run draft -- start --run-id review-1 --manifest /path/to/manifest.json --root /path/to/evidence
-npm run draft -- status --run-id review-1
-```
-
-The first command persists run identity and policy before provider requests. It reports processing state and safe stop reasons, exiting unsuccessfully for a failed run. Status reopens state without model calls and reports question IDs, routes, attempts and usage. Supporting text stays in the restricted local database.
-
-A processing identity starts once. Changed sources or policy require a new intake/evidence run. Interrupted processing retains completed results and usage reservations; status does not restart it. Use the parent questionnaire workflow for persistent review and approved export, as described in [review and exports](review.md).
+`npm run review -- status --run-id <run-id>` inspects a persisted review once drafting reaches that checkpoint. Changed sources or policy require a new run. See `docs/review.md` for administration and recovery.
 
 ## Mastra Studio
 
@@ -49,9 +42,9 @@ Successful siblings remain persisted when a question fails. Global authenticatio
 
 ## Execution policy
 
-Choose budget, call count and elapsed-time limits for your use case. Supply the complete validated policy with `--policy /path/to/policy.json`, the Studio workflow's `policy` field, or `.runtime/profile.json` for the parent workflow. Defaults are examples, not a recommended spend allowance. Every detector, interpretation, answer, verification and retry call contributes to usage; the default 100 calls can leave gaps in the 24-question demo.
+Choose budget, call count and elapsed-time limits for your use case. Supply the complete validated policy through the Studio workflow's `policy` field or `.runtime/profile.json` for the respond command. `VRQ_MODEL` in `.env` overrides the profile model for new runs and sets the default when Studio input omits `policy`. An explicit Studio policy and saved runs retain their model. Restart Studio after changing `.env`. Defaults are examples, not a recommended spend allowance. Every detector, interpretation, answer, verification and retry call contributes to usage; the default 100 calls can leave gaps in the 24-question demo.
 
-`budgetUsd`, `maxPhysicalCalls` and `maxRunElapsedMs` accept user-selected positive finite values. `rates` accepts an ISO date and nonnegative input/output prices per million tokens. Update the historical example rates for your provider account. Concurrency, per-call input/output size, retries and detector attempts retain bounded validation to protect local execution.
+`budgetUsd`, `maxPhysicalCalls` and `maxRunElapsedMs` accept user-selected positive finite values. `rates` accepts an ISO date and nonnegative input/output prices per million tokens. Update the example rates for your chosen model and provider account; `VRQ_MODEL` does not update prices automatically. Concurrency, per-call input/output size, retries and detector attempts retain bounded validation to protect local execution.
 
 Usage reconciles once per physical call. Missing or malformed usage retains a conservative reservation; reasoning is included in output usage. Estimated cost is not a provider billing cap. A persisted run retains its original policy through review; use a new run to change it.
 

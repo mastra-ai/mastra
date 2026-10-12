@@ -1,11 +1,11 @@
 import { mkdir, mkdtemp, lstat, realpath, readdir, readFile, writeFile, rename, rm } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
-import { exportManifestSchema, projectionSchema } from '../contracts/review.ts';
+import { documentPublicationSchema } from '../contracts/completion.ts';
 import type { ExportManifest, ReviewState } from '../contracts/review.ts';
 import { openReviewStore } from '../persistence/review.ts';
 import { openProcessingStore } from '../persistence/processing.ts';
 import { canonicalJson, sha256 } from '../intake/source.ts';
-import { readCompletion, prepareCompletion, sourceBytes } from '../persistence/completion.ts';
+import { prepareCompletion, sourceBytes } from '../persistence/completion.ts';
 import { planDigest } from '../completion/plan.ts';
 import { writeDocument, validateDocument, screenRetainedPackage } from '../completion/document.ts';
 import { revalidateEvidence, validateProjectionText } from '../review/validation.ts';
@@ -34,10 +34,10 @@ export async function containedDirectory(root: string, path: string, create = fa
   if (relative(await realpath(base), await realpath(target)) !== rel) throw new Error('SYMLINK_PATH');
   return target;
 }
-export function bundlePath(root: string, s: Pick<ReviewState, 'runId' | 'revision'>) {
+function bundlePath(root: string, s: Pick<ReviewState, 'runId' | 'revision'>) {
   return resolve(root, 'exports', s.runId, `revision-${s.revision}`);
 }
-export async function verifyPublished(path: string, s: ReviewState): Promise<ExportManifest> {
+async function verifyPublished(path: string, s: ReviewState): Promise<ExportManifest> {
   const stat = await lstat(path);
   if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('UNSAFE_PUBLICATION');
   const manifest = s.stagedManifest ?? s.manifest;
@@ -49,10 +49,7 @@ export async function verifyPublished(path: string, s: ReviewState): Promise<Exp
     manifest.projectionDigest !== sha256(canonicalJson(s.projection))
   )
     throw new Error('PUBLICATION_BINDING_MISMATCH');
-  const expectedNames =
-    manifest.schemaVersion === 1
-      ? [...manifest.files.map(f => f.name), 'manifest.json']
-      : manifest.files.map(f => f.name);
+  const expectedNames = manifest.files.map(f => f.name);
   if (canonicalJson((await readdir(path)).sort()) !== canonicalJson(expectedNames.sort()))
     throw new Error('INCOMPLETE_PUBLICATION');
   for (const f of manifest.files) {
@@ -62,25 +59,17 @@ export async function verifyPublished(path: string, s: ReviewState): Promise<Exp
     const bytes = await readFile(file);
     if (bytes.length !== f.bytes || sha256(bytes) !== f.sha256) throw new Error('ARTIFACT_HASH_MISMATCH');
   }
-  if (manifest.schemaVersion === 1) {
-    const legacy = exportManifestSchema.parse(JSON.parse(await readFile(resolve(path, 'manifest.json'), 'utf8')));
-    if (canonicalJson(legacy) !== canonicalJson(manifest)) throw new Error('PUBLICATION_HASH_MISMATCH');
-    const json = projectionSchema.parse(JSON.parse(await readFile(resolve(path, 'completed.json'), 'utf8')));
-    if (canonicalJson(json) !== canonicalJson(s.projection)) throw new Error('PROJECTION_MISMATCH');
-  }
   return manifest;
 }
 export interface ExportOptions extends ReviewOptions {
   runtimeRoot: string;
-  fault?: (stage: 'write' | 'published' | 'state') => Promise<void>;
+  fault?: (stage: 'write' | 'state') => Promise<void>;
 }
 export async function publishExport(runId: string, options: ExportOptions) {
   const review = await openReviewStore(options.databaseUrl),
     processing = await openProcessingStore(options.databaseUrl);
   let state: ReviewState | undefined, temp: string | undefined;
   try {
-    const completion = await readCompletion(options.databaseUrl, runId);
-    if (completion.version === 1) throw new Error('LEGACY_RUN_READ_ONLY');
     const plan = await prepareCompletion(options.databaseUrl, runId);
     const intake = await processing.readIntake(runId);
     if (!intake) throw new Error('SOURCE_UNAVAILABLE');
@@ -101,7 +90,6 @@ export async function publishExport(runId: string, options: ExportOptions) {
       await lstat(destination);
       const manifest = await verifyPublished(destination, state);
       if (
-        manifest.schemaVersion !== 2 ||
         manifest.sourceSha256 !== plan.sourceSha256 ||
         manifest.mappingDigest !== plan.mappingDigest ||
         manifest.writePlanDigest !== planDigest(plan)
@@ -124,7 +112,7 @@ export async function publishExport(runId: string, options: ExportOptions) {
     await screenRetainedPackage(bytes, plan.format, evidence);
     temp = await mkdtemp(resolve(parent, '.staging-'));
     const name = `answered.${plan.format}` as const;
-    const manifest = exportManifestSchema.parse({
+    const manifest = documentPublicationSchema.parse({
       schemaVersion: 2,
       runId,
       revision: state.revision,
@@ -147,7 +135,6 @@ export async function publishExport(runId: string, options: ExportOptions) {
     state = await review.prepareExport(runId, state.claimToken!, manifest);
     await rename(temp, destination);
     temp = undefined;
-    await options.fault?.('published');
     await options.fault?.('state');
     return {
       state: await review.finishExport(runId, state.claimToken!, manifest),

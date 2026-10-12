@@ -4,7 +4,7 @@ import { createDraftWorkflow } from './vendor-risk-drafts.ts';
 import type { DraftWorkflowOptions } from './vendor-risk-drafts/runtime.ts';
 import { createReviewStep } from './vendor-risk-questionnaire/steps/review.ts';
 import { createExportStep } from './vendor-risk-questionnaire/steps/export.ts';
-import { exportManifestSchema } from '../contracts/review.ts';
+import { documentResultSchema } from '../contracts/completion.ts';
 import { openIntakeStore } from '../persistence/store.ts';
 import { databaseUrl } from '../persistence/database.ts';
 
@@ -31,7 +31,7 @@ export function createQuestionnaireWorkflow(options: DraftWorkflowOptions = {}) 
     description:
       'Persist drafts, suspend once for exact-set review and publish one source-preserving answered document.',
     inputSchema: draftInputSchema,
-    outputSchema: exportManifestSchema,
+    outputSchema: documentResultSchema,
     options: { autoRestartActiveRuns: false },
   })
     .then(canonical)

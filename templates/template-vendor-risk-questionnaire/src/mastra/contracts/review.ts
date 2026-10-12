@@ -108,40 +108,6 @@ export const projectionSchema = z
     )
       c.addIssue({ code: 'custom', message: 'Projection coverage, ordering and evidence bindings must agree.' });
   });
-const legacyArtifactNames = [
-  'questionnaire.xlsx',
-  'questionnaire.csv',
-  'evidence.csv',
-  'completed.json',
-  'completed.md',
-  'completed.pdf',
-] as const;
-export const legacyExportManifestSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    runId: scopedRunId,
-    revision: z.int().nonnegative(),
-    approvalId: id,
-    projectionDigest: hash,
-    quality: z.enum(['complete', 'delivered_with_gaps']),
-    files: z
-      .array(
-        z
-          .object({
-            name: z.enum(legacyArtifactNames),
-            sha256: hash,
-            bytes: z.int().positive(),
-          })
-          .strict(),
-      )
-      .length(legacyArtifactNames.length),
-  })
-  .strict()
-  .refine(v => new Set(v.files.map(f => f.name)).size === legacyArtifactNames.length, 'Complete bundle required.');
-export const exportManifestSchema = z.discriminatedUnion('schemaVersion', [
-  legacyExportManifestSchema,
-  documentPublicationSchema,
-]);
 export const reviewStateSchema = z
   .object({
     runId: scopedRunId,
@@ -156,8 +122,8 @@ export const reviewStateSchema = z
     results: z.array(questionResultSchema).min(1).max(100),
     state: z.enum(['awaiting_review', 'approved', 'exporting', 'exported', 'invalidated']),
     projection: projectionSchema.nullable(),
-    manifest: exportManifestSchema.nullable(),
-    stagedManifest: exportManifestSchema.nullable(),
+    manifest: documentPublicationSchema.nullable(),
+    stagedManifest: documentPublicationSchema.nullable(),
     claimToken: id.nullable(),
     claimAt: z.iso.datetime().nullable(),
   })
@@ -190,4 +156,4 @@ export const reviewStateSchema = z
 export type ReviewDecision = z.infer<typeof reviewDecisionSchema>;
 export type ReviewState = z.infer<typeof reviewStateSchema>;
 export type Projection = z.infer<typeof projectionSchema>;
-export type ExportManifest = z.infer<typeof exportManifestSchema>;
+export type ExportManifest = z.infer<typeof documentPublicationSchema>;

@@ -11,20 +11,6 @@ export function sourceBytes(value: unknown): Uint8Array {
   if (value instanceof ArrayBuffer) return new Uint8Array(value);
   throw new Error('SOURCE_UNAVAILABLE');
 }
-export async function readCompletion(url: string, runId: string) {
-  const client = await openDatabase(url);
-  try {
-    const rows = await client.execute({
-      sql: 'SELECT plan_json FROM vrq_document_plans WHERE run_id = ?',
-      args: [runId],
-    });
-    if (!rows.rows[0]) return { version: 1 as const };
-    const plan = rows.rows[0].plan_json;
-    return { version: 2 as const, plan: plan ? writePlanSchema.parse(JSON.parse(String(plan))) : undefined };
-  } finally {
-    client.close();
-  }
-}
 export async function prepareCompletion(
   url: string,
   runId: string,
@@ -36,7 +22,7 @@ export async function prepareCompletion(
       sql: 'SELECT plan_json FROM vrq_document_plans WHERE run_id = ?',
       args: [runId],
     });
-    if (!row.rows[0]) throw new Error('LEGACY_RUN_READ_ONLY');
+    if (!row.rows[0]) throw new Error('COMPLETION_NOT_INITIALIZED');
     const intake = await readIntake(client, runId);
     if (!intake) throw new Error('SOURCE_UNAVAILABLE');
     const bytes = sourceBytes(intake.sourceBytes);

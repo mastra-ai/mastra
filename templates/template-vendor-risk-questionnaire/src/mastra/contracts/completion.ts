@@ -1,3 +1,4 @@
+import { isAbsolute } from 'node:path';
 import { z } from 'zod';
 import { id, hash } from './primitives.ts';
 import { sourceLocatorSchema } from './source-locator.ts';
@@ -146,3 +147,10 @@ export const documentPublicationSchema = z
   })
   .strict()
   .refine(v => v.files[0]!.name === `answered.${v.format}`, 'Output format must agree.');
+
+export const documentResultSchema = z
+  .object({
+    path: z.string().min(1).refine(isAbsolute, 'An absolute output path is required.'),
+    manifest: documentPublicationSchema,
+  })
+  .strict();

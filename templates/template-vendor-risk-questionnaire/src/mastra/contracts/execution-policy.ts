@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const executionPolicySchema = z
   .object({
     version: z.literal(1),
-    model: z.literal('openai/gpt-6.1-sol'),
+    model: z.templateLiteral(['openai/', z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/)]),
     api: z.literal('responses'),
     reasoningEffort: z.literal('medium'),
     serviceTier: z.literal('default'),
@@ -14,8 +14,6 @@ export const executionPolicySchema = z
     callTimeoutMs: z.int().positive().max(60000),
     maxInputTokens: z.int().positive().max(8000),
     maxOutputTokens: z.int().positive().max(4000),
-    // Retained for compatibility with persisted version-1 policies; drafting now uses one turn.
-    draftTurns: z.int().positive().max(3).optional(),
     transientRetries: z.int().nonnegative().max(2),
     maxDetectorAttemptsPerPayload: z.int().positive().max(6),
     confidenceThreshold: z.number().min(0).max(1),
@@ -32,7 +30,7 @@ export const executionPolicySchema = z
   .strict();
 export const defaultExecutionPolicy = executionPolicySchema.parse({
   version: 1,
-  model: 'openai/gpt-6.1-sol',
+  model: process.env.VRQ_MODEL?.trim() || 'openai/gpt-6.1-sol',
   api: 'responses',
   reasoningEffort: 'medium',
   serviceTier: 'default',

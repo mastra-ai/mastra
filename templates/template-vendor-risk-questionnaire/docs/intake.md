@@ -1,6 +1,6 @@
 # Input profiles and mappings
 
-The primary `npm run respond -- /absolute/path/questionnaire.xlsx` (or `.docx`) command builds mappings internally. Known verified sample layouts need no mapping file; supported exceptions prompt for regions, row bounds, fields and explicit exclusions. The administrative JSON mapping interfaces below remain available. Destination preflight runs before drafting, including direct draft/Studio routes. It binds exact spans and prefilled consent to the immutable source and mapping hashes.
+The primary `npm run respond -- /absolute/path/questionnaire.xlsx` (or `.docx`) command builds mappings internally. Known verified sample layouts need no mapping file; supported exceptions prompt for regions, row bounds, fields and explicit exclusions. Studio also accepts explicit JSON mappings as described below. Destination preflight runs before drafting, including direct draft/Studio routes. It binds exact spans and prefilled consent to the immutable source and mapping hashes.
 
 Questionnaire inputs support XLSX ordinary worksheet tables, DOCX body tables, and identified DOCX paragraph blocks. Evidence intake separately supports XLSX, PDF, CSV, JSON and Markdown. DOCX evidence and PDF questionnaires are not supported. Approved review exports one answered XLSX or DOCX copy in the input format through the parent questionnaire workflow.
 

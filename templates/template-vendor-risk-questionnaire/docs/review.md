@@ -8,9 +8,9 @@ The lower-level commands below remain administration and inspection interfaces. 
 
 ## Studio intake
 
-`npm run dev` prepares originally authored fictional demo files only when `.runtime/demo` is absent. Existing data is preserved; partial or unsafe directories stop startup with a diagnostic. No provider request or answer approval occurs during preparation.
+`npm run demo` explicitly prepares the fictional sample files and evidence profile. Existing data is preserved; partial or unsafe data stops preparation with a diagnostic. Then run `npm run dev` to open Studio. Preparation makes no provider request or answer approval.
 
-Configure `.runtime/profile.json` once with absolute local evidence root/manifest paths, scope and execution policy. Startup writes the fictional profile only when absent; custom profiles and state are preserved. Source eligibility remains manifest-driven and topic retrieval remains bounded to the eligible snapshot.
+Configure `.runtime/profile.json` once with absolute local evidence root/manifest paths, scope and execution policy. Demo preparation writes the fictional profile only when absent; custom profiles and state are preserved. Source eligibility remains manifest-driven and topic retrieval remains bounded to the eligible snapshot.
 
 The tested stable Studio 1.33.0 rejects XLSX/DOCX chat attachments. In Studio select **vendor-risk-intake**, using an absolute local questionnaire path:
 
@@ -104,13 +104,13 @@ Then retry the applicable decision/export operation. Recovery does not replenish
 
 ## Answered document
 
-New runs publish exactly one `answered.xlsx` or `answered.docx` in the original input format. Application code writes literal values into the exact source-bound response destinations. The immutable original is preserved. Existing explanation fields retain safe reasons and limitations; existing evidence fields retain safe citation labels and locators. Full supporting attribution stays in the restricted local review/audit when no evidence field exists.
+New runs publish exactly one `answered.xlsx` or `answered.docx` in the original input format. The parent workflow returns `{ path, manifest }` after publication; the CLI uses that result directly. Reopening an exported run validates the existing file before returning it. Application code writes literal values into the exact source-bound response destinations. The immutable original is preserved. Existing explanation fields retain safe reasons and limitations; existing evidence fields retain safe citation labels and locators. Full supporting attribution stays in the restricted local review/audit when no evidence field exists.
 
 Unknown and withheld remain explicit. Choice destinations require a compatible explanation field so qualifications and gaps cannot disappear. Missing, protected, merged, ambiguous, overlapping or fixed-layout targets fail before provider work where detectable. Prefilled targets require explicit hash-bound replacement consent. Reviewed content is checked again for representability; nothing is truncated.
 
 The complete retained package is checked locally, including hidden content, headers/footers, comments and metadata. It is never sent wholesale to a model or detector. Unsupported binary/XML payloads and protected original content block release and require a corrected source. Approval cannot bypass these checks or authorize silent redaction of unrelated material.
 
-Publication stores version-2 source/mapping/plan/projection/approval/output bindings internally. Only one answered file is staged and atomically published; no customer manifest or JSON/PDF/CSV/Markdown companion is created. Retry validates the persisted bindings and output hash, reconciles an interrupted state update, and preserves approval and completed work. Version-1 historical bundles remain read-only and inspectable; unfinished historical releases require an explicitly new run.
+Publication stores version-2 source/mapping/plan/projection/approval/output bindings internally. Only one answered file is staged and atomically published; no customer manifest or JSON/PDF/CSV/Markdown companion is created. Retry validates the persisted bindings and output hash, reconciles an interrupted state update, and preserves approval and completed work.
 
 ## Explicit cleanup
 
@@ -139,12 +139,10 @@ Preview alone deletes nothing. Missing confirmation, stale previews or symlink e
 
 ## Domain metrics and tracing
 
-`npm run review -- metrics --run-id review-1` reads a safe projection from durable state. It deduplicates first routing and logical review/export events, counts each physical provider attempt, and reports active processing time separately from review waiting and wall time. Missing token usage, absent denominators and unavailable historical event times are `null`; observed subtotals remain explicit. Question, domain and run correlations are hashed. Restricted answer and audit records remain available through operator status.
-
-Native tracing is configured with `@mastra/observability` and `MastraStorageExporter` against the local DuckDB observability domain. LibSQL retains required workflow snapshots, answers, approvals, domain events and usage accounting. Telemetry errors report `degraded_incomplete` and preserve persisted business results. Required operational storage failures still stop work; a stop-write failure is explicitly unpersisted. Span names are fixed types; input/output, raw prompts, excerpts, tools, errors, paths, free metadata and arbitrary correlation strings are removed before export. The logger and detector callbacks emit fixed codes or pseudonymous metadata. Runtime/native result objects and operator records can still contain original messages and are restricted application data, not general telemetry. See [evaluation and metrics](evaluation.md).
+`npm run review -- metrics --run-id review-1` reports durable processing, review, export and usage metrics. See `docs/evaluation.md` for definitions, local storage and telemetry failure behavior. Operator status includes restricted answer and audit records.
 
 ## Local process ownership
 
-Stop Studio before running CLI commands that submit review, resume, export or clean up data. One mutating process holds `.runtime/vrq.db.writer`; a second process fails before native database operations reach the driver. `draft status`, `review status` and `review metrics` use query-only connections and can inspect state while Studio owns the writer lease.
+Stop Studio before running CLI commands that submit review, resume, export or clean up data. One mutating process holds `.runtime/vrq.db.writer`; a second process fails before native database operations reach the driver. `review status` and `review metrics` use query-only connections and can inspect state while Studio owns the writer lease.
 
 After a crash, inspect `.runtime/vrq.db.writer/owner.json` and confirm that its PID has exited. Run `npm run recover:writer -- --token <token>` with the recorded token. Recovery refuses a live process or changed token. Then inspect durable business and workflow state before deciding on any further work. A required terminal snapshot fault can leave native history `running` while application state is `failed`; never use that old native history to automatically restart or replay model work.

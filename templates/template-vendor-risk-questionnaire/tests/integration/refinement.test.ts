@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { realpath, readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -15,7 +15,7 @@ import { buildEvidenceSnapshot } from '../../src/mastra/evidence/snapshot.ts';
 import { openIntakeStore } from '../../src/mastra/persistence/store.ts';
 import { openProcessingStore } from '../../src/mastra/persistence/processing.ts';
 import { createIntakeWorkflow } from '../../src/mastra/workflows/vendor-risk-intake.ts';
-import { prepareDemo } from '../../scripts/predev.ts';
+import { prepareDemo } from '../../scripts/generate-demo.ts';
 import { questionInterpretationAgent } from '../../src/mastra/agents/question-interpretation.ts';
 import { evidenceAnswerAgent } from '../../src/mastra/agents/evidence-answer.ts';
 import { supportVerifierAgent } from '../../src/mastra/agents/support-verifier.ts';
@@ -26,6 +26,7 @@ beforeEach(async () => {
   root = await realpath(await temporaryDirectory());
 });
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await cleanupDirectory(root);
 });
 describe('Configured evidence and registered runtime', () => {
@@ -68,7 +69,10 @@ describe('Configured evidence and registered runtime', () => {
     await mkdir(runtime);
     const configured = demoProfile(corpus);
     await writeFile(resolve(runtime, 'profile.json'), JSON.stringify(configured));
+    vi.stubEnv('VRQ_MODEL', 'openai/gpt-5-mini');
     const profile = await loadEvidenceProfile(runtime);
+    expect(profile.policy.model).toBe('openai/gpt-5-mini');
+    expect(JSON.parse(await readFile(resolve(runtime, 'profile.json'), 'utf8'))).toEqual(configured);
     const evidence = await buildEvidenceSnapshot({
       runId: 'configured-run',
       manifest,
@@ -158,7 +162,7 @@ describe('Configured evidence and registered runtime', () => {
     processing.close();
     await f.mastra.shutdown();
   });
-  it('dev_bootstrap_preserves_custom_configuration_and_existing_runtime_state', async () => {
+  it('demo_generation_preserves_custom_configuration_and_existing_runtime_state', async () => {
     const corpus = resolve(root, 'custom-evidence');
     await mkdir(corpus);
     await generateCorpus(corpus);

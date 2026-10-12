@@ -37,11 +37,11 @@ Each invocation makes fresh requests and stores results, judgments, policy, usag
 
 ## Local operational metrics
 
-`npm run review -- metrics --run-id <run-id>` reports routing, supported answers, corrections, evidence coverage, gaps, failures, usage, exports and active/review/wall time. Domain events are persisted with their business transitions and deduplicated across restart, review and export. Physical retries remain separate usage records. Missing usage and historical timing remain `null`, with observed subtotals available.
+`npm run review -- metrics --run-id <run-id>` reports routing, supported answers, corrections, evidence coverage, gaps, failures, usage, exports and active/review/wall time. Domain events are persisted with their business transitions and deduplicated across restart, review and export. Physical retries remain separate usage records. Missing usage and incomplete timing remain `null`, with observed subtotals available.
 
 Supported-answer rate is supported released answers / total questions and remains `null` until final approval. Correction rate counts distinct materially corrected questions / reviewed questions. Evidence coverage uses actual reviewed claims and citations.
 
-Native traces contain pseudonymous correlations, fixed span types and allowlisted numeric metadata. Prompts, excerpts, tool payloads, raw errors and paths are excluded. No remote exporter is configured. Local traces use `.runtime/vrq.db.telemetry.duckdb`; required workflow state, approvals, domain events and consumption records use LibSQL at `.runtime/vrq.db`.
+Studio exposes native traces under **Observability → Traces**; questionnaire-specific aggregates remain available through `review metrics`. Native traces contain pseudonymous correlations, fixed span types and allowlisted numeric metadata. Prompts, excerpts, tool payloads, raw errors and paths are excluded. No remote exporter is configured. Local traces use `.runtime/vrq.db.telemetry.duckdb`; required workflow state, approvals, domain events and consumption records use LibSQL at `.runtime/vrq.db`.
 
 Telemetry adapter/exporter failures report `degraded_incomplete` in CLI output and Studio's `/vrq/telemetry-status` endpoint. Persisted business results remain valid. Required operational storage failures stop new calls and preserve committed results; an unpersistable stop reports `STORAGE_FAILURE_UNPERSISTED`. A failed terminal save can leave the last native snapshot marked `running`; it does not authorize automatic replay. Internally swallowed adapter errors cannot be reported by the template.
 

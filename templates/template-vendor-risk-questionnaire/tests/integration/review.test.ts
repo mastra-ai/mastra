@@ -11,7 +11,7 @@ import { openReviewStore } from '../../src/mastra/persistence/review.ts';
 import { openProcessingStore } from '../../src/mastra/persistence/processing.ts';
 import { recoverQuestionnaire } from '../../src/mastra/workflows/vendor-risk-questionnaire.ts';
 import { previewCleanup, confirmCleanup } from '../../src/mastra/runtime/maintenance.ts';
-import { prepareDemo } from '../../scripts/predev.ts';
+import { prepareDemo } from '../../scripts/generate-demo.ts';
 import { createIntakeWorkflow } from '../../src/mastra/workflows/vendor-risk-intake.ts';
 import { Mastra } from '@mastra/core';
 import { defaultExecutionPolicy } from '../../src/mastra/contracts/execution-policy.ts';

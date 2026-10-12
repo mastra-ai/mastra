@@ -5,8 +5,7 @@ import { supportVerifierAgent } from '../../src/mastra/agents/support-verifier.t
 import { answerConsistencyAgent } from '../../src/mastra/agents/answer-consistency.ts';
 import { it, expect, vi } from 'vitest';
 import { resolve } from 'node:path';
-import { readFile, writeFile, copyFile } from 'node:fs/promises';
-import { execFileSync } from 'node:child_process';
+import { readFile } from 'node:fs/promises';
 import { Mastra } from '@mastra/core';
 import { DuckDBStore } from '@mastra/duckdb';
 import { createNativeStorage, telemetryPath } from '../../src/mastra/persistence/database.ts';
@@ -84,10 +83,10 @@ it('reports_truthful_domain_metrics_without_duplicate_events', async () => {
     const db = await openDatabase(f.url);
     await db.execute({ sql: 'DELETE FROM vrq_events WHERE run_id = ?', args: [f.runId] });
     db.close();
-    const historical = await readDomainMetrics(f.url, f.runId);
-    expect(historical.timing.activeProcessingMs).toBeNull();
-    expect(historical.timing.wallMs).toBeNull();
-    expect(historical.timing.historicalTimingMissing).toBe(true);
+    const incomplete = await readDomainMetrics(f.url, f.runId);
+    expect(incomplete.timing.activeProcessingMs).toBeNull();
+    expect(incomplete.timing.wallMs).toBeNull();
+    expect(incomplete.timing.incompleteTiming).toBe(true);
     await restarted.mastra.shutdown();
   } finally {
     await cleanupDirectory(root);
@@ -214,18 +213,9 @@ it('omits_sensitive_question_document_and_credential_content_from_telemetry', as
     await cleanupDirectory(root);
   }
 }, 60000);
-it('local_demo_start_status_review_resume_exports_complete_bundle', async () => {
+it('review_resume_exports_one_document_with_bound_projection', async () => {
   const root = await temporaryDirectory();
   try {
-    await copyFile(resolve('scripts/setup.ts'), resolve(root, 'setup.ts'));
-    await writeFile(resolve(root, '.env.example'), 'OPENAI_API_KEY=\n');
-    await writeFile(resolve(root, '.env'), 'PRESERVE_OPERATOR_CONFIGURATION=1\n');
-    await writeFile(resolve(root, 'npm-stub.ts'), 'export {};\n');
-    execFileSync(process.execPath, [resolve(root, 'setup.ts')], {
-      cwd: root,
-      env: { ...process.env, npm_execpath: resolve(root, 'npm-stub.ts') },
-    });
-    expect(await readFile(resolve(root, '.env'), 'utf8')).toBe('PRESERVE_OPERATOR_CONFIGURATION=1\n');
     const f = await reviewFixture(
       root,
       { questions: [{ text: 'Does MFA apply?' }, { text: 'Missing operational evidence?' }] },

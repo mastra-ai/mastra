@@ -14,7 +14,7 @@ import { buildEvidenceSnapshot, loadManifest } from '../evidence/snapshot.ts';
 import { openIntakeStore } from '../persistence/store.ts';
 import { openReviewStore } from '../persistence/review.ts';
 import { openRespondStore } from '../persistence/respond.ts';
-import { prepareCompletion, readCompletion } from '../persistence/completion.ts';
+import { prepareCompletion } from '../persistence/completion.ts';
 import { submitReview } from '../review/service.ts';
 import { publishExport } from '../exports/publication.ts';
 import { recoverQuestionnaire } from '../workflows/vendor-risk-questionnaire.ts';
@@ -183,8 +183,7 @@ export async function respond(options: RespondOptions) {
         }
       await store.persistIntake(runId, imported.input, imported.mapping, source);
     }
-    // Intake atomically registers a v2 plan, which may still need building after an interruption.
-    if ((await readCompletion(options.databaseUrl, runId)).version !== 2) throw new Error('LEGACY_RUN_READ_ONLY');
+    // Intake registers a plan, which may still need building after an interruption.
     await prepareCompletion(options.databaseUrl, runId, checkpoint.consent);
     if (!(await store.readEvidence(runId))) {
       const evidence = await buildEvidenceSnapshot({
@@ -216,7 +215,10 @@ export async function respond(options: RespondOptions) {
     }
     if (!state) throw new Error('REVIEW_STATE_REQUIRED');
     const reviewOptions = { ...options, evidenceRoot: profile.evidenceRoot, manifestPath: profile.manifestPath };
-    if (state.state === 'exported') return publishExport(runId, reviewOptions);
+    if (state.state === 'exported') {
+      const { path, manifest } = await publishExport(runId, reviewOptions);
+      return { path, manifest };
+    }
     if (state.state === 'invalidated') throw new Error('RUN_INVALIDATED');
     if (state.state === 'awaiting_review') {
       display(state, io);
@@ -357,7 +359,7 @@ export async function respond(options: RespondOptions) {
       },
     });
     if (result.status !== 'success') throw new Error('PUBLICATION_INCOMPLETE');
-    const output = await publishExport(runId, reviewOptions);
+    const output = result.result;
     io.show(
       `${output.path}\n${output.manifest.quality}: ${state.projection!.supported}/${state.projection!.total} supported.`,
     );

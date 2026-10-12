@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { defaultExecutionPolicy, executionPolicySchema } from '../../src/mastra/contracts/execution-policy.ts';
 import { draftSchema, questionResultSchema, verificationSchema } from '../../src/mastra/contracts/answer.ts';
 import { securityOutcomeSchema, usageRecordSchema } from '../../src/mastra/contracts/processing.ts';
@@ -24,6 +24,28 @@ describe('processing policy and deterministic result contracts', () => {
       expect(executionPolicySchema.safeParse({ ...defaultExecutionPolicy, [key]: 0 }).success).toBe(false);
     expect(executionPolicySchema.safeParse({ ...defaultExecutionPolicy, maxOutputTokens: 4001 }).success).toBe(false);
     expect(executionPolicySchema.safeParse({ ...defaultExecutionPolicy, api: 'chat' }).success).toBe(false);
+  });
+  it('configures_new_defaults_without_rewriting_saved_policies', async () => {
+    try {
+      vi.stubEnv('VRQ_MODEL', 'openai/gpt-5-mini');
+      vi.resetModules();
+      const configured = await import('../../src/mastra/contracts/execution-policy.ts');
+      expect(configured.defaultExecutionPolicy.model).toBe('openai/gpt-5-mini');
+      expect(configured.executionPolicySchema.parse(defaultExecutionPolicy).model).toBe(defaultExecutionPolicy.model);
+      for (const model of ['anthropic/other', 'openai/', 'openai/bad name', `openai/${'a'.repeat(101)}`])
+        expect(configured.executionPolicySchema.safeParse({ ...defaultExecutionPolicy, model }).success).toBe(false);
+      vi.stubEnv('VRQ_MODEL', 'invalid');
+      vi.resetModules();
+      await expect(import('../../src/mastra/contracts/execution-policy.ts')).rejects.toThrow();
+      vi.stubEnv('VRQ_MODEL', '');
+      vi.resetModules();
+      expect((await import('../../src/mastra/contracts/execution-policy.ts')).defaultExecutionPolicy.model).toBe(
+        'openai/gpt-6.1-sol',
+      );
+    } finally {
+      vi.unstubAllEnvs();
+      vi.resetModules();
+    }
   });
   it('requires_reasoned_unknown_and_linked_security_routing', () => {
     const draft = {

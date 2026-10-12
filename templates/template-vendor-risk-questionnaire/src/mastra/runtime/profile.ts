@@ -1,5 +1,6 @@
 import { lstat, readFile, realpath } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { executionPolicySchema } from '../contracts/execution-policy.ts';
 import { evidenceProfileSchema } from '../contracts/profile.ts';
 import { manifestSchema } from '../contracts/evidence-manifest.ts';
 import { loadManifest } from '../evidence/snapshot.ts';
@@ -28,5 +29,9 @@ export async function validateEvidenceProfile(raw: unknown) {
     manifestFile = await lstat(profile.manifestPath);
   if (!evidence.isDirectory() || evidence.isSymbolicLink() || !manifestFile.isFile() || manifestFile.isSymbolicLink())
     throw new Error('PROFILE_SOURCE_UNSAFE');
+  profile.policy = executionPolicySchema.parse({
+    ...profile.policy,
+    model: process.env.VRQ_MODEL?.trim() || profile.policy.model,
+  });
   return profile;
 }

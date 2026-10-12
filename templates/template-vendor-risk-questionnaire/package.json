@@ -9,7 +9,6 @@
     "node": "^22.22.0 || >=24.12.0"
   },
   "scripts": {
-    "setup": "node scripts/setup.ts",
     "dev": "MASTRA_TELEMETRY_DISABLED=1 mastra dev",
     "build": "MASTRA_TELEMETRY_DISABLED=1 mastra build",
     "start": "MASTRA_TELEMETRY_DISABLED=1 mastra start",
@@ -17,10 +16,7 @@
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
     "test": "vitest run",
-    "intake": "node scripts/intake.ts",
     "demo": "node scripts/generate-demo.ts",
-    "draft": "node --env-file-if-exists=.env scripts/draft.ts",
-    "predev": "node scripts/predev.ts",
     "review": "node --env-file-if-exists=.env scripts/review.ts",
     "recover:writer": "node scripts/recover-writer.ts",
     "eval:live": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run --config vitest.live.config.ts",

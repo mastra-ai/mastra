@@ -15,14 +15,14 @@ import {
 import { docxFixture } from '../fixtures/office.ts';
 import { reviewFixture, decision, attachParent } from '../support/review.ts';
 import { draftingFixture, controlledProvider, executeDraft, jsonStream, userText } from '../support/drafting.ts';
-import { readCompletion } from '../../src/mastra/persistence/completion.ts';
 import * as completionPersistence from '../../src/mastra/persistence/completion.ts';
 import { openIntakeStore } from '../../src/mastra/persistence/store.ts';
 import { openRespondStore } from '../../src/mastra/persistence/respond.ts';
 import { buildWritePlan, preflightPlan } from '../../src/mastra/completion/plan.ts';
 import { writeDocument, validateDocument } from '../../src/mastra/completion/document.ts';
 import { submitReview } from '../../src/mastra/review/service.ts';
-import { publishExport, verifyPublished, bundlePath } from '../../src/mastra/exports/publication.ts';
+import { publishExport } from '../../src/mastra/exports/publication.ts';
+import * as publication from '../../src/mastra/exports/publication.ts';
 import { openReviewStore } from '../../src/mastra/persistence/review.ts';
 import { openDatabase } from '../../src/mastra/persistence/database.ts';
 import { IntakeCoordinator } from '../../src/mastra/intake/adapters.ts';
@@ -34,6 +34,7 @@ beforeEach(async () => {
   root = await temporaryDirectory();
 });
 afterEach(async () => {
+  vi.restoreAllMocks();
   await cleanupDirectory(root);
 });
 
@@ -149,49 +150,6 @@ it('preserves_unrelated_xml_properties_and_untouched_package_entries', async () 
     if (replacement.includes('w:b')) expect(strFromU8(unzipSync(output)['word/document.xml']!)).toContain('<w:b/>');
   }
 });
-it('preserves_legacy_records_and_artifacts_without_conversion', async () => {
-  const f = await reviewFixture(root),
-    approved = (await submitReview(decision(f), f.options))!;
-  const db = await openDatabase(f.url);
-  await db.execute({ sql: 'DELETE FROM vrq_document_plans WHERE run_id = ?', args: [f.runId] });
-  const path = bundlePath(f.runtimeRoot, approved);
-  await mkdir(path, { recursive: true });
-  const names = [
-    'questionnaire.xlsx',
-    'questionnaire.csv',
-    'evidence.csv',
-    'completed.json',
-    'completed.md',
-    'completed.pdf',
-  ] as const;
-  const files = [];
-  for (const name of names) {
-    const bytes = Buffer.from(name === 'completed.json' ? canonicalJson(approved.projection) : `Historical ${name}`);
-    await writeFile(resolve(path, name), bytes);
-    files.push({ name, sha256: sha256(bytes), bytes: bytes.length });
-  }
-  const manifest = {
-    schemaVersion: 1 as const,
-    runId: f.runId,
-    revision: approved.revision,
-    approvalId: approved.projection!.approvalId,
-    projectionDigest: sha256(canonicalJson(approved.projection)),
-    quality: approved.projection!.quality,
-    files,
-  };
-  await writeFile(resolve(path, 'manifest.json'), canonicalJson(manifest));
-  const legacy = { ...approved, state: 'exported' as const, manifest, stagedManifest: manifest };
-  await db.execute({
-    sql: 'UPDATE vrq_review SET state_json = ? WHERE run_id = ?',
-    args: [canonicalJson(legacy), f.runId],
-  });
-  expect(await readCompletion(f.url, f.runId)).toEqual({ version: 1 });
-  expect(await verifyPublished(path, legacy)).toEqual(manifest);
-  await expect(publishExport(f.runId, f.options)).rejects.toThrow('LEGACY_RUN_READ_ONLY');
-  expect(await readFile(resolve(path, 'manifest.json'), 'utf8')).toBe(canonicalJson(manifest));
-  db.close();
-  await f.mastra.shutdown();
-});
 it('rejects_stale_source_mapping_and_publication_hash_mismatch', async () => {
   const f = await documentFixture('xlsx'),
     plan = await f.plan();
@@ -305,9 +263,14 @@ it('respond_resumes_missing_initialization_checkpoints_before_provider_work', as
     expect(await store.readEvidence(runId)).toBeUndefined();
     store.close();
     expect(f.provider.calls).toHaveLength(0);
-    const completion = await readCompletion(f.url, runId);
-    expect(completion.version).toBe(2);
-    if (interruption === 'completion') expect(completion.plan).toBeUndefined();
+    const db = await openDatabase(f.url);
+    const completion = await db.execute({
+      sql: 'SELECT plan_json FROM vrq_document_plans WHERE run_id = ?',
+      args: [runId],
+    });
+    expect(completion.rows).toHaveLength(1);
+    if (interruption === 'completion') expect(completion.rows[0]!.plan_json).toBeNull();
+    db.close();
     const prompts: string[] = [],
       answers = ['release', 'APPROVE'];
     const output = await respond({
@@ -332,8 +295,8 @@ it('respond_resumes_missing_initialization_checkpoints_before_provider_work', as
     await f.mastra.shutdown();
   }
 });
-it('respond_does_not_initialize_or_convert_genuine_legacy_runs', async () => {
-  const f = await respondFixture('xlsx', 'legacy-resume'),
+it('respond_rejects_a_missing_completion_record_before_provider_work', async () => {
+  const f = await respondFixture('xlsx', 'missing-completion'),
     checkpoints = await openRespondStore(f.url);
   await checkpoints.initialize(f.runId, source(await readFile(f.sourcePath), 'source.xlsx'), f.sourcePath);
   checkpoints.close();
@@ -349,12 +312,11 @@ it('respond_does_not_initialize_or_convert_genuine_legacy_runs', async () => {
       io: {
         show: () => {},
         ask: async () => {
-          throw new Error('LEGACY_MUST_NOT_PROMPT');
+          throw new Error('MISSING_COMPLETION_MUST_NOT_PROMPT');
         },
       },
     }),
-  ).rejects.toThrow('LEGACY_RUN_READ_ONLY');
-  expect(await readCompletion(f.url, f.runId)).toEqual({ version: 1 });
+  ).rejects.toThrow('COMPLETION_NOT_INITIALIZED');
   expect(f.provider.calls).toHaveLength(0);
   await f.mastra.shutdown();
 });
@@ -479,6 +441,7 @@ it.each(['unknown', 'restricted', 'review_required', 'invalid correction'] as co
   },
 );
 it('respond_reviews_and_completes_xlsx_and_docx_without_json', async () => {
+  const publish = vi.spyOn(publication, 'publishExport');
   for (const format of ['xlsx', 'docx'] as const) {
     const f = await respondFixture(format),
       lines: string[] = [],
@@ -492,7 +455,23 @@ it('respond_reviews_and_completes_xlsx_and_docx_without_json', async () => {
       io: { show: s => lines.push(s), ask: async () => responses.shift() ?? null },
     });
     expect(output.manifest.schemaVersion).toBe(2);
+    expect(publish).toHaveBeenCalledTimes(1);
     expect(output.path.endsWith(`answered.${format}`)).toBe(true);
+    const resumed = await respond({
+      ...f,
+      databaseUrl: f.url,
+      resume: output.manifest.runId,
+      models: f.provider.factory,
+      io: {
+        show: () => {},
+        ask: async () => {
+          throw new Error('ALREADY_EXPORTED');
+        },
+      },
+    });
+    expect(resumed).toEqual(output);
+    expect(publish).toHaveBeenCalledTimes(2);
+    publish.mockClear();
     expect(lines.some(s => s.includes('Supported by approved evidence.'))).toBe(true);
     expect(await readdir(resolve(output.path, '..'))).toEqual([`answered.${format}`]);
     expect(f.provider.calls.filter(c => c.phase === 'draft')).toHaveLength(1);

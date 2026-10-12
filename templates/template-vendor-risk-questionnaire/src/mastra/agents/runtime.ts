@@ -19,7 +19,7 @@ function capability(agentId: string, context?: RequestContext) {
     throw new Error('RUNTIME_CAPABILITY_REQUIRED');
   return bound;
 }
-export function bindPhaseAgent(agent: Agent, options: ModelOptions, context: RequestContext) {
+function bindPhaseAgent(agent: Agent, options: ModelOptions, context: RequestContext) {
   if (context.get('runId') !== options.runId || context.get('questionId') !== options.questionId)
     throw new Error('RUNTIME_CAPABILITY_SCOPE');
   const bindings = capabilities.get(context) ?? new Map<string, Capability>();
