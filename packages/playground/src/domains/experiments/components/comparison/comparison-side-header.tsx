@@ -62,7 +62,7 @@ export function ComparisonSideHeader({
           <Button
             render={<Link href={`/experiments/${experiment.id}`} />}
             size="sm"
-
+            className="max-w-full min-w-0"
             aria-label={`Open experiment ${experiment.name || shortId}`}
           >
             <span className="min-w-0 truncate">{experiment.name || shortId}</span>

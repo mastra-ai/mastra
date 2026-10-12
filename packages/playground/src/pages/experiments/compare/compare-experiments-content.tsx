@@ -12,8 +12,11 @@ import { ExperimentsComparison } from '@/domains/experiments/components/comparis
 function ExperimentIdLinks({ experimentIds }: { experimentIds: string[] }) {
   return experimentIds.map((id, index) => (
     <span key={id} className="flex items-center gap-2">
-      {index > 0 && (index === experimentIds.length - 1 ? 'and' : ',')}
-      <ExperimentIdLink experimentId={id} />
+      {index > 0 && index === experimentIds.length - 1 && 'and'}
+      <span className="flex items-center">
+        <ExperimentIdLink experimentId={id} />
+        {index < experimentIds.length - 2 && ','}
+      </span>
     </span>
   ));
 }
@@ -104,12 +107,12 @@ export function CompareExperimentsContent({
     <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
       {/* Padding lives on the toolbar only: the comparison table runs edge to edge. */}
       <div className="grid w-full content-start">
-        <div className="flex min-w-0 items-center gap-3 px-4 py-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3 px-4 py-3">
           <Txt as="h1" variant="heading" tone="ink">
             Experiments comparison
           </Txt>
 
-          <Txt variant="caption" tone="muted" className="flex items-center gap-2">
+          <Txt variant="caption" tone="muted" className="flex flex-wrap items-center gap-2">
             <ExperimentIdLinks experimentIds={experimentIds} />
           </Txt>
         </div>
