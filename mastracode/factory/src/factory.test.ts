@@ -1299,10 +1299,11 @@ describe('MastraFactory.prepare', () => {
     expect(paths).toContain('/auth/me');
   });
 
-  // Both `MASTRA_COOKIE_DOMAIN` and `MASTRA_SHARED_API_URL` feed Studio's
-  // cookie-domain precedence (explicit > shared-API hostname > publicUrl
-  // fallback), so a runner with either set would silently flip the derived
-  // domain. Clear both around each derivation test and restore after.
+  // Studio no longer derives a cookie domain from `publicUrl`, and
+  // `MASTRA_COOKIE_DOMAIN` is not honored for setting, but a runner with
+  // `MASTRA_SHARED_API_URL` set on `.mastra.ai` would still flip
+  // `useProductionCookies`' legacy-clear path. Clear both around each cookie
+  // test and restore after.
   async function withCleanCookieEnv<T>(fn: () => Promise<T>): Promise<T> {
     const prevCookie = process.env.MASTRA_COOKIE_DOMAIN;
     const prevShared = process.env.MASTRA_SHARED_API_URL;
@@ -1322,15 +1323,17 @@ describe('MastraFactory.prepare', () => {
     return lastStudioProvider()?.getSessionHeaders?.({ id: 'test-token', userId: 'u_1' })?.['Set-Cookie'];
   }
 
-  it('derives the default Studio cookie domain from publicUrl for subdomain deploys', async () => {
-    // A `<sub>.mastra.cloud` deploy should mint cookies with
-    // `Domain=.mastra.cloud` so the browser sends them back to sibling
-    // subdomains — no `MASTRA_COOKIE_DOMAIN` env wiring required.
+  it('keeps the default Studio cookie host-only on a shared-domain deploy', async () => {
+    // SP-5: a `<sub>.mastra.cloud` deploy must NOT mint a `Domain=.mastra.cloud`
+    // cookie. A parent-scoped session cookie is sent by the browser to every
+    // sibling host on the shared domain, so one visited tenant host could
+    // harvest another deployment's sealed session. Host-only is the default; a
+    // domain-scoped cookie requires an explicit `cookieDomain`/`MASTRA_COOKIE_DOMAIN`.
     await withCleanCookieEnv(async () => {
       await prepareFactory({ storage: fakeStorage(), publicUrl: 'https://studio-abc.mastra.cloud' });
       const setCookie = seededSetCookie();
       expect(setCookie).toBeDefined();
-      expect(setCookie).toContain('Domain=.mastra.cloud');
+      expect(setCookie).not.toContain('Domain=');
     });
   });
 

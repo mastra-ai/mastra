@@ -319,64 +319,20 @@ function hasPlatformCredentials(): boolean {
 
 /**
  * Default auth provider — `MastraAuthStudio`, which proxies identity to the
- * shared Mastra platform API. `MastraAuthStudio` resolves `MASTRA_SHARED_API_URL`,
- * `MASTRA_ORGANIZATION_ID`, and `MASTRA_COOKIE_DOMAIN` from env on its own —
- * this helper only derives a cookie-domain fallback from the factory's
- * `publicUrl`.
+ * shared Mastra platform API. `MastraAuthStudio` resolves its own env
+ * (`MASTRA_SHARED_API_URL`, `MASTRA_ORGANIZATION_ID`).
  *
- * Cookie-domain resolution (Studio picks the first that wins):
- *   1. explicit `MASTRA_COOKIE_DOMAIN` env, if set;
- *   2. `.mastra.ai` when `sharedApiUrl` is on `.mastra.ai`;
- *   3. this parent-domain fallback derived from `publicUrl` — so a deploy on
- *      `https://foo.mastra.cloud` mints cookies with `Domain=.mastra.cloud`
- *      without the caller wiring the env var by hand.
- *   4. otherwise host-only (no `Domain=`), which is correct for `localhost`.
+ * The default session cookie is **host-only**: we deliberately do not derive a
+ * shared parent `Domain` (e.g. `.mastra.cloud`) from `publicUrl`. A
+ * parent-scoped session cookie is presented by the browser to every sibling
+ * host under that parent, so a single visited tenant host on the shared
+ * deployment domain could harvest another deployment's sealed session.
+ * Callers that consciously want a domain-scoped cookie opt in explicitly by
+ * passing `MASTRA_COOKIE_DOMAIN` or their own `MastraAuthStudio` (with
+ * `cookieDomain`) via `auth:`.
  */
-function buildDefaultStudioAuth(publicUrl: string): IMastraAuthProvider {
-  return new MastraAuthStudio({
-    cookieDomain: parentDomainFromPublicUrl(publicUrl),
-  });
-}
-
-/**
- * Derive a parent cookie domain from `publicUrl` by stripping the leftmost
- * label — the same shape platform-API's env injection uses (see
- * `platform/servers/api/src/lib/studio-env-vars.ts`: `.${routingDomain.replace(/^[^.]+\./, '')}`).
- *
- * Rather than a generic `strip-left-label` heuristic — which either emits
- * cookies scoped to a public suffix (`sub.example.co.uk` → `.example.co.uk`
- * requires PSL data to be safe) or misclassifies numeric hostnames like
- * `3scale.example.com` as IPv4 — we only derive a parent domain when the
- * host sits under one of the platform's known registrable domains. Anything
- * else (custom domains, arbitrary tenant hostnames, IPs, `localhost`)
- * falls through to host-only cookies. Callers that need a different scope
- * pass `MASTRA_COOKIE_DOMAIN` explicitly (Studio honors that first).
- */
-const KNOWN_PLATFORM_COOKIE_PARENTS = ['mastra.cloud', 'mastra.ai'] as const;
-
-function isIpLiteral(hostname: string): boolean {
-  // IPv6 addresses in URLs are bracketed; `URL.hostname` strips the brackets
-  // but the address itself still contains `:`. IPv4 is four dot-separated
-  // numeric octets — trust the parser to have already validated shape.
-  if (hostname.includes(':')) return true;
-  return /^\d+(?:\.\d+){3}$/.test(hostname);
-}
-
-function parentDomainFromPublicUrl(publicUrl: string): string | undefined {
-  let hostname: string;
-  try {
-    hostname = new URL(publicUrl).hostname.toLowerCase();
-  } catch {
-    return undefined;
-  }
-  if (hostname === 'localhost' || isIpLiteral(hostname)) return undefined;
-  for (const parent of KNOWN_PLATFORM_COOKIE_PARENTS) {
-    // Exact match → we're already on the parent, host-only is correct.
-    // Subdomain match → mint the parent-scoped cookie.
-    if (hostname === parent) return undefined;
-    if (hostname.endsWith(`.${parent}`)) return `.${parent}`;
-  }
-  return undefined;
+function buildDefaultStudioAuth(): IMastraAuthProvider {
+  return new MastraAuthStudio();
 }
 
 /** A session parking or being answered is inbox news, so the registry bumps the project's feed. */
@@ -487,12 +443,13 @@ export class MastraFactory {
     const eventBus = pubsub ?? new EventEmitterPubSub();
     // Default auth: honor an explicitly-passed provider (including `null` to
     // disable auth) as-is; otherwise fall back to `MastraAuthStudio`
-    // (platform-proxied identity). The default derives its cookie domain
-    // from `publicUrl` — deploys on `<sub>.mastra.cloud` mint parent-domain
-    // cookies without the caller wiring `MASTRA_COOKIE_DOMAIN` explicitly.
+    // (platform-proxied identity). The default is host-only — it does not
+    // derive a shared parent cookie domain from `publicUrl`, so the sealed
+    // session is never presented to sibling hosts on the shared deployment
+    // domain.
     const configuredAuth = this.#config.auth;
     const auth: IMastraAuthProvider | undefined =
-      configuredAuth === null ? undefined : (configuredAuth ?? buildDefaultStudioAuth(publicOrigin));
+      configuredAuth === null ? undefined : (configuredAuth ?? buildDefaultStudioAuth());
     if (auth && !this.#config.secretEncryption) {
       console.warn(
         "[factory] auth is enabled but 'secretEncryption' is not configured. Persisted model credentials, " +
