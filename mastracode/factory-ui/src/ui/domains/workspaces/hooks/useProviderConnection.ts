@@ -141,8 +141,6 @@ export function useProviderConnection({
     }
   };
 
-  const authError = scope === undefined ? undefined : authQuery.error;
-
   const canConfigure = (chosen: ProviderInfo, method?: ProviderConnectionMethod) =>
     scope !== 'org' || !authEnabled || orgKeyAdmin || isConfigured(chosen, method);
 
@@ -151,7 +149,7 @@ export function useProviderConnection({
       providersQuery.isPending ||
       (scope !== undefined && authQuery.isPending) ||
       (scope === 'org' && authEnabled && orgKeyAdminQuery.isPending),
-    catalogError: providersQuery.error ?? authError ?? undefined,
+    catalogError: providersQuery.error ?? (scope !== undefined ? authQuery.error : undefined) ?? undefined,
     authEnabled,
     orgKeyAdmin,
     // A provider can offer both methods; sign-in support must not hide API-key access.
