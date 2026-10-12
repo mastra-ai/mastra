@@ -40,7 +40,7 @@ export type TimeoutAbortSignal = {
   signal: AbortSignal | undefined;
   /** Rejects with a `MastraTimeoutError` when the budget elapses. Undefined when no timeout is configured. */
   timeoutPromise?: Promise<never>;
-  /** Clears the timer and detaches listeners. Safe to call more than once. */
+  /** Clears the timer and, unless `detachParentOnCleanup` is false, detaches the parent listener. Safe to call more than once. */
   cleanup: () => void;
 };
 
@@ -49,15 +49,21 @@ export type TimeoutAbortSignal = {
  *
  * When `timeoutMs` is undefined this is a pass-through: the parent signal is returned
  * unchanged and no timer is created.
+ *
+ * Set `detachParentOnCleanup: false` when the parent signal lives no longer than the
+ * derived signal and `cleanup` may run while consumers still hold the derived signal:
+ * cleanup then only clears the timer, so a later parent abort still propagates.
  */
 export function createTimeoutAbortSignal({
   parentSignal,
   timeoutMs,
   timeoutType,
+  detachParentOnCleanup = true,
 }: {
   parentSignal?: AbortSignal;
   timeoutMs?: number;
   timeoutType: MastraTimeoutType;
+  detachParentOnCleanup?: boolean;
 }): TimeoutAbortSignal {
   if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     return { signal: parentSignal, cleanup: () => {} };
@@ -97,7 +103,9 @@ export function createTimeoutAbortSignal({
     timeoutPromise,
     cleanup: () => {
       clearTimeout(timer);
-      parentSignal?.removeEventListener('abort', onParentAbort);
+      if (detachParentOnCleanup) {
+        parentSignal?.removeEventListener('abort', onParentAbort);
+      }
     },
   };
 }

@@ -616,6 +616,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/lowrouter',
+          label: 'LowRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/lucidquery',
           label: 'LucidQuery',
         },
@@ -771,13 +776,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/opencode-go',
-          label: 'OpenCode Go',
+          id: 'providers/opencode',
+          label: 'OpenCode',
         },
         {
           type: 'doc',
-          id: 'providers/opencode',
-          label: 'OpenCode Zen',
+          id: 'providers/opencode-go',
+          label: 'OpenCode Go',
         },
         {
           type: 'doc',

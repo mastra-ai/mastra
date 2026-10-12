@@ -95,8 +95,16 @@ const agent = new Agent({
     name: 'sandboxId',
     type: 'string',
     description:
-      'Persisted E2B provider sandbox ID to reattach to deterministically. When set, `start()` connects to this exact sandbox (resuming it if paused) instead of discovering by logical `id` metadata. Only a typed "sandbox gone" error (not found, killed, or not running) falls through to the usual logical-id lookup and create ladder; auth, quota, rate-limit, timeout, and network errors propagate without creating a new sandbox. A sandbox tagged with a different logical id is refused. Read the resolved provider ID from the `sandboxId` property after start.',
+      'Persisted E2B provider sandbox ID to reattach to deterministically. When set, `start()` connects to this exact sandbox (resuming it if paused) instead of discovering by logical `id` metadata. Under the default `reattach: \'best-effort\'`, only a typed "sandbox gone" error (not found, killed, or not running) falls through to the usual logical-id lookup and create ladder; auth, quota, rate-limit, timeout, and network errors propagate without creating a new sandbox. A sandbox tagged with a different logical id is refused. Read the resolved provider ID from the `sandboxId` property after start.',
     isOptional: true,
+  },
+  {
+    name: 'reattach',
+    type: "'best-effort' | 'required'",
+    description:
+      "What `start()` does when `sandboxId` is set but that sandbox is gone. `'best-effort'` falls through to the logical-id lookup, which may reconnect to another sandbox with the same `id` before creating a new one. `'required'` throws a `SandboxError` with code `SANDBOX_REATTACH_FAILED` instead of looking up or creating a sandbox. See [Requiring reattachment](#requiring-reattachment).",
+    isOptional: true,
+    defaultValue: "'best-effort'",
   },
   {
     name: 'domain',
@@ -171,6 +179,20 @@ const agent = new Agent({
   },
 ]}
 />
+
+## Requiring reattachment
+
+When you pass a persisted `sandboxId` and that sandbox is gone, the default `reattach: 'best-effort'` falls through to the logical-id lookup, which may reconnect to another sandbox with the same `id` or create a new one. When a different sandbox would silently lose state your app depends on, set `reattach: 'required'`:
+
+```typescript title="src/mastra/workspaces.ts"
+const sandbox = new E2BSandbox({
+  id: 'session-123',
+  sandboxId: persistedSandboxId,
+  reattach: 'required',
+})
+```
+
+With `reattach: 'required'`, a gone sandbox rejects `start()` with a `SandboxError` whose `code` is `SANDBOX_REATTACH_FAILED`, and no lookup or create runs. The error's `details` include `provider`, `sandboxId`, and `logicalId` (the sandbox's logical `id`). Other errors propagate unchanged, as they do under `'best-effort'`. To start fresh, clear your persisted `sandboxId` and construct the sandbox without it. Clones inherit the `reattach` setting.
 
 ## Background processes
 
@@ -498,6 +520,21 @@ Failure handling is designed so a broken template never wedges a session:
   ref could otherwise be reused forever. When creating a sandbox from a
   named ref fails, the cached resolution is dropped and creation retries
   down the fallback ladder.
+
+If a sandbox without the template's toolchain is worse than a failed start, set `fallbackTemplate: false` on the resolved spec. A failed build, or a ref that can't create a sandbox, then rejects `start()` with the original error instead of falling back:
+
+```typescript title="src/mastra/workspaces.ts"
+const repoTemplate = createRepoTemplate({
+  getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/app.git' }),
+  setupCommand: 'pnpm install',
+})!
+
+const sandbox = new E2BSandbox({
+  template: {
+    resolveSpec: async () => ({ ...(await repoTemplate.resolveSpec()), fallbackTemplate: false }),
+  },
+})
+```
 
 Private repositories build warm templates when `getRepositoryAccess` returns
 an `authorization` alongside the clone URL — a fresh, short-lived credential

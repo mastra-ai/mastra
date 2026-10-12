@@ -977,6 +977,9 @@ export class FactoryDecisionDispatcher {
             { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
             resolved.message,
           );
+          // The feed read is async storage I/O; the card can move while it runs.
+          if (await kickoffLanded()) return;
+          if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           if (decision.cancelInFlight && session.stream.isActive()) session.abort();
           const precedingMessage = decision.precedingMessage;
           if (precedingMessage) {
@@ -998,6 +1001,7 @@ export class FactoryDecisionDispatcher {
                 },
               ),
             );
+            if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           }
           // The run's own verdict, not the delivery's. A signal can reach the
           // agent perfectly and the run still die on a provider error or be

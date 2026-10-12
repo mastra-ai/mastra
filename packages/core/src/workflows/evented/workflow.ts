@@ -91,7 +91,7 @@ import { waitForSuspendedSnapshot } from '../utils';
 import { Workflow, Run } from '../workflow';
 import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
-import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
+import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk, withoutAuthToken } from './helpers';
 import type { TripwireChunk } from './helpers';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
@@ -815,8 +815,8 @@ function createStepFromProcessor<TProcessorId extends string>(
     outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<
       z.infer<typeof ProcessorStepOutputSchema>
     >,
-    execute: async ({ inputData, requestContext, outputWriter, ...obsFields }) => {
-      const observabilityContext = resolveObservabilityContext(obsFields);
+    execute: async ({ inputData, requestContext, outputWriter, tracing, tracingContext, loggerVNext, metrics }) => {
+      const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
@@ -1998,7 +1998,7 @@ export class EventedRun<
       status: 'running',
       value: {},
       context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
-      requestContext: requestContext.toJSON(),
+      requestContext: withoutAuthToken(requestContext.toJSON()),
       activePaths: [],
       activeStepsPath: {},
       suspendedPaths: {},
@@ -2136,7 +2136,7 @@ export class EventedRun<
       status: 'running',
       value: {},
       context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
-      requestContext: requestContext.toJSON(),
+      requestContext: withoutAuthToken(requestContext.toJSON()),
       activePaths: [],
       activeStepsPath: {},
       suspendedPaths: {},
@@ -2522,8 +2522,9 @@ export class EventedRun<
     }
 
     const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
-    // Start with the snapshot's request context (old values)
-    const requestContextObj = snapshot.requestContext ?? {};
+    // Start with the snapshot's request context (old values). Rows written before the
+    // auth token was stripped may still hold one; never restore a stale bearer token.
+    const requestContextObj = withoutAuthToken(snapshot.requestContext ?? {});
     const requestContext = new RequestContext();
 
     // First, set values from the snapshot

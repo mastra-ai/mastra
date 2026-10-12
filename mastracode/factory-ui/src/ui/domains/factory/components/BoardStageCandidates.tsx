@@ -16,7 +16,8 @@ export function BoardStageCandidates({
   candidates: BoardCandidate[];
   afterWorkItems: boolean;
   layout: BoardLayout;
-  projectRepositoryId: string;
+  /** The linked repository each candidate comes from. */
+  projectRepositoryId: (candidate: BoardCandidate) => string;
   factoryProjectId: string;
   onRun: (candidate: BoardCandidate, move: CardMove, prompt?: string) => void;
 }) {
@@ -39,7 +40,7 @@ export function BoardStageCandidates({
             key={candidate.sourceKey}
             layout={layout}
             candidate={candidate}
-            projectRepositoryId={projectRepositoryId}
+            projectRepositoryId={projectRepositoryId(candidate)}
             factoryProjectId={factoryProjectId}
             onRun={(move, prompt) => onRun(candidate, move, prompt)}
           />
