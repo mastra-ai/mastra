@@ -237,6 +237,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
           expect(response.data).toEqual({
             error: 'Invalid request body',
             issues: [{ field: 'root', message: expect.stringContaining('string') }],
+            problem: expect.objectContaining({ status: 400, code: 'INVALID_REQUEST_BODY' }),
           });
         } else {
           expect(response.status).toBe(200);
@@ -361,6 +362,14 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       expect(response.data).toEqual({
         error: 'Invalid request body',
         issues: [{ field, message: expect.any(String) }],
+        problem: {
+          type: 'urn:mastra:error:INVALID_REQUEST_BODY',
+          title: 'Invalid request body',
+          status: 400,
+          detail: 'Invalid request body',
+          code: 'INVALID_REQUEST_BODY',
+          issues: [{ field, message: expect.any(String) }],
+        },
       });
     });
 
@@ -976,6 +985,24 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
               throw new HTTPException(404, { message: 'Legacy fallback' });
             },
           },
+          {
+            method: 'GET',
+            path: '/custom/http-error-coded',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw new HTTPException(404, { message: 'Agent with id "x" not found', code: 'AGENT_NOT_FOUND' });
+            },
+          },
+          {
+            method: 'GET',
+            path: '/custom/http-error-unexpected',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              throw new HTTPException(500, { message: 'db password is hunter2' });
+            },
+          },
         ];
         const mutableServerRoutes = SERVER_ROUTES as ServerRoute[];
         const originalLength = mutableServerRoutes.length;
@@ -1030,8 +1057,47 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         });
 
         expect(response.status).toBe(404);
-        expect(response.data).toEqual({ error: 'Legacy fallback' });
+        expect(response.data).toEqual({
+          error: 'Legacy fallback',
+          problem: { type: 'about:blank', title: 'Not Found', status: 404, detail: 'Legacy fallback' },
+        });
         expect(custom.getHandlerCalls()).toBe(1);
+      });
+
+      it('exposes the business code of an HTTPException in the problem field', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/http-error-coded',
+        });
+
+        expect(response.status).toBe(404);
+        expect(response.headers['content-type']).toContain('application/json');
+        expect(response.data).toEqual({
+          error: 'Agent with id "x" not found',
+          problem: {
+            type: 'urn:mastra:error:AGENT_NOT_FOUND',
+            title: 'Agent not found',
+            status: 404,
+            detail: 'Agent with id "x" not found',
+            code: 'AGENT_NOT_FOUND',
+          },
+        });
+      });
+
+      it('masks the problem detail and exposes no code for unexpected server errors', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/http-error-unexpected',
+        });
+
+        expect(response.status).toBe(500);
+        const { problem } = response.data as { problem: unknown };
+        expect(problem).toEqual({ type: 'about:blank', title: 'Internal Server Error', status: 500 });
+        expect(JSON.stringify(problem)).not.toContain('hunter2');
       });
     });
 

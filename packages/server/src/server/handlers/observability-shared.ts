@@ -102,7 +102,10 @@ export async function getObservabilityStore(mastra: Mastra): Promise<Observabili
     // 501, not 500: a missing or explicitly disabled observability domain
     // (e.g. `domains: { observability: false }`) is a capability gap, not a
     // server failure — matching the other 501s in this file.
-    throw new HTTPException(501, { message: 'Observability storage domain is not available' });
+    throw new HTTPException(501, {
+      message: 'Observability storage domain is not available',
+      code: 'STORAGE_DOMAIN_UNAVAILABLE',
+    });
   }
   return observability;
 }
@@ -112,7 +115,10 @@ export async function getScoresStore(mastra: Mastra): Promise<ScoresStorage> {
   const storage = getStorage(mastra);
   const scores = await storage.getStore('scores');
   if (!scores) {
-    throw new HTTPException(501, { message: 'Scores storage domain is not available' });
+    throw new HTTPException(501, {
+      message: 'Scores storage domain is not available',
+      code: 'STORAGE_DOMAIN_UNAVAILABLE',
+    });
   }
   return scores;
 }

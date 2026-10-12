@@ -79,12 +79,12 @@ export const GET_BACKGROUND_TASK_ROUTE = createRoute({
     const bgManager = mastra.backgroundTaskManager;
     if (!bgManager) {
       // Background tasks not enabled — the task can't exist.
-      throw new HTTPException(404, { message: 'Background task not found' });
+      throw new HTTPException(404, { message: 'Background task not found', code: 'BACKGROUND_TASK_NOT_FOUND' });
     }
 
     const task = await bgManager.getTask(backgroundTaskId);
     if (!task) {
-      throw new HTTPException(404, { message: 'Background task not found' });
+      throw new HTTPException(404, { message: 'Background task not found', code: 'BACKGROUND_TASK_NOT_FOUND' });
     }
     return task;
   },

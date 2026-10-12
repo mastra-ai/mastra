@@ -5,7 +5,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { describe, expect, it } from 'vitest';
 
 import { HTTPException } from '../http-exception';
-import { handleError } from './error';
+import { handleError, publicCodeForError } from './error';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -226,6 +226,77 @@ describe('handleError', () => {
       }
       expect(caught).toBeInstanceOf(HTTPException);
       expect(caught!.status).toBe(500);
+    });
+  });
+
+  describe('business error codes', () => {
+    function catchError(err: unknown): HTTPException {
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        return e as HTTPException;
+      }
+      throw new Error('handleError did not throw');
+    }
+
+    it('exposes MODEL_NOT_ALLOWED on the exception', () => {
+      const err = Object.assign(new Error('nope'), { code: 'MODEL_NOT_ALLOWED' as const });
+      expect(catchError(err).code).toBe('MODEL_NOT_ALLOWED');
+    });
+
+    it.each([
+      ['WORKFLOW_SCHEMA_VALIDATION_FAILED', 'WORKFLOW_SCHEMA_VALIDATION_FAILED'],
+      ['WORKFLOW_RESUME_ALREADY_CLAIMED', 'WORKFLOW_RESUME_ALREADY_CLAIMED'],
+      ['DURABLE_AGENT_RUN_ACTIVE', 'DURABLE_RUN_ACTIVE'],
+      ['DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY', 'DURABLE_RUN_ACTIVE'],
+      ['DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS', 'DURABLE_RUN_RECOVERY_IN_PROGRESS'],
+      ['DURABLE_AGENT_RECOVER_RUN_SUSPENDED', 'DURABLE_RUN_SUSPENDED'],
+      ['DURABLE_AGENT_EXECUTION_CONFLICT', 'DURABLE_RUN_EXECUTION_CONFLICT'],
+      ['OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT', 'FEEDBACK_REVIEW_STATUS_CONFLICT'],
+      ['OBSERVABILITY_STORAGE_LIST_FEEDBACK_NOT_IMPLEMENTED', 'OBSERVABILITY_FEATURE_NOT_IMPLEMENTED'],
+      ['OBSERVABILITY_STORAGE_LIST_LOGS_NOT_IMPLEMENTED', 'OBSERVABILITY_FEATURE_NOT_IMPLEMENTED'],
+    ])('maps internal id %s to public code %s', (id, code) => {
+      const caught = catchError(Object.assign(new Error('boom'), { id }));
+      expect(caught.code).toBe(code);
+    });
+
+    it('does not leak internal ids of unknown MastraErrors', () => {
+      const err = new MastraError({
+        id: 'SOME_INTERNAL_FAILURE',
+        domain: ErrorDomain.MASTRA_MEMORY,
+        category: ErrorCategory.SYSTEM,
+        text: 'internal failure',
+      });
+      const caught = catchError(err);
+      expect(caught.code).toBeUndefined();
+    });
+
+    it('preserves the code of an HTTPException that is re-thrown through handleError', () => {
+      const original = new HTTPException(404, { message: 'Agent not found', code: 'AGENT_NOT_FOUND' });
+      const caught = catchError(original);
+      expect(caught.status).toBe(404);
+      expect(caught.message).toBe('Agent not found');
+      expect(caught.code).toBe('AGENT_NOT_FOUND');
+    });
+
+    it('maps the internal NO_MODEL_SELECTED id to the public code via publicCodeForError', () => {
+      const err = new MastraError({
+        id: 'NO_MODEL_SELECTED',
+        domain: ErrorDomain.MASTRA_SERVER,
+        category: ErrorCategory.USER,
+        text: 'No model selected',
+      });
+      expect(publicCodeForError(err)).toBe('NO_MODEL_SELECTED');
+    });
+
+    it('returns no public code for unknown internal ids', () => {
+      expect(publicCodeForError(new Error('x'))).toBeUndefined();
+      expect(publicCodeForError({ id: 'SOME_INTERNAL_FAILURE' })).toBeUndefined();
+    });
+
+    it('does not expose a code on a plain error with a status', () => {
+      const caught = catchError(Object.assign(new Error('teapot'), { status: 418 }));
+      expect(caught.code).toBeUndefined();
     });
   });
 });

@@ -64,7 +64,7 @@ describe('READ_AGENT_PLAN_ROUTE', () => {
           agentId: 'plan-agent',
           path,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Plan capability not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Plan capability not found', code: 'PLAN_CAPABILITY_NOT_FOUND' });
     });
   });
 

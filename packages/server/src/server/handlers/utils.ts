@@ -172,7 +172,10 @@ export async function validateThreadOwnership(
   effectiveResourceId: string | undefined,
 ): Promise<void> {
   if (thread && effectiveResourceId && thread.resourceId && thread.resourceId !== effectiveResourceId) {
-    throw new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' });
+    throw new HTTPException(403, {
+      message: 'Access denied: thread belongs to a different resource',
+      code: 'THREAD_ACCESS_DENIED',
+    });
   }
 }
 
@@ -226,6 +229,9 @@ export async function validateRunOwnership(
   effectiveResourceId: string | undefined,
 ): Promise<void> {
   if (run && effectiveResourceId && run.resourceId && run.resourceId !== effectiveResourceId) {
-    throw new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' });
+    throw new HTTPException(403, {
+      message: 'Access denied: workflow run belongs to a different resource',
+      code: 'WORKFLOW_RUN_ACCESS_DENIED',
+    });
   }
 }

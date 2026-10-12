@@ -82,7 +82,7 @@ async function hydrateScheduleResponse(
 async function loadSchedule(mastra: Mastra, scheduleId: string): Promise<AnySchedule> {
   const schedule = await mastra.schedules.get(scheduleId);
   if (!schedule) {
-    throw new HTTPException(404, { message: 'Schedule not found' });
+    throw new HTTPException(404, { message: 'Schedule not found', code: 'SCHEDULE_NOT_FOUND' });
   }
   return schedule;
 }

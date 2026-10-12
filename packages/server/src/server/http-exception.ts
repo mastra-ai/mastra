@@ -1,4 +1,5 @@
 // Copied from https://github.com/honojs/hono/blob/main/packages/hono/src/http-exception.ts
+import type { MastraErrorCode } from './http-errors/codes';
 
 /**
  * @module
@@ -70,12 +71,14 @@ export type StatusCode =
  * @property message - Optional custom error message.
  * @property cause - Optional cause of the error.
  * @property stack - Optional stack trace for the error.
+ * @property code - Optional public business error code, exposed as `problem.code`.
  */
 type HTTPExceptionOptions = {
   res?: Response;
   message?: string;
   cause?: unknown;
   stack?: string;
+  code?: MastraErrorCode;
 };
 
 /**
@@ -107,6 +110,7 @@ type HTTPExceptionOptions = {
 export class HTTPException extends Error {
   readonly res?: Response;
   readonly status: StatusCode;
+  readonly code?: MastraErrorCode;
 
   /**
    * Creates an instance of `HTTPException`.
@@ -117,6 +121,7 @@ export class HTTPException extends Error {
     super(options?.message, { cause: options?.cause });
     this.res = options?.res;
     this.status = status;
+    this.code = options?.code;
     this.stack = options?.stack || this.stack;
   }
 

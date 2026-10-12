@@ -44,12 +44,15 @@ export const LIST_STORED_WORKSPACES_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
-        throw new HTTPException(500, { message: 'Workspaces storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Workspaces storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Resolve the visibility scope for this caller. Non-owner queries for
@@ -110,12 +113,15 @@ export const GET_STORED_WORKSPACE_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
-        throw new HTTPException(500, { message: 'Workspaces storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Workspaces storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const workspace = await workspaceStore.getByIdResolved(storedWorkspaceId);
@@ -173,12 +179,15 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
-        throw new HTTPException(500, { message: 'Workspaces storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Workspaces storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Derive ID from name if not explicitly provided
@@ -268,12 +277,15 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
-        throw new HTTPException(500, { message: 'Workspaces storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Workspaces storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Check if workspace exists
@@ -355,12 +367,15 @@ export const DELETE_STORED_WORKSPACE_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const workspaceStore = await storage.getStore('workspaces');
       if (!workspaceStore) {
-        throw new HTTPException(500, { message: 'Workspaces storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Workspaces storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Check if workspace exists

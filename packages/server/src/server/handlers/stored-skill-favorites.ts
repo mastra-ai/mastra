@@ -14,15 +14,21 @@ import { handleError } from './error';
 async function getFavoritesContext(mastra: Parameters<typeof requireBuilderFeature>[0]) {
   const storage = mastra.getStorage();
   if (!storage) {
-    throw new HTTPException(500, { message: 'Storage is not configured' });
+    throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
   }
   const skillStore = await storage.getStore('skills');
   if (!skillStore) {
-    throw new HTTPException(500, { message: 'Skills storage domain is not available' });
+    throw new HTTPException(500, {
+      message: 'Skills storage domain is not available',
+      code: 'STORAGE_DOMAIN_UNAVAILABLE',
+    });
   }
   const favoritesStore = await storage.getStore('favorites');
   if (!favoritesStore) {
-    throw new HTTPException(500, { message: 'Favorites storage domain is not available' });
+    throw new HTTPException(500, {
+      message: 'Favorites storage domain is not available',
+      code: 'STORAGE_DOMAIN_UNAVAILABLE',
+    });
   }
   return { skillStore, favoritesStore };
 }

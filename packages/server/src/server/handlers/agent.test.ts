@@ -762,11 +762,11 @@ describe('Agent Handlers', () => {
     it('should throw 404 when agent not found', async () => {
       await expect(
         GET_AGENT_BY_ID_ROUTE.handler({ ...createTestServerContext({ mastra: mockMastra }), agentId: 'non-existing' }),
-      ).rejects.toThrow(
-        new HTTPException(404, {
-          message: 'Agent with id non-existing not found',
-        }),
-      );
+      ).rejects.toMatchObject({
+        status: 404,
+        message: 'Agent with id non-existing not found',
+        code: 'AGENT_NOT_FOUND',
+      });
     });
 
     it('should return serialized agent with browser tools when browser is configured', async () => {
@@ -825,7 +825,11 @@ describe('Agent Handlers', () => {
           threadId: 'test-thread',
           experimental_output: undefined,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
+      ).rejects.toMatchObject({
+        status: 404,
+        message: 'Agent with id non-existing not found',
+        code: 'AGENT_NOT_FOUND',
+      });
     });
   });
 
@@ -859,7 +863,11 @@ describe('Agent Handlers', () => {
           threadId: 'test-thread',
           experimental_output: undefined,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
+      ).rejects.toMatchObject({
+        status: 404,
+        message: 'Agent with id non-existing not found',
+        code: 'AGENT_NOT_FOUND',
+      });
     });
   });
 
@@ -896,7 +904,11 @@ describe('Agent Handlers', () => {
           threadId: 'test-thread',
           experimental_output: undefined,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Agent with id non-existing not found' }));
+      ).rejects.toMatchObject({
+        status: 404,
+        message: 'Agent with id non-existing not found',
+        code: 'AGENT_NOT_FOUND',
+      });
     });
   });
 

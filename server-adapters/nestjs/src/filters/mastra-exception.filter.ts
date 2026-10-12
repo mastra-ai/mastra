@@ -1,5 +1,9 @@
 import { formatZodError, isZodError } from '@mastra/server/handlers/error';
-import { getCustomHTTPExceptionResponse, HTTPException as MastraHTTPException } from '@mastra/server/server-adapter';
+import {
+  getCustomHTTPExceptionResponse,
+  HTTPException as MastraHTTPException,
+  toErrorBody,
+} from '@mastra/server/server-adapter';
 import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import type { ArgumentsHost, ExceptionFilter } from '@nestjs/common';
 import type { Request, Response } from 'express';
@@ -62,7 +66,7 @@ export class MastraExceptionFilter implements ExceptionFilter {
     }
 
     if (exception instanceof MastraHTTPException) {
-      response.status(exception.status).json({ error: exception.message });
+      response.status(exception.status).json(toErrorBody(exception).body);
       return;
     }
 
@@ -86,6 +90,7 @@ export class MastraExceptionFilter implements ExceptionFilter {
       ...(normalized.code && { code: normalized.code }),
       ...(normalized.issues && { issues: normalized.issues }),
       ...(requestId && { requestId }),
+      problem: toErrorBody(Object.assign(new Error(normalized.error), { status: normalized.status })).body.problem,
       timestamp: new Date().toISOString(),
     });
   }

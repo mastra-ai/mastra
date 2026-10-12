@@ -56,12 +56,15 @@ export const LIST_STORED_PROMPT_BLOCKS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const promptBlockStore = await storage.getStore('promptBlocks');
       if (!promptBlockStore) {
-        throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Prompt blocks storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const scope = await getStoredResourceScope(mastra, requestContext);
@@ -111,12 +114,15 @@ export const GET_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const promptBlockStore = await storage.getStore('promptBlocks');
       if (!promptBlockStore) {
-        throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Prompt blocks storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const promptBlock = await promptBlockStore.getByIdResolved(storedPromptBlockId, { status });
@@ -164,12 +170,15 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const promptBlockStore = await storage.getStore('promptBlocks');
       if (!promptBlockStore) {
-        throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Prompt blocks storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Derive ID from name if not explicitly provided
@@ -252,12 +261,15 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const promptBlockStore = await storage.getStore('promptBlocks');
       if (!promptBlockStore) {
-        throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Prompt blocks storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Check if prompt block exists
@@ -340,12 +352,15 @@ export const DELETE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const promptBlockStore = await storage.getStore('promptBlocks');
       if (!promptBlockStore) {
-        throw new HTTPException(500, { message: 'Prompt blocks storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Prompt blocks storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Check if prompt block exists

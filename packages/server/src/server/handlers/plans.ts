@@ -41,7 +41,7 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
       );
 
       if (!hasSubmitPlan) {
-        throw new HTTPException(404, { message: 'Plan capability not found' });
+        throw new HTTPException(404, { message: 'Plan capability not found', code: 'PLAN_CAPABILITY_NOT_FOUND' });
       }
       if (!isPlanPath(path)) {
         throw new HTTPException(400, { message: 'Invalid plan path' });

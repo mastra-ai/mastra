@@ -566,7 +566,7 @@ describe('Memory Handlers', () => {
           threadId: 'non-existent',
           agentId: 'test-agent',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Thread not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Thread not found', code: 'THREAD_NOT_FOUND' });
       expect(spy).toHaveBeenCalledWith({ threadId: 'non-existent' });
     });
 
@@ -1226,7 +1226,7 @@ describe('Memory Handlers', () => {
           agentId: 'test-agent',
           page: 0,
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Thread not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Thread not found', code: 'THREAD_NOT_FOUND' });
     });
 
     it('should return paginated messages for valid thread', async () => {
@@ -1934,7 +1934,11 @@ describe('Memory Handlers', () => {
             agentId: 'test-agent',
             threadId: 'user-b-thread',
           }),
-        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+        ).rejects.toMatchObject({
+          status: 403,
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        });
       });
 
       it('should allow access when resourceId matches thread owner', async () => {
@@ -2186,7 +2190,11 @@ describe('Memory Handlers', () => {
             threadId: 'user-b-thread',
             page: 0,
           }),
-        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+        ).rejects.toMatchObject({
+          status: 403,
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        });
       });
     });
 
@@ -2236,7 +2244,11 @@ describe('Memory Handlers', () => {
             agentId: 'test-agent',
             threadId: 'support',
           }),
-        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+        ).rejects.toMatchObject({
+          status: 403,
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        });
 
         expect(spy).not.toHaveBeenCalled();
         const thread = await mockMemory.getThreadById({ threadId: 'support' });
@@ -2277,7 +2289,11 @@ describe('Memory Handlers', () => {
             agentId: 'test-agent',
             threadId: 'user-b-thread',
           }),
-        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+        ).rejects.toMatchObject({
+          status: 403,
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        });
       });
 
       it('should allow deletion when resourceId matches thread owner', async () => {
@@ -2314,7 +2330,11 @@ describe('Memory Handlers', () => {
             threadId: 'user-b-thread',
             title: 'Hacked Title',
           }),
-        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+        ).rejects.toMatchObject({
+          status: 403,
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        });
       });
     });
 
@@ -2501,7 +2521,11 @@ describe('Memory Handlers', () => {
             agentId: 'test-agent',
             messages,
           }),
-        ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+        ).rejects.toMatchObject({
+          status: 403,
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        });
       });
 
       it('should allow saving messages to new thread that does not exist yet', async () => {
@@ -2804,11 +2828,11 @@ describe('Memory Handlers', () => {
             agentId: 'test-agent',
             messageIds: ['user-b-msg'],
           }),
-        ).rejects.toThrow(
-          new HTTPException(403, {
-            message: 'Access denied: thread belongs to a different resource',
-          }),
-        );
+        ).rejects.toMatchObject({
+          status: 403,
+          message: 'Access denied: thread belongs to a different resource',
+          code: 'THREAD_ACCESS_DENIED',
+        });
       });
 
       it('should allow deletion when user owns the thread containing the messages', async () => {

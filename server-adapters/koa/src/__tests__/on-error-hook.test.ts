@@ -443,7 +443,10 @@ describe('Koa onError hook integration tests', () => {
       expect(response.status).toBe(500);
       const result = await response.json();
       // Should fall back to default error response
-      expect(result).toEqual({ error: 'Original error' });
+      expect(result).toEqual({
+        error: 'Original error',
+        problem: { type: 'about:blank', title: 'Internal Server Error', status: 500 },
+      });
       // onError should only be called once (guard prevents double invocation)
       expect(onErrorCallCount).toBe(1);
     });

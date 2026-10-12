@@ -56,12 +56,15 @@ export const LIST_SCORER_VERSIONS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
-        throw new HTTPException(500, { message: 'Scorer definitions storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Scorer definitions storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const scorer = await scorerStore.getById(scorerId);
@@ -103,12 +106,15 @@ export const CREATE_SCORER_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
-        throw new HTTPException(500, { message: 'Scorer definitions storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Scorer definitions storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const scorer = await scorerStore.getById(scorerId);
@@ -189,12 +195,15 @@ export const GET_SCORER_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
-        throw new HTTPException(500, { message: 'Scorer definitions storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Scorer definitions storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const version = await scorerStore.getVersion(versionId);
@@ -236,12 +245,15 @@ export const ACTIVATE_SCORER_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
-        throw new HTTPException(500, { message: 'Scorer definitions storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Scorer definitions storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const scorer = await scorerStore.getById(scorerId);
@@ -298,12 +310,15 @@ export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
-        throw new HTTPException(500, { message: 'Scorer definitions storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Scorer definitions storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const scorer = await scorerStore.getById(scorerId);
@@ -390,12 +405,15 @@ export const DELETE_SCORER_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
-        throw new HTTPException(500, { message: 'Scorer definitions storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Scorer definitions storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const scorer = await scorerStore.getById(scorerId);
@@ -454,12 +472,15 @@ export const COMPARE_SCORER_VERSIONS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const scorerStore = await storage.getStore('scorerDefinitions');
       if (!scorerStore) {
-        throw new HTTPException(500, { message: 'Scorer definitions storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Scorer definitions storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
       const scorer = await scorerStore.getById(scorerId);
       assertStoredResourceScope(scorer, await getStoredResourceScope(mastra, requestContext));

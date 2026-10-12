@@ -153,7 +153,7 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
   }
 
   if (!workflow) {
-    throw new HTTPException(404, { message: 'Workflow not found' });
+    throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
   }
 
   return { workflow };
@@ -395,7 +395,7 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
       }
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
       const workflowRuns = (await workflow.listWorkflowRuns({
         fromDate: fromDate ? (typeof fromDate === 'string' ? new Date(fromDate) : fromDate) : undefined,
@@ -469,7 +469,7 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       // Parse fields parameter (comma-separated string)
@@ -481,7 +481,7 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
       });
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
 
       await validateRunOwnership(run, effectiveResourceId);
@@ -518,13 +518,13 @@ export const DELETE_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       // Validate ownership before deletion
       const run = await workflow.getWorkflowRunById(runId);
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
       await validateRunOwnership(run, effectiveResourceId);
 
@@ -565,7 +565,7 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const run = await workflow.createRun({ runId, resourceId: effectiveResourceId, disableScorers });
@@ -604,7 +604,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const existingRun = await workflow.getWorkflowRunById(runId, { withNestedWorkflows: false });
@@ -660,13 +660,13 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
 
       await validateRunOwnership(run, effectiveResourceId);
@@ -711,7 +711,7 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const _run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
@@ -750,13 +750,13 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
 
       await validateRunOwnership(run, effectiveResourceId);
@@ -807,13 +807,13 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
 
       await validateRunOwnership(run, effectiveResourceId);
@@ -866,13 +866,13 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
 
       await validateRunOwnership(run, effectiveResourceId);
@@ -925,13 +925,13 @@ export const RESUME_NO_WAIT_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
 
       await validateRunOwnership(run, effectiveResourceId);
@@ -973,13 +973,13 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
 
       await validateRunOwnership(run, effectiveResourceId);
@@ -1026,13 +1026,13 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
 
       await validateRunOwnership(run, effectiveResourceId);
@@ -1074,13 +1074,13 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
 
       await validateRunOwnership(run, effectiveResourceId);
@@ -1117,7 +1117,7 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ASYNC_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       await workflow.restartAllActiveWorkflowRuns();
@@ -1148,7 +1148,7 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       void workflow.restartAllActiveWorkflowRuns().catch(error => {
@@ -1189,13 +1189,13 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
 
       await validateRunOwnership(run, effectiveResourceId);
@@ -1237,13 +1237,13 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
 
       await validateRunOwnership(run, effectiveResourceId);
@@ -1289,13 +1289,13 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       // Validate ownership of existing run before time traveling
       const existingRun = await workflow.getWorkflowRunById(runId);
       if (!existingRun) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
       await validateRunOwnership(existingRun, effectiveResourceId);
 
@@ -1340,13 +1340,13 @@ export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
 
       await validateRunOwnership(run, effectiveResourceId);
@@ -1390,7 +1390,7 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const serverCache = mastra.getServerCache();
@@ -1440,13 +1440,13 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
 
       if (!workflow) {
-        throw new HTTPException(404, { message: 'Workflow not found' });
+        throw new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
       }
 
       const run = await workflow.getWorkflowRunById(runId);
 
       if (!run) {
-        throw new HTTPException(404, { message: 'Workflow run not found' });
+        throw new HTTPException(404, { message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
       }
 
       await validateRunOwnership(run, effectiveResourceId);

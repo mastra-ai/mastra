@@ -168,7 +168,7 @@ export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
       }
 
       if (!processorEntry) {
-        throw new HTTPException(404, { message: 'Processor not found' });
+        throw new HTTPException(404, { message: 'Processor not found', code: 'PROCESSOR_NOT_FOUND' });
       }
 
       // Check if it's a workflow processor
@@ -245,7 +245,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
       }
 
       if (!processor) {
-        throw new HTTPException(404, { message: 'Processor not found' });
+        throw new HTTPException(404, { message: 'Processor not found', code: 'PROCESSOR_NOT_FOUND' });
       }
 
       const messageList = new MessageList();

@@ -10,6 +10,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
+  toErrorBody,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -137,7 +138,10 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           }
         }
         ctx.status = status;
-        ctx.body = { error: error.message || 'Unknown error' };
+        ctx.body = {
+          ...toErrorBody(error).body,
+          error: error.message || 'Unknown error',
+        };
 
         // The route handler already logged this 501 at warn level. Skip the emit when only
         // Koa's default listener would receive it, since that prints to console.error.

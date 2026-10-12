@@ -135,12 +135,15 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
-        throw new HTTPException(500, { message: 'Skills storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Skills storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const filter = resolveAuthorFilter({
@@ -168,7 +171,10 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
         }
         const favoritesStore = await storage.getStore('favorites');
         if (!favoritesStore) {
-          throw new HTTPException(500, { message: 'Favorites storage domain is not available' });
+          throw new HTTPException(500, {
+            message: 'Favorites storage domain is not available',
+            code: 'STORAGE_DOMAIN_UNAVAILABLE',
+          });
         }
         const starredIds = await favoritesStore.listFavoritedIds({ userId: favoriteSubjectId, entityType: 'skill' });
         if (starredIds.length === 0) {
@@ -256,12 +262,15 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
-        throw new HTTPException(500, { message: 'Skills storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Skills storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const skill = await skillStore.getByIdResolved(storedSkillId);
@@ -314,12 +323,15 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
-        throw new HTTPException(500, { message: 'Skills storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Skills storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Derive ID from name if not explicitly provided
@@ -417,12 +429,15 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
-        throw new HTTPException(500, { message: 'Skills storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Skills storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Check if skill exists. Skill metadata lives on the resolved snapshot.
@@ -508,12 +523,15 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
-        throw new HTTPException(500, { message: 'Skills storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Skills storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Check if skill exists. Skill metadata lives on the resolved snapshot.
@@ -577,17 +595,23 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
-        throw new HTTPException(500, { message: 'Skills storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Skills storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const blobStore = await storage.getStore('blobs');
       if (!blobStore) {
-        throw new HTTPException(500, { message: 'Blob storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'Blob storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       // Verify skill exists. Skill metadata lives on the resolved snapshot.

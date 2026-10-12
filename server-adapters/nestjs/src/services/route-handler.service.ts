@@ -1,7 +1,7 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { formatZodError } from '@mastra/server/handlers/error';
-import { isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
+import { isZodError, SERVER_ROUTES, toValidationErrorBody } from '@mastra/server/server-adapter';
 import type { ServerRoute, ServerContext, ZodErrorLike } from '@mastra/server/server-adapter';
 import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
 
@@ -327,7 +327,7 @@ export class RouteHandlerService {
       `Invalid ${VALIDATION_CONTEXT_LABELS[context]}`,
       error,
       400,
-      formatZodError(error, VALIDATION_CONTEXT_LABELS[context]),
+      toValidationErrorBody(formatZodError(error, VALIDATION_CONTEXT_LABELS[context]), context),
     );
   }
 

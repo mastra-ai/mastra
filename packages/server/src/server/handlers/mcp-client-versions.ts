@@ -46,12 +46,15 @@ export const LIST_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
@@ -93,12 +96,15 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
@@ -182,12 +188,15 @@ export const GET_MCP_CLIENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const version = await mcpClientStore.getVersion(versionId);
@@ -229,12 +238,15 @@ export const ACTIVATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
@@ -291,12 +303,15 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
@@ -386,12 +401,15 @@ export const DELETE_MCP_CLIENT_VERSION_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
@@ -450,12 +468,15 @@ export const COMPARE_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured' });
+        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
       }
 
       const mcpClientStore = await storage.getStore('mcpClients');
       if (!mcpClientStore) {
-        throw new HTTPException(500, { message: 'MCP clients storage domain is not available' });
+        throw new HTTPException(500, {
+          message: 'MCP clients storage domain is not available',
+          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+        });
       }
       const mcpClient = await mcpClientStore.getById(mcpClientId);
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));

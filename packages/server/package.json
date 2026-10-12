@@ -90,6 +90,16 @@
         "default": "./dist/server/browser-stream/index.cjs"
       }
     },
+    "./http-errors": {
+      "import": {
+        "types": "./dist/server/http-errors/index.d.ts",
+        "default": "./dist/server/http-errors/index.js"
+      },
+      "require": {
+        "types": "./dist/server/http-errors/index.d.ts",
+        "default": "./dist/server/http-errors/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

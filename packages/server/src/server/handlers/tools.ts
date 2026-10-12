@@ -210,7 +210,7 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
       }
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+        throw new HTTPException(404, { message: 'Tool not found', code: 'TOOL_NOT_FOUND' });
       }
 
       return serializeTool(tool);
@@ -258,7 +258,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
       }
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+        throw new HTTPException(404, { message: 'Tool not found', code: 'TOOL_NOT_FOUND' });
       }
 
       if (!tool?.execute) {
@@ -322,7 +322,7 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
       const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+        throw new HTTPException(404, { message: 'Tool not found', code: 'TOOL_NOT_FOUND' });
       }
 
       return serializeTool(tool);
@@ -355,7 +355,7 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
       const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found' });
+        throw new HTTPException(404, { message: 'Tool not found', code: 'TOOL_NOT_FOUND' });
       }
 
       if (!tool?.execute) {

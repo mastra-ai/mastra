@@ -1,6 +1,6 @@
 ---
-title: "Reference: Server routes | Server"
-description: "Server adapters register these routes when you call server.init(). All routes are prefixed with the prefix option if configured."
+title: 'Reference: Server routes | Server'
+description: 'Server adapters register these routes when you call server.init(). All routes are prefixed with the prefix option if configured.'
 packages:
   - '@mastra/server'
 ---
@@ -651,3 +651,72 @@ Common status codes:
 
 - [createRoute()](/reference/server/create-route): Creating custom routes
 - [Server Adapters](/docs/server/server-adapters): Using adapters
+
+## Error responses
+
+Error responses keep the `error` message field and add an optional `problem` field that follows [RFC 9457](https://www.rfc-editor.org/rfc/rfc9457) Problem Details. The response `Content-Type` stays `application/json`.
+
+```json
+{
+  "error": "Agent with id weather-agent not found",
+  "problem": {
+    "type": "urn:mastra:error:AGENT_NOT_FOUND",
+    "title": "Agent not found",
+    "status": 404,
+    "detail": "Agent with id weather-agent not found",
+    "code": "AGENT_NOT_FOUND"
+  }
+}
+```
+
+The HTTP status gives the generic category. `problem.code` gives the business reason when Mastra knows it. Errors without a known reason use `type: "about:blank"` and omit `code`. For 5xx errors, `detail` is omitted so internal messages aren't exposed. Validation errors also include `problem.issues`.
+
+Import the schema, type, and codes from `@mastra/server/http-errors`. This entry point depends only on `zod`, so you can use it in client code:
+
+```typescript
+import {
+  problemDetailsSchema,
+  type ProblemDetails,
+  isMastraErrorCode,
+} from '@mastra/server/http-errors'
+
+const body = await response.json()
+const parsed = problemDetailsSchema.safeParse(body.problem)
+if (parsed.success && parsed.data.code === 'AGENT_NOT_FOUND') {
+  // handle missing agent
+}
+```
+
+### Error codes
+
+| Code | Default status | Title |
+| - | - | - |
+| `AGENT_NOT_FOUND` | 404 | Agent not found |
+| `MODEL_NOT_ALLOWED` | 422 | Model not allowed |
+| `NO_MODEL_SELECTED` | 400 | No model selected |
+| `WORKFLOW_NOT_FOUND` | 404 | Workflow not found |
+| `WORKFLOW_RUN_NOT_FOUND` | 404 | Workflow run not found |
+| `WORKFLOW_RUN_ACCESS_DENIED` | 403 | Workflow run access denied |
+| `WORKFLOW_SCHEMA_VALIDATION_FAILED` | 400 | Workflow schema validation failed |
+| `WORKFLOW_RESUME_ALREADY_CLAIMED` | 409 | Workflow resume already claimed |
+| `RUN_ID_REQUIRED` | 400 | Run id required |
+| `DURABLE_RUN_ACTIVE` | 409 | Durable run already active |
+| `DURABLE_RUN_RECOVERY_IN_PROGRESS` | 409 | Durable run recovery in progress |
+| `DURABLE_RUN_SUSPENDED` | 409 | Durable run suspended |
+| `DURABLE_RUN_EXECUTION_CONFLICT` | 409 | Durable run execution conflict |
+| `DURABLE_RUN_ACCESS_DENIED` | 403 | Durable run access denied |
+| `THREAD_NOT_FOUND` | 404 | Thread not found |
+| `THREAD_ACCESS_DENIED` | 403 | Thread access denied |
+| `TOOL_NOT_FOUND` | 404 | Tool not found |
+| `PROCESSOR_NOT_FOUND` | 404 | Processor not found |
+| `WORKSPACE_NOT_FOUND` | 404 | Workspace not found |
+| `SCHEDULE_NOT_FOUND` | 404 | Schedule not found |
+| `BACKGROUND_TASK_NOT_FOUND` | 404 | Background task not found |
+| `PLAN_CAPABILITY_NOT_FOUND` | 404 | Plan capability not found |
+| `STORAGE_NOT_CONFIGURED` | 500 | Storage not configured |
+| `STORAGE_DOMAIN_UNAVAILABLE` | 500 | Storage domain unavailable |
+| `OBSERVABILITY_FEATURE_NOT_IMPLEMENTED` | 501 | Observability feature not implemented |
+| `FEEDBACK_REVIEW_STATUS_CONFLICT` | 409 | Feedback review status conflict |
+| `INVALID_REQUEST_BODY` | 400 | Invalid request body |
+| `INVALID_QUERY_PARAMS` | 400 | Invalid query parameters |
+| `INVALID_PATH_PARAMS` | 400 | Invalid path parameters |

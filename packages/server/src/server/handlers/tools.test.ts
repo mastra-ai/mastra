@@ -641,11 +641,11 @@ describe('Tools Handlers', () => {
           agentId: 'non-existent',
           toolId: mockTool.id,
         }),
-      ).rejects.toThrow(
-        new HTTPException(404, {
-          message: 'Agent with id non-existent not found',
-        }),
-      );
+      ).rejects.toMatchObject({
+        status: 404,
+        message: 'Agent with id non-existent not found',
+        code: 'AGENT_NOT_FOUND',
+      });
     });
 
     it('should throw 404 when tool is not found in agent', async () => {
@@ -660,11 +660,7 @@ describe('Tools Handlers', () => {
           agentId: 'test-agent',
           toolId: 'non-existent',
         }),
-      ).rejects.toThrow(
-        new HTTPException(404, {
-          message: 'Tool not found',
-        }),
-      );
+      ).rejects.toMatchObject({ status: 404, message: 'Tool not found', code: 'TOOL_NOT_FOUND' });
     });
 
     it('should return serialized tool when found', async () => {

@@ -25,6 +25,7 @@ import { formatZodError } from '../handlers/error';
 import { HTTPException } from '../http-exception';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
+import { toValidationErrorBody } from './error-body';
 import type { SetMcpRequestAuth } from './mcp-auth';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import type { ServerRoute } from './routes';
@@ -1408,7 +1409,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
     return {
       status: 400,
-      body: formatZodError(error, MastraServer.CONTEXT_LABELS[context]),
+      body: toValidationErrorBody(formatZodError(error, MastraServer.CONTEXT_LABELS[context]), context),
     };
   }
 }
@@ -1507,3 +1508,6 @@ function getFGAResourcePermissionSlug(resourceType: string): string {
 
   return resourcePermissionSlugs[resourceType] ?? resourceType;
 }
+
+export { toErrorBody, toValidationErrorBody } from './error-body';
+export type { ErrorBody, ValidationErrorBody } from './error-body';

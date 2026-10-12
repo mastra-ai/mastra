@@ -185,7 +185,7 @@ describe('Agent Builder Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'non-existent',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
     });
 
     it('should get action by ID successfully', async () => {
@@ -230,7 +230,7 @@ describe('Agent Builder Handlers', () => {
           actionId: 'non-existent',
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
     });
 
     it('should start action run successfully when runId is not passed', async () => {
@@ -305,7 +305,7 @@ describe('Agent Builder Handlers', () => {
           actionId: 'non-existent',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
     });
 
     it('should get action run successfully', async () => {
@@ -351,7 +351,7 @@ describe('Agent Builder Handlers', () => {
           actionId: 'non-existent',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
     });
 
     it('should create action run successfully', async () => {
@@ -460,7 +460,7 @@ describe('Agent Builder Handlers', () => {
           step: 'test-step',
           resumeData: {},
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
 
       expect(WorkflowRegistry.registerTemporaryWorkflows).toHaveBeenCalledWith(
         {

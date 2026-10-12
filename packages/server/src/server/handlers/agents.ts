@@ -82,7 +82,7 @@ import type { Context } from '../types';
 
 import { toSlug } from '../utils';
 
-import { handleError } from './error';
+import { handleError, publicCodeForError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
   sanitizeBody,
@@ -211,7 +211,10 @@ async function validateDurableToolCallAccess({
 
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
   if (!workflowsStore) {
-    throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+    throw new HTTPException(403, {
+      message: 'Access denied: durable run belongs to a different resource',
+      code: 'DURABLE_RUN_ACCESS_DENIED',
+    });
   }
   const workflowName = getDurableLoopWorkflowName(agent);
   const contextResourceId = getContextResourceId(requestContext);
@@ -246,7 +249,10 @@ async function validateDurableToolCallAccess({
       persistedResourceIds.size > 1 ||
       (contextResourceId && persistedResourceId && persistedResourceId !== contextResourceId)
     ) {
-      throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+      throw new HTTPException(403, {
+        message: 'Access denied: durable run belongs to a different resource',
+        code: 'DURABLE_RUN_ACCESS_DENIED',
+      });
     }
 
     const ready =
@@ -257,16 +263,25 @@ async function validateDurableToolCallAccess({
 
     if (ready || Date.now() >= deadline || abortSignal?.aborted) {
       if (!workflowRun) {
-        throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' });
+        throw new HTTPException(403, {
+          message: 'Access denied: durable run belongs to a different resource',
+          code: 'DURABLE_RUN_ACCESS_DENIED',
+        });
       }
 
       const persistedThreadId = input?.state?.threadId ?? input?.messageListState?.memoryInfo?.threadId;
       if (threadId && persistedThreadId !== threadId) {
-        throw new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' });
+        throw new HTTPException(403, {
+          message: 'Access denied: durable run belongs to a different thread',
+          code: 'DURABLE_RUN_ACCESS_DENIED',
+        });
       }
 
       if (!ready || input?.agentId !== agent.id) {
-        throw new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' });
+        throw new HTTPException(403, {
+          message: 'Access denied: tool call is not suspended on this durable run',
+          code: 'DURABLE_RUN_ACCESS_DENIED',
+        });
       }
       return;
     }
@@ -1021,7 +1036,7 @@ export async function getAgentFromSystem({
   }
 
   if (!agent) {
-    throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
+    throw new HTTPException(404, { message: `Agent with id ${agentId} not found`, code: 'AGENT_NOT_FOUND' });
   }
 
   return agent;
@@ -1991,7 +2006,7 @@ function handleSignalRoutingError(error: unknown, defaultMessage: string): never
     !(error as { status?: unknown }).status &&
     !(error as { details?: { status?: unknown } }).details?.status
   ) {
-    throw new HTTPException(400, { message: error.message, cause: error });
+    throw new HTTPException(400, { message: error.message, cause: error, code: publicCodeForError(error) });
   }
   return handleError(error, defaultMessage);
 }
@@ -2735,7 +2750,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
       }
 
       if (!params.toolCallId) {
@@ -2893,7 +2908,7 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
         }
         const thread = await memory.getThreadById({ threadId: effectiveThreadId });
         if (!thread) {
-          throw new HTTPException(403, { message: 'Access denied: thread not found' });
+          throw new HTTPException(403, { message: 'Access denied: thread not found', code: 'THREAD_ACCESS_DENIED' });
         }
         await enforceThreadAccess({
           mastra,
@@ -2939,7 +2954,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
       }
 
       if (!params.toolCallId) {
@@ -2989,7 +3004,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
       }
 
       sanitizeBody(params, ['tools', 'actor']);
@@ -3114,7 +3129,7 @@ export const RECOVER_ROUTE = createRoute({
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
       }
 
       const { runId, versions } = params;
@@ -3188,7 +3203,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
       }
 
       sanitizeBody(params, ['tools', 'actor']);
@@ -3318,7 +3333,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
       }
 
       if (!params.toolCallId) {
@@ -3372,7 +3387,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
       }
 
       if (!params.toolCallId) {
@@ -3474,7 +3489,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -3514,7 +3529,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required' });
+        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -3862,7 +3877,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
     try {
       const agent = agentId ? mastra.getAgentById(agentId) : null;
       if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
+        throw new HTTPException(404, { message: 'Agent not found', code: 'AGENT_NOT_FOUND' });
       }
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name

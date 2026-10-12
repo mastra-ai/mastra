@@ -12,6 +12,7 @@ import {
   checkRouteFGA,
   getFGAProvider,
   getCustomHTTPExceptionResponse,
+  toErrorBody,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -694,21 +695,16 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               } catch {
                 // serialization or access error — omit cause
               }
-              return c.json(
-                {
-                  error: error instanceof Error ? error.message : 'Unknown error',
-                  ...(safeCause ? { cause: safeCause } : {}),
-                },
-                status,
-              );
+              const { body } = toErrorBody(error);
+              return c.json({ ...body, ...(safeCause ? { cause: safeCause } : {}) }, status);
             }
             // Check for MastraError with status in details
             if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
-              const status = (error.details as any).status;
-              return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, status);
+              const { status, body } = toErrorBody(error);
+              return c.json(body, status as any);
             }
           }
-          return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
+          return c.json(toErrorBody(error).body, 500);
         }
       },
     );

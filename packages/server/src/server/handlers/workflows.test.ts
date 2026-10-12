@@ -547,7 +547,7 @@ describe('vNext Workflow Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           workflowId: 'non-existent',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
     });
 
     it('should get workflow by ID successfully', async () => {
@@ -577,7 +577,7 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'non-existent',
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
     });
 
     it('should start workflow run successfully when runId is not passed', async () => {
@@ -672,7 +672,7 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'non-existent',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
     });
 
     it('should throw error when workflow run is not found', async () => {
@@ -682,7 +682,7 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'test-workflow',
           runId: 'non-existent',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
     });
 
     it('should get workflow run successfully', async () => {
@@ -728,7 +728,7 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'non-existent',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
     });
 
     it('should delete workflow run successfully', async () => {
@@ -760,7 +760,7 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'test-workflow',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
     });
   });
 
@@ -781,7 +781,7 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'non-existent',
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' });
     });
 
     it('should create workflow run successfully', async () => {
@@ -838,7 +838,7 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'test-workflow',
           runId: 'non-existent',
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
     });
 
     it('should start workflow run successfully', async () => {
@@ -969,7 +969,7 @@ describe('vNext Workflow Handlers', () => {
           step: 'test-step',
           resumeData: {},
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
     });
 
     it('should preserve resourceId when resuming async workflow after server restart', async () => {
@@ -1039,7 +1039,7 @@ describe('vNext Workflow Handlers', () => {
           step: 'test-step',
           resumeData: {},
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow run not found' }));
+      ).rejects.toMatchObject({ status: 404, message: 'Workflow run not found', code: 'WORKFLOW_RUN_NOT_FOUND' });
     });
 
     it('should resume workflow run successfully', async () => {

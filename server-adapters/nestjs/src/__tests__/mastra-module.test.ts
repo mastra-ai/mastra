@@ -454,7 +454,16 @@ describe('MastraModule', () => {
       expect(response.status).toBe(404);
 
       const body = response.body as any;
-      expect(body).toEqual({ error: expect.any(String) });
+      expect(body).toEqual({
+        error: expect.any(String),
+        problem: {
+          type: 'urn:mastra:error:AGENT_NOT_FOUND',
+          title: 'Agent not found',
+          status: 404,
+          detail: expect.any(String),
+          code: 'AGENT_NOT_FOUND',
+        },
+      });
 
       await app.close();
     });
