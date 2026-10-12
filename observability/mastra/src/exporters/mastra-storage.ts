@@ -69,6 +69,8 @@ type FlushResult = {
 };
 
 const FLUSH_SUCCEEDED: FlushResult = { failed: false };
+/** Max join/write rounds a single flush() makes before it returns under continuous traffic */
+const MAX_FLUSH_ROUNDS = 3;
 
 /**
  * Storage-backed exporter. Buffers observability events and flushes them in
@@ -625,21 +627,29 @@ export class MastraStorageExporter extends BaseExporter {
   async flush(): Promise<void> {
     // A timer or size trigger may have taken a batch out of the buffer and still be
     // writing it, so an empty buffer doesn't mean the data reached storage. Join those
-    // writes first: they can also defer span updates back into the buffer.
-    while (this.#inFlightFlushes.size > 0) {
-      await Promise.allSettled([...this.#inFlightFlushes]);
-    }
-    if (this.#eventBuffer.totalSize > 0) {
+    // writes first: they can also defer span updates back into the buffer. Writes that
+    // start while we wait get a few more rounds, then we stop so flush() stays bounded
+    // under non-stop traffic (same cap as ObservabilityBus).
+    for (let round = 0; round < MAX_FLUSH_ROUNDS; round++) {
+      if (this.#inFlightFlushes.size > 0) {
+        await Promise.allSettled([...this.#inFlightFlushes]);
+        continue;
+      }
+      if (this.#eventBuffer.totalSize === 0) {
+        return;
+      }
       this.logger.debug('Flushing buffered events', {
         bufferedEvents: this.#eventBuffer.totalSize,
       });
       await this.trackFlushBuffer();
-      // A write that started while ours ran may still be in flight (and may have
-      // deferred updates back into the buffer), so go around again.
-      if (this.#inFlightFlushes.size > 0) {
-        await this.flush();
+      if (this.#inFlightFlushes.size === 0) {
+        return;
       }
     }
+    this.logger.warn(`flush() stopped after ${MAX_FLUSH_ROUNDS} rounds; new writes kept starting`, {
+      inFlightWrites: this.#inFlightFlushes.size,
+      bufferedEvents: this.#eventBuffer.totalSize,
+    });
   }
 
   async shutdown(): Promise<void> {
