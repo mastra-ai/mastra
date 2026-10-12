@@ -15,9 +15,9 @@ import {
 import {
   clearOnboardingFlow,
   persistOnboardingFactory,
-  persistOnboardingLinkedRepository,
+  persistOnboardingLinkedRepositories,
   readOnboardingFactory,
-  readOnboardingLinkedRepository,
+  readOnboardingLinkedRepositories,
 } from '../services/onboardingFlow';
 import type { OnboardingDraft } from '../services/onboardingFlow';
 
@@ -55,15 +55,18 @@ export function useCompleteFactorySetup() {
       // Linking refetches the Factory list; the marker keeps the root guard from leaving onboarding.
       persistOnboardingFactory(factory.id);
       if (existing && existing.name !== repo.name) await renameFactoryProject(baseUrl, factory.id, repo.name);
-      const previouslyLinked = existing && readOnboardingLinkedRepository();
+      const previouslyLinked = existing ? readOnboardingLinkedRepositories() : [];
       await link.mutateAsync({
         factoryProjectId: factory.id,
         repo,
         onLinked: async linked => {
-          if (previouslyLinked && previouslyLinked !== linked.projectRepositoryId) {
-            await unlinkRepository(baseUrl, factory.id, previouslyLinked);
+          const onboardingLinks = [...new Set([...previouslyLinked, linked.projectRepositoryId])];
+          // Record the new link before cleanup can fail, including across a reload and another repo choice.
+          persistOnboardingLinkedRepositories(onboardingLinks);
+          for (const id of onboardingLinks) {
+            if (id !== linked.projectRepositoryId) await unlinkRepository(baseUrl, factory.id, id);
           }
-          persistOnboardingLinkedRepository(linked.projectRepositoryId);
+          persistOnboardingLinkedRepositories([linked.projectRepositoryId]);
         },
       });
       await Promise.all([

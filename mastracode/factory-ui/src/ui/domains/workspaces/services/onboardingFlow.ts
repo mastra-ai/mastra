@@ -100,13 +100,20 @@ export function readOnboardingFactory(): string | undefined {
   return sessionStorage.getItem(ONBOARDING_FACTORY_KEY) ?? undefined;
 }
 
-/** The repository link this onboarding created, so a retry never unlinks someone else's repository. */
-export function persistOnboardingLinkedRepository(projectRepositoryId: string): void {
-  sessionStorage.setItem(ONBOARDING_LINKED_REPOSITORY_KEY, projectRepositoryId);
+/** All links this onboarding created, including superseded links whose cleanup may need retrying. */
+export function persistOnboardingLinkedRepositories(projectRepositoryIds: readonly string[]): void {
+  sessionStorage.setItem(ONBOARDING_LINKED_REPOSITORY_KEY, JSON.stringify(projectRepositoryIds));
 }
 
-export function readOnboardingLinkedRepository(): string | undefined {
-  return sessionStorage.getItem(ONBOARDING_LINKED_REPOSITORY_KEY) ?? undefined;
+export function readOnboardingLinkedRepositories(): string[] {
+  const value = sessionStorage.getItem(ONBOARDING_LINKED_REPOSITORY_KEY);
+  if (!value) return [];
+  try {
+    return z.array(z.string()).parse(JSON.parse(value));
+  } catch {
+    // Earlier drafts stored a single unencoded link ID at this key.
+    return [value];
+  }
 }
 
 export function readOnboardingReviewReturn(): boolean {

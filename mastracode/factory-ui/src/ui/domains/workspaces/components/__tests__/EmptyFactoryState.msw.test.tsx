@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { GithubRepo, FactoryProjectPayload } from '../../services/github';
@@ -29,6 +30,7 @@ const repo: GithubRepo = {
   sandboxWorkdir: '/workspace/hello',
 };
 const otherRepo: GithubRepo = { ...repo, id: 100, fullName: 'octo/other', name: 'other', defaultBranch: 'develop' };
+const thirdRepo: GithubRepo = { ...repo, id: 101, fullName: 'octo/third', name: 'third' };
 const gitlabProject: GitLabProject = {
   id: 'gitlab-source',
   name: 'backend',
@@ -311,6 +313,74 @@ describe('Draft Factory onboarding', () => {
       expect(writes.filter(item => item.path === 'unlink')).toEqual([{ path: 'unlink', body: 'link-99' }]);
       expect(writes.filter(item => item.path === 'model').map(item => item.body)).toContainEqual({ name: 'other' });
       expect(links.map(link => link.repository.slug)).toEqual(['octo/teammate', 'octo/other']);
+    },
+  );
+
+  it.each([thirdRepo, repo])(
+    'removes superseded links after a failed cleanup, reload, and change to $fullName',
+    async finalRepo => {
+      const writes = registerSetup('model');
+      const repositories = [repo, otherRepo, thirdRepo];
+      const teammateRepo: GithubRepo = { ...repo, id: 7, name: 'teammate', fullName: 'octo/teammate' };
+      const links = new Map<string, GithubRepo>([['link-teammate', teammateRepo]]);
+      let cleanupFailed = false;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: repositories })),
+        http.post(
+          `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`,
+          async ({ request }) => {
+            const body = z.object({ repository: z.object({ externalId: z.string() }) }).parse(await request.json());
+            const selected = repositories.find(item => String(item.id) === body.repository.externalId);
+            if (!selected) return HttpResponse.json({ error: 'not_found' }, { status: 404 });
+            const id = `link-${selected.id}`;
+            links.set(id, selected);
+            return HttpResponse.json({
+              projectRepository: {
+                id,
+                branch: selected.defaultBranch,
+                sandboxWorkdir: selected.sandboxWorkdir,
+                repository: {
+                  slug: selected.fullName,
+                  externalId: String(selected.id),
+                  defaultBranch: selected.defaultBranch,
+                },
+              },
+            });
+          },
+        ),
+        http.delete(`${TEST_BASE_URL}/web/factory/projects/fp-1/repositories/:linkId`, ({ params }) => {
+          writes.push({ path: 'unlink', body: params.linkId });
+          if (!cleanupFailed) {
+            cleanupFailed = true;
+            return HttpResponse.json({ error: 'unavailable' }, { status: 502 });
+          }
+          links.delete(String(params.linkId));
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      persistOnboardingDraft({ repository: repo, model });
+      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+      const user = userEvent.setup();
+      const view = renderOnboarding();
+      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('502');
+
+      await user.click(screen.getByRole('button', { name: 'Edit codebase' }));
+      await user.click(await screen.findByRole('radio', { name: otherRepo.fullName }));
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent('Failed to unlink repository (502)');
+      expect([...links.keys()]).toEqual(['link-teammate', 'link-99', 'link-100']);
+
+      view.unmount();
+      renderOnboarding();
+      await user.click(await screen.findByRole('button', { name: 'Edit codebase' }));
+      await user.click(await screen.findByRole('radio', { name: finalRepo.fullName }));
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+      expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
+      expect([...links.values()].map(item => item.fullName)).toEqual(['octo/teammate', finalRepo.fullName]);
     },
   );
 

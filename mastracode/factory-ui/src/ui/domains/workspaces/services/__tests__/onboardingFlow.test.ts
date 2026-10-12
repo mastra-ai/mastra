@@ -3,11 +3,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   hasResumableFactoryOnboarding,
   ONBOARDING_FACTORY_KEY,
+  ONBOARDING_LINKED_REPOSITORY_KEY,
   ONBOARDING_STEP_KEY,
   ONBOARDING_UPDATED_AT_KEY,
   persistOnboardingFactory,
+  persistOnboardingLinkedRepositories,
   persistOnboardingStep,
   readOnboardingStep,
+  readOnboardingLinkedRepositories,
+  clearOnboardingFlow,
 } from '../onboardingFlow';
 
 class MemoryStorage implements Storage {
@@ -44,6 +48,15 @@ beforeEach(() => {
 });
 
 describe('Factory onboarding flow', () => {
+  it('retains repository links from older pending onboarding flows', () => {
+    sessionStorage.setItem(ONBOARDING_LINKED_REPOSITORY_KEY, 'link-original');
+    expect(readOnboardingLinkedRepositories()).toEqual(['link-original']);
+    persistOnboardingLinkedRepositories([...readOnboardingLinkedRepositories(), 'link-replacement']);
+    expect(readOnboardingLinkedRepositories()).toEqual(['link-original', 'link-replacement']);
+    clearOnboardingFlow();
+    expect(readOnboardingLinkedRepositories()).toEqual([]);
+  });
+
   it('round-trips the personal provider step', () => {
     persistOnboardingStep('personal-provider');
 
