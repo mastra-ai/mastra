@@ -3,7 +3,6 @@ import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
-/** A connection is a choice in a list, not a separate onboarding card. */
 export function OnboardingConnectionRow({
   icon,
   name,
@@ -35,7 +34,7 @@ export function OnboardingConnectionRow({
       <div className="min-w-0 flex-1 basis-40">
         <Txt as="h2" variant="caption" className="flex items-center gap-2">
           {name}
-          {connected && <Check className="text-success-indicator size-4" aria-label="Connected" />}
+          {connected && <Check className="text-success-indicator size-4" role="img" aria-label="Connected" />}
         </Txt>
         <Txt variant={compact ? 'meta' : 'caption'} tone="muted" className="mt-1">
           {description}

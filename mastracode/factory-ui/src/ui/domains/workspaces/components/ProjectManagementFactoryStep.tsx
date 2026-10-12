@@ -1,33 +1,21 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
-import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
-import type { OnboardingSource } from './onboarding/preview/OnboardingPreview';
+import { useWorkSourceConnections } from '../hooks/useWorkSourceConnections';
+import type { WorkSource } from '../hooks/useWorkSourceConnections';
 import { OnboardingLinearConnection } from './onboarding/OnboardingLinearConnection';
 import { OnboardingPlatformConnection } from './onboarding/OnboardingPlatformConnection';
 
 export interface ProjectManagementFactoryStepProps {
   onConnect: () => void;
   onContinue: () => void;
-  onPreviewSource?: (source: OnboardingSource) => void;
+  onPreviewSource?: (source: WorkSource) => void;
 }
 
-/**
- * The optional tracker step in onboarding. Linear, Jira, and incident.io are
- * equivalent, side-by-side choices; providers connect headlessly in place
- * (no redirect), so the wizard state survives the whole flow.
- */
 export function ProjectManagementFactoryStep({
   onConnect,
   onContinue,
   onPreviewSource,
 }: ProjectManagementFactoryStepProps) {
-  const linearStatus = useLinearStatusQuery();
-  const jiraConnections = usePlatformConnectionsQuery('jira');
-  const incidentConnections = usePlatformConnectionsQuery('incident-io');
-  const linearConnected = linearStatus.data?.connected === true;
-  const jiraConnected = jiraConnections.data?.some(connection => connection.status === 'active') ?? false;
-  const incidentConnected = incidentConnections.data?.some(connection => connection.status === 'active') ?? false;
-  const anyConnected = linearConnected || jiraConnected || incidentConnected;
+  const anyConnected = Object.values(useWorkSourceConnections()).some(Boolean);
   return (
     <section aria-label="Project management connections" className="w-full">
       <div className="space-y-1">

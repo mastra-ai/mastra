@@ -20,7 +20,6 @@ async function findPendingFactory(baseUrl: string, pendingId: string) {
   return factories.find(factory => factory.id === pendingId);
 }
 
-/** Commit once the user confirms. Keep the created id so failed saves can be retried. */
 export function useCompleteFactorySetup() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();

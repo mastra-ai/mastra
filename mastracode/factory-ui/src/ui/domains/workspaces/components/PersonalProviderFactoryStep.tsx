@@ -1,7 +1,7 @@
 import type { OnboardingConnectionChoice } from '../services/onboardingFlow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useProviderConnection } from '../hooks/useProviderConnection';
+import { CONNECTION_METHOD_LABEL, useProviderConnection } from '../hooks/useProviderConnection';
 import type { PreviewProvider } from '../hooks/useProviderConnection';
 import { providerDisplayName } from '../../settings/components/provider-display-name';
 import { FactoryDefaultModelForm } from './FactoryDefaultModelForm';
@@ -55,7 +55,7 @@ export function PersonalProviderFactoryStep({
         <OnboardingConnectionRow
           icon={<ProviderBrandIcon provider={connectedProvider.provider} />}
           name={providerDisplayName(connectedProvider.provider)}
-          description={connection.method === 'oauth' ? 'Provider sign-in · only you.' : 'API key · only you.'}
+          description={`${CONNECTION_METHOD_LABEL[connection.method ?? 'api_key']} · only you.`}
           connected
           action={
             <Button

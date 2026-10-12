@@ -14,6 +14,11 @@ export type ProviderCredentialScope = 'org' | 'user';
 export type ProviderConnectionMethod = 'api_key' | 'oauth';
 export type PreviewProvider = (providerId: string | undefined, method?: ProviderConnectionMethod) => void;
 
+export const CONNECTION_METHOD_LABEL: Record<ProviderConnectionMethod, string> = {
+  api_key: 'API key',
+  oauth: 'Provider sign-in',
+};
+
 export interface ActiveProviderOAuth {
   provider: string;
   session: OAuthStartResponse;
@@ -46,7 +51,6 @@ export interface ProviderConnection {
   completeOAuth: () => void;
 }
 
-/** Read the requested scope, independently of the caller's winning credential. */
 export function providerCredentialMethod(
   provider: ProviderInfo,
   scope?: ProviderCredentialScope,
@@ -68,6 +72,16 @@ export function providerCredentialMethod(
   return provider.source.startsWith('oauth') ? 'oauth' : 'api_key';
 }
 
+export function isProviderConnected(
+  provider: ProviderInfo,
+  scope?: ProviderCredentialScope,
+  method?: ProviderConnectionMethod,
+): boolean {
+  const saved = providerCredentialMethod(provider, scope);
+  // Unscoped credentials resolve by precedence (sign-in over saved key), so any one serves both methods.
+  return method && scope ? saved === method : saved !== undefined;
+}
+
 export function matchesProviderQuery(provider: ProviderInfo, query: string): boolean {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return true;
@@ -84,7 +98,6 @@ function offersApiKey(provider: ProviderInfo): boolean {
   return ['stored-org', 'stored-user', 'stored'].includes(provider.source);
 }
 
-/** Pick a model provider and connect it, by browser sign-in or by API key. */
 export function useProviderConnection({
   scope,
   initialSelection,
@@ -105,11 +118,9 @@ export function useProviderConnection({
   const authEnabled = authQuery.data?.authEnabled === true;
   const orgKeyAdmin = !authEnabled || (orgKeyAdminQuery.data ?? true);
   const credentialScope = authEnabled ? scope : undefined;
-  const isConfigured = (provider: ProviderInfo, method?: ProviderConnectionMethod) => {
-    const saved = providerCredentialMethod(provider, credentialScope);
-    // Unscoped credentials resolve by precedence (sign-in over saved key), so any one serves both methods.
-    return method && credentialScope ? saved === method : saved !== undefined;
-  };
+  const hidesDeploymentKeys = authEnabled && scope === 'user';
+  const isConfigured = (provider: ProviderInfo, method?: ProviderConnectionMethod) =>
+    isProviderConnected(provider, credentialScope, method);
   const byConfiguredThenName = (left: ProviderInfo, right: ProviderInfo): number => {
     if (isConfigured(left) !== isConfigured(right)) return isConfigured(left) ? -1 : 1;
     return providerDisplayName(left.provider).localeCompare(providerDisplayName(right.provider));
@@ -152,10 +163,9 @@ export function useProviderConnection({
     catalogError: providersQuery.error ?? (scope !== undefined ? authQuery.error : undefined) ?? undefined,
     authEnabled,
     orgKeyAdmin,
-    // A provider can offer both methods; sign-in support must not hide API-key access.
     signInProviders: providers.filter(candidate => candidate.oauth?.supported === true),
     keyProviders: providers.filter(
-      candidate => !(authEnabled && scope === 'user' && candidate.source === 'deployment') && offersApiKey(candidate),
+      candidate => !(hidesDeploymentKeys && candidate.source === 'deployment') && offersApiKey(candidate),
     ),
     provider,
     connected: provider ? isConfigured(provider, selection?.method) : false,

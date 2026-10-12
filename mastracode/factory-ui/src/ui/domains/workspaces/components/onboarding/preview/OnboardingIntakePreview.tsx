@@ -1,15 +1,13 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 import { Check, CircleDashed, Code2 } from 'lucide-react';
-import { useLinearStatusQuery } from '../../../../../../hooks/useLinearData';
-import { usePlatformConnectionsQuery } from '../../../../../../hooks/usePlatformConnections';
+import { useWorkSourceConnections, WORK_SOURCE_NAME } from '../../../hooks/useWorkSourceConnections';
+import type { WorkSource } from '../../../hooks/useWorkSourceConnections';
 import { IncidentIoIcon, JiraIcon } from '../../../../../ui/icons';
-import type { OnboardingSource } from './OnboardingPreview';
 import { Sketch, SketchLabel, SketchLink, SketchPanel } from './OnboardingSketch';
 
 const SOURCES = {
   linear: {
-    name: 'Linear',
     Icon: LinearIcon,
     example: 'Add repository search',
     id: 'ENG-124',
@@ -18,7 +16,6 @@ const SOURCES = {
     kind: 'Issue',
   },
   jira: {
-    name: 'Jira',
     Icon: JiraIcon,
     example: 'Improve sign-in errors',
     id: 'APP-124',
@@ -27,7 +24,6 @@ const SOURCES = {
     kind: 'Issue',
   },
   'incident-io': {
-    name: 'incident.io',
     Icon: IncidentIoIcon,
     example: 'Add a health check',
     id: 'INC-124',
@@ -37,17 +33,10 @@ const SOURCES = {
   },
 };
 
-/** The same item appears at the source and on the board: connection enables later import. */
-export function OnboardingIntakePreview({ source }: { source: OnboardingSource }) {
-  const linear = useLinearStatusQuery();
-  const jira = usePlatformConnectionsQuery('jira');
-  const incident = usePlatformConnectionsQuery('incident-io');
-  const status = {
-    linear: linear.data?.connected === true,
-    jira: jira.data?.some(item => item.status === 'active') === true,
-    'incident-io': incident.data?.some(item => item.status === 'active') === true,
-  };
-  const { name, Icon, example, id, previousId, previousExample, kind } = SOURCES[source];
+export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
+  const status = useWorkSourceConnections();
+  const name = WORK_SOURCE_NAME[source];
+  const { Icon, example, id, previousId, previousExample, kind } = SOURCES[source];
   return (
     <section aria-label="Work intake preview" className="relative h-full">
       <Sketch>

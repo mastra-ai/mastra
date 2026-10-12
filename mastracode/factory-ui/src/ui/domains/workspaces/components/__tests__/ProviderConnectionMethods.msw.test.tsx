@@ -57,7 +57,7 @@ describe('provider method and scope are independent choices', () => {
     renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     const dialog = within(screen.getByRole('dialog'));
-    expect(dialog.getByText('Everyone in your organization can use this key.')).toBeInTheDocument();
+    expect(dialog.getByText(/Everyone in your organization can use this key\./)).toBeInTheDocument();
     await user.type(dialog.getByLabelText('API key for Anthropic'), 'test-key');
     await user.click(dialog.getByRole('button', { name: 'Save' }));
     expect(await screen.findByRole('combobox')).toHaveTextContent('anthropic/claude-fable-5');

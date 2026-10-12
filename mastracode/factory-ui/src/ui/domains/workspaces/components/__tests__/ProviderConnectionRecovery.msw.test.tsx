@@ -22,7 +22,7 @@ const session = {
   kind: 'device-code',
   url: 'https://auth.openai.com/codex/device',
   userCode: 'ABCD-1234',
-  instructions: 'Enable device code authorization in your ChatGPT settings, then enter this code.',
+  instructions: 'Enter code: ABCD-1234',
   expiresAt: Date.now() + 600_000,
   nextPollMs: 10,
 };
@@ -77,7 +77,6 @@ describe('provider connection recovery', () => {
       await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
       await user.click(screen.getByRole('button', { name: 'Continue with OpenAI' }));
       const dialog = within(await screen.findByRole('dialog'));
-      expect(dialog.getByText(session.instructions)).toBeVisible();
       expect(dialog.getByText(session.userCode)).toBeVisible();
       expect(dialog.queryByRole('textbox', { name: 'Authorization code' })).not.toBeInTheDocument();
       expect(dialog.getByText(scope === 'org' ? /Everyone in your organization/ : /only for you/)).toBeVisible();

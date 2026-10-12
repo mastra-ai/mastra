@@ -153,8 +153,6 @@ describe('Factory root route', () => {
   });
 
   it('resumes a mid-flow onboarding from the root route after an OAuth round-trip', async () => {
-    // GitHub/Linear callbacks land on `/?…=connected`; the Factory is only
-    // created at confirmation, so the root route must resume the drafted step.
     seedOnboarding('project-management', null);
 
     server.use(

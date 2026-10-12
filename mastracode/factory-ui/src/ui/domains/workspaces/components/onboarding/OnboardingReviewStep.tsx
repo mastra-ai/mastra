@@ -3,8 +3,8 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GitBranch, ListTodo, Sparkles, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useLinearStatusQuery } from '../../../../../hooks/useLinearData';
-import { usePlatformConnectionsQuery } from '../../../../../hooks/usePlatformConnections';
+import { CONNECTION_METHOD_LABEL } from '../../hooks/useProviderConnection';
+import { useWorkSourceConnections, WORK_SOURCE_NAME, WORK_SOURCES } from '../../hooks/useWorkSourceConnections';
 import { providerDisplayName } from '../../../settings/components/provider-display-name';
 import { isGitLabRepository } from '../../services/github';
 import type { OnboardingConnectionChoice, OnboardingDraft, OnboardingStep } from '../../services/onboardingFlow';
@@ -47,14 +47,8 @@ function OnboardingReviewRow({
 }
 
 function OnboardingWorkReviewRow({ disabled, onEdit }: { disabled: boolean; onEdit: () => void }) {
-  const linear = useLinearStatusQuery();
-  const jira = usePlatformConnectionsQuery('jira');
-  const incidents = usePlatformConnectionsQuery('incident-io');
-  const connected = [
-    linear.data?.connected ? 'Linear' : undefined,
-    jira.data?.some(item => item.status === 'active') ? 'Jira' : undefined,
-    incidents.data?.some(item => item.status === 'active') ? 'incident.io' : undefined,
-  ].filter(Boolean);
+  const status = useWorkSourceConnections();
+  const connected = WORK_SOURCES.filter(source => status[source]).map(source => WORK_SOURCE_NAME[source]);
   return (
     <OnboardingReviewRow
       icon={<ListTodo />}
@@ -87,7 +81,7 @@ export function OnboardingReviewStep({
 }) {
   const repo = draft.repository;
   const personal = draft.personal;
-  const personalMethod = personal?.method === 'oauth' ? 'Provider sign-in' : 'API key';
+  const personalMethod = personal && CONNECTION_METHOD_LABEL[personal.method];
   const personalScope = personal?.modelId ? 'your default' : 'only you';
   return (
     <section aria-label="Review factory setup" className="flex flex-col gap-5">
@@ -115,7 +109,7 @@ export function OnboardingReviewStep({
             icon={<Sparkles />}
             label="Model"
             value={personal?.modelId ?? 'Choose a model'}
-            detail={`${personalMethod} · Factory + your default`}
+            detail={personal && `${personalMethod} · Factory + your default`}
             disabled={pending}
             onEdit={() => onEdit('personal-provider')}
           />

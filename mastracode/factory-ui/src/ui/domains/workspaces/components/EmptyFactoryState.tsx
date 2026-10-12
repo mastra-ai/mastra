@@ -24,7 +24,7 @@ import { ArrowLeft } from 'lucide-react';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { OnboardingPreview } from './onboarding/preview/OnboardingPreview';
 import type { ProviderConnectionMethod } from '../hooks/useProviderConnection';
-import type { OnboardingSource } from './onboarding/preview/OnboardingPreview';
+import type { WorkSource } from '../hooks/useWorkSourceConnections';
 import { InitialFactoryStep } from './InitialFactoryStep';
 import { ModelProviderFactoryStep } from './ModelProviderFactoryStep';
 import { PersonalProviderFactoryStep } from './PersonalProviderFactoryStep';
@@ -32,7 +32,6 @@ import { ProjectManagementFactoryStep } from './ProjectManagementFactoryStep';
 import { VcsFactoryStep } from './VcsFactoryStep';
 import { OnboardingReviewStep } from './onboarding/OnboardingReviewStep';
 
-/** What the user hovers or focuses before choosing; cleared on every step change. */
 interface StepPreview {
   repository?: SourceControlRepository;
   providerId?: string;
@@ -43,7 +42,6 @@ interface StepPreview {
   personalModel?: string;
 }
 
-/** Hovering another provider hides the saved model: it belongs to the saved provider. */
 function shownModel(previewedModel?: string, previewedProvider?: string, savedModel?: string) {
   if (previewedModel) return previewedModel;
   if (previewedProvider) return undefined;
@@ -64,7 +62,7 @@ export function EmptyFactoryState() {
     setReviewReturn(value);
   };
   const [githubRedirecting, setGithubRedirecting] = useState(false);
-  const [previewSource, setPreviewSource] = useState<OnboardingSource>();
+  const [previewSource, setPreviewSource] = useState<WorkSource>();
   const [preview, setPreview] = useState<StepPreview>({});
   const previewWith = (patch: StepPreview) => setPreview(current => ({ ...current, ...patch }));
 

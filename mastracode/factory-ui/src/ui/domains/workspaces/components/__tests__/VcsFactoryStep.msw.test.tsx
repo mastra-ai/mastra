@@ -47,7 +47,6 @@ describe('VCS Factory step', () => {
     const user = userEvent.setup();
     const radio = await screen.findByRole('radio', { name: 'octo/hello' });
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
-    // The whole label is a touch target, not just its small radio control.
     await user.click(screen.getByText('octo/hello'));
     expect(radio).toBeChecked();
     expect(onSelectRepository).not.toHaveBeenCalled();

@@ -3,7 +3,11 @@ import { Building2, MessageSquare, Sparkles, UserRound } from 'lucide-react';
 import { useProvidersQuery } from '../../../../../../hooks/use-providers';
 import { useFactoryAuth } from '../../../../../../hooks/useFactoryAuth';
 import { providerDisplayName } from '../../../../settings/components/provider-display-name';
-import { providerCredentialMethod } from '../../../hooks/useProviderConnection';
+import {
+  CONNECTION_METHOD_LABEL,
+  isProviderConnected,
+  providerCredentialMethod,
+} from '../../../hooks/useProviderConnection';
 import { useProviderModels } from '../../../hooks/useProviderModels';
 import { ProviderBrandIcon } from '../../ProviderBrandIcon';
 import type { OnboardingPreviewProps } from './OnboardingPreview';
@@ -118,7 +122,7 @@ export function OnboardingSharedModelPreview({
   connectionMethod,
 }: Pick<OnboardingPreviewProps, 'repository' | 'model' | 'providerId' | 'connectionMethod'>) {
   const provider = providerId ?? model?.split('/')[0];
-  const method = connectionMethod === 'oauth' ? 'Provider sign-in' : 'API key';
+  const method = CONNECTION_METHOD_LABEL[connectionMethod ?? 'api_key'];
   return (
     <section aria-label="Default model preview" className="relative h-full">
       <div className="absolute inset-x-8 top-3 flex items-start justify-between gap-4">
@@ -137,7 +141,7 @@ export function OnboardingSharedModelPreview({
         </Txt>
       </div>
       <AccountsScene mode="shared" />
-      <div className="onboarding-scene-detail absolute inset-x-7 top-[89%]" style={{ animationDelay: '160ms' }}>
+      <div className="onboarding-scene-detail absolute inset-x-7 top-[89%]">
         <Txt variant="caption">
           {repository?.name ? `Power the work in ${repository.name}` : 'Default model for Factory work'}
         </Txt>
@@ -181,12 +185,11 @@ export function OnboardingPersonalPreview({
   const providers = useProvidersQuery();
   const personal = providers.data?.find(item => item.provider === personalProviderId);
   const auth = useFactoryAuth();
-  const scope = auth.data?.authEnabled === false ? undefined : 'user';
+  const scope = auth.data?.authEnabled ? 'user' : undefined;
   const savedMethod = personal ? providerCredentialMethod(personal, scope) : undefined;
-  const connected =
-    savedMethod !== undefined && (!personalConnectionMethod || savedMethod === personalConnectionMethod);
+  const connected = personal ? isProviderConnected(personal, scope, personalConnectionMethod) : false;
   const providerName = personalProviderId ? providerDisplayName(personalProviderId) : undefined;
-  const method = (personalConnectionMethod ?? savedMethod) === 'oauth' ? 'Provider sign-in' : 'API key';
+  const method = CONNECTION_METHOD_LABEL[personalConnectionMethod ?? savedMethod ?? 'api_key'];
   const fallback = model ? 'Shared access available' : 'Connect your own account';
   return (
     <section aria-label="Personal access preview" className="relative h-full">
@@ -200,7 +203,7 @@ export function OnboardingPersonalPreview({
       </div>
       <AccountsScene mode={individual ? 'individual' : 'hybrid'} />
       <div className="onboarding-scene-detail absolute inset-x-7 top-[89%] grid grid-cols-2 gap-8">
-        <div aria-label="Factory work model" className="min-w-0">
+        <div role="group" aria-label="Factory work model" className="min-w-0">
           <Txt variant="meta" tone="muted" className="mb-2">
             Factory work
           </Txt>
@@ -215,7 +218,7 @@ export function OnboardingPersonalPreview({
             </Txt>
           )}
         </div>
-        <div aria-label="Personal sessions provider" className="min-w-0">
+        <div role="group" aria-label="Personal sessions provider" className="min-w-0">
           {personalModel && connected ? (
             <SuggestedModelLabel providerId={personalProviderId} model={personalModel} />
           ) : (

@@ -21,7 +21,6 @@ export const STEP_META: Record<OnboardingStep, { label: string; title: string; d
   },
 };
 
-/** Without a shared model, the personal step also picks the Factory model. */
 export function onboardingStepMeta(step: OnboardingStep, personalIsFactoryModel: boolean) {
   if (step === 'personal-provider' && personalIsFactoryModel)
     return { title: 'Choose your model.', description: 'Your default model, also used for this Factory.' };

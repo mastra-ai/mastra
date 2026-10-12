@@ -7,7 +7,6 @@ Redesigned Factory onboarding around an editable draft and a final review. Repos
 **Model providers**
 
 - API keys and provider sign-in are now separate choices, each with explicit organization or personal scope.
-- Device-code sign-in shows the provider's instructions and waits until authorization completes.
 - Provider and model lists offer **Retry** when they fail to load.
 - Members without shared organization access choose a personal model, which becomes both the Factory default and their own default.
 

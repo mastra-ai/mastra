@@ -2,19 +2,18 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GitBranch } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProviderConnectionMethod } from '../../../hooks/useProviderConnection';
+import type { WorkSource } from '../../../hooks/useWorkSourceConnections';
 import type { OnboardingStep } from '../../../services/onboardingFlow';
 import { OnboardingPersonalPreview, OnboardingSharedModelPreview } from './OnboardingAccountsPreview';
 import { OnboardingIntakePreview } from './OnboardingIntakePreview';
 import { Sketch, SketchLabel, SketchLink, SketchPanel } from './OnboardingSketch';
 import '../onboarding-preview.css';
 
-export type OnboardingSource = 'linear' | 'jira' | 'incident-io';
-
 export interface OnboardingPreviewProps {
   step: OnboardingStep;
   personalModel?: string;
   repository?: { name: string; fullName: string; defaultBranch: string };
-  source?: OnboardingSource;
+  source?: WorkSource;
   model?: string;
   providerId?: string;
   personalProviderId?: string;
@@ -22,7 +21,6 @@ export interface OnboardingPreviewProps {
   personalConnectionMethod?: ProviderConnectionMethod;
 }
 
-/** Hidden scenes stay out of the accessibility tree while they fade. */
 function OnboardingScene({ active, children }: { active: boolean; children: ReactNode }) {
   return (
     <div className="onboarding-scene absolute inset-0" data-active={active} aria-hidden={!active} inert={!active}>

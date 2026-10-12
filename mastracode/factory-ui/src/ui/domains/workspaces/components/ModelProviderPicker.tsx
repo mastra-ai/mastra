@@ -7,10 +7,9 @@ import { useState } from 'react';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { providerDisplayName } from '../../settings/components/provider-display-name';
 import type { PreviewProvider, ProviderConnection, ProviderConnectionMethod } from '../hooks/useProviderConnection';
-import { matchesProviderQuery } from '../hooks/useProviderConnection';
+import { CONNECTION_METHOD_LABEL, matchesProviderQuery } from '../hooks/useProviderConnection';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
 
-/** Connection method is independent of provider and credential ownership. */
 export function ModelProviderPicker({
   connection,
   onPreviewProvider,
@@ -19,7 +18,7 @@ export function ModelProviderPicker({
   onPreviewProvider?: PreviewProvider;
 }) {
   const [search, setSearch] = useState('');
-  const [method, setMethod] = useState<ProviderConnectionMethod>('api_key');
+  const [method, setMethod] = useState<ProviderConnectionMethod>(connection.method ?? 'api_key');
   if (connection.isPending) return <SkeletonRows label="Loading model providers" rows={3} rowClassName="h-9 w-full" />;
   if (connection.catalogError)
     return (
@@ -51,11 +50,11 @@ export function ModelProviderPicker({
         <TabList variant="pill-ghost" size="sm">
           <Tab value="api_key">
             <KeyRound aria-hidden="true" />
-            API key
+            {CONNECTION_METHOD_LABEL.api_key}
           </Tab>
           <Tab value="oauth">
             <LogIn aria-hidden="true" />
-            Provider sign-in
+            {CONNECTION_METHOD_LABEL.oauth}
           </Tab>
         </TabList>
         <TabContent value="api_key">

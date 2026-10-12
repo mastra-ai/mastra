@@ -21,7 +21,6 @@ export interface FactoryDefaultModelFormProps {
   submitLabel?: string;
 }
 
-/** Choose the draft default; the wizard persists it only on final confirmation. */
 export function FactoryDefaultModelForm({
   scope = 'org',
   initialModelId,

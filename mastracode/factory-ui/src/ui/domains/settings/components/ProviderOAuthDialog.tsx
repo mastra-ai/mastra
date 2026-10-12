@@ -150,9 +150,6 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice 
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="items-center text-center">
-          <Txt as="p" variant="caption" tone="muted">
-            {session.instructions}
-          </Txt>
           {session.userCode && (
             <div className="flex w-full min-w-0 items-center justify-center gap-2">
               <Txt

@@ -58,9 +58,6 @@ export function AddApiKeyDialog({
 
   const fixedScopeCredential = fixedScope === 'org' ? provider.orgCredential : provider.userCredential;
   const replacesSignIn = fixedScope !== undefined && fixedScopeCredential === 'oauth';
-  const description = fixedScope
-    ? SCOPED_KEY_ACCESS[fixedScope]
-    : 'The key is stored securely and never displayed again.';
   const error = saveKeyMutation.error instanceof Error ? saveKeyMutation.error.message : undefined;
   const personalOnlyWarning = authEnabled && preferredScope === 'org' && !canWriteOrgKey;
 
@@ -88,7 +85,8 @@ export function AddApiKeyDialog({
         <DialogHeader>
           <DialogTitle>API key for {displayName}</DialogTitle>
           <DialogDescription>
-            {description}
+            The key is stored securely and never displayed again.
+            {fixedScope && ` ${SCOPED_KEY_ACCESS[fixedScope]}`}
             {replacesSignIn && ' Saving replaces the provider sign-in at this scope.'}
           </DialogDescription>
         </DialogHeader>

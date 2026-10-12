@@ -4,12 +4,12 @@ import { isPlatformConnectUnavailableError } from '../../../factory/services/pla
 import { ProviderConnectControl } from '../../../settings/components/PlatformProviderConnections';
 import { IncidentIoIcon, JiraIcon } from '../../../../ui/icons';
 import { SkeletonRows } from '../../../../ui/SkeletonRows';
+import { WORK_SOURCE_NAME } from '../../hooks/useWorkSourceConnections';
 import { OnboardingConnectionRow } from './OnboardingConnectionRow';
 
 const PLATFORMS = {
-  jira: { name: 'Jira', Icon: JiraIcon, purpose: 'Issues and priorities for your work board.' },
+  jira: { Icon: JiraIcon, purpose: 'Issues and priorities for your work board.' },
   'incident-io': {
-    name: 'incident.io',
     Icon: IncidentIoIcon,
     purpose: 'Bring incident follow-ups into your work board.',
   },
@@ -17,7 +17,8 @@ const PLATFORMS = {
 
 export function OnboardingPlatformConnection({ provider }: { provider: 'jira' | 'incident-io' }) {
   const query = usePlatformConnectionsQuery(provider);
-  const { name, Icon, purpose } = PLATFORMS[provider];
+  const name = WORK_SOURCE_NAME[provider];
+  const { Icon, purpose } = PLATFORMS[provider];
   if (query.isPending)
     return <SkeletonRows label={`Loading ${name} connections`} rows={1} rowClassName="h-22 w-full" />;
   if (isPlatformConnectUnavailableError(query.error)) return null;

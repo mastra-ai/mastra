@@ -22,7 +22,9 @@ export function CreateFactoryProviderRows({ connection, query, error }: CreateFa
     return <CreateFactoryPaletteAlert>{connection.catalogError.message}</CreateFactoryPaletteAlert>;
 
   const signIn = connection.signInProviders.filter(provider => matchesProviderQuery(provider, query));
-  const withKey = connection.keyProviders.filter(provider => matchesProviderQuery(provider, query));
+  const withKey = connection.keyProviders.filter(
+    provider => provider.oauth?.supported !== true && matchesProviderQuery(provider, query),
+  );
 
   return (
     <>

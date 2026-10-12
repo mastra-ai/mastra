@@ -31,7 +31,6 @@
   }
 }
 
-/* Panels and links take the Factory UI’s quiet border hierarchy, one device pixel wide at any size. */
 .onboarding-sketch {
   fill: none;
   stroke: var(--color-border);
@@ -97,13 +96,12 @@
   }
 }
 
-/* A visual earns its space; the form stays reachable on short screens. */
 @media (max-width: 899px) {
   .onboarding-page {
     height: 100dvh;
     min-height: 0;
     padding-bottom: 76px;
-    overflow: hidden;
+    overflow-y: auto;
   }
   .onboarding-layout {
     height: 100%;
