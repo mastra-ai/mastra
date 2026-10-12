@@ -1,3 +1,6 @@
+import { defaultLimits } from './contracts/limits.ts';
+import { studioAuth } from './server/auth.ts';
+import { questionnaireRoutes } from './server/routes.ts';
 import { createLocalObservability, SafeLogger } from './observability/privacy.ts';
 import { questionInterpretationAgent } from './agents/question-interpretation.ts';
 import { evidenceAnswerAgent } from './agents/evidence-answer.ts';
@@ -11,6 +14,7 @@ import { vendorRiskQuestionnaire } from './workflows/vendor-risk-questionnaire.t
 import { vendorRiskIntake } from './workflows/vendor-risk-intake.ts';
 import { vendorRiskDrafts } from './workflows/vendor-risk-drafts.ts';
 
+const auth = studioAuth();
 mkdirSync(runtimeRoot, { recursive: true });
 await storage.init().catch(() => {
   throw new ProcessingFailure('STORAGE_FAILURE');
@@ -22,7 +26,10 @@ export const mastra = new Mastra({
   agents: { questionInterpretationAgent, evidenceAnswerAgent, supportVerifierAgent, answerConsistencyAgent },
   server: {
     host: '127.0.0.1',
+    auth,
+    bodySizeLimit: defaultLimits.maxBytes + 65536,
     apiRoutes: [
+      ...questionnaireRoutes,
       {
         path: '/vrq/telemetry-status',
         method: 'GET',

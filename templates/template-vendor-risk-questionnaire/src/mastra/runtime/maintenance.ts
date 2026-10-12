@@ -28,6 +28,7 @@ const tables = [
   'vrq_intakes',
   'vrq_document_plans',
   'vrq_respond',
+  'vrq_http_jobs',
   'vrq_draft_owners',
   'vrq_review_payloads',
   'vrq_draft_inputs',

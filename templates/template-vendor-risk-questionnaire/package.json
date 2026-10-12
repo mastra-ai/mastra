@@ -40,6 +40,7 @@
     "mastra": "latest",
     "oxfmt": "0.72.0",
     "typescript": "^5.9.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "hono": "4.13.13"
   }
 }

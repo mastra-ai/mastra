@@ -131,7 +131,7 @@ export interface RespondOptions {
   sourcePath?: string;
   resume?: string;
 }
-export async function respond(options: RespondOptions) {
+export async function prepareResponse(options: RespondOptions) {
   const { io, profile, workflow } = options;
   const runId = scopedRunId.parse(options.resume ?? generatedId());
 
@@ -214,6 +214,21 @@ export async function respond(options: RespondOptions) {
       state = await review.read(runId);
     }
     if (!state) throw new Error('REVIEW_STATE_REQUIRED');
+    return { state, checkpoint };
+  } finally {
+    store.close();
+    review.close();
+    checkpoints.close();
+  }
+}
+export async function respond(options: RespondOptions) {
+  const { io, profile, workflow } = options;
+  let { state, checkpoint } = await prepareResponse(options);
+  const runId = state.runId;
+  const store = await openIntakeStore(options.databaseUrl),
+    review = await openReviewStore(options.databaseUrl),
+    checkpoints = await openRespondStore(options.databaseUrl);
+  try {
     const reviewOptions = { ...options, evidenceRoot: profile.evidenceRoot, manifestPath: profile.manifestPath };
     if (state.state === 'exported') {
       const { path, manifest } = await publishExport(runId, reviewOptions);

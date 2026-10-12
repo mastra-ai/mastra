@@ -33,6 +33,10 @@ Vendor questionnaires vary in structure, and supporting documents have different
 - Review the demo's conflicting controls, missing evidence and restricted sources. Release supported answers or retain visible gaps.
 - Cancel during review, then resume using the run ID to continue from saved choices.
 
+## Web interface
+
+Run the Svelte + Bits UI client in `demo_ui` to upload questionnaires, review pending answers, download approved documents and inspect existing review metrics. See [UI setup and HTTP routes](docs/ui.md). Mastra Studio and the API use `SimpleAuth` only when `NODE_ENV=production`; configure `MASTRA_STUDIO_TOKEN` before production startup.
+
 ## Customization
 
 - Open the project in your coding agent: “Map our questionnaire fields and configure approved evidence scope. Explore the code and propose a plan before making changes.”

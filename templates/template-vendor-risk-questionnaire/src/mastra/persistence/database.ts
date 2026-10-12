@@ -9,7 +9,7 @@ import { DatabaseAdmission, OwnedClient, StorageOwner, StorageFault, Unpersisted
 import type { DatabaseClient } from './client.ts';
 import { localDatabasePath, writerLease } from './ownership.ts';
 
-export const runtimeRoot = resolve(process.cwd(), '.runtime');
+export const runtimeRoot = resolve(process.env.MASTRA_PROJECT_ROOT || process.cwd(), '.runtime');
 export const databaseUrl = `file:${resolve(runtimeRoot, 'vrq.db')}`;
 export const telemetryPath = (url: string) => `${localDatabasePath(url)}.telemetry.duckdb`;
 
@@ -342,6 +342,7 @@ export async function openDatabase(url: string, owner?: StorageOwner, underlying
   try {
     await client.batch(
       [
+        'CREATE TABLE IF NOT EXISTS vrq_http_jobs (run_id TEXT PRIMARY KEY, error TEXT)',
         'CREATE TABLE IF NOT EXISTS vrq_events (run_id TEXT NOT NULL, event_key TEXT NOT NULL, event_json TEXT NOT NULL, PRIMARY KEY(run_id,event_key))',
         'CREATE TABLE IF NOT EXISTS vrq_diagnostics (id TEXT PRIMARY KEY, run_id TEXT NOT NULL, diagnostic_json TEXT NOT NULL)',
         'CREATE TABLE IF NOT EXISTS vrq_sources (digest TEXT PRIMARY KEY, source_id TEXT NOT NULL, original_name TEXT NOT NULL, size_bytes INTEGER NOT NULL, bytes BLOB NOT NULL)',
