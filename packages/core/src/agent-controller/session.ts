@@ -896,50 +896,30 @@ export class SessionThread {
   }
 
   /**
-   * Compare and set a thread's owner.
+   * Transfer the active thread to a new owner.
    *
-   * Transfers are atomic within this process. They are atomic across processes
-   * only when the host configures `threadLock`; hosts needing strict durable CAS
-   * should commit that CAS in their own store before mirroring it here.
+   * Transfers are serialized within this process. Hosts needing strict durable
+   * compare-and-set semantics should commit that change in their own store before
+   * mirroring it here.
    */
-  async transferOwnership({
-    threadId = this.#threadId,
-    toOwnerId,
-    expectedOwnerId,
-  }: {
-    threadId?: string | null;
-    toOwnerId: string;
-    expectedOwnerId: string;
-  }): Promise<{ ok: true } | { ok: false; currentOwnerId: string | undefined }> {
-    if (!threadId) return { ok: false, currentOwnerId: undefined };
+  async transferOwnership({ toOwnerId }: { toOwnerId: string }): Promise<void> {
+    const threadId = this.requireId();
 
-    return withThreadOwnershipMutex(threadId, async () => {
+    await withThreadOwnershipMutex(threadId, async () => {
       const store = this.#store;
       if (!store) throw new Error('Memory is not configured on this AgentController');
 
-      const needsTemporaryHostLock = threadId !== this.#threadId;
-      if (needsTemporaryHostLock) await store.acquireLock(threadId);
+      const thread = await this.#requireOwnedThread({ threadId });
+      const storedOwnerId = thread.metadata?.ownerId;
+      const currentOwnerId = typeof storedOwnerId === 'string' ? storedOwnerId : this.#owner.identity.getOwnerId();
+      if (currentOwnerId === toOwnerId) return;
 
-      try {
-        const thread = await this.#requireOwnedThread({ threadId });
-        const storedOwnerId = thread.metadata?.ownerId;
-        const currentOwnerId = typeof storedOwnerId === 'string' ? storedOwnerId : this.#owner.identity.getOwnerId();
-        if (currentOwnerId !== expectedOwnerId) {
-          return { ok: false, currentOwnerId };
-        }
-
-        if (currentOwnerId !== toOwnerId) {
-          await store.setMetadata({ threadId, key: 'ownerId', value: toOwnerId });
-          const persistedThread = await this.#requireOwnedThread({ threadId });
-          if (persistedThread.metadata?.ownerId !== toOwnerId) {
-            throw new Error(`Failed to persist owner for thread: ${threadId}`);
-          }
-          this.#owner.emit({ type: 'thread_owner_changed', threadId, fromOwnerId: currentOwnerId, toOwnerId });
-        }
-        return { ok: true };
-      } finally {
-        if (needsTemporaryHostLock) await store.releaseLock(threadId);
+      await store.setMetadata({ threadId, key: 'ownerId', value: toOwnerId });
+      const persistedThread = await this.#requireOwnedThread({ threadId });
+      if (persistedThread.metadata?.ownerId !== toOwnerId) {
+        throw new Error(`Failed to persist owner for thread: ${threadId}`);
       }
+      this.#owner.emit({ type: 'thread_owner_changed', threadId, fromOwnerId: currentOwnerId, toOwnerId });
     });
   }
 

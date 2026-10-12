@@ -437,20 +437,19 @@ const ownerId = await session.thread.getOwner()
 
 Returns: `Promise<string | undefined>`
 
-### `session.thread.transferOwnership({ threadId?, toOwnerId, expectedOwnerId })`
+### `session.thread.transferOwnership({ toOwnerId })`
 
-Compare the current thread owner to `expectedOwnerId`. When they match, store `toOwnerId` in `metadata.ownerId` and emit `thread_owner_changed`. The original `metadata.createdBy` value doesn't change. Omit `threadId` to transfer the active thread.
+Store `toOwnerId` in the active thread's `metadata.ownerId` and emit `thread_owner_changed`. The original `metadata.createdBy` value doesn't change.
 
 ```typescript
-const result = await session.thread.transferOwnership({
+await session.thread.transferOwnership({
   toOwnerId: 'user-456',
-  expectedOwnerId: 'user-123',
 })
 ```
 
-Returns: `Promise<{ ok: true } | { ok: false; currentOwnerId: string | undefined }>`
+Returns: `Promise<void>`
 
-Transfers are atomic within one process. Configure the controller's `threadLock` for coordination across processes. Storage-backed applications that require a durable cross-process compare-and-set should perform it in their own store first, then call this method to mirror the result.
+Transfers are serialized within one process. Storage-backed applications that require a durable cross-process compare-and-set should perform it in their own store first, then call this method to mirror the result.
 
 A successful change emits:
 

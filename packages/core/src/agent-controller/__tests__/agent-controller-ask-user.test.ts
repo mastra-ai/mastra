@@ -289,7 +289,7 @@ describe('AgentController: ask_user native suspension', () => {
     const address = fixture.session.suspensions.resolveAddress({ toolCallId: 'owned-1' })!;
     expect(address, JSON.stringify(sourceEvents)).toBeDefined();
     if (recovery === 'cold-storage-only') {
-      await fixture.session.thread.transferOwnership({ toOwnerId: 'transferred-owner', expectedOwnerId: 'owner' });
+      await fixture.session.thread.transferOwnership({ toOwnerId: 'transferred-owner' });
       await expect(fixture.session.thread.getOwner()).resolves.toBe('transferred-owner');
     }
     if (!recovery.startsWith('warm')) {
