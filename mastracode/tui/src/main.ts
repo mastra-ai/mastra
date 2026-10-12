@@ -37,9 +37,9 @@ import {
   shouldRunHeadless,
 } from './resume-command.js';
 import { resolveTuiSubagents } from './subagent-settings.js';
-import { detectTerminalTheme } from './tui/detect-theme.js';
+import { applyThemePreference } from './tui/commands/theme.js';
 import { MastraTUI } from './tui/index.js';
-import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
+import { restoreTerminalForeground } from './tui/theme.js';
 import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
 import { getCurrentVersion } from './version.js';
 
@@ -137,24 +137,10 @@ async function tuiMain(
   setupDebugLogging();
 
   // Detect and apply terminal theme
-  // MASTRA_THEME env var is the highest-priority override
+  // MASTRA_THEME env var is the highest-priority override (mode name or custom theme name)
   const envTheme = process.env.MASTRA_THEME?.toLowerCase();
-  let themeMode: 'dark' | 'light';
-  let detectedBgHex: string | undefined;
-  if (envTheme === 'dark' || envTheme === 'light') {
-    themeMode = envTheme;
-  } else {
-    const settings = loadSettings();
-    const themePref = settings.preferences.theme;
-    if (themePref === 'dark' || themePref === 'light') {
-      themeMode = themePref;
-    } else {
-      const detection = await detectTerminalTheme();
-      themeMode = detection.mode;
-      detectedBgHex = detection.detectedBgHex;
-    }
-  }
-  applyThemeMode(themeMode, detectedBgHex);
+  const themePref = envTheme || loadSettings().preferences.theme || 'auto';
+  await applyThemePreference(themePref);
 
   // createMastraCode() brought up shared resources and minted the single
   // session that all work runs through. The AgentController owns no session of its own.
@@ -167,7 +153,7 @@ async function tuiMain(
     resourceId: session.identity.getResourceId(),
     hasAuthStorage: Boolean(authStorage),
     hasMcp: Boolean(mcpManager),
-    theme: themeMode,
+    theme: themePref,
   });
 
   tui = new MastraTUI({
