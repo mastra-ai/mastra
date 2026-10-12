@@ -433,7 +433,7 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
               content: {
                 ...message.content,
                 parts: message.content.parts?.map(part =>
-                  part.type === 'text' ? { ...part, text: part.text.toUpperCase() } : part,
+                  part.type === 'text' ? { ...part, text: `${part.text.toUpperCase()}!` } : part,
                 ),
               },
             })),
@@ -448,9 +448,9 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     });
     const fullOutput = await stream.getFullOutput();
 
-    expect(await stream.text).toBe('FIRSTSECONDTHIRD');
-    expect(fullOutput.steps.map(step => step.text)).toEqual(['FIRST', 'SECOND', 'THIRD']);
-    expect(fullOutput.text).toBe('FIRSTSECONDTHIRD');
+    expect(await stream.text).toBe('FIRST!SECOND!THIRD!');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['FIRST!', 'SECOND!', 'THIRD!']);
+    expect(fullOutput.text).toBe('FIRST!SECOND!THIRD!');
   });
 
   it('removes final step text when its response is removed', async () => {

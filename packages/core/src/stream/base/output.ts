@@ -278,14 +278,46 @@ function resolveMessageText(message: MastraDBMessage): string {
   return convertedMessage ? coreContentToString(convertedMessage.content) : '';
 }
 
-function reconcileBufferedStepTexts<OUTPUT>(steps: LLMStepResult<OUTPUT>[], processedText: string): void {
-  const originalLength = steps.reduce((length, step) => length + step.text.length, 0);
-  if (processedText.length === originalLength) {
-    let offset = 0;
-    for (const step of steps) {
-      const end = offset + step.text.length;
-      step.text = processedText.slice(offset, end);
-      offset = end;
+function findStepPartOffsets<OUTPUT>(
+  message: MastraDBMessage | undefined,
+  steps: LLMStepResult<OUTPUT>[],
+): number[] | undefined {
+  const parts = message?.content.parts;
+  if (!parts) return undefined;
+
+  const offsets = Array<number>(steps.length + 1);
+  offsets[steps.length] = parts.length;
+  let partIndex = parts.length;
+
+  for (let stepIndex = steps.length - 1; stepIndex >= 0; stepIndex--) {
+    const stepText = steps[stepIndex]!.text;
+    let text = '';
+
+    while (partIndex > 0 && text !== stepText) {
+      const part = parts[--partIndex]!;
+      if (part.type === 'text') text = `${part.text}${text}`;
+    }
+
+    if (text !== stepText) return undefined;
+    offsets[stepIndex] = partIndex;
+  }
+
+  return offsets;
+}
+
+function reconcileBufferedStepTexts<OUTPUT>(
+  steps: LLMStepResult<OUTPUT>[],
+  processedText: string,
+  processedMessage?: MastraDBMessage,
+  stepPartOffsets?: number[],
+): void {
+  const processedParts = processedMessage?.content.parts;
+  if (processedParts && stepPartOffsets?.at(-1) === processedParts.length) {
+    for (const [index, step] of steps.entries()) {
+      step.text = processedParts
+        .slice(stepPartOffsets[index], stepPartOffsets[index + 1])
+        .map(part => (part.type === 'text' ? part.text : ''))
+        .join('');
     }
     return;
   }
@@ -1300,10 +1332,19 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     stepMessage && iterationPartOffset !== undefined
                       ? self.messageList.splitResponseMessageAtPartOffset(stepMessage.id, iterationPartOffset)
                       : undefined;
+                  const earlierStepPartOffsets = separatedIteration
+                    ? findStepPartOffsets(
+                        self.messageList.get.response
+                          .db()
+                          .find(message => message.id === separatedIteration.earlierMessageId),
+                        self.#bufferedSteps.slice(0, -1),
+                      )
+                    : undefined;
 
                   let outputText: string | undefined;
                   let stepText: string | undefined;
                   let processedEarlierText: string | undefined;
+                  let processedEarlierMessage: MastraDBMessage | undefined;
                   try {
                     self.messageList = await self.processorRunner.runOutputProcessors(
                       self.messageList,
@@ -1319,7 +1360,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     const processedStepMessage = processedStepMessageId
                       ? responseMessages.find(message => message.id === processedStepMessageId)
                       : undefined;
-                    const processedEarlierMessage = separatedIteration
+                    processedEarlierMessage = separatedIteration
                       ? responseMessages.find(message => message.id === separatedIteration.earlierMessageId)
                       : undefined;
                     processedEarlierText = separatedIteration
@@ -1348,6 +1389,15 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                               .join('')
                           : (outputText ?? '')
                         : undefined;
+
+                    if (processedEarlierText !== undefined) {
+                      reconcileBufferedStepTexts(
+                        self.#bufferedSteps.slice(0, -1),
+                        processedEarlierText,
+                        processedEarlierMessage,
+                        earlierStepPartOffsets,
+                      );
+                    }
                   } finally {
                     if (separatedIteration) {
                       self.messageList.coalesceSplitResponseMessages(
@@ -1355,10 +1405,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                         separatedIteration.currentMessageId,
                       );
                     }
-                  }
-
-                  if (processedEarlierText !== undefined) {
-                    reconcileBufferedStepTexts(self.#bufferedSteps.slice(0, -1), processedEarlierText);
                   }
 
                   // When multiple iterations share one response message, separate the current iteration before result
