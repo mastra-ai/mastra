@@ -58,7 +58,6 @@
   stroke: var(--color-border);
 }
 .onboarding-recess {
-  fill: var(--color-background);
   stroke: none;
 }
 .onboarding-landing {

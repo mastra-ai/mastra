@@ -113,7 +113,7 @@ function surface(vertices: readonly Point[], marks: Point[] = [], radius = 1.5):
     }
     return points[0];
   });
-  return { outline, marks: Array.from({ length: 6 }, (_, i) => marks[i] ?? vertices[0]) };
+  return { outline, marks: Array.from({ length: 8 }, (_, i) => marks[i] ?? vertices[0]) };
 }
 export function panel(x: number, y: number, width: number, height: number, marked = false): Surface {
   const marks: Point[] = marked
@@ -138,19 +138,45 @@ export function panel(x: number, y: number, width: number, height: number, marke
 const folded = panel(200, 175, 0, 0);
 const worldLine = (a: WorldPoint, b: WorldPoint): Point[] => [project(a), project(b)];
 const worldPolygon = (points: WorldPoint[]) => polygon(points.map(project));
-function slab(x: number, y: number, width: number, depth: number, z: number, height: number, marked = true): Surface {
+function box(
+  x: number,
+  y: number,
+  width: number,
+  depth: number,
+  z: number,
+  height: number,
+  flushAt: (corner: WorldPoint) => boolean = () => false,
+) {
   const corners: WorldPoint[] = [
     [x, y, z],
     [x + width, y, z],
     [x + width, y + depth, z],
     [x, y + depth, z],
   ];
-  const outline = hull([...corners, ...corners.map(([u, v, w]): WorldPoint => [u, v, w + height])].map(project));
-  const marks = worldLine([x, y + depth, z + height], [x + width, y + depth, z + height]);
+  const vertices = [...corners, ...corners.map(([u, v, w]): WorldPoint => [u, v, w + height])];
+  const square = new Set(vertices.filter(flushAt).map(corner => project(corner).join()));
+  const top = z + height;
+  const crease = (from: WorldPoint, to: WorldPoint) => {
+    const roundingInset = (corner: WorldPoint) =>
+      flushAt(corner) ? 0 : 2 / Math.hypot(to[0] - from[0], to[1] - from[1]);
+    const along = (t: number): WorldPoint => [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t, top];
+    return worldLine(along(roundingInset(from)), along(1 - roundingInset(to)));
+  };
+  return {
+    silhouette: hull(vertices.map(project)).flatMap(point => (square.has(point.join()) ? [point, point] : [point])),
+    creases: [
+      ...crease([x, y + depth, top], [x + width, y + depth, top]),
+      ...crease([x + width, y, top], [x + width, y + depth, top]),
+    ],
+  };
+}
+function slab(x: number, y: number, width: number, depth: number, z: number, height: number, marked = true): Surface {
+  const { silhouette, creases } = box(x, y, width, depth, z, height);
+  const top = z + height;
   if (marked)
     for (const offset of [8, 14])
-      marks.push(...worldLine([x + 6, y + offset, z + height], [x + width - 8, y + offset, z + height]));
-  return surface(outline, marks);
+      creases.push(...worldLine([x + 6, y + offset, top], [x + width - 8, y + offset, top]));
+  return surface(silhouette, creases);
 }
 function transformed(shape: Surface, scale: number, x: number, y: number): Surface {
   const move = ([u, v]: Point): Point => [u * scale + x, v * scale + y];
@@ -194,13 +220,13 @@ const brackets = [false, true].map(right => {
   return transformed(surface(points.map(project), [], 1), 1.65, repoX, repoY);
 });
 const repoOutlet = project([14, 80, 11]);
-const inlet = project([-31, 40, 17]),
-  interior = project([-31, 14, 17]);
+const approach = project([-31, 64, 7]),
+  threshold = project([-31, 34, 7]);
 const codeLink: Point[] = [
   [repoOutlet[0] * 1.65 + repoX, repoOutlet[1] * 1.65 + repoY],
   [260, 175],
-  [inlet[0] * miniScale + miniX, inlet[1] * miniScale + miniY],
-  [interior[0] * miniScale + miniX, interior[1] * miniScale + miniY],
+  [approach[0] * miniScale + miniX, approach[1] * miniScale + miniY],
+  [threshold[0] * miniScale + miniX, threshold[1] * miniScale + miniY],
 ];
 const hiddenLink: Point[] = [
   [200, 175],
@@ -274,12 +300,33 @@ export function drawingPose(scene: DrawingScene, mode: AccountsMode): DrawingPos
   };
 }
 
-// Open bays reach the conveyor floor. The shell occludes tickets inside; there is no false threshold.
+const jambStrokeClearance = 0.5;
+const outsideBay = (x: readonly [number, number], y: readonly [number, number]) =>
+  polygon(hull(x.flatMap(u => y.flatMap(v => [project([u, v, -1]), project([u, v, 14])]))));
+const inputBelt = box(-52, 40, 42, 102, 0, 7, ([, v]) => v === 40),
+  outputBelt = box(57, -10, 88, 38, 0, 7, ([u]) => u === 57);
+
+// Belts stop at the wall, so they always sit in front of it; tickets cross it and keep only what the shell leaves visible.
 export const factoryPaths = {
+  ticketsVisible: [
+    outsideBay([-52, -10 - jambStrokeClearance], [40, 160]),
+    outsideBay([57, 160], [-10, 28 - jambStrokeClearance]),
+    worldPolygon([
+      [-52, 40, 0],
+      [-52, 40, 28],
+      [-10 - jambStrokeClearance, 40, 28],
+      [-10 - jambStrokeClearance, 40, 0],
+    ]),
+    worldPolygon([
+      [57, -10, 0],
+      [57, -10, 28],
+      [57, 28 - jambStrokeClearance, 28],
+      [57, 28 - jambStrokeClearance, 0],
+    ]),
+  ],
   foundation: contour(slab(-66, -41, 130, 86, -5, 5, false).outline),
-  inputBelt: contour(slab(-52, 27, 42, 115, 0, 7, false).outline),
-  outputBelt: contour(slab(44, -10, 101, 38, 0, 7, false).outline),
-  beltEdges: segments([...worldLine([-50, 142, 7], [-12, 142, 7]), ...worldLine([145, -8, 7], [145, 26, 7])]),
+  belts: contour(rounded(inputBelt.silhouette, 1.5)) + contour(rounded(outputBelt.silhouette, 1.5)),
+  beltEdges: segments([...inputBelt.creases, ...outputBelt.creases]),
   chimney: contour(slab(30, -34, 16, 16, 0, 93, false).outline),
   chimneyCap: contour(slab(28, -36, 20, 20, 89, 7, false).outline),
   recess:

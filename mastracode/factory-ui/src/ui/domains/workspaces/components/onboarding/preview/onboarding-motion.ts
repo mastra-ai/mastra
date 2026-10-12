@@ -92,6 +92,7 @@ export function createOnboardingMotion(svg: SVGSVGElement, stage: HTMLElement) {
   const belts = svg.querySelector<SVGGElement>('[data-belts]');
   const foundation = svg.querySelector<SVGPathElement>('[data-foundation]');
   const landing = svg.querySelector<SVGPathElement>('[data-landing]');
+  const conveyorClip = svg.querySelector<SVGClipPathElement>('[data-conveyor-clip]');
   const drawn = new WeakMap<SVGGElement, Surface>();
   const media = window.matchMedia('(prefers-reduced-motion: reduce)');
   let scene: DrawingScene = 'factory',
@@ -120,6 +121,10 @@ export function createOnboardingMotion(svg: SVGSVGElement, stage: HTMLElement) {
       point => Math.hypot(point[0] - shape.outline[0][0], point[1] - shape.outline[0][1]) > 0.05,
     );
     attribute(item.group, 'opacity', String(hasArea ? (shape.opacity ?? 1) : 0));
+  }
+  function clipToConveyor(group: SVGGElement, clipped: boolean) {
+    if (clipped && conveyorClip) attribute(group, 'clip-path', `url(#${conveyorClip.id})`);
+    else group.removeAttribute('clip-path');
   }
   function draw(now: number) {
     const settled = media.matches || now - start >= duration + 120;
@@ -157,7 +162,9 @@ export function createOnboardingMotion(svg: SVGSVGElement, stage: HTMLElement) {
     });
     surfaces.forEach((item, i) => {
       const shape = current.surfaces[i];
-      if (scene === 'factory' && active && (i === 3 || i === 4)) {
+      const onConveyor = scene === 'factory' && active && (i === 3 || i === 4);
+      clipToConveyor(item.group, onConveyor);
+      if (onConveyor) {
         const index = i - 3;
         const phase = motion ? (elapsed / 8 + (index === 0 ? 0.18 : 0.53)) % 1 : index === 0 ? 0.18 : 0.82;
         const ticket = { ...conveyorTicket(index, smooth(phase)), opacity: media.matches ? 1 : envelope(phase) };

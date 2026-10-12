@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { contour, factoryPaths, panel } from './onboarding-drawing';
 import type { AccountsMode, DrawingScene } from './onboarding-drawing';
 import { createOnboardingMotion } from './onboarding-motion';
@@ -6,6 +6,7 @@ import { createOnboardingMotion } from './onboarding-motion';
 /** The SVG stays mounted between steps; only its coordinates and the separate HTML labels change. */
 export function OnboardingIllustration({ scene, mode }: { scene: DrawingScene; mode: AccountsMode }) {
   const svg = useRef<SVGSVGElement>(null);
+  const id = useId().replace(/\W/g, '');
   const motion = useRef<ReturnType<typeof createOnboardingMotion> | undefined>(undefined);
   useEffect(() => {
     const element = svg.current;
@@ -29,9 +30,13 @@ export function OnboardingIllustration({ scene, mode }: { scene: DrawingScene; m
       className="onboarding-sketch onboarding-illustration absolute inset-0 size-full"
       data-scene={scene}
     >
-      {[0, 1, 2].map(index => (
-        <path key={index} data-link className="onboarding-sketch-link" />
-      ))}
+      <defs>
+        <clipPath id={`${id}-conveyor`} data-conveyor-clip>
+          {factoryPaths.ticketsVisible.map(region => (
+            <path key={region} d={region} />
+          ))}
+        </clipPath>
+      </defs>
       <path
         data-landing
         d={`${contour(panel(28, 186, 104, 48).outline)}M76,210h8M80,206v8`}
@@ -39,17 +44,22 @@ export function OnboardingIllustration({ scene, mode }: { scene: DrawingScene; m
       />
       <g data-building>
         <path data-foundation d={factoryPaths.foundation} className="onboarding-sketch-surface" />
-        <g data-belts>
-          <path d={factoryPaths.inputBelt + factoryPaths.outputBelt} className="onboarding-sketch-surface" />
-          <path d={factoryPaths.beltEdges} />
-        </g>
         <path d={factoryPaths.chimney} className="onboarding-sketch-surface" />
         <path d={factoryPaths.chimneyCap} className="onboarding-sketch-surface" />
         <path d={factoryPaths.recess} className="onboarding-sketch-surface onboarding-recess" />
         <path d={factoryPaths.jambs} />
       </g>
-      {/* These surfaces are the conveyor jobs, then the repository and its code marks.
-          Staying behind the shell makes a job actually disappear through the loading bay. */}
+      <g data-building>
+        <path d={factoryPaths.wall} className="onboarding-sketch-surface" />
+        <path d={factoryPaths.wallMarks} className="onboarding-sketch-detail" />
+        <g data-belts>
+          <path d={factoryPaths.belts} className="onboarding-sketch-surface" />
+          <path d={factoryPaths.beltEdges} />
+        </g>
+      </g>
+      {[0, 1, 2].map(index => (
+        <path key={index} data-link className="onboarding-sketch-link" />
+      ))}
       {[3, 4, 5].map(index => (
         <g key={index} data-surface={index}>
           <path data-face className="onboarding-sketch-surface" />
@@ -59,10 +69,6 @@ export function OnboardingIllustration({ scene, mode }: { scene: DrawingScene; m
       {[0, 1, 2].map(index => (
         <circle key={index} data-packet r={3} className="onboarding-sketch-surface" />
       ))}
-      <g data-building>
-        <path d={factoryPaths.wall} className="onboarding-sketch-surface" />
-        <path d={factoryPaths.wallMarks} className="onboarding-sketch-detail" />
-      </g>
       {[0, 1, 2].map(index => (
         <g key={index} data-surface={index}>
           <path data-face className="onboarding-sketch-surface" />
