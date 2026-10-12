@@ -145,4 +145,22 @@ describe('ownerless registry entries', () => {
     expect(globalRunRegistry.get(runId)?.abortController).toBe(aliceController);
     globalRunRegistry.delete(runId);
   });
+
+  it("observe().abort() from another app never aborts this app's run", async () => {
+    const runId = 'observe-abort-run';
+    const aliceController = new AbortController();
+    globalRunRegistry.set(runId, { mastra: alice, abortController: aliceController } as unknown as RunRegistryEntry);
+
+    const storage = new InMemoryStore();
+    const agent = new Agent({ id: 'support', name: 'support', instructions: 'help', model: model([]) });
+    const runner = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    new Mastra({ agents: { support: runner } as never, storage, logger: false });
+
+    const observed = await (runner as any).observe(runId, { idleTimeoutMs: 50 });
+    await observed.abort().catch(() => {});
+    expect(aliceController.signal.aborted).toBe(false);
+    expect(globalRunRegistry.get(runId)?.abortController).toBe(aliceController);
+    await observed.cleanup?.();
+    globalRunRegistry.delete(runId);
+  });
 });

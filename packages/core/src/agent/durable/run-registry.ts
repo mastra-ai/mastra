@@ -54,7 +54,7 @@ export const globalRunRegistry = new TTLCache<string, RunRegistryEntry>({
  * scoped reader, so a later instance reusing the runId cannot adopt it.
  */
 export function getRunRegistryEntry(runId: string, mastra: Mastra | undefined): RunRegistryEntry | undefined {
-  const entry = globalRunRegistry.get(runId);
+  const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
   if (!entry || !mastra) return entry;
   if (!entry.mastra) {
     entry.mastra = mastra;
@@ -74,6 +74,11 @@ export function setRunRegistryEntry(runId: string, entry: RunRegistryEntry, mast
   if (mastra) entry.mastra ??= mastra;
   globalRunRegistry.set(runId, entry);
   return true;
+}
+
+/** Remove `runId`'s entry only if it belongs to `mastra` (or has no owner). */
+export function deleteRunRegistryEntry(runId: string, mastra: Mastra | undefined): void {
+  if (getRunRegistryEntry(runId, mastra)) globalRunRegistry.delete(runId);
 }
 
 /** runId -> number of in-flight operations holding the entry alive. */
