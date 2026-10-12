@@ -527,6 +527,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     startedAt: number;
     perStep?: boolean;
     stepSpan?: any;
+    /** Loop iteration of the nested workflow step; scopes its invoke and result IDs. */
+    iterationCount?: number;
     actor?: ActorSignal;
     requestContext?: RequestContext;
   }): Promise<StepResult<any, any, any, any> | null> {
@@ -547,9 +549,27 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       startedAt,
       perStep,
       stepSpan,
+      iterationCount,
       actor,
       requestContext: parentRequestContext,
     } = params;
+    // A nested workflow inside a loop or foreach is invoked once per iteration. Without
+    // its own IDs, Inngest returns the first iteration's memoized result for every later one.
+    // The first iteration keeps the plain IDs so runs already in flight replay unchanged.
+    const hasScopedExecutionAddress =
+      (iterationCount !== undefined && iterationCount !== 1) ||
+      (executionContext.foreachIndex !== undefined && executionContext.foreachIndex !== 0);
+    const executionAddressParts = [`path.${JSON.stringify(executionContext.executionPath)}`];
+    if (iterationCount !== undefined && iterationCount !== 1) {
+      executionAddressParts.push(`iteration.${iterationCount}`);
+    }
+    if (executionContext.foreachIndex !== undefined && executionContext.foreachIndex !== 0) {
+      executionAddressParts.push(`foreach.${executionContext.foreachIndex}`);
+    }
+    const nestedOperationPrefix = hasScopedExecutionAddress
+      ? `workflow.${executionContext.workflowId}.run.${executionContext.runId}.${executionAddressParts.join('.')}.step.${step.id}`
+      : `workflow.${executionContext.workflowId}.step.${step.id}`;
+    const invokeOperationId = hasScopedExecutionAddress ? `${nestedOperationPrefix}.invoke` : nestedOperationPrefix;
     const forwardedRequestContext = parentRequestContext
       ? this.serializeRequestContext(parentRequestContext)
       : (inputData?.requestContextEntries ?? {});
@@ -618,7 +638,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         }
         const nestedResumeStepId = nestedResumeSteps[0];
 
-        const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
+        const invokeResp = (await this.inngestStep.invoke(invokeOperationId, {
           function: step.getFunction(),
           data: {
             inputData,
@@ -662,7 +682,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           snapshot,
           graph: step.buildExecutionGraph(),
         });
-        const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
+        const invokeResp = (await this.inngestStep.invoke(invokeOperationId, {
           function: step.getFunction(),
           data: {
             timeTravel: timeTravelParams,
@@ -688,7 +708,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         // Derived (not random) so every replay pass addresses the same child
         // snapshot — see `derivedNestedRunId` above.
         const nestedRunId = derivedNestedRunId;
-        const invokeResp = (await this.inngestStep.invoke(`workflow.${executionContext.workflowId}.step.${step.id}`, {
+        const invokeResp = (await this.inngestStep.invoke(invokeOperationId, {
           function: step.getFunction(),
           data: {
             inputData,
@@ -737,147 +757,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       }
     }
 
-    const res = await this.inngestStep.run(
-      `workflow.${executionContext.workflowId}.step.${step.id}.nestedwf-results`,
-      async () => {
-        if (result.status === 'failed') {
-          await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
-            type: 'watch',
-            runId: executionContext.runId,
-            data: {
-              type: 'workflow-step-result',
-              payload: {
-                id: step.id,
-                status: 'failed',
-                error: result?.error,
-                payload: prevOutput,
-              },
-            },
-          });
-
-          return { executionContext, result: { status: 'failed', error: result?.error, endedAt: Date.now() } };
-        } else if (result.status === 'suspended') {
-          const suspendedSteps = Object.entries(result.steps).filter(([_stepName, stepResult]) => {
-            const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
-            return stepRes?.status === 'suspended';
-          });
-
-          for (const [stepName, stepResult] of suspendedSteps) {
-            const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
-            executionContext.suspendedPaths[step.id] = executionContext.executionPath;
-
-            // Re-register the nested run's resume labels on the parent so the outer snapshot is
-            // self-describing about every parked leaf (e.g. `resumeLabels[toolCallId]`). Without
-            // this a caller can only target the outer step, and concurrent suspensions inside the
-            // nested workflow become impossible to disambiguate. Mirrors `Workflow.execute()` in
-            // packages/core/src/workflows/workflow.ts.
-            for (const label of Object.keys((result as any)?.resumeLabels ?? {})) {
-              executionContext.resumeLabels[label] = { stepId: step.id };
-            }
-
-            // Keep the nested workflow metadata (foreachIndex, foreachOutput, resumeLabels) when
-            // propagating a suspension to the parent — only runId and path change as we move up.
-            // Per-iteration `__streamState` blobs are stripped from the propagated copies: they can
-            // be large and resume reads them from the nested run's own snapshot, so the parent only
-            // needs the identifying fields.
-            const nestedMeta = (stepResult as any)?.suspendPayload?.__workflow_meta ?? {};
-            const propagatedForeachOutput = Array.isArray(nestedMeta.foreachOutput)
-              ? nestedMeta.foreachOutput.map((entry: any) => {
-                  if (entry?.status !== 'suspended' || !entry.suspendPayload) return entry;
-                  const { __streamState: _streamState, ...suspendPayload } = entry.suspendPayload;
-                  return { ...entry, suspendPayload };
-                })
-              : undefined;
-
-            await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
-              type: 'watch',
-              runId: executionContext.runId,
-              data: {
-                type: 'workflow-step-suspended',
-                payload: {
-                  id: step.id,
-                  status: 'suspended',
-                },
-              },
-            });
-
-            return {
-              executionContext,
-              result: {
-                status: 'suspended',
-                suspendedAt: Date.now(),
-                payload: stepResult.payload,
-                suspendPayload: {
-                  ...(stepResult as any)?.suspendPayload,
-                  __workflow_meta: {
-                    ...nestedMeta,
-                    ...(propagatedForeachOutput ? { foreachOutput: propagatedForeachOutput } : {}),
-                    runId: runId,
-                    path: suspendPath,
-                  },
-                },
-              },
-            };
-          }
-
-          return {
-            executionContext,
-            result: {
-              status: 'suspended',
-              suspendedAt: Date.now(),
-              payload: {},
-            },
-          };
-        } else if (result.status === 'tripwire') {
-          await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
-            type: 'watch',
-            runId: executionContext.runId,
-            data: {
-              type: 'workflow-step-result',
-              payload: {
-                id: step.id,
-                status: 'tripwire',
-                error: result?.tripwire?.reason,
-                payload: prevOutput,
-              },
-            },
-          });
-
-          return {
-            executionContext,
-            result: {
-              status: 'tripwire',
-              tripwire: result?.tripwire,
-              endedAt: Date.now(),
-            },
-          };
-        } else if (perStep || result.status === 'paused') {
-          await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
-            type: 'watch',
-            runId: executionContext.runId,
-            data: {
-              type: 'workflow-step-result',
-              payload: {
-                id: step.id,
-                status: 'paused',
-              },
-            },
-          });
-
-          await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
-            type: 'watch',
-            runId: executionContext.runId,
-            data: {
-              type: 'workflow-step-finish',
-              payload: {
-                id: step.id,
-                metadata: {},
-              },
-            },
-          });
-          return { executionContext, result: { status: 'paused' } };
-        }
-
+    const res = await this.inngestStep.run(`${nestedOperationPrefix}.nestedwf-results`, async () => {
+      if (result.status === 'failed') {
         await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
           type: 'watch',
           runId: executionContext.runId,
@@ -885,8 +766,118 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             type: 'workflow-step-result',
             payload: {
               id: step.id,
-              status: 'success',
-              output: result?.result,
+              status: 'failed',
+              error: result?.error,
+              payload: prevOutput,
+            },
+          },
+        });
+
+        return { executionContext, result: { status: 'failed', error: result?.error, endedAt: Date.now() } };
+      } else if (result.status === 'suspended') {
+        const suspendedSteps = Object.entries(result.steps).filter(([_stepName, stepResult]) => {
+          const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
+          return stepRes?.status === 'suspended';
+        });
+
+        for (const [stepName, stepResult] of suspendedSteps) {
+          const suspendPath: string[] = [stepName, ...(stepResult?.suspendPayload?.__workflow_meta?.path ?? [])];
+          executionContext.suspendedPaths[step.id] = executionContext.executionPath;
+
+          // Re-register the nested run's resume labels on the parent so the outer snapshot is
+          // self-describing about every parked leaf (e.g. `resumeLabels[toolCallId]`). Without
+          // this a caller can only target the outer step, and concurrent suspensions inside the
+          // nested workflow become impossible to disambiguate. Mirrors `Workflow.execute()` in
+          // packages/core/src/workflows/workflow.ts.
+          for (const label of Object.keys((result as any)?.resumeLabels ?? {})) {
+            executionContext.resumeLabels[label] = { stepId: step.id };
+          }
+
+          // Keep the nested workflow metadata (foreachIndex, foreachOutput, resumeLabels) when
+          // propagating a suspension to the parent — only runId and path change as we move up.
+          // Per-iteration `__streamState` blobs are stripped from the propagated copies: they can
+          // be large and resume reads them from the nested run's own snapshot, so the parent only
+          // needs the identifying fields.
+          const nestedMeta = (stepResult as any)?.suspendPayload?.__workflow_meta ?? {};
+          const propagatedForeachOutput = Array.isArray(nestedMeta.foreachOutput)
+            ? nestedMeta.foreachOutput.map((entry: any) => {
+                if (entry?.status !== 'suspended' || !entry.suspendPayload) return entry;
+                const { __streamState: _streamState, ...suspendPayload } = entry.suspendPayload;
+                return { ...entry, suspendPayload };
+              })
+            : undefined;
+
+          await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+            type: 'watch',
+            runId: executionContext.runId,
+            data: {
+              type: 'workflow-step-suspended',
+              payload: {
+                id: step.id,
+                status: 'suspended',
+              },
+            },
+          });
+
+          return {
+            executionContext,
+            result: {
+              status: 'suspended',
+              suspendedAt: Date.now(),
+              payload: stepResult.payload,
+              suspendPayload: {
+                ...(stepResult as any)?.suspendPayload,
+                __workflow_meta: {
+                  ...nestedMeta,
+                  ...(propagatedForeachOutput ? { foreachOutput: propagatedForeachOutput } : {}),
+                  runId: runId,
+                  path: suspendPath,
+                },
+              },
+            },
+          };
+        }
+
+        return {
+          executionContext,
+          result: {
+            status: 'suspended',
+            suspendedAt: Date.now(),
+            payload: {},
+          },
+        };
+      } else if (result.status === 'tripwire') {
+        await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+          type: 'watch',
+          runId: executionContext.runId,
+          data: {
+            type: 'workflow-step-result',
+            payload: {
+              id: step.id,
+              status: 'tripwire',
+              error: result?.tripwire?.reason,
+              payload: prevOutput,
+            },
+          },
+        });
+
+        return {
+          executionContext,
+          result: {
+            status: 'tripwire',
+            tripwire: result?.tripwire,
+            endedAt: Date.now(),
+          },
+        };
+      } else if (perStep || result.status === 'paused') {
+        await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+          type: 'watch',
+          runId: executionContext.runId,
+          data: {
+            type: 'workflow-step-result',
+            payload: {
+              id: step.id,
+              status: 'paused',
             },
           },
         });
@@ -902,10 +893,36 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
           },
         });
+        return { executionContext, result: { status: 'paused' } };
+      }
 
-        return { executionContext, result: { status: 'success', output: result?.result, endedAt: Date.now() } };
-      },
-    );
+      await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+        type: 'watch',
+        runId: executionContext.runId,
+        data: {
+          type: 'workflow-step-result',
+          payload: {
+            id: step.id,
+            status: 'success',
+            output: result?.result,
+          },
+        },
+      });
+
+      await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
+        type: 'watch',
+        runId: executionContext.runId,
+        data: {
+          type: 'workflow-step-finish',
+          payload: {
+            id: step.id,
+            metadata: {},
+          },
+        },
+      });
+
+      return { executionContext, result: { status: 'success', output: result?.result, endedAt: Date.now() } };
+    });
 
     Object.assign(executionContext, res.executionContext);
     return {

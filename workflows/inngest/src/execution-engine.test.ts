@@ -169,6 +169,8 @@ function createNestedResumeFixture(
     stepResultShape?: 'legacy' | 'stripped';
     /** foreach iteration index on the execution context. */
     foreachIndex?: number;
+    /** Loop iteration of the nested workflow step. */
+    iterationCount?: number;
     /** 'fresh' calls executeWorkflowStep without resume data. */
     mode?: 'resume' | 'fresh';
     /** Overrides the mocked step.invoke implementation. */
@@ -177,7 +179,14 @@ function createNestedResumeFixture(
     withLoggerSpy?: boolean;
   } = {},
 ) {
-  const { stepResultShape = 'legacy', foreachIndex, mode = 'resume', invokeImpl, withLoggerSpy } = options;
+  const {
+    stepResultShape = 'legacy',
+    foreachIndex,
+    iterationCount,
+    mode = 'resume',
+    invokeImpl,
+    withLoggerSpy,
+  } = options;
   const inngest = new Inngest({ id: 'nested-resume-test' });
   const { createWorkflow, createStep } = init(inngest);
   const suspendedStep = createStep({
@@ -251,12 +260,14 @@ function createNestedResumeFixture(
       inputData: { value: 'start' },
       pubsub: { publish: vi.fn().mockResolvedValue(undefined) } as any,
       startedAt: Date.now(),
+      ...(iterationCount !== undefined ? { iterationCount } : {}),
     });
 
   return {
     execute,
     engine,
     invoke,
+    run: inngestStep.run,
     loadWorkflowSnapshot,
     logger,
     nestedRunId,
@@ -494,6 +505,32 @@ describe('InngestExecutionEngine.executeWorkflowStep', () => {
     await freshFixture.execute();
     expect(freshFixture.invoke).toHaveBeenCalledTimes(1);
     expect(freshFixture.invoke.mock.calls[0]?.[1].data.runId).toBe(`${freshFixture.parentRunId}-foreach-2`);
+  });
+
+  it('scopes the invoke and result ids by loop iteration and foreach index', async () => {
+    const operationIds = async (options: { iterationCount?: number; foreachIndex?: number }) => {
+      const fixture = createNestedResumeFixture({}, { mode: 'fresh', ...options });
+      await fixture.execute();
+      return {
+        invoke: fixture.invoke.mock.calls[0]?.[0],
+        result: fixture.run.mock.calls.map(call => call[0]).find(id => id.endsWith('.nestedwf-results')),
+      };
+    };
+    const nestedId = 'nested-resume-workflow';
+
+    // The first iteration keeps the ids runs already in flight replay.
+    expect(await operationIds({ iterationCount: 1 })).toEqual({
+      invoke: `workflow.parent-workflow.step.${nestedId}`,
+      result: `workflow.parent-workflow.step.${nestedId}.nestedwf-results`,
+    });
+    expect(await operationIds({ iterationCount: 2 })).toEqual({
+      invoke: `workflow.parent-workflow.run.parent-run.path.[0].iteration.2.step.${nestedId}.invoke`,
+      result: `workflow.parent-workflow.run.parent-run.path.[0].iteration.2.step.${nestedId}.nestedwf-results`,
+    });
+    expect(await operationIds({ foreachIndex: 2 })).toEqual({
+      invoke: `workflow.parent-workflow.run.parent-run.path.[0].foreach.2.step.${nestedId}.invoke`,
+      result: `workflow.parent-workflow.run.parent-run.path.[0].foreach.2.step.${nestedId}.nestedwf-results`,
+    });
   });
 
   it('invokes a fresh nested run under the parent run id', async () => {
