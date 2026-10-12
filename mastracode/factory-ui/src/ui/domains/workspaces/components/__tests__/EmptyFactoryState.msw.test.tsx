@@ -52,7 +52,7 @@ function renderOnboarding() {
   );
 }
 
-function registerSetup(failure?: 'connection' | 'model') {
+function registerSetup(failure?: 'connection' | 'intake' | 'model') {
   const writes: { path: string; body: unknown }[] = [];
   let project: FactoryProjectPayload | undefined;
   let failed = false;
@@ -136,6 +136,10 @@ function registerSetup(failure?: 'connection' | 'model') {
     http.put(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
       const body = await request.json();
       writes.push({ path: 'intake', body });
+      if (failure === 'intake' && !failed) {
+        failed = true;
+        return HttpResponse.json({ error: 'unavailable' }, { status: 502 });
+      }
       return HttpResponse.json({ config: body });
     }),
     http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async ({ request }) => {
@@ -259,50 +263,56 @@ describe('Draft Factory onboarding', () => {
     },
   );
 
-  it('replaces only its own repository link when the codebase changes after a failed save', async () => {
-    const writes = registerSetup('model');
-    const links: { id: string; repository: { slug: string; externalId: string; defaultBranch: string } }[] = [];
-    server.use(
-      http.post(
-        `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`,
-        async ({ request }) => {
-          const body = (await request.json()) as { repository: { slug: string; externalId: string } };
-          const link = {
-            id: `link-${body.repository.externalId}`,
-            repository: { ...body.repository, defaultBranch: 'main' },
-          };
-          if (!links.some(existing => existing.id === link.id)) links.push(link);
-          return HttpResponse.json({ projectRepository: { ...link, branch: 'main', sandboxWorkdir: '/workspace' } });
-        },
-      ),
-      http.delete(`${TEST_BASE_URL}/web/factory/projects/fp-1/repositories/:linkId`, ({ params }) => {
-        writes.push({ path: 'unlink', body: params.linkId });
-        links.splice(
-          links.findIndex(link => link.id === params.linkId),
-          1,
-        );
-        return HttpResponse.json({ ok: true });
-      }),
-    );
-    persistOnboardingDraft({ repository: repo, model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
-    const user = userEvent.setup();
-    renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('502');
+  it.each(['intake', 'model'] as const)(
+    'replaces only its own repository link when the codebase changes after a failed %s save',
+    async failure => {
+      const writes = registerSetup(failure);
+      const links: { id: string; repository: { slug: string; externalId: string; defaultBranch: string } }[] = [];
+      server.use(
+        http.post(
+          `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`,
+          async ({ request }) => {
+            const body = (await request.json()) as { repository: { slug: string; externalId: string } };
+            const link = {
+              id: `link-${body.repository.externalId}`,
+              repository: { ...body.repository, defaultBranch: 'main' },
+            };
+            if (!links.some(existing => existing.id === link.id)) links.push(link);
+            return HttpResponse.json({ projectRepository: { ...link, branch: 'main', sandboxWorkdir: '/workspace' } });
+          },
+        ),
+        http.delete(`${TEST_BASE_URL}/web/factory/projects/fp-1/repositories/:linkId`, ({ params }) => {
+          writes.push({ path: 'unlink', body: params.linkId });
+          links.splice(
+            links.findIndex(link => link.id === params.linkId),
+            1,
+          );
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      persistOnboardingDraft({ repository: repo, model });
+      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+      const user = userEvent.setup();
+      renderOnboarding();
+      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
 
-    links.push({ id: 'link-teammate', repository: { slug: 'octo/teammate', externalId: '7', defaultBranch: 'main' } });
-    await user.click(screen.getByRole('button', { name: 'Edit codebase' }));
-    await user.click(await screen.findByRole('radio', { name: 'octo/other' }));
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      links.push({
+        id: 'link-teammate',
+        repository: { slug: 'octo/teammate', externalId: '7', defaultBranch: 'main' },
+      });
+      await user.click(screen.getByRole('button', { name: 'Edit codebase' }));
+      await user.click(await screen.findByRole('radio', { name: 'octo/other' }));
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
 
-    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
-    expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
-    expect(writes.filter(item => item.path === 'unlink')).toEqual([{ path: 'unlink', body: 'link-99' }]);
-    expect(writes.filter(item => item.path === 'model').map(item => item.body)).toContainEqual({ name: 'other' });
-    expect(links.map(link => link.repository.slug)).toEqual(['octo/teammate', 'octo/other']);
-  });
+      expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+      expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
+      expect(writes.filter(item => item.path === 'unlink')).toEqual([{ path: 'unlink', body: 'link-99' }]);
+      expect(writes.filter(item => item.path === 'model').map(item => item.body)).toContainEqual({ name: 'other' });
+      expect(links.map(link => link.repository.slug)).toEqual(['octo/teammate', 'octo/other']);
+    },
+  );
 
   it('refuses to create a Factory whose model is no longer available', async () => {
     const writes = registerSetup();

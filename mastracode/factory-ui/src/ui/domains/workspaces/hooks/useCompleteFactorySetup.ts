@@ -55,12 +55,17 @@ export function useCompleteFactorySetup() {
       // Linking refetches the Factory list; the marker keeps the root guard from leaving onboarding.
       persistOnboardingFactory(factory.id);
       if (existing && existing.name !== repo.name) await renameFactoryProject(baseUrl, factory.id, repo.name);
-      const linked = await link.mutateAsync({ factoryProjectId: factory.id, repo });
       const previouslyLinked = existing && readOnboardingLinkedRepository();
-      if (previouslyLinked && previouslyLinked !== linked.projectRepositoryId) {
-        await unlinkRepository(baseUrl, factory.id, previouslyLinked);
-      }
-      persistOnboardingLinkedRepository(linked.projectRepositoryId);
+      await link.mutateAsync({
+        factoryProjectId: factory.id,
+        repo,
+        onLinked: async linked => {
+          if (previouslyLinked && previouslyLinked !== linked.projectRepositoryId) {
+            await unlinkRepository(baseUrl, factory.id, previouslyLinked);
+          }
+          persistOnboardingLinkedRepository(linked.projectRepositoryId);
+        },
+      });
       await Promise.all([
         updateFactoryDefaultModel(baseUrl, factory.id, factoryModel),
         personalModel ? setPersonalDefault.mutateAsync(personalModel) : undefined,
