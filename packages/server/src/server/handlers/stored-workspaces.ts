@@ -134,7 +134,10 @@ export const GET_STORED_WORKSPACE_ROUTE = createRoute({
       const workspace = await workspaceStore.getByIdResolved(storedWorkspaceId);
 
       if (!workspace) {
-        throw new HTTPException(404, { message: `Stored workspace with id ${storedWorkspaceId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored workspace with id ${storedWorkspaceId} not found`,
+          code: MASTRA_ERROR_CODES.WORKSPACE_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(workspace, await getStoredResourceScope(mastra, requestContext));
 
@@ -206,13 +209,17 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive workspace ID from name. Please provide an explicit id.',
+          code: MASTRA_ERROR_CODES.RESOURCE_ID_DERIVATION_FAILED,
         });
       }
 
       // Check if workspace with this ID already exists
       const existing = await workspaceStore.getById(id);
       if (existing) {
-        throw new HTTPException(409, { message: `Workspace with id ${id} already exists` });
+        throw new HTTPException(409, {
+          message: `Workspace with id ${id} already exists`,
+          code: MASTRA_ERROR_CODES.WORKSPACE_ALREADY_EXISTS,
+        });
       }
 
       // Force authorId from the authenticated caller; ignore any body-provided value.
@@ -241,7 +248,10 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
       // Return the resolved workspace (thin record + version config)
       const resolved = await workspaceStore.getByIdResolved(id);
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve created workspace' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve created workspace',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       return resolved;
@@ -304,7 +314,10 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
       // Check if workspace exists
       const existing = await workspaceStore.getById(storedWorkspaceId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored workspace with id ${storedWorkspaceId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored workspace with id ${storedWorkspaceId} not found`,
+          code: MASTRA_ERROR_CODES.WORKSPACE_NOT_FOUND,
+        });
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
@@ -352,7 +365,10 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
       // Return the resolved workspace with the updated config
       const resolved = await workspaceStore.getByIdResolved(storedWorkspaceId);
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve updated workspace' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve updated workspace',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       return resolved;
@@ -397,7 +413,10 @@ export const DELETE_STORED_WORKSPACE_ROUTE = createRoute({
       // Check if workspace exists
       const existing = await workspaceStore.getById(storedWorkspaceId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored workspace with id ${storedWorkspaceId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored workspace with id ${storedWorkspaceId} not found`,
+          code: MASTRA_ERROR_CODES.WORKSPACE_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 

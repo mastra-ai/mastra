@@ -117,7 +117,10 @@ async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) 
   const logger = mastra.getLogger();
 
   if (!workflowId) {
-    throw new HTTPException(400, { message: 'Workflow ID is required' });
+    throw new HTTPException(400, {
+      message: 'Workflow ID is required',
+      code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+    });
   }
 
   let workflow;
@@ -330,7 +333,10 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
   handler: (async ({ mastra, workflowId }: any) => {
     try {
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
       return getWorkflowInfo(workflow, false);
@@ -370,7 +376,10 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       // Support both page/perPage and limit/offset for backwards compatibility
@@ -389,10 +398,16 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
         finalPerPage !== undefined &&
         (typeof finalPerPage !== 'number' || !Number.isInteger(finalPerPage) || finalPerPage <= 0)
       ) {
-        throw new HTTPException(400, { message: 'perPage must be a positive integer' });
+        throw new HTTPException(400, {
+          message: 'perPage must be a positive integer',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
       if (finalPage !== undefined && (!Number.isInteger(finalPage) || finalPage < 0)) {
-        throw new HTTPException(400, { message: 'page must be a non-negative integer' });
+        throw new HTTPException(400, {
+          message: 'page must be a non-negative integer',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
       if (!workflow) {
@@ -460,11 +475,14 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'Run ID is required' });
+        throw new HTTPException(400, { message: 'Run ID is required', code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -512,11 +530,14 @@ export const DELETE_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'Run ID is required' });
+        throw new HTTPException(400, { message: 'Run ID is required', code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -566,7 +587,10 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -601,11 +625,17 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to stream workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to stream workflow',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -621,6 +651,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
           message:
             `Workflow run ${runId} already finished with status "${existingRun.status}". ` +
             `Use /observe to read its stream back, or stream a new runId.`,
+          code: MASTRA_ERROR_CODES.WORKFLOW_RUN_ALREADY_FINISHED,
         });
       }
 
@@ -657,11 +688,17 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to resume workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to resume workflow',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -715,7 +752,10 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -750,11 +790,17 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to start run' });
+        throw new HTTPException(400, {
+          message: 'runId required to start run',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -810,11 +856,17 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to observe workflow stream' });
+        throw new HTTPException(400, {
+          message: 'runId required to observe workflow stream',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -837,7 +889,10 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       const serverCache = mastra.getServerCache();
       if (!serverCache) {
-        throw new HTTPException(500, { message: 'Server cache not found' });
+        throw new HTTPException(500, {
+          message: 'Server cache not found',
+          code: MASTRA_ERROR_CODES.SERVER_CACHE_UNAVAILABLE,
+        });
       }
 
       // Get cached chunks from the specified index (or 0 if not specified)
@@ -872,11 +927,17 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to resume workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to resume workflow',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -934,11 +995,17 @@ export const RESUME_NO_WAIT_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to resume workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to resume workflow',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -985,11 +1052,17 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to resume workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to resume workflow',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -1041,11 +1114,17 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to restart workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to restart workflow',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -1092,11 +1171,17 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to restart workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to restart workflow',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -1142,7 +1227,10 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ASYNC_ROUTE = createRoute({
   handler: async ({ mastra, workflowId }) => {
     try {
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -1173,7 +1261,10 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE = createRoute({
   handler: async ({ mastra, workflowId }) => {
     try {
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -1210,11 +1301,17 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to time travel workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to time travel workflow',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -1261,11 +1358,17 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to time travel workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to time travel workflow',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -1316,11 +1419,17 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to time travel workflow stream' });
+        throw new HTTPException(400, {
+          message: 'runId required to time travel workflow stream',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -1370,11 +1479,17 @@ export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to cancel workflow run' });
+        throw new HTTPException(400, {
+          message: 'runId required to cancel workflow run',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -1423,11 +1538,17 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to resume workflow' });
+        throw new HTTPException(400, {
+          message: 'runId required to resume workflow',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -1473,11 +1594,17 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
 
       if (!workflowId) {
-        throw new HTTPException(400, { message: 'Workflow ID is required' });
+        throw new HTTPException(400, {
+          message: 'Workflow ID is required',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
 
       if (!runId) {
-        throw new HTTPException(400, { message: 'runId required to observe workflow stream' });
+        throw new HTTPException(400, {
+          message: 'runId required to observe workflow stream',
+          code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED,
+        });
       }
 
       const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
@@ -1500,7 +1627,10 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
       const serverCache = mastra.getServerCache();
       if (!serverCache) {
-        throw new HTTPException(500, { message: 'Server cache not found' });
+        throw new HTTPException(500, {
+          message: 'Server cache not found',
+          code: MASTRA_ERROR_CODES.SERVER_CACHE_UNAVAILABLE,
+        });
       }
 
       // Get cached chunks and create replay stream
@@ -1508,7 +1638,10 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
       const result = _run.observeStreamLegacy();
 
       if (!result.stream) {
-        throw new HTTPException(500, { message: 'Failed to create observe stream' });
+        throw new HTTPException(500, {
+          message: 'Failed to create observe stream',
+          code: MASTRA_ERROR_CODES.WORKFLOW_OBSERVE_FAILED,
+        });
       }
 
       return createReplayStream<StreamEvent>({
@@ -1688,7 +1821,10 @@ export const RECEIVE_WORKFLOW_EVENT_ROUTE = createRoute({
       const rawCreatedAt = (event as unknown as { createdAt: unknown }).createdAt;
       const createdAt = rawCreatedAt instanceof Date ? rawCreatedAt : new Date(rawCreatedAt as string);
       if (Number.isNaN(createdAt.getTime())) {
-        throw new HTTPException(400, { message: 'Invalid createdAt' });
+        throw new HTTPException(400, {
+          message: 'Invalid createdAt',
+          code: MASTRA_ERROR_CODES.WORKFLOW_INVALID_REQUEST,
+        });
       }
       return await mastra.handleWorkflowEvent({ ...event, createdAt });
     } catch (error) {

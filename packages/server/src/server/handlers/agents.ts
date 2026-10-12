@@ -979,7 +979,7 @@ export async function getAgentFromSystem({
   const logger = mastra.getLogger();
 
   if (!agentId) {
-    throw new HTTPException(400, { message: 'Agent ID is required' });
+    throw new HTTPException(400, { message: 'Agent ID is required', code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST });
   }
 
   let agent: Agent | null | undefined;
@@ -1620,7 +1620,10 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
       validateBody({ messages });
 
       if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
-        throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
+        throw new HTTPException(400, {
+          message: 'Both threadId or resourceId must be provided',
+          code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+        });
       }
 
       // Validate thread ownership if accessing an existing thread
@@ -1691,7 +1694,10 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
       validateBody({ messages });
 
       if ((effectiveThreadId && !effectiveResourceId) || (!effectiveThreadId && effectiveResourceId)) {
-        throw new HTTPException(400, { message: 'Both threadId or resourceId must be provided' });
+        throw new HTTPException(400, {
+          message: 'Both threadId or resourceId must be provided',
+          code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+        });
       }
 
       // Validate thread ownership if accessing an existing thread
@@ -2089,7 +2095,10 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
       }
 
       if (typeof (agent as { sendSignal?: unknown }).sendSignal !== 'function') {
-        throw new HTTPException(501, { message: 'agent signals are not supported by this Mastra core version' });
+        throw new HTTPException(501, {
+          message: 'agent signals are not supported by this Mastra core version',
+          code: MASTRA_ERROR_CODES.CORE_VERSION_UNSUPPORTED,
+        });
       }
 
       const agentSignal = signal as AgentSignalInput;
@@ -2114,7 +2123,10 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
       }
 
       if (!effectiveResourceId || !effectiveThreadId) {
-        throw new HTTPException(400, { message: 'resourceId and threadId are required when runId is not provided' });
+        throw new HTTPException(400, {
+          message: 'resourceId and threadId are required when runId is not provided',
+          code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+        });
       }
 
       const result = await agent.sendSignal(agentSignal, {
@@ -2193,7 +2205,10 @@ async function handleAgentMessageRoute({
   }
 
   if (typeof (agent as unknown as Record<string, unknown>)[methodName] !== 'function') {
-    throw new HTTPException(501, { message: `agent ${methodName} is not supported by this Mastra core version` });
+    throw new HTTPException(501, {
+      message: `agent ${methodName} is not supported by this Mastra core version`,
+      code: MASTRA_ERROR_CODES.CORE_VERSION_UNSUPPORTED,
+    });
   }
 
   if (runId) {
@@ -2211,7 +2226,10 @@ async function handleAgentMessageRoute({
   }
 
   if (!effectiveResourceId || !effectiveThreadId) {
-    throw new HTTPException(400, { message: 'resourceId and threadId are required when runId is not provided' });
+    throw new HTTPException(400, {
+      message: 'resourceId and threadId are required when runId is not provided',
+      code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+    });
   }
 
   const result = await agent[methodName](message, {
@@ -2296,12 +2314,14 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
       if (typeof (agent as { abortThreadStream?: unknown }).abortThreadStream !== 'function') {
         throw new HTTPException(501, {
           message: 'agent thread aborts are not supported by this Mastra core version',
+          code: MASTRA_ERROR_CODES.CORE_VERSION_UNSUPPORTED,
         });
       }
       if (clearPendingSignals && agent.__supportsThreadSignalCancellation !== true) {
         throw new HTTPException(501, {
           message:
             'clear-on-abort requires a newer @mastra/core version. Upgrade @mastra/core alongside @mastra/server.',
+          code: MASTRA_ERROR_CODES.CORE_VERSION_UNSUPPORTED,
         });
       }
 
@@ -2309,7 +2329,10 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
 
       if (!effectiveThreadId) {
-        throw new HTTPException(400, { message: 'threadId is required' });
+        throw new HTTPException(400, {
+          message: 'threadId is required',
+          code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+        });
       }
 
       const memory = await agent.getMemory({ requestContext: serverRequestContext });
@@ -2358,11 +2381,16 @@ export const CANCEL_AGENT_PENDING_SIGNALS_ROUTE = createRoute({
         throw new HTTPException(501, {
           message:
             'thread-wide cancellation requires a newer @mastra/core version. Upgrade @mastra/core alongside @mastra/server.',
+          code: MASTRA_ERROR_CODES.CORE_VERSION_UNSUPPORTED,
         });
       }
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
-      if (!effectiveThreadId) throw new HTTPException(400, { message: 'threadId is required' });
+      if (!effectiveThreadId)
+        throw new HTTPException(400, {
+          message: 'threadId is required',
+          code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+        });
       const memory = await agent.getMemory({ requestContext });
       const thread = await memory?.getThreadById({ threadId: effectiveThreadId });
       await enforceThreadAccess({
@@ -2408,6 +2436,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       if (typeof (agent as { subscribeToThread?: unknown }).subscribeToThread !== 'function') {
         throw new HTTPException(501, {
           message: 'agent thread subscriptions are not supported by this Mastra core version',
+          code: MASTRA_ERROR_CODES.CORE_VERSION_UNSUPPORTED,
         });
       }
 
@@ -2415,7 +2444,10 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
       const effectiveThreadId = getEffectiveThreadId(serverRequestContext, threadId);
 
       if (!effectiveThreadId) {
-        throw new HTTPException(400, { message: 'threadId is required' });
+        throw new HTTPException(400, {
+          message: 'threadId is required',
+          code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+        });
       }
 
       if (withInitialHistory) {
@@ -2758,7 +2790,10 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       }
 
       if (!params.toolCallId) {
-        throw new HTTPException(400, { message: 'Tool call id is required' });
+        throw new HTTPException(400, {
+          message: 'Tool call id is required',
+          code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+        });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -2803,7 +2838,7 @@ async function validateSubscriptionToolCallThreadAccess({
   const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
 
   if (!effectiveThreadId) {
-    throw new HTTPException(400, { message: 'threadId is required' });
+    throw new HTTPException(400, { message: 'threadId is required', code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST });
   }
 
   if (effectiveResourceId) {
@@ -2842,7 +2877,10 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       });
 
       if (!params.toolCallId) {
-        throw new HTTPException(400, { message: 'Tool call id is required' });
+        throw new HTTPException(400, {
+          message: 'Tool call id is required',
+          code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+        });
       }
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
@@ -2908,6 +2946,7 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
         if (!memory) {
           throw new HTTPException(403, {
             message: 'Access denied: agent has no memory configured to validate thread ownership',
+            code: MASTRA_ERROR_CODES.THREAD_ACCESS_DENIED,
           });
         }
         const thread = await memory.getThreadById({ threadId: effectiveThreadId });
@@ -2965,7 +3004,10 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       }
 
       if (!params.toolCallId) {
-        throw new HTTPException(400, { message: 'Tool call id is required' });
+        throw new HTTPException(400, {
+          message: 'Tool call id is required',
+          code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+        });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -3169,6 +3211,7 @@ export const RECOVER_ROUTE = createRoute({
       if (!isDurableAgentLike(agent)) {
         throw new HTTPException(400, {
           message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+          code: MASTRA_ERROR_CODES.AGENT_RECOVER_UNSUPPORTED,
         });
       }
 
@@ -3344,7 +3387,10 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       }
 
       if (!params.toolCallId) {
-        throw new HTTPException(400, { message: 'Tool call id is required' });
+        throw new HTTPException(400, {
+          message: 'Tool call id is required',
+          code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+        });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -3398,7 +3444,10 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       }
 
       if (!params.toolCallId) {
-        throw new HTTPException(400, { message: 'Tool call id is required' });
+        throw new HTTPException(400, {
+          message: 'Tool call id is required',
+          code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+        });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -3625,7 +3674,10 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
 
       const modelList = await agent.getModelList();
       if (!modelList || modelList.length === 0) {
-        throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+        throw new HTTPException(400, {
+          message: 'Agent model list is not found or empty',
+          code: MASTRA_ERROR_CODES.AGENT_MODEL_LIST_EMPTY,
+        });
       }
 
       agent.reorderModels(reorderedModelIds);
@@ -3654,12 +3706,18 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
 
       const modelList = await agent.getModelList();
       if (!modelList || modelList.length === 0) {
-        throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
+        throw new HTTPException(400, {
+          message: 'Agent model list is not found or empty',
+          code: MASTRA_ERROR_CODES.AGENT_MODEL_LIST_EMPTY,
+        });
       }
 
       const modelConfig = modelList.find(config => config.id === modelConfigId);
       if (!modelConfig) {
-        throw new HTTPException(404, { message: `Model config with id ${modelConfigId} not found` });
+        throw new HTTPException(404, {
+          message: `Model config with id ${modelConfigId} not found`,
+          code: MASTRA_ERROR_CODES.MODEL_CONFIG_NOT_FOUND,
+        });
       }
 
       const newModel =
@@ -3778,6 +3836,7 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
         throw new HTTPException(400, {
           message:
             'No model with a configured API key found. Please set the required environment variable for your model provider.',
+          code: MASTRA_ERROR_CODES.MODEL_API_KEY_MISSING,
         });
       }
 
@@ -3819,7 +3878,10 @@ export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
   requiresAuth: true,
   deprecated: true,
   handler: async () => {
-    throw new HTTPException(410, { message: 'This endpoint is deprecated. Please use /stream instead.' });
+    throw new HTTPException(410, {
+      message: 'This endpoint is deprecated. Please use /stream instead.',
+      code: MASTRA_ERROR_CODES.ENDPOINT_DEPRECATED,
+    });
   },
 });
 
@@ -3893,7 +3955,10 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
       // Get the skill from the agent (searches both inline and workspace skills)
       const skill = await agent.getSkill(identifier, { requestContext });
       if (!skill) {
-        throw new HTTPException(404, { message: `Skill "${identifier}" not found` });
+        throw new HTTPException(404, {
+          message: `Skill "${identifier}" not found`,
+          code: MASTRA_ERROR_CODES.SKILL_NOT_FOUND,
+        });
       }
 
       return {

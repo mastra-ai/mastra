@@ -88,7 +88,7 @@ async function requireEnabledRegistry(mastra: Mastra, registryId: string): Promi
   const list = await resolveRegistries(mastra);
   const match = list.find(r => r.id === registryId);
   if (!match || !match.enabled) {
-    throw new HTTPException(404, { message: 'Registry not found' });
+    throw new HTTPException(404, { message: 'Registry not found', code: MASTRA_ERROR_CODES.REGISTRY_NOT_FOUND });
   }
 }
 
@@ -352,6 +352,7 @@ export const BUILDER_REGISTRY_INSTALL_ROUTE = createRoute({
       if (!result || result.files.length === 0) {
         throw new HTTPException(404, {
           message: `Could not find skill "${skillName}" in ${owner}/${repo}.`,
+          code: MASTRA_ERROR_CODES.SKILL_NOT_FOUND,
         });
       }
 
@@ -372,6 +373,7 @@ export const BUILDER_REGISTRY_INSTALL_ROUTE = createRoute({
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive skill ID from registry skill metadata.',
+          code: MASTRA_ERROR_CODES.RESOURCE_ID_DERIVATION_FAILED,
         });
       }
 
@@ -382,6 +384,7 @@ export const BUILDER_REGISTRY_INSTALL_ROUTE = createRoute({
           message: `Skill with id "${id}" already exists.`,
           // Surface the existing id so the client can deep-link.
           cause: { storedSkillId: id },
+          code: MASTRA_ERROR_CODES.SKILL_ALREADY_EXISTS,
         });
       }
 

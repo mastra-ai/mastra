@@ -26,6 +26,7 @@ import {
   MASTRA_PUBLIC_HOST_HEADER,
   isStudioClientTypeHeader,
 } from '../constants';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -369,7 +370,10 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
       const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'getLoginUrl')) {
-        throw new HTTPException(404, { message: 'SSO not configured' });
+        throw new HTTPException(404, {
+          message: 'SSO not configured',
+          code: MASTRA_ERROR_CODES.AUTH_FEATURE_NOT_CONFIGURED,
+        });
       }
 
       // Build OAuth callback URI using the configured route prefix
@@ -575,7 +579,10 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
           implementsInterface<ISSOProvider>(auth, 'getLogoutUrl'));
 
       if (!canLogout) {
-        throw new HTTPException(404, { message: 'Logout not configured' });
+        throw new HTTPException(404, {
+          message: 'Logout not configured',
+          code: MASTRA_ERROR_CODES.AUTH_FEATURE_NOT_CONFIGURED,
+        });
       }
 
       // Get session ID and destroy it
@@ -640,19 +647,22 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
         !implementsInterface<ISessionProvider>(auth, 'refreshSession') ||
         !implementsInterface<ISessionProvider>(auth, 'getSessionIdFromRequest')
       ) {
-        throw new HTTPException(404, { message: 'Session refresh not configured' });
+        throw new HTTPException(404, {
+          message: 'Session refresh not configured',
+          code: MASTRA_ERROR_CODES.AUTH_FEATURE_NOT_CONFIGURED,
+        });
       }
 
       // Get session ID from request
       const sessionId = auth.getSessionIdFromRequest(request);
       if (!sessionId) {
-        throw new HTTPException(401, { message: 'No session' });
+        throw new HTTPException(401, { message: 'No session', code: MASTRA_ERROR_CODES.SESSION_NOT_FOUND });
       }
 
       // Refresh the session
       const newSession = await auth.refreshSession(sessionId);
       if (!newSession) {
-        throw new HTTPException(401, { message: 'Session expired' });
+        throw new HTTPException(401, { message: 'Session expired', code: MASTRA_ERROR_CODES.SESSION_EXPIRED });
       }
 
       // Build response with new session headers
@@ -695,7 +705,10 @@ export const POST_CREDENTIALS_SIGN_IN_ROUTE = createPublicRoute({
       const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth || !implementsInterface<ICredentialsProvider>(auth, 'signIn')) {
-        throw new HTTPException(404, { message: 'Credentials authentication not configured' });
+        throw new HTTPException(404, {
+          message: 'Credentials authentication not configured',
+          code: MASTRA_ERROR_CODES.AUTH_FEATURE_NOT_CONFIGURED,
+        });
       }
 
       const result = await auth.signIn(email, password, request);
@@ -727,7 +740,10 @@ export const POST_CREDENTIALS_SIGN_IN_ROUTE = createPublicRoute({
     } catch (error) {
       if (error instanceof HTTPException) throw error;
       // Return a generic error for auth failures to avoid leaking info
-      throw new HTTPException(401, { message: 'Invalid email or password' });
+      throw new HTTPException(401, {
+        message: 'Invalid email or password',
+        code: MASTRA_ERROR_CODES.INVALID_CREDENTIALS,
+      });
     }
   },
 });
@@ -752,7 +768,10 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
       const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth || !implementsInterface<ICredentialsProvider>(auth, 'signUp')) {
-        throw new HTTPException(404, { message: 'Credentials authentication not configured' });
+        throw new HTTPException(404, {
+          message: 'Credentials authentication not configured',
+          code: MASTRA_ERROR_CODES.AUTH_FEATURE_NOT_CONFIGURED,
+        });
       }
 
       const result = await auth.signUp(email, password, name, request);
@@ -787,7 +806,10 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
       mastra?.getLogger?.()?.error('Sign-up error', {
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
-      throw new HTTPException(400, { message: 'Failed to create account' });
+      throw new HTTPException(400, {
+        message: 'Failed to create account',
+        code: MASTRA_ERROR_CODES.ACCOUNT_CREATION_FAILED,
+      });
     }
   },
 });
@@ -818,12 +840,18 @@ export const GET_ROLE_PERMISSIONS_ROUTE = createRoute({
       const callerPermissions: string[] = requestContext?.get(MASTRA_USER_PERMISSIONS_KEY) ?? [];
       const isAdmin = callerPermissions.some((p: string) => p === '*' || p === '*:*');
       if (!isAdmin) {
-        throw new HTTPException(403, { message: 'Admin access required' });
+        throw new HTTPException(403, {
+          message: 'Admin access required',
+          code: MASTRA_ERROR_CODES.ADMIN_ACCESS_REQUIRED,
+        });
       }
 
       const rbac = getRBACProvider(mastra);
       if (!rbac?.getPermissionsForRole) {
-        throw new HTTPException(404, { message: 'RBAC provider does not support role permission resolution' });
+        throw new HTTPException(404, {
+          message: 'RBAC provider does not support role permission resolution',
+          code: MASTRA_ERROR_CODES.AUTH_FEATURE_NOT_CONFIGURED,
+        });
       }
 
       const permissions = await rbac.getPermissionsForRole(roleId);

@@ -84,7 +84,7 @@ describe('READ_AGENT_PLAN_ROUTE', () => {
           agentId: 'plan-agent',
           path,
         }),
-      ).rejects.toThrow(new HTTPException(400, { message: 'Invalid plan path' }));
+      ).rejects.toThrow(new HTTPException(400, { message: 'Invalid plan path', code: 'PLAN_PATH_INVALID' }));
     });
   });
 

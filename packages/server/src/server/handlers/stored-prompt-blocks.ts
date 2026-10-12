@@ -135,7 +135,10 @@ export const GET_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       const promptBlock = await promptBlockStore.getByIdResolved(storedPromptBlockId, { status });
 
       if (!promptBlock) {
-        throw new HTTPException(404, { message: `Stored prompt block with id ${storedPromptBlockId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored prompt block with id ${storedPromptBlockId} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
@@ -197,13 +200,17 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive prompt block ID from name. Please provide an explicit id.',
+          code: MASTRA_ERROR_CODES.RESOURCE_ID_DERIVATION_FAILED,
         });
       }
 
       // Check if prompt block with this ID already exists
       const existing = await promptBlockStore.getById(id);
       if (existing) {
-        throw new HTTPException(409, { message: `Prompt block with id ${id} already exists` });
+        throw new HTTPException(409, {
+          message: `Prompt block with id ${id} already exists`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_ALREADY_EXISTS,
+        });
       }
 
       await promptBlockStore.create({
@@ -223,7 +230,10 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       // Use draft status since newly created entities start as drafts
       const resolved = await promptBlockStore.getByIdResolved(id, { status: 'draft' });
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve created prompt block' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve created prompt block',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       const latestVersion = await promptBlockStore.getLatestVersion(id);
@@ -288,7 +298,10 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       // Check if prompt block exists
       const existing = await promptBlockStore.getById(storedPromptBlockId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored prompt block with id ${storedPromptBlockId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored prompt block with id ${storedPromptBlockId} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_NOT_FOUND,
+        });
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
@@ -331,7 +344,10 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       // Return the resolved prompt block with the latest (draft) version so the UI sees its edits
       const resolved = await promptBlockStore.getByIdResolved(storedPromptBlockId, { status: 'draft' });
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve updated prompt block' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve updated prompt block',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       const latestVersion = await promptBlockStore.getLatestVersion(storedPromptBlockId);
@@ -382,7 +398,10 @@ export const DELETE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
       // Check if prompt block exists
       const existing = await promptBlockStore.getById(storedPromptBlockId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored prompt block with id ${storedPromptBlockId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored prompt block with id ${storedPromptBlockId} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 

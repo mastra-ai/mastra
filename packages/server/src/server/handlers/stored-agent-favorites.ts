@@ -57,14 +57,20 @@ export const FAVORITE_STORED_AGENT_ROUTE = createRoute({
 
       const callerId = getCallerAuthorId(requestContext);
       if (!callerId) {
-        throw new HTTPException(401, { message: 'Authentication required' });
+        throw new HTTPException(401, {
+          message: 'Authentication required',
+          code: MASTRA_ERROR_CODES.AUTHENTICATION_REQUIRED,
+        });
       }
 
       const { agentStore, favoritesStore } = await getFavoritesContext(mastra);
 
       const agent = await agentStore.getById(storedAgentId);
       if (!agent) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored agent with id ${storedAgentId} not found`,
+          code: MASTRA_ERROR_CODES.AGENT_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
 
@@ -103,14 +109,20 @@ export const UNFAVORITE_STORED_AGENT_ROUTE = createRoute({
 
       const callerId = getCallerAuthorId(requestContext);
       if (!callerId) {
-        throw new HTTPException(401, { message: 'Authentication required' });
+        throw new HTTPException(401, {
+          message: 'Authentication required',
+          code: MASTRA_ERROR_CODES.AUTHENTICATION_REQUIRED,
+        });
       }
 
       const { agentStore, favoritesStore } = await getFavoritesContext(mastra);
 
       const agent = await agentStore.getById(storedAgentId);
       if (!agent) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored agent with id ${storedAgentId} not found`,
+          code: MASTRA_ERROR_CODES.AGENT_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
 

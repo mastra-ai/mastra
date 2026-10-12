@@ -120,7 +120,10 @@ export const GET_STORED_SCORER_ROUTE = createRoute({
       const scorer = await scorerStore.getByIdResolved(storedScorerId, { status });
 
       if (!scorer) {
-        throw new HTTPException(404, { message: `Stored scorer definition with id ${storedScorerId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored scorer definition with id ${storedScorerId} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(scorer, await getStoredResourceScope(mastra, requestContext));
 
@@ -183,13 +186,17 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive scorer definition ID from name. Please provide an explicit id.',
+          code: MASTRA_ERROR_CODES.RESOURCE_ID_DERIVATION_FAILED,
         });
       }
 
       // Check if scorer definition with this ID already exists
       const existing = await scorerStore.getById(id);
       if (existing) {
-        throw new HTTPException(409, { message: `Scorer definition with id ${id} already exists` });
+        throw new HTTPException(409, {
+          message: `Scorer definition with id ${id} already exists`,
+          code: MASTRA_ERROR_CODES.SCORER_ALREADY_EXISTS,
+        });
       }
 
       await scorerStore.create({
@@ -212,7 +219,10 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
       // Use draft status since newly created entities start as drafts
       const resolved = await scorerStore.getByIdResolved(id, { status: 'draft' });
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve created scorer definition' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve created scorer definition',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       return resolved;
@@ -274,7 +284,10 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
       // Check if scorer definition exists
       const existing = await scorerStore.getById(storedScorerId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored scorer definition with id ${storedScorerId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored scorer definition with id ${storedScorerId} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_NOT_FOUND,
+        });
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
@@ -335,7 +348,10 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
       // Return the resolved scorer definition with the latest (draft) version so the UI sees its edits
       const resolved = await scorerStore.getByIdResolved(storedScorerId, { status: 'draft' });
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve updated scorer definition' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve updated scorer definition',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       return resolved;
@@ -380,7 +396,10 @@ export const DELETE_STORED_SCORER_ROUTE = createRoute({
       // Check if scorer definition exists
       const existing = await scorerStore.getById(storedScorerId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored scorer definition with id ${storedScorerId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored scorer definition with id ${storedScorerId} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 

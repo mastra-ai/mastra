@@ -296,6 +296,26 @@ describe('handleError', () => {
       expect(publicCodeForError(err)).toBe('NO_MODEL_SELECTED');
     });
 
+    it.each([
+      ['DATASET_NOT_FOUND', 'DATASET_NOT_FOUND'],
+      ['DATASET_ITEM_NOT_FOUND', 'DATASET_ITEM_NOT_FOUND'],
+      ['EXPERIMENT_NOT_FOUND', 'EXPERIMENT_NOT_FOUND'],
+      ['EXPERIMENT_NO_ITEMS', 'EXPERIMENT_NO_ITEMS'],
+      ['EXPERIMENT_HAS_TARGET', 'EXPERIMENT_TARGET_INVALID'],
+      ['EXPERIMENT_HAS_NO_TARGET', 'EXPERIMENT_TARGET_INVALID'],
+      ['EXPERIMENT_INVALID_TARGET', 'EXPERIMENT_TARGET_INVALID'],
+      ['EXPERIMENT_TARGET_NOT_FOUND', 'EXPERIMENT_TARGET_NOT_FOUND'],
+      ['DATASET_ITEM_IDENTITY_CONFLICT', 'DATASET_ITEM_IDENTITY_CONFLICT'],
+      ['EXPERIMENT_ID_CONFLICT', 'EXPERIMENT_ID_CONFLICT'],
+      ['EXPERIMENT_ALREADY_FINALIZED', 'EXPERIMENT_ALREADY_FINALIZED'],
+      ['DATASET_ITEM_EXTERNAL_ID_INVALID', 'DATASET_ITEM_EXTERNAL_ID_INVALID'],
+      ['DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE', 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE'],
+      ['DATASET_SCHEMA_PATTERN_UNSUPPORTED', 'DATASET_SCHEMA_PATTERN_UNSUPPORTED'],
+    ])('maps the internal dataset error id %s to the public %s code', (id, code) => {
+      const err = new MastraError({ id, domain: ErrorDomain.STORAGE, category: ErrorCategory.USER, text: id });
+      expect(publicCodeForError(err)).toBe(code);
+    });
+
     it('returns no public code for unknown internal ids', () => {
       expect(publicCodeForError(new Error('x'))).toBeUndefined();
       expect(publicCodeForError({ id: 'SOME_INTERNAL_FAILURE' })).toBeUndefined();

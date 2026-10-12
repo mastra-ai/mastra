@@ -1,5 +1,6 @@
 import { EMBEDDING_MODELS } from '@mastra/core/llm';
 import type { MastraVector, QueryResult, IndexStats, VectorFilter } from '@mastra/core/vector';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
 import {
   vectorNamePathParams,
@@ -48,12 +49,18 @@ interface QueryRequest {
 
 function getVector(mastra: Context['mastra'], vectorName?: string): MastraVector {
   if (!vectorName) {
-    throw new HTTPException(400, { message: 'Vector name is required' });
+    throw new HTTPException(400, {
+      message: 'Vector name is required',
+      code: MASTRA_ERROR_CODES.VECTOR_INVALID_REQUEST,
+    });
   }
 
   const vector = mastra.getVector(vectorName);
   if (!vector) {
-    throw new HTTPException(404, { message: `Vector store ${vectorName} not found` });
+    throw new HTTPException(404, {
+      message: `Vector store ${vectorName} not found`,
+      code: MASTRA_ERROR_CODES.VECTOR_STORE_NOT_FOUND,
+    });
   }
 
   return vector;
@@ -70,7 +77,10 @@ export async function upsertVectors({
 }: VectorContext & UpsertRequest) {
   try {
     if (!indexName || !vectors || !Array.isArray(vectors)) {
-      throw new HTTPException(400, { message: 'Invalid request index. indexName and vectors array are required.' });
+      throw new HTTPException(400, {
+        message: 'Invalid request index. indexName and vectors array are required.',
+        code: MASTRA_ERROR_CODES.VECTOR_INVALID_REQUEST,
+      });
     }
 
     const vector = getVector(mastra, vectorName);
@@ -93,11 +103,15 @@ export async function createIndex({
     if (!indexName || typeof dimension !== 'number' || dimension <= 0) {
       throw new HTTPException(400, {
         message: 'Invalid request index, indexName and positive dimension number are required.',
+        code: MASTRA_ERROR_CODES.VECTOR_INVALID_REQUEST,
       });
     }
 
     if (metric && !['cosine', 'euclidean', 'dotproduct'].includes(metric)) {
-      throw new HTTPException(400, { message: 'Invalid metric. Must be one of: cosine, euclidean, dotproduct' });
+      throw new HTTPException(400, {
+        message: 'Invalid metric. Must be one of: cosine, euclidean, dotproduct',
+        code: MASTRA_ERROR_CODES.VECTOR_INVALID_REQUEST,
+      });
     }
 
     const vector = getVector(mastra, vectorName);
@@ -120,7 +134,10 @@ export async function queryVectors({
 }: Pick<VectorContext, 'mastra' | 'vectorName'> & QueryRequest) {
   try {
     if (!indexName || !queryVector || !Array.isArray(queryVector)) {
-      throw new HTTPException(400, { message: 'Invalid request query. indexName and queryVector array are required.' });
+      throw new HTTPException(400, {
+        message: 'Invalid request query. indexName and queryVector array are required.',
+        code: MASTRA_ERROR_CODES.VECTOR_INVALID_REQUEST,
+      });
     }
 
     const vector = getVector(mastra, vectorName);
@@ -151,7 +168,10 @@ export async function describeIndex({
 }: Pick<VectorContext, 'mastra' | 'vectorName'> & { indexName?: string }) {
   try {
     if (!indexName) {
-      throw new HTTPException(400, { message: 'Index name is required' });
+      throw new HTTPException(400, {
+        message: 'Index name is required',
+        code: MASTRA_ERROR_CODES.VECTOR_INVALID_REQUEST,
+      });
     }
 
     const vector = getVector(mastra, vectorName);
@@ -175,7 +195,10 @@ export async function deleteIndex({
 }: Pick<VectorContext, 'mastra' | 'vectorName'> & { indexName?: string }) {
   try {
     if (!indexName) {
-      throw new HTTPException(400, { message: 'Index name is required' });
+      throw new HTTPException(400, {
+        message: 'Index name is required',
+        code: MASTRA_ERROR_CODES.VECTOR_INVALID_REQUEST,
+      });
     }
 
     const vector = getVector(mastra, vectorName);
@@ -228,7 +251,10 @@ export const UPSERT_VECTORS_ROUTE = createRoute({
       const { indexName, vectors, metadata, ids } = params;
 
       if (!indexName || !vectors || !Array.isArray(vectors)) {
-        throw new HTTPException(400, { message: 'Invalid request index. indexName and vectors array are required.' });
+        throw new HTTPException(400, {
+          message: 'Invalid request index. indexName and vectors array are required.',
+          code: MASTRA_ERROR_CODES.VECTOR_INVALID_REQUEST,
+        });
       }
 
       const vector = getVector(mastra, vectorName);
@@ -258,11 +284,15 @@ export const CREATE_INDEX_ROUTE = createRoute({
       if (!indexName || typeof dimension !== 'number' || dimension <= 0) {
         throw new HTTPException(400, {
           message: 'Invalid request index, indexName and positive dimension number are required.',
+          code: MASTRA_ERROR_CODES.VECTOR_INVALID_REQUEST,
         });
       }
 
       if (metric && !['cosine', 'euclidean', 'dotproduct'].includes(metric)) {
-        throw new HTTPException(400, { message: 'Invalid metric. Must be one of: cosine, euclidean, dotproduct' });
+        throw new HTTPException(400, {
+          message: 'Invalid metric. Must be one of: cosine, euclidean, dotproduct',
+          code: MASTRA_ERROR_CODES.VECTOR_INVALID_REQUEST,
+        });
       }
 
       const vector = getVector(mastra, vectorName);
@@ -292,6 +322,7 @@ export const QUERY_VECTORS_ROUTE = createRoute({
       if (!indexName || !queryVector || !Array.isArray(queryVector)) {
         throw new HTTPException(400, {
           message: 'Invalid request query. indexName and queryVector array are required.',
+          code: MASTRA_ERROR_CODES.VECTOR_INVALID_REQUEST,
         });
       }
 
@@ -345,7 +376,10 @@ export const DESCRIBE_INDEX_ROUTE = createRoute({
   handler: async ({ mastra, vectorName, indexName }) => {
     try {
       if (!indexName) {
-        throw new HTTPException(400, { message: 'Index name is required' });
+        throw new HTTPException(400, {
+          message: 'Index name is required',
+          code: MASTRA_ERROR_CODES.VECTOR_INVALID_REQUEST,
+        });
       }
 
       const vector = getVector(mastra, vectorName);
@@ -375,7 +409,10 @@ export const DELETE_INDEX_ROUTE = createRoute({
   handler: async ({ mastra, vectorName, indexName }) => {
     try {
       if (!indexName) {
-        throw new HTTPException(400, { message: 'Index name is required' });
+        throw new HTTPException(400, {
+          message: 'Index name is required',
+          code: MASTRA_ERROR_CODES.VECTOR_INVALID_REQUEST,
+        });
       }
 
       const vector = getVector(mastra, vectorName);

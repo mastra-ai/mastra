@@ -10,6 +10,7 @@
  * filesystem writes, and DB writes happen in the callers.
  */
 
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
 
 // =============================================================================
@@ -90,6 +91,7 @@ export function assertSafeSkillName(name: string): string {
   if (!SKILL_NAME_REGEX.test(name)) {
     throw new HTTPException(400, {
       message: `Invalid skill name "${name}". Names must start with alphanumeric and contain only letters, numbers, hyphens, and underscores.`,
+      code: MASTRA_ERROR_CODES.SKILL_NAME_INVALID,
     });
   }
   return name;
@@ -104,6 +106,7 @@ export function assertSafeFilePath(filePath: string): string {
   if (filePath.startsWith('/') || filePath.startsWith('\\') || /^[a-zA-Z]:[\\/]/.test(filePath)) {
     throw new HTTPException(400, {
       message: `Invalid file path "${filePath}". Absolute paths are not allowed.`,
+      code: MASTRA_ERROR_CODES.SKILL_FILE_PATH_INVALID,
     });
   }
   // Normalize backslashes to forward slashes so Windows-style traversal
@@ -113,6 +116,7 @@ export function assertSafeFilePath(filePath: string): string {
     if (segment === '..' || segment === '.') {
       throw new HTTPException(400, {
         message: `Invalid file path "${filePath}". Path traversal is not allowed.`,
+        code: MASTRA_ERROR_CODES.SKILL_FILE_PATH_INVALID,
       });
     }
   }
@@ -152,6 +156,7 @@ export async function searchSkillsSh({ q, limit }: { q: string; limit: number })
     if (!response.ok) {
       throw new HTTPException(502, {
         message: `Skills API error: ${response.status} ${response.statusText}`,
+        code: MASTRA_ERROR_CODES.SKILLS_API_ERROR,
       });
     }
 
@@ -186,6 +191,7 @@ export async function getPopularSkillsSh({
     if (!response.ok) {
       throw new HTTPException(502, {
         message: `Skills API error: ${response.status} ${response.statusText}`,
+        code: MASTRA_ERROR_CODES.SKILLS_API_ERROR,
       });
     }
 
@@ -226,10 +232,12 @@ export async function previewSkillsSh({
       if (response.status === 404) {
         throw new HTTPException(404, {
           message: `Could not find skill "${skillName}" for ${owner}/${repo}`,
+          code: MASTRA_ERROR_CODES.SKILL_NOT_FOUND,
         });
       }
       throw new HTTPException(502, {
         message: `Skills API error: ${response.status} ${response.statusText}`,
+        code: MASTRA_ERROR_CODES.SKILLS_API_ERROR,
       });
     }
 
@@ -239,6 +247,7 @@ export async function previewSkillsSh({
     if (!content) {
       throw new HTTPException(404, {
         message: `No content available for skill "${skillName}"`,
+        code: MASTRA_ERROR_CODES.SKILL_NOT_FOUND,
       });
     }
 

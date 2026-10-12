@@ -2,6 +2,7 @@ import { matchesPermission } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
 
 /**
@@ -219,7 +220,7 @@ export function assertReadAccess(args: {
     return;
   }
 
-  throw new HTTPException(404, { message: 'Not found' });
+  throw new HTTPException(404, { message: 'Not found', code: MASTRA_ERROR_CODES.RESOURCE_NOT_FOUND });
 }
 
 /**
@@ -258,7 +259,7 @@ export function assertExecuteAccess(args: {
     return;
   }
 
-  throw new HTTPException(404, { message: 'Not found' });
+  throw new HTTPException(404, { message: 'Not found', code: MASTRA_ERROR_CODES.RESOURCE_NOT_FOUND });
 }
 
 /**
@@ -294,7 +295,7 @@ export function assertWriteAccess(args: {
     return;
   }
 
-  throw new HTTPException(404, { message: 'Not found' });
+  throw new HTTPException(404, { message: 'Not found', code: MASTRA_ERROR_CODES.RESOURCE_NOT_FOUND });
 }
 
 /**
@@ -335,7 +336,7 @@ export function assertShareAccess(args: {
     return;
   }
 
-  throw new HTTPException(404, { message: 'Not found' });
+  throw new HTTPException(404, { message: 'Not found', code: MASTRA_ERROR_CODES.RESOURCE_NOT_FOUND });
 }
 
 /**

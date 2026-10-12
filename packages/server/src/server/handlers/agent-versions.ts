@@ -207,7 +207,10 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
       // Get the created version to return
       const version = await agentsStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+        throw new HTTPException(500, {
+          message: 'Failed to retrieve created version',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       // Enforce retention limit - delete oldest versions if we exceed the max
@@ -260,12 +263,18 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
       const version = await agentsStore.getVersion(versionId);
 
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
+        });
       }
 
       // Verify the version belongs to the specified agent
       if (version.agentId !== agentId) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found for agent ${agentId}` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found for agent ${agentId}`,
+          code: MASTRA_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
+        });
       }
       const agent = await agentsStore.getById(agentId);
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
@@ -322,10 +331,16 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
       // Verify version exists and belongs to this agent
       const version = await agentsStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
+        });
       }
       if (version.agentId !== agentId) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found for agent ${agentId}` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found for agent ${agentId}`,
+          code: MASTRA_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
+        });
       }
 
       await validateAgentInstructionReferences({
@@ -400,10 +415,16 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       // Get the version to restore
       const versionToRestore = await agentsStore.getVersion(versionId);
       if (!versionToRestore) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
+        });
       }
       if (versionToRestore.agentId !== agentId) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found for agent ${agentId}` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found for agent ${agentId}`,
+          code: MASTRA_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
+        });
       }
 
       // Extract the config fields from the version to restore (top-level, no .snapshot)
@@ -444,7 +465,10 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
       // Get the created version to return
       const newVersion = await agentsStore.getVersion(newVersionId);
       if (!newVersion) {
-        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+        throw new HTTPException(500, {
+          message: 'Failed to retrieve created version',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       // Enforce retention limit - delete oldest versions if we exceed the max
@@ -511,16 +535,23 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
       // Verify version exists and belongs to this agent
       const version = await agentsStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
+        });
       }
       if (version.agentId !== agentId) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found for agent ${agentId}` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found for agent ${agentId}`,
+          code: MASTRA_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
+        });
       }
 
       // Check if this is the active version
       if (agent.activeVersionId === versionId) {
         throw new HTTPException(400, {
           message: 'Cannot delete the active version. Activate a different version first.',
+          code: MASTRA_ERROR_CODES.VERSION_ACTIVE_DELETE_FORBIDDEN,
         });
       }
 
@@ -589,18 +620,30 @@ export const COMPARE_AGENT_VERSIONS_ROUTE: ServerRoute<
       // Get both versions
       const fromVersion = await agentsStore.getVersion(from);
       if (!fromVersion) {
-        throw new HTTPException(404, { message: `Version with id ${from} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${from} not found`,
+          code: MASTRA_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
+        });
       }
       if (fromVersion.agentId !== agentId) {
-        throw new HTTPException(404, { message: `Version with id ${from} not found for agent ${agentId}` });
+        throw new HTTPException(404, {
+          message: `Version with id ${from} not found for agent ${agentId}`,
+          code: MASTRA_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
+        });
       }
 
       const toVersion = await agentsStore.getVersion(to);
       if (!toVersion) {
-        throw new HTTPException(404, { message: `Version with id ${to} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${to} not found`,
+          code: MASTRA_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
+        });
       }
       if (toVersion.agentId !== agentId) {
-        throw new HTTPException(404, { message: `Version with id ${to} not found for agent ${agentId}` });
+        throw new HTTPException(404, {
+          message: `Version with id ${to} not found for agent ${agentId}`,
+          code: MASTRA_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
+        });
       }
 
       // Extract config fields from both versions (top-level, no .snapshot)

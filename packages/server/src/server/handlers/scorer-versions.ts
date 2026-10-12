@@ -73,7 +73,10 @@ export const LIST_SCORER_VERSIONS_ROUTE = createRoute({
 
       const scorer = await scorerStore.getById(scorerId);
       if (!scorer) {
-        throw new HTTPException(404, { message: `Scorer with id ${scorerId} not found` });
+        throw new HTTPException(404, {
+          message: `Scorer with id ${scorerId} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(scorer, await getStoredResourceScope(mastra, requestContext));
 
@@ -126,7 +129,10 @@ export const CREATE_SCORER_VERSION_ROUTE = createRoute({
 
       const scorer = await scorerStore.getById(scorerId);
       if (!scorer) {
-        throw new HTTPException(404, { message: `Scorer with id ${scorerId} not found` });
+        throw new HTTPException(404, {
+          message: `Scorer with id ${scorerId} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(scorer, await getStoredResourceScope(mastra, requestContext));
 
@@ -167,7 +173,10 @@ export const CREATE_SCORER_VERSION_ROUTE = createRoute({
 
       const version = await scorerStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+        throw new HTTPException(500, {
+          message: 'Failed to retrieve created version',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       await enforceRetentionLimit(
@@ -219,12 +228,16 @@ export const GET_SCORER_VERSION_ROUTE = createRoute({
       const version = await scorerStore.getVersion(versionId);
 
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
+        });
       }
 
       if (version.scorerDefinitionId !== scorerId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for scorer ${scorerId}`,
+          code: MASTRA_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
         });
       }
       const scorer = await scorerStore.getById(scorerId);
@@ -271,17 +284,24 @@ export const ACTIVATE_SCORER_VERSION_ROUTE = createRoute({
 
       const scorer = await scorerStore.getById(scorerId);
       if (!scorer) {
-        throw new HTTPException(404, { message: `Scorer with id ${scorerId} not found` });
+        throw new HTTPException(404, {
+          message: `Scorer with id ${scorerId} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(scorer, await getStoredResourceScope(mastra, requestContext));
 
       const version = await scorerStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
+        });
       }
       if (version.scorerDefinitionId !== scorerId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for scorer ${scorerId}`,
+          code: MASTRA_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
         });
       }
 
@@ -339,17 +359,24 @@ export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
 
       const scorer = await scorerStore.getById(scorerId);
       if (!scorer) {
-        throw new HTTPException(404, { message: `Scorer with id ${scorerId} not found` });
+        throw new HTTPException(404, {
+          message: `Scorer with id ${scorerId} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(scorer, await getStoredResourceScope(mastra, requestContext));
 
       const versionToRestore = await scorerStore.getVersion(versionId);
       if (!versionToRestore) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
+        });
       }
       if (versionToRestore.scorerDefinitionId !== scorerId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for scorer ${scorerId}`,
+          code: MASTRA_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
         });
       }
 
@@ -383,7 +410,10 @@ export const RESTORE_SCORER_VERSION_ROUTE = createRoute({
 
       const newVersion = await scorerStore.getVersion(newVersionId);
       if (!newVersion) {
-        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+        throw new HTTPException(500, {
+          message: 'Failed to retrieve created version',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       await enforceRetentionLimit(
@@ -437,23 +467,31 @@ export const DELETE_SCORER_VERSION_ROUTE = createRoute({
 
       const scorer = await scorerStore.getById(scorerId);
       if (!scorer) {
-        throw new HTTPException(404, { message: `Scorer with id ${scorerId} not found` });
+        throw new HTTPException(404, {
+          message: `Scorer with id ${scorerId} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(scorer, await getStoredResourceScope(mastra, requestContext));
 
       const version = await scorerStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
+        });
       }
       if (version.scorerDefinitionId !== scorerId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for scorer ${scorerId}`,
+          code: MASTRA_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
         });
       }
 
       if (scorer.activeVersionId === versionId) {
         throw new HTTPException(400, {
           message: 'Cannot delete the active version. Activate a different version first.',
+          code: MASTRA_ERROR_CODES.VERSION_ACTIVE_DELETE_FORBIDDEN,
         });
       }
 
@@ -509,21 +547,29 @@ export const COMPARE_SCORER_VERSIONS_ROUTE = createRoute({
 
       const fromVersion = await scorerStore.getVersion(from);
       if (!fromVersion) {
-        throw new HTTPException(404, { message: `Version with id ${from} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${from} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
+        });
       }
       if (fromVersion.scorerDefinitionId !== scorerId) {
         throw new HTTPException(404, {
           message: `Version with id ${from} not found for scorer ${scorerId}`,
+          code: MASTRA_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
         });
       }
 
       const toVersion = await scorerStore.getVersion(to);
       if (!toVersion) {
-        throw new HTTPException(404, { message: `Version with id ${to} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${to} not found`,
+          code: MASTRA_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
+        });
       }
       if (toVersion.scorerDefinitionId !== scorerId) {
         throw new HTTPException(404, {
           message: `Version with id ${to} not found for scorer ${scorerId}`,
+          code: MASTRA_ERROR_CODES.SCORER_VERSION_NOT_FOUND,
         });
       }
 

@@ -146,7 +146,10 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
       try {
         mastra.getWorkflowById(body.workflowId);
       } catch {
-        throw new HTTPException(404, { message: `Workflow "${body.workflowId}" not found` });
+        throw new HTTPException(404, {
+          message: `Workflow "${body.workflowId}" not found`,
+          code: MASTRA_ERROR_CODES.WORKFLOW_NOT_FOUND,
+        });
       }
       return await mastra.schedules.create({
         workflowId: body.workflowId,
@@ -164,7 +167,10 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
     try {
       mastra.getAgentById(agentBody.agentId);
     } catch {
-      throw new HTTPException(404, { message: `Agent "${agentBody.agentId}" not found` });
+      throw new HTTPException(404, {
+        message: `Agent "${agentBody.agentId}" not found`,
+        code: MASTRA_ERROR_CODES.AGENT_NOT_FOUND,
+      });
     }
     return await mastra.schedules.create({
       agentId: agentBody.agentId,

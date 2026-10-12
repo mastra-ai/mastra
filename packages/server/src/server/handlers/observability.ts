@@ -20,6 +20,7 @@ import {
 // @mastra/core@1.32.0; route them through a shim that tolerates older cores
 // (see ./observability-storage-schemas.ts for full rationale).
 import { z } from 'zod/v4';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
@@ -263,7 +264,10 @@ export const GET_BRANCH_ROUTE = createRoute({
       const branch = await observabilityStore.getBranch({ traceId, spanId, depth });
 
       if (!branch) {
-        throw new HTTPException(404, { message: `Branch not found for span '${spanId}' in trace '${traceId}'` });
+        throw new HTTPException(404, {
+          message: `Branch not found for span '${spanId}' in trace '${traceId}'`,
+          code: MASTRA_ERROR_CODES.SPAN_NOT_FOUND,
+        });
       }
 
       return branch;
@@ -289,7 +293,10 @@ export const GET_TRACE_ROUTE: ServerRoute = createRoute({
       const trace = await observabilityStore.getTrace({ traceId });
 
       if (!trace) {
-        throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
+        throw new HTTPException(404, {
+          message: `Trace with ID '${traceId}' not found`,
+          code: MASTRA_ERROR_CODES.TRACE_NOT_FOUND,
+        });
       }
 
       // Stored SpanRecords carry no status field; derive it from error/endedAt so
@@ -319,7 +326,10 @@ export const GET_TRACE_LIGHT_ROUTE: ServerRoute = createRoute({
       const trace = await observabilityStore.getTraceLight({ traceId });
 
       if (!trace) {
-        throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
+        throw new HTTPException(404, {
+          message: `Trace with ID '${traceId}' not found`,
+          code: MASTRA_ERROR_CODES.TRACE_NOT_FOUND,
+        });
       }
 
       return trace;
@@ -346,7 +356,7 @@ export const GET_SPAN_ROUTE: ServerRoute = createRoute({
       const span = await observabilityStore.getSpan({ traceId, spanId });
 
       if (!span) {
-        throw new HTTPException(404, { message: `Span not found` });
+        throw new HTTPException(404, { message: `Span not found`, code: MASTRA_ERROR_CODES.SPAN_NOT_FOUND });
       }
 
       return span;
@@ -378,7 +388,10 @@ export const GET_TRACE_TRAJECTORY_ROUTE = createRoute({
       const trace = await observabilityStore.getTrace({ traceId });
 
       if (!trace) {
-        throw new HTTPException(404, { message: `Trace with ID '${traceId}' not found` });
+        throw new HTTPException(404, {
+          message: `Trace with ID '${traceId}' not found`,
+          code: MASTRA_ERROR_CODES.TRACE_NOT_FOUND,
+        });
       }
 
       const trajectory = extractTrajectoryFromTrace(trace.spans);
@@ -433,7 +446,10 @@ export const SCORE_TRACES_ROUTE = createRoute({
 
       const scorer = mastra.getScorerById(scorerName);
       if (!scorer) {
-        throw new HTTPException(404, { message: `Scorer '${scorerName}' not found` });
+        throw new HTTPException(404, {
+          message: `Scorer '${scorerName}' not found`,
+          code: MASTRA_ERROR_CODES.SCORER_NOT_FOUND,
+        });
       }
 
       scoreTraces({

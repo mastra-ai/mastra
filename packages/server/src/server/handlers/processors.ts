@@ -217,22 +217,32 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
       const { phase, messages } = bodyParams;
 
       if (!processorId) {
-        throw new HTTPException(400, { message: 'Processor ID is required' });
+        throw new HTTPException(400, {
+          message: 'Processor ID is required',
+          code: MASTRA_ERROR_CODES.PROCESSOR_INVALID_REQUEST,
+        });
       }
 
       if (!phase) {
-        throw new HTTPException(400, { message: 'Phase is required' });
+        throw new HTTPException(400, {
+          message: 'Phase is required',
+          code: MASTRA_ERROR_CODES.PROCESSOR_INVALID_REQUEST,
+        });
       }
 
       if (phase === 'llmRequest') {
         // processLLMRequest operates on the provider prompt, not on messages
         throw new HTTPException(400, {
           message: 'llmRequest phase cannot be executed directly. It runs on the provider prompt during an agent call.',
+          code: MASTRA_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
         });
       }
 
       if (!messages || !Array.isArray(messages)) {
-        throw new HTTPException(400, { message: 'Messages array is required' });
+        throw new HTTPException(400, {
+          message: 'Messages array is required',
+          code: MASTRA_ERROR_CODES.PROCESSOR_INVALID_REQUEST,
+        });
       }
 
       // Get the processor from Mastra's registered processors
@@ -360,6 +370,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
           if (result.status !== 'success') {
             throw new HTTPException(500, {
               message: `Processor workflow ${processor.id} failed with status: ${result.status}`,
+              code: MASTRA_ERROR_CODES.PROCESSOR_EXECUTION_FAILED,
             });
           }
 
@@ -390,6 +401,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
           }
           throw new HTTPException(500, {
             message: `Error executing processor workflow: ${error.message}`,
+            code: MASTRA_ERROR_CODES.PROCESSOR_EXECUTION_FAILED,
           });
         }
       }
@@ -423,7 +435,10 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
         switch (phase) {
           case 'input':
             if (!processor.processInput) {
-              throw new HTTPException(400, { message: 'Processor does not support input phase' });
+              throw new HTTPException(400, {
+                message: 'Processor does not support input phase',
+                code: MASTRA_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
+              });
             }
             result = await processor.processInput({
               ...baseContext,
@@ -433,7 +448,10 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
 
           case 'inputStep':
             if (!processor.processInputStep) {
-              throw new HTTPException(400, { message: 'Processor does not support inputStep phase' });
+              throw new HTTPException(400, {
+                message: 'Processor does not support inputStep phase',
+                code: MASTRA_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
+              });
             }
             result = await processor.processInputStep({
               ...baseContext,
@@ -453,7 +471,10 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
 
           case 'outputResult':
             if (!processor.processOutputResult) {
-              throw new HTTPException(400, { message: 'Processor does not support outputResult phase' });
+              throw new HTTPException(400, {
+                message: 'Processor does not support outputResult phase',
+                code: MASTRA_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
+              });
             }
             result = await processor.processOutputResult({
               ...baseContext,
@@ -469,7 +490,10 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
 
           case 'outputStep':
             if (!processor.processOutputStep) {
-              throw new HTTPException(400, { message: 'Processor does not support outputStep phase' });
+              throw new HTTPException(400, {
+                message: 'Processor does not support outputStep phase',
+                code: MASTRA_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
+              });
             }
             result = await processor.processOutputStep({
               ...baseContext,
@@ -487,10 +511,14 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
             // outputStream is for streaming chunks, not a simple execute
             throw new HTTPException(400, {
               message: 'outputStream phase cannot be executed directly. Use streaming instead.',
+              code: MASTRA_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
             });
 
           default:
-            throw new HTTPException(400, { message: `Unknown phase: ${phase}` });
+            throw new HTTPException(400, {
+              message: `Unknown phase: ${phase}`,
+              code: MASTRA_ERROR_CODES.PROCESSOR_INVALID_REQUEST,
+            });
         }
 
         // Process the result

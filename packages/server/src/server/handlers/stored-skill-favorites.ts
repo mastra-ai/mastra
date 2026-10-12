@@ -57,14 +57,20 @@ export const FAVORITE_STORED_SKILL_ROUTE = createRoute({
 
       const callerId = getCallerAuthorId(requestContext);
       if (!callerId) {
-        throw new HTTPException(401, { message: 'Authentication required' });
+        throw new HTTPException(401, {
+          message: 'Authentication required',
+          code: MASTRA_ERROR_CODES.AUTHENTICATION_REQUIRED,
+        });
       }
 
       const { skillStore, favoritesStore } = await getFavoritesContext(mastra);
 
       const skill = await skillStore.getByIdResolved(storedSkillId);
       if (!skill) {
-        throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored skill with id ${storedSkillId} not found`,
+          code: MASTRA_ERROR_CODES.SKILL_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(skill, await getStoredResourceScope(mastra, requestContext));
 
@@ -103,14 +109,20 @@ export const UNFAVORITE_STORED_SKILL_ROUTE = createRoute({
 
       const callerId = getCallerAuthorId(requestContext);
       if (!callerId) {
-        throw new HTTPException(401, { message: 'Authentication required' });
+        throw new HTTPException(401, {
+          message: 'Authentication required',
+          code: MASTRA_ERROR_CODES.AUTHENTICATION_REQUIRED,
+        });
       }
 
       const { skillStore, favoritesStore } = await getFavoritesContext(mastra);
 
       const skill = await skillStore.getByIdResolved(storedSkillId);
       if (!skill) {
-        throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored skill with id ${storedSkillId} not found`,
+          code: MASTRA_ERROR_CODES.SKILL_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(skill, await getStoredResourceScope(mastra, requestContext));
 

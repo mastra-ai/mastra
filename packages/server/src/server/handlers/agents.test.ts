@@ -2122,6 +2122,7 @@ describe('Agent Routes Authorization', () => {
       ).rejects.toThrow(
         new HTTPException(400, {
           message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+          code: 'AGENT_RECOVER_UNSUPPORTED',
         }),
       );
     });
@@ -3112,6 +3113,7 @@ describe('Agent Routes Authorization', () => {
       ).rejects.toThrow(
         new HTTPException(403, {
           message: 'Access denied: agent has no memory configured to validate thread ownership',
+          code: 'THREAD_ACCESS_DENIED',
         }),
       );
 

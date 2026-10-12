@@ -87,7 +87,11 @@ export const GET_DYNAMIC_WORKFLOW_ROUTE = createRoute({
         });
 
       const def = await store.get(dynamicWorkflowId);
-      if (!def) throw new HTTPException(404, { message: `Dynamic workflow "${dynamicWorkflowId}" not found` });
+      if (!def)
+        throw new HTTPException(404, {
+          message: `Dynamic workflow "${dynamicWorkflowId}" not found`,
+          code: MASTRA_ERROR_CODES.WORKFLOW_NOT_FOUND,
+        });
       return def;
     } catch (error) {
       return handleError(error, 'Error getting dynamic workflow');

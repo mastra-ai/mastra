@@ -1,4 +1,5 @@
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -31,7 +32,10 @@ export const LIST_PROCESSOR_PROVIDERS_ROUTE = createRoute({
       const editor = mastra.getEditor();
 
       if (!editor) {
-        throw new HTTPException(500, { message: 'Editor is not configured' });
+        throw new HTTPException(500, {
+          message: 'Editor is not configured',
+          code: MASTRA_ERROR_CODES.EDITOR_NOT_CONFIGURED,
+        });
       }
 
       const providers = editor.getProcessorProviders();
@@ -66,13 +70,19 @@ export const GET_PROCESSOR_PROVIDER_ROUTE = createRoute({
       const editor = mastra.getEditor();
 
       if (!editor) {
-        throw new HTTPException(500, { message: 'Editor is not configured' });
+        throw new HTTPException(500, {
+          message: 'Editor is not configured',
+          code: MASTRA_ERROR_CODES.EDITOR_NOT_CONFIGURED,
+        });
       }
 
       const provider = editor.getProcessorProvider(providerId);
 
       if (!provider) {
-        throw new HTTPException(404, { message: `Processor provider with id ${providerId} not found` });
+        throw new HTTPException(404, {
+          message: `Processor provider with id ${providerId} not found`,
+          code: MASTRA_ERROR_CODES.PROCESSOR_PROVIDER_NOT_FOUND,
+        });
       }
 
       return {

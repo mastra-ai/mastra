@@ -3,6 +3,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
 import type {
   ResponseObject,
@@ -788,7 +789,10 @@ export async function persistResponseTurnRecord({
   messages: MastraDBMessage[];
 }): Promise<void> {
   if (!memoryStore) {
-    throw new HTTPException(500, { message: 'Memory storage was not available while storing the response' });
+    throw new HTTPException(500, {
+      message: 'Memory storage was not available while storing the response',
+      code: MASTRA_ERROR_CODES.MEMORY_STORAGE_UNAVAILABLE,
+    });
   }
 
   const normalizedMessages: MastraDBMessage[] = messages.map(message => ({

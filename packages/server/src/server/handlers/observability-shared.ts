@@ -90,7 +90,10 @@ function getFeatures(observabilityStore: ObservabilityStorage): readonly string[
 export function getStorage(mastra: Mastra): MastraCompositeStore {
   const storage = mastra.getStorage();
   if (!storage) {
-    throw new HTTPException(500, { message: 'Storage is not available' });
+    throw new HTTPException(500, {
+      message: 'Storage is not available',
+      code: MASTRA_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+    });
   }
   return storage;
 }
@@ -129,6 +132,7 @@ export function assertObservabilityTraceQuerySupported(observabilityStore: Obser
 
   throw new HTTPException(501, {
     message: 'Advanced trace queries are not supported by the configured observability store',
+    code: MASTRA_ERROR_CODES.TRACE_QUERY_UNSUPPORTED,
   });
 }
 
@@ -137,6 +141,7 @@ export function assertObservabilityTraceAggregateSupported(observabilityStore: O
 
   throw new HTTPException(501, {
     message: 'Trace aggregation is not supported by the configured observability store',
+    code: MASTRA_ERROR_CODES.TRACE_AGGREGATE_UNSUPPORTED,
   });
 }
 
@@ -145,6 +150,7 @@ export function assertObservabilitySpanQuerySupported(observabilityStore: Observ
 
   throw new HTTPException(501, {
     message: 'Span queries are not supported by the configured observability store',
+    code: MASTRA_ERROR_CODES.SPAN_QUERY_UNSUPPORTED,
   });
 }
 
@@ -170,6 +176,7 @@ export function assertObservabilityTraceQueryRootDurationSupported(
 
   throw new HTTPException(501, {
     message: 'Root duration predicates are not supported by the configured observability store',
+    code: MASTRA_ERROR_CODES.OBSERVABILITY_FEATURE_NOT_IMPLEMENTED,
   });
 }
 
@@ -197,6 +204,7 @@ export function assertObservabilityTraceQueryContextIdsSupported(
 
   throw new HTTPException(501, {
     message: 'Context identifier predicates are not supported by the configured observability store',
+    code: MASTRA_ERROR_CODES.OBSERVABILITY_FEATURE_NOT_IMPLEMENTED,
   });
 }
 
@@ -205,6 +213,7 @@ export function assertObservabilityTraceQueryDiscoverySupported(observabilitySto
 
   throw new HTTPException(501, {
     message: 'Trace query discovery is not supported by the configured observability store',
+    code: MASTRA_ERROR_CODES.TRACE_QUERY_DISCOVERY_UNSUPPORTED,
   });
 }
 
@@ -222,6 +231,7 @@ export function assertObservabilityTraceQueryTenantScopeSupported(
 
   throw new HTTPException(501, {
     message: 'The configured observability store cannot enforce the trusted tenant scope',
+    code: MASTRA_ERROR_CODES.OBSERVABILITY_FEATURE_NOT_IMPLEMENTED,
   });
 }
 
@@ -230,6 +240,7 @@ export function assertObservabilityThreadQuerySupported(observabilityStore: Obse
 
   throw new HTTPException(501, {
     message: 'Advanced thread queries are not supported by the configured observability store',
+    code: MASTRA_ERROR_CODES.TRACE_QUERY_UNSUPPORTED,
   });
 }
 
@@ -417,6 +428,7 @@ export function assertObservabilityDeltaSupported(
   if (!coreFeatures.has(OBSERVABILITY_DELTA_POLLING_FEATURE)) {
     throw new HTTPException(501, {
       message: `${OBSERVABILITY_DELTA_POLLING_UPGRADE_MESSAGE} (endpoint: ${endpoint})`,
+      code: MASTRA_ERROR_CODES.CORE_VERSION_UNSUPPORTED,
     });
   }
 
@@ -426,6 +438,7 @@ export function assertObservabilityDeltaSupported(
 
   throw new HTTPException(501, {
     message: `Delta polling is not supported by the configured observability store for ${endpoint}`,
+    code: MASTRA_ERROR_CODES.OBSERVABILITY_FEATURE_NOT_IMPLEMENTED,
   });
 }
 

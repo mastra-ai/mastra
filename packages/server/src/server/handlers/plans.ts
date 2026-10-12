@@ -48,16 +48,22 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
         });
       }
       if (!isPlanPath(path)) {
-        throw new HTTPException(400, { message: 'Invalid plan path' });
+        throw new HTTPException(400, { message: 'Invalid plan path', code: MASTRA_ERROR_CODES.PLAN_PATH_INVALID });
       }
 
       const workspace = await agent.getWorkspace({ requestContext });
       const filesystem = await workspace?.resolveFilesystem({ requestContext });
       if (!filesystem) {
-        throw new HTTPException(404, { message: 'No workspace filesystem configured' });
+        throw new HTTPException(404, {
+          message: 'No workspace filesystem configured',
+          code: MASTRA_ERROR_CODES.WORKSPACE_FILESYSTEM_NOT_CONFIGURED,
+        });
       }
       if (!(await filesystem.exists(path))) {
-        throw new HTTPException(404, { message: `Plan file "${path}" not found` });
+        throw new HTTPException(404, {
+          message: `Plan file "${path}" not found`,
+          code: MASTRA_ERROR_CODES.PLAN_NOT_FOUND,
+        });
       }
 
       const content = await filesystem.readFile(path, { encoding: 'utf-8' });

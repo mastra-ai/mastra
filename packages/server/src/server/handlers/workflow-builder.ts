@@ -1,3 +1,4 @@
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
 import { agentExecutionBodySchema, streamResponseSchema } from '../schemas/agents';
 import { workflowBuilderSettingsResponseSchema } from '../schemas/workflow-builder';
@@ -55,11 +56,18 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
     try {
       const editor = mastra.getEditor();
       if (!editor?.hasEnabledWorkflowBuilderConfig?.() || typeof editor.resolveWorkflowBuilder !== 'function') {
-        throw new HTTPException(404, { message: 'Workflow builder is not enabled' });
+        throw new HTTPException(404, {
+          message: 'Workflow builder is not enabled',
+          code: MASTRA_ERROR_CODES.WORKFLOW_BUILDER_DISABLED,
+        });
       }
 
       const builder = await editor.resolveWorkflowBuilder();
-      if (!builder?.enabled) throw new HTTPException(404, { message: 'Workflow builder is not enabled' });
+      if (!builder?.enabled)
+        throw new HTTPException(404, {
+          message: 'Workflow builder is not enabled',
+          code: MASTRA_ERROR_CODES.WORKFLOW_BUILDER_DISABLED,
+        });
       const agent = builder.getAgent();
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, ...rest } = params;

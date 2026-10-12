@@ -154,7 +154,10 @@ function hasNonEmptyInstructions(value: unknown): boolean {
 
 function assertOwnedInstructionsNotEmpty(instructions: unknown) {
   if (!hasNonEmptyInstructions(instructions)) {
-    throw new HTTPException(400, { message: 'Instructions are required' });
+    throw new HTTPException(400, {
+      message: 'Instructions are required',
+      code: MASTRA_ERROR_CODES.AGENT_INSTRUCTIONS_REQUIRED,
+    });
   }
 }
 
@@ -453,7 +456,10 @@ export const OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE = createRoute({
     try {
       const provider = mastra.getEditor?.()?.getSourceControlProvider?.();
       if (!provider?.openChangeRequest) {
-        throw new HTTPException(400, { message: 'Source control provider cannot open change requests' });
+        throw new HTTPException(400, {
+          message: 'Source control provider cannot open change requests',
+          code: MASTRA_ERROR_CODES.SOURCE_CONTROL_CHANGE_REQUESTS_UNSUPPORTED,
+        });
       }
 
       const openChangeRequest = provider.openChangeRequest.bind(provider);
@@ -534,7 +540,10 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       const agent = await agentsStore.getByIdResolved(storedAgentId, { status });
 
       if (!agent) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored agent with id ${storedAgentId} not found`,
+          code: MASTRA_ERROR_CODES.AGENT_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
 
@@ -623,13 +632,17 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive agent ID from name. Please provide an explicit id.',
+          code: MASTRA_ERROR_CODES.RESOURCE_ID_DERIVATION_FAILED,
         });
       }
 
       // Check if agent with this ID already exists
       const existing = await agentsStore.getById(id);
       if (existing) {
-        throw new HTTPException(409, { message: `Agent with id ${id} already exists` });
+        throw new HTTPException(409, {
+          message: `Agent with id ${id} already exists`,
+          code: MASTRA_ERROR_CODES.AGENT_ALREADY_EXISTS,
+        });
       }
 
       // Force authorId from the authenticated caller; ignore any body-provided value.
@@ -747,7 +760,10 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       // config the caller just saved.
       const resolved = await agentsStore.getByIdResolved(id, { status: 'published' });
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve created agent' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve created agent',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       return enrichOrStripFavorites(mastra, requestContext, 'agent', resolved);
@@ -837,7 +853,10 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // Check if agent exists
       const existing = await agentsStore.getById(storedAgentId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored agent with id ${storedAgentId} not found`,
+          code: MASTRA_ERROR_CODES.AGENT_NOT_FOUND,
+        });
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
@@ -1017,7 +1036,10 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       // Return the resolved agent with the latest version
       const resolved = await agentsStore.getByIdResolved(storedAgentId, { status: 'draft' });
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve updated agent' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve updated agent',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       return enrichOrStripFavorites(mastra, requestContext, 'agent', resolved);
@@ -1062,7 +1084,10 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
       // Check if agent exists
       const existing = await agentsStore.getById(storedAgentId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored agent with id ${storedAgentId} not found`,
+          code: MASTRA_ERROR_CODES.AGENT_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
@@ -1140,7 +1165,10 @@ export const GET_STORED_AGENT_DEPENDENTS_ROUTE = createRoute({
       // dependents endpoint from being usable as a sub-agent reference oracle.
       const target = await agentsStore.getById(storedAgentId);
       if (!target) {
-        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored agent with id ${storedAgentId} not found`,
+          code: MASTRA_ERROR_CODES.AGENT_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(target, await getStoredResourceScope(mastra, requestContext));
       assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: target });
@@ -1224,7 +1252,10 @@ export const PREVIEW_INSTRUCTIONS_ROUTE = createRoute({
     try {
       const editor = mastra.getEditor();
       if (!editor) {
-        throw new HTTPException(500, { message: 'Editor is not configured' });
+        throw new HTTPException(500, {
+          message: 'Editor is not configured',
+          code: MASTRA_ERROR_CODES.EDITOR_NOT_CONFIGURED,
+        });
       }
 
       const result = await editor.prompt.preview(blocks, context ?? {});

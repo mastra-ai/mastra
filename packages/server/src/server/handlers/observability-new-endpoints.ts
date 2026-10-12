@@ -78,6 +78,7 @@ import {
   MASTRA_CLIENT_TYPE_HEADER,
   isStudioClientTypeHeader,
 } from '../constants';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { buildProblem, problemDetailsSchema } from '../http-errors';
 import type { MastraErrorCode } from '../http-errors';
 import { HTTPException } from '../http-exception';
@@ -150,6 +151,7 @@ function createNewRoute<
           if (onUnsupportedCore) onUnsupportedCore();
           throw new HTTPException(501, {
             message: 'New observability endpoints require @mastra/core >= 1.13.2, please upgrade.',
+            code: MASTRA_ERROR_CODES.CORE_VERSION_UNSUPPORTED,
           });
         }
 
@@ -387,7 +389,10 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
       assertObservabilityTraceQueryContextIdsSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
       if (plan.paginationMode === 'delta' && !observabilityStore.getFeatures()?.includes('delta-polling')) {
-        throw new HTTPException(501, { message: 'This storage provider does not support observability delta polling' });
+        throw new HTTPException(501, {
+          message: 'This storage provider does not support observability delta polling',
+          code: MASTRA_ERROR_CODES.OBSERVABILITY_FEATURE_NOT_IMPLEMENTED,
+        });
       }
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
@@ -963,6 +968,7 @@ export const DELETE_SCORES = createNewRoute(NEW_ROUTE_DEFS.DELETE_SCORES, {
     if (!coreFeatures.has('observability-signal-deletion')) {
       throw new HTTPException(501, {
         message: 'Score deletion requires a newer @mastra/core with observability signal deletion support.',
+        code: MASTRA_ERROR_CODES.CORE_VERSION_UNSUPPORTED,
       });
     }
     const args = pickParams(deleteScoresArgsSchema, params);
@@ -1090,6 +1096,7 @@ export const DELETE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.DELETE_FEEDBACK, {
     if (!coreFeatures.has('observability-signal-deletion')) {
       throw new HTTPException(501, {
         message: 'Feedback deletion requires a newer @mastra/core with observability signal deletion support.',
+        code: MASTRA_ERROR_CODES.CORE_VERSION_UNSUPPORTED,
       });
     }
     const args = pickParams(deleteFeedbackArgsSchema, params);

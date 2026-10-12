@@ -1,4 +1,5 @@
 import { MastraFGAPermissions } from '../fga-permissions';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
 import {
   conversationDeletedSchema,
@@ -55,16 +56,25 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
   handler: async ({ mastra, requestContext, agent_id, conversation_id, resource_id, title, metadata }) => {
     try {
       if (!mastra) {
-        throw new HTTPException(500, { message: 'Mastra instance is required for conversations' });
+        throw new HTTPException(500, {
+          message: 'Mastra instance is required for conversations',
+          code: MASTRA_ERROR_CODES.MASTRA_INSTANCE_UNAVAILABLE,
+        });
       }
 
       const agent = await getAgentFromSystem({ mastra, agentId: agent_id });
       const memory = await agent.getMemory({ requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: `Agent "${agent.id}" does not have memory configured` });
+        throw new HTTPException(400, {
+          message: `Agent "${agent.id}" does not have memory configured`,
+          code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
       if (!(await getAgentMemoryStore({ agent, requestContext }))) {
-        throw new HTTPException(400, { message: `Memory storage is not configured for agent "${agent.id}"` });
+        throw new HTTPException(400, {
+          message: `Memory storage is not configured for agent "${agent.id}"`,
+          code: MASTRA_ERROR_CODES.MEMORY_STORAGE_UNAVAILABLE,
+        });
       }
 
       const threadId = conversation_id ?? globalThis.crypto.randomUUID();
@@ -105,7 +115,10 @@ export const GET_CONVERSATION_ROUTE = createRoute({
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
       if (!match) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+        throw new HTTPException(404, {
+          message: `Conversation ${conversationId} was not found`,
+          code: MASTRA_ERROR_CODES.CONVERSATION_NOT_FOUND,
+        });
       }
 
       return buildConversationObject({ thread: match.thread });
@@ -130,7 +143,10 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
       if (!match) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+        throw new HTTPException(404, {
+          message: `Conversation ${conversationId} was not found`,
+          code: MASTRA_ERROR_CODES.CONVERSATION_NOT_FOUND,
+        });
       }
 
       const { messages } = await match.memoryStore.listMessages({
@@ -161,7 +177,10 @@ export const DELETE_CONVERSATION_ROUTE = createRoute({
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
       if (!match) {
-        throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+        throw new HTTPException(404, {
+          message: `Conversation ${conversationId} was not found`,
+          code: MASTRA_ERROR_CODES.CONVERSATION_NOT_FOUND,
+        });
       }
 
       await match.memoryStore.deleteThread({ threadId: conversationId });

@@ -16,7 +16,10 @@ export function validateBody(body: Record<string, unknown>) {
   }, {});
 
   if (Object.keys(errorResponse).length > 0) {
-    throw new HTTPException(400, { message: Object.values(errorResponse)[0] });
+    throw new HTTPException(400, {
+      message: Object.values(errorResponse)[0],
+      code: MASTRA_ERROR_CODES.INVALID_REQUEST_BODY,
+    });
   }
 }
 
@@ -147,6 +150,7 @@ export function requireEffectiveResourceId(
     throw new HTTPException(400, {
       message:
         'A resource ID is required when using memory. Provide memory.resource in the request body, or configure server auth with mapUserToResourceId to derive it from the authenticated user.',
+      code: MASTRA_ERROR_CODES.MEMORY_INVALID_REQUEST,
     });
   }
 }
@@ -208,7 +212,10 @@ export async function enforceThreadAccess({
 
   const user = requestContext?.get('user');
   if (!user || typeof user !== 'object') {
-    throw new HTTPException(403, { message: 'FGA authorization denied: authenticated user is required' });
+    throw new HTTPException(403, {
+      message: 'FGA authorization denied: authenticated user is required',
+      code: MASTRA_ERROR_CODES.AUTHENTICATION_REQUIRED,
+    });
   }
 
   await MastraMemory.checkThreadFGA({

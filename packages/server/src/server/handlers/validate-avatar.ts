@@ -1,3 +1,4 @@
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
 
 const AVATAR_MAX_BYTES = 512 * 1024; // 512 KB
@@ -11,7 +12,10 @@ export function validateMetadataAvatarUrl(metadata: Record<string, unknown> | un
   if (!metadata || !('avatarUrl' in metadata) || metadata.avatarUrl === null || metadata.avatarUrl === undefined)
     return;
   if (typeof metadata.avatarUrl !== 'string') {
-    throw new HTTPException(400, { message: 'metadata.avatarUrl must be a string' });
+    throw new HTTPException(400, {
+      message: 'metadata.avatarUrl must be a string',
+      code: MASTRA_ERROR_CODES.AVATAR_INVALID,
+    });
   }
 
   const dataUrl = metadata.avatarUrl;
@@ -19,6 +23,7 @@ export function validateMetadataAvatarUrl(metadata: Record<string, unknown> | un
   if (!match) {
     throw new HTTPException(400, {
       message: 'metadata.avatarUrl must be a valid data URL (data:<mime>;base64,<data>)',
+      code: MASTRA_ERROR_CODES.AVATAR_INVALID,
     });
   }
 
@@ -31,17 +36,21 @@ export function validateMetadataAvatarUrl(metadata: Record<string, unknown> | un
     base64Payload.length % 4 === 0 &&
     /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64Payload);
   if (!isStrictBase64) {
-    throw new HTTPException(400, { message: 'metadata.avatarUrl contains invalid base64' });
+    throw new HTTPException(400, {
+      message: 'metadata.avatarUrl contains invalid base64',
+      code: MASTRA_ERROR_CODES.AVATAR_INVALID,
+    });
   }
   const byteLength = Buffer.from(base64Payload, 'base64').byteLength;
 
   if (byteLength === 0) {
-    throw new HTTPException(400, { message: 'metadata.avatarUrl is empty' });
+    throw new HTTPException(400, { message: 'metadata.avatarUrl is empty', code: MASTRA_ERROR_CODES.AVATAR_INVALID });
   }
 
   if (byteLength > AVATAR_MAX_BYTES) {
     throw new HTTPException(413, {
       message: `metadata.avatarUrl exceeds ${AVATAR_MAX_BYTES}-byte limit (got ${byteLength})`,
+      code: MASTRA_ERROR_CODES.AVATAR_TOO_LARGE,
     });
   }
 }

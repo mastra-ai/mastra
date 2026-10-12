@@ -123,6 +123,7 @@ describe('Vector Handlers', () => {
       ).rejects.toThrow(
         new HTTPException(400, {
           message: 'Invalid request index, indexName and positive dimension number are required.',
+          code: 'VECTOR_INVALID_REQUEST',
         }),
       );
     });

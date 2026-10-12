@@ -63,7 +63,10 @@ export const LIST_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
       if (!mcpClient) {
-        throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
+        throw new HTTPException(404, {
+          message: `MCP client with id ${mcpClientId} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
@@ -116,7 +119,10 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
       if (!mcpClient) {
-        throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
+        throw new HTTPException(404, {
+          message: `MCP client with id ${mcpClientId} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
@@ -160,7 +166,10 @@ export const CREATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 
       const version = await mcpClientStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+        throw new HTTPException(500, {
+          message: 'Failed to retrieve created version',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       await enforceRetentionLimit(
@@ -212,12 +221,16 @@ export const GET_MCP_CLIENT_VERSION_ROUTE = createRoute({
       const version = await mcpClientStore.getVersion(versionId);
 
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_VERSION_NOT_FOUND,
+        });
       }
 
       if (version.mcpClientId !== mcpClientId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for MCP client ${mcpClientId}`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_VERSION_NOT_FOUND,
         });
       }
       const mcpClient = await mcpClientStore.getById(mcpClientId);
@@ -264,17 +277,24 @@ export const ACTIVATE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
       if (!mcpClient) {
-        throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
+        throw new HTTPException(404, {
+          message: `MCP client with id ${mcpClientId} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       const version = await mcpClientStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_VERSION_NOT_FOUND,
+        });
       }
       if (version.mcpClientId !== mcpClientId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for MCP client ${mcpClientId}`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_VERSION_NOT_FOUND,
         });
       }
 
@@ -332,17 +352,24 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
       if (!mcpClient) {
-        throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
+        throw new HTTPException(404, {
+          message: `MCP client with id ${mcpClientId} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       const versionToRestore = await mcpClientStore.getVersion(versionId);
       if (!versionToRestore) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_VERSION_NOT_FOUND,
+        });
       }
       if (versionToRestore.mcpClientId !== mcpClientId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for MCP client ${mcpClientId}`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_VERSION_NOT_FOUND,
         });
       }
 
@@ -379,7 +406,10 @@ export const RESTORE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 
       const newVersion = await mcpClientStore.getVersion(newVersionId);
       if (!newVersion) {
-        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+        throw new HTTPException(500, {
+          message: 'Failed to retrieve created version',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       await enforceRetentionLimit(
@@ -433,23 +463,31 @@ export const DELETE_MCP_CLIENT_VERSION_ROUTE = createRoute({
 
       const mcpClient = await mcpClientStore.getById(mcpClientId);
       if (!mcpClient) {
-        throw new HTTPException(404, { message: `MCP client with id ${mcpClientId} not found` });
+        throw new HTTPException(404, {
+          message: `MCP client with id ${mcpClientId} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
       const version = await mcpClientStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_VERSION_NOT_FOUND,
+        });
       }
       if (version.mcpClientId !== mcpClientId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for MCP client ${mcpClientId}`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_VERSION_NOT_FOUND,
         });
       }
 
       if (mcpClient.activeVersionId === versionId) {
         throw new HTTPException(400, {
           message: 'Cannot delete the active version. Activate a different version first.',
+          code: MASTRA_ERROR_CODES.VERSION_ACTIVE_DELETE_FORBIDDEN,
         });
       }
 
@@ -505,21 +543,29 @@ export const COMPARE_MCP_CLIENT_VERSIONS_ROUTE = createRoute({
 
       const fromVersion = await mcpClientStore.getVersion(from);
       if (!fromVersion) {
-        throw new HTTPException(404, { message: `Version with id ${from} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${from} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_VERSION_NOT_FOUND,
+        });
       }
       if (fromVersion.mcpClientId !== mcpClientId) {
         throw new HTTPException(404, {
           message: `Version with id ${from} not found for MCP client ${mcpClientId}`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_VERSION_NOT_FOUND,
         });
       }
 
       const toVersion = await mcpClientStore.getVersion(to);
       if (!toVersion) {
-        throw new HTTPException(404, { message: `Version with id ${to} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${to} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_VERSION_NOT_FOUND,
+        });
       }
       if (toVersion.mcpClientId !== mcpClientId) {
         throw new HTTPException(404, {
           message: `Version with id ${to} not found for MCP client ${mcpClientId}`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_VERSION_NOT_FOUND,
         });
       }
 

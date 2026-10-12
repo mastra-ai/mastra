@@ -1,5 +1,6 @@
 import type { Mastra } from '@mastra/core';
 import type { ChannelProvider } from '@mastra/core/channels';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -48,7 +49,7 @@ export async function isBuilderFeatureEnabled(mastra: Mastra, feature: keyof Age
  */
 export async function requireBuilderFeature(mastra: Mastra, feature: keyof AgentFeatures): Promise<void> {
   if (!(await isBuilderFeatureEnabled(mastra, feature))) {
-    throw new HTTPException(404, { message: 'Not Found' });
+    throw new HTTPException(404, { message: 'Not Found', code: MASTRA_ERROR_CODES.ROUTE_NOT_FOUND });
   }
 }
 

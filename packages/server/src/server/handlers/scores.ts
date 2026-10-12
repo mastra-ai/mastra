@@ -1,6 +1,7 @@
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { StoragePagination } from '@mastra/core/storage';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
 import { runIdSchema } from '../schemas/common';
 import {
@@ -346,7 +347,10 @@ export const SAVE_SCORE_ROUTE = createRoute({
       const scoresStore = await mastra.getStorage()?.getStore('scores');
       const result = await scoresStore?.saveScore?.(score);
       if (!result) {
-        throw new HTTPException(500, { message: 'Storage not configured' });
+        throw new HTTPException(500, {
+          message: 'Storage not configured',
+          code: MASTRA_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
       return result;
     } catch (error) {

@@ -109,7 +109,10 @@ export const GET_STORED_MCP_CLIENT_ROUTE = createRoute({
       const mcpClient = await mcpClientStore.getByIdResolved(storedMCPClientId, { status });
 
       if (!mcpClient) {
-        throw new HTTPException(404, { message: `Stored MCP client with id ${storedMCPClientId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored MCP client with id ${storedMCPClientId} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(mcpClient, await getStoredResourceScope(mastra, requestContext));
 
@@ -158,13 +161,17 @@ export const CREATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive MCP client ID from name. Please provide an explicit id.',
+          code: MASTRA_ERROR_CODES.RESOURCE_ID_DERIVATION_FAILED,
         });
       }
 
       // Check if MCP client with this ID already exists
       const existing = await mcpClientStore.getById(id);
       if (existing) {
-        throw new HTTPException(409, { message: `MCP client with id ${id} already exists` });
+        throw new HTTPException(409, {
+          message: `MCP client with id ${id} already exists`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_ALREADY_EXISTS,
+        });
       }
 
       await mcpClientStore.create({
@@ -182,7 +189,10 @@ export const CREATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       // Use draft status since newly created entities start as drafts
       const resolved = await mcpClientStore.getByIdResolved(id, { status: 'draft' });
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve created MCP client' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve created MCP client',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       return resolved;
@@ -239,7 +249,10 @@ export const UPDATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       // Check if MCP client exists
       const existing = await mcpClientStore.getById(storedMCPClientId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored MCP client with id ${storedMCPClientId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored MCP client with id ${storedMCPClientId} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_NOT_FOUND,
+        });
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
@@ -280,7 +293,10 @@ export const UPDATE_STORED_MCP_CLIENT_ROUTE = createRoute({
       // Return the resolved MCP client with the latest (draft) version so the UI sees its edits
       const resolved = await mcpClientStore.getByIdResolved(storedMCPClientId, { status: 'draft' });
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve updated MCP client' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve updated MCP client',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       return resolved;
@@ -325,7 +341,10 @@ export const DELETE_STORED_MCP_CLIENT_ROUTE = createRoute({
       // Check if MCP client exists
       const existing = await mcpClientStore.getById(storedMCPClientId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored MCP client with id ${storedMCPClientId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored MCP client with id ${storedMCPClientId} not found`,
+          code: MASTRA_ERROR_CODES.MCP_CLIENT_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 

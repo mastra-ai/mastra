@@ -64,7 +64,10 @@ export const LIST_PROMPT_BLOCK_VERSIONS_ROUTE = createRoute({
 
       const promptBlock = await promptBlockStore.getById(promptBlockId);
       if (!promptBlock) {
-        throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
+        throw new HTTPException(404, {
+          message: `Prompt block with id ${promptBlockId} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
@@ -117,7 +120,10 @@ export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 
       const promptBlock = await promptBlockStore.getById(promptBlockId);
       if (!promptBlock) {
-        throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
+        throw new HTTPException(404, {
+          message: `Prompt block with id ${promptBlockId} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
@@ -158,7 +164,10 @@ export const CREATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 
       const version = await promptBlockStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+        throw new HTTPException(500, {
+          message: 'Failed to retrieve created version',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       await enforceRetentionLimit(
@@ -210,12 +219,16 @@ export const GET_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
       const version = await promptBlockStore.getVersion(versionId);
 
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+        });
       }
 
       if (version.blockId !== promptBlockId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for prompt block ${promptBlockId}`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
         });
       }
       const promptBlock = await promptBlockStore.getById(promptBlockId);
@@ -262,17 +275,24 @@ export const ACTIVATE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 
       const promptBlock = await promptBlockStore.getById(promptBlockId);
       if (!promptBlock) {
-        throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
+        throw new HTTPException(404, {
+          message: `Prompt block with id ${promptBlockId} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       const version = await promptBlockStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+        });
       }
       if (version.blockId !== promptBlockId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for prompt block ${promptBlockId}`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
         });
       }
 
@@ -330,17 +350,24 @@ export const RESTORE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 
       const promptBlock = await promptBlockStore.getById(promptBlockId);
       if (!promptBlock) {
-        throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
+        throw new HTTPException(404, {
+          message: `Prompt block with id ${promptBlockId} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       const versionToRestore = await promptBlockStore.getVersion(versionId);
       if (!versionToRestore) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+        });
       }
       if (versionToRestore.blockId !== promptBlockId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for prompt block ${promptBlockId}`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
         });
       }
 
@@ -374,7 +401,10 @@ export const RESTORE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 
       const newVersion = await promptBlockStore.getVersion(newVersionId);
       if (!newVersion) {
-        throw new HTTPException(500, { message: 'Failed to retrieve created version' });
+        throw new HTTPException(500, {
+          message: 'Failed to retrieve created version',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       await enforceRetentionLimit(
@@ -428,23 +458,31 @@ export const DELETE_PROMPT_BLOCK_VERSION_ROUTE = createRoute({
 
       const promptBlock = await promptBlockStore.getById(promptBlockId);
       if (!promptBlock) {
-        throw new HTTPException(404, { message: `Prompt block with id ${promptBlockId} not found` });
+        throw new HTTPException(404, {
+          message: `Prompt block with id ${promptBlockId} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(promptBlock, await getStoredResourceScope(mastra, requestContext));
 
       const version = await promptBlockStore.getVersion(versionId);
       if (!version) {
-        throw new HTTPException(404, { message: `Version with id ${versionId} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${versionId} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+        });
       }
       if (version.blockId !== promptBlockId) {
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found for prompt block ${promptBlockId}`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
         });
       }
 
       if (promptBlock.activeVersionId === versionId) {
         throw new HTTPException(400, {
           message: 'Cannot delete the active version. Activate a different version first.',
+          code: MASTRA_ERROR_CODES.VERSION_ACTIVE_DELETE_FORBIDDEN,
         });
       }
 
@@ -500,21 +538,29 @@ export const COMPARE_PROMPT_BLOCK_VERSIONS_ROUTE = createRoute({
 
       const fromVersion = await promptBlockStore.getVersion(from);
       if (!fromVersion) {
-        throw new HTTPException(404, { message: `Version with id ${from} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${from} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+        });
       }
       if (fromVersion.blockId !== promptBlockId) {
         throw new HTTPException(404, {
           message: `Version with id ${from} not found for prompt block ${promptBlockId}`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
         });
       }
 
       const toVersion = await promptBlockStore.getVersion(to);
       if (!toVersion) {
-        throw new HTTPException(404, { message: `Version with id ${to} not found` });
+        throw new HTTPException(404, {
+          message: `Version with id ${to} not found`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
+        });
       }
       if (toVersion.blockId !== promptBlockId) {
         throw new HTTPException(404, {
           message: `Version with id ${to} not found for prompt block ${promptBlockId}`,
+          code: MASTRA_ERROR_CODES.PROMPT_BLOCK_VERSION_NOT_FOUND,
         });
       }
 

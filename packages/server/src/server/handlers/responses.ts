@@ -3,6 +3,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MemoryStorage } from '@mastra/core/storage';
 import { MastraFGAPermissions } from '../fga-permissions';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
 import {
   createResponseBodySchema,
@@ -177,6 +178,7 @@ async function resolveThreadExecutionContext({
     throw new HTTPException(400, {
       message:
         'conversation_id and previous_response_id must reference the same conversation thread when both are provided',
+      code: MASTRA_ERROR_CODES.RESPONSE_INVALID_REQUEST,
     });
   }
 
@@ -199,6 +201,7 @@ async function resolveThreadExecutionContext({
     if (conversationId) {
       throw new HTTPException(400, {
         message: 'conversation_id requires the target agent to have memory configured',
+        code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
       });
     }
 
@@ -208,7 +211,10 @@ async function resolveThreadExecutionContext({
   if (conversationId) {
     const existingThread = await memory.getThreadById({ threadId: conversationId });
     if (!existingThread) {
-      throw new HTTPException(404, { message: `Conversation ${conversationId} was not found` });
+      throw new HTTPException(404, {
+        message: `Conversation ${conversationId} was not found`,
+        code: MASTRA_ERROR_CODES.CONVERSATION_NOT_FOUND,
+      });
     }
 
     await enforceThreadAccess({
@@ -299,11 +305,15 @@ async function resolveResponseAgent({
   if (!agentId) {
     throw new HTTPException(400, {
       message: 'Responses requests require an agent_id',
+      code: MASTRA_ERROR_CODES.RESPONSE_INVALID_REQUEST,
     });
   }
 
   if (!mastra) {
-    throw new HTTPException(500, { message: 'Mastra instance is required for agent-backed responses' });
+    throw new HTTPException(500, {
+      message: 'Mastra instance is required for agent-backed responses',
+      code: MASTRA_ERROR_CODES.MASTRA_INSTANCE_UNAVAILABLE,
+    });
   }
 
   return getAgentFromSystem({ mastra, agentId });
@@ -320,7 +330,7 @@ async function resolveAgentMemoryStore({
 }): Promise<MemoryStorage> {
   const agentMemoryStore = await getAgentMemoryStore({ agent, requestContext });
   if (!agentMemoryStore) {
-    throw new HTTPException(400, { message: errorMessage });
+    throw new HTTPException(400, { message: errorMessage, code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED });
   }
 
   return agentMemoryStore;
@@ -660,17 +670,24 @@ async function prepareCreateResponseRequest({
           } else {
             throw new HTTPException(400, {
               message: `Stored response ${body.previous_response_id} belongs to agent ${owningResponseTurnRecord.metadata.agentId}, not ${body.agent_id}`,
+              code: MASTRA_ERROR_CODES.STORED_RESPONSE_AGENT_MISMATCH,
             });
           }
         }
 
         if (!previousResponseTurnRecord) {
-          throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
+          throw new HTTPException(404, {
+            message: `Stored response ${body.previous_response_id} was not found`,
+            code: MASTRA_ERROR_CODES.STORED_RESPONSE_NOT_FOUND,
+          });
         }
       }
     } else {
       if (!mastra) {
-        throw new HTTPException(500, { message: 'Mastra instance is required for agent-backed responses' });
+        throw new HTTPException(500, {
+          message: 'Mastra instance is required for agent-backed responses',
+          code: MASTRA_ERROR_CODES.MASTRA_INSTANCE_UNAVAILABLE,
+        });
       }
 
       previousResponseTurnRecord = await findResponseTurnRecordAcrossAgents({
@@ -680,7 +697,10 @@ async function prepareCreateResponseRequest({
       });
 
       if (!previousResponseTurnRecord) {
-        throw new HTTPException(404, { message: `Stored response ${body.previous_response_id} was not found` });
+        throw new HTTPException(404, {
+          message: `Stored response ${body.previous_response_id} was not found`,
+          code: MASTRA_ERROR_CODES.STORED_RESPONSE_NOT_FOUND,
+        });
       }
     }
   }
@@ -711,6 +731,7 @@ async function prepareCreateResponseRequest({
 
       throw new HTTPException(500, {
         message: 'Responses route could not determine the effective model for this request',
+        code: MASTRA_ERROR_CODES.MODEL_RESOLUTION_FAILED,
       });
     })();
   const shouldStore = body.store ?? false;
@@ -743,6 +764,7 @@ async function prepareCreateResponseRequest({
   if (shouldStore && !threadContext) {
     throw new HTTPException(400, {
       message: 'Stored responses require the target agent to have memory configured',
+      code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
     });
   }
 
@@ -1025,7 +1047,10 @@ export const GET_RESPONSE_ROUTE = createRoute({
     try {
       const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });
       if (!responseTurnRecord) {
-        throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
+        throw new HTTPException(404, {
+          message: `Stored response ${responseId} was not found`,
+          code: MASTRA_ERROR_CODES.STORED_RESPONSE_NOT_FOUND,
+        });
       }
 
       return mapResponseTurnRecordToResponse(responseTurnRecord);
@@ -1050,7 +1075,10 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
     try {
       const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });
       if (!responseTurnRecord) {
-        throw new HTTPException(404, { message: `Stored response ${responseId} was not found` });
+        throw new HTTPException(404, {
+          message: `Stored response ${responseId} was not found`,
+          code: MASTRA_ERROR_CODES.STORED_RESPONSE_NOT_FOUND,
+        });
       }
 
       await deleteResponseTurnRecord({ responseTurnRecord });

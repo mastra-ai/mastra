@@ -4,6 +4,7 @@ import type { RequestContext } from '@mastra/core/di';
 import { coreFeatures } from '@mastra/core/features';
 
 import { MASTRA_USER_KEY } from '../constants';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
 import {
   channelPlatformPathParams,
@@ -26,7 +27,10 @@ import { handleError } from './error';
 
 function assertChannelsAvailable(): void {
   if (!coreFeatures.has('channels')) {
-    throw new HTTPException(501, { message: 'Channels require a newer version of @mastra/core' });
+    throw new HTTPException(501, {
+      message: 'Channels require a newer version of @mastra/core',
+      code: MASTRA_ERROR_CODES.CORE_VERSION_UNSUPPORTED,
+    });
   }
 }
 
@@ -50,6 +54,7 @@ async function getChannelOrThrow(mastra: Mastra, platform: string): Promise<Chan
     const available = channels.map(c => c.id).join(', ');
     throw new HTTPException(404, {
       message: `Channel "${platform}" is not registered. Available: ${available || 'none'}`,
+      code: MASTRA_ERROR_CODES.CHANNEL_NOT_FOUND,
     });
   }
   return channel;
@@ -95,7 +100,7 @@ async function assertChannelAgentWriteAccess(
   }
 
   if (action === 'connect') {
-    throw new HTTPException(404, { message: `Agent "${agentId}" not found` });
+    throw new HTTPException(404, { message: `Agent "${agentId}" not found`, code: MASTRA_ERROR_CODES.AGENT_NOT_FOUND });
   }
 
   // Disconnect against an unknown agentId = orphan cleanup (stored agent was
@@ -107,7 +112,7 @@ async function assertChannelAgentWriteAccess(
   if (hasAdminBypass(requestContext, 'channels')) return;
   if (hasScopedPermission({ requestContext, resource: 'channels', action: 'write' })) return;
 
-  throw new HTTPException(404, { message: 'Not found' });
+  throw new HTTPException(404, { message: 'Not found', code: MASTRA_ERROR_CODES.RESOURCE_NOT_FOUND });
 }
 
 // ============================================================================
@@ -197,6 +202,7 @@ export const CONNECT_CHANNEL_ROUTE = createRoute({
       if (!channel.connect) {
         throw new HTTPException(400, {
           message: `Channel "${platform}" does not support programmatic connection`,
+          code: MASTRA_ERROR_CODES.CHANNEL_OPERATION_UNSUPPORTED,
         });
       }
 
@@ -270,6 +276,7 @@ export const DISCONNECT_CHANNEL_ROUTE = createRoute({
       if (!channel.disconnect) {
         throw new HTTPException(400, {
           message: `Channel "${platform}" does not support programmatic disconnection`,
+          code: MASTRA_ERROR_CODES.CHANNEL_OPERATION_UNSUPPORTED,
         });
       }
 

@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { AgentInstructionBlock } from '@mastra/core/storage';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 
 import { HTTPException } from '../http-exception';
 import { assertStoredResourceScope, getStoredResourceScope } from '../utils';
@@ -85,12 +86,14 @@ export async function validateAgentInstructionReferences({
   if (unresolvedIds.length > 0) {
     throw new HTTPException(400, {
       message: `Unable to verify referenced prompt blocks: ${unresolvedIds.join(', ')}. Resolve these references and try again.`,
+      code: MASTRA_ERROR_CODES.PROMPT_BLOCK_REFERENCES_UNRESOLVED,
     });
   }
 
   if (unpublishedIds.length > 0) {
     throw new HTTPException(400, {
       message: UNPUBLISHED_REFERENCES_MESSAGE.replace('{ids}', unpublishedIds.join(', ')),
+      code: MASTRA_ERROR_CODES.PROMPT_BLOCK_REFERENCES_UNPUBLISHED,
     });
   }
 }

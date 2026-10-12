@@ -236,7 +236,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
   handler: async ({ mastra, runId, toolId, registeredTools, requestContext, ...bodyParams }) => {
     try {
       if (!toolId) {
-        throw new HTTPException(400, { message: 'Tool ID is required' });
+        throw new HTTPException(400, { message: 'Tool ID is required', code: MASTRA_ERROR_CODES.TOOL_INVALID_REQUEST });
       }
 
       let tool: any;
@@ -263,7 +263,10 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
       }
 
       if (!tool?.execute) {
-        throw new HTTPException(400, { message: 'Tool is not executable' });
+        throw new HTTPException(400, {
+          message: 'Tool is not executable',
+          code: MASTRA_ERROR_CODES.TOOL_NOT_EXECUTABLE,
+        });
       }
 
       const { data } = bodyParams;
@@ -314,7 +317,10 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
   handler: async ({ mastra, agentId, toolId, requestContext }) => {
     try {
       if (!agentId) {
-        throw new HTTPException(400, { message: 'Agent ID is required' });
+        throw new HTTPException(400, {
+          message: 'Agent ID is required',
+          code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+        });
       }
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -347,7 +353,10 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   handler: async ({ mastra, agentId, toolId, data, requestContext }) => {
     try {
       if (!agentId) {
-        throw new HTTPException(400, { message: 'Agent ID is required' });
+        throw new HTTPException(400, {
+          message: 'Agent ID is required',
+          code: MASTRA_ERROR_CODES.AGENT_INVALID_REQUEST,
+        });
       }
       const agent = await getAgentFromSystem({ mastra, agentId });
 
@@ -360,7 +369,10 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
       }
 
       if (!tool?.execute) {
-        throw new HTTPException(400, { message: 'Tool is not executable' });
+        throw new HTTPException(400, {
+          message: 'Tool is not executable',
+          code: MASTRA_ERROR_CODES.TOOL_NOT_EXECUTABLE,
+        });
       }
 
       const result = await tool.execute(data, {

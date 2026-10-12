@@ -283,7 +283,10 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
       const skill = await skillStore.getByIdResolved(storedSkillId);
 
       if (!skill) {
-        throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored skill with id ${storedSkillId} not found`,
+          code: MASTRA_ERROR_CODES.SKILL_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(skill, await getStoredResourceScope(mastra, requestContext));
 
@@ -350,13 +353,17 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
       if (!id) {
         throw new HTTPException(400, {
           message: 'Could not derive skill ID from name. Please provide an explicit id.',
+          code: MASTRA_ERROR_CODES.RESOURCE_ID_DERIVATION_FAILED,
         });
       }
 
       // Check if skill with this ID already exists
       const existing = await skillStore.getById(id);
       if (existing) {
-        throw new HTTPException(409, { message: `Skill with id ${id} already exists` });
+        throw new HTTPException(409, {
+          message: `Skill with id ${id} already exists`,
+          code: MASTRA_ERROR_CODES.SKILL_ALREADY_EXISTS,
+        });
       }
 
       // Force authorId from the authenticated caller; ignore any body-provided value.
@@ -391,7 +398,10 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
       // Return the resolved skill (thin record + version config)
       const resolved = await skillStore.getByIdResolved(id);
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve created skill' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve created skill',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       return enrichOrStripFavorites(mastra, requestContext, 'skill', resolved);
@@ -456,7 +466,10 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       // Check if skill exists. Skill metadata lives on the resolved snapshot.
       const existing = await skillStore.getByIdResolved(storedSkillId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored skill with id ${storedSkillId} not found`,
+          code: MASTRA_ERROR_CODES.SKILL_NOT_FOUND,
+        });
       }
       const scope = await getStoredResourceScope(mastra, requestContext);
       assertStoredResourceScope(existing, scope);
@@ -508,7 +521,10 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       // Return the resolved skill with the updated config
       const resolved = await skillStore.getByIdResolved(storedSkillId);
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve updated skill' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve updated skill',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       return enrichOrStripFavorites(mastra, requestContext, 'skill', resolved);
@@ -553,7 +569,10 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
       // Check if skill exists. Skill metadata lives on the resolved snapshot.
       const existing = await skillStore.getByIdResolved(storedSkillId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored skill with id ${storedSkillId} not found`,
+          code: MASTRA_ERROR_CODES.SKILL_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
@@ -636,7 +655,10 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       // Verify skill exists. Skill metadata lives on the resolved snapshot.
       const existing = await skillStore.getByIdResolved(storedSkillId);
       if (!existing) {
-        throw new HTTPException(404, { message: `Stored skill with id ${storedSkillId} not found` });
+        throw new HTTPException(404, {
+          message: `Stored skill with id ${storedSkillId} not found`,
+          code: MASTRA_ERROR_CODES.SKILL_NOT_FOUND,
+        });
       }
       assertStoredResourceScope(existing, await getStoredResourceScope(mastra, requestContext));
 
@@ -657,6 +679,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       if (!resolvedPath.startsWith(allowedBase + path.default.sep) && resolvedPath !== allowedBase) {
         throw new HTTPException(400, {
           message: `skillPath must be within the allowed directory: ${allowedBase}`,
+          code: MASTRA_ERROR_CODES.SKILL_PATH_INVALID,
         });
       }
 
@@ -665,13 +688,17 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       try {
         const stat = await fs.stat(resolvedPath);
         if (!stat.isDirectory()) {
-          throw new HTTPException(400, { message: `skillPath is not a directory: ${resolvedPath}` });
+          throw new HTTPException(400, {
+            message: `skillPath is not a directory: ${resolvedPath}`,
+            code: MASTRA_ERROR_CODES.SKILL_PATH_INVALID,
+          });
         }
       } catch (err) {
         if (err instanceof HTTPException) throw err;
         if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
           throw new HTTPException(400, {
             message: `skillPath does not exist on the server filesystem: ${resolvedPath}. Create the skill directory (with a SKILL.md) before publishing, or use a skill that was materialized to disk.`,
+            code: MASTRA_ERROR_CODES.SKILL_PATH_INVALID,
           });
         }
         throw err;
@@ -682,6 +709,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
         if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
           throw new HTTPException(400, {
             message: `skillPath is missing SKILL.md: ${resolvedPath}`,
+            code: MASTRA_ERROR_CODES.SKILL_PATH_INVALID,
           });
         }
         throw err;
@@ -725,7 +753,10 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
 
       const resolved = await skillStore.getByIdResolved(storedSkillId);
       if (!resolved) {
-        throw new HTTPException(500, { message: 'Failed to resolve skill after publish' });
+        throw new HTTPException(500, {
+          message: 'Failed to resolve skill after publish',
+          code: MASTRA_ERROR_CODES.STORED_RESOURCE_RESOLUTION_FAILED,
+        });
       }
 
       return enrichOrStripFavorites(mastra, requestContext, 'skill', resolved);

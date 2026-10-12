@@ -177,13 +177,19 @@ async function enforceDeleteMessagesThreadAccess({
   const threadIds = [...new Set(messages.map(m => m.threadId).filter(Boolean))] as string[];
 
   if (messages.some(message => !message.threadId)) {
-    throw new HTTPException(403, { message: 'Access denied: unable to verify message thread access' });
+    throw new HTTPException(403, {
+      message: 'Access denied: unable to verify message thread access',
+      code: MASTRA_ERROR_CODES.THREAD_ACCESS_DENIED,
+    });
   }
 
   for (const threadId of threadIds) {
     const thread = await memoryStore.getThreadById({ threadId });
     if (!thread) {
-      throw new HTTPException(403, { message: 'Access denied: unable to verify message thread access' });
+      throw new HTTPException(403, {
+        message: 'Access denied: unable to verify message thread access',
+        code: MASTRA_ERROR_CODES.THREAD_ACCESS_DENIED,
+      });
     }
 
     await enforceThreadAccess({
@@ -697,30 +703,45 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
 
       const omConfig = await getOMConfigFromAgent(agent, requestContext);
       if (!omConfig?.enabled) {
-        throw new HTTPException(400, { message: 'Observational Memory is not enabled for this agent' });
+        throw new HTTPException(400, {
+          message: 'Observational Memory is not enabled for this agent',
+          code: MASTRA_ERROR_CODES.OBSERVATIONAL_MEMORY_NOT_ENABLED,
+        });
       }
 
       // Get storage from the agent's memory (not mastra.getStorage())
       // This ensures we use the same storage the agent uses for OM
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not configured for this agent' });
+        throw new HTTPException(400, {
+          message: 'Memory is not configured for this agent',
+          code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       let memoryStore: MemoryStorage | undefined;
       try {
         memoryStore = await memory.storage.getStore('memory');
       } catch {
-        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory storage is not initialized',
+          code: MASTRA_ERROR_CODES.MEMORY_STORAGE_UNAVAILABLE,
+        });
       }
       if (!memoryStore) {
-        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory storage is not initialized',
+          code: MASTRA_ERROR_CODES.MEMORY_STORAGE_UNAVAILABLE,
+        });
       }
 
       // Determine the resourceId to use
       const effectiveResourceId = resourceId;
       if (!effectiveResourceId) {
-        throw new HTTPException(400, { message: 'resourceId is required for observational memory lookup' });
+        throw new HTTPException(400, {
+          message: 'resourceId is required for observational memory lookup',
+          code: MASTRA_ERROR_CODES.MEMORY_INVALID_REQUEST,
+        });
       }
 
       // For resource-scoped OM, lookup by resourceId only (threadId=null)
@@ -789,13 +810,19 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
 
       const omConfig = await getOMConfigFromAgent(agent, requestContext);
       if (!omConfig?.enabled) {
-        throw new HTTPException(400, { message: 'Observational Memory is not enabled for this agent' });
+        throw new HTTPException(400, {
+          message: 'Observational Memory is not enabled for this agent',
+          code: MASTRA_ERROR_CODES.OBSERVATIONAL_MEMORY_NOT_ENABLED,
+        });
       }
 
       // Resolve the OM processor to call waitForBuffering
       const omProcessor = await agent.resolveProcessorById('observational-memory', requestContext);
       if (!omProcessor || typeof (omProcessor as any).waitForBuffering !== 'function') {
-        throw new HTTPException(400, { message: 'Observational Memory processor not available' });
+        throw new HTTPException(400, {
+          message: 'Observational Memory processor not available',
+          code: MASTRA_ERROR_CODES.OBSERVATIONAL_MEMORY_NOT_ENABLED,
+        });
       }
 
       // Block until buffering completes (30s timeout)
@@ -804,22 +831,34 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
       // After buffering, fetch the updated record
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not configured for this agent' });
+        throw new HTTPException(400, {
+          message: 'Memory is not configured for this agent',
+          code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       let memoryStore: MemoryStorage | undefined;
       try {
         memoryStore = await memory.storage.getStore('memory');
       } catch {
-        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory storage is not initialized',
+          code: MASTRA_ERROR_CODES.MEMORY_STORAGE_UNAVAILABLE,
+        });
       }
       if (!memoryStore) {
-        throw new HTTPException(400, { message: 'Memory storage is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory storage is not initialized',
+          code: MASTRA_ERROR_CODES.MEMORY_STORAGE_UNAVAILABLE,
+        });
       }
 
       const effectiveResourceId = resourceId;
       if (!effectiveResourceId) {
-        throw new HTTPException(400, { message: 'resourceId is required' });
+        throw new HTTPException(400, {
+          message: 'resourceId is required',
+          code: MASTRA_ERROR_CODES.MEMORY_INVALID_REQUEST,
+        });
       }
 
       const omThreadId = omConfig.scope === 'resource' ? null : (threadId ?? null);
@@ -981,7 +1020,10 @@ export const LIST_THREADS_ROUTE = createRoute({
         }
       }
 
-      throw new HTTPException(400, { message: 'Memory is not initialized' });
+      throw new HTTPException(400, {
+        message: 'Memory is not initialized',
+        code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+      });
     } catch (error) {
       return handleError(error, 'Error listing threads');
     }
@@ -1072,7 +1114,10 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
         }
       }
 
-      throw new HTTPException(400, { message: 'Memory is not initialized' });
+      throw new HTTPException(400, {
+        message: 'Memory is not initialized',
+        code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+      });
     } catch (error) {
       return handleError(error, 'Error getting thread');
     }
@@ -1109,7 +1154,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
       validateBody({ threadId: effectiveThreadId });
 
       if (!effectiveThreadId) {
-        throw new HTTPException(400, { message: 'No threadId found' });
+        throw new HTTPException(400, { message: 'No threadId found', code: MASTRA_ERROR_CODES.MEMORY_INVALID_REQUEST });
       }
 
       // Gateway proxy: list messages from gateway API
@@ -1121,6 +1166,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
             throw new HTTPException(501, {
               message:
                 'Gateway memory message metadata filters are not supported by this gateway endpoint. Remove filter.metadata or query a local memory store.',
+              code: MASTRA_ERROR_CODES.MEMORY_OPERATION_UNSUPPORTED,
             });
           }
 
@@ -1305,15 +1351,24 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       if (!messages) {
-        throw new HTTPException(400, { message: 'Messages are required' });
+        throw new HTTPException(400, {
+          message: 'Messages are required',
+          code: MASTRA_ERROR_CODES.MEMORY_INVALID_REQUEST,
+        });
       }
 
       if (!Array.isArray(messages)) {
-        throw new HTTPException(400, { message: 'Messages should be an array' });
+        throw new HTTPException(400, {
+          message: 'Messages should be an array',
+          code: MASTRA_ERROR_CODES.MEMORY_INVALID_REQUEST,
+        });
       }
 
       // The body schema is intentionally permissive (unknown[]); narrow to the
@@ -1333,6 +1388,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         } else if (existingResourceId !== message.resourceId) {
           throw new HTTPException(400, {
             message: 'All messages for the same threadId must use the same resourceId.',
+            code: MASTRA_ERROR_CODES.MEMORY_INVALID_REQUEST,
           });
         }
       }
@@ -1342,6 +1398,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
       if (invalidMessages.length > 0) {
         throw new HTTPException(400, {
           message: `All messages must have threadId and resourceId fields. Found ${invalidMessages.length} invalid message(s).`,
+          code: MASTRA_ERROR_CODES.MEMORY_INVALID_REQUEST,
         });
       }
 
@@ -1351,6 +1408,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         if (unauthorizedMessages.length > 0) {
           throw new HTTPException(403, {
             message: 'Access denied: cannot save messages for a different resource',
+            code: MASTRA_ERROR_CODES.MESSAGE_ACCESS_DENIED,
           });
         }
 
@@ -1441,7 +1499,10 @@ export const CREATE_THREAD_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
 
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       // Creating with an existing id upserts the thread, so validate ownership of any existing thread first
@@ -1516,7 +1577,10 @@ export const UPDATE_THREAD_ROUTE = createRoute({
       const updatedAt = new Date();
 
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
@@ -1589,7 +1653,10 @@ export const DELETE_THREAD_ROUTE = createRoute({
           }
           const deleteResult = await gwClient.deleteThread(effectiveThreadId!);
           if (!deleteResult.ok) {
-            throw new HTTPException(404, { message: 'Thread not found on gateway' });
+            throw new HTTPException(404, {
+              message: 'Thread not found on gateway',
+              code: MASTRA_ERROR_CODES.THREAD_NOT_FOUND,
+            });
           }
           return { result: 'Thread deleted' };
         }
@@ -1597,7 +1664,10 @@ export const DELETE_THREAD_ROUTE = createRoute({
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
@@ -1642,13 +1712,16 @@ export const CLONE_THREAD_ROUTE = createRoute({
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       // Validate source thread ownership
       const sourceThread = await memory.getThreadById({ threadId: effectiveThreadId! });
       if (!sourceThread) {
-        throw new HTTPException(404, { message: 'Source thread not found' });
+        throw new HTTPException(404, { message: 'Source thread not found', code: MASTRA_ERROR_CODES.THREAD_NOT_FOUND });
       }
       const cloneResourceId = effectiveResourceId ?? sourceThread.resourceId ?? undefined;
       await enforceThreadAccess({
@@ -1704,6 +1777,7 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
       if (scopeId) {
         throw new HTTPException(403, {
           message: 'Thread transfer requires a privileged (non-resource-scoped) context',
+          code: MASTRA_ERROR_CODES.THREAD_TRANSFER_FORBIDDEN,
         });
       }
 
@@ -1717,6 +1791,7 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
         throw new HTTPException(403, {
           message:
             'Thread transfer requires explicit authorization. Configure an FGA provider (memory:write) to authorize privileged, non-resource-scoped transfers.',
+          code: MASTRA_ERROR_CODES.THREAD_TRANSFER_FORBIDDEN,
         });
       }
 
@@ -1728,7 +1803,10 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
 
       const agent = agentId ? await getAgentFromContext({ mastra, agentId, requestContext }) : undefined;
       if (agent && (await isGatewayAgentAsync(agent))) {
-        throw new HTTPException(501, { message: 'Thread transfer is not supported for gateway agents' });
+        throw new HTTPException(501, {
+          message: 'Thread transfer is not supported for gateway agents',
+          code: MASTRA_ERROR_CODES.MEMORY_OPERATION_UNSUPPORTED,
+        });
       }
 
       // Resolve either the agent's memory or, for agent-less (storage-backed) memory,
@@ -1736,7 +1814,10 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext, allowMissingAgent: true });
       const memoryStore = memory ? undefined : await getStorageFromContext({ mastra })?.getStore('memory');
       if (!memory && !memoryStore) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       const sourceThread = memory
@@ -1793,7 +1874,10 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
       const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
       if (!thread) {
@@ -1812,6 +1896,7 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
         if (!(await memory.supportsAtomicWorkingMemoryMerge())) {
           throw new HTTPException(400, {
             message: 'Working memory merge is not supported by the configured storage adapter',
+            code: MASTRA_ERROR_CODES.MEMORY_OPERATION_UNSUPPORTED,
           });
         }
         try {
@@ -1823,7 +1908,7 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
           });
         } catch (error) {
           if (error instanceof MastraError && error.category === ErrorCategory.USER) {
-            throw new HTTPException(400, { message: error.message });
+            throw new HTTPException(400, { message: error.message, code: MASTRA_ERROR_CODES.MEMORY_INVALID_REQUEST });
           }
           throw error;
         }
@@ -1859,7 +1944,10 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
 
       if (messageIds === undefined || messageIds === null) {
-        throw new HTTPException(400, { message: 'messageIds is required' });
+        throw new HTTPException(400, {
+          message: 'messageIds is required',
+          code: MASTRA_ERROR_CODES.MEMORY_INVALID_REQUEST,
+        });
       }
 
       // Normalize messageIds to the format expected by deleteMessages
@@ -1887,11 +1975,17 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
       if (effectiveResourceId && stringIds.length > 0) {
         const storage = memory?.storage || getStorageFromContext({ mastra });
         if (!storage) {
-          throw new HTTPException(403, { message: 'Access denied: unable to verify message ownership' });
+          throw new HTTPException(403, {
+            message: 'Access denied: unable to verify message ownership',
+            code: MASTRA_ERROR_CODES.MESSAGE_ACCESS_DENIED,
+          });
         }
         const memoryStore = await storage.getStore('memory');
         if (!memoryStore) {
-          throw new HTTPException(400, { message: 'Memory is not initialized' });
+          throw new HTTPException(400, {
+            message: 'Memory is not initialized',
+            code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+          });
         }
 
         await enforceDeleteMessagesThreadAccess({
@@ -1904,11 +1998,17 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
       } else if (stringIds.length > 0) {
         const storage = memory?.storage || getStorageFromContext({ mastra });
         if (!storage) {
-          throw new HTTPException(400, { message: 'Memory is not initialized' });
+          throw new HTTPException(400, {
+            message: 'Memory is not initialized',
+            code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+          });
         }
         const memoryStore = await storage.getStore('memory');
         if (!memoryStore) {
-          throw new HTTPException(400, { message: 'Memory is not initialized' });
+          throw new HTTPException(400, {
+            message: 'Memory is not initialized',
+            code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+          });
         }
         await enforceDeleteMessagesThreadAccess({
           mastra,
@@ -1928,10 +2028,16 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
           if (memoryStore) {
             await memoryStore.deleteMessages(stringIds);
           } else {
-            throw new HTTPException(400, { message: 'Memory is not initialized' });
+            throw new HTTPException(400, {
+              message: 'Memory is not initialized',
+              code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+            });
           }
         } else {
-          throw new HTTPException(400, { message: 'Memory is not initialized' });
+          throw new HTTPException(400, {
+            message: 'Memory is not initialized',
+            code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+          });
         }
       }
 
@@ -1975,7 +2081,10 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
 
       const memory = await getMemoryFromContext({ mastra, agentId, requestContext });
       if (!memory) {
-        throw new HTTPException(400, { message: 'Memory is not initialized' });
+        throw new HTTPException(400, {
+          message: 'Memory is not initialized',
+          code: MASTRA_ERROR_CODES.MEMORY_NOT_CONFIGURED,
+        });
       }
 
       // Get memory configuration first to check scope

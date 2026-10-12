@@ -6,6 +6,7 @@ import type * as ToolProviderModule from '@mastra/core/tool-provider';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
 import { MASTRA_USER_KEY } from '../constants';
+import { MASTRA_ERROR_CODES } from '../http-errors';
 import { HTTPException } from '../http-exception';
 import {
   authorizeToolProviderBodySchema,
@@ -71,7 +72,10 @@ async function loadToolProviderModule() {
 
 function requireEditor(editor: IMastraEditor | undefined): IMastraEditor {
   if (!editor) {
-    throw new HTTPException(500, { message: 'Editor is not configured' });
+    throw new HTTPException(500, {
+      message: 'Editor is not configured',
+      code: MASTRA_ERROR_CODES.EDITOR_NOT_CONFIGURED,
+    });
   }
   return editor;
 }
@@ -82,7 +86,7 @@ async function resolveProvider(editor: IMastraEditor, providerId: string): Promi
   } catch (error) {
     const { UnknownToolProviderError } = await loadToolProviderModule();
     if (error instanceof UnknownToolProviderError) {
-      throw new HTTPException(404, { message: error.message });
+      throw new HTTPException(404, { message: error.message, code: MASTRA_ERROR_CODES.TOOL_PROVIDER_NOT_FOUND });
     }
     throw error;
   }
@@ -240,11 +244,17 @@ export const GET_TOOL_PROVIDER_TOOL_SCHEMA_ROUTE = createRoute({
       const editor = requireEditor(mastra.getEditor());
       const provider = await resolveProvider(editor, providerId);
       if (!provider.getToolSchema) {
-        throw new HTTPException(404, { message: `Tool provider ${providerId} does not support getToolSchema` });
+        throw new HTTPException(404, {
+          message: `Tool provider ${providerId} does not support getToolSchema`,
+          code: MASTRA_ERROR_CODES.TOOL_PROVIDER_OPERATION_UNSUPPORTED,
+        });
       }
       const schema = await provider.getToolSchema(toolSlug);
       if (!schema) {
-        throw new HTTPException(404, { message: `Schema for tool ${toolSlug} not found in provider ${providerId}` });
+        throw new HTTPException(404, {
+          message: `Schema for tool ${toolSlug} not found in provider ${providerId}`,
+          code: MASTRA_ERROR_CODES.TOOL_SCHEMA_NOT_FOUND,
+        });
       }
       return schema;
     } catch (error) {
@@ -273,7 +283,10 @@ export const AUTHORIZE_TOOL_PROVIDER_ROUTE = createRoute({
       const editor = requireEditor(mastra.getEditor());
       const provider = await resolveProvider(editor, providerId);
       if (!provider.authorize) {
-        throw new HTTPException(400, { message: `Tool provider ${providerId} does not support authorize` });
+        throw new HTTPException(400, {
+          message: `Tool provider ${providerId} does not support authorize`,
+          code: MASTRA_ERROR_CODES.TOOL_PROVIDER_OPERATION_UNSUPPORTED,
+        });
       }
       // Per-pin scope:
       // - 'shared' buckets under SHARED_BUCKET_ID.
@@ -293,6 +306,7 @@ export const AUTHORIZE_TOOL_PROVIDER_ROUTE = createRoute({
         if (typeof callerResourceId !== 'string' || callerResourceId.length === 0) {
           throw new HTTPException(400, {
             message: `Cannot authorize caller-supplied connection: request context has no '${MASTRA_RESOURCE_ID_KEY}'. Set requestContext.set('${MASTRA_RESOURCE_ID_KEY}', <userId>) before calling /authorize.`,
+            code: MASTRA_ERROR_CODES.TOOL_PROVIDER_CONNECTION_INVALID,
           });
         }
       }
@@ -367,7 +381,10 @@ export const GET_TOOL_PROVIDER_AUTH_STATUS_ROUTE = createRoute({
       const editor = requireEditor(mastra.getEditor());
       const provider = await resolveProvider(editor, providerId);
       if (!provider.getAuthStatus) {
-        throw new HTTPException(400, { message: `Tool provider ${providerId} does not support getAuthStatus` });
+        throw new HTTPException(400, {
+          message: `Tool provider ${providerId} does not support getAuthStatus`,
+          code: MASTRA_ERROR_CODES.TOOL_PROVIDER_OPERATION_UNSUPPORTED,
+        });
       }
       const status = await provider.getAuthStatus(authId);
       return { status };
@@ -396,7 +413,10 @@ export const TOOL_PROVIDER_CONNECTION_STATUS_ROUTE = createRoute({
       const editor = requireEditor(mastra.getEditor());
       const provider = await resolveProvider(editor, providerId);
       if (!provider.getConnectionStatus) {
-        throw new HTTPException(400, { message: `Tool provider ${providerId} does not support getConnectionStatus` });
+        throw new HTTPException(400, {
+          message: `Tool provider ${providerId} does not support getConnectionStatus`,
+          code: MASTRA_ERROR_CODES.TOOL_PROVIDER_OPERATION_UNSUPPORTED,
+        });
       }
       const result = await provider.getConnectionStatus({ items });
       return { items: result };
@@ -437,7 +457,10 @@ export const LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE = createRoute({
       const editor = requireEditor(mastra.getEditor());
       const provider = await resolveProvider(editor, providerId);
       if (!provider.listConnections) {
-        throw new HTTPException(400, { message: `Tool provider ${providerId} does not support listConnections` });
+        throw new HTTPException(400, {
+          message: `Tool provider ${providerId} does not support listConnections`,
+          code: MASTRA_ERROR_CODES.TOOL_PROVIDER_OPERATION_UNSUPPORTED,
+        });
       }
       const callerAuthorId = resolveOwnerId(requestContext, mastra.getLogger());
       const isAdmin = requestContext ? hasAdminBypass(requestContext, TOOL_PROVIDERS_RESOURCE) : false;
@@ -617,6 +640,7 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       if (store && !matched && !isAdmin) {
         throw new HTTPException(403, {
           message: 'You do not have permission to disconnect this connection',
+          code: MASTRA_ERROR_CODES.TOOL_PROVIDER_CONNECTION_ACCESS_DENIED,
         });
       }
 
@@ -625,6 +649,7 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       if (!isShared && effectiveOwner !== callerAuthorId && !isAdmin) {
         throw new HTTPException(403, {
           message: 'You do not have permission to disconnect this connection',
+          code: MASTRA_ERROR_CODES.TOOL_PROVIDER_CONNECTION_ACCESS_DENIED,
         });
       }
 
@@ -633,6 +658,7 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
         if (usage > 0) {
           throw new HTTPException(409, {
             message: `Connection ${connectionId} is still pinned by ${usage} agent(s). Pass ?force=true to disconnect anyway.`,
+            code: MASTRA_ERROR_CODES.TOOL_PROVIDER_CONNECTION_IN_USE,
           });
         }
       }
@@ -690,6 +716,7 @@ export const UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       if (!store) {
         throw new HTTPException(500, {
           message: 'Tool provider connections storage is not configured',
+          code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -698,6 +725,7 @@ export const UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       if (!match) {
         throw new HTTPException(404, {
           message: `Connection ${connectionId} not found for provider ${providerId}`,
+          code: MASTRA_ERROR_CODES.TOOL_PROVIDER_CONNECTION_NOT_FOUND,
         });
       }
 
@@ -705,6 +733,7 @@ export const UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
       if (!isShared && match.authorId !== callerAuthorId && !isAdmin) {
         throw new HTTPException(403, {
           message: 'You do not have permission to update this connection',
+          code: MASTRA_ERROR_CODES.TOOL_PROVIDER_CONNECTION_ACCESS_DENIED,
         });
       }
 
@@ -770,6 +799,7 @@ export const GET_TOOL_PROVIDER_CONNECTION_USAGE_ROUTE = createRoute({
       if (store && !matched && !isAdmin) {
         throw new HTTPException(403, {
           message: 'You do not have permission to view usage for this connection',
+          code: MASTRA_ERROR_CODES.TOOL_PROVIDER_CONNECTION_ACCESS_DENIED,
         });
       }
 
@@ -778,6 +808,7 @@ export const GET_TOOL_PROVIDER_CONNECTION_USAGE_ROUTE = createRoute({
       if (!isShared && effectiveOwner !== callerAuthorId && !isAdmin) {
         throw new HTTPException(403, {
           message: 'You do not have permission to view usage for this connection',
+          code: MASTRA_ERROR_CODES.TOOL_PROVIDER_CONNECTION_ACCESS_DENIED,
         });
       }
 
