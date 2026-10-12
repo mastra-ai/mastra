@@ -1,5 +1,7 @@
 import deepEqual from 'fast-deep-equal';
 import { z } from 'zod/v4';
+import { MastraFGAPermissions } from '../../../auth/ee';
+import type { MastraFGAPermissionInput } from '../../../auth/ee';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import type { SystemMessage } from '../../../llm';
 import type { MastraMemory } from '../../../memory/memory';
@@ -65,6 +67,7 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
   isResume?: boolean;
+  authorizeMemory: (permission: MastraFGAPermissionInput, threadId: string) => Promise<void>;
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
@@ -80,6 +83,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
   memoryConfig,
   memory,
   isResume,
+  authorizeMemory,
   runScope,
 }: PrepareMemoryStepOptions<OUTPUT>) {
   return createStep({
@@ -165,7 +169,8 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
       }
 
       let threadObject: StorageThreadType | undefined = undefined;
-      const existingThread = await memory.getThreadById({ threadId: thread?.id });
+      await authorizeMemory(MastraFGAPermissions.MEMORY_READ, thread.id);
+      const existingThread = await memory.getThreadById({ threadId: thread.id });
 
       if (existingThread) {
         assertThreadOwnedByResource({
@@ -178,6 +183,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           (!existingThread.metadata && thread.metadata) ||
           (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
         ) {
+          await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id);
           threadObject = await memory.saveThread({
             thread: { ...existingThread, metadata: { ...(existingThread.metadata ?? {}), ...thread.metadata } },
             memoryConfig,
@@ -190,6 +196,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         // This is required because output processors (like MessageHistory) may call
         // saveMessages() before executeOnFinish(), and some storage backends (like PostgresStore)
         // validate that the thread exists before saving messages.
+        await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id);
         threadObject = await memory.createThread({
           threadId: thread?.id,
           metadata: thread.metadata,

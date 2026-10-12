@@ -61,7 +61,13 @@ import type {
   ToolInvocationUIPartWithMeta,
 } from '../types';
 
-import { mergeAbortSignals, parseClientRequestContext, requestContextQueryString, toQueryParams } from '../utils';
+import {
+  isTerminalReconnectError,
+  mergeAbortSignals,
+  parseClientRequestContext,
+  requestContextQueryString,
+  toQueryParams,
+} from '../utils';
 import { getClientToolModelOutput } from '../utils/client-tool-model-output';
 import { processClientTools } from '../utils/process-client-tools';
 import { processMastraNetworkStream, processMastraStream } from '../utils/process-mastra-stream';
@@ -946,8 +952,10 @@ export class Agent extends BaseResource {
               response = await requestSubscription();
               break;
             } catch (error) {
-              if (isClosed() || attempts >= reconnectOptions.maxRetries) {
-                if (isClosed()) return;
+              if (isClosed()) return;
+              // Auth denials and other client errors won't resolve by resubscribing;
+              // 408/429 stay retryable.
+              if (isTerminalReconnectError(error) || attempts >= reconnectOptions.maxRetries) {
                 throw error;
               }
             }
@@ -3275,6 +3283,10 @@ export class Agent extends BaseResource {
    * Only supported when the target agent is a durable agent (createDurableAgent).
    * The server rebuilds the runtime state from the persisted snapshot, replays
    * past chunks, and continues the loop to completion.
+   *
+   * Responds with 409 when the run is not orphaned: another execution still
+   * owns it (retry once its lease lapses), it is already being recovered, or it
+   * is suspended (use `resumeStream` instead). To follow a live run, use `observe`.
    */
   async recover(params: RecoverParams): Promise<
     Response & {

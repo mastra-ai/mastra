@@ -48,6 +48,52 @@ export function getFactorySessionAddress(requestContext: RequestContext | undefi
   return { orgId, ...coordinates };
 }
 
+/**
+ * Read the session's factory scoping off controller state: the project whose
+ * shared settings row applies to its runs, plus the org rung that row is keyed
+ * by (`factoryOrgId` is seeded at session start and is authoritative for
+ * downstream identity reads — the owner id is a user, never an org).
+ */
+export function readFactorySessionScope(
+  requestContext: RequestContext | undefined,
+): { factoryProjectId: string; factoryOrgId?: string } | null {
+  if (!requestContext || typeof requestContext.get !== 'function') return null;
+  const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
+  const state = context?.getState();
+  const factoryProjectId = state?.factoryProjectId;
+  if (typeof factoryProjectId !== 'string' || factoryProjectId.length === 0) return null;
+  const factoryOrgId = state?.factoryOrgId;
+  return {
+    factoryProjectId,
+    ...(typeof factoryOrgId === 'string' && factoryOrgId.length > 0 ? { factoryOrgId } : {}),
+  };
+}
+
+/**
+ * Read the active run binding for this session when controller state has lost
+ * `factoryProjectId` — a crash-recovered session ("Continue") is recreated with
+ * empty state, so the binding table is the only remaining source of the project
+ * whose shared settings row applies to the run. Read-only, unlike
+ * `resolveFactorySessionAddress`: it neither heals state nor touches source
+ * control, so input processors can call it before any tool has run.
+ */
+export async function findSessionRunBinding(
+  requestContext: RequestContext | undefined,
+  storage: Pick<WorkItemsStorage, 'findActiveRunBindingByThread'>,
+): Promise<FactoryRunBindingRecord | null> {
+  if (!requestContext || typeof requestContext.get !== 'function') return null;
+  const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
+  if (!context?.threadId || !context.resourceId) return null;
+  const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
+  if (!orgId) return null;
+  return storage.findActiveRunBindingByThread({
+    orgId,
+    threadId: context.threadId,
+    resourceId: context.resourceId,
+    sessionId: context.resourceId,
+  });
+}
+
 export interface FactorySessionAddressResolution {
   address: FactoryRunBindingAddress;
   /** Present only when the address was recovered from the binding table. */

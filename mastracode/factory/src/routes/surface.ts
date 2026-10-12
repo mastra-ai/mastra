@@ -121,6 +121,8 @@ export interface FactoryApiRoutesDeps {
   intakeReady: boolean;
   factoryReady: boolean;
   knowledgeEnabled: boolean;
+  /** Organization this deployment serves; its admins may edit deployment-wide settings. */
+  deploymentOrganizationId?: string;
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   knowledgeKey?: string;
@@ -635,6 +637,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           memorySettings: deps.domains.memorySettings,
           sessionRetirement: deps.sessionRetirement,
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
+          ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
         });
   // Absent known integrations still get their disabled-status stub.
   const absentStubs = ['github', 'linear', 'jira']
@@ -667,7 +670,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
             factoryProjectId: request.factoryProjectId,
             sessionId: request.sessionId,
           }),
-        deps.domains.memorySettings,
         deps.domains.intake,
       )
     : undefined;
@@ -722,6 +724,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
       features: { knowledge: deps.knowledgeEnabled },
+      deploymentOrganizationId: deps.deploymentOrganizationId,
       deploymentProviders: deps.deploymentModelProviders,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
@@ -730,7 +733,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       auth: deps.auth,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,
-      memorySettings: deps.domains.memorySettings,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
     }).routes(),
     ...new SkillRoutes({

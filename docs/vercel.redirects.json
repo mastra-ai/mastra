@@ -2219,6 +2219,11 @@
       "source": "/reference/client-js/telemetry",
       "destination": "/reference/client-js/observability",
       "permanent": true
+    },
+    {
+      "source": "/reference/agents/getTools",
+      "destination": "/reference/agents/listTools",
+      "permanent": true
     }
   ]
 }

@@ -115,7 +115,20 @@ const result = await sandbox.executeCommand('cat', ['/workspace/state.json'])
 
 When `sandboxId` is set, `environmentId` isn't required because the sandbox already exists.
 
+Read the platform's id for the running sandbox from the `sandboxId` property after `start()` and persist it for the next reattach. The property is `undefined` until the sandbox has started in the current process. The option passed to the constructor is a hint for `start()`. Before `start()` runs, `getInfo()` answers from local state and doesn't ask the platform about the hint. Under the default `reattach: 'best-effort'`, if the platform no longer knows the id, `start()` falls through to a fresh provision keyed by the sandbox's logical `id`. That fallback needs `environmentId` (or `MASTRA_ENVIRONMENT_ID`), so pass it whenever a hint might be stale; without it, `start()` throws `environmentId is required`.
+
 `start()` reports `{ outcome: 'connected' }` on reattach and `{ outcome: 'created' }` on a fresh provision (including a checkpoint-recovered boot, which is a new VM even when its filesystem was restored). See [`start()`](/reference/workspace/sandbox#start) for the shared contract.
+
+When a fresh sandbox would silently lose state your app depends on, set `reattach: 'required'`:
+
+```typescript
+const sandbox = new PlatformSandbox({
+  sandboxId: 'sbx_abc123',
+  reattach: 'required',
+})
+```
+
+With `reattach: 'required'`, a reattach target the platform reports as missing (404), gone (410), or destroyed rejects `start()` with a `SandboxError` whose `code` is `SANDBOX_REATTACH_FAILED`, and no sandbox is provisioned. The error's `details` include `provider`, `sandboxId`, `logicalId` (the sandbox's logical `id`), and `reason`. Other errors propagate unchanged. To start fresh, clear your persisted `sandboxId` and construct the sandbox without it. Clones inherit the `reattach` setting.
 
 ### Reusable templates
 
@@ -338,6 +351,14 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     isOptional: true,
   },
   {
+    name: 'reattach',
+    type: "'best-effort' | 'required'",
+    description:
+      "What start() does when sandboxId is set but the platform reports that sandbox as missing, gone, or destroyed. 'best-effort' provisions a fresh sandbox. 'required' throws a SandboxError with code SANDBOX_REATTACH_FAILED instead of provisioning.",
+    isOptional: true,
+    defaultValue: "'best-effort'",
+  },
+  {
     name: 'seedCheckpointName',
     type: 'string',
     description:
@@ -457,7 +478,7 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     name: 'start',
     type: '() => Promise<SandboxStartResult>',
     description:
-      'Provision the remote sandbox, or reattach when sandboxId was passed to the constructor. Idempotent once the sandbox is running. A destroyed reattach target falls through to a fresh provision.',
+      "Provision the remote sandbox, or reattach when sandboxId was passed to the constructor. Idempotent once the sandbox is running. A destroyed reattach target falls through to a fresh provision under the default reattach: 'best-effort', and throws SANDBOX_REATTACH_FAILED under reattach: 'required'.",
   },
   {
     name: 'destroy',
@@ -468,7 +489,8 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   {
     name: 'stop',
     type: '() => Promise<void>',
-    description: 'Alias for destroy().',
+    description:
+      "Release this process's lease on the sandbox without touching the remote one. The sandbox keeps running under the environment's idle policy and sandboxId is kept, so a later start() reattaches. Only destroy() releases the sandbox.",
   },
   {
     name: 'executeCommand',

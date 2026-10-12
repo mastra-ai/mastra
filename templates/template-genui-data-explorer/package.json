@@ -58,6 +58,7 @@
   },
   "overrides": {
     "@graphql-tools/utils@<12.0.1": "12.0.3",
+    "@whatwg-node/fetch@<0.12.1": "0.12.1",
     "katex@<0.18.2": "0.18.2",
     "tinypool@<2.1.2": "2.1.2",
     "undici@<6.29.0": "6.29.0"

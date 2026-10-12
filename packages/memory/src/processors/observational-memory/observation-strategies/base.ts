@@ -1,14 +1,21 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { MessageHistory } from '@mastra/core/processors';
-import type { MemoryStorage } from '@mastra/core/storage';
+import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
 import type { Memory } from '../../..';
+import { getOMLockKey, runOMCommit } from '../commit-queue';
 import { omDebug, omError } from '../debug';
 import { formatOmError, getOmFailureMetadata, isOmModelExecutionError } from '../error';
-import { getObservableMessages, stripThreadTags } from '../message-utils';
+import {
+  findLastCompletedObservationBoundary,
+  getObservableMessages,
+  getUnobservedParts,
+  stripThreadTags,
+} from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
+import { getLineageHead } from '../record-lineage';
 import type { ReflectorRunner } from '../reflector-runner';
 import { withRetry } from '../retry';
 import { stripSubconsciousSignals } from '../subconscious/origin';
@@ -21,10 +28,57 @@ import type {
   ResolvedReflectionConfig,
 } from '../types';
 
-import type { ObservationRunOpts, ObservationRunResult, ObserverOutput, ProcessedObservation } from './types';
+import type {
+  ObservationPersistOutcome,
+  ObservationRunOpts,
+  ObservationRunResult,
+  ObserverOutput,
+  ProcessedObservation,
+} from './types';
 
 /** Module-level xxhash singleton — loaded once, shared across all strategy instances. */
 const hasherPromise = xxhash();
+
+/** Recompose-and-retry rounds for an observation commit that hit a retired or changed head. */
+const MAX_HEAD_COMMIT_RETRIES = 3;
+
+const OBSERVATION_LIFECYCLE_MARKERS = new Set([
+  'data-om-observation-start',
+  'data-om-observation-end',
+  'data-om-observation-failed',
+]);
+
+function isOmPart(part: unknown): boolean {
+  return String((part as { type?: string } | undefined)?.type ?? '').startsWith('data-om-');
+}
+
+/**
+ * Index in `message` right after this cycle's start marker (and any OM parts directly after it),
+ * or -1 when the message doesn't carry it.
+ */
+function afterOwnStartMarker(message: MastraDBMessage, marker: { type: string; data: unknown }): number {
+  const cycleId = (marker.data as { cycleId?: string } | undefined)?.cycleId;
+  const startType = marker.type.startsWith('data-om-buffering-')
+    ? 'data-om-buffering-start'
+    : 'data-om-observation-start';
+  if (!cycleId || marker.type === startType) return -1;
+  const parts = message.content?.parts ?? [];
+  const start = parts.findIndex((part: any) => part?.type === startType && part?.data?.cycleId === cycleId);
+  if (start === -1) return -1;
+  let index = start + 1;
+  while (index < parts.length && isOmPart(parts[index])) index++;
+  return index;
+}
+
+/** True when the message has parts no completed observation boundary covers (OM markers aside). */
+function hasUnobservedContent(message: MastraDBMessage): boolean {
+  return getUnobservedParts(message).some(part => !isOmPart(part));
+}
+
+function isObservationLifecycleMarker(marker: { type: string; data: unknown }): boolean {
+  const operationType = (marker.data as { operationType?: string } | undefined)?.operationType;
+  return OBSERVATION_LIFECYCLE_MARKERS.has(marker.type) && operationType !== 'reflection';
+}
 
 /**
  * Dependencies injected into observation strategies.
@@ -53,6 +107,11 @@ export interface StrategyDeps {
     recordId?: string;
   }) => Promise<void>;
   emitDebugEvent: (event: ObservationDebugEvent) => void;
+  /** Applies `observation.previousObserverTokens` to the previous observations the Observer sees. */
+  prepareObserverContext: (
+    existingObservations: string | undefined,
+    record?: ObservationalMemoryRecord | null,
+  ) => { context: string | undefined; wasTruncated: boolean };
 }
 
 /**
@@ -110,17 +169,49 @@ export abstract class ObservationStrategy {
         }
       }
 
-      const { messages, existingObservations } = await this.prepare();
+      const { messages, existingObservations, contextRecord } = await this.prepare();
+      if (messages.length === 0) {
+        // Nothing is unobserved (e.g. a stale persisted pending count met the threshold). Observing
+        // nothing would still commit a cursor at the current time, past any message that is
+        // timestamped earlier but not yet observed.
+        return { observed: false };
+      }
       const observationMessages = stripSubconsciousSignals(messages);
       await this.emitStartMarkers(cycleId);
-      const output = await this.observe(existingObservations, observationMessages);
-      const processed = await this.process(output, existingObservations);
-      this.settleObservationCommit(await this.persist(processed));
+      // The Observer sees the budgeted context; composition below still builds on the full text.
+      const observerContext = this.deps.prepareObserverContext(existingObservations, contextRecord ?? record);
+      const output = await this.observe(
+        observerContext.context ?? '',
+        observationMessages,
+        observerContext.wasTruncated,
+      );
+      let processed = await this.process(output, existingObservations);
+      let committedRecord = record;
+      const outcome = await this.persist(processed);
+      // A cycle another instance already covered wrote nothing, so there is nothing new to curate.
+      this.settleObservationCommit(outcome?.status === 'committed' && !outcome.alreadyCovered);
+      if (outcome?.status === 'not-committed') {
+        // Nothing landed on the head: no completion marker, no reflection, and the caller
+        // keeps the source messages in context (`observed: false`).
+        omDebug(`[OM:observe] cycle ${cycleId} not committed: ${outcome.reason}`);
+        await this.emitFailedMarkers(cycleId, new Error(`Observation not committed: ${outcome.reason}`));
+        return { observed: false, usage: output.usage, providerMetadata: output.providerMetadata };
+      }
+      if (outcome?.status === 'committed') {
+        processed = outcome.processed;
+        committedRecord = outcome.record;
+      }
       await this.emitEndMarkers(cycleId, processed);
 
       if (this.needsReflection) {
         await this.deps.reflector.maybeReflect({
-          record: { ...record, activeObservations: processed.observations },
+          // The reflection snapshot is the text this cycle committed; storage keeps anything
+          // appended to it while the Reflector runs.
+          record: {
+            ...committedRecord,
+            activeObservations: processed.observations,
+            observationTokenCount: processed.observationTokens,
+          },
           observationTokens: processed.observationTokens,
           threadId,
           writer,
@@ -129,6 +220,7 @@ export abstract class ObservationStrategy {
           mainAgent: this.opts.agent,
           sendSignal: this.opts.sendSignal,
           sendStateSignal: this.opts.sendStateSignal,
+          currentModel: this.opts.currentModel,
           reflectionHooks,
           trigger: this.opts.trigger,
           requestContext,
@@ -153,7 +245,12 @@ export abstract class ObservationStrategy {
             threadId,
           },
         };
-        await this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId).catch(() => {});
+        const observed = this.getObservedMessagesForThread(threadId);
+        await (
+          observed?.length
+            ? this.persistMarkerToObservedMessage(failedMarkerForStorage, observed, threadId, this.opts.resourceId)
+            : this.persistMarkerToStorage(failedMarkerForStorage, threadId, this.opts.resourceId)
+        ).catch(() => {});
         if (abortSignal?.aborted) throw error;
         omError('[OM] Observation failed', error);
         return { observed: false, error: error instanceof Error ? error : new Error(String(error)) };
@@ -186,6 +283,13 @@ export abstract class ObservationStrategy {
     }
 
     const markerThreadId = (marker.data as { threadId?: string } | undefined)?.threadId ?? this.opts.threadId;
+    const observed = isObservationLifecycleMarker(marker)
+      ? this.getObservedMessagesForThread(markerThreadId)
+      : undefined;
+    if (observed?.length) {
+      await this.persistMarkerToObservedMessage(marker, observed, markerThreadId, this.opts.resourceId);
+      return;
+    }
     // Prefer the live MessageList (markers land on the pending assistant message
     // before it reaches storage); fall back to the storage scan when no list was
     // provided or the list contains no assistant message yet.
@@ -332,6 +436,93 @@ export abstract class ObservationStrategy {
     return `${existingObservations}${boundary}${newThreadSection}`;
   }
 
+  /**
+   * Commit composed observations to the current head generation.
+   *
+   * The write is conditional on the head text the observations were composed from. When the
+   * target generation was retired by a reflection, or another writer changed the text, the
+   * observations are recomposed against the fresh head and the commit is retried (bounded).
+   * When the fresh head's `observedMessageIds` already include every message this cycle observed
+   * (another instance observed them first), nothing is written and `alreadyCovered` is set, so
+   * callers advance cursors and markers without adding a second copy of the same observations.
+   * The cursor alone is not proof: an activation can move it past a message it never covered.
+   * Returns null when no commit landed — callers must then leave cursors, markers, and the live
+   * context untouched.
+   */
+  protected async commitActiveObservationsToHead(opts: {
+    processed: ProcessedObservation;
+    composedFrom: string;
+    target: ObservationalMemoryRecord;
+    recompose: (head: ObservationalMemoryRecord) => Promise<ProcessedObservation>;
+    /** Ids of the messages this cycle observed. */
+    cycleMessageIds: string[];
+  }): Promise<{
+    processed: ProcessedObservation;
+    record: ObservationalMemoryRecord;
+    alreadyCovered?: boolean;
+  } | null> {
+    let { processed, composedFrom, target } = opts;
+    for (let attempt = 0; attempt <= MAX_HEAD_COMMIT_RETRIES; attempt++) {
+      // Inside the queue slot, compose against the head as it is now, so in-process writers
+      // never conflict; the conditional write still guards against other processes.
+      const result = await this.runCommit(async () => {
+        // Never the record a clear left behind: a new record created since is not this lineage.
+        const head = await getLineageHead(this.storage, target);
+        if (!head) return null;
+        if (head.id !== target.id || (head.activeObservations ?? '') !== composedFrom) {
+          if (this.headCoversCycle(head, opts.cycleMessageIds)) {
+            omDebug(`[OM:observe] head ${head.id} already covers this cycle's messages; skipping the duplicate commit`);
+            target = head;
+            return { applied: true as const, alreadyCovered: true as const };
+          }
+          target = head;
+          composedFrom = head.activeObservations ?? '';
+          processed = await opts.recompose(head);
+        }
+        const input = {
+          id: target.id,
+          observations: processed.observations,
+          tokenCount: processed.observationTokens,
+          lastObservedAt: processed.lastObservedAt,
+          observedMessageIds: processed.observedMessageIds,
+          expectedActiveObservations: composedFrom,
+        };
+        // Cores older than commitActiveObservations only offer the void-returning write.
+        return typeof this.storage.commitActiveObservations === 'function'
+          ? await this.storage.commitActiveObservations(input)
+          : (await this.storage.updateActiveObservations(input), { applied: true as const });
+      });
+      if (!result) return null;
+      if ('alreadyCovered' in result) {
+        // Nothing of ours landed; what follows (reflection snapshot, token counts) reads the head.
+        return {
+          processed: {
+            ...processed,
+            observations: target.activeObservations ?? '',
+            observationTokens: target.observationTokenCount,
+          },
+          record: target,
+          alreadyCovered: true,
+        };
+      }
+      if (result.applied) return { processed, record: target };
+      omDebug(`[OM:observe] commit to ${target.id} not applied (${result.reason}); retrying against the head`);
+    }
+    return null;
+  }
+
+  private headCoversCycle(head: ObservationalMemoryRecord, cycleMessageIds: string[]): boolean {
+    if (cycleMessageIds.length === 0) return false;
+    const headIds = new Set(Array.isArray(head.observedMessageIds) ? head.observedMessageIds : []);
+    return cycleMessageIds.every(id => headIds.has(id));
+  }
+
+  /** Runs one storage commit in this thread's (or resource's) slot of the process-wide commit queue. */
+  protected runCommit<T>(op: () => Promise<T>): Promise<T> {
+    const { threadId, resourceId, record } = this.opts;
+    return runOMCommit(getOMLockKey(this.scope, record.threadId ?? threadId, record.resourceId ?? resourceId), op);
+  }
+
   protected async indexObservationGroups(
     observations: string,
     threadId: string,
@@ -370,6 +561,127 @@ export abstract class ObservationStrategy {
   // ── Marker persistence ──────────────────────────────────────
 
   /**
+   * Messages this cycle observed for `threadId`, or undefined when the strategy does not
+   * place observation lifecycle markers.
+   */
+  protected getObservedMessagesForThread(_threadId: string): MastraDBMessage[] | undefined {
+    return undefined;
+  }
+
+  /**
+   * Persist an observation start/end/failed marker without hiding unobserved content. A completed
+   * end marker tells `getUnobservedMessages` that everything before it in that message is observed
+   * (whatever thread the marker names), so it must only follow content this cycle observed.
+   * Placement, in order:
+   * 1. the live MessageList's newest assistant message (this turn's response or its seed), when the
+   *    list belongs to the marker's thread and the cycle observed that message or it has no
+   *    unobserved content;
+   * 2. the newest observed assistant message; a stored copy (no live list, or another instance's
+   *    message) gets the marker right after the parts this cycle observed (end/failed markers right
+   *    after this cycle's start marker), so parts added while the Observer ran stay unobserved;
+   * 3. the newest stored assistant message that is not newer than the observed range, only when it
+   *    has nothing unobserved (or already carries this cycle's start marker); otherwise no marker,
+   *    and the thread cursor alone records the cycle.
+   * Lifecycle markers never go on user messages.
+   */
+  protected async persistMarkerToObservedMessage(
+    marker: { type: string; data: unknown },
+    observed: MastraDBMessage[],
+    threadId: string,
+    resourceId?: string,
+  ): Promise<void> {
+    const observedIds = new Set(observed.map(m => m.id));
+    const list = threadId === this.opts.threadId ? this.opts.messageList : undefined;
+    const listMessages = list ? getObservableMessages(list) : [];
+    const live = [...listMessages].reverse().find(m => m.role === 'assistant');
+    if (live && (observedIds.has(live.id) || !hasUnobservedContent(live))) {
+      await this.attachMarker(marker, live, live.content.parts.length, threadId, resourceId);
+      return;
+    }
+
+    const target = [...observed].reverse().find(m => m.role === 'assistant');
+    if (target) {
+      const fromList = listMessages.find(m => m.id === target.id);
+      if (fromList) {
+        await this.attachMarker(marker, fromList, fromList.content.parts.length, threadId, resourceId);
+        return;
+      }
+      try {
+        const stored = (await this.storage.listMessagesById({ messageIds: [target.id] })).messages[0];
+        if (stored?.content?.parts && Array.isArray(stored.content.parts)) {
+          const afterStart = afterOwnStartMarker(stored, marker);
+          const index = afterStart !== -1 ? afterStart : this.insertionAfterObserved(stored, target);
+          await this.attachMarker(marker, stored, index, threadId, resourceId);
+        }
+      } catch (e) {
+        omDebug(`[OM:persistMarkerToObservedMessage] failed to load marker target: ${e}`);
+      }
+      return;
+    }
+
+    const observedTimes = observed.filter(m => m.createdAt).map(m => new Date(m.createdAt!).getTime());
+    if (observedTimes.length === 0) return;
+    await this.persistMarkerToStorage(marker, threadId, resourceId, {
+      notAfter: new Date(Math.max(...observedTimes)),
+      onlyIfObserved: true,
+    });
+  }
+
+  /** What the cycle observed of each message, captured when it placed its first marker there. */
+  private readonly observedParts = new Map<string, { count: number; observedIsTrimmed: boolean }>();
+
+  /**
+   * Index in `stored` right after the parts the cycle observed in `observed` (and any OM markers
+   * directly after them). Parts are only ever appended, so the observed message's non-marker part
+   * count locates them, counted from the start of the message or, when `observed` is the trimmed
+   * copy `getUnobservedMessages` returns for an already marked message, from just after the stored
+   * copy's last completed boundary. Captured at the cycle's first marker, before the Observer runs,
+   * because `observed` may be a live reference that grows meanwhile. Falls back to the end when the
+   * stored copy has fewer parts than were observed.
+   */
+  private insertionAfterObserved(stored: MastraDBMessage, observed: MastraDBMessage): number {
+    if (!this.observedParts.has(observed.id)) {
+      this.observedParts.set(observed.id, {
+        count: (observed.content?.parts ?? []).filter(part => !isOmPart(part)).length,
+        observedIsTrimmed: findLastCompletedObservationBoundary(observed) === -1,
+      });
+    }
+    const { count, observedIsTrimmed } = this.observedParts.get(observed.id)!;
+    const parts = stored.content.parts;
+    let index = observedIsTrimmed ? findLastCompletedObservationBoundary(stored) + 1 : 0;
+    let seen = 0;
+    while (index < parts.length && seen < count) {
+      if (!isOmPart(parts[index])) seen++;
+      index++;
+    }
+    if (seen < count) return parts.length;
+    while (index < parts.length && isOmPart(parts[index])) index++;
+    return index;
+  }
+
+  private async attachMarker(
+    marker: { type: string; data: unknown },
+    msg: MastraDBMessage,
+    index: number,
+    threadId: string,
+    resourceId?: string,
+  ): Promise<void> {
+    const parts = msg.content?.parts;
+    if (!parts || !Array.isArray(parts)) return;
+    const markerData = marker.data as { cycleId?: string } | undefined;
+    const alreadyPresent =
+      markerData?.cycleId && parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+    if (!alreadyPresent) {
+      parts.splice(index, 0, marker as any);
+    }
+    try {
+      await this.messageHistory.persistMessages({ messages: [msg], threadId, resourceId });
+    } catch (e) {
+      omDebug(`[OM:persistMarkerToObservedMessage] failed to save marker to DB: ${e}`);
+    }
+  }
+
+  /**
    * Persist a marker to the last assistant message in storage.
    * Fetches messages directly from the DB so it works even when
    * no MessageList is available (e.g. async buffering ops).
@@ -378,31 +690,47 @@ export abstract class ObservationStrategy {
     marker: { type: string; data: unknown },
     threadId: string,
     resourceId?: string,
+    opts?: {
+      notAfter?: Date;
+      /** Only mark a message whose content is all observed, or that carries this cycle's start marker. */
+      onlyIfObserved?: boolean;
+      /**
+       * Only mark the message that carries this cycle's start marker. Any newer assistant message
+       * may still be streaming: the agent re-saves it whole from its own copy, which would drop the
+       * marker, and writing back the copy read here could drop content the agent saved meanwhile.
+       */
+      onCycleStartMessage?: boolean;
+    },
   ): Promise<void> {
     try {
       const result = await this.storage.listMessages({
         threadId,
         perPage: 20,
         orderBy: { field: 'createdAt', direction: 'DESC' },
+        ...(opts?.notAfter ? { filter: { dateRange: { end: opts.notAfter } } } : {}),
       });
-      const messages = result?.messages ?? [];
-      for (const msg of messages) {
-        if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-          const markerData = marker.data as { cycleId?: string } | undefined;
-          const alreadyPresent =
-            markerData?.cycleId &&
-            msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
-          if (!alreadyPresent) {
-            msg.content.parts.push(marker as any);
-          }
-          await this.messageHistory.persistMessages({
-            messages: [msg],
-            threadId,
-            resourceId,
-          });
-          return;
-        }
+      const assistants = (result?.messages ?? []).filter(
+        msg => msg?.role === 'assistant' && Array.isArray(msg.content?.parts),
+      );
+      // An end/failed marker belongs with this cycle's start marker, even if a newer assistant
+      // message was saved meanwhile; otherwise the start marker would look in progress forever.
+      const startMessage =
+        opts?.onlyIfObserved || opts?.onCycleStartMessage
+          ? assistants.find(m => afterOwnStartMarker(m, marker) !== -1)
+          : undefined;
+      const msg = opts?.onCycleStartMessage ? startMessage : (startMessage ?? assistants[0]);
+      if (!msg) return;
+      const markerData = marker.data as { cycleId?: string } | undefined;
+      const alreadyPresent =
+        markerData?.cycleId &&
+        msg.content.parts.some((p: any) => p?.type === marker.type && p?.data?.cycleId === markerData.cycleId);
+      const afterStart = afterOwnStartMarker(msg, marker);
+      // A marker after content the cycle never observed would hide it from the actor.
+      if (opts?.onlyIfObserved && afterStart === -1 && hasUnobservedContent(msg)) return;
+      if (!alreadyPresent) {
+        msg.content.parts.splice(afterStart !== -1 ? afterStart : msg.content.parts.length, 0, marker as any);
       }
+      await this.messageHistory.persistMessages({ messages: [msg], threadId, resourceId });
     } catch (e) {
       omDebug(`[OM:persistMarkerToStorage] failed to save marker to DB: ${e}`);
     }
@@ -454,11 +782,24 @@ export abstract class ObservationStrategy {
   abstract get needsLock(): boolean;
   abstract get needsReflection(): boolean;
   abstract get rethrowOnFailure(): boolean;
-  abstract prepare(): Promise<{ messages: MastraDBMessage[]; existingObservations: string }>;
-  abstract observe(existingObservations: string, messages: MastraDBMessage[]): Promise<ObserverOutput>;
+  /** `contextRecord`: the record `existingObservations` was read from, when fresher than `opts.record`. */
+  abstract prepare(): Promise<{
+    messages: MastraDBMessage[];
+    existingObservations: string;
+    contextRecord?: ObservationalMemoryRecord | null;
+  }>;
+  /** `observerContext` is the previous observations after the `previousObserverTokens` budget. */
+  abstract observe(
+    observerContext: string,
+    messages: MastraDBMessage[],
+    wasTruncated: boolean,
+  ): Promise<ObserverOutput>;
   abstract process(output: ObserverOutput, existingObservations: string): Promise<ProcessedObservation>;
-  /** Commit the processed observations. Resolves `false` when the cycle intentionally skips the commit. */
-  abstract persist(processed: ProcessedObservation): Promise<boolean>;
+  /**
+   * Commit the processed observations. Resolves `undefined` when there was nothing to commit, and
+   * `not-committed` when the commit was rejected; only `committed` settles `observationCommitted` true.
+   */
+  abstract persist(processed: ProcessedObservation): Promise<ObservationPersistOutcome | void>;
   abstract emitStartMarkers(cycleId: string): Promise<void>;
   abstract emitEndMarkers(cycleId: string, processed: ProcessedObservation): Promise<void>;
   abstract emitFailedMarkers(cycleId: string, error: unknown): Promise<void>;

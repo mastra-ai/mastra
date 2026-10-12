@@ -8,7 +8,7 @@ import { BM25Index } from '../../workspace/search/bm25';
 import type { TokenizeOptions } from '../../workspace/search/bm25';
 import type { ProcessInputStepArgs, Processor } from '../index';
 import type { LoadedToolStore, LoadedToolStoreContext } from './tool-search-stores';
-import { LegacyMapLoadedToolStore, ContextLoadedToolStore } from './tool-search-stores';
+import { LegacyMapLoadedToolStore, ContextLoadedToolStore, deriveLoadedNamesFromMessages } from './tool-search-stores';
 
 export type ToolSearchFilterPhase = 'search' | 'load' | 'active';
 
@@ -431,6 +431,8 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     stepArgs?: ProcessInputStepArgs;
     tools?: Record<string, unknown>;
     getMessages?: () => Promise<ProcessInputStepArgs['messages']>;
+    /** Messages of an in-flight run not yet saved to memory (durable recovery in a fresh process). */
+    runMessages?: ProcessInputStepArgs['messages'];
   }): Promise<Record<string, Tool<any, any>>> {
     if (args?.stepArgs) {
       const loadedNames = await this.store.getLoadedNames(this.makeStoreContext(args.stepArgs));
@@ -446,7 +448,12 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     const threadId = this.resolveThreadId(args?.requestContext);
     const messages =
       this.store instanceof ContextLoadedToolStore && args?.getMessages ? await args.getMessages() : undefined;
-    const loadedNames = await this.store.getLoadedNames({ threadId, args: undefined, messages });
+    const loadedNames = new Set(await this.store.getLoadedNames({ threadId, args: undefined, messages }));
+    // A non-context store loses its state with the process; tools this run loaded are still
+    // recorded in its own messages.
+    if (args?.runMessages?.length && !(this.store instanceof ContextLoadedToolStore)) {
+      for (const name of deriveLoadedNamesFromMessages({ messages: args.runMessages })) loadedNames.add(name);
+    }
     return this.getLoadedTools(this.catalogForStep(args?.tools), loadedNames, args?.requestContext);
   }
 

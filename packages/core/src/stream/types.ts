@@ -206,6 +206,8 @@ export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   output?: TOutput;
   dynamic?: boolean;
   title?: string;
+  /** Tool-owned metadata for UI hosts (e.g. `app` holds the MCP App UI pointer). */
+  toolMetadata?: JSONObject;
   /**
    * W3C trace context carrier for client-side tool execution.
    *
@@ -239,6 +241,7 @@ interface ToolCallInputStreamingStartPayload {
   providerMetadata?: ProviderMetadata;
   dynamic?: boolean;
   title?: string;
+  toolMetadata?: JSONObject;
   observability?: ClientObservabilityCarrier;
 }
 
@@ -1180,6 +1183,8 @@ export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPU
   totalUsage: LanguageModelUsage;
   model?: partialModel;
   runId?: string;
+  /** Model messages the run added to the conversation (the response messages). */
+  messages?: ModelMessage[];
 };
 
 /**

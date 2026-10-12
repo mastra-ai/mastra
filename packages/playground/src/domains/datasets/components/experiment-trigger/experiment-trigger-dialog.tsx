@@ -12,6 +12,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Field, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
@@ -23,7 +24,6 @@ import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
-import { ChevronRight } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { DatasetCombobox } from '../dataset-combobox';
@@ -342,7 +342,7 @@ export function ExperimentTriggerDialog({
 
           <Collapsible>
             <CollapsibleTrigger className="flex items-center gap-2 text-caption">
-              <ChevronRight className="size-4" />
+              <DisclosureChevron direction="right" className="size-4" />
               Request Context (JSON, optional)
               {hasRequestContext && (
                 <Badge size="xs" variant="blue">

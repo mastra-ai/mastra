@@ -838,6 +838,58 @@ describe('GithubIntegration OAuth', () => {
   });
 });
 
+describe('GithubIntegration open issue discovery', () => {
+  const openIssue = (number: number) => ({
+    number,
+    title: `Issue ${number}`,
+    html_url: `https://github.com/acme/api/issues/${number}`,
+    state: 'open',
+    assignees: [{ login: 'ada' }],
+    labels: ['bug', { name: 'triage' }],
+    user: { login: 'grace' },
+    created_at: '2026-10-01T00:00:00Z',
+    updated_at: '2026-10-02T00:00:00Z',
+  });
+
+  it('lists open issues without pull requests, following pages until a short page', async () => {
+    const github = new GithubIntegration(validConfig());
+    const fullPage = Array.from({ length: 100 }, (_, index) => openIssue(index + 1));
+    const listForRepo = vi
+      .fn()
+      .mockResolvedValueOnce({ data: fullPage })
+      .mockResolvedValueOnce({ data: [openIssue(101), { ...openIssue(102), pull_request: {} }] });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { listForRepo } } as any);
+
+    const issues = await github.listOpenIssueStates({ installationId: 7, repository: 'acme/api' });
+
+    expect(listForRepo).toHaveBeenCalledTimes(2);
+    expect(listForRepo).toHaveBeenLastCalledWith({ owner: 'acme', repo: 'api', state: 'open', per_page: 100, page: 2 });
+    expect(issues).toHaveLength(101);
+    expect(issues.at(-1)).toEqual({
+      number: 101,
+      title: 'Issue 101',
+      url: 'https://github.com/acme/api/issues/101',
+      state: 'open',
+      assignees: ['ada'],
+      labels: ['bug', 'triage'],
+      author: 'grace',
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-02T00:00:00Z',
+    });
+  });
+
+  it('stops after five pages', async () => {
+    const github = new GithubIntegration(validConfig());
+    const fullPage = Array.from({ length: 100 }, (_, index) => openIssue(index + 1));
+    const listForRepo = vi.fn().mockResolvedValue({ data: fullPage });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { listForRepo } } as any);
+
+    await github.listOpenIssueStates({ installationId: 7, repository: 'acme/api' });
+
+    expect(listForRepo).toHaveBeenCalledTimes(5);
+  });
+});
+
 describe('GithubIntegration workers', () => {
   const originalEnv = { ...process.env };
 

@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { Agent } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
+import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import { TITLE_PINNED_THREAD_METADATA_KEY } from '@mastra/core/memory';
 import { MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { createSkill } from '@mastra/core/skills';
@@ -41,6 +42,7 @@ import {
   reconcileObservationGroupsFromReflection,
   renderObservationGroupsForReflection,
 } from '../observation-groups';
+import { AsyncBufferObservationStrategy } from '../observation-strategies/async-buffer';
 import { getObservationsAsOf } from '../observation-utils';
 import { didProviderChange, ObservationalMemory } from '../observational-memory';
 import {
@@ -622,12 +624,13 @@ describe('Storage Operations', () => {
         config: {},
       });
 
-      // Set initial active observations
+      // Set initial active observations. The cursor sits before the buffered chunk's
+      // messages: a chunk wholly covered by the cursor is already observed and is not stored.
       await storage.updateActiveObservations({
         id: initial.id,
         observations: '- 🔴 Active observation',
         tokenCount: 50,
-        lastObservedAt: new Date(),
+        lastObservedAt: new Date('2025-01-01T09:00:00Z'),
       });
 
       // Add buffered observations as a chunk
@@ -2333,6 +2336,7 @@ describe('Observer Agent Helpers', () => {
     await Promise.allSettled([...BufferingCoordinator.asyncBufferingOps.values()]);
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -2447,6 +2451,7 @@ describe('Observer Agent Helpers', () => {
     } finally {
       BufferingCoordinator.asyncBufferingOps.clear();
       BufferingCoordinator.lastBufferedBoundary.clear();
+      BufferingCoordinator.observationBoundaryOwners.clear();
       BufferingCoordinator.lastBufferedAtTime.clear();
       BufferingCoordinator.reflectionBufferCycleIds.clear();
     }
@@ -2951,7 +2956,7 @@ describe('Observer Agent Helpers', () => {
 
       expect(textParts[0].text).toContain('## New Message History to Observe');
       expect(textParts[1].text).toBe(
-        `Dec 4 2024:\nAssistant (10:30 AM): I found two candidate vendors.\nReasoning: Comparing price and delivery windows.\nTool Call web_search (10:31 AM): query: "best local print vendors"\nTool Result web_search: {\n  "topVendor": "Acme Print",\n  "etaDays": 3\n}\nDec 5 2024:\nFile (9:00 AM): [File #1: quote.pdf]`,
+        `Dec 4 2024:\nAssistant (10:30 AM): I found two candidate vendors.\nReasoning: Comparing price and delivery windows.\nTool Call web_search (10:31 AM): query: "best local print vendors"\nTool Result web_search (10:31 AM): {\n  "topVendor": "Acme Print",\n  "etaDays": 3\n}\nDec 5 2024:\nFile (9:00 AM): [File #1: quote.pdf]`,
       );
       expect(historyMessage.content).toContainEqual(
         expect.objectContaining({
@@ -3425,7 +3430,7 @@ describe('Observer Agent Helpers', () => {
           observeAttachments: 'auto',
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: textOnlyModelFn as any }),
+        resolveModel: async () => ({ model: textOnlyModelFn as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,
@@ -3491,7 +3496,7 @@ describe('Observer Agent Helpers', () => {
           observeAttachments: 'auto',
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: 'openrouter/deepseek/deepseek-v4-flash' as any }),
+        resolveModel: async () => ({ model: 'openrouter/deepseek/deepseek-v4-flash' as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,
@@ -3552,7 +3557,7 @@ describe('Observer Agent Helpers', () => {
           observeAttachments: 'auto',
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: multimodalModelFn as any }),
+        resolveModel: async () => ({ model: multimodalModelFn as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,
@@ -3616,7 +3621,7 @@ describe('Observer Agent Helpers', () => {
           ],
         } as any,
         observedMessageIds: new Set(),
-        resolveModel: () => ({ model: 'test-model' as any }),
+        resolveModel: async () => ({ model: 'test-model' as any }),
         tokenCounter: {
           countMessages: () => 1,
         } as any,
@@ -3666,6 +3671,377 @@ describe('Observer Agent Helpers', () => {
       expect(promptText).toContain(
         'Use the prior current-task, suggested-response, and thread-title as continuity hints',
       );
+    });
+  });
+
+  describe('native auto model resolution', () => {
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('defaults each role to auto and chooses the active provider low-cost model', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const om = new ObservationalMemory({ storage: createInMemoryStorage() });
+
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          currentModel: { provider: 'openai', modelId: 'gpt-5.5', model: 'openai/gpt-5.5' },
+        }),
+      ).resolves.toMatchObject({ model: 'openai/gpt-6-luna' });
+      await expect(
+        (om as any).resolveReflectionModel(1, {
+          currentModel: { provider: 'anthropic', modelId: 'claude-opus-4-6', model: 'anthropic/claude-opus-4-6' },
+        }),
+      ).resolves.toMatchObject({ model: 'anthropic/claude-haiku-4-5' });
+    });
+
+    it('serializes auto as selection metadata without resolving it as a routed model', async () => {
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      await expect(om.getResolvedConfig()).resolves.toMatchObject({
+        observation: { model: 'auto' },
+        reflection: { model: 'auto' },
+      });
+    });
+
+    it('prefers Gemini when the Google API key is configured', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-key');
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          currentModel: { provider: 'openai', modelId: 'gpt-5.5', model: 'openai/gpt-5.5' },
+        }),
+      ).resolves.toMatchObject({ model: 'google/gemini-2.5-flash' });
+    });
+
+    it('preserves the exact actor model for unknown and custom providers', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new MockLanguageModelV2({ provider: 'custom-gateway', modelId: 'custom-model' });
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      const resolved = await (om as any).resolveObservationModel(1, {
+        currentModel: { provider: 'custom-gateway', modelId: 'custom-model', model: actorModel },
+      });
+
+      expect(resolved.model).toBe(actorModel);
+    });
+
+    it('falls back to the main agent model when no invocation model was captured', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const fallbackModel = new MockLanguageModelV2({ provider: 'custom-gateway', modelId: 'manual-fallback' });
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+      const mainAgent = { getModel: vi.fn(async () => fallbackModel) };
+
+      const resolved = await (om as any).resolveObservationModel(1, { mainAgent });
+
+      expect(mainAgent.getModel).toHaveBeenCalledOnce();
+      expect(resolved.model).toBe(fallbackModel);
+    });
+
+    it('preserves a built-in actor model instance whose sibling route is not known to be usable', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-opus-4-6' });
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      const resolved = await (om as any).resolveObservationModel(1, {
+        currentModel: { provider: 'anthropic', modelId: 'claude-opus-4-6', model: actorModel },
+      });
+
+      expect(resolved.model).toBe(actorModel);
+    });
+
+    it('maps a plain string-backed router captured by the processor path to its provider low-cost model', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new ModelRouterLanguageModel('openai/gpt-5.5');
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+      const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'thread-router-model' },
+        resourceId: 'resource-router-model',
+      });
+      const state: Record<string, unknown> = {};
+
+      await processor.processInputStep({
+        messageList: new MessageList({ threadId: 'thread-router-model', resourceId: 'resource-router-model' }),
+        messages: [],
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: actorModel,
+        retryCount: 0,
+        abort: vi.fn() as any,
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: state.__omActorModelContext }),
+      ).resolves.toMatchObject({ model: 'openai/gpt-6-luna' });
+    });
+
+    it.each([
+      {
+        configuration: 'inline routing credentials',
+        createModel: () =>
+          new ModelRouterLanguageModel({
+            id: 'anthropic/claude-opus-4-6',
+            url: 'https://configured-gateway.example/v1',
+            apiKey: 'inline-test-key',
+          }),
+      },
+      {
+        configuration: 'an explicit API transport',
+        createModel: () => new ModelRouterLanguageModel({ id: 'openai/gpt-5.5', api: 'responses' }),
+      },
+      {
+        configuration: 'a selected custom gateway',
+        createModel: () =>
+          new ModelRouterLanguageModel('anthropic/claude-opus-4-6', [
+            {
+              id: 'test-custom-gateway',
+              name: 'Test custom gateway',
+              handlesModel: (modelId: string) => modelId === 'anthropic/claude-opus-4-6',
+            } as any,
+          ]),
+      },
+      {
+        configuration: 'an older compatible Core router that does not expose its ID',
+        createModel: () => {
+          const model = new ModelRouterLanguageModel('openai/gpt-5.5');
+          Object.defineProperty(model, 'id', { value: undefined });
+          return model;
+        },
+      },
+    ])('preserves a configured router with $configuration', async ({ createModel }) => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = createModel();
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+      const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'thread-configured-router' },
+        resourceId: 'resource-configured-router',
+      });
+      const state: Record<string, unknown> = {};
+
+      await processor.processInputStep({
+        messageList: new MessageList({
+          threadId: 'thread-configured-router',
+          resourceId: 'resource-configured-router',
+        }),
+        messages: [],
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: actorModel,
+        retryCount: 0,
+        abort: vi.fn() as any,
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: state.__omActorModelContext }),
+      ).resolves.toMatchObject({ model: actorModel });
+    });
+
+    it('preserves configured model instances captured by the processor path across actor changes', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-opus-4-6' });
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+      const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', { thread: { id: 'thread-auto-model' }, resourceId: 'resource-auto-model' });
+      const state: Record<string, unknown> = {};
+
+      await processor.processInputStep({
+        messageList: new MessageList({ threadId: 'thread-auto-model', resourceId: 'resource-auto-model' }),
+        messages: [],
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: actorModel as any,
+        retryCount: 0,
+        abort: vi.fn() as any,
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: state.__omActorModelContext }),
+      ).resolves.toMatchObject({ model: actorModel });
+
+      const nextState: Record<string, unknown> = {};
+      const nextActorModel = new MockLanguageModelV2({ provider: 'openai', modelId: 'gpt-5.5' });
+      await processor.processInputStep({
+        messageList: new MessageList({ threadId: 'thread-auto-model', resourceId: 'resource-auto-model' }),
+        messages: [],
+        requestContext,
+        stepNumber: 1,
+        state: nextState,
+        steps: [],
+        systemMessages: [],
+        model: nextActorModel as any,
+        retryCount: 0,
+        abort: vi.fn() as any,
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: nextState.__omActorModelContext }),
+      ).resolves.toMatchObject({ model: nextActorModel });
+    });
+
+    it('resolves auto before an observer agent invokes the provider', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const doGenerate = vi.fn(async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        finishReason: 'stop' as const,
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        content: [{ type: 'text' as const, text: '<observations>\n- Runtime auto resolved\n</observations>' }],
+        warnings: [],
+      }));
+      const actorModel = createStreamCapableMockModel({
+        provider: 'custom-gateway',
+        modelId: 'runtime-model',
+        doGenerate,
+      });
+      const storage = createInMemoryStorage();
+      const om = new ObservationalMemory({
+        storage,
+        observation: { model: 'auto', messageTokens: 1, bufferTokens: false },
+        reflection: { model: 'auto', observationTokens: 10_000 },
+      });
+      await storage.initializeObservationalMemory({
+        threadId: 'thread-auto-runtime',
+        resourceId: 'resource-auto-runtime',
+        scope: 'resource',
+        config: {},
+      });
+
+      await om.observe({
+        threadId: 'thread-auto-runtime',
+        resourceId: 'resource-auto-runtime',
+        messages: [createTestMessage('Remember this runtime selection', 'user', 'runtime-message')],
+        agent: { getModel: vi.fn(async () => actorModel) } as any,
+      });
+
+      expect(doGenerate).toHaveBeenCalledOnce();
+      expect(actorModel.modelId).toBe('runtime-model');
+    });
+
+    it('keeps the gateway route of a labeled main model', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = Object.assign(
+        new MockLanguageModelV2({ provider: 'openrouter.chat', modelId: 'openai/gpt-5.5' }),
+        {
+          id: 'mastra/openai/gpt-5.5',
+        },
+      );
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto' });
+
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: { model: actorModel } }),
+      ).resolves.toMatchObject({ model: 'mastra/openai/gpt-6-luna' });
+    });
+
+    it('applies autoModels overrides, including the Gemini pick', async () => {
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        model: 'auto',
+        autoModels: { google: 'google/gemini-3.5-flash', anthropic: 'anthropic/claude-sonnet-4-6' },
+      });
+
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: { model: 'anthropic/claude-opus-4-6' } }),
+      ).resolves.toMatchObject({ model: 'anthropic/claude-sonnet-4-6' });
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: { model: 'google/gemini-3.1-pro-preview' } }),
+      ).resolves.toMatchObject({ model: 'google/gemini-3.5-flash' });
+
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'test-key');
+      await expect(
+        (om as any).resolveObservationModel(1, { currentModel: { model: 'openai/gpt-5.5' } }),
+      ).resolves.toMatchObject({ model: 'google/gemini-3.5-flash' });
+    });
+
+    it('routes the pick through resolveModel with the request context', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const routedModel = new MockLanguageModelV2({ provider: 'anthropic', modelId: 'claude-haiku-4-5' });
+      const resolveModel = vi.fn(async () => routedModel);
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto', resolveModel });
+      const requestContext = new RequestContext();
+
+      const resolved = await (om as any).resolveReflectionModel(1, {
+        requestContext,
+        currentModel: { model: 'anthropic/claude-opus-4-6' },
+      });
+
+      expect(resolveModel).toHaveBeenCalledWith('anthropic/claude-haiku-4-5', { requestContext });
+      expect(resolved.model).toBe(routedModel);
+    });
+
+    it('does not call resolveModel when the main model is reused', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const actorModel = new MockLanguageModelV2({ provider: 'custom-gateway', modelId: 'custom-model' });
+      const resolveModel = vi.fn();
+      const om = new ObservationalMemory({ storage: createInMemoryStorage(), model: 'auto', resolveModel });
+
+      const resolved = await (om as any).resolveObservationModel(1, { currentModel: { model: actorModel } });
+
+      expect(resolved.model).toBe(actorModel);
+      expect(resolveModel).not.toHaveBeenCalled();
+    });
+
+    it('lets a dynamic model function choose auto or a concrete model per request', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        model: ({ requestContext }: { requestContext: RequestContext }) =>
+          (requestContext.get('pinned') as string | undefined) ?? 'auto',
+      });
+      const autoContext = new RequestContext();
+      const pinnedContext = new RequestContext();
+      pinnedContext.set('pinned', 'openai/gpt-5.5');
+
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          requestContext: autoContext,
+          currentModel: { model: 'anthropic/claude-opus-4-6' },
+        }),
+      ).resolves.toMatchObject({ model: 'anthropic/claude-haiku-4-5' });
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          requestContext: pinnedContext,
+          currentModel: { model: 'anthropic/claude-opus-4-6' },
+        }),
+      ).resolves.toMatchObject({ model: 'openai/gpt-5.5' });
+      await expect(om.getResolvedConfig(autoContext)).resolves.toMatchObject({
+        observation: { model: 'auto' },
+        reflection: { model: 'auto' },
+      });
+    });
+
+    it('keeps explicit observer and reflector models independent', async () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', '');
+      const om = new ObservationalMemory({
+        storage: createInMemoryStorage(),
+        observation: { model: 'auto' },
+        reflection: { model: 'openai/gpt-5.4-mini' },
+      });
+
+      await expect(
+        (om as any).resolveObservationModel(1, {
+          currentModel: { provider: 'deepseek', modelId: 'deepseek-chat', model: 'deepseek/deepseek-chat' },
+        }),
+      ).resolves.toMatchObject({ model: 'deepseek/deepseek-v4-flash' });
+      await expect(
+        (om as any).resolveReflectionModel(1, {
+          currentModel: { provider: 'deepseek', modelId: 'deepseek-chat', model: 'deepseek/deepseek-chat' },
+        }),
+      ).resolves.toMatchObject({ model: 'openai/gpt-5.4-mini' });
     });
   });
 
@@ -3719,8 +4095,11 @@ describe('Observer Agent Helpers', () => {
       await om.observer.call(undefined, observerMessages);
       await (om as any).reflector.call('01234567890');
 
-      expect(observerResolveSpy).toHaveBeenCalledWith(om.getTokenCounter().countMessages(observerMessages));
-      expect(reflectorResolveSpy).toHaveBeenCalledWith(1);
+      expect(observerResolveSpy).toHaveBeenCalledWith(
+        om.getTokenCounter().countMessages(observerMessages),
+        expect.any(Object),
+      );
+      expect(reflectorResolveSpy).toHaveBeenCalledWith(1, expect.any(Object));
       expect(observerCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o');
       expect(reflectorCreateAgentSpy.mock.calls[0][0]).toBe('openai/gpt-4o-mini');
     });
@@ -4356,6 +4735,25 @@ describe('Reflector Agent Helpers', () => {
 
       expect(systemPrompt).toBe(systemPromptWithUndefined);
       expect(systemPrompt).toContain('observational-memory-instruction');
+    });
+
+    it('should tell the Reflector to keep concrete facts, dated changes, and negatives by default', () => {
+      const systemPrompt = buildReflectorSystemPrompt();
+      const consolidation = systemPrompt.slice(systemPrompt.indexOf('When consolidating observations:'));
+
+      expect(consolidation).toContain('Keep every concrete fact');
+      expect(consolidation).toContain('never drop specifics');
+      expect(consolidation).toContain('keep both the old and new values with their dates and say which is current');
+      expect(consolidation).toContain(
+        'Keep what the user explicitly said they have never done, do not know, or refused',
+      );
+      expect(consolidation).toContain('Prefer many short factual lines over prose summaries');
+      // Older observations may be condensed in wording, but not stripped of their facts.
+      expect(consolidation).toContain(
+        'Condense the wording of older observations more than recent ones, but keep their facts',
+      );
+      expect(consolidation).not.toContain('Condense older observations more aggressively');
+      expect(systemPrompt).not.toContain('=== CUSTOM INSTRUCTIONS ===');
     });
   });
 
@@ -5071,7 +5469,7 @@ describe('ObservationalMemory Integration', () => {
         retrieval: true,
         observation: {
           messageTokens: 500,
-          previousObserverTokens: 2000,
+          previousObserverTokens: false,
           maxRetries: 8,
           failurePolicy: 'abort',
         },
@@ -7353,7 +7751,7 @@ describe('Resource Scope Observation Flow', () => {
         extractors: [new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() })],
       } as any,
       observedMessageIds: new Set(),
-      resolveModel: () => ({ model: model as any }),
+      resolveModel: async () => ({ model: model as any }),
       tokenCounter: { countMessages: () => 1 } as any,
     });
     const results = await observer.callMultiThread(
@@ -8702,6 +9100,7 @@ describe('Locking Behavior', () => {
       } finally {
         BufferingCoordinator.asyncBufferingOps.clear();
         BufferingCoordinator.lastBufferedBoundary.clear();
+        BufferingCoordinator.observationBoundaryOwners.clear();
         BufferingCoordinator.lastBufferedAtTime.clear();
         BufferingCoordinator.reflectionBufferCycleIds.clear();
         vi.useRealTimers();
@@ -11436,6 +11835,8 @@ describe('Full Async Buffering Flow', () => {
     observerFailures?: number;
     failurePolicy?: 'abort' | 'continue';
     maxRetries?: number;
+    /** Awaited before each observer call returns; lets a test hold a buffer op in flight */
+    observerGate?: () => Promise<void> | undefined;
   }) {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');
@@ -11447,6 +11848,7 @@ describe('Full Async Buffering Flow', () => {
     }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -11482,6 +11884,7 @@ describe('Full Async Buffering Flow', () => {
 
         // Observer call
         observerCalls.push({ input: promptText });
+        await opts.observerGate?.();
         if (observerCalls.length <= (opts.observerFailures ?? 0)) {
           throw Object.assign(new Error('observer failed'), { statusCode: 503 });
         }
@@ -11568,10 +11971,13 @@ describe('Full Async Buffering Flow', () => {
 
     // Helper to call processInputStep
     const processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
-    async function step(stepNumber: number, opts?: { freshState?: boolean }) {
+    async function step(stepNumber: number, opts?: { freshState?: boolean; input?: MastraDBMessage[] }) {
       if (opts?.freshState) {
         Object.keys(sharedState).forEach(k => delete sharedState[k]);
         sharedMessageList = new MessageList({ threadId, resourceId });
+      }
+      for (const msg of opts?.input ?? []) {
+        sharedMessageList.add(msg, 'input');
       }
       const requestContext = new RequestContext();
       requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
@@ -12552,11 +12958,16 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
   });
 
-  it('should trigger sync observation at step > 0 even when bufferTokens is set without blockAfter', async () => {
+  it('should keep observing at step > 0 when bufferTokens is set without blockAfter', async () => {
     // Regression test: when async buffering is enabled (bufferTokens set) but blockAfter
-    // is NOT configured, sync observation at step > 0 must still fire once pending tokens
+    // is NOT configured, observation at step > 0 must still fire once pending tokens
     // exceed the threshold. Previously, the blockAfter gate had `if (!blockAfter) return false`
     // which silently disabled ALL sync observation when blockAfter was unset.
+    //
+    // With threshold→blockAfter band semantics, pending tokens between the threshold
+    // (2000) and the default blockAfter (1.2x = 2400) are handled by background band
+    // buffering + activation instead of a blocking sync observation — so the observer
+    // still runs, just asynchronously across steps.
     const { step, waitForAsyncOps, observerCalls, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
       messageTokens: 2000, // Threshold that will be exceeded
       bufferTokens: 500, // Async buffering enabled
@@ -12592,16 +13003,396 @@ describe('Full Async Buffering Flow', () => {
       );
     }
 
-    // Step 1: the blockAfter gate must not have silently disabled sync
-    // observation — the regression this test guards is `if (!blockAfter) return
-    // false` disabling ALL sync observation at step > 0.
+    // Steps 1-2: the blockAfter gate must not have silently disabled observation —
+    // the regression this test guards is `if (!blockAfter) return false` disabling
+    // ALL sync observation at step > 0. Step 1 activates the step-0 buffered chunk
+    // (a swap, no observer call) leaving the fresh messages in the threshold→blockAfter
+    // band; step 2 triggers band buffering, which runs the observer on them.
     await step(1);
+    await waitForAsyncOps();
+    await step(2);
     await waitForAsyncOps();
     expect(observerCalls.length).toBeGreaterThan(callsAfterStep0);
 
     // Verify observations were actually persisted to the record
     const record = await storage.getObservationalMemory(threadId, resourceId);
     expect(record?.activeObservations).toBeTruthy();
+  });
+
+  it('should buffer in the threshold→blockAfter band instead of running a blocking sync observation', async () => {
+    // ~2200 pending tokens sit between the threshold (2000) and blockAfter (2x = 4000).
+    // Reaching the threshold without a buffered chunk must trigger background band
+    // buffering — NOT a blocking sync observation (the sync-at-threshold race that
+    // caused blocking observer calls on every turn even with async buffering enabled).
+    const { om, step, waitForAsyncOps, observerCalls, storage, threadId, resourceId } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        blockAfter: 2, // 2x threshold = 4000
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~2200 tokens: in the band
+      });
+
+    const status = await om.getStatus({ threadId, resourceId });
+    expect(status.observationBlockAfter).toBe(4000);
+    expect(status.inAsyncObservationBand).toBe(true);
+    expect(status.shouldBuffer).toBe(true);
+
+    await step(0);
+    await waitForAsyncOps();
+
+    // Band buffering ran the observer in the background and produced a chunk...
+    expect(observerCalls.length).toBeGreaterThan(0);
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(getBufferedChunks(record).length).toBeGreaterThan(0);
+    // ...but no sync observation committed observations directly.
+    expect(record?.activeObservations ?? '').toBe('');
+
+    // The next step activates the buffered chunk (a swap, no extra observer call).
+    const callsBeforeActivation = observerCalls.length;
+    await step(1);
+    const postActivation = await storage.getObservationalMemory(threadId, resourceId);
+    expect(postActivation?.activeObservations).toContain('Observed');
+    expect(observerCalls.length).toBe(callsBeforeActivation);
+  });
+
+  it('should run a blocking sync observation once pending tokens reach blockAfter with no buffered chunk', async () => {
+    // ~2200 pending tokens exceed blockAfter (2x threshold 1000 = 2000). With no
+    // activatable chunk, the band no longer applies — a sync observation must fire
+    // so context is bounded.
+    const { step, observerCalls, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
+      messageTokens: 1000,
+      bufferTokens: 250,
+      bufferActivation: 1.0,
+      blockAfter: 2, // 2x threshold = 2000
+      reflectionObservationTokens: 50000,
+      messageCount: 20, // ~2200 tokens: past blockAfter
+    });
+
+    await step(0);
+
+    // Sync observation committed directly during the step — no async wait needed.
+    expect(observerCalls.length).toBeGreaterThan(0);
+    const record = await storage.getObservationalMemory(threadId, resourceId);
+    expect(record?.activeObservations).toContain('Observed');
+  });
+
+  it('should not wait on an in-flight buffer op to activate in the threshold→blockAfter band', async () => {
+    let holdObserver: Promise<void> | undefined;
+    const { om, step, waitForAsyncOps, observerCalls, storage, threadId, resourceId } =
+      await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        blockAfter: 2, // 2x threshold = 4000
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~2200 tokens: in the band
+        observerGate: () => holdObserver,
+      });
+
+    // Turn 1, step 0 buffers a chunk in the background (observer not held).
+    await step(0);
+    await waitForAsyncOps();
+    expect(getBufferedChunks(await storage.getObservationalMemory(threadId, resourceId)).length).toBe(1);
+
+    // More messages arrive, still inside the band, and a background buffer op for them
+    // is still running when the next turn starts.
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+    const bandMessages = Array.from({ length: 3 }, (_, i) => ({
+      id: `band-msg-${i}`,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: { format: 2 as const, parts: [{ type: 'text' as const, text: `Band ${i}: ${filler}` }] },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+      threadId,
+      resourceId,
+    }));
+    await storage.saveMessages({ messages: bandMessages });
+    const status = await om.getStatus({ threadId, resourceId });
+    expect(status.inAsyncObservationBand).toBe(true);
+    expect(status.canActivate).toBe(true);
+
+    let releaseObserver!: () => void;
+    holdObserver = new Promise<void>(resolve => (releaseObserver = resolve));
+    const callsBeforeOp = observerCalls.length;
+    const inFlightOp = om.buffer({ threadId, resourceId, messages: bandMessages, pendingTokens: status.pendingTokens });
+    let turn2Step0: Promise<unknown> | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await vi.waitFor(() => expect(observerCalls.length).toBe(callsBeforeOp + 1));
+      expect(om.buffering.isAsyncBufferingInProgress(`obs:thread:${threadId}`)).toBe(true);
+
+      // Turn 2, step 0: a chunk is ready. Activation takes it without waiting on the held op
+      // (storage keeps the op's chunk when it lands). Reflection still runs.
+      const maybeReflect = vi.spyOn(om.reflector, 'maybeReflect');
+      turn2Step0 = step(0, { freshState: true });
+      const outcome = await Promise.race([
+        turn2Step0.then(() => 'completed' as const),
+        new Promise<'blocked'>(resolve => (timer = setTimeout(() => resolve('blocked'), 1000))),
+      ]);
+      expect(outcome).toBe('completed');
+      expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+      expect(maybeReflect).toHaveBeenCalledWith(expect.objectContaining({ trigger: 'turn-sync' }));
+    } finally {
+      clearTimeout(timer);
+      holdObserver = undefined;
+      releaseObserver();
+      await turn2Step0?.catch(() => {});
+    }
+    await inFlightOp;
+    await waitForAsyncOps();
+
+    // The held op's chunk landed after the activation and is still there to activate.
+    const afterOp = await storage.getObservationalMemory(threadId, resourceId);
+    expect(getBufferedChunks(afterOp).flatMap(chunk => chunk.messageIds)).toEqual(
+      expect.arrayContaining(bandMessages.map(m => m.id)),
+    );
+    // The op started before the activation, so its pre-activation token boundary must not
+    // overwrite activation's reset; otherwise the next buffer trigger stalls until pending
+    // tokens climb back past the old boundary.
+    expect(BufferingCoordinator.lastBufferedBoundary.get(`obs:thread:${threadId}`)).toBe(0);
+    expect(afterOp?.lastBufferedAtTokens ?? 0).toBe(0);
+  });
+
+  it('should activate a persisted chunk without waiting for the buffer op to finish indexing', async () => {
+    // A buffer op stays registered through its post-persist work (indexing, thread title),
+    // which can take seconds with a real embedder. Activation never waits on that tail,
+    // so a persisted chunk must activate in the band meanwhile.
+    let releaseIndexing!: () => void;
+    const indexingHeld = new Promise<void>(resolve => (releaseIndexing = resolve));
+    const indexSpy = vi
+      .spyOn(AsyncBufferObservationStrategy.prototype as any, 'indexObservationGroups')
+      .mockImplementation(() => indexingHeld);
+    try {
+      const { om, step, waitForAsyncOps, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        blockAfter: 2, // 2x threshold = 4000
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~2200 tokens: in the band
+      });
+      const bufferKey = `obs:thread:${threadId}`;
+
+      // Turn 1 buffers a chunk; the op persists it, then sits in its indexing tail.
+      await step(0);
+      await vi.waitFor(() => expect(indexSpy).toHaveBeenCalled());
+      expect(getBufferedChunks(await storage.getObservationalMemory(threadId, resourceId)).length).toBe(1);
+      expect(om.buffering.isAsyncBufferingInProgress(bufferKey)).toBe(true);
+      expect(BufferingCoordinator.pendingChunkWrites.has(bufferKey)).toBe(false);
+
+      // Turn 2, step 0: the chunk is ready and nothing can append another one.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const turn2Step0 = step(0, { freshState: true });
+      const outcome = await Promise.race([
+        turn2Step0.then(() => 'completed' as const),
+        new Promise<'blocked'>(resolve => (timer = setTimeout(() => resolve('blocked'), 1000))),
+      ]);
+      clearTimeout(timer);
+      expect(outcome).toBe('completed');
+      expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+
+      // When the op finishes, its buffering bookkeeping must not overwrite activation's reset.
+      releaseIndexing();
+      await turn2Step0;
+      await waitForAsyncOps();
+      expect(BufferingCoordinator.lastBufferedBoundary.get(bufferKey)).toBe(0);
+      expect((await storage.getObservationalMemory(threadId, resourceId))?.lastBufferedAtTokens ?? 0).toBe(0);
+    } finally {
+      releaseIndexing();
+      indexSpy.mockRestore();
+    }
+  });
+
+  it('should not let a buffer op queued behind an in-flight one restore a boundary activation reset', async () => {
+    // op2 is queued behind op1 (still indexing) when a band activation resets the boundary.
+    // op2's start-of-run write must not put its pre-activation boundary back once op1 finishes.
+    let releaseIndexing!: () => void;
+    const indexingHeld = new Promise<void>(resolve => (releaseIndexing = resolve));
+    const indexSpy = vi
+      .spyOn(AsyncBufferObservationStrategy.prototype as any, 'indexObservationGroups')
+      .mockImplementationOnce(() => indexingHeld);
+    try {
+      const { om, step, waitForAsyncOps, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        blockAfter: 2, // 2x threshold = 4000
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~2200 tokens: in the band
+      });
+      const bufferKey = `obs:thread:${threadId}`;
+
+      // op1 persists its chunk, then sits in its indexing tail.
+      await step(0);
+      await vi.waitFor(() => expect(indexSpy).toHaveBeenCalled());
+      expect(om.buffering.isAsyncBufferingInProgress(bufferKey)).toBe(true);
+
+      // op2 queues behind op1 with its own starting boundary.
+      const status = await om.getStatus({ threadId, resourceId });
+      const op2 = om.buffer({ threadId, resourceId, pendingTokens: status.pendingTokens });
+      expect(BufferingCoordinator.lastBufferedBoundary.get(bufferKey)).toBe(status.pendingTokens);
+
+      // Next turn: activation in the band resets the boundary while op2 still waits for op1.
+      await step(0, { freshState: true });
+      expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+      expect(BufferingCoordinator.lastBufferedBoundary.get(bufferKey) ?? 0).toBe(0);
+
+      releaseIndexing();
+      await op2;
+      await waitForAsyncOps();
+      expect(BufferingCoordinator.lastBufferedBoundary.get(bufferKey) ?? 0).toBe(0);
+      expect((await storage.getObservationalMemory(threadId, resourceId))?.lastBufferedAtTokens ?? 0).toBe(0);
+    } finally {
+      releaseIndexing();
+      indexSpy.mockRestore();
+    }
+  });
+
+  describe('threshold→blockAfter band with a ready chunk at step > 0', () => {
+    async function setupReadyChunkInBand(holdObserver: () => Promise<void> | undefined) {
+      const scenario = await setupAsyncBufferingScenario({
+        messageTokens: 2000,
+        bufferTokens: 500,
+        bufferActivation: 1.0,
+        blockAfter: 2, // 2x threshold = 4000
+        reflectionObservationTokens: 50000,
+        messageCount: 20, // ~2200 tokens: in the band
+        observerGate: holdObserver,
+      });
+      const { step, waitForAsyncOps, storage, threadId, resourceId } = scenario;
+
+      // Step 0 buffers a chunk in the background; it completes before step 1.
+      const list = await step(0);
+      await waitForAsyncOps();
+      expect(getBufferedChunks(await storage.getObservationalMemory(threadId, resourceId)).length).toBe(1);
+
+      // The agent responds with enough content to cross the next buffer interval,
+      // still inside the band.
+      const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(10);
+      for (let i = 0; i < 6; i++) {
+        list.add(
+          {
+            id: `band-response-${i}`,
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: `Band ${i}: ${filler}` }] },
+            type: 'text',
+            createdAt: new Date(Date.UTC(2025, 0, 1, 11, i)),
+            threadId,
+            resourceId,
+          } as MastraDBMessage,
+          'response',
+        );
+      }
+      const status = await scenario.om.getStatus({ threadId, resourceId, messages: list.get.all.db() });
+      expect(status.inAsyncObservationBand).toBe(true);
+      expect(status.canActivate).toBe(true);
+      return scenario;
+    }
+
+    async function raceStep(run: () => Promise<unknown>) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const pending = run();
+      try {
+        return await Promise.race([
+          pending.then(() => 'completed' as const),
+          new Promise<'blocked'>(resolve => (timer = setTimeout(() => resolve('blocked'), 1000))),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    it('should activate the ready chunk instead of starting a buffer op that would defer it', async () => {
+      let holdObserver: Promise<void> | undefined;
+      const { step, observerCalls, storage, threadId, resourceId } = await setupReadyChunkInBand(() => holdObserver);
+
+      // Any new buffer op would stay in flight and defer activation.
+      let releaseObserver!: () => void;
+      holdObserver = new Promise<void>(resolve => (releaseObserver = resolve));
+      const callsBeforeStep = observerCalls.length;
+      let step1: Promise<unknown> | undefined;
+      try {
+        const outcome = await raceStep(() => (step1 = step(1)));
+        expect(outcome).toBe('completed');
+        expect(observerCalls.length).toBe(callsBeforeStep);
+        expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+      } finally {
+        holdObserver = undefined;
+        releaseObserver();
+        await step1?.catch(() => {});
+      }
+    });
+
+    it('should activate without waiting on an in-flight reflection buffer op', async () => {
+      const { step, storage, threadId, resourceId } = await setupReadyChunkInBand(() => undefined);
+
+      // A reflection buffer op is still running; waitForBuffering would wait on it.
+      const ops = BufferingCoordinator.asyncBufferingOps as Map<string, Promise<void>>;
+      const reflectionKey = `refl:thread:${threadId}`;
+      let releaseReflection!: () => void;
+      ops.set(reflectionKey, new Promise<void>(resolve => (releaseReflection = resolve)));
+      let step1: Promise<unknown> | undefined;
+      try {
+        const outcome = await raceStep(() => (step1 = step(1)));
+        expect(outcome).toBe('completed');
+        expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
+      } finally {
+        ops.delete(reflectionKey);
+        releaseReflection();
+        await step1?.catch(() => {});
+      }
+    });
+  });
+
+  it('should keep the new user input in the input bucket when step 0 buffers it', async () => {
+    // Semantic recall embeds new user messages from messageList.get.input.db(); the
+    // buffer path must not move the turn's prompt out of that bucket.
+    const { step, waitForAsyncOps, observerCalls, threadId, resourceId } = await setupAsyncBufferingScenario({
+      messageTokens: 3000,
+      bufferTokens: 500,
+      bufferActivation: 0.7,
+      reflectionObservationTokens: 50000,
+      messageCount: 10,
+    });
+    const prompt = {
+      id: 'new-user-prompt',
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'What did we decide about the launch date?' }] },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 11, 0)),
+      threadId,
+      resourceId,
+    } as MastraDBMessage;
+
+    const list = await step(0, { input: [prompt] });
+    await waitForAsyncOps();
+
+    expect(observerCalls.some(call => call.input.includes('launch date'))).toBe(true);
+    expect(list.get.input.db().map(m => m.id)).toContain('new-user-prompt');
+  });
+
+  it('should resolve a multiplier blockAfter against a per-record messageTokens override', async () => {
+    // Instance threshold 10000 → default blockAfter 1.2x = 12000. The record override
+    // lowers the threshold to 3000, so the band must end at 3600, not 12000.
+    const { om, step, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
+      messageTokens: 10000,
+      bufferTokens: 2000,
+      bufferActivation: 0.8,
+      reflectionObservationTokens: 50000,
+      messageCount: 40, // ~4400 tokens: past the override's blockAfter
+    });
+    await om.getStatus({ threadId, resourceId });
+    await om.updateRecordConfig(threadId, resourceId, { observation: { messageTokens: 3000 } });
+
+    const status = await om.getStatus({ threadId, resourceId });
+    expect(status.threshold).toBe(3000);
+    expect(status.observationBlockAfter).toBe(3600);
+    expect(status.inAsyncObservationBand).toBe(false);
+
+    await step(0);
+    expect((await storage.getObservationalMemory(threadId, resourceId))?.activeObservations).toContain('Observed');
   });
 
   it('should exclude pending tail tool calls from async buffering while still buffering the completed prefix', async () => {
@@ -12615,6 +13406,7 @@ describe('Full Async Buffering Flow', () => {
     }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -12808,6 +13600,7 @@ describe('Full Async Buffering Flow', () => {
     }
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -15078,6 +15871,7 @@ describe('Per-step save deduplication', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -16357,6 +17151,7 @@ describe('Processor behavioral regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -16467,6 +17262,7 @@ describe('Processor behavioral regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -16658,6 +17454,7 @@ describe('Processor behavioral regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -16759,6 +17556,7 @@ describe('Processor behavioral regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -16902,6 +17700,7 @@ describe('Processor behavioral regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -17009,6 +17808,7 @@ describe('OM context loading with no prior observations', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -17136,6 +17936,7 @@ describe('OM context loading with no prior observations', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -17401,6 +18202,7 @@ describe('OM context loading with no prior observations', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -17663,6 +18465,7 @@ describe('Processor stream events: buffering status and activation markers', () 
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -17821,6 +18624,7 @@ describe('Processor stream events: buffering status and activation markers', () 
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -18036,6 +18840,7 @@ describe('Async reflection failure should not permanently block future reflectio
     // Clear static maps
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -18465,6 +19270,7 @@ describe('Message ordering regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 
@@ -18853,6 +19659,7 @@ describe('Message ordering regressions', () => {
 
     BufferingCoordinator.asyncBufferingOps.clear();
     BufferingCoordinator.lastBufferedBoundary.clear();
+    BufferingCoordinator.observationBoundaryOwners.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
 

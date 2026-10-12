@@ -82,16 +82,15 @@ import {
 } from './auth/account-rotation-processor.js';
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
-import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
+import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 import { resolveExperimentalAgent, validateExperimentalAgent, wrapExperimentalAgent } from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
-import { hasExplicitOMConfiguration } from './onboarding/om-settings.js';
 import type { ProviderAccess } from './onboarding/packs.js';
-import { getAvailableOmPacks, selectPreferredOMPack } from './onboarding/packs.js';
+import { getAvailableOmPacks, resolveAutoOMModelId } from './onboarding/packs.js';
 import {
   loadSettings,
   MASTRA_GATEWAY_PROVIDER,
@@ -289,10 +288,13 @@ export interface MastraCodeConfig {
   /** Observe completed tool calls without replacing or modifying the built-in tool implementation. */
   postToolObserver?: PostToolObserver;
   /**
-   * Stateless input processor instances prepended before Mastra Code's mandatory processors.
+   * Stateless input processor instances prepended before Mastra Code's mandatory processors,
+   * or a per-request resolver for processors that depend on trusted request context.
    * Embedders may extend processing but cannot replace built-in safety and compatibility policy.
    */
-  inputProcessors?: InputProcessor[];
+  inputProcessors?:
+    | InputProcessor[]
+    | ((args: { requestContext: RequestContext }) => InputProcessor[] | Promise<InputProcessor[]>);
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /**
@@ -722,7 +724,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // Agent settings:
         //   state.yolo, state.thinkingLevel, state.smartEditing
         // Observational memory settings:
-        //   state.omScope, state.observerModelId, state.reflectorModelId,
+        //   state.omScope, role selection intent/effective model,
         //   state.observationThreshold, state.reflectionThreshold
         requestContextKeys: [
           // Session identifiers
@@ -742,8 +744,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           'controller.state.smartEditing',
           // Observational memory settings
           'controller.state.omScope',
-          'controller.state.observerModelId',
-          'controller.state.reflectorModelId',
+          'om.observer.selectionMode',
+          'om.observer.effectiveModelId',
+          'om.reflector.selectionMode',
+          'om.reflector.effectiveModelId',
           'controller.state.observationThreshold',
           'controller.state.reflectionThreshold',
         ],
@@ -1070,8 +1074,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Mastra Code's own processors are constructed once, here, rather than inside
   // the resolver below: the resolver runs before every LLM call, and rebuilding
   // stateful processors per request would reset them.
+  const staticConfiguredInputProcessors = Array.isArray(config?.inputProcessors) ? config.inputProcessors : [];
   const mastraCodeInputProcessors: InputProcessor[] = [
-    ...(config?.inputProcessors ?? []),
+    ...staticConfiguredInputProcessors,
     new PlanRejectionAbortProcessor(),
     ...(backgroundToolsEnabled ? [createBackgroundWorkSignalProcessor()] : []),
     new AgentsMDInjector({
@@ -1258,15 +1263,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // per-request from the active workspace (mirrors `judge`).
       tools: getGoalJudgeTools,
     },
-    inputProcessors: () => [
-      ...mastraCodeInputProcessors,
-      // Input-lane notice ONLY (no processAPIError — see the class doc): the
-      // runner walks input processors first in runProcessAPIError, so an
-      // input-lane processAPIError would rotate before transient retries run.
-      new AccountStartNoticeProcessor({ credentialStore: authStorage }),
-      ...readPluginProcessors().input.map(entry => entry.value),
-      ...(pluginSignalLane?.getInputProcessors() ?? []),
-    ],
+    inputProcessors: ({ requestContext }) => {
+      const resolveProcessors = (configured: InputProcessor[]) => [
+        ...configured,
+        ...mastraCodeInputProcessors,
+        // Input-lane notice ONLY (no processAPIError — see the class doc): the
+        // runner walks input processors first in runProcessAPIError, so an
+        // input-lane processAPIError would rotate before transient retries run.
+        new AccountStartNoticeProcessor({ credentialStore: authStorage }),
+        ...readPluginProcessors().input.map(entry => entry.value),
+        ...(pluginSignalLane?.getInputProcessors() ?? []),
+      ];
+      if (typeof config?.inputProcessors !== 'function') return resolveProcessors([]);
+      const configured = config.inputProcessors({ requestContext });
+      return configured instanceof Promise ? configured.then(resolveProcessors) : resolveProcessors(configured);
+    },
     // Like the input lane, plugin processors sit last — after the layers they
     // customize, before the channel and memory layers the Agent appends.
     outputProcessors: () => [
@@ -1420,12 +1431,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   }
   const builtinOmPacks = getAvailableOmPacks(startupAccess);
   const effectiveDefaults = globalSettings.models.modeDefaults;
-  const activeProviderId = (effectiveDefaults.build ?? buildMode.defaultModelId)?.split('/')[0];
-  const preferredOmModel = hasExplicitOMConfiguration(globalSettings)
-    ? undefined
-    : selectPreferredOMPack(startupAccess, activeProviderId)?.modelId;
-  const effectiveObserverModel = resolveOmRoleModel(globalSettings, 'observer', builtinOmPacks) || preferredOmModel;
-  const effectiveReflectorModel = resolveOmRoleModel(globalSettings, 'reflector', builtinOmPacks) || preferredOmModel;
+  const effectiveObserverModel = resolveOmRoleModel(globalSettings, 'observer', builtinOmPacks);
+  const effectiveReflectorModel = resolveOmRoleModel(globalSettings, 'reflector', builtinOmPacks);
+  const observerModelSelection = globalSettings.models.observerModelSelection;
+  const reflectorModelSelection = globalSettings.models.reflectorModelSelection;
   const effectiveObservationThreshold = globalSettings.models.omObservationThreshold ?? undefined;
   const effectiveReflectionThreshold = globalSettings.models.omReflectionThreshold ?? undefined;
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
@@ -1464,11 +1473,21 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // machine-local settings.json never leaks into server sessions.
   const globalInitialState: Partial<MastraCodeState> = {};
   if (!config?.disableSettingsOmSeed) {
-    if (effectiveObserverModel) {
+    if (observerModelSelection === 'auto') {
+      globalInitialState.observerModelSelection = 'auto';
+    } else if (effectiveObserverModel) {
       globalInitialState.observerModelId = effectiveObserverModel;
+      globalInitialState.observerModelSelection = effectiveObserverModel;
+    } else {
+      globalInitialState.observerModelSelection = 'auto';
     }
-    if (effectiveReflectorModel) {
+    if (reflectorModelSelection === 'auto') {
+      globalInitialState.reflectorModelSelection = 'auto';
+    } else if (effectiveReflectorModel) {
       globalInitialState.reflectorModelId = effectiveReflectorModel;
+      globalInitialState.reflectorModelSelection = effectiveReflectorModel;
+    } else {
+      globalInitialState.reflectorModelSelection = 'auto';
     }
     if (effectiveObservationThreshold !== undefined) {
       globalInitialState.observationThreshold = effectiveObservationThreshold;
@@ -1522,6 +1541,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     memory,
     pubsub: signalsPubSub,
     stateSchema: typedStateSchema,
+    omConfig: {
+      observerModel: 'auto',
+      defaultObserverModelId: DEFAULT_OM_MODEL_ID,
+      reflectorModel: 'auto',
+      defaultReflectorModelId: DEFAULT_OM_MODEL_ID,
+      resolveAutoModelId: ({ currentModelId }) => resolveAutoOMModelId(currentModelId),
+    },
     agent: codeAgent,
     subagents,
     // Subagents resolve like the main agent: tenant credentials and

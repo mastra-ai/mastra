@@ -99,7 +99,7 @@ export function WorkItemCardRows({
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
           <CardStatus status={status} />
           {verdict && (
-            <Badge size="xs" variant={verdict.approved ? 'green' : 'orange'}>
+            <Badge size="xs" variant={verdict.outdated ? 'neutral' : verdict.approved ? 'green' : 'orange'}>
               {verdict.label}
             </Badge>
           )}
@@ -128,12 +128,20 @@ export function WorkItemCardRows({
   );
 }
 
-/** The last verdict a review pass recorded; the card rests in Reviewing until the PR merges. */
-export function reviewVerdict(metadata: Record<string, unknown>): { approved: boolean; label: string } | undefined {
+/**
+ * The last verdict a review pass recorded; the card rests in Reviewing until the PR merges.
+ * Once a push moves the PR past the reviewed head the verdict is kept but marked outdated,
+ * so a stale approval never reads as current while the next pass runs.
+ */
+export function reviewVerdict(
+  metadata: Record<string, unknown>,
+): { approved: boolean; outdated: boolean; label: string } | undefined {
   const verdict = metadata.reviewVerdict;
   if (verdict !== 'approve' && verdict !== 'request changes') return undefined;
-  const sha = typeof metadata.reviewedHeadSha === 'string' ? ` · ${metadata.reviewedHeadSha.slice(0, 7)}` : '';
-  return verdict === 'approve'
-    ? { approved: true, label: `Approved${sha}` }
-    : { approved: false, label: `Changes requested${sha}` };
+  const reviewed = typeof metadata.reviewedHeadSha === 'string' ? metadata.reviewedHeadSha : undefined;
+  const head = typeof metadata.pullRequestHeadSha === 'string' ? metadata.pullRequestHeadSha : undefined;
+  const outdated = reviewed !== undefined && head !== undefined && reviewed.toLowerCase() !== head.toLowerCase();
+  const sha = reviewed ? ` · ${reviewed.slice(0, 7)}` : '';
+  const label = `${verdict === 'approve' ? 'Approved' : 'Changes requested'}${sha}${outdated ? ' (outdated)' : ''}`;
+  return { approved: verdict === 'approve' && !outdated, outdated, label };
 }

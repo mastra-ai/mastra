@@ -91,7 +91,6 @@ export function LatencyCard({ onViewTraces, onTimeRangeClick }: LatencyCardProps
           height="fill"
           xLabels="edges"
           showLegend={false}
-          showYAxis={false}
           valueFormatter={formatDuration}
           axisFormatter={formatAxisDuration}
           onBucketClick={onTimeRangeClick && (row => onTimeRangeClick(bucketWindow(Number(row.ts), step)))}

@@ -1,3 +1,4 @@
+import { MastraFGAPermissions } from '../../../auth/ee';
 import type { IMastraLogger } from '../../../logger';
 import { noopLogger } from '../../../logger/noop-logger';
 import type { Mastra } from '../../../mastra';
@@ -5,13 +6,19 @@ import type { MastraMemory } from '../../../memory/memory';
 import { createObservabilityContext } from '../../../observability';
 import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
+import { StructuredOutputProcessor } from '../../../processors/processors/structured-output';
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
+import { toStandardSchema } from '../../../schema';
 import { createOutputHandler } from '../../../stream/base/output-format-handlers';
+import type { ChunkType } from '../../../stream/types';
 import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
 import { TripWire } from '../../trip-wire';
+import type { StructuredOutputOptions } from '../../types';
+import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
+import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
 import { globalRunRegistry } from '../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
@@ -34,6 +41,8 @@ export interface DurableFinishSideEffectsResult {
   messageListState: SerializedMessageListState;
   outputText: string;
   titleGeneration?: Promise<void>;
+  /** Chunks from the `structuredOutput.model` structuring pass, to publish before FINISH. */
+  structuredOutputChunks?: ChunkType[];
   /** Set when an output processor aborted in processOutputResult; nothing was persisted. */
   tripwire?: {
     reason: string;
@@ -109,7 +118,8 @@ export async function runDurableFinishSideEffects({
         mastra,
         runId,
         agentId: initData.agentId,
-        input: initData,
+        // initData read back from a snapshot may keep saved messages as refs.
+        input: { ...initData, messageListState },
         logger: effectiveLogger,
       });
       rebuiltSaveQueueManager = resolved.saveQueueManager;
@@ -125,6 +135,15 @@ export async function runDurableFinishSideEffects({
   }
 
   const effectiveRequestContext = restoreRequestContext(initData.requestContextEntries, requestContext);
+  // Snapshots drop MastraMemory (it holds a live instance), but memory processors read
+  // memoryConfig (e.g. readOnly) from it. Restore it from durable state when it's missing.
+  if (!effectiveRequestContext.has('MastraMemory') && durableState?.threadId) {
+    effectiveRequestContext.set('MastraMemory', {
+      thread: { id: durableState.threadId },
+      resourceId: durableState.resourceId,
+      memoryConfig: durableState.memoryConfig,
+    });
+  }
   // Deserialize into the run's existing MessageList when there is one. MastraModelOutput
   // holds that instance and reads it during final processing, so swapping in a new one
   // would leave the stream reporting pre-processor messages.
@@ -152,15 +171,50 @@ export async function runDurableFinishSideEffects({
   const structuredOutputText = resolveOutputText(messageList);
   const liveStructuredOutput = registryEntry?.structuredOutput;
   const structuredOutputSchema = liveStructuredOutput?.schema ?? structuredOutput?.schema;
-  if (structuredOutputSchema && !structuredOutput?.hasStructuringModel && structuredOutputText.trim()) {
+  let structuredOutputChunks: ChunkType[] | undefined;
+  // The structuring model reads tool calls and results too, so a tool-only answer still qualifies.
+  const structuringParts = structuredOutput?.hasStructuringModel ? responseStreamParts(messageList) : undefined;
+  if (structuredOutputSchema && (structuredOutputText.trim() || structuringParts?.length)) {
     const finishReason = outputResult?.finishReason;
     const truncated = finishReason === 'length' || finishReason === 'content-filter';
-    const result = truncated
-      ? undefined
-      : await createOutputHandler({ schema: structuredOutputSchema }).validateAndTransformFinal(structuredOutputText);
     const errorStrategy = liveStructuredOutput ? liveStructuredOutput.errorStrategy : structuredOutput?.errorStrategy;
     const fallbackValue = liveStructuredOutput ? liveStructuredOutput.fallbackValue : structuredOutput?.fallbackValue;
-    const value = result?.success ? result.value : errorStrategy === 'fallback' ? fallbackValue : undefined;
+    let value: unknown;
+    if (structuredOutput?.hasStructuringModel) {
+      // Like Agent's StructuredOutputProcessor: the main model answered in text, so a
+      // separate structuring model turns that answer into the object.
+      const structuringModel = liveStructuredOutput?.model ?? structuredOutput.structuringModelConfig?.originalConfig;
+      // Never structure partial text from an aborted or failed turn.
+      const failed = finishReason === 'abort' || finishReason === 'error';
+      if (structuringModel && !truncated && !failed) {
+        structuredOutputChunks = await runStructuringPass({
+          options: {
+            ...(liveStructuredOutput ?? {}),
+            schema: liveStructuredOutput?.schema ?? toStandardSchema(structuredOutput.schema!),
+            model: structuringModel as any,
+            instructions: liveStructuredOutput?.instructions ?? structuredOutput.instructions,
+            jsonPromptInjection: liveStructuredOutput?.jsonPromptInjection ?? structuredOutput.jsonPromptInjection,
+            errorStrategy,
+            fallbackValue,
+          } as StructuredOutputOptions<any>,
+          mastra,
+          agentId: initData.agentId,
+          messageList,
+          streamParts: structuringParts!,
+          requestContext: effectiveRequestContext,
+          logger: effectiveLogger,
+        });
+        const objectChunk = structuredOutputChunks.findLast(chunk => chunk.type === 'object-result');
+        value = objectChunk?.type === 'object-result' ? objectChunk.object : undefined;
+      } else if (!structuringModel) {
+        effectiveLogger.warn('[DurableAgent] structuredOutput.model is not available on this worker', { runId });
+      }
+    } else {
+      const result = truncated
+        ? undefined
+        : await createOutputHandler({ schema: structuredOutputSchema }).validateAndTransformFinal(structuredOutputText);
+      value = result?.success ? result.value : errorStrategy === 'fallback' ? fallbackValue : undefined;
+    }
     const lastAssistantMessage = messageList.get.response
       .db()
       .findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult);
@@ -171,6 +225,15 @@ export async function runDurableFinishSideEffects({
       };
     }
   }
+
+  // Output processors persist messages too (MessageHistory saves the response
+  // in processOutputResult), so a superseded execution must stop here, before
+  // either memory write path, and never reach the finish event (#23734). This
+  // check sits outside the processor try/catch, which swallows errors. It uses
+  // the live `requestContext`: the snapshot entries never carry the
+  // execution id.
+  const assertOwned = () => assertExecutionOwned({ runId, agentId: initData.agentId, requestContext, mastra });
+  await assertOwned();
 
   // Keep this MessageList for every later phase. ProcessorRunner applies
   // returned message arrays back onto it, including removals and replacements.
@@ -226,6 +289,20 @@ export async function runDurableFinishSideEffects({
 
   const saveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
   const memory = registryEntry?.memory ?? rebuiltMemory;
+  const authorizeMemory =
+    durableState?.threadId && durableState.resourceId
+      ? (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
+          authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
+            mastra,
+            user: effectiveRequestContext.get('user'),
+            threadId: durableState.threadId!,
+            resourceId: durableState.resourceId!,
+            agentId: initData.agentId,
+            requestContext: effectiveRequestContext,
+            permission,
+            actor: initData.options?.actor,
+          })
+      : undefined;
 
   if (
     saveQueueManager &&
@@ -235,6 +312,8 @@ export async function runDurableFinishSideEffects({
     !durableState.observationalMemory &&
     !durableState.memoryConfig?.readOnly
   ) {
+    await authorizeMemory!(MastraFGAPermissions.MEMORY_WRITE);
+    if (!durableState.threadExists) await authorizeMemory!(MastraFGAPermissions.MEMORY_READ);
     try {
       if (!durableState.threadExists) {
         await memory.createThread?.({
@@ -244,8 +323,11 @@ export async function runDurableFinishSideEffects({
         });
       }
 
-      await saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig);
+      await saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig, {
+        beforePersist: assertOwned,
+      });
     } catch (error) {
+      if (isExecutionFenceError(error)) throw error;
       effectiveLogger.error('[DurableAgent] Error persisting messages', {
         runId,
         threadId: durableState.threadId,
@@ -274,6 +356,8 @@ export async function runDurableFinishSideEffects({
     };
 
     const generateThreadTitle = registryEntry?.generateThreadTitle;
+    await authorizeMemory!(MastraFGAPermissions.MEMORY_READ);
+    await authorizeMemory!(MastraFGAPermissions.MEMORY_WRITE);
     titleGeneration = (async () => {
       if (generateThreadTitle) {
         await generateThreadTitle(titleArgs);
@@ -293,7 +377,103 @@ export async function runDurableFinishSideEffects({
     messageListState: messageList.serialize(),
     outputText,
     titleGeneration,
+    structuredOutputChunks,
   };
+}
+
+class StructuringPassError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, { cause });
+    this.name = 'StructuringPassError';
+  }
+}
+
+/**
+ * Rebuild the chunks the structuring prompt reads (text, tool calls and results) from the
+ * run's response messages; the durable finish step has no in-memory chunk history.
+ */
+function responseStreamParts(messageList: MessageList): ChunkType[] {
+  const parts: ChunkType[] = [];
+  for (const message of messageList.get.response.db()) {
+    if (message.role !== 'assistant' || message.content?.metadata?.completionResult) continue;
+    for (const part of message.content?.parts ?? []) {
+      if (part.type === 'text') {
+        parts.push({ type: 'text-delta', payload: { id: '', text: part.text } } as ChunkType);
+      } else if (part.type === 'tool-invocation') {
+        const { toolCallId, toolName, args } = part.toolInvocation;
+        parts.push({ type: 'tool-call', payload: { toolCallId, toolName, args } } as ChunkType);
+        if (part.toolInvocation.state === 'result') {
+          parts.push({
+            type: 'tool-result',
+            payload: { toolCallId, toolName, result: part.toolInvocation.result },
+          } as ChunkType);
+        }
+      }
+    }
+  }
+  return parts;
+}
+
+/**
+ * Run Agent's StructuredOutputProcessor once against the finished turn and collect the
+ * chunks it would have streamed (object deltas and the final `object-result`).
+ */
+async function runStructuringPass({
+  options,
+  mastra,
+  agentId,
+  messageList,
+  streamParts,
+  requestContext,
+  logger,
+}: {
+  options: StructuredOutputOptions<any>;
+  mastra?: Mastra;
+  agentId: string;
+  messageList: MessageList;
+  streamParts: ChunkType[];
+  requestContext: RequestContext;
+  logger: IMastraLogger;
+}): Promise<ChunkType[]> {
+  const chunks: ChunkType[] = [];
+  try {
+    const processor = new StructuredOutputProcessor({ ...options, logger });
+    if (mastra) {
+      processor.__registerMastra(mastra);
+      if (options.useAgent) {
+        try {
+          processor.setAgent(mastra.getAgentById(agentId) as AnyAgent);
+        } catch {
+          // Fall back to the processor's internal structuring agent.
+        }
+      }
+    }
+    const state: Record<string, unknown> = { controller: { enqueue: (chunk: ChunkType) => chunks.push(chunk) } };
+    await processor.processOutputStream({
+      part: { type: 'finish' } as ChunkType,
+      state,
+      streamParts,
+      messageList,
+      requestContext,
+      abort: (() => {
+        throw new Error('abort is not supported in the durable structuring pass');
+      }) as any,
+      retryCount: 0,
+    } as any);
+    // Under errorStrategy 'strict' the processor records the failure and aborts in
+    // processOutputStep (Agent retries there). The finish step cannot retry, so fail the run.
+    processor.processOutputStep({
+      state,
+      messages: [],
+      abort: ((reason: string, opts?: { metadata?: { error?: unknown } }) => {
+        throw new StructuringPassError(reason, opts?.metadata?.error);
+      }) as any,
+    } as any);
+  } catch (error) {
+    if (error instanceof StructuringPassError || (options.errorStrategy ?? 'strict') === 'strict') throw error;
+    logger.error('[DurableAgent] Structured output structuring pass failed', { error });
+  }
+  return chunks;
 }
 
 /**

@@ -49,9 +49,7 @@
     "step-5-preview"
   ],
   "temperature": [
-    "deepseek-v3-2",
     "deepseek-v4-1-flash",
-    "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "deepseek-v4-pro-0813",
@@ -89,7 +87,6 @@
     "qwen3-6-27b",
     "qwen3-6-35b-a3b",
     "qwen3-6-flash",
-    "qwen3-6-max-preview",
     "qwen3-6-plus",
     "qwen3-7-flash",
     "qwen3-7-max",
@@ -99,7 +96,6 @@
     "qwen3-8-max",
     "qwen3-8-max-0902",
     "qwen3-8-omni-flash",
-    "qwen3-max",
     "seed-2-0-code",
     "seed-2-0-lite",
     "seed-2-0-mini",
@@ -111,9 +107,7 @@
     "step-5-preview"
   ],
   "structuredOutput": [
-    "deepseek-v3-2",
     "deepseek-v4-1-flash",
-    "deepseek-v4-flash",
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "deepseek-v4-pro-0813",
@@ -157,7 +151,6 @@
     "qwen3-6-27b",
     "qwen3-6-35b-a3b",
     "qwen3-6-flash",
-    "qwen3-6-max-preview",
     "qwen3-6-plus",
     "qwen3-7-flash",
     "qwen3-7-max",
@@ -167,7 +160,6 @@
     "qwen3-8-max",
     "qwen3-8-max-0902",
     "qwen3-8-omni-flash",
-    "qwen3-max",
     "seed-2-0-code",
     "seed-2-0-lite",
     "seed-2-0-mini",
@@ -288,17 +280,6 @@
         "type": "budget_tokens",
         "min": 1,
         "max": 262144
-      }
-    ],
-    "deepseek-v3-2": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 393216
       }
     ],
     "mimo-v2-5-pro": [
@@ -610,17 +591,6 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "qwen3-6-max-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 393216
-      }
-    ],
     "step-3-7-flash": [
       {
         "type": "effort",
@@ -652,17 +622,6 @@
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
-      }
-    ],
-    "deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1,
-        "max": 393216
       }
     ]
   }

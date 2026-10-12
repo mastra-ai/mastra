@@ -62,6 +62,11 @@ export const activeDiscordInstallations: ChannelInstallationInfo[] = [
   },
 ];
 
+export const unconfiguredPlatforms: ChannelPlatformInfo[] = [
+  { id: 'slack', name: 'Slack', isConfigured: false },
+  { id: 'discord', name: 'Discord', isConfigured: false },
+];
+
 export const slackDiscordConfiguredPlatforms: ChannelPlatformInfo[] = [
   { id: 'slack', name: 'Slack', isConfigured: true },
   { id: 'discord', name: 'Discord', isConfigured: true },
