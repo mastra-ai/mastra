@@ -16,14 +16,7 @@ import {
 import type { DialogSize } from './dialog-shell';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
-import {
-  Drawer,
-  DrawerBackdrop,
-  DrawerHandleBar,
-  DrawerPopup,
-  DrawerPortal,
-  DrawerViewport,
-} from '@/ds/components/Drawer';
+import { Drawer, DrawerContent } from '@/ds/components/Drawer';
 import type { DrawerProps } from '@/ds/components/Drawer';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { useIsMobile } from '@/hooks/use-is-mobile';
@@ -41,7 +34,7 @@ export type DialogProps = Omit<DialogPrimitive.Root.Props, 'handle' | 'onOpenCha
   onOpenChange?: (open: boolean, details: DialogOpenChangeDetails | DrawerOpenChangeDetails) => void;
 };
 
-const DialogIsDrawerContext = React.createContext(false);
+const useIsDrawer = () => useIsMobile(DIALOG_DRAWER_BREAKPOINT_PX);
 
 // Below 640px every dialog is a bottom drawer. Open state lives here so crossing the breakpoint keeps it open.
 function Dialog({
@@ -53,7 +46,7 @@ function Dialog({
   disablePointerDismissal,
   ...props
 }: DialogProps) {
-  const isDrawer = useIsMobile(DIALOG_DRAWER_BREAKPOINT_PX);
+  const isDrawer = useIsDrawer();
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen);
   const rootProps = {
     ...props,
@@ -72,13 +65,11 @@ function Dialog({
 
   return (
     <DialogContext.Provider value={{ intent, pending }}>
-      <DialogIsDrawerContext.Provider value={isDrawer}>
-        {isDrawer ? (
-          <Drawer {...rootProps} onOpenChange={handleOpenChange} />
-        ) : (
-          <DialogPrimitive.Root {...rootProps} onOpenChange={handleOpenChange} />
-        )}
-      </DialogIsDrawerContext.Provider>
+      {isDrawer ? (
+        <Drawer {...rootProps} onOpenChange={handleOpenChange} />
+      ) : (
+        <DialogPrimitive.Root {...rootProps} onOpenChange={handleOpenChange} />
+      )}
     </DialogContext.Provider>
   );
 }
@@ -126,7 +117,7 @@ function DialogContent({
   ...props
 }: DialogContentProps) {
   const { intent, pending } = useDialogContext();
-  const isDrawer = React.useContext(DialogIsDrawerContext);
+  const isDrawer = useIsDrawer();
   const closeRef = React.useRef<HTMLButtonElement>(null);
   const isDestructive = intent === 'destructive';
   const popupProps = {
@@ -143,7 +134,7 @@ function DialogContent({
       ref={closeRef}
       disabled={pending}
       data-slot="dialog-close"
-      className={cn('absolute right-4', isDrawer ? 'top-6' : 'top-4')}
+      className={cn('absolute right-4', isDrawer ? 'top-1.5' : 'top-4')}
       render={
         <Button variant="ghost" size="icon-sm" aria-label="Close">
           <X />
@@ -154,25 +145,20 @@ function DialogContent({
 
   if (isDrawer) {
     return (
-      <DrawerPortal>
-        {showOverlay && <DrawerBackdrop className={overlayClassName} />}
-        <DrawerViewport>
-          <DrawerPopup
-            {...popupProps}
-            className={cn(
-              dialogDrawerPopupClassName,
-              size === 'full' && dialogDrawerFullHeightClassName,
-              '[&_[data-slot=dialog-header]]:pr-12',
-              className,
-            )}
-          >
-            <DrawerHandleBar />
-            {children}
-            {closeButton}
-            <div aria-hidden className={dialogDrawerBleedSpacerClassName} />
-          </DrawerPopup>
-        </DrawerViewport>
-      </DrawerPortal>
+      <DrawerContent
+        {...popupProps}
+        showCloseButton={false}
+        className={cn(
+          dialogDrawerPopupClassName,
+          size === 'full' && dialogDrawerFullHeightClassName,
+          '[&_[data-slot=dialog-header]]:pr-12',
+          className,
+        )}
+      >
+        {children}
+        {closeButton}
+        <div aria-hidden className={dialogDrawerBleedSpacerClassName} />
+      </DrawerContent>
     );
   }
 
