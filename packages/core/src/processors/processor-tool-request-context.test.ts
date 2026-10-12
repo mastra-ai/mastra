@@ -18,6 +18,7 @@ import type { InputProcessor, ProcessInputStepArgs } from './index';
 describe('Processor-returned tools receive requestContext', () => {
   it('should forward requestContext to tools added by processInputStep', async () => {
     let capturedRequestContext: RequestContext | undefined;
+    let capturedAgentId: string | undefined;
 
     // A tool that captures the requestContext it receives during execute
     const dynamicTool = createTool({
@@ -26,8 +27,9 @@ describe('Processor-returned tools receive requestContext', () => {
       inputSchema: z.object({
         query: z.string(),
       }),
-      execute: async (input, { requestContext }) => {
+      execute: async (input, { requestContext, agent }) => {
         capturedRequestContext = requestContext;
+        capturedAgentId = agent?.agentId;
         return `Result for: ${input.query}`;
       },
     });
@@ -119,6 +121,8 @@ describe('Processor-returned tools receive requestContext', () => {
     expect(capturedRequestContext).toBeDefined();
     expect(capturedRequestContext!.get('userId')).toBe('user-123');
     expect(capturedRequestContext!.get('apiKey')).toBe('secret-key');
+    // Same agent context as a tool assigned to the agent directly
+    expect(capturedAgentId).toBe('test-agent-rc');
   });
 
   it('should forward requestContext to dynamically added tools alongside existing tools', async () => {

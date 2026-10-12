@@ -836,6 +836,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                           mastra: mastra ? createMastraProxy({ mastra, logger: boundLogger }) : undefined,
                           memory: registryEntry?.memory,
                           agentName: typedInput.agentName ?? agentId,
+                          agentId,
                           requestContext,
                           workspace: registryEntry?.workspace,
                           requireApproval: (tool as any).requireApproval,
