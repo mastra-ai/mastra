@@ -1509,7 +1509,9 @@ export class MessageList {
         // A provider-flagged error (`output-error` with a structured `result`) comes from a tool-result
         // chunk, so its transcript transform is stored under the output-available phase.
         const isProviderErrorResult =
-          part.toolInvocation.state === 'output-error' && part.toolInvocation.result !== undefined;
+          part.toolInvocation.state === 'output-error' &&
+          part.toolInvocation.result !== undefined &&
+          part.providerExecuted === true;
         const outputTransform =
           part.toolInvocation.state === 'result' || isProviderErrorResult
             ? (getTransformedToolPayload(part.providerMetadata, 'transcript', 'output-available') ??
@@ -1599,7 +1601,9 @@ export class MessageList {
       return {
         ...invocation,
         ...(transformed.args !== undefined ? { args: transformed.args } : {}),
-        ...(invocation.state === 'result' && 'result' in transformed ? { result: transformed.result } : {}),
+        ...((invocation.state === 'result' || invocationState === 'output-error') && 'result' in transformed
+          ? { result: transformed.result }
+          : {}),
         ...(invocationState === 'output-error' && transformed.errorText !== undefined
           ? { errorText: transformed.errorText }
           : {}),

@@ -320,4 +320,90 @@ describe('provider-executed tool results flagged isError (#26526)', () => {
     expect((message.content.parts?.[0] as any).toolInvocation.state).toBe('output-error');
     expect(message.content.toolInvocations?.[0]?.state).toBe('call');
   });
+
+  it('keeps client-tool errors on the error transcript transform', () => {
+    const messageList = new MessageList();
+    messageList.add(userMessage(), 'input');
+    messageList.add(
+      {
+        id: 'assistant-client-error',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'output-error',
+                toolCallId: 'call_client',
+                toolName: 'getWeather',
+                args: { city: 'x' },
+                result: { secret: 'SECRET' },
+                errorText: 'SECRET stack',
+              } as any,
+              providerMetadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    transcript: {
+                      'output-available': { transformed: { secret: 'SECRET' } },
+                      error: { transformed: 'Tool failed' },
+                    },
+                  },
+                },
+              },
+            },
+          ],
+        },
+        createdAt: new Date(2),
+      },
+      'response',
+    );
+
+    const drained = messageList.drainUnsavedMessages();
+    const part = drained.find(m => m.id === 'assistant-client-error')?.content.parts?.[0] as any;
+    expect(part.toolInvocation.errorText).toBe('Tool failed');
+  });
+
+  it('clears a legacy output-error result when the transcript transform redacts it to undefined', () => {
+    const messageList = new MessageList();
+    messageList.add(userMessage(), 'input');
+    messageList.add(
+      {
+        id: 'assistant-legacy-error',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                toolCallId: 'srvtoolu_1',
+                toolName: 'tool_search_tool_regex',
+                args: { pattern: '(' },
+                ...getToolResultInvocationState({ result: { detail: 'SECRET' }, isError: true }),
+              },
+              providerExecuted: true,
+              providerMetadata: {
+                mastra: { toolPayloadTransform: { transcript: { 'output-available': { transformed: undefined } } } },
+              },
+            },
+          ],
+          toolInvocations: [
+            {
+              state: 'output-error',
+              toolCallId: 'srvtoolu_1',
+              toolName: 'tool_search_tool_regex',
+              args: { pattern: '(' },
+              result: { detail: 'SECRET' },
+            } as any,
+          ],
+        },
+        createdAt: new Date(2),
+      },
+      'response',
+    );
+
+    const drained = messageList.drainUnsavedMessages();
+    expect(JSON.stringify(drained)).not.toContain('SECRET');
+  });
 });
