@@ -162,6 +162,67 @@ describe('GithubIntegration collaborator permission', () => {
   });
 });
 
+describe('GithubIntegration installation Octokit', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  /** Stubbed GitHub API: counts token mints and answers 401 for revoked tokens. */
+  function stubGithubApi() {
+    const revoked = new Set<string>();
+    const minted: string[] = [];
+    const json = (status: number, body: unknown) =>
+      new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith('/app/installations/7/access_tokens')) {
+          const token = `ghs_${minted.length + 1}`;
+          minted.push(token);
+          return json(201, {
+            token,
+            expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+            permissions: { metadata: 'read' },
+            repository_selection: 'all',
+          });
+        }
+        const token = new Headers(init?.headers).get('authorization')?.replace(/^token /, '') ?? '';
+        if (revoked.has(token)) return json(401, { message: 'Bad credentials' });
+        return json(200, { total_count: 0, repositories: [] });
+      }),
+    );
+    return { minted, revoked };
+  }
+
+  it('reuses one client and token across calls for the same installation', async () => {
+    const { minted } = stubGithubApi();
+    const github = new GithubIntegration(validConfig());
+
+    await github.getInstallationOctokit(7).apps.listReposAccessibleToInstallation();
+    await github.getInstallationOctokit(7).apps.listReposAccessibleToInstallation();
+
+    expect(github.getInstallationOctokit(7)).toBe(github.getInstallationOctokit(7));
+    expect(minted).toEqual(['ghs_1']);
+  });
+
+  it('mints a fresh token after GitHub rejects the cached one', async () => {
+    const { minted, revoked } = stubGithubApi();
+    const github = new GithubIntegration(validConfig());
+    await github.getInstallationOctokit(7).apps.listReposAccessibleToInstallation();
+
+    // Past auth-app's 5 s replication retry window, so the 401 surfaces.
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 10_000 });
+    revoked.add('ghs_1');
+    await expect(github.getInstallationOctokit(7).apps.listReposAccessibleToInstallation()).rejects.toMatchObject({
+      status: 401,
+    });
+
+    await github.getInstallationOctokit(7).apps.listReposAccessibleToInstallation();
+    expect(minted).toEqual(['ghs_1', 'ghs_2']);
+  });
+});
+
 describe('GithubIntegration collaborator permission coalescing', () => {
   it('shares one in-flight request between overlapping lookups for the same login', async () => {
     const github = new GithubIntegration(validConfig());

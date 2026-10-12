@@ -508,7 +508,20 @@ export class GithubIntegration implements FactoryIntegration {
       // Re-insert so Map order tracks recency for LRU eviction.
       this.#installationOctokits.delete(installationId);
     } else {
-      octokit = new Octokit({ authStrategy: createAppAuth, auth: { ...this.#appAuth(), installationId } });
+      const created = new Octokit({ authStrategy: createAppAuth, auth: { ...this.#appAuth(), installationId } });
+      // auth-app keeps serving a cached token GitHub has revoked (it only retries
+      // 401s within 5 s of minting), so drop this client and mint fresh next call.
+      // Not on 403: GitHub also uses it for rate limits.
+      created.hook.error('request', error => {
+        if (
+          (error as { status?: number }).status === 401 &&
+          this.#installationOctokits.get(installationId) === created
+        ) {
+          this.#installationOctokits.delete(installationId);
+        }
+        throw error;
+      });
+      octokit = created;
       if (this.#installationOctokits.size >= INSTALLATION_OCTOKIT_CACHE_MAX_ENTRIES) {
         const oldest = this.#installationOctokits.keys().next().value;
         if (oldest !== undefined) this.#installationOctokits.delete(oldest);
