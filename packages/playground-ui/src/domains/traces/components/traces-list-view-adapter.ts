@@ -2,7 +2,9 @@ import type { TraceQueryTrace } from '@mastra/core/storage';
 import { displayTraceName } from '../trace-list-columns';
 import type { TracesListViewTrace } from './traces-list-view';
 
-export function toTracesListViewTraces(traces: TraceQueryTrace[]): TracesListViewTrace[] {
+type TraceQueryRow = TraceQueryTrace & Pick<TracesListViewTrace, 'outputPreview' | 'errorPreview'>;
+
+export function toTracesListViewTraces(traces: TraceQueryRow[]): TracesListViewTrace[] {
   return traces.map(trace => ({
     traceId: trace.traceId,
     spanId: trace.rootSpanId,
@@ -11,6 +13,7 @@ export function toTracesListViewTraces(traces: TraceQueryTrace[]): TracesListVie
     createdAt: trace.createdAt,
     inputPreview: trace.inputPreview,
     outputPreview: trace.outputPreview,
+    errorPreview: trace.errorPreview,
     metadata: trace.metadata,
     entityId: trace.entityId,
     entityName: trace.entityName,

@@ -2,6 +2,7 @@ export const TRACE_OPTIONAL_COLUMNS = [
   'type',
   'input',
   'output',
+  'error',
   'duration',
   'endTime',
   'environment',
@@ -121,6 +122,7 @@ export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): s
   keys.push('name');
   if (visible.has('input')) keys.push('input');
   if (visible.has('output')) keys.push('output');
+  if (visible.has('error')) keys.push('error');
   keys.push('status');
   for (const column of ['duration', 'endTime', 'environment', ...TRACE_USAGE_COLUMNS] as const) {
     if (visible.has(column)) keys.push(column);
@@ -136,9 +138,10 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
   const columns = ['11rem'];
 
   if (visible.has('type')) columns.push('7rem');
-  columns.push(visible.has('input') || visible.has('output') ? '14rem' : 'minmax(8rem,1fr)');
+  columns.push(visible.has('input') || visible.has('output') || visible.has('error') ? '14rem' : 'minmax(8rem,1fr)');
   if (visible.has('input')) columns.push('minmax(8rem,1fr)');
   if (visible.has('output')) columns.push('minmax(8rem,1fr)');
+  if (visible.has('error')) columns.push('minmax(8rem,1fr)');
 
   columns.push('6rem');
 

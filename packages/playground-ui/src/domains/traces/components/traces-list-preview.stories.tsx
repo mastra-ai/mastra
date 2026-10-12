@@ -14,7 +14,11 @@ const meta = {
   ],
   args: {
     onTraceClick: () => {},
-    columnPreferences: { visibleColumns: ['input', 'output', 'duration'], customColumns: [], metadataKeys: [] },
+    columnPreferences: {
+      visibleColumns: ['input', 'output', 'error', 'duration'],
+      customColumns: [],
+      metadataKeys: [],
+    },
     traces: [
       {
         traceId: 'preview',
@@ -28,10 +32,11 @@ const meta = {
       },
       {
         traceId: 'legacy',
-        name: 'Older trace without stored output',
+        name: 'Report agent',
         createdAt: '2026-10-12T09:00:00Z',
         inputPreview: 'Summarize this report.',
-        status: 'success',
+        errorPreview: 'Document could not be loaded.',
+        status: 'error',
       },
     ],
   },

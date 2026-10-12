@@ -20,26 +20,6 @@ The `group` option remains supported until the next major release. Use [`queryTr
 
 :::
 
-## Stored previews
-
-Trace query rows may include an optional `outputPreview` supplied by the storage adapter. Older adapters omit it; `null` indicates no output preview is available. The Studio trace table can display this field through its **Output** column control. Adding this response field does not generate or store previews automatically.
-
-### Format native span previews
-
-Writers can use `buildSpanInputPreview()` and `buildSpanOutputPreview()` from `@mastra/core/observability` to format native span values before storing them:
-
-```typescript
-import { buildSpanOutputPreview, SpanType } from '@mastra/core/observability'
-
-const preview = buildSpanOutputPreview({
-  spanType: SpanType.MODEL_INFERENCE,
-  output: { text: 'The answer' },
-})
-// { value: 'The answer', truncated: false }
-```
-
-Both helpers return `{ value: string | null, truncated: boolean }`, limited to 256 Unicode code points without an appended ellipsis. Pass native values, not serialized database JSON. Model output uses its text when present; other structured values use JSON. Missing output stays `null`. These helpers do not select which span represents a trace or change existing trace input previews.
-
 ## Query individual spans
 
 `querySpans()` returns one row per matching completed span across traces, including matching child spans. Use it to list the spans themselves, for example every failed tool call in the last day.
