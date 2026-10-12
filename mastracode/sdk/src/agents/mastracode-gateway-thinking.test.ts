@@ -17,7 +17,6 @@ mkdirSync(appDataDir, { recursive: true });
 function createGateway(thinkingLevel: ThinkingLevelSetting | undefined, { routeThroughMastraGateway = false } = {}) {
   return new MastraCodeGateway({
     mastraGatewayBaseUrl: 'https://gateway.example.com',
-    mastraGatewayApiKey: 'gateway-key',
     routeThroughMastraGateway,
     thinkingLevel,
     customProviders: [{ name: 'My Local', url: 'https://custom.example.com/v1', models: ['local-model'] }] as any,
