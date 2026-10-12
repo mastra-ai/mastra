@@ -237,7 +237,7 @@ inputProcessors: [
 
 ## Violation callbacks
 
-Processors support an `onViolation` callback that fires when a policy violation aborts the run, for example with the `block` strategy. Some processors, such as `RegexFilterProcessor`, also call it directly when they redact content. Strategies that only log, such as `warn`, don't call it. Use it for side effects like alerting, logging to external systems, or sending notifications.
+Processors support an `onViolation` callback that fires when a policy violation aborts the run, for example with the `block` strategy. Some processors also call it directly: `RegexFilterProcessor` when it redacts content, and `TokenCostControl` when it warns. Strategies that only log, such as `ModerationProcessor`'s `warn`, don't call it. Use it for side effects like alerting, logging to external systems, or sending notifications.
 
 The callback receives a `ProcessorViolation` object with `processorId`, `message`, and `detail` (processor-specific metadata).
 
