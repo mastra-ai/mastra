@@ -311,10 +311,11 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         body: {
           error: expect.stringContaining('calculatorTool'),
           problem: {
-            type: 'about:blank',
-            title: 'Bad Request',
+            type: 'urn:mastra:error:MCP_TOOL_INVALID_INPUT',
+            title: 'Invalid MCP tool input',
             status: 400,
             detail: body.error,
+            code: 'MCP_TOOL_INVALID_INPUT',
           },
         },
       });
