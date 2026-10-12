@@ -7,8 +7,6 @@
 
 import type { MastraCompositeStore, RetentionConfig } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
-import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-import { PostgresStore } from '@mastra/pg';
 
 import type { StorageConfig, PgStorageConfig } from './project.js';
 import { getDatabasePath, getVectorDatabasePath } from './project.js';
@@ -22,13 +20,18 @@ export const MASTRA_CODE_LOCAL_PRAGMAS = {
 /**
  * Construct a LibSQL store for an arbitrary url/authToken, applying the same
  * local pragmas the default factory uses.
+ *
+ * Async because `@mastra/libsql` (native driver) is imported lazily — storage
+ * packages must not load at module parse time or they sit on the CLI's cold
+ * start path even when another backend is configured.
  */
-export function buildLibSQLStore(opts: {
+export async function buildLibSQLStore(opts: {
   id?: string;
   url: string;
   authToken?: string;
   retention?: RetentionConfig;
-}): MastraCompositeStore {
+}): Promise<MastraCompositeStore> {
+  const { LibSQLStore } = await import('@mastra/libsql');
   return new LibSQLStore({
     id: opts.id ?? 'mastra-code-storage',
     url: opts.url,
@@ -38,8 +41,9 @@ export function buildLibSQLStore(opts: {
   });
 }
 
-/** Construct a LibSQL vector store for an arbitrary url/authToken. */
-export function buildLibSQLVector(opts: { id?: string; url: string; authToken?: string }): MastraVector {
+/** Construct a LibSQL vector store for an arbitrary url/authToken. Async — see buildLibSQLStore. */
+export async function buildLibSQLVector(opts: { id?: string; url: string; authToken?: string }): Promise<MastraVector> {
+  const { LibSQLVector } = await import('@mastra/libsql');
   return new LibSQLVector({
     id: opts.id ?? 'mastra-code-vectors',
     url: opts.url,
@@ -55,7 +59,7 @@ export interface StorageResult {
   warning?: string;
 }
 
-function createFallbackLibSQL(): MastraCompositeStore {
+function createFallbackLibSQL(): Promise<MastraCompositeStore> {
   return buildLibSQLStore({ url: `file:${getDatabasePath()}`, retention: DEFAULT_RETENTION });
 }
 
@@ -72,7 +76,7 @@ export async function createStorage(config: StorageConfig): Promise<StorageResul
 
   // Default: LibSQL
   return {
-    storage: buildLibSQLStore({ url: config.url, authToken: config.authToken, retention: DEFAULT_RETENTION }),
+    storage: await buildLibSQLStore({ url: config.url, authToken: config.authToken, retention: DEFAULT_RETENTION }),
     backend: 'libsql',
   };
 }
@@ -81,7 +85,7 @@ async function createPgStorage(config: PgStorageConfig): Promise<StorageResult> 
   // No connection info → fall back with guidance
   if (!config.connectionString && !config.host) {
     return {
-      storage: createFallbackLibSQL(),
+      storage: await createFallbackLibSQL(),
       backend: 'libsql',
       warning:
         'PostgreSQL backend selected but no connection info configured. ' +
@@ -97,6 +101,7 @@ async function createPgStorage(config: PgStorageConfig): Promise<StorageResult> 
     ...(config.skipDefaultIndexes ? { skipDefaultIndexes: config.skipDefaultIndexes } : {}),
   };
 
+  const { PostgresStore } = await import('@mastra/pg');
   const store = config.connectionString
     ? new PostgresStore({ ...base, connectionString: config.connectionString })
     : new PostgresStore({
@@ -121,7 +126,7 @@ async function createPgStorage(config: PgStorageConfig): Promise<StorageResult> 
       // ignore cleanup errors
     }
     return {
-      storage: createFallbackLibSQL(),
+      storage: await createFallbackLibSQL(),
       backend: 'libsql',
       warning:
         `Failed to connect to PostgreSQL at ${target}: ${msg}\n` +
