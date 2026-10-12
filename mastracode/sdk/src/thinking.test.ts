@@ -94,6 +94,8 @@ describe('thinking model capabilities', () => {
     ['Claude without extended thinking offers only off', 'anthropic/claude-3-5-haiku-20241022', undefined, ['off']],
     ['Gemini without a thinking config offers only off', 'google/gemini-2.0-flash', undefined, ['off']],
     ['providers whose request cannot carry the level offer only off', 'zai/glm-5', effort('low', 'high'), ['off']],
+    ['GitHub Copilot offers only off without catalog data', 'github-copilot/claude-opus-4.7', undefined, ['off']],
+    ['Kimi for Coding offers only off without catalog data', 'kimi-for-coding/kimi-k2.6', undefined, ['off']],
     ['models missing from the catalog keep every level', 'my-local/local-model', undefined, THINKING_LEVEL_VALUES],
     [
       'xAI offers only the efforts its package accepts',

@@ -56,6 +56,18 @@ export function isThinkingAdapterProvider(provider: string): boolean {
   return THINKING_ADAPTER_PROVIDERS.has(provider);
 }
 
+const PROVIDERS_ROUTED_WITHOUT_THINKING: ReadonlySet<string> = new Set([
+  'github-copilot',
+  'kimi-for-coding',
+  'moonshotai',
+  'amazon-bedrock',
+]);
+
+export function isRoutedWithoutThinking(modelId: string): boolean {
+  const [provider = ''] = stripMastraGatewayPrefix(modelId).split('/');
+  return PROVIDERS_ROUTED_WITHOUT_THINKING.has(provider);
+}
+
 export function thinkingRequestFormatFor(modelId: string): ThinkingRequestFormat | undefined {
   const routedThroughMastraGateway = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
   const [provider = ''] = stripMastraGatewayPrefix(modelId).split('/');

@@ -6,4 +6,4 @@ Fixed the thinking level being ignored by more providers. It now reaches Groq, M
 
 It also reaches every model routed through the Mastra gateway with an API key. That includes Claude, GPT and Gemini.
 
-The thinking picker lists only the levels a model's request can carry. For example, GLM-5.2 through Mistral tops out at High instead of failing the request on Max. Models whose requests cannot carry a level, such as Z.ai models, now offer only Off instead of levels that did nothing. Off still leaves each model on its own default.
+The thinking picker lists only the levels a model's request can carry. For example, GLM-5.2 through Mistral tops out at High instead of failing the request on Max. Models whose requests cannot carry a level now offer only Off instead of levels that did nothing. That includes Z.ai, Kimi, GitHub Copilot and Amazon Bedrock models. Off still leaves each model on its own default.
