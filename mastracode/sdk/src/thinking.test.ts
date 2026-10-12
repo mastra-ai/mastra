@@ -6,6 +6,7 @@ import {
   resolveDefaultThinkingLevel,
   runThinkingLevel,
   supportsMaxReasoningEffort,
+  THINKING_LEVEL_VALUES,
 } from './thinking.js';
 
 const effort = (...values: string[]) => [{ type: 'effort' as const, values }];
@@ -92,12 +93,8 @@ describe('thinking model capabilities', () => {
     ],
     ['Claude without extended thinking offers only off', 'anthropic/claude-3-5-haiku-20241022', undefined, ['off']],
     ['Gemini without a thinking config offers only off', 'google/gemini-2.0-flash', undefined, ['off']],
-    [
-      'providers without a request format offer the efforts the model publishes',
-      'zai/glm-5',
-      effort('low', 'high'),
-      ['off', 'low', 'high'],
-    ],
+    ['providers whose request cannot carry the level offer only off', 'zai/glm-5', effort('low', 'high'), ['off']],
+    ['models missing from the catalog keep every level', 'my-local/local-model', undefined, THINKING_LEVEL_VALUES],
     [
       'xAI offers only the efforts its package accepts',
       'xai/grok-4.6',
@@ -120,7 +117,7 @@ describe('thinking model capabilities', () => {
     ['other providers listed without reasoning controls offer only off', 'xai/grok-4.20-0309-reasoning', [], ['off']],
     [
       'models that only toggle thinking offer off and one on level',
-      'zai/glm-4.6',
+      'togetherai/Qwen/Qwen3.5-9B',
       [{ type: 'toggle' }],
       ['off', 'high'],
     ],

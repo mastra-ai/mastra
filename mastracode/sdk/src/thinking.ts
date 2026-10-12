@@ -6,7 +6,7 @@ import {
 } from './providers/anthropic-thinking.js';
 import { runGeminiThinkingLevel } from './providers/google-thinking.js';
 import { normalizeAnthropicModelId, stripMastraGatewayPrefix } from './providers/model-ids.js';
-import { thinkingRequestFormatFor } from './providers/thinking-request.js';
+import { isThinkingAdapterProvider, thinkingRequestFormatFor } from './providers/thinking-request.js';
 
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
@@ -72,8 +72,9 @@ export function requestableReasoningOptions(
   modelId: string,
   reasoningOptions: readonly ModelReasoningOption[] | undefined,
 ): readonly ModelReasoningOption[] | undefined {
+  if (!reasoningOptions) return reasoningOptions;
   const format = thinkingRequestFormatFor(modelId);
-  if (!format || !reasoningOptions) return reasoningOptions;
+  if (!format) return isThinkingAdapterProvider(splitProvider(modelId).provider) ? reasoningOptions : [];
   const acceptedEfforts = format.sendEffort ? (format.acceptedEfforts ?? ACTIVE_THINKING_LEVELS) : [];
   return reasoningOptions.flatMap((option): ModelReasoningOption[] => {
     if (option.type === 'toggle') return format.enableThinking ? [option] : [];
