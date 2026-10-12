@@ -9,6 +9,7 @@ import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { AlertCircleIcon, GaugeIcon } from 'lucide-react';
+import { getResultErrorMessage, getResultOutputText } from '../utils/result-output';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 /**
@@ -20,6 +21,8 @@ export type ExperimentResultsListItem = {
   id: string;
   itemId: string;
   input?: unknown;
+  output?: unknown;
+  targetType?: DatasetExperimentResult['targetType'];
   error?: unknown;
   status?: DatasetExperimentResult['status'] | null;
   tags?: string[] | null;
@@ -29,7 +32,7 @@ export type ExperimentResultsListItem = {
   startedAt?: string | Date | null;
 };
 
-const BUILT_IN_COLUMNS = new Set(['itemId', 'id', 'status', 'input', 'tags', 'scores', 'startedAt']);
+const BUILT_IN_COLUMNS = new Set(['itemId', 'id', 'status', 'input', 'output', 'error', 'tags', 'scores', 'startedAt']);
 
 export type ExperimentResultsSortKey = 'startedAt';
 
@@ -92,6 +95,8 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   const hasItemIdColumn = hasColumn('itemId') || hasColumn('id');
   const hasStatusColumn = hasColumn('status');
   const hasInputColumn = hasColumn('input');
+  const hasOutputColumn = hasColumn('output');
+  const hasErrorColumn = hasColumn('error');
   const hasTagsColumn = hasColumn('tags');
   const hasScoresColumn = hasColumn('scores');
   const hasStartedAtColumn = hasColumn('startedAt');
@@ -193,6 +198,21 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
 
                 {hasInputColumn && (
                   <DataList.TextCell font="mono">{truncate(formatValue(result.input), 200)}</DataList.TextCell>
+                )}
+
+                {hasOutputColumn && (
+                  <DataList.Cell className="truncate font-mono" data-testid={`result-output-${result.id}`}>
+                    {getResultOutputText(result) ?? ''}
+                  </DataList.Cell>
+                )}
+
+                {hasErrorColumn && (
+                  <DataList.Cell
+                    className="truncate text-destructive-foreground"
+                    data-testid={`result-error-${result.id}`}
+                  >
+                    {getResultErrorMessage(result) ?? ''}
+                  </DataList.Cell>
                 )}
 
                 {hasTagsColumn && (
