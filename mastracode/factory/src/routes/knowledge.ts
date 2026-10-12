@@ -948,7 +948,6 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           if ('response' in resolved) return resolved.response;
           const importerId = c.req.param('importerId');
           if (!importerId) return c.json({ error: 'importer_not_found' }, 404);
-          if (!resolved.knowledge.getImporter(importerId)) return c.json({ error: 'importer_not_found' }, 404);
 
           const rawStatus = c.req.query('status');
           const status = importRunStatus(rawStatus);
@@ -990,7 +989,6 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const importerId = c.req.param('importerId');
           if (!importerId) return c.json({ error: 'importer_not_found' }, 404);
           const importer = resolved.knowledge.getImporter(importerId);
-          if (!importer) return c.json({ error: 'importer_not_found' }, 404);
           const runId = c.req.param('runId');
           if (!runId) return c.json({ error: 'import_run_not_found' }, 404);
           const run = await resolved.knowledge.getImportRun(runId);
@@ -1006,7 +1004,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             : [];
           let transcript: KnowledgeImportRunDetailPayload['transcript'];
           if (run.transcriptThreadId) {
-            const memory = importer.agentic
+            const memory = importer?.agentic
               ? await importer.agentic.agent.getMemory().catch(() => undefined)
               : undefined;
             const recalled = memory

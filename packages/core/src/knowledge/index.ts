@@ -8,7 +8,6 @@ import type {
   ClaimKnowledgeSemanticOutboxInput,
   CreateKnowledgeNodeInput,
   CreateKnowledgeImportRunInput,
-  KnowledgeImportRunStatus,
   KnowledgeScopeIds,
   KnowledgeSemanticOutboxEntry,
   KnowledgeStructurePlan,
@@ -362,14 +361,11 @@ export class Knowledge extends MastraBase {
   }
 
   async getImportRun(id: string) {
-    const run = await (await this.getStorage()).getImportRun(id);
-    if (run) this.#assertImporter(run.importerId);
-    return run;
+    return (await this.getStorage()).getImportRun(id);
   }
 
   async listImportRuns(input: ListKnowledgeImportRunsInput = {}) {
     if (input.importerId) {
-      this.#assertImporter(input.importerId);
       return (await this.getStorage()).listImportRuns(input);
     }
 
@@ -500,11 +496,7 @@ export class Knowledge extends MastraBase {
 
   async listActivity(input: { scopeIds: KnowledgeScopeIds; importRunId?: string; after?: string; limit?: number }) {
     const storage = await this.getStorage();
-    if (input.importRunId) {
-      const run = await storage.getImportRun(input.importRunId);
-      if (!run) return [];
-      this.#assertImporter(run.importerId);
-    }
+    if (input.importRunId && !(await storage.getImportRun(input.importRunId))) return [];
     return storage.listActivity(input);
   }
 
