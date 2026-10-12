@@ -369,7 +369,6 @@ describe('estimateCosts', () => {
             image: 5,
           },
           outputDetails: {
-            reasoning: 30,
             audio: 10,
             image: 10,
           },
@@ -385,10 +384,32 @@ describe('estimateCosts', () => {
       tier_index: 0,
       error: 'no_pricing_for_usage_type',
     });
-    expect(costs.get(TokenMetrics.OUTPUT_REASONING)?.costMetadata).toEqual({
+    expect(costs.get(TokenMetrics.OUTPUT_AUDIO)?.costMetadata).toEqual({
       pricing_id: 'openai-gpt-4o-mini',
       tier_index: 0,
       error: 'no_pricing_for_usage_type',
+    });
+  });
+
+  it('prices reasoning tokens at the reasoning rate, or the output rate when the model has none', () => {
+    const registry = PricingRegistry.fromText(
+      [
+        '{"i":"with-rate","p":"openai","m":"with-rate","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1e-6},"ot":{"c":4e-6},"ort":{"c":2e-6}}}]}}}',
+        '{"i":"without-rate","p":"openai","m":"without-rate","s":{"v":"model_pricing/v1","d":{"u":"USD","t":[{"r":{"it":{"c":1e-6},"ot":{"c":4e-6}}}]}}}',
+      ].join('\n'),
+    );
+    const usage = { inputTokens: 0, outputTokens: 1_000, outputDetails: { text: 400, reasoning: 600 } };
+
+    const withRate = estimateCosts({ provider: 'openai', model: 'with-rate', usage }, registry);
+    expect(withRate.get(TokenMetrics.OUTPUT_REASONING)?.estimatedCost).toBeCloseTo(600 * 2e-6, 10);
+    expect(withRate.get(TokenMetrics.TOTAL_OUTPUT)?.estimatedCost).toBeCloseTo(400 * 4e-6 + 600 * 2e-6, 10);
+
+    const withoutRate = estimateCosts({ provider: 'openai', model: 'without-rate', usage }, registry);
+    expect(withoutRate.get(TokenMetrics.OUTPUT_REASONING)?.estimatedCost).toBeCloseTo(600 * 4e-6, 10);
+    expect(withoutRate.get(TokenMetrics.TOTAL_OUTPUT)?.estimatedCost).toBeCloseTo(1_000 * 4e-6, 10);
+    expect(withoutRate.get(TokenMetrics.TOTAL_OUTPUT)?.costMetadata).toEqual({
+      pricing_id: 'without-rate',
+      tier_index: 0,
     });
   });
 
@@ -424,7 +445,7 @@ describe('estimateCosts', () => {
       tier_index: 0,
       error: 'partial_cost',
     });
-    expect(costs.get(TokenMetrics.TOTAL_OUTPUT)?.estimatedCost).toBeCloseTo(0.00009);
+    expect(costs.get(TokenMetrics.TOTAL_OUTPUT)?.estimatedCost).toBeCloseTo(0.000108, 10);
     expect(costs.get(TokenMetrics.TOTAL_OUTPUT)?.costMetadata).toEqual({
       pricing_id: 'openai-gpt-4o-mini',
       tier_index: 0,
@@ -433,11 +454,7 @@ describe('estimateCosts', () => {
     expect(costs.get(TokenMetrics.INPUT_TEXT)?.estimatedCost).toBeCloseTo(0.00006);
     expect(costs.get(TokenMetrics.INPUT_CACHE_READ)?.estimatedCost).toBeCloseTo(0.00000375);
     expect(costs.get(TokenMetrics.OUTPUT_TEXT)?.estimatedCost).toBeCloseTo(0.00009);
-    expect(costs.get(TokenMetrics.OUTPUT_REASONING)?.costMetadata).toEqual({
-      pricing_id: 'openai-gpt-4o-mini',
-      tier_index: 0,
-      error: 'no_pricing_for_usage_type',
-    });
+    expect(costs.get(TokenMetrics.OUTPUT_REASONING)?.estimatedCost).toBeCloseTo(0.000018, 10);
   });
 
   it('adds summed detail costs onto totals when a mode has successful detail costs', () => {

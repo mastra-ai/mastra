@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   updates: [] as Array<{ set: Record<string, unknown>; where: unknown }>,
   /** When set, the stub models a local-provider callback rooted at <localRoot>/<sessionId>. */
   localRoot: null as string | null,
+  /** When false, the stub models a provider with no separate physical id (undefined `sandboxId`). */
+  physicalId: true,
   createSandbox: vi.fn((ctx: { sessionId: string; sandboxId?: string }) => {
     // Models a well-behaved provider: lazy start via ensureRunning() on the
     // first command/info call (coalesced, failures never latch), the hook
@@ -29,7 +31,7 @@ const mocks = vi.hoisted(() => ({
       // Physical, reattachable VM id — distinct from the logical `id` — as a
       // real provider (e.g. Railway) exposes. Reflects the reattach id when the
       // callback is given one, else the freshly provisioned VM id.
-      sandboxId: ctx.sandboxId ?? `vm-${ctx.sessionId}`,
+      sandboxId: mocks.physicalId ? (ctx.sandboxId ?? `vm-${ctx.sessionId}`) : undefined,
       provider: mocks.localRoot ? 'local' : 'stub',
       status: 'pending',
       ...(mocks.localRoot ? { workingDirectory: `${mocks.localRoot}/${ctx.sessionId}` } : {}),
@@ -1194,6 +1196,28 @@ describe('GitHub session workspace preparation', () => {
     await restarted.workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
 
     expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: 'vm-session-a' }));
+  });
+
+  it('persists no sandbox id for a provider without a physical one, so resume provisions by logical id', async () => {
+    mocks.physicalId = false;
+    try {
+      const { workspace } = await createLocalFactory();
+      addProject();
+      const session = addSession({ id: 'session-a' });
+      await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+      // The logical id must not be stored as a reattach hint: handed back as
+      // `sandboxId`, the provider would ask about a resource it never issued.
+      expect(session.sandboxId).toBeNull();
+
+      __clearSessionSandboxesForTests();
+      mocks.createSandbox.mockClear();
+      const restarted = await createLocalFactory();
+      await restarted.workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      expect(mocks.createSandbox).toHaveBeenCalledWith(expect.objectContaining({ sandboxId: undefined }));
+    } finally {
+      mocks.physicalId = true;
+    }
   });
 
   it('does not register GitHub refresh after an infrastructure setup failure', async () => {
@@ -3053,6 +3077,59 @@ describe('FactorySkillSource layering', () => {
     expect(visibleNames).toEqual(expect.arrayContaining([...REVIEW_ONLY_FACTORY_SKILLS]));
     expect(await source.exists(reviewSkill)).toBe(true);
     expect((await source.stat(reviewSkill)).type).toBe('file');
+  });
+
+  describe('repository skill roots', () => {
+    const repoRoot = path.resolve('/repo/.claude/skills');
+    const repoFallback = (names: string[]) =>
+      ({
+        ...fallbackStub,
+        readdir: async () => names.map(name => ({ name, type: 'directory' as const })),
+      }) as any;
+
+    it('hides repository skills named after bundled or app-local Factory skills', async () => {
+      const localRoot = await makeLocalRoot({ 'my-app-skill': '---\ndescription: app\n---\n# App Skill\n' });
+      await fs.writeFile(path.join(localRoot, 'README.md'), 'not a skill');
+      const source = new FactorySkillSource(
+        repoFallback(['my-app-skill', 'factory-plan', 'repo-only-skill', 'README.md']),
+        [repoRoot],
+        localRoot,
+      );
+
+      const names = (await source.readdir(repoRoot)).map(entry => entry.name);
+      // README.md is a file in the local root, so it reserves nothing.
+      expect(names).toEqual(['repo-only-skill', 'README.md']);
+    });
+
+    it('picks up app-local skills added after the source was created', async () => {
+      const localRoot = await makeLocalRoot({});
+      const source = new FactorySkillSource(repoFallback(['late-skill']), [repoRoot], localRoot);
+      expect((await source.readdir(repoRoot)).map(entry => entry.name)).toEqual(['late-skill']);
+
+      await fs.mkdir(path.join(localRoot, 'late-skill'));
+      await fs.writeFile(path.join(localRoot, 'late-skill', 'SKILL.md'), '# Late\n');
+      expect(await source.readdir(repoRoot)).toEqual([]);
+    });
+
+    it('does not filter paths that are not registered skill roots', async () => {
+      const localRoot = await makeLocalRoot({ 'my-app-skill': '# App\n' });
+      const source = new FactorySkillSource(repoFallback(['my-app-skill', 'factory-plan']), [repoRoot], localRoot);
+      const names = (await source.readdir(path.join(repoRoot, 'nested'))).map(entry => entry.name);
+      expect(names).toEqual(['my-app-skill', 'factory-plan']);
+    });
+
+    it('reserves only bundled names without a usable local root', async () => {
+      const names = ['factory-triage', 'my-app-skill'];
+      const noLocal = new FactorySkillSource(repoFallback(names), [repoRoot], undefined);
+      expect((await noLocal.readdir(repoRoot)).map(entry => entry.name)).toEqual(['my-app-skill']);
+
+      const missingLocal = new FactorySkillSource(
+        repoFallback(names),
+        [repoRoot],
+        path.join(os.tmpdir(), 'factory-missing-local-root-does-not-exist'),
+      );
+      expect((await missingLocal.readdir(repoRoot)).map(entry => entry.name)).toEqual(['my-app-skill']);
+    });
   });
 
   it('resolveLocalFactorySkillsPath handles the dev-server cwd variants', async () => {

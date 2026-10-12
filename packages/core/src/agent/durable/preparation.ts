@@ -54,9 +54,16 @@ import {
   applyClientToolModelOutput,
   fireClientToolOutputHooks,
 } from '../workflows/prepare-stream/client-tool-output-hooks';
+import { MASTRA_DURABLE_EXECUTIONS_KEY } from './execution-fence';
 import { authorizeDurableMemory } from './memory-fga';
+import { recordRunSavedMessages } from './run-message-refs';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
-import { createWorkflowInput, serializeClientTools } from './utils/serialize-state';
+import {
+  createWorkflowInput,
+  serializeClientTools,
+  serializeModelConfig,
+  serializeToolsetToolNames,
+} from './utils/serialize-state';
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 import { isJsonSafe } from './workflows/shared/schemas';
 
@@ -90,6 +97,9 @@ function snapshotRequestContextEntries(
     // executing worker's. The caller's own versions entry is re-added at the
     // call site.
     if (key === MASTRA_VERSIONS_KEY) continue;
+    // Execution ids are claimed per execution. A persisted id would be restored
+    // over a later execution's id (e.g. the recovered one) and fence it out.
+    if (key === MASTRA_DURABLE_EXECUTIONS_KEY) continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
     // the event loop on every durable step, and reading the value twice (probe
@@ -181,7 +191,9 @@ interface DurablePreparationAgent {
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
   __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  __getSubscribePendingSignals(): (runId: string, listener: () => void) => () => void;
   __getGoalConfig(): GoalConfig | undefined;
+  __hasFixedMemory(): boolean;
   __getMaxRetriesConfigured?(): boolean;
   __getMaxProcessorRetries?(): number | undefined;
   __listLLMRequestProcessors(
@@ -491,29 +503,24 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   let errorProcessors: ErrorProcessorOrWorkflow[] = [];
   let hasConfiguredErrorProcessors = false;
 
-  try {
-    inputProcessors = await typedAgent.listInputProcessors(requestContext);
-    // Call-time outputProcessors replace constructor-level ones (parity with
-    // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
-    outputProcessors = execOptions?.outputProcessors
-      ? execOptions.outputProcessors
-      : await typedAgent.listOutputProcessors(requestContext);
-    // Error processors resolve after output processors so a failing error
-    // resolver can't leave the run without its configured output processors.
-    // They resolve once: call-time errorProcessors replace the resolved list,
-    // including the defaults, and the request lane below reuses the result.
-    // `hasConfiguredErrorProcessors` excludes framework defaults and gates the
-    // implicit retry-cap warning, since the defaults self-limit.
-    ({ errorProcessors, hasConfiguredErrorProcessors } = await typedAgent.__resolveRunErrorProcessors(
-      requestContext,
-      execOptions?.errorProcessors,
-    ));
-    // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
-    // processors are skipped by ProcessorRunner.runProcessLLMRequest.
-    llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext, errorProcessors);
-  } catch (error) {
-    logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
-  }
+  inputProcessors = await typedAgent.listInputProcessors(requestContext);
+  // Call-time outputProcessors replace constructor-level ones (parity with
+  // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
+  outputProcessors = execOptions?.outputProcessors
+    ? execOptions.outputProcessors
+    : await typedAgent.listOutputProcessors(requestContext);
+  // Error processors resolve after output processors. They resolve once:
+  // call-time errorProcessors replace the resolved list, including the defaults,
+  // and the request lane below reuses the result. `hasConfiguredErrorProcessors`
+  // excludes framework defaults and gates the implicit retry-cap warning, since
+  // the defaults self-limit.
+  ({ errorProcessors, hasConfiguredErrorProcessors } = await typedAgent.__resolveRunErrorProcessors(
+    requestContext,
+    execOptions?.errorProcessors,
+  ));
+  // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
+  // processors are skipped by ProcessorRunner.runProcessLLMRequest.
+  llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext, errorProcessors);
 
   // Open AGENT_RUN here so processor_run spans (and their MEMORY_OPERATION
   // children) parent to it. MODEL_GENERATION is opened later under it.
@@ -590,7 +597,17 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           retry: error.options?.retry,
         });
       } else {
-        logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);
+        const inputProcessorError = new MastraError(
+          {
+            id: 'AGENT_INPUT_PROCESSOR_ERROR',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `[Agent:${publicAgentName}] - Input processor error`,
+          },
+          error,
+        );
+        agentSpan?.error({ error: inputProcessorError, endTree: true });
+        throw inputProcessorError;
       }
     }
   }
@@ -685,6 +702,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     ? new SaveQueueManager({
         logger,
         memory,
+        onSaved: recordRunSavedMessages(runId),
       })
     : undefined;
 
@@ -698,15 +716,19 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     if (structuredOutputSchema) {
       serializedStructuredOutput = {
         jsonPromptInjection: so.jsonPromptInjection,
-        // `instructions` means two different things depending on `model`: structuring-agent
-        // instructions when a separate structuring pass runs, injected prompt text when it
-        // does not. The durable path has no structuring pass (`structuringModelConfig` is
-        // never populated, so `llm-execution.ts` always takes the direct branch), so carrying
-        // the field when `model` is set would inject structuring-agent prose as the model's
-        // only output guidance. Withhold it there and let the generated schema instruction stand.
-        instructions: so.model ? undefined : so.instructions,
+        // With `model` set these are structuring-agent instructions for the finish-time
+        // structuring pass; otherwise they are injected into the main model's prompt.
+        instructions: so.instructions,
         useAgent: so.useAgent,
         hasStructuringModel: so.model ? true : undefined,
+        // Workers without the live config (remote/recovered runs) resolve the structuring
+        // model from this. Model instances persist as `provider/modelId`, like the main model.
+        structuringModelConfig:
+          typeof so.model === 'string'
+            ? { provider: so.model.split('/')[0] ?? '', modelId: so.model, originalConfig: so.model }
+            : so.model && typeof so.model.provider === 'string' && typeof so.model.modelId === 'string'
+              ? serializeModelConfig(so.model)
+              : undefined,
         errorStrategy: so.errorStrategy,
         // A non-JSON-safe fallback would fail options validation; in-process runs still
         // have it through the run registry's live config.
@@ -767,6 +789,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     scorers,
     options: {
       clientTools: serializeClientTools(execOptions?.clientTools, tools),
+      toolsetToolNames: serializeToolsetToolNames(execOptions?.toolsets),
       maxSteps: execOptions?.maxSteps,
       toolChoice: execOptions?.toolChoice as any,
       activeTools: execOptions?.activeTools,
@@ -823,6 +846,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       threadExists,
       savePerStep,
       observationalMemory,
+      fixedMemory: typedAgent.__hasFixedMemory(),
     },
     messageId,
     agentSpanData: agentSpan?.exportSpan(),
@@ -834,6 +858,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const registryEntry: RunRegistryEntry = {
     mastra,
     tools,
+    requestTools: tools,
     saveQueueManager,
     memory,
     memoryAuthorizationChecks,
@@ -876,6 +901,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // Signal drain — the closure reads from AgentThreadStreamRuntime's queues.
     // Non-serializable; cross-process engines lose it and signals go undelivered.
     drainPendingSignals: scope => typedAgent.__getDrainPendingSignals()(runId, scope),
+    subscribePendingSignals: listener => typedAgent.__getSubscribePendingSignals()(runId, listener),
     // Thread title generation — mirrors the non-durable `#executeOnFinish` branch,
     // which was never ported to the durable finish step (so `generateTitle` never
     // fired for durable/evented agents). Parked here because the agent instance is

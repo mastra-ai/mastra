@@ -2,6 +2,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
 
 import { MessageList } from '../agent/message-list';
+import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { PrefillErrorHandler } from './prefill-error-handler';
 import { ProviderHistoryCompat } from './provider-history-compat';
 import {
@@ -10,6 +11,7 @@ import {
   ECONNRESET_RETRY_MAX_DELAY_MS,
   defaultStabilityErrorProcessors,
   isECONNRESETError,
+  isMalformedFunctionCallError,
   STABILITY_ERROR_PROCESSOR_IDS,
 } from './stability-defaults';
 import { StreamErrorRetryProcessor } from './stream-error-retry-processor';
@@ -48,6 +50,16 @@ function makeApiError(statusCode: number, isRetryable = false): APICallError {
     requestBodyValues: {},
     statusCode,
     isRetryable,
+  });
+}
+
+function makeAgentStreamError(rawFinishReason?: string): MastraError {
+  return new MastraError({
+    id: 'AGENT_STREAM_ERROR',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.SYSTEM,
+    text: 'Agent stream finished with finishReason "error" but no error payload was provided',
+    details: { runId: 'run-1', ...(rawFinishReason && { rawFinishReason }) },
   });
 }
 
@@ -130,6 +142,26 @@ describe('default stability StreamErrorRetryProcessor policy', () => {
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 2 }))).resolves.toBeUndefined();
   });
 
+  it('retries a Gemini MALFORMED_FUNCTION_CALL finish twice, then stops', async () => {
+    const processor = retryProcessor();
+    const error = makeAgentStreamError('MALFORMED_FUNCTION_CALL');
+
+    await expect(processor.processAPIError(makeArgs({ error, retryCount: 0 }))).resolves.toEqual({ retry: true });
+    await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toEqual({ retry: true });
+    await expect(processor.processAPIError(makeArgs({ error, retryCount: 2 }))).resolves.toBeUndefined();
+  });
+
+  it('does not retry an AGENT_STREAM_ERROR with any other raw finish reason', async () => {
+    const processor = retryProcessor();
+
+    await expect(
+      processor.processAPIError(makeArgs({ error: makeAgentStreamError('SAFETY'), retryCount: 0 })),
+    ).resolves.toBeUndefined();
+    await expect(
+      processor.processAPIError(makeArgs({ error: makeAgentStreamError(), retryCount: 0 })),
+    ).resolves.toBeUndefined();
+  });
+
   it('never retries a known terminal authorization error (401)', async () => {
     const processor = retryProcessor();
     const error = makeApiError(401);
@@ -191,5 +223,29 @@ describe('ECONNRESET policy constants and matcher', () => {
     expect(isECONNRESETError(null)).toBe(false);
     expect(isECONNRESETError(new Error('rate limited'))).toBe(false);
     expect(isECONNRESETError(Object.assign(new Error('boom'), { code: 'ETIMEDOUT' }))).toBe(false);
+  });
+});
+
+describe('isMalformedFunctionCallError', () => {
+  it('matches an AGENT_STREAM_ERROR whose raw finish reason is MALFORMED_FUNCTION_CALL', () => {
+    expect(isMalformedFunctionCallError(makeAgentStreamError('MALFORMED_FUNCTION_CALL'))).toBe(true);
+    expect(
+      isMalformedFunctionCallError({
+        id: 'AGENT_STREAM_ERROR',
+        details: { rawFinishReason: 'MALFORMED_FUNCTION_CALL' },
+      }),
+    ).toBe(true);
+  });
+
+  it('does not match other errors', () => {
+    expect(isMalformedFunctionCallError(undefined)).toBe(false);
+    expect(isMalformedFunctionCallError(null)).toBe(false);
+    expect(isMalformedFunctionCallError(new Error('MALFORMED_FUNCTION_CALL'))).toBe(false);
+    expect(isMalformedFunctionCallError(makeAgentStreamError('SAFETY'))).toBe(false);
+    expect(isMalformedFunctionCallError(makeAgentStreamError())).toBe(false);
+    expect(
+      isMalformedFunctionCallError({ id: 'OTHER_ERROR', details: { rawFinishReason: 'MALFORMED_FUNCTION_CALL' } }),
+    ).toBe(false);
+    expect(isMalformedFunctionCallError({ id: 'AGENT_STREAM_ERROR' })).toBe(false);
   });
 });

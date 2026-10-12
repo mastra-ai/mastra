@@ -169,12 +169,9 @@
     "prism-ml/ternary-bonsai-2-27b",
     "qwen/qwen2.5-vl-72b-instruct",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3-vl-30b-a3b-thinking",
-    "qwen/qwen3-vl-32b-instruct",
     "qwen/qwen3-vl-8b-instruct",
-    "qwen/qwen3-vl-8b-thinking",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -445,33 +442,23 @@
     "qwen/qwen-2.5-7b-instruct",
     "qwen/qwen-2.5-coder-32b-instruct",
     "qwen/qwen-plus",
-    "qwen/qwen-plus-2025-07-28",
     "qwen/qwen2.5-vl-72b-instruct",
     "qwen/qwen3-14b",
-    "qwen/qwen3-235b-a22b",
     "qwen/qwen3-235b-a22b-2507",
     "qwen/qwen3-235b-a22b-thinking-2507",
     "qwen/qwen3-30b-a3b",
     "qwen/qwen3-30b-a3b-instruct-2507",
-    "qwen/qwen3-30b-a3b-thinking-2507",
     "qwen/qwen3-32b",
-    "qwen/qwen3-8b",
     "qwen/qwen3-coder",
     "qwen/qwen3-coder-30b-a3b-instruct",
     "qwen/qwen3-coder-flash",
     "qwen/qwen3-coder-next",
-    "qwen/qwen3-coder-plus",
-    "qwen/qwen3-max",
-    "qwen/qwen3-max-thinking",
     "qwen/qwen3-next-80b-a3b-instruct",
     "qwen/qwen3-next-80b-a3b-thinking",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3-vl-30b-a3b-thinking",
-    "qwen/qwen3-vl-32b-instruct",
     "qwen/qwen3-vl-8b-instruct",
-    "qwen/qwen3-vl-8b-thinking",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -483,7 +470,6 @@
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.6-flash",
-    "qwen/qwen3.6-max-preview",
     "qwen/qwen3.6-plus",
     "qwen/qwen3.7-flash",
     "qwen/qwen3.7-max",
@@ -636,7 +622,6 @@
     "ibm-granite/granite-4.2-8b",
     "inception/mercury-2",
     "inception/mercury-2.5",
-    "inclusionai/ling-3.0-flash-fin",
     "inclusionai/ling-3.0-flash-vl",
     "inference-net/schematron-v2-small",
     "inference-net/schematron-v2-turbo",
@@ -767,7 +752,6 @@
     "qwen/qwen-2.5-72b-instruct",
     "qwen/qwen-2.5-7b-instruct",
     "qwen/qwen-plus",
-    "qwen/qwen-plus-2025-07-28",
     "qwen/qwen2.5-vl-72b-instruct",
     "qwen/qwen3-14b",
     "qwen/qwen3-235b-a22b-2507",
@@ -777,18 +761,12 @@
     "qwen/qwen3-coder",
     "qwen/qwen3-coder-30b-a3b-instruct",
     "qwen/qwen3-coder-next",
-    "qwen/qwen3-coder-plus",
-    "qwen/qwen3-max",
-    "qwen/qwen3-max-thinking",
     "qwen/qwen3-next-80b-a3b-instruct",
     "qwen/qwen3-next-80b-a3b-thinking",
     "qwen/qwen3-vl-235b-a22b-instruct",
-    "qwen/qwen3-vl-235b-a22b-thinking",
     "qwen/qwen3-vl-30b-a3b-instruct",
     "qwen/qwen3-vl-30b-a3b-thinking",
-    "qwen/qwen3-vl-32b-instruct",
     "qwen/qwen3-vl-8b-instruct",
-    "qwen/qwen3-vl-8b-thinking",
     "qwen/qwen3.5-122b-a10b",
     "qwen/qwen3.5-27b",
     "qwen/qwen3.5-35b-a3b",
@@ -800,7 +778,6 @@
     "qwen/qwen3.6-27b",
     "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.6-flash",
-    "qwen/qwen3.6-max-preview",
     "qwen/qwen3.6-plus",
     "qwen/qwen3.7-max",
     "qwen/qwen3.7-plus",
@@ -1999,11 +1976,6 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen3-235b-a22b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen/qwen3.5-122b-a10b": [
       {
         "type": "toggle"
@@ -2020,11 +1992,6 @@
       }
     ],
     "qwen/qwen3.5-flash-02-23": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen/qwen3-max-thinking": [
       {
         "type": "toggle"
       }
@@ -2058,22 +2025,12 @@
         "type": "toggle"
       }
     ],
-    "qwen/qwen3.6-max-preview": [
-      {
-        "type": "toggle"
-      }
-    ],
     "qwen/qwen3-30b-a3b": [
       {
         "type": "toggle"
       }
     ],
     "qwen/qwen3.5-397b-a17b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen/qwen3-8b": [
       {
         "type": "toggle"
       }
