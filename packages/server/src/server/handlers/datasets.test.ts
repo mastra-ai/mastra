@@ -308,11 +308,14 @@ describe('Datasets Handlers', () => {
           COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds: ['a', 'b'], baselineId: 'c' }).success,
         ).toBe(false);
       });
+    });
 
-      it('rejects the removed experimentIdA/experimentIdB body', () => {
-        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIdA: 'a', experimentIdB: 'b' }).success).toBe(
-          false,
-        );
+    describe('when an older client sends experimentIdA/experimentIdB', () => {
+      it('compares them with experimentIdA as the baseline', () => {
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.parse({ experimentIdA: 'a', experimentIdB: 'b' })).toEqual({
+          experimentIds: ['a', 'b'],
+          baselineId: 'a',
+        });
       });
     });
   });

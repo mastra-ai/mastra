@@ -5686,10 +5686,7 @@ export const API_ROUTE_METADATA = {
       "datasetId"
     ],
     "queryParams": [],
-    "bodyParams": [
-      "baselineId",
-      "experimentIds"
-    ],
+    "bodyParams": [],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {

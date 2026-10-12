@@ -504,7 +504,7 @@ export const submitExperimentResultBodySchema = z.object({
     .describe('Externally computed scores, persisted keyed by runId = experimentId'),
 });
 
-export const compareExperimentsBodySchema = z
+const compareExperimentIdsBodySchema = z
   .object({
     experimentIds: z
       .array(z.string().min(1))
@@ -520,6 +520,22 @@ export const compareExperimentsBodySchema = z
     path: ['baselineId'],
     message: 'baselineId must be one of experimentIds',
   });
+
+/** Body sent by clients released before N-way comparison. Mapped to the experimentIds shape. */
+const legacyCompareExperimentsBodySchema = z
+  .object({
+    experimentIdA: z.string().min(1).describe('Deprecated: use experimentIds. Baseline experiment ID.'),
+    experimentIdB: z.string().min(1).describe('Deprecated: use experimentIds. Contender experiment ID.'),
+  })
+  .transform(({ experimentIdA, experimentIdB }) => ({
+    experimentIds: [experimentIdA, experimentIdB],
+    baselineId: experimentIdA,
+  }));
+
+export const compareExperimentsBodySchema = z.union([
+  compareExperimentIdsBodySchema,
+  legacyCompareExperimentsBodySchema,
+]);
 
 // ============================================================================
 // Response Schemas

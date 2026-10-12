@@ -2,11 +2,10 @@
 '@mastra/server': minor
 ---
 
-The compare experiments route (`POST /api/datasets/:datasetId/compare`) now compares two to ten experiments at once. Its body takes `experimentIds` and an optional `baselineId` instead of `experimentIdA` and `experimentIdB`.
+The compare experiments route (`POST /api/datasets/:datasetId/compare`) now compares two to ten experiments at once. Send `experimentIds` and an optional `baselineId`:
 
-**Upgrading**
-
-```diff
-- { "experimentIdA": "exp-1", "experimentIdB": "exp-2" }
-+ { "experimentIds": ["exp-1", "exp-2"], "baselineId": "exp-1" }
+```json
+{ "experimentIds": ["exp-1", "exp-2", "exp-3"], "baselineId": "exp-1" }
 ```
+
+The previous `{ "experimentIdA", "experimentIdB" }` body is still accepted and compares those two experiments with `experimentIdA` as the baseline. It is deprecated in favor of `experimentIds`.
