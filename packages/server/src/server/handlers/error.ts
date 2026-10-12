@@ -1,5 +1,6 @@
 import type { ZodError } from 'zod';
 
+import { buildProblem } from '../http-errors/build-problem';
 import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import type { MastraErrorCode } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
@@ -158,6 +159,7 @@ export function handleError(error: unknown, defaultMessage: string): never {
         attempted: error.attempted,
         offendingLabel: error.offendingLabel,
       },
+      problem: buildProblem({ status: 422, code: MASTRA_ERROR_CODES.MODEL_NOT_ALLOWED, detail: error.message }),
     };
     const res = new Response(JSON.stringify(body), {
       status: 422,

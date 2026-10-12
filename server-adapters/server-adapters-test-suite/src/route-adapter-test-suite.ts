@@ -1,3 +1,4 @@
+import { handleError } from '@mastra/server/handlers/error';
 import { createRoute, HTTPException, SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
@@ -996,6 +997,23 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
           },
           {
             method: 'GET',
+            path: '/custom/model-not-allowed',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalls++;
+              return handleError(
+                Object.assign(new Error('Model not allowed: anthropic/opus (static)'), {
+                  code: 'MODEL_NOT_ALLOWED' as const,
+                  allowed: [{ provider: 'openai', modelId: 'gpt-4o' }],
+                  attempted: { provider: 'anthropic', modelId: 'opus' },
+                  offendingLabel: 'static',
+                }),
+                'Error generating response',
+              );
+            },
+          },
+          {
+            method: 'GET',
             path: '/custom/http-error-unexpected',
             responseType: 'json',
             handler: async () => {
@@ -1084,6 +1102,35 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             code: 'AGENT_NOT_FOUND',
           },
         });
+      });
+
+      it('exposes MODEL_NOT_ALLOWED in the problem field next to the legacy error object', async () => {
+        const custom = await setupCustomErrorRoutes();
+
+        const response = await executeHttpRequest(custom.app, {
+          method: 'GET',
+          path: '/api/custom/model-not-allowed',
+        });
+
+        expect(response.status).toBe(422);
+        expect(response.headers['content-type']).toContain('application/json');
+        expect(response.data).toEqual({
+          error: {
+            code: 'MODEL_NOT_ALLOWED',
+            message: 'Model not allowed: anthropic/opus (static)',
+            allowed: [{ provider: 'openai', modelId: 'gpt-4o' }],
+            attempted: { provider: 'anthropic', modelId: 'opus' },
+            offendingLabel: 'static',
+          },
+          problem: {
+            type: 'urn:mastra:error:MODEL_NOT_ALLOWED',
+            title: 'Model not allowed',
+            status: 422,
+            detail: 'Model not allowed: anthropic/opus (static)',
+            code: 'MODEL_NOT_ALLOWED',
+          },
+        });
+        expect(custom.getHandlerCalls()).toBe(1);
       });
 
       it('masks the problem detail and exposes no code for unexpected server errors', async () => {

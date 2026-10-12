@@ -308,7 +308,15 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const body = await res.json();
       expect({ status: res.status, body }).toEqual({
         status: 400,
-        body: { error: expect.stringContaining('calculatorTool') },
+        body: {
+          error: expect.stringContaining('calculatorTool'),
+          problem: {
+            type: 'about:blank',
+            title: 'Bad Request',
+            status: 400,
+            detail: body.error,
+          },
+        },
       });
     });
   }

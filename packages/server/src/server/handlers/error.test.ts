@@ -93,6 +93,13 @@ describe('handleError', () => {
           attempted: err.attempted,
           offendingLabel: err.offendingLabel,
         },
+        problem: {
+          type: 'urn:mastra:error:MODEL_NOT_ALLOWED',
+          title: 'Model not allowed',
+          status: 422,
+          detail: err.message,
+          code: 'MODEL_NOT_ALLOWED',
+        },
       });
     });
 
