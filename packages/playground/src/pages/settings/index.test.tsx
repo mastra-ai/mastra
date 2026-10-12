@@ -13,7 +13,7 @@ import { server } from '@/test/msw-server';
 const BASE_URL = 'http://localhost:4111';
 
 async function renderSettingsPage() {
-  server.use(http.get(BASE_URL, () => HttpResponse.text('ok')));
+  server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })));
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
   render(
