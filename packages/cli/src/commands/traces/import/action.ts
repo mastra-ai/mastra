@@ -297,7 +297,8 @@ export async function runTraceImport(
   ui.step('Resolving Mastra Platform project');
   const requestedProject = options.targetProject ?? options.project;
   const destination = await resolveDestination(requestedProject, environment);
-  const projectLabel = requestedProject ?? destination.projectName;
+  // Echo what the user typed; with no flag, the ID is the only value guaranteed to resolve to this project.
+  const projectLabel = requestedProject ?? destination.projectId;
   options.signal?.throwIfAborted();
 
   let state: { directory: string; manifest: TraceImportManifest };

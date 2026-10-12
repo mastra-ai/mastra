@@ -281,7 +281,7 @@ describe('runTraceImport', () => {
       ),
       'Prepared trace import',
     );
-    expect(deps.ui?.outro).toHaveBeenCalledWith(expect.stringContaining('--target-project "Target project"'));
+    expect(deps.ui?.outro).toHaveBeenCalledWith(expect.stringContaining('--target-project target-project'));
   });
 
   it('prints the resume command with the project exactly as the user named it', async () => {
