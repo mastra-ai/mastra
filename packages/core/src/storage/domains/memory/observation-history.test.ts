@@ -22,10 +22,16 @@ describe('observation history filters', () => {
         lastObservedAt: new Date(),
       },
     });
-    await store.createReflectionGeneration({ currentRecord: first, reflection: 'newer generation', tokenCount: 1 });
+    const newHead = await store.createReflectionGeneration({
+      currentRecord: first,
+      reflection: 'newer generation',
+      tokenCount: 1,
+    });
     const before = structuredClone(await store.getObservationalMemoryHistory('thread', 'resource'));
     const found = await store.getObservationalMemoryHistory('thread', 'resource', 1, { groupId, sortDirection: 'ASC' });
-    expect(found.map(r => r.id)).toEqual([first.id]);
+    // Rollover moves the unactivated chunk to the new head; it is found there, still buffered.
+    expect(found.map(r => r.id)).toEqual([newHead.id]);
+    expect(found[0]?.bufferedObservationChunks).toHaveLength(1);
     expect(
       await store.getObservationalMemoryHistory('thread', 'resource', 1, { groupId: groupId.toUpperCase() }),
     ).toEqual([]);

@@ -1,0 +1,52 @@
+import { useContext, useState } from 'react';
+
+import { Txt } from '../Txt/Txt';
+import { AvatarSizeContext, avatarSizeClasses, type AvatarSize } from './avatar-size';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { cn } from '@/lib/utils';
+
+export type AvatarProps = {
+  src?: string;
+  name: string;
+  size?: AvatarSize;
+  interactive?: boolean;
+  color?: string;
+  textColor?: string;
+};
+
+export function AvatarNamed({ src, name, size, interactive = false, color, textColor }: AvatarProps) {
+  const contextSize = useContext(AvatarSizeContext);
+  const [didError, setDidError] = useState(false);
+  const resolvedSize = size ?? contextSize ?? 'sm';
+  const initial = name.trim()[0]?.toUpperCase() ?? 'A';
+  const showImage = Boolean(src) && !didError;
+  const showFallbackTint = !showImage && Boolean(color);
+
+  return (
+    <div
+      data-slot="avatar"
+      data-size={resolvedSize}
+      className={cn(
+        avatarSizeClasses[resolvedSize],
+        'flex shrink-0 items-center justify-center overflow-hidden rounded-full border border-border',
+        !showFallbackTint && 'bg-fill',
+        controlStateColorTransition,
+        interactive && 'cursor-pointer hover:border-border-hover',
+      )}
+      style={showFallbackTint ? { backgroundColor: color } : undefined}
+    >
+      {showImage ? (
+        <img src={src} alt={name} className="size-full object-cover" onError={() => setDidError(true)} />
+      ) : (
+        <Txt
+          variant={resolvedSize === 'xs' ? 'meta' : 'body'}
+          tone={showFallbackTint ? undefined : 'muted'}
+          className="text-center"
+          style={showFallbackTint && textColor ? { color: textColor } : undefined}
+        >
+          {initial}
+        </Txt>
+      )}
+    </div>
+  );
+}

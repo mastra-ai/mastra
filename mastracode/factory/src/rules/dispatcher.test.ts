@@ -2793,6 +2793,131 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
+  async function moveCardTo(storage: WorkItemsStorage, workItemId: string, stage: string) {
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await storage.update({ orgId: 'org-1', id: workItemId, userId: 'user-1', patch: { stages: [stage] } });
+  }
+
+  async function prepareReviewScenario(
+    idempotencyKey: string,
+    options: { cancelInFlight?: boolean; precedingMessage?: string },
+  ) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'factory-review',
+      arguments: 'PR 42',
+      idempotencyKey,
+      ...options,
+    });
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Fix issue',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'work',
+      session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: PROJECT_ID,
+      kickoffKey: `kickoff-${idempotencyKey}`,
+      kickoffMessage: null,
+    });
+    return { storage, item, transitionService };
+  }
+
+  it('drops the kickoff when the card moves while the work-item feed is loading', async () => {
+    const { storage, item, transitionService } = await prepareDeliverScenario('skill-card-moved-during-feed');
+    const { controller, session } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      feedReader: {
+        readRunContext: async () => {
+          await moveCardTo(storage, item.id, 'review');
+          return null;
+        },
+      } as never,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision?.status).toBe('superseded');
+    expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it('does not abort or post the preceding notice when the card moves while the feed is loading', async () => {
+    const { storage, item, transitionService } = await prepareReviewScenario('skill-cancel-moved-during-feed', {
+      cancelInFlight: true,
+      precedingMessage: 'Now reviewing',
+    });
+    const { controller, session, abort, sendNotificationSignal } = createSession(undefined, { streamActive: true });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      primeCredentials: vi.fn(async () => {}),
+      feedReader: {
+        readRunContext: async () => {
+          await moveCardTo(storage, item.id, 'review');
+          return null;
+        },
+      } as never,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision?.status).toBe('superseded');
+    expect(abort).not.toHaveBeenCalled();
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
+  it('drops the kickoff when the card moves while the preceding notice is delivered', async () => {
+    const { storage, item, transitionService } = await prepareReviewScenario('skill-moved-during-notice', {
+      precedingMessage: 'Now reviewing',
+    });
+    const { controller, session, sendNotificationSignal } = createSession(undefined, {
+      signalAccepted: Promise.resolve({ accepted: true, action: 'wake' }),
+    });
+    sendNotificationSignal.mockImplementationOnce(async () => {
+      await moveCardTo(storage, item.id, 'review');
+      return { persisted: Promise.resolve(), accepted: Promise.resolve({ action: 'persist' }) } as never;
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      primeCredentials: vi.fn(async () => {}),
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+    expect(decision?.status).toBe('superseded');
+    expect(session.sendSignal).not.toHaveBeenCalled();
+  });
+
   it('delivers a held kickoff once the card is moved into the stage its seat carries', async () => {
     // Decided while the card sat outside the plan seat's stages, like a held
     // triage run in Intake that Investigate approves and moves into Triage.

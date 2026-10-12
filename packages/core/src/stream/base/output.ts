@@ -385,11 +385,18 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     finishReason: undefined,
   };
   #bufferedText: LLMStepResult<OUTPUT>['text'][] = [];
+  /** Length of `#bufferedText` when the current step began; a retried step is cut back to it. */
+  #bufferedTextAtStepStart = 0;
   #bufferedObject: OUTPUT | undefined;
   #usedFallbackValue = false;
   #bufferedTextChunks: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
   #bufferedSources: LLMStepResult<OUTPUT>['sources'] = [];
   #bufferedReasoning: LLMStepResult<OUTPUT>['reasoning'] = [];
+  /** Run-level reasoning as of the last `step-start` that has no `step-finish` yet. */
+  #reasoningAtStepStart?: {
+    length: number;
+    details: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]>;
+  };
   #bufferedFiles: LLMStepResult<OUTPUT>['files'] = [];
   #toolCallArgsDeltas: Record<string, LLMStepResult<OUTPUT>['text'][]> = {};
   #toolCallDeltaIdNameMap: Record<string, string> = {};
@@ -772,6 +779,27 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               }
               self.#closeTransportIfNeeded();
               break;
+            case 'step-start':
+              // A step reports the reasoning of the model request that completed it. A request
+              // cancelled by a queued signal ends without step-finish, so drop what it streamed.
+              self.#bufferedByStep.reasoning = [];
+              self.#bufferedByStepReasoningDetails = {};
+              // Text works the same way: a request that streamed text and then failed into an
+              // API-error retry (the durable agent starts each attempt with a new step-start)
+              // must not leave its partial text in front of the next request's answer (#26081).
+              if (self.#bufferedByStep.text) {
+                self.#bufferedByStep.text = '';
+                self.#bufferedText.length = Math.min(self.#bufferedText.length, self.#bufferedTextAtStepStart);
+              }
+              if (self.#reasoningAtStepStart) {
+                self.#bufferedReasoning.length = self.#reasoningAtStepStart.length;
+                self.#bufferedReasoningDetails = self.#reasoningAtStepStart.details;
+              }
+              self.#reasoningAtStepStart = {
+                length: self.#bufferedReasoning.length,
+                details: { ...self.#bufferedReasoningDetails },
+              };
+              break;
             case 'raw':
               if (!self.#options.includeRawChunks) {
                 return;
@@ -989,8 +1017,17 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               const currentPayloadStep = payloadSteps[payloadSteps.length - 1];
               const stepTripwire = currentPayloadStep?.tripwire;
 
+              // A retried attempt is thrown away (a processor rejected it, or an error processor
+              // answered its API error with a retry), so it contributes no text: neither to
+              // this step nor to the run's text, which would otherwise begin with the failed
+              // attempt's partial output (#26081).
+              const isRetriedStep = (chunk.payload.stepResult.reason as string) === 'retry';
+              if (isRetriedStep) {
+                self.#bufferedText.length = Math.min(self.#bufferedText.length, self.#bufferedTextAtStepStart);
+              }
+
               // If step has tripwire, text should be empty (rejected response)
-              const stepText = stepTripwire ? '' : self.#bufferedByStep.text;
+              const stepText = stepTripwire || isRetriedStep ? '' : self.#bufferedByStep.text;
 
               const stepResult: LLMStepResult<OUTPUT> = {
                 stepType: self.#bufferedSteps.length === 0 ? 'initial' : 'tool-result',
@@ -1004,7 +1041,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 // may be a stale reference (each workflow step deserializes
                 // a fresh instance).  Fall back to the live messageList for
                 // non-durable agents.
-                content: (chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1),
+                // A retried attempt was rolled back, so the last response content belongs to an earlier step.
+                content: isRetriedStep
+                  ? []
+                  : ((chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1)),
                 text: stepText,
                 // Include tripwire data if present
                 tripwire: stepTripwire,
@@ -1096,6 +1136,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 finishReason: undefined,
               };
               self.#bufferedByStepReasoningDetails = {};
+              self.#reasoningAtStepStart = undefined;
+              self.#bufferedTextAtStepStart = self.#bufferedText.length;
 
               // A continuing goal evaluation arrived while this step was still
               // in flight (in-process chunk ordering): this step-finish belongs
@@ -1998,15 +2040,19 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       | undefined;
 
     if (this.#returnScorerData) {
-      scoringData = {
-        input: {
-          inputMessages: this.messageList.getPersisted.input.db(),
-          rememberedMessages: this.messageList.getPersisted.remembered.db(),
-          systemMessages: this.messageList.getSystemMessages(),
-          taggedSystemMessages: this.messageList.getPersisted.taggedSystemMessages,
-        },
-        output: this.messageList.getPersisted.response.db(),
-      };
+      try {
+        scoringData = {
+          input: {
+            inputMessages: this.messageList.getPersisted.input.db(),
+            rememberedMessages: this.messageList.getPersisted.remembered.db(),
+            systemMessages: this.messageList.getSystemMessages(),
+            taggedSystemMessages: this.messageList.getPersisted.taggedSystemMessages,
+          },
+          output: await this.messageList.getRunResponseMessages(this.#options.loadStoredMessages),
+        };
+      } catch (error) {
+        this.logger.warn('Failed to load run response messages for scoring data', { error });
+      }
     }
 
     const steps = await this.steps;
@@ -2390,10 +2436,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedChunks.length = 0;
     this.#bufferedSteps.length = 0;
     this.#bufferedText.length = 0;
+    this.#bufferedTextAtStepStart = 0;
     this.#bufferedTextChunks = {};
     this.#bufferedSources.length = 0;
     this.#bufferedReasoning.length = 0;
     this.#bufferedReasoningDetails = {};
+    this.#reasoningAtStepStart = undefined;
     this.#bufferedFiles.length = 0;
     this.#toolCalls.length = 0;
     this.#toolResults.length = 0;
@@ -2485,6 +2533,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       bufferedByStepReasoningDetails: this.#bufferedByStepReasoningDetails,
       bufferedByStep: this.#bufferedByStep,
       bufferedText: this.#bufferedText,
+      bufferedTextAtStepStart: this.#bufferedTextAtStepStart,
       bufferedTextChunks: this.#bufferedTextChunks,
       bufferedSources: this.#bufferedSources,
       bufferedReasoning: this.#bufferedReasoning,
@@ -2512,6 +2561,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedByStepReasoningDetails = state.bufferedByStepReasoningDetails ?? {};
     this.#bufferedByStep = state.bufferedByStep;
     this.#bufferedText = state.bufferedText;
+    this.#bufferedTextAtStepStart = state.bufferedTextAtStepStart ?? state.bufferedText.length;
     this.#bufferedTextChunks = state.bufferedTextChunks;
     this.#bufferedSources = state.bufferedSources;
     this.#bufferedReasoning = state.bufferedReasoning;

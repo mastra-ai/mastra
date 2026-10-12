@@ -207,12 +207,13 @@ describe('DurableAgent stopWhen callback', () => {
 
       const stopWhenCalled = vi.fn().mockReturnValue(false);
 
-      const { runId, cleanup } = await durableAgent.stream('What is the weather in Toronto?', {
+      const { runId, cleanup, output } = await durableAgent.stream('What is the weather in Toronto?', {
         stopWhen: stopWhenCalled,
       });
 
       expect(runId).toBeDefined();
       // stopWhen is passed to the stream options
+      await output.consumeStream({ onError: () => {} });
       cleanup();
     });
 
@@ -261,12 +262,13 @@ describe('DurableAgent stopWhen callback', () => {
         return steps.some((step: any) => step.content?.some((item: any) => item.type === 'tool-result'));
       });
 
-      const { runId, cleanup } = await durableAgent.stream('Get the data', {
+      const { runId, cleanup, output } = await durableAgent.stream('Get the data', {
         stopWhen,
         maxSteps: 10,
       });
 
       expect(runId).toBeDefined();
+      await output.consumeStream({ onError: () => {} });
       cleanup();
     });
 
@@ -291,12 +293,13 @@ describe('DurableAgent stopWhen callback', () => {
 
       const stopWhen = vi.fn().mockReturnValue(false);
 
-      const { runId, cleanup } = await durableAgent.stream('Search for test', {
+      const { runId, cleanup, output } = await durableAgent.stream('Search for test', {
         stopWhen,
         maxSteps: 5,
       });
 
       expect(runId).toBeDefined();
+      await output.consumeStream({ onError: () => {} });
       cleanup();
     });
   });
@@ -315,12 +318,13 @@ describe('DurableAgent stopWhen callback', () => {
 
       const stopWhen = vi.fn().mockReturnValue(false);
 
-      const { runId, cleanup } = await durableAgent.stream('Hello', {
+      const { runId, cleanup, output } = await durableAgent.stream('Hello', {
         stopWhen,
         maxSteps: 3,
       });
 
       expect(runId).toBeDefined();
+      await output.consumeStream({ onError: () => {} });
       cleanup();
     });
 
@@ -371,11 +375,12 @@ describe('DurableAgent stopWhen callback', () => {
       // Stop immediately
       const stopWhen = vi.fn().mockReturnValue(true);
 
-      const { runId, cleanup } = await durableAgent.stream('Hello', {
+      const { runId, cleanup, output } = await durableAgent.stream('Hello', {
         stopWhen,
       });
 
       expect(runId).toBeDefined();
+      await output.consumeStream({ onError: () => {} });
       cleanup();
     });
   });
@@ -436,11 +441,12 @@ describe('DurableAgent stopWhen edge cases', () => {
       return false;
     });
 
-    const { runId, cleanup } = await durableAgent.stream('Hello', {
+    const { runId, cleanup, output } = await durableAgent.stream('Hello', {
       stopWhen,
     });
 
     expect(runId).toBeDefined();
+    await output.consumeStream({ onError: () => {} });
     cleanup();
   });
 
@@ -457,11 +463,12 @@ describe('DurableAgent stopWhen edge cases', () => {
 
     const stopWhen = vi.fn().mockReturnValue(false);
 
-    const { runId, cleanup } = await durableAgent.stream('Hello', {
+    const { runId, cleanup, output } = await durableAgent.stream('Hello', {
       stopWhen,
     });
 
     expect(runId).toBeDefined();
+    await output.consumeStream({ onError: () => {} });
     cleanup();
   });
 
@@ -482,11 +489,12 @@ describe('DurableAgent stopWhen edge cases', () => {
       return steps.length > 0;
     });
 
-    const { runId, cleanup } = await durableAgent.stream('Hello', {
+    const { runId, cleanup, output } = await durableAgent.stream('Hello', {
       stopWhen,
     });
 
     expect(runId).toBeDefined();
+    await output.consumeStream({ onError: () => {} });
     cleanup();
   });
 });

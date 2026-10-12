@@ -10,12 +10,14 @@ import {
   emitFinishEvent,
   runDurableFinishSideEffects,
   modelConfigSchema,
+  modelListEntrySchema,
   durableAgenticOutputSchema,
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
   globalRunRegistry,
+  loadRunStoredMessages,
   pruneAgentLoopSnapshot,
 } from '@mastra/core/agent/durable';
 import type {
@@ -61,6 +63,7 @@ const durableAgenticInputSchema = z.object({
   initialUntaggedSystemMessages: z.array(z.any()).optional(),
   toolsMetadata: z.array(z.any()),
   modelConfig: modelConfigSchema,
+  modelList: z.array(modelListEntrySchema).optional(),
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
@@ -92,6 +95,8 @@ export interface InngestDurableAgenticWorkflowOptions {
  * Iteration state schema - extends base with observability fields.
  */
 const iterationStateSchema = baseIterationStateSchema.extend({
+  // Fallback model list; the shared base state update does not carry it
+  modelList: z.array(modelListEntrySchema).optional(),
   // Observability - exported span data for agent run
   agentSpanData: z.any().optional(),
   // Observability - exported span data for model generation (ONE span for entire run)
@@ -179,6 +184,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
           toolsMetadata: state.toolsMetadata,
           modelConfig: state.modelConfig,
+          modelList: state.modelList,
           options: state.options,
           state: state.state,
           messageId: state.messageId,
@@ -267,6 +273,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // Extend with Inngest-specific observability fields
         const newIterationState: IterationState = {
           ...baseUpdate,
+          modelList: initData.modelList,
           // Preserve agent span data for observability
           agentSpanData: initData.agentSpanData,
           // Preserve model span data (ONE span for entire agent run)
@@ -450,6 +457,11 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               payload: tripwire,
             });
           }
+          if (pubsub && !tripwire) {
+            for (const chunk of finishResult.structuredOutputChunks ?? []) {
+              await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
+            }
+          }
 
           const finalOutput = {
             messageListState: finishResult.messageListState,
@@ -513,14 +525,16 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       )
       // Execute scorers (fire-and-forget, doesn't affect main result)
       .map(
-        async ({ inputData, getInitData, mastra, requestContext, tracingContext }) => {
-          executeDurableAgentScorers({
+        async params => {
+          const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
+          void executeDurableAgentScorers({
             initData: getInitData() as DurableAgenticWorkflowInput,
             finalOutput: inputData,
             mastra,
             requestContext,
             tracingContext,
-          });
+            loadStoredMessages: loadRunStoredMessages(params),
+          }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));
 
           return inputData;
         },

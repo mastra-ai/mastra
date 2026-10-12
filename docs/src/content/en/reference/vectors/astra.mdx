@@ -244,7 +244,7 @@ try {
   })
 } catch (error) {
   if (error instanceof MastraError) {
-    console.log(error.id) // 'MASTRA_VECTOR_ASTRA_QUERY_FAILED'
+    console.log(error.id) // 'MASTRA_VECTOR_ASTRA_QUERY_DB_ERROR'
     console.log(error.domain) // 'MASTRA_VECTOR'
     console.log(error.category) // 'USER' | 'THIRD_PARTY'
     console.log(error.details) // Additional error context

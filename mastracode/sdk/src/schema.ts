@@ -166,6 +166,12 @@ export const stateSchema = z
       })
       .optional(),
     subagentModelId: z.string().optional(),
+    // Per-agentType subagent selections, written by session.subagents.model.set
+    // (key shape: subagentModelId_<agentType>). Declared so state validation
+    // keeps them — Zod strips unknown keys.
+    subagentModelId_explore: z.string().optional(),
+    subagentModelId_plan: z.string().optional(),
+    subagentModelId_execute: z.string().optional(),
     projectPath: z.string().optional(),
     projectName: z.string().optional(),
     factoryProjectId: z.string().optional(),

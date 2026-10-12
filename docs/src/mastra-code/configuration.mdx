@@ -79,6 +79,8 @@ Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes
 
 Model choices belong to the pack, not to an individual thread. Updating a pack changes that mode's model for every thread that uses the pack. Each thread remembers its active pack and current model. When you switch modes, Mastra Code applies the active pack's model for the new mode.
 
+Start Mastra Code with `--pack <id>` to begin the session on a specific pack: a built-in pack id such as `anthropic` or `openai`, `custom:<name>`, or a bare custom-pack name. This applies the pack the way **Activate** in `/models` does — it becomes the default pack and is applied to the session, including any thread resumed at startup. An unknown id fails fast and lists the valid packs. `MASTRACODE_MODEL_ID` also sets a startup model; when both are given, `--pack` wins.
+
 `/models` also configures **fallback packs**: select a pack and choose **Set fallback…** from its action menu. When every account serving the active pack's provider is unavailable, either rate-limited or down after retries, the turn hops to the fallback pack's model for that mode. Fallbacks work for built-in and custom packs, and chains are allowed (A → B → C). Cycles are capped at one revisit per cascade (A → B → A), then the error surfaces. Every hop renders a notice in the transcript and is saved in the thread history. After a hop, the thread stays on the landed pack until you switch back with `/models`. There is no automatic recovery.
 
 When the active pack sets a concrete [memory model](#om-model-settings), the same chain also covers observational memory. If that model's provider is unavailable, the role falls back to the next pack's memory model in chain order.
