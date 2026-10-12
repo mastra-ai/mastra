@@ -13,12 +13,15 @@ import {
   listItemsQuerySchema,
   triggerExperimentBodySchema,
 } from '../schemas/datasets';
+import { DATASETS_ROUTES } from '../server-adapter/routes/datasets';
 import {
   ADD_ITEM_ROUTE,
   BATCH_INSERT_ITEMS_ROUTE,
   DELETE_ANY_EXPERIMENT_ROUTE,
   DELETE_DATASET_ROUTE,
   DELETE_EXPERIMENT_ROUTE,
+  EXPERIMENT_REVIEW_SUMMARY_ROUTE,
+  GET_ANY_EXPERIMENT_ROUTE,
   GET_DATASET_ROUTE,
   GET_EXPERIMENT_ROUTE,
   GET_ITEM_ROUTE,
@@ -1162,6 +1165,84 @@ describe('Datasets Handlers', () => {
           experimentId: 'does-not-exist',
         } as any),
       ).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
+  describe('GET_ANY_EXPERIMENT_ROUTE', () => {
+    async function createExperiment(tenancy?: { organizationId?: string; projectId?: string }) {
+      const dataset = await mastra.datasets.create({ name: 'Get Any Experiment DS', ...tenancy });
+      await dataset.addItem({ input: { q: 'q1' } });
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+      return { dataset, experimentId: created.experimentId as string };
+    }
+
+    it('returns an experiment with its datasetId without knowing the dataset', async () => {
+      const { dataset, experimentId } = await createExperiment();
+
+      const result = (await GET_ANY_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        experimentId,
+      } as any)) as any;
+
+      expect(result.id).toBe(experimentId);
+      expect(result.datasetId).toBe(dataset.id);
+    });
+
+    it('returns an experiment orphaned by dataset deletion with a null datasetId', async () => {
+      const { dataset, experimentId } = await createExperiment();
+      await mastra.datasets.delete({ id: dataset.id });
+
+      const result = (await GET_ANY_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        experimentId,
+      } as any)) as any;
+
+      expect(result.id).toBe(experimentId);
+      expect(result.datasetId).toBeNull();
+    });
+
+    it('returns 404 for a nonexistent experiment', async () => {
+      await expect(
+        GET_ANY_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          experimentId: 'does-not-exist',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('returns the experiment when tenancy matches', async () => {
+      const { experimentId } = await createExperiment({ organizationId: 'org_a', projectId: 'proj_1' });
+
+      const result = (await GET_ANY_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        experimentId,
+        organizationId: 'org_a',
+        projectId: 'proj_1',
+      } as any)) as any;
+
+      expect(result.id).toBe(experimentId);
+    });
+
+    it('returns 404 when tenancy does not match', async () => {
+      const { experimentId } = await createExperiment({ organizationId: 'org_a', projectId: 'proj_1' });
+
+      await expect(
+        GET_ANY_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          experimentId,
+          organizationId: 'org_b',
+        } as any),
+      ).rejects.toMatchObject({ status: 404 });
+    });
+
+    it('is registered after the review summary route so /experiments/review-summary is not shadowed', () => {
+      const routes: readonly unknown[] = DATASETS_ROUTES;
+      expect(routes.indexOf(EXPERIMENT_REVIEW_SUMMARY_ROUTE)).toBeGreaterThanOrEqual(0);
+      expect(routes.indexOf(GET_ANY_EXPERIMENT_ROUTE)).toBeGreaterThan(routes.indexOf(EXPERIMENT_REVIEW_SUMMARY_ROUTE));
     });
   });
 

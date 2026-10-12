@@ -78,6 +78,16 @@
         "default": "./dist/routes/index.cjs"
       }
     },
+    "./durable": {
+      "import": {
+        "types": "./dist/durable/index.d.ts",
+        "default": "./dist/durable/index.js"
+      },
+      "require": {
+        "types": "./dist/durable/index.d.cts",
+        "default": "./dist/durable/index.cjs"
+      }
+    },
     "./knowledge-compat": {
       "import": {
         "types": "./dist/knowledge-compat/index.d.ts",
@@ -86,6 +96,16 @@
       "require": {
         "types": "./dist/knowledge-compat/index.d.cts",
         "default": "./dist/knowledge-compat/index.cjs"
+      }
+    },
+    "./memory": {
+      "import": {
+        "types": "./dist/memory/index.d.ts",
+        "default": "./dist/memory/index.js"
+      },
+      "require": {
+        "types": "./dist/memory/index.d.cts",
+        "default": "./dist/memory/index.cjs"
       }
     },
     "./package.json": "./package.json"

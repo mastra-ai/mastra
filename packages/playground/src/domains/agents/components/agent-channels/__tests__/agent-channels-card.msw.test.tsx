@@ -14,12 +14,14 @@ import {
   pendingSlackInstallations,
   slackDiscordConfiguredPlatforms,
   slackInstallations,
+  unconfiguredPlatforms,
 } from '../../__tests__/fixtures/channels';
 import { AgentChannelsCard } from '../agent-channels-card';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const HEADING = 'Finish connecting your channels';
+const EMPTY_HEADING = 'Connect your channels';
 
 function renderCard() {
   const queryClient = new QueryClient({
@@ -105,12 +107,34 @@ describe('AgentChannelsCard', () => {
     await waitFor(() => expect(reconciled).toBe(true));
   });
 
-  it('renders nothing when no channel is connected yet', async () => {
+  it('offers Connect for every configured channel when nothing is connected yet', async () => {
     useChannels(noSlackInstallations, noSlackInstallations);
 
-    const { queryClient } = renderCard();
-    await settle(queryClient);
+    renderCard();
 
+    expect(await screen.findByText(EMPTY_HEADING)).not.toBeNull();
+    expect(screen.queryByText(HEADING)).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Connect' })).toHaveLength(2);
+    expect(screen.getByText('Slack')).not.toBeNull();
+    expect(screen.getByText('Discord')).not.toBeNull();
+    expect(screen.queryByText('Telegram')).toBeNull();
+    expect(screen.queryByText('Pending')).toBeNull();
+  });
+
+  it('renders nothing when no channel platform is configured', async () => {
+    let platformsRequested = false;
+    server.use(
+      http.get(`${BASE_URL}/api/channels/platforms`, () => {
+        platformsRequested = true;
+        return HttpResponse.json(unconfiguredPlatforms);
+      }),
+    );
+
+    renderCard();
+    await waitFor(() => expect(platformsRequested).toBe(true));
+    await act(async () => {});
+
+    expect(screen.queryByText(EMPTY_HEADING)).toBeNull();
     expect(screen.queryByText(HEADING)).toBeNull();
     expect(screen.queryByRole('button')).toBeNull();
   });

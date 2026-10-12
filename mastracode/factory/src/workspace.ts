@@ -209,9 +209,28 @@ export class FactorySkillSource implements SkillSource {
     }
     const entries = await this.fallback.readdir(skillPath);
     if (this.#fallbackSkillRoots.has(path.normalize(skillPath))) {
-      return entries.filter(entry => !FACTORY_SKILL_NAMES.has(entry.name));
+      const reserved = await this.#reservedNames();
+      return entries.filter(entry => !reserved.has(entry.name));
     }
     return entries;
+  }
+
+  /**
+   * Names the Factory mount serves: bundled skills plus the app's local skills.
+   * Repository skills with these names are hidden so they cannot collide with
+   * Factory's copy. Recomputed per scan so skill refreshes pick up local changes.
+   */
+  async #reservedNames(): Promise<Set<string>> {
+    const reserved = new Set(FACTORY_SKILL_NAMES);
+    if (!this.#localSource) return reserved;
+    try {
+      for (const entry of await this.#localSource.readdir('')) {
+        if (entry.type === 'directory') reserved.add(entry.name);
+      }
+    } catch {
+      // A missing or unreadable local root reserves only the bundled names.
+    }
+    return reserved;
   }
 
   realpath(skillPath: string): Promise<string> {
@@ -534,8 +553,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           id: session.id,
           // Persist the provider's PHYSICAL, reattachable VM id so resume can
           // reattach to the same VM. Providers with no separate physical id
-          // (e.g. local) fall back to the logical id, preserving prior behavior.
-          sandboxId: target.sandboxId ?? target.id,
+          // (e.g. local) persist nothing: a logical id handed back as a
+          // `sandboxId` hint is unknown to the provider and breaks resume.
+          sandboxId: target.sandboxId ?? null,
           sandboxWorkdir: sessionEntry.workdir ?? '',
         });
         void constructedWorkspaces

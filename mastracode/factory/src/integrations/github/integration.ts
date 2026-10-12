@@ -52,7 +52,7 @@ import { resolveGithubRules } from './default-rules.js';
 import { attachGithubIssueReconciler } from './issue-reconciler.js';
 import { GithubReconcileWorker } from './reconcile-worker.js';
 import { reconcileInterval, reconciliationEnabled } from './reconciliation-config.js';
-import { buildGithubRoutes } from './routes.js';
+import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.js';
 import { attachGithubReconciler, attachGithubRules } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import {
@@ -126,6 +126,9 @@ const COLLABORATOR_PERMISSION_CACHE_TTL_MS = 30 * 60_000;
 const COLLABORATOR_PERMISSION_CACHE_MAX_ENTRIES = 1000;
 /** Bound on the shared upstream lookup; callers race their own signal against it. */
 const COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS = 10_000;
+/** Missed-open issue discovery reads at most this many pages per repository per sweep. */
+const OPEN_ISSUE_DISCOVERY_MAX_PAGES = 5;
+const OPEN_ISSUE_DISCOVERY_PAGE_SIZE = 100;
 
 export interface IssueSummary {
   number: number;
@@ -379,6 +382,7 @@ export class GithubIntegration implements FactoryIntegration {
   readonly #webhookSecret: string | undefined;
   readonly #authorizedBots: readonly string[];
   #storage: IntegrationContext['storage'] | undefined;
+  #ingestFactoryEvent: ReturnType<typeof attachGithubRules>;
   #sourceControlStorage: IntegrationContext['storage']['sourceControl'] | undefined;
   /** `installationId:owner/repo:login` → cached collaborator permission (TTL-bounded). */
   readonly #collaboratorPermissionCache = new Map<
@@ -1208,6 +1212,7 @@ export class GithubIntegration implements FactoryIntegration {
   routes(ctx: IntegrationContext): ApiRoute[] {
     this.#storage = ctx.storage;
     const ingestFactoryEvent = attachGithubRules(this, ctx);
+    this.#ingestFactoryEvent = ingestFactoryEvent;
     return buildGithubRoutes({
       github: this,
       auth: ctx.auth,
@@ -1224,6 +1229,14 @@ export class GithubIntegration implements FactoryIntegration {
       sessionRetirement: ctx.sessionRetirement,
       ...(ctx.workItems ? { workItems: ctx.workItems } : {}),
     });
+  }
+
+  /**
+   * Import a newly linked repository's open issues and pull requests onto
+   * the board. No-op until routes are mounted with rules configured.
+   */
+  async ingestLinkedRepositoryBacklog(args: { orgId: string; projectRepositoryId: string }): Promise<void> {
+    await ingestLinkedRepositoryBacklog({ github: this, ...args, ingestFactoryEvent: this.#ingestFactoryEvent });
   }
 
   /**
@@ -1245,7 +1258,12 @@ export class GithubIntegration implements FactoryIntegration {
       ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
       : undefined;
     const issues = issueEnabled
-      ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
+      ? attachGithubIssueReconciler(
+          this,
+          ctx,
+          input => this.fetchIssueState(input),
+          input => this.listOpenIssueStates(input),
+        )
       : undefined;
     if (!reconcile && !issues) return [];
 
@@ -1335,6 +1353,47 @@ export class GithubIntegration implements FactoryIntegration {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Lists a repository's open issues (pull requests excluded) so the issue
+   * sweep can mint cards for issues whose webhook never arrived.
+   */
+  async listOpenIssueStates(input: {
+    installationId: number;
+    repository: string;
+  }): Promise<Array<ReconcileIssueState & { number: number }>> {
+    const parts = splitRepoFullName(input.repository);
+    if (!parts) return [];
+    const octokit = this.getInstallationOctokit(input.installationId);
+    const issues: Array<ReconcileIssueState & { number: number }> = [];
+    for (let page = 1; page <= OPEN_ISSUE_DISCOVERY_MAX_PAGES; page += 1) {
+      const { data } = await octokit.issues.listForRepo({
+        owner: parts.owner,
+        repo: parts.repo,
+        state: 'open',
+        per_page: OPEN_ISSUE_DISCOVERY_PAGE_SIZE,
+        page,
+      });
+      for (const issue of data) {
+        if (issue.pull_request) continue;
+        issues.push({
+          number: issue.number,
+          title: issue.title,
+          url: issue.html_url,
+          state: 'open',
+          assignees: (issue.assignees ?? []).map(user => user.login).filter((login): login is string => Boolean(login)),
+          labels: (issue.labels ?? [])
+            .map(label => (typeof label === 'string' ? label : label.name))
+            .filter((name): name is string => Boolean(name)),
+          ...(issue.user?.login ? { author: issue.user.login } : {}),
+          createdAt: issue.created_at,
+          updatedAt: issue.updated_at,
+        });
+      }
+      if (data.length < OPEN_ISSUE_DISCOVERY_PAGE_SIZE) break;
+    }
+    return issues;
   }
 
   /**
