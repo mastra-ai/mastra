@@ -1248,6 +1248,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       let existingEntry = existingRegistryEntry;
       if (!existingEntry) {
         existingEntry = {
+          mastra,
           // Minimal placeholder fields. The durable LLM step recreates tools
           // and model from the workflow input; this slot exists primarily to
           // carry the abort controller across the resumed segment. The
