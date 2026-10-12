@@ -144,7 +144,7 @@ function DialogContent({
         className={cn(
           'pb-3',
           size === 'full' && 'h-[calc(85vh+3rem)]',
-          '[&_[data-slot=dialog-header]]:pr-12',
+          showCloseButton && '[&_[data-slot=dialog-header]]:pr-12',
           className,
         )}
       >
@@ -164,7 +164,7 @@ function DialogContent({
         className={cn(
           dialogPopupClassName,
           dialogContentSizeClasses[size],
-          '[&_[data-slot=dialog-header]]:pr-12',
+          showCloseButton && '[&_[data-slot=dialog-header]]:pr-12',
           className,
         )}
       >
