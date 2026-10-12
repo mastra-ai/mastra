@@ -1,5 +1,30 @@
 # @mastra/observability
 
+## 1.20.0-alpha.0
+
+### Minor Changes
+
+- Cost estimates now use model prices from [models.dev](https://models.dev). Each release of `@mastra/observability` includes a recent snapshot of these prices. ([#26518](https://github.com/mastra-ai/mastra/pull/26518))
+
+  Models that models.dev no longer lists, mostly retired ones such as `claude-3-7-sonnet`, `o1-mini` and `gemini-1.5-pro`, no longer get cost estimates. Their token metrics are still recorded, without cost fields.
+
+  Prices can also refresh from models.dev while your app runs:
+
+  - Under `mastra dev`, refresh is on by default. Prices refresh in the background once a day, and when a model has no price. Refreshed prices are cached in `~/.cache/mastra`. Set `MASTRA_AUTO_REFRESH_PRICING=false` to turn it off.
+  - In other environments, such as production, refresh is off by default. Set `MASTRA_AUTO_REFRESH_PRICING=true` to turn it on.
+  - `MASTRA_OFFLINE=true` turns refresh off everywhere, whatever `MASTRA_AUTO_REFRESH_PRICING` is set to.
+
+  The `model` label on cost metrics now uses the models.dev model ID for some models, mostly gateway, OpenRouter and Amazon Bedrock models. After you upgrade, charts grouped by model can show these models under a new name.
+
+### Patch Changes
+
+- Update bundled model pricing with the latest prices from models.dev ([`6e5f3b3`](https://github.com/mastra-ai/mastra/commit/6e5f3b392e068550533031fa90474b902d0e10e0))
+
+- Spans now keep and export the `links` they were started with, and any links set on the span before it ends. Links whose IDs are not valid W3C trace and span IDs (32 and 16 lowercase hex characters, not all zeros) are ignored. ([#26059](https://github.com/mastra-ai/mastra/pull/26059))
+
+- Updated dependencies [[`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`821b8d4`](https://github.com/mastra-ai/mastra/commit/821b8d4253dcac5d8cf886994884e4645899bedc), [`878e0e2`](https://github.com/mastra-ai/mastra/commit/878e0e2f5adf9669158c7a8a8d67cd8809633c24), [`3504acd`](https://github.com/mastra-ai/mastra/commit/3504acdb2833b71db61dc9387c0f25f3cd0a3070), [`5bb6d71`](https://github.com/mastra-ai/mastra/commit/5bb6d711680d17370eacdcdab105e5af69202c5f), [`dab6849`](https://github.com/mastra-ai/mastra/commit/dab6849945ab2a0e4c946f5b31fb6f41b2c1cd7d), [`5227c95`](https://github.com/mastra-ai/mastra/commit/5227c95d54d0b4846220530450063f259797b587)]:
+  - @mastra/core@1.77.0-alpha.1
+
 ## 1.19.0
 
 ### Minor Changes
