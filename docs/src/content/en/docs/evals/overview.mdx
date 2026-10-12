@@ -150,7 +150,7 @@ Eligibility filters decide _whether a scorer runs_; to filter _which messages a 
 
 Scores are persisted when the Mastra instance has `storage` configured, and when the scorer is registered on that instance. Registration is what lets Mastra resolve the scorer's metadata (name, description, type) through [`getScorerById()`](/reference/core/getScorerById) before writing the score.
 
-Scorers you attach to an agent or a workflow step register themselves. Scorers you pass directly to [`runEvals()`](/reference/evals/run-evals), including [Quick Checks](/docs/evals/quick-checks), need the `scorers` option on the [`Mastra` class](/reference/core/mastra-class):
+Scorers you attach to an agent or a workflow step register themselves, including steps inside nested workflows. Registering a scorer on the `Mastra` instance doesn't run it automatically; to score live runs, add it to an agent's or workflow step's `scorers`. Scorers you pass directly to [`runEvals()`](/reference/evals/run-evals), including [Quick Checks](/docs/evals/quick-checks), need the `scorers` option on the [`Mastra` class](/reference/core/mastra-class):
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

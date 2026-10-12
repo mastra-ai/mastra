@@ -356,6 +356,32 @@ describe('createOnScorerHook', () => {
     expect(mockScorer.run.mock.calls[0][0].output).toBe(output);
   });
 
+  it('should fall back to the mastra-registered scorer when the workflow cannot be resolved', async () => {
+    const mockScorer = {
+      id: 'nested-step-scorer',
+      name: 'Nested step scorer',
+      run: vi.fn().mockResolvedValue({ score: 1 }),
+    };
+    mockMastra.getWorkflowById.mockImplementation(() => {
+      throw new Error('Workflow with ID inner not found');
+    });
+    mockMastra.getScorerById.mockReturnValue(mockScorer);
+
+    await hook({
+      runId: 'test-run',
+      scorer: { id: mockScorer.id },
+      input: [],
+      output: { value: 'step-result' },
+      source: 'LIVE',
+      entity: { id: 'inner' },
+      entityType: 'WORKFLOW',
+    });
+
+    expect(mockMastra.getScorerById).toHaveBeenCalledWith(mockScorer.id);
+    expect(mockScorer.run).toHaveBeenCalledTimes(1);
+    expect(mockScoresStore.saveScore).toHaveBeenCalledTimes(1);
+  });
+
   it('should pass live span correlation context and metadata into scorer.run', async () => {
     const correlationContext = {
       traceId: 'trace-live',

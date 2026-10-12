@@ -364,4 +364,49 @@ describe('Scorer Registration', () => {
       );
     });
   });
+
+  it('should save step scores from a nested workflow that is not registered on the Mastra instance', async () => {
+    const nestedScorer = createTestScorer('nested-step-scorer');
+    const saveScore = vi.fn().mockResolvedValue({ score: {} });
+    const innerStep = createStep({
+      id: 'inner-step',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      scorers: { nested: { scorer: nestedScorer } },
+      execute: async ({ inputData }) => inputData,
+    });
+    const inner = createWorkflow({
+      id: 'inner-workflow',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(innerStep)
+      .commit();
+    const outer = createWorkflow({
+      id: 'outer-workflow',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(inner)
+      .commit();
+
+    const mastra = new Mastra({
+      logger: false,
+      storage: {
+        init: vi.fn().mockResolvedValue(undefined),
+        getStore: vi.fn(async (domain: string) => (domain === 'scores' ? { saveScore } : null)),
+        __setLogger: vi.fn(),
+      } as any,
+      workflows: { outer },
+    });
+    vi.spyOn(mastra.observability, 'addScore').mockResolvedValue(undefined);
+
+    const run = await outer.createRun({ disableScorers: false });
+    const result = await run.start({ inputData: { value: 'input' } });
+
+    expect(result.status).toBe('success');
+    await vi.waitFor(() => {
+      expect(saveScore).toHaveBeenCalledWith(expect.objectContaining({ scorerId: 'nested-step-scorer' }));
+    });
+  });
 });
