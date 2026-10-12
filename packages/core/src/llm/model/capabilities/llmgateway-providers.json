@@ -119,6 +119,7 @@
     "deepinfra/nemotron-3-ultra-550b",
     "deepinfra/qwen3-vl-235b-a22b-instruct",
     "deepinfra/qwen3-vl-30b-a3b-instruct",
+    "deepinfra/qwen3.5-9b",
     "deepseek/deepseek-v4.1-flash",
     "entrim/deepseek-v4.1-flash",
     "entrim/glm-5.3-flash",
@@ -387,7 +388,6 @@
     "deepinfra/qwen3-vl-235b-a22b-instruct",
     "deepinfra/qwen3-vl-30b-a3b-instruct",
     "deepinfra/qwen3.5-9b",
-    "deepinfra/qwen3.8-2.4t-a95b",
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4.1-flash",
     "embercloud/glm-4.5",
@@ -701,7 +701,7 @@
     "deepinfra/mimo-v2.6-flash",
     "deepinfra/mimo-v2.6-pro",
     "deepinfra/muse-glimmer-30b",
-    "deepinfra/qwen3.8-2.4t-a95b",
+    "deepinfra/qwen3.5-9b",
     "entrim/deepseek-v4.1-flash",
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
@@ -876,12 +876,6 @@
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepinfra/qwen3.8-2.4t-a95b": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "deepinfra/muse-glimmer-30b": [

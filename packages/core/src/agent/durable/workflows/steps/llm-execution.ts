@@ -2043,6 +2043,26 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     finishReason = payload.stepResult?.reason || payload.finishReason || 'stop';
                     usage = payload.output?.usage || payload.usage || usage;
 
+                    // A provider can end the stream with finishReason 'error' without ever
+                    // enqueueing an error part (e.g. Google reports MALFORMED_FUNCTION_CALL
+                    // this way). Throw so the shared retry / error-processor / fallback path
+                    // sees it, matching the regular loop.
+                    if (finishReason === 'error') {
+                      const rawReason = payload.stepResult?.rawReason;
+                      throw new MastraError({
+                        id: 'AGENT_STREAM_ERROR',
+                        text: rawReason
+                          ? `Agent stream finished with finishReason "error" (provider reported "${rawReason}") but no error payload was provided`
+                          : 'Agent stream finished with finishReason "error" but no error payload was provided',
+                        domain: ErrorDomain.AGENT,
+                        category: ErrorCategory.SYSTEM,
+                        details: {
+                          runId,
+                          ...(rawReason && { rawFinishReason: rawReason }),
+                        },
+                      });
+                    }
+
                     // A provider can close the stream cleanly with finishReason 'other'
                     // without producing any output (e.g. @ai-sdk/openai defaults to
                     // 'other' when the SSE stream ends before a response.completed

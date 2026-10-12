@@ -9,6 +9,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import { ToolSearchProcessor } from '../../../processors/processors/tool-search';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
@@ -123,6 +124,64 @@ describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
 
     const { cleanup } = await agent.recover('run-1');
     expect(Object.keys(globalRunRegistry.get('run-1')?.tools ?? {})).toContain('find-order');
+    cleanup();
+  });
+
+  it('restores tools loaded by a search result the checkpoint keeps as a memory ref', async () => {
+    const store = new InMemoryStore();
+    const memory = new MockMemory({ storage: store });
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'search-agent',
+        name: 'search-agent',
+        instructions: 'x',
+        model: new MockLanguageModelV2({
+          doStream: async () => ({
+            stream: convertArrayToReadableStream([]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+          }),
+        }) as any,
+        memory,
+        inputProcessors: [new ToolSearchProcessor({ tools: { 'find-order': findOrder } })],
+      }),
+    });
+    void new Mastra({ agents: { 'search-agent': agent as any }, storage: store });
+
+    // The run saved the search result to memory, so its checkpoint holds a ref.
+    const state = transcript();
+    const saved = state.messages.find(message => message.id === 'a1')!;
+    await memory.createThread({ threadId: 't', resourceId: 'r' });
+    await memory.saveMessages({ messages: [{ ...saved, threadId: 't', resourceId: 'r' } as any] });
+    const checkpoint = {
+      ...state,
+      messages: state.messages.map(message =>
+        message.id === 'a1' ? { __ref: 'memory', id: 'a1', fingerprint: 'stale' } : message,
+      ),
+    };
+
+    const workflows = (await store.getStore('workflows'))!;
+    await workflows.persistWorkflowSnapshot({
+      workflowName: DurableStepIds.AGENTIC_LOOP,
+      runId: 'run-2',
+      resourceId: 'r',
+      snapshot: snapshot('run-2'),
+    });
+    await workflows.persistWorkflowSnapshot({
+      workflowName: DurableStepIds.AGENTIC_EXECUTION,
+      runId: 'run-2',
+      resourceId: 'r',
+      snapshot: snapshot('run-2', { messageListState: checkpoint }),
+    });
+
+    const restart = vi.fn(async () => ({ status: 'success' }));
+    vi.spyOn(agent, 'getWorkflow').mockReturnValue({
+      createRun: vi.fn(async ({ runId }: { runId: string }) => ({ restart, runId })),
+      restart,
+      deleteWorkflowRunById: vi.fn(async () => {}),
+    } as any);
+
+    const { cleanup } = await agent.recover('run-2');
+    expect(Object.keys(globalRunRegistry.get('run-2')?.tools ?? {})).toContain('find-order');
     cleanup();
   });
 });

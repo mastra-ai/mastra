@@ -16,6 +16,7 @@ import {
   saveSettings,
 } from '@mastra/code-sdk/onboarding/index';
 import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/index';
+import { activateModePackInSettings, resolvePackSelection } from '@mastra/code-sdk/onboarding/pack-activation';
 import {
   resolveThreadActiveModelPackId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
@@ -805,6 +806,26 @@ export class MastraTUI {
 
     // Resume the latest unlocked thread for this directory.
     const startupResumeIssue = await resumeThreadOnStartup(this.state, this.state.options.resumeThreadId);
+    // A --pack startup applies to whatever thread startup selected, including a
+    // resumed one — it overrides the thread's sticky pack for this session.
+    // Validation happens here, after the resume, because a resumed thread
+    // restores its persisted mode: the pack must have a model for that mode.
+    // Only a valid pack is persisted as the global default — a rejected pack
+    // fails fast instead of silently falling back or changing settings.
+    if (this.state.options.initialPackId) {
+      const packId = this.state.options.initialPackId;
+      const settings = loadSettings();
+      const modeId = this.state.session.mode.get();
+      if (!resolvePackSelection(settings, packId, modeId)) {
+        this.stop();
+        process.stderr.write(`Error: Model pack "${packId}" has no model for ${modeId} mode\n`);
+        this.exit(1);
+        return;
+      }
+      activateModePackInSettings(settings, packId);
+      saveSettings(settings);
+      await applyCurrentThreadPack({ state: this.state }, { packId });
+    }
     await this.syncThreadActivePackMetadata();
 
     // Subscribe to controller events

@@ -922,10 +922,11 @@ export interface StoredAgentToolConfig {
 /**
  * Per-MCP-client/integration tool configuration stored in agent snapshots.
  * Specifies which tools from an MCP client or integration provider are enabled and their overrides.
- * When `tools` is omitted, all tools from the source are included.
+ * An empty `tools` map (`{}`) includes all tools from the source.
+ * When `tools` is omitted, no tools are included.
  */
 export interface StoredMCPClientToolsConfig {
-  /** When omitted, all tools from the source are included. */
+  /** `{}` includes all tools from the source; when omitted, no tools are included. */
   tools?: Record<string, StoredAgentToolConfig>;
 }
 
@@ -2116,7 +2117,11 @@ export type ListDatasetExperimentResultsResponse = Omit<
   results: DatasetExperimentResult[];
 };
 
-export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'scores'>;
+export type DatasetExperimentResultRow = DatasetExperimentResult extends infer R
+  ? R extends unknown
+    ? Omit<R, 'scores'>
+    : never
+  : never;
 
 export type RunExperimentItemResponse =
   GeneratedResponse<'POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run'>;
