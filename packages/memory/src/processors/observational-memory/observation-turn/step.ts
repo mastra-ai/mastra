@@ -99,7 +99,7 @@ export class ObservationStep {
       if (activation.activated) {
         activated = true;
         if (activation.activatedMessageIds?.length) {
-          messageList.removeByIds(activation.activatedMessageIds);
+          messageList.removeByIds(activation.activatedMessageIds, { pruned: true });
         }
         await om.resetBufferingState({
           threadId,

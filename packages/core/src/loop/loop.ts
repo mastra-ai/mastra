@@ -1,5 +1,6 @@
 import { generateId } from '@internal/ai-sdk-v5';
 import type { ToolSet } from '@internal/ai-sdk-v5';
+import { createStoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { validateModelTimeoutSettings } from '../llm/model/model-settings';
 import { ConsoleLogger } from '../logger';
@@ -165,6 +166,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       structuredOutput: rest.structuredOutput,
       outputProcessors,
       returnScorerData,
+      loadStoredMessages: returnScorerData ? createStoredMessageLoader(_internal?.memory) : undefined,
       ...observabilityContext,
       requestContext: rest.requestContext,
       processorStates,

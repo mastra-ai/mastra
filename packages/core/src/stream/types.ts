@@ -15,6 +15,7 @@ import type {
 } from '@internal/ai-sdk-v4';
 import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
+import type { StoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { AgentSignalType } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
@@ -1247,6 +1248,8 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
    */
   deferErrorChunks?: boolean;
   returnScorerData?: boolean;
+  /** Loads response messages the run pruned from its message list (kept there by id only) for scorer data. */
+  loadStoredMessages?: StoredMessageLoader;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
   /** The run's abort signal, forwarded to output processors. */
