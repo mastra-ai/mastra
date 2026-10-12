@@ -551,6 +551,15 @@ describe('AgentController: ask_user native suspension', () => {
         );
       }
       expect(session.suspensions.has(second)).toBe(true);
+      if (recovery === 'cold-durable') {
+        await vi.waitFor(async () => {
+          const suspended = await fixture.source.listSuspendedRuns({
+            threadId: second.threadId,
+            resourceId: second.resourceId,
+          });
+          expect(suspended.runs.some(run => run.runId === second.runId)).toBe(true);
+        });
+      }
       const resumed = session.respondToToolSuspension({ address: second, resumeData: 'second' });
       if (recovery === 'warm-reattach') {
         await writeEntered.promise;

@@ -5749,12 +5749,17 @@ export class Session<TState = unknown> {
       disposed = true;
     };
     const removeDeletionListener = this.machinery.onSessionDeleted?.(() => detach());
+    const pubsub = agent.getPubSub();
+    const suspension = agentThreadStreamRuntime.getResumableThreadRunSuspension(address, pubsub);
     const subscription = await this.machinery
       .subscribeToThread({ agent, ...address, requestContext: observerContext })
       .catch(error => {
         removeDeletionListener?.();
         throw error;
       });
+    if (suspension && !agentThreadStreamRuntime.getResumableThreadRun(address, pubsub)) {
+      agentThreadStreamRuntime.__restoreThreadRunSuspension(address, suspension, pubsub);
+    }
     detach = () => {
       disposed = true;
       subscription.unsubscribe();
@@ -5984,7 +5989,7 @@ export class Session<TState = unknown> {
         entry.resourceId === resourceId,
     );
     try {
-      observer = await this.observeSourceResume(agent, address, requestContext);
+      if (!sourceIsActive()) observer = await this.observeSourceResume(agent, address, requestContext);
       this.suspensions.delete(address);
       this.displayState.deletePendingSuspension(address);
       const sharedOptions = this.machinery.buildSharedRunOptions(requestContext);
@@ -6011,14 +6016,10 @@ export class Session<TState = unknown> {
           toolsets,
         },
       });
-      if (resolveOnToolEnd && resumedSubscriptionBoundary) {
-        await Promise.race([resumedSubscriptionBoundary.promise, observer.promise]);
-        // The visible caller may acknowledge the tool result before the source
-        // parks again. Its bounded observer still owns that next boundary.
-        observer = undefined;
+      if (resumedSubscriptionBoundary) {
+        await resumedSubscriptionBoundary.promise;
       } else {
-        await observer.promise;
-        await resumedSubscriptionBoundary?.promise;
+        await observer?.promise;
       }
     } catch (error) {
       if (!observer?.dispatched()) {

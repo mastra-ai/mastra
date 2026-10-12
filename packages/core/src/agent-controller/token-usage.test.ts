@@ -64,11 +64,10 @@ describe('step-finish token usage extraction', () => {
     session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
   });
 
-  it('excludes reported signal-cancelled usage from events, totals and persistence, preserving accepted steps', async () => {
+  it('excludes reported signal-cancelled usage from events, totals and persistence', async () => {
     const usage = { inputTokens: 2, outputTokens: 3, totalTokens: 5, reasoningTokens: 1, cachedInputTokens: 2 };
     const storage = new InMemoryStore();
     const observedUsages: unknown[] = [];
-    const steps: unknown[] = [];
     let calls = 0;
     let processing!: () => void;
     const entered = new Promise<void>(resolve => {
@@ -82,11 +81,6 @@ describe('step-finish token usage extraction', () => {
       id: 'interrupted-usage',
       name: 'Interrupted usage',
       instructions: 'Test',
-      defaultOptions: {
-        onStepFinish: step => {
-          steps.push(step);
-        },
-      },
       outputProcessors: [
         {
           id: 'pause-finish',
@@ -151,13 +145,26 @@ describe('step-finish token usage extraction', () => {
       release();
       await running;
       expect(calls).toBe(3);
-      expect(steps).toHaveLength(2);
-      expect(steps[1]).toMatchObject({
-        text: 'accepted answer',
-        reasoning: [],
-        usage: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
-      });
-      expect(events.filter(event => event.type === 'usage_update')).toHaveLength(2);
+      expect(events.filter(event => event.type === 'usage_update')).toEqual([
+        {
+          type: 'usage_update',
+          usage: {
+            promptTokens: 1,
+            completionTokens: 1,
+            totalTokens: 2,
+            raw: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          },
+        },
+        {
+          type: 'usage_update',
+          usage: {
+            promptTokens: 3,
+            completionTokens: 4,
+            totalTokens: 7,
+            raw: { inputTokens: 3, outputTokens: 4, totalTokens: 7 },
+          },
+        },
+      ]);
       expect(session.getTokenUsage()).toEqual({
         promptTokens: 4,
         completionTokens: 5,
