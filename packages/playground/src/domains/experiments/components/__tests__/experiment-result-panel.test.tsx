@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExperimentResultPanel } from '../experiment-result-panel';
+import { agentMarkdownResult, workflowResult } from './fixtures/experiment-results';
 import {
   metricsCapableCapabilities,
   metricsUnavailableCapabilities,
@@ -22,6 +23,7 @@ const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetEx
   experimentId: 'exp-1',
   itemId: 'item-1',
   input: 'hello',
+  targetType: 'workflow',
   output: 'world',
   groundTruth: null,
   scores: {},
@@ -80,6 +82,31 @@ function renderPanel(
   );
   return { onTagsChange };
 }
+
+describe('ExperimentResultPanel output', () => {
+  describe('when the result is an agent result with text', () => {
+    it('renders the output text as markdown', () => {
+      renderPanel(agentMarkdownResult);
+
+      expect(screen.getByRole('heading', { name: 'Title' })).toBeDefined();
+      expect(screen.getByText('bold').tagName).toBe('STRONG');
+    });
+
+    it('does not render the raw markdown source', () => {
+      renderPanel(agentMarkdownResult);
+
+      expect(document.body.textContent).not.toContain('**bold**');
+    });
+  });
+
+  describe('when the result is a workflow result', () => {
+    it('renders the output as JSON', () => {
+      renderPanel(workflowResult);
+
+      expect(document.body.textContent).toContain('"answer": 42');
+    });
+  });
+});
 
 describe('ExperimentResultPanel metadata', () => {
   describe('given a result with a status and tags', () => {

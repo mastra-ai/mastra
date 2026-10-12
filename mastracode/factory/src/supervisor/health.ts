@@ -220,9 +220,22 @@ export function computeFactoryHealth(
     activeSeatsByItem.set(item.id, seats);
   }
 
-  const inFlightByItem = new Set(
-    inputs.decisions.filter(d => d.workItemId && IN_FLIGHT_DECISION_STATUSES.has(d.status)).map(d => d.workItemId!),
-  );
+  const inFlightByItem = new Map<string, FactoryDeferredDecisionRecord[]>();
+  for (const decision of inputs.decisions) {
+    if (!decision.workItemId || !IN_FLIGHT_DECISION_STATUSES.has(decision.status)) continue;
+    const inFlight = inFlightByItem.get(decision.workItemId) ?? [];
+    inFlight.push(decision);
+    inFlightByItem.set(decision.workItemId, inFlight);
+  }
+  // A seat or run left behind by an earlier phase cannot carry this one, so only the phase's
+  // own role counts. Decisions without a role (a queued transition) still move the card.
+  const seatedFor = (itemId: string, role: string | undefined) =>
+    (activeSeatsByItem.get(itemId) ?? []).some(binding => !role || binding.role === role);
+  const movingFor = (itemId: string, role: string | undefined) =>
+    (inFlightByItem.get(itemId) ?? []).some(decision => {
+      const decided = decisionRole(decision);
+      return !role || decided === null || decided === role;
+    });
   for (const item of inputs.items) {
     const stage = factoryRuleStage(item.stages);
     const semantics = stage ? inputs.phaseSemantics(item) : undefined;
@@ -250,13 +263,14 @@ export function computeFactoryHealth(
           suggestedRepair: { action: 'accept-work-item', workItemId: item.id },
         });
       }
-    } else if (!activeSeatsByItem.has(item.id) && !inFlightByItem.has(item.id)) {
+    } else if (!seatedFor(item.id, semantics.role) && !movingFor(item.id, semantics.role)) {
       const role = semantics.role;
+      const roleLabel = role ? `${role} ` : '';
       findings.push({
         kind: 'seat-missing',
         id: `seat-missing:${item.id}`,
         ...base,
-        evidence: `In ${stage} since ${enteredAt?.toISOString() ?? 'unknown'} with no active seat and no decision in flight; nothing will move it.`,
+        evidence: `In ${stage} since ${enteredAt?.toISOString() ?? 'unknown'} with no active ${roleLabel}seat and no ${roleLabel}decision in flight; nothing will move it.`,
         beganAt: enteredAt?.toISOString() ?? null,
         suggestedRepair: role ? { action: 'start-run', workItemId: item.id, role } : null,
       });
@@ -288,7 +302,9 @@ export async function runFactoryHealthCheck(
 ): Promise<FactoryHealthReport> {
   const [items, decisions, bindings, pendingStarts] = await Promise.all([
     workItems.list(scope),
-    workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId),
+    workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
+      statuses: [...IN_FLIGHT_DECISION_STATUSES],
+    }),
     workItems.listRunBindings(scope.orgId, scope.factoryProjectId),
     workItems.listPendingStarts(scope.orgId, scope.factoryProjectId),
   ]);

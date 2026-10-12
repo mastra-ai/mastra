@@ -33,7 +33,6 @@ export const customProviderModelSelectorScenario = {
       completedAt: new Date(0).toISOString(),
       skippedAt: null,
       version: 1,
-      quietModePreferenceSelected: true,
     };
     settings.customProviders = [
       {

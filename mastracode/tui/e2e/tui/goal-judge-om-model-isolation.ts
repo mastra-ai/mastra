@@ -109,9 +109,12 @@ export const goalJudgeOmModelIsolationScenario = {
     const history = stripAnsi(
       (terminal as unknown as { serializeHistory(): { output: string } }).serializeHistory().output,
     );
-    completedObservationCycle = /Buffered observation/i.test(history) && /Activated observations/i.test(history);
+    // Buffering markers are hidden; the activation marker is the visible end of the observation cycle.
+    completedObservationCycle = /Activated observations/i.test(history) && !/Buffered observation/i.test(history);
     if (!completedObservationCycle) {
-      throw new Error('Expected the TUI history to show both buffered and activated observational-memory markers');
+      throw new Error(
+        'Expected the TUI history to show the activated observational-memory marker and no buffering marker',
+      );
     }
     const markerCount = history.split(PROVIDER_CHANGE_MARKER).length - 1;
     observedMarkerCount = markerCount;

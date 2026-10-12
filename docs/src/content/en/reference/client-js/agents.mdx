@@ -350,7 +350,7 @@ await subscription.processDataStream({
 
 Pass `withInitialHistory: true` (or `{ perPage }`) to receive the stored messages as a first `thread-history` chunk instead of fetching history separately. Finished runs aren't replayed after it, so completed answers don't stream again on reconnect.
 
-`subscribeToThread()` returns the underlying `Response` plus a `processDataStream()` helper. The helper reads the subscription stream until the connection closes or the request is aborted. Pass `reconnect: true` to resubscribe when the transport closes or a reconnect request fails, such as after a proxy idle timeout.
+`subscribeToThread()` returns the underlying `Response` plus a `processDataStream()` helper. The helper reads the subscription stream until the connection closes or the request is aborted. Pass `reconnect: true` to resubscribe when the transport closes or a reconnect request fails, such as after a proxy idle timeout. If a reconnect request fails with a 4xx status (for example `401` or `403`) or `501`, `processDataStream()` stops reconnecting and rejects with the original `MastraClientError`. `408` and `429` are still retried.
 
 <PropertiesTable
   content={[
@@ -370,7 +370,7 @@ Pass `withInitialHistory: true` (or `{ perPage }`) to receive the stored message
     type: 'boolean | { maxRetries?: number; delayMs?: number }',
     isOptional: true,
     description:
-      'Reconnects the subscription stream after it closes or a reconnect request fails. `true` retries indefinitely with a one-second delay.',
+      'Reconnects the subscription stream after it closes or a reconnect request fails. `true` retries indefinitely with a one-second delay. A 4xx (other than `408` and `429`) or `501` response stops reconnecting and rejects with that error.',
   },
 ]}
 />
