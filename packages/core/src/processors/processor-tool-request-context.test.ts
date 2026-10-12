@@ -2,7 +2,11 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { createDurableAgent } from '../agent/durable/create-durable-agent';
+import { EventEmitterPubSub } from '../events/event-emitter';
+import { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
+import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import type { InputProcessor, ProcessInputStepArgs } from './index';
 
@@ -258,5 +262,94 @@ describe('Processor-returned tools receive requestContext', () => {
 
     expect(existingToolContext).toBeDefined();
     expect(existingToolContext!.get('tenantId')).toBe('tenant-abc');
+  });
+});
+
+describe('Processor-returned tools on the durable path', () => {
+  it('should pass the agent id to tools added by processInputStep', async () => {
+    let capturedAgentId: string | undefined;
+
+    const dynamicTool = createTool({
+      id: 'dynamic-tool',
+      description: 'A dynamically loaded tool that reads the agent context',
+      inputSchema: z.object({ query: z.string() }),
+      execute: async (input, { agent }) => {
+        capturedAgentId = agent?.agentId;
+        return `Result for: ${input.query}`;
+      },
+    });
+
+    const toolInjectorProcessor = {
+      id: 'tool-injector-processor',
+      processInputStep: async (args: ProcessInputStepArgs) => ({
+        tools: { ...(args.tools ?? {}), 'dynamic-tool': dynamicTool },
+      }),
+    } as InputProcessor;
+
+    let turn = 0;
+    const mockModel = new MockLanguageModelV2({
+      doStream: async () => {
+        turn++;
+        const chunks: any[] =
+          turn === 1
+            ? [
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'dynamic-tool',
+                  input: JSON.stringify({ query: 'test' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]
+            : [
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Done.' },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'finish', finishReason: 'stop', usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 } },
+              ];
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: `id-${turn}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+            ...chunks,
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
+      },
+    });
+
+    const pubsub = new EventEmitterPubSub();
+    try {
+      const durableAgent = createDurableAgent({
+        agent: new Agent({
+          id: 'test-agent-durable',
+          name: 'Test Agent Durable',
+          instructions: 'Use tools when asked',
+          model: mockModel as any,
+          inputProcessors: [toolInjectorProcessor],
+        }),
+        pubsub,
+      });
+      new Mastra({
+        agents: { 'test-agent-durable': durableAgent as any },
+        logger: false,
+        storage: new InMemoryStore(),
+        pubsub,
+      });
+
+      const result = await durableAgent.stream('Call the dynamic tool', { maxSteps: 5 });
+      for await (const _chunk of result.fullStream) {
+        // drain the stream
+      }
+    } finally {
+      await pubsub.close();
+    }
+
+    expect(capturedAgentId).toBe('test-agent-durable');
   });
 });
