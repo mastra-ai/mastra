@@ -32,6 +32,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3
 const MAX_SESSION_OWNER_PROFILES = 100;
 const MAX_SESSION_OWNER_PROFILE_CACHE_ENTRIES = 500;
 const SESSION_OWNER_PROFILE_TTL_MS = 5 * 60_000;
+const MAX_SESSION_RECYCLE_ATTEMPTS = 10;
 
 interface SessionOwnerProfile {
   id: string;
@@ -379,9 +380,10 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         }
         if (session.visibility === 'private') return c.json({ session });
 
+        const fromOwnerId = body.expectedOwnerId;
         const transferred = await match.sourceControl.sessions.transferOwner({
           sessionId,
-          expectedUserId: body.expectedOwnerId,
+          expectedUserId: fromOwnerId,
           toUserId: userId,
         });
         if (transferred.status === 'conflict') {
@@ -394,7 +396,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             409,
           );
         }
-        if (body.expectedOwnerId === userId) return c.json({ session: transferred.session });
+        if (fromOwnerId === userId) return c.json({ session: transferred.session });
 
         let liveSession = await options.controller?.getSessionByResource(sessionId);
         try {
@@ -415,6 +417,13 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           }
           if (liveSession) {
             await liveSession.thread.transferOwnership({ toOwnerId: userId });
+            const authoritativeSession = await match.sourceControl.sessions.getBySessionId(sessionId);
+            if (!authoritativeSession) {
+              throw new Error(`Factory session ${sessionId} disappeared while mirroring ownership.`);
+            }
+            if (authoritativeSession.userId !== userId) {
+              await liveSession.thread.transferOwnership({ toOwnerId: authoritativeSession.userId });
+            }
           }
         } catch (mirrorError) {
           let authoritativeOwnerId: string | undefined;
@@ -422,7 +431,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             const rollback = await match.sourceControl.sessions.transferOwner({
               sessionId,
               expectedUserId: userId,
-              toUserId: session.userId,
+              toUserId: fromOwnerId,
             });
             authoritativeOwnerId = rollback.session?.userId;
           } catch (rollbackError) {
@@ -470,6 +479,14 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
               await options.controller!.deleteSession({ resourceId: sessionId });
             } catch (error) {
               recycleAttempt++;
+              if (recycleAttempt >= MAX_SESSION_RECYCLE_ATTEMPTS) {
+                console.error('[Factory Sessions] Giving up recycling transferred live session', {
+                  sessionId,
+                  attempts: recycleAttempt,
+                  error,
+                });
+                return;
+              }
               const delayMs = Math.min(100 * 2 ** (recycleAttempt - 1), 5_000);
               console.error('[Factory Sessions] Failed to recycle transferred live session; retrying', {
                 sessionId,
@@ -499,7 +516,11 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             actorId: userId,
             action: 'factory.session.owner_transferred',
             targets: [{ type: 'session', id: session.id, name: session.title ?? session.branch }],
-            metadata: { fromOwnerId: session.userId, toOwnerId: userId, createdByUserId: session.createdByUserId },
+            metadata: {
+              fromOwnerId,
+              toOwnerId: userId,
+              createdByUserId: transferred.session.createdByUserId,
+            },
             projectRepositoryId: session.projectRepositoryId,
           })
           .catch(error => {

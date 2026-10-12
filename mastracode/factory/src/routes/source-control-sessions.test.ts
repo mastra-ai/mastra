@@ -339,6 +339,166 @@ describe('source-control session routes', () => {
     });
   });
 
+  it('reconciles the live thread to the authoritative owner after concurrent transfers', async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const session = await sourceControl.sessions.create({
+      sessionId: 'factory-concurrent-transfer',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/concurrent-transfer',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    let releaseFirstMirror = () => {};
+    const firstMirrorBlocked = new Promise<void>(resolve => {
+      releaseFirstMirror = resolve;
+    });
+    let firstMirrorEntered = () => {};
+    const firstMirrorStarted = new Promise<void>(resolve => {
+      firstMirrorEntered = resolve;
+    });
+    let mirroredOwner = 'user-1';
+    const transferOwnership = vi.fn(async ({ toOwnerId }: { toOwnerId: string }) => {
+      if (toOwnerId === 'user-2' && transferOwnership.mock.calls.length === 1) {
+        firstMirrorEntered();
+        await firstMirrorBlocked;
+      }
+      mirroredOwner = toOwnerId;
+      if (toOwnerId === 'user-3') releaseFirstMirror();
+    });
+    const liveSession = {
+      thread: { transferOwnership },
+      stream: { isActive: () => true },
+      subscribe: vi.fn(() => () => {}),
+    };
+    const controller = {
+      getSessionByResource: vi.fn(async () => liveSession),
+    } as unknown as Parameters<typeof buildSourceControlSessionRoutes>[0]['controller'];
+    const ownerTwoApp = buildApp([sourceControl], seed.memorySettings, controller, {
+      workosId: 'user-2',
+      organizationId: 'org-1',
+    });
+    const ownerThreeApp = buildApp([sourceControl], seed.memorySettings, controller, {
+      workosId: 'user-3',
+      organizationId: 'org-1',
+    });
+
+    const firstResponse = ownerTwoApp.request(`/web/user-sessions/${session.sessionId}/owner`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedOwnerId: 'user-1' }),
+    });
+    await firstMirrorStarted;
+    const secondResponse = ownerThreeApp.request(`/web/user-sessions/${session.sessionId}/owner`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedOwnerId: 'user-2' }),
+    });
+
+    await expect(secondResponse).resolves.toMatchObject({ status: 200 });
+    await expect(firstResponse).resolves.toMatchObject({ status: 200 });
+    await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ userId: 'user-3' });
+    expect(mirroredOwner).toBe('user-3');
+    expect(transferOwnership).toHaveBeenNthCalledWith(1, { toOwnerId: 'user-2' });
+    expect(transferOwnership).toHaveBeenNthCalledWith(2, { toOwnerId: 'user-3' });
+    expect(transferOwnership).toHaveBeenNthCalledWith(3, { toOwnerId: 'user-3' });
+  });
+
+  it('rolls back a failed mirror to the CAS-proven previous owner', async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const session = await sourceControl.sessions.create({
+      sessionId: 'factory-rollback-transfer',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/rollback-transfer',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const transferOwner = sourceControl.sessions.transferOwner.bind(sourceControl.sessions);
+    let transferCalls = 0;
+    vi.spyOn(sourceControl.sessions, 'transferOwner').mockImplementation(async args => {
+      transferCalls++;
+      if (transferCalls === 1) {
+        await transferOwner({ sessionId: args.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' });
+      }
+      return transferOwner(args);
+    });
+    const transferOwnership = vi
+      .fn<({ toOwnerId }: { toOwnerId: string }) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('mirror failed'))
+      .mockResolvedValue(undefined);
+    const liveSession = {
+      thread: { transferOwnership },
+      stream: { isActive: () => true },
+      subscribe: vi.fn(() => () => {}),
+    };
+    const controller = {
+      getSessionByResource: vi.fn(async () => liveSession),
+    } as unknown as Parameters<typeof buildSourceControlSessionRoutes>[0]['controller'];
+    const app = buildApp([sourceControl], seed.memorySettings, controller, {
+      workosId: 'user-3',
+      organizationId: 'org-1',
+    });
+
+    const response = await app.request(`/web/user-sessions/${session.sessionId}/owner`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedOwnerId: 'user-2' }),
+    });
+
+    expect(response.status).toBe(500);
+    await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ userId: 'user-2' });
+    expect(transferOwnership).toHaveBeenNthCalledWith(1, { toOwnerId: 'user-3' });
+    expect(transferOwnership).toHaveBeenNthCalledWith(2, { toOwnerId: 'user-2' });
+  });
+
+  it('stops retrying after repeated live-session recycle failures', async () => {
+    vi.useFakeTimers();
+    onTestFinished(async () => {
+      vi.useRealTimers();
+    });
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const session = await sourceControl.sessions.create({
+      sessionId: 'factory-recycle-retries',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/recycle-retries',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const liveSession = {
+      thread: { transferOwnership: vi.fn().mockResolvedValue(undefined) },
+      stream: { isActive: () => false },
+      subscribe: vi.fn(() => () => {}),
+    };
+    const controller = {
+      getSessionByResource: vi.fn(async () => liveSession),
+      deleteSession: vi.fn().mockRejectedValue(new Error('delete failed')),
+    } as unknown as Parameters<typeof buildSourceControlSessionRoutes>[0]['controller'];
+    const app = buildApp([sourceControl], seed.memorySettings, controller, {
+      workosId: 'user-2',
+      organizationId: 'org-1',
+    });
+
+    const response = await app.request(`/web/user-sessions/${session.sessionId}/owner`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedOwnerId: 'user-1' }),
+    });
+    expect(response.status).toBe(200);
+    await vi.runAllTimersAsync();
+
+    expect(controller.deleteSession).toHaveBeenCalledTimes(10);
+    expect(error).toHaveBeenLastCalledWith(
+      '[Factory Sessions] Giving up recycling transferred live session',
+      expect.objectContaining({ sessionId: session.sessionId, attempts: 10 }),
+    );
+  });
+
   it('treats acquisition by the current owner as a CAS-checked no-op', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const session = await sourceControl.sessions.create({
