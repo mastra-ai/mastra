@@ -2236,6 +2236,11 @@
       "permanent": true
     },
     {
+      "source": "/reference/agents/getTools",
+      "destination": "/reference/agents/listTools",
+      "permanent": true
+    },
+    {
       "source": "/docs/workspace/overview/llms.txt",
       "destination": "/docs/sandbox/overview/llms.txt",
       "permanent": true
@@ -4063,6 +4068,11 @@
     {
       "source": "/reference/client-js/telemetry/llms.txt",
       "destination": "/reference/client-js/observability/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/agents/getTools/llms.txt",
+      "destination": "/reference/agents/listTools/llms.txt",
       "permanent": true
     }
   ]

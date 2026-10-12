@@ -12,6 +12,7 @@ import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payl
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { DurableStepIds } from '../../constants';
+import { assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { globalRunRegistry } from '../../run-registry';
 import type {
@@ -106,7 +107,23 @@ export function createDurableLLMMappingStep() {
           threadId: state.threadId,
           resourceId: state.resourceId,
         })
-      ).deserialize(readMessageListState(params.state, llmOutput));
+      ).deserialize(await readMessageListState(params, llmOutput));
+
+      if (llmOutput.stepResult.signalPreempted) {
+        return {
+          ...(await storeMessageListState(params, messageList.serialize())),
+          messageId,
+          stepResult: llmOutput.stepResult,
+          toolResults: [],
+          output: {
+            text: '',
+            toolCalls: [],
+            usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+            steps: [],
+          },
+          state,
+        } satisfies DurableAgenticExecutionOutput;
+      }
 
       // A declined approval has no `result` but is fully resolved: persist it as `output-denied`
       // with the approval decision (rather than as a successful `result`) so it round-trips on
@@ -461,9 +478,13 @@ export function createDurableLLMMappingStep() {
               }
               output.state = { ...output.state, threadExists: true };
             }
-            await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+            await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig, {
+              beforePersist: () =>
+                assertExecutionOwned({ runId: _runId, agentId: _agentId, requestContext, mastra: mastra as Mastra }),
+            });
           }
         } catch (error) {
+          if (isExecutionFenceError(error)) throw error;
           mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to save step: ${error}`);
         }
       }

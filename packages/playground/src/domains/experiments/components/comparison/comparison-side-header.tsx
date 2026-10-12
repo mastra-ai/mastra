@@ -7,28 +7,30 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { CalendarIcon, HashIcon, LayersIcon, TargetIcon } from 'lucide-react';
+import type { ComparisonRole } from './build-comparison-rows';
 import { ComparisonScoreRow } from './comparison-score-row';
 import { ComparisonSection } from './comparison-section';
 
 export interface ScorerSummary {
   scorerId: string;
   average: number | null;
-  /** Difference against the baseline average. Contender side only. */
+  /** Difference against the baseline average. Null on the baseline. */
   delta: number | null;
 }
 
 export interface ComparisonSideHeaderProps {
-  side: 'baseline' | 'contender';
+  role: ComparisonRole;
+  /** Column badge, e.g. `Baseline` or `Contender 2`. */
+  label: string;
   experiment?: DatasetExperiment;
-  /** Per-scorer averages across every item. */
+  /** Per-scorer averages across every item. Contenders also render their delta against the baseline. */
   summary?: ScorerSummary[];
-  /** Only the contender renders deltas, so a difference is stated once. */
-  showDeltas?: boolean;
-  /** Highlights the dataset version when the two experiments disagree on it. */
+  /** Highlights the dataset version when this experiment disagrees with the baseline on it. */
   versionMismatch?: boolean;
+  /** Makes this contender the baseline. Omitted on the baseline itself. */
+  onSetBaseline?: () => void;
 }
 
-const sideLabel = { baseline: 'Baseline', contender: 'Contender' } as const;
 const sideVariant = { baseline: 'purple', contender: 'blue' } as const;
 
 /** Inline link: small leading glyph, truncating name, small trailing external cue. */
@@ -36,14 +38,14 @@ const linkClass = 'flex min-w-0 items-center gap-1.5 hover:underline [&>svg]:siz
 
 /** Header cell of one comparison side: which experiment it is, and its averages. */
 export function ComparisonSideHeader({
-  side,
+  role,
+  label,
   experiment,
   summary,
-  showDeltas,
   versionMismatch,
+  onSetBaseline,
 }: ComparisonSideHeaderProps) {
   const { Link, paths } = useLinkComponent();
-  const label = sideLabel[side];
 
   const shortId = experiment ? (getShortId(experiment.id) ?? experiment.id) : null;
   const createdAt = experiment?.createdAt ? new Date(experiment.createdAt) : null;
@@ -53,17 +55,22 @@ export function ComparisonSideHeader({
   return (
     <div className="grid content-start gap-3">
       <div className="flex min-w-0 items-center gap-2">
-        <Badge variant={sideVariant[side]} size="xs">
+        <Badge variant={sideVariant[role]} size="xs">
           {label}
         </Badge>
         {experiment && (
           <Button
             render={<Link href={`/experiments/${experiment.id}`} />}
             size="sm"
-
+            className="max-w-full min-w-0"
             aria-label={`Open experiment ${experiment.name || shortId}`}
           >
             <span className="min-w-0 truncate">{experiment.name || shortId}</span>
+          </Button>
+        )}
+        {onSetBaseline && (
+          <Button variant="ghost" size="sm" className="ml-auto shrink-0" onClick={onSetBaseline}>
+            Set as baseline
           </Button>
         )}
       </div>
@@ -105,7 +112,7 @@ export function ComparisonSideHeader({
                 key={scorerId}
                 scorerId={scorerId}
                 value={average}
-                delta={showDeltas ? delta : null}
+                delta={role === 'contender' ? delta : null}
               />
             ))}
           </div>
