@@ -126,6 +126,8 @@ const COLLABORATOR_PERMISSION_CACHE_TTL_MS = 30 * 60_000;
 const COLLABORATOR_PERMISSION_CACHE_MAX_ENTRIES = 1000;
 /** Bound on the shared upstream lookup; callers race their own signal against it. */
 const COLLABORATOR_PERMISSION_LOOKUP_TIMEOUT_MS = 10_000;
+/** Installations whose Octokit (and cached token) is kept; least recently used is evicted. */
+const INSTALLATION_OCTOKIT_CACHE_MAX_ENTRIES = 1000;
 /** Missed-open issue discovery reads at most this many pages per repository per sweep. */
 const OPEN_ISSUE_DISCOVERY_MAX_PAGES = 5;
 const OPEN_ISSUE_DISCOVERY_PAGE_SIZE = 100;
@@ -502,10 +504,17 @@ export class GithubIntegration implements FactoryIntegration {
    */
   getInstallationOctokit(installationId: number): Octokit {
     let octokit = this.#installationOctokits.get(installationId);
-    if (!octokit) {
+    if (octokit) {
+      // Re-insert so Map order tracks recency for LRU eviction.
+      this.#installationOctokits.delete(installationId);
+    } else {
       octokit = new Octokit({ authStrategy: createAppAuth, auth: { ...this.#appAuth(), installationId } });
-      this.#installationOctokits.set(installationId, octokit);
+      if (this.#installationOctokits.size >= INSTALLATION_OCTOKIT_CACHE_MAX_ENTRIES) {
+        const oldest = this.#installationOctokits.keys().next().value;
+        if (oldest !== undefined) this.#installationOctokits.delete(oldest);
+      }
     }
+    this.#installationOctokits.set(installationId, octokit);
     return octokit;
   }
 
