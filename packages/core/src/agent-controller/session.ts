@@ -63,6 +63,7 @@ import type {
 
 export const SUSPENDED_RUN_AGENT_KEY = createRunScopeKey<Agent>('agent-controller.suspendedRunAgent');
 export const SOURCE_APPROVAL_CALLS_KEY = createRunScopeKey<Set<string>>('agent-controller.sourceApprovalCalls');
+export const THREAD_OWNER_ID_RUN_SCOPE_KEY = createRunScopeKey<string>('agent-controller.threadOwnerId');
 export const THREAD_OWNER_ID_CONTEXT_KEY = 'mastra__agentControllerThreadOwnerId';
 
 /**
@@ -4264,6 +4265,7 @@ export class Session<TState = unknown> {
     reason: NonNullable<Extract<AgentControllerEvent, { type: 'agent_end' }>['reason']>,
   ): Promise<void> {
     const event = { type: 'agent_end', reason } as const;
+    const runId = this.run.getRunId();
     for (const listener of this.#beforeAgentEndListeners) {
       try {
         await listener(event);
@@ -4271,6 +4273,7 @@ export class Session<TState = unknown> {
         console.error('Error in before-agent-end listener:', error);
       }
     }
+    if (reason !== 'suspended' && runId) this.#threadOwnerIdsByRunId.delete(runId);
     this.emit(event);
   }
 
@@ -5461,6 +5464,18 @@ export class Session<TState = unknown> {
   /** Tool call ids whose response has been claimed and is still being applied. */
   #claimedToolResponses = new Set<string>();
   #suspensionAgents = new WeakMap<PendingSuspension, Agent>();
+  #threadOwnerIdsByRunId = new Map<string, string>();
+
+  /** @internal Capture the trusted owner snapshot while processing a run's stream. */
+  __captureRunThreadOwnerId(runId: string, requestContext: RequestContext): void {
+    const threadOwnerId = requestContext.getRaw(THREAD_OWNER_ID_CONTEXT_KEY);
+    if (typeof threadOwnerId !== 'string' || this.#threadOwnerIdsByRunId.has(runId)) return;
+    this.#threadOwnerIdsByRunId.set(runId, threadOwnerId);
+    const runScope = this.machinery.getRunScope(runId);
+    if (!runScope?.has(THREAD_OWNER_ID_RUN_SCOPE_KEY)) {
+      runScope?.set(THREAD_OWNER_ID_RUN_SCOPE_KEY, threadOwnerId);
+    }
+  }
 
   private async resolveSuspendedThreadOwnerId(
     agent: Agent,
@@ -5468,6 +5483,10 @@ export class Session<TState = unknown> {
   ): Promise<string | undefined> {
     const persisted = await agent.__getSuspendedRunRequestContextValue({ runId, key: THREAD_OWNER_ID_CONTEXT_KEY });
     if (typeof persisted === 'string') return persisted;
+
+    const runOwnerId =
+      this.machinery.getRunScope(runId)?.get(THREAD_OWNER_ID_RUN_SCOPE_KEY) ?? this.#threadOwnerIdsByRunId.get(runId);
+    if (runOwnerId) return runOwnerId;
 
     const thread = await this.thread.getById({ threadId });
     if (thread) {

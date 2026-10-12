@@ -143,9 +143,10 @@ describe('tool approvals resolve against the run that raised them', () => {
     const session = await controller.createSession({ id: 'test-session', ownerId: 'owner-a' });
     const streamOptions = await session.machinery.buildStreamOptions({});
     const runRequestContext = streamOptions.requestContext as RequestContext;
+    expect(runRequestContext.getRaw(THREAD_OWNER_ID_CONTEXT_KEY)).toBe('owner-a');
 
     vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
-    vi.spyOn(agent, '__getSuspendedRunRequestContextValue').mockResolvedValue('owner-a');
+    vi.spyOn(agent, '__getSuspendedRunRequestContextValue').mockResolvedValue(undefined);
     const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'run-a' });
 
     await processSubscribedChunks(
