@@ -292,7 +292,7 @@ For Langfuse imports:
 - Observations become Mastra spans with their parent-child relationships and timestamps.
 - Langfuse `AGENT`, `TOOL`, and `EVALUATOR` observations, and plain spans that carry OpenTelemetry GenAI attributes such as `gen_ai.operation.name: invoke_agent`, keep their primitive type and name. Mastra Platform shows them in the Primitive type and Primitive name columns and includes them in those filters, like native traces.
 - Supported fields such as names, input, output, errors, model details, usage, cost, tags, and source context are mapped when present.
-- Environments you set in Langfuse, such as `staging`, are kept. Langfuse's built-in `default` environment isn't copied, so those traces appear in Mastra Studio for any environment, like spans that have no environment.
+- Environments you set in Langfuse, such as `staging`, are kept. Langfuse's built-in `default` environment isn't copied. Those traces have no environment in Mastra, and Mastra Studio shows them for every environment.
 - Destination trace and span IDs are deterministic. Original Langfuse IDs remain in span metadata for correlation.
 - Unknown Langfuse observation types become generic spans and produce a warning instead of being silently discarded.
 - Only trace observations are imported. Scores, feedback, datasets, attachments, and logs aren't imported.
