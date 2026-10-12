@@ -74,6 +74,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-wonder",
     "minimax/minimax-01",
     "minimax/minimax-m3",
     "mistralai/codestral-2508",
@@ -362,6 +363,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-wonder",
     "microsoft/phi-4",
     "microsoft/wizardlm-2-8x22b",
     "minimax/minimax-01",
@@ -657,6 +659,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-wonder",
     "microsoft/phi-4",
     "minimax/minimax-m2",
     "minimax/minimax-m2.5",
@@ -1364,6 +1367,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "meta/muse-wonder": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "meta/muse-spark-1.1": [

@@ -17,6 +17,7 @@ const sourceIdentitySchema = z
     provider: z.string().min(1),
     baseUrl: z.string().url(),
     projectId: z.string().min(1),
+    projectName: z.string().nullable().optional(),
     idAlgorithmVersion: z.string().min(1),
   })
   .strict();

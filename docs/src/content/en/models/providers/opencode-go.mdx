@@ -9,7 +9,7 @@ description: "Browse OpenCode Go model IDs, capabilities, context windows, and p
 
 Access 36 OpenCode Go models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
-Learn more in the [OpenCode Go documentation](https://opencode.ai/docs/go).
+Learn more in the [OpenCode Go documentation](https://opencode.ai/v2/docs/console/go/).
 
 ```bash title=".env"
 OPENCODE_API_KEY=your-api-key
@@ -37,7 +37,7 @@ for await (const chunk of stream) {
 
 :::note
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [OpenCode Go documentation](https://opencode.ai/docs/go) for details.
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [OpenCode Go documentation](https://opencode.ai/v2/docs/console/go/) for details.
 
 :::
 
@@ -431,7 +431,7 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://opencode.ai/zen/go/v1",
+    url: "https://opencode.ai/inference/go/v1",
     id: "opencode-go/claude-haiku-5-5",
     apiKey: process.env.OPENCODE_API_KEY,
     headers: {

@@ -199,22 +199,26 @@ describe('experiment item sub-route', () => {
   });
 
   describe('when the user selects results for review', () => {
-    it('shows the selected count in the review action without a separate selection label', async () => {
+    it('shows the selected count and reveals the actions once something is selected', async () => {
+      renderExperimentRoute();
+
+      expect((await screen.findByRole('button', { name: '0 selected' })).hasAttribute('disabled')).toBe(true);
+      expect(screen.queryByRole('button', { name: 'Flag for review' })).toBeNull();
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select result item-1' }));
+
+      expect(await screen.findByRole('button', { name: '1 selected' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Flag for review' })).toBeDefined();
+    });
+
+    it('clears the selection and hides the actions when the count button is clicked', async () => {
       renderExperimentRoute();
 
       fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
+      fireEvent.click(await screen.findByRole('button', { name: '1 selected' }));
 
-      expect(await screen.findByRole('button', { name: 'Flag 1 to review' })).toBeDefined();
-      expect(screen.queryByText('1 selected')).toBeNull();
-    });
-
-    it('only shows the selection actions once something is selected', async () => {
-      renderExperimentRoute();
-
-      // Selecting is what reveals the actions, so no bulk-selection affordance is needed beforehand.
-      expect(await screen.findByRole('checkbox', { name: 'Select result item-1' })).toBeDefined();
-      expect(screen.queryByRole('button', { name: /Flag \d+ to review/ })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+      expect(await screen.findByRole('button', { name: '0 selected' })).toBeDefined();
+      expect(screen.queryByRole('button', { name: 'Flag for review' })).toBeNull();
     });
   });
 
