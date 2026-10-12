@@ -477,6 +477,7 @@ export {
   DrawerViewport,
   DrawerPopup,
   DrawerContent,
+  DrawerHandleBar,
   DrawerHeader,
   DrawerFooter,
   DrawerBody,

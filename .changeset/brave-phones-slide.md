@@ -2,25 +2,6 @@
 '@mastra/playground-ui': minor
 ---
 
-Added `ResponsiveDialog`, a dialog that becomes a bottom drawer on phone-sized screens (below 640px). It uses the same parts as `Dialog`, so switching is a rename.
+`Dialog` now opens as a bottom drawer on phone-sized screens (below 640px), so every existing dialog adapts to mobile without changes at the call site. People can swipe it down to close, the same as pressing Cancel. Pending dialogs still refuse to close.
 
-```tsx
-import {
-  ResponsiveDialog,
-  ResponsiveDialogBody,
-  ResponsiveDialogContent,
-  ResponsiveDialogHeader,
-  ResponsiveDialogTitle,
-  ResponsiveDialogTrigger,
-} from '@mastra/playground-ui/components/ResponsiveDialog';
-
-<ResponsiveDialog>
-  <ResponsiveDialogTrigger render={<Button>Edit</Button>} />
-  <ResponsiveDialogContent size="md">
-    <ResponsiveDialogHeader>
-      <ResponsiveDialogTitle>Edit agent</ResponsiveDialogTitle>
-    </ResponsiveDialogHeader>
-    <ResponsiveDialogBody>…</ResponsiveDialogBody>
-  </ResponsiveDialogContent>
-</ResponsiveDialog>;
-```
+`DialogContent` no longer accepts function forms of `render` or `style`, and `Dialog` no longer accepts `handle`, since the same dialog can now render either way.
