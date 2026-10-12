@@ -258,3 +258,8 @@ export const BUNDLED_THEMES: Record<string, object> = {
     },
   },
 };
+
+export const BUNDLED_THEME_PAIRS: ReadonlyArray<{ light: string; dark: string }> = [
+  { light: 'catppuccin-latte', dark: 'catppuccin-mocha' },
+  { light: 'solarized-light', dark: 'solarized-dark' },
+];

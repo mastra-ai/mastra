@@ -499,34 +499,13 @@ export function getThemeGeneration(): number {
   return themeGeneration;
 }
 
-/** True while a custom theme's `bg` has been applied to the terminal via OSC 11. */
-let customBgApplied = false;
-
-function hexToOscRgb(hex: string): string {
-  const channel = (i: number) => hex.slice(i, i + 2).toLowerCase();
-  return `rgb:${channel(1)}/${channel(3)}/${channel(5)}`;
-}
-
-/**
- * Whether the terminal understands OSC color sequences. Legacy Windows
- * conhost doesn't and prints them as garbage; Windows Terminal, ConEmu, and
- * terminals that set TERM/TERM_PROGRAM do.
- */
-function supportsOscColors(): boolean {
-  if (!process.stdout.isTTY) return false;
-  if (process.platform !== 'win32') return true;
-  return Boolean(
-    process.env.WT_SESSION || process.env.TERM_PROGRAM || process.env.ConEmuANSI === 'ON' || process.env.TERM,
-  );
-}
-
 /**
  * Apply a theme mode, updating both the surface palette and the theme colors.
  * Pass `customColors` (from a custom theme file) to use them as the base
  * palette instead of the built-in dark/light theme; pass undefined to clear
  * any previously-applied custom theme. `customBg` (a custom theme's `bg`
- * color) repaints the terminal background via OSC 11 and becomes the base
- * that panel shades and contrast adaptation derive from.
+ * color) becomes the base that panel shades and contrast adaptation derive
+ * from, without touching the terminal's own background.
  */
 export function applyThemeMode(
   mode: ThemeMode,
@@ -540,41 +519,6 @@ export function applyThemeMode(
   detectedTerminalBg = customBg ?? terminalBgHex;
   themeGeneration++;
   computeAdaptedColors();
-  // Set terminal default foreground via OSC 10 so unstyled text (e.g. editor input)
-  // adapts to the theme; OSC 11 repaints the terminal background for themes that set one.
-  if (supportsOscColors()) {
-    process.stdout.write(`\x1b]10;${hexToOscRgb(currentTheme.text)}\x07`);
-    if (customBg) {
-      process.stdout.write(`\x1b]11;${hexToOscRgb(customBg)}\x07`);
-      // The terminal's native selection highlight doesn't adapt to a repainted
-      // background, so set it to the theme's selection color (OSC 17 = highlight bg).
-      // Glyph colors are left alone so selected text keeps its styling.
-      process.stdout.write(`\x1b]17;${hexToOscRgb(currentTheme.selectedBg)}\x07`);
-      customBgApplied = true;
-    } else if (customBgApplied) {
-      // Leaving a theme that painted the background: reset to the terminal's own.
-      process.stdout.write('\x1b]111\x07');
-      process.stdout.write('\x1b]117\x07');
-      customBgApplied = false;
-    }
-  }
-}
-
-/**
- * Restore terminal foreground (and background, if a theme painted it) to
- * defaults. Call on exit to undo OSC 10/11 changes.
- */
-export function restoreTerminalForeground(): void {
-  if (supportsOscColors()) {
-    // OSC 110/111 reset the terminal's default foreground/background to their original values.
-    process.stdout.write('\x1b]110\x07');
-    if (customBgApplied) {
-      process.stdout.write('\x1b]111\x07');
-      // Reset selection highlight bg (set alongside the custom background).
-      process.stdout.write('\x1b]117\x07');
-      customBgApplied = false;
-    }
-  }
 }
 
 // =============================================================================

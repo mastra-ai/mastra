@@ -13,8 +13,9 @@
  *
  * - `appearance` selects the surface palette and the built-in theme
  *   (dark/light) used as a fallback for any color not specified.
- * - `bg` (optional) repaints the terminal background (OSC 11) and becomes
- *   the base that panel shades and contrast adaptation derive from.
+ * - `bg` (optional) is the terminal background the theme expects; panel shades
+ *   and contrast adaptation derive from it. The terminal's own background is
+ *   left untouched.
  * - `vars` is an optional named palette; `colors` and `bg` values may be a
  *   hex string (#rrggbb) or the name of a var.
  * - Unknown color keys are ignored so newer themes degrade gracefully
@@ -32,7 +33,7 @@ export interface CustomTheme {
   name: string;
   /** Base appearance: picks the surface palette and fallback colors. */
   appearance: 'dark' | 'light';
-  /** Terminal background to paint (OSC 11); panels and contrast derive from it. */
+  /** Terminal background the theme expects; panels and contrast derive from it. */
   bg?: string;
   /** Fully-resolved colors: file overrides merged over the built-in base. */
   colors: ThemeColors;

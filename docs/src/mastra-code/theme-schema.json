@@ -17,7 +17,7 @@
     },
     "bg": {
       "$ref": "#/definitions/colorValue",
-      "description": "Terminal background. When set, the TUI repaints the terminal background to this color and derives panel shades from it. Reset on exit or theme switch."
+      "description": "Terminal background the theme is designed for. Panel shades and contrast adaptation derive from it; the terminal background is not painted. Omit to adapt to the terminal's own background."
     },
     "vars": {
       "type": "object",

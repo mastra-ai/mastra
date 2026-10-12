@@ -1,14 +1,22 @@
+---
+title: 'Themes'
+description: 'Choose a bundled Mastra Code theme, follow your terminal light or dark appearance, or write your own theme JSON.'
+packages:
+  - 'mastracode'
+---
+
 # Themes
 
 Mastra Code ships with bundled themes and loads custom ones from
 `~/.mastracode/themes/<name>.json`.
 
-- `/theme` — open the theme picker (built-ins + bundled + custom, live preview)
+- `/theme` — open the theme picker (built-ins + pairs + bundled + custom, live preview)
 - `/theme list` — list all available themes
 - `/theme <name>` — apply and persist a theme by name
 - `/theme auto|dark|light` — built-in modes
+- `/theme <light>/<dark>` — follow the terminal appearance with a theme pair
 - `/theme status` — show the active mode and stored preference
-- `MASTRA_THEME=<name>` — environment override (mode or theme name)
+- `MASTRA_THEME=<name>` — environment override (mode, theme name, or pair)
 
 ## Bundled themes
 
@@ -18,6 +26,34 @@ Mastra Code ships with bundled themes and loads custom ones from
 Bundled themes are defined in `src/tui/bundled-themes.ts`. A user file in
 `~/.mastracode/themes/` with the same name overrides the bundled version, so
 you can tweak one by copying its definition into a file and editing it.
+
+## Follow your terminal's light/dark mode
+
+Picking a single custom theme locks you into its `appearance`, so it keeps the
+same palette no matter what your terminal is set to. To follow the terminal
+instead, use a light/dark pair: the light theme first, the dark theme second,
+separated by `/`.
+
+```bash
+MASTRA_THEME=catppuccin-latte/catppuccin-mocha mastracode
+```
+
+```json title="~/.mastracode/settings.json"
+{
+  "preferences": {
+    "theme": "solarized-light/solarized-dark"
+  }
+}
+```
+
+Mastra Code reads the terminal's background color (OSC 11), then its light/dark
+notification, then the `COLORFGBG` environment variable, and falls back to
+dark. It applies the light theme when the terminal is light and the dark theme
+otherwise. `auto` does the same for the built-in palettes.
+
+The picker offers a pair for every bundled light/dark family:
+`catppuccin-latte/catppuccin-mocha` and `solarized-light/solarized-dark`. Any
+two theme names work in a pair, and each name must not contain `/`.
 
 ## File format
 
@@ -56,24 +92,23 @@ you can tweak one by copying its definition into a file and editing it.
 
 - `appearance` (required): `"dark"` or `"light"`. Selects the surface palette
   and the built-in theme used as a fallback for any color you don't set.
-- `bg` (optional): terminal background. When set, the TUI repaints the
-  terminal background to this color (OSC 11), derives panel shades from it,
-  and contrast-adapts foreground colors against it. The terminal's selection
-  highlight is also set to the theme's `selectedBg` (OSC 17) so selected text
-  stays readable against the new background. Both are reset on exit or when
-  switching themes. Background color keys you don't set explicitly
-  (`overlayBg`, `selectedBg`, `userMessageBg`, `systemReminderBg`,
-  `toolPendingBg`, `toolSuccessBg`, `toolErrorBg`, `errorBg`) are derived
-  from `bg` so overlays and panels match instead of falling back to the
-  built-in near-black/white values.
+- `bg` (optional): the terminal background the theme is designed for. Panel
+  and overlay shades derive from it, and foreground colors contrast-adapt
+  against it. Mastra Code does not paint the terminal background, so set it in
+  your terminal for a theme whose `bg` differs from it. Background color keys
+  you don't set explicitly (`overlayBg`, `selectedBg`, `userMessageBg`,
+  `systemReminderBg`, `toolPendingBg`, `toolSuccessBg`, `toolErrorBg`,
+  `errorBg`) are derived from `bg` so overlays and panels match instead of
+  falling back to the built-in near-black/white values.
 - `vars` (optional): named palette. Values must be hex colors (`#rrggbb` or `#rgb`).
 - `colors` (optional): any subset of the color keys below. Values are a hex
   color or the name of a `var`. The loader ignores unknown keys, but the JSON
-  schema is stricter and flags them so typos show up in your editor.
+  schema (`theme-schema.json`, beside this page) is stricter and flags them so
+  typos show up in your editor.
 
-Foreground colors are still contrast-adapted against the actual terminal
-background (WCAG-based), so a theme stays readable even if the terminal
-background doesn't match the theme's assumptions.
+Without a `bg`, foreground colors and panel shades contrast-adapt against the
+terminal's actual background (WCAG-based), so the theme stays readable whatever
+your terminal is set to.
 
 ## Color keys
 
@@ -140,4 +175,4 @@ Specific source hints:
 Keep hex values as-is; drop source keys with no counterpart and let the
 built-in fallback fill the rest. Ask your agent: "translate <theme file or
 name> to a mastracode theme at ~/.mastracode/themes/<name>.json using the
-mapping in custom-themes.md".
+mapping in themes.mdx".

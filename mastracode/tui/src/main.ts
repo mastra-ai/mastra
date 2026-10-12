@@ -39,7 +39,6 @@ import {
 import { resolveTuiSubagents } from './subagent-settings.js';
 import { applyThemePreference } from './tui/commands/theme.js';
 import { MastraTUI } from './tui/index.js';
-import { restoreTerminalForeground } from './tui/theme.js';
 import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
 import { getCurrentVersion } from './version.js';
 
@@ -286,7 +285,6 @@ process.on('exit', () => {
   } catch {
     // stdout may already be closed during exit
   }
-  restoreTerminalForeground();
   releaseAllThreadLocks();
   try {
     const threadId = getResumeThreadId?.();

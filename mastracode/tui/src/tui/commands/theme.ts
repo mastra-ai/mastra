@@ -1,9 +1,11 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
+import { BUNDLED_THEME_PAIRS } from '../bundled-themes.js';
 import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
 import { getThemesDir, listBundledThemes, listCustomThemes, loadCustomTheme } from '../custom-themes.js';
 import { detectTerminalTheme } from '../detect-theme.js';
+import type { ThemeDetectionResult } from '../detect-theme.js';
 import { showModalOverlay } from '../overlay.js';
 import { applyThemeMode, getSelectListTheme, getThemeMode, theme } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
@@ -16,11 +18,19 @@ import type { SlashCommandContext } from './types.js';
  */
 let applyRequestId = 0;
 
+function parseThemePair(pref: string): { light: string; dark: string } | undefined {
+  const [light, dark, ...rest] = pref.split('/');
+  if (!light || !dark || rest.length > 0) return undefined;
+  return { light, dark };
+}
+
 /**
- * Apply a stored theme preference: 'auto' | 'dark' | 'light' or the name of a
- * custom theme file. Returns a human-readable description of what was applied,
- * or an error string for a broken/missing custom theme (after falling back to
- * auto-detection so the UI is never left unstyled).
+ * Apply a stored theme preference: 'auto', 'dark', 'light', the name of a
+ * custom theme file, or a light/dark pair like 'catppuccin-latte/catppuccin-mocha'
+ * that follows the detected terminal appearance. Returns a human-readable
+ * description of what was applied, or an error string for a broken/missing
+ * custom theme (after falling back to auto-detection so the UI is never left
+ * unstyled).
  */
 export async function applyThemePreference(
   pref: string,
@@ -30,21 +40,46 @@ export async function applyThemePreference(
     applyThemeMode(pref);
     return { applied: pref };
   }
-  if (pref !== 'auto') {
-    const result = loadCustomTheme(pref);
-    if (result.ok) {
-      applyThemeMode(result.theme.appearance, undefined, result.theme.colors, result.theme.bg);
-      return { applied: `${result.theme.name} (${result.theme.appearance})` };
-    }
-    const detection = await detectTerminalTheme();
-    if (requestId !== applyRequestId) return { applied: pref, stale: true };
-    applyThemeMode(detection.mode, detection.detectedBgHex);
-    return { applied: `auto (detected: ${detection.mode})`, error: result.error };
+
+  let detection: ThemeDetectionResult | undefined;
+  const detect = async (): Promise<ThemeDetectionResult | undefined> => {
+    detection ??= await detectTerminalTheme();
+    return requestId === applyRequestId ? detection : undefined;
+  };
+
+  const pair = parseThemePair(pref);
+  let themeName: string | undefined;
+  if (pair) {
+    const detected = await detect();
+    if (!detected) return { applied: pref, stale: true };
+    themeName = detected.mode === 'light' ? pair.light : pair.dark;
+  } else if (pref !== 'auto') {
+    themeName = pref;
   }
-  const detection = await detectTerminalTheme();
-  if (requestId !== applyRequestId) return { applied: pref, stale: true };
-  applyThemeMode(detection.mode, detection.detectedBgHex);
-  return { applied: `auto (detected: ${detection.mode})` };
+
+  if (themeName !== undefined) {
+    const result = loadCustomTheme(themeName);
+    if (result.ok) {
+      const { appearance, colors, bg } = result.theme;
+      if (bg) {
+        applyThemeMode(appearance, undefined, colors, bg);
+      } else {
+        const detected = await detect();
+        if (!detected) return { applied: pref, stale: true };
+        applyThemeMode(appearance, detected.detectedBgHex, colors);
+      }
+      return { applied: `${result.theme.name} (${pair && detection ? detection.mode : appearance})` };
+    }
+    const detected = await detect();
+    if (!detected) return { applied: pref, stale: true };
+    applyThemeMode(detected.mode, detected.detectedBgHex);
+    return { applied: `auto (detected: ${detected.mode})`, error: result.error };
+  }
+
+  const detected = await detect();
+  if (!detected) return { applied: pref, stale: true };
+  applyThemeMode(detected.mode, detected.detectedBgHex);
+  return { applied: `auto (detected: ${detected.mode})` };
 }
 
 /**
@@ -86,7 +121,7 @@ async function showThemePicker(ctx: SlashCommandContext): Promise<void> {
   const settings = loadSettings();
   // The effective theme may differ from the saved preference (MASTRA_THEME
   // overrides it at startup) — restore what's actually active on cancel.
-  const currentPref = process.env.MASTRA_THEME || settings.preferences.theme || 'auto';
+  const currentPref = process.env.MASTRA_THEME?.toLowerCase() || settings.preferences.theme || 'auto';
   const customNames = listCustomThemes();
   const bundledNames = listBundledThemes().filter(name => !customNames.includes(name));
 
@@ -95,11 +130,19 @@ async function showThemePicker(ctx: SlashCommandContext): Promise<void> {
     { value: 'dark', label: 'dark', description: 'Built-in dark theme' },
     { value: 'light', label: 'light', description: 'Built-in light theme' },
   ];
+  const pairItems: SelectItem[] = BUNDLED_THEME_PAIRS.map(({ light, dark }) => {
+    const value = `${light}/${dark}`;
+    return {
+      value,
+      label: `  ${value}${value === currentPref ? theme.fg('accent', ' ●') : ''}  ${theme.fg('dim', 'follow terminal')}`,
+    };
+  });
   const items: SelectItem[] = [
     ...builtins.map(b => ({
       value: b.value,
       label: `  ${b.label}${b.value === currentPref ? theme.fg('accent', ' ●') : ''}  ${theme.fg('dim', b.description)}`,
     })),
+    ...pairItems,
     ...bundledNames.map(name => ({
       value: name,
       label: `  ${name}${name === currentPref ? theme.fg('accent', ' ●') : ''}  ${theme.fg('dim', 'bundled')}`,
@@ -170,8 +213,9 @@ async function showThemePicker(ctx: SlashCommandContext): Promise<void> {
 /**
  * /theme — open the theme picker.
  * /theme list — list all available themes.
- * /theme <auto|dark|light|name> — set the theme directly (name = bundled theme
- * or custom theme file in ~/.mastracode/themes/<name>.json).
+ * /theme <auto|dark|light|name|light/dark> — set the theme directly (name =
+ * bundled theme or custom theme file in ~/.mastracode/themes/<name>.json; a
+ * light/dark pair follows the detected terminal appearance).
  */
 export async function handleThemeCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
   const arg = args[0];
@@ -196,6 +240,11 @@ export async function handleThemeCommand(ctx: SlashCommandContext, args: string[
     const bundledNames = listBundledThemes().filter(name => !customNames.includes(name));
     const lines = [
       'Built-in: ' + ['auto', 'dark', 'light'].map(n => `${n}${mark(n)}`).join(', '),
+      'Pairs: ' +
+        BUNDLED_THEME_PAIRS.map(p => {
+          const pair = `${p.light}/${p.dark}`;
+          return `${pair}${mark(pair)}`;
+        }).join(', '),
       'Bundled: ' + bundledNames.map(n => `${n}${mark(n)}`).join(', '),
       customNames.length
         ? 'Custom: ' + customNames.map(n => `${n}${mark(n)}`).join(', ')
