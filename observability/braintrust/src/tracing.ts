@@ -155,9 +155,10 @@ export class BraintrustExporter extends TrackingExporter<
   #useProvidedLogger: boolean;
   #providedLogger?: BraintrustLogger;
   #localLogger?: BraintrustLogger;
-  // Ambient spans that received rows since the last flush. Their rows go through
-  // the span's own SDK state, not through the exporter's logger.
-  #pendingExternalSpans = new Set<BraintrustSpan>();
+  // Latest ambient span Mastra attached to. Its rows go through that span's own
+  // SDK state, not through the exporter's logger. One slot is enough: every span
+  // from one SDK copy shares the same background logger.
+  #externalSpan?: BraintrustSpan;
 
   constructor(config: BraintrustExporterConfig = {}) {
     // Resolve env vars BEFORE calling super (config is readonly in base class)
@@ -335,7 +336,7 @@ export class BraintrustExporter extends TrackingExporter<
       // Check if it's a valid span (not the NOOP_SPAN)
       if (externalSpan && externalSpan.id) {
         // External span detected - attach Mastra traces to it
-        this.#pendingExternalSpans.add(externalSpan);
+        this.#externalSpan = externalSpan;
         return externalSpan;
       } else {
         // No external span - use provided logger
@@ -450,10 +451,9 @@ export class BraintrustExporter extends TrackingExporter<
     if (logger?.flush) {
       pending.push(logger.flush());
     }
-    for (const span of this.#pendingExternalSpans) {
-      pending.push(span.flush ? span.flush() : flushGlobalLogger());
+    if (this.#externalSpan) {
+      pending.push(this.#externalSpan.flush ? this.#externalSpan.flush() : flushGlobalLogger());
     }
-    this.#pendingExternalSpans.clear();
     await Promise.all(pending);
   }
 

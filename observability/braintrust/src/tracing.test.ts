@@ -3235,7 +3235,7 @@ describe('BraintrustExporter flush and shutdown', () => {
     await stopping;
   });
 
-  it('flush() waits for an ambient external span and forgets it afterwards', async () => {
+  it('flush() waits for the ambient external span', async () => {
     const gate = deferred();
     const mockExternalSpan = {
       id: 'external-span-id',
@@ -3265,9 +3265,9 @@ describe('BraintrustExporter flush and shutdown', () => {
     gate.resolve();
     await flushing;
 
-    // The span was flushed once; a second flush must not touch it again
+    // Later flushes keep covering the same ambient span
     await exporter.flush();
-    expect(mockExternalSpan.flush).toHaveBeenCalledTimes(1);
+    expect(mockExternalSpan.flush).toHaveBeenCalledTimes(2);
   });
 });
 
