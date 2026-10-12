@@ -5,6 +5,7 @@ import type { AvailableModelOption } from '../../../../hooks/useAvailableModels'
 import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { FactoryDefaultModelSection } from './FactoryDefaultModelSection';
+import { FactoryModelScopeSection } from './FactoryModelScopeSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { BaseThinkingSection, ModeThinkingDefaultsSection } from './ThinkingDefaultsSection';
 import { ProviderAccessSection } from './ProviderAccessSection';
@@ -47,6 +48,7 @@ export function FactoryModelsSettings({ models, settings, onBehaviorChange }: Fa
         description="Applied to Factory runs (triage, board work items) and channel sessions."
       >
         <SettingsContainer>
+          <FactoryModelScopeSection />
           <FactoryDefaultModelSection models={models} />
         </SettingsContainer>
       </SettingsSubsection>
