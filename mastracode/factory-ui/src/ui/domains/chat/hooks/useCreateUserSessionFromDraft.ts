@@ -8,6 +8,7 @@ import { createUserSession } from '../../workspaces/services/user-sessions';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModes } from '../context/useChatModes';
 import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatThinking } from '../context/useChatThinking';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { promptHandoffState } from './useHandoffPrompt';
 
@@ -15,6 +16,7 @@ export function useCreateUserSessionFromDraft() {
   const { baseUrl, factorySessionState } = useChatSessionContext();
   const { activeModeId } = useChatModes();
   const { activeModelId, defaultModelId } = useChatModels();
+  const { override: thinkingLevelOverride } = useChatThinking();
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -29,22 +31,29 @@ export function useCreateUserSessionFromDraft() {
         throw new Error('Session configuration is not ready. Try again.');
       }
 
-      // Session creation hydrates the personal default server-side. Only hand
-      // off a model when the draft explicitly deviated from that default.
-      const handoffModelId = activeModelId === defaultModelId ? undefined : activeModelId;
+      const draftKeepsServerDefaults = activeModelId === defaultModelId && !thinkingLevelOverride;
+      const handoffModelId = draftKeepsServerDefaults ? undefined : activeModelId;
 
       try {
         const session = await createUserSession(baseUrl, projectRepositoryId, {
           sessionId: draftSessionId,
           title: prompt,
         });
-        return { session, prompt, factoryId, projectRepositoryId, activeModeId, handoffModelId };
+        return { session, prompt, factoryId, projectRepositoryId, activeModeId, handoffModelId, thinkingLevelOverride };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Session creation failed';
         throw new Error(`Could not create the session: ${message}. Try again.`, { cause: error });
       }
     },
-    onSuccess: ({ session, prompt, factoryId, projectRepositoryId, activeModeId, handoffModelId }) => {
+    onSuccess: ({
+      session,
+      prompt,
+      factoryId,
+      projectRepositoryId,
+      activeModeId,
+      handoffModelId,
+      thinkingLevelOverride,
+    }) => {
       queryClient.setQueryData(queryKeys.userSession(session.sessionId), session);
       addCachedSession(queryClient, projectRepositoryId, session);
       queryClient.setQueryData<MastraDBMessage[]>(
@@ -61,6 +70,7 @@ export function useCreateUserSessionFromDraft() {
         state: promptHandoffState(prompt, {
           modeId: activeModeId,
           modelId: handoffModelId,
+          thinkingLevel: thinkingLevelOverride,
         }),
       });
     },

@@ -18,24 +18,11 @@ function registerAuthHandler() {
   );
 }
 
-function registerPersistenceHandlers(onFactoryModel: (body: unknown) => void, onOMDefaults: (body: unknown) => void) {
+function registerPersistenceHandlers(onFactoryModel: (body: unknown) => void) {
   server.use(
     http.patch(`${TEST_BASE_URL}/web/factory/projects/factory-1`, async ({ request }) => {
       onFactoryModel(await request.json());
       return HttpResponse.json({ project: { id: 'factory-1', name: 'Factory', defaultModelId: 'openai/gpt-5.6-sol' } });
-    }),
-    http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, async ({ request }) => {
-      onOMDefaults(await request.json());
-      return HttpResponse.json({
-        ok: true,
-        config: {
-          observerModelId: 'openai/gpt-5.4-mini',
-          reflectorModelId: 'openai/gpt-5.4-mini',
-          observationThreshold: 30000,
-          reflectionThreshold: 40000,
-          observeAttachments: 'auto',
-        },
-      });
     }),
   );
 }
@@ -125,9 +112,8 @@ describe('Model provider onboarding', () => {
   });
 
   describe('when OpenAI is already connected', () => {
-    it('persists the suggested Factory model and hidden OM defaults', async () => {
+    it('persists the suggested Factory model without materializing automatic OM models', async () => {
       const onFactoryModel = vi.fn<(body: unknown) => void>();
-      const onOMDefaults = vi.fn<(body: unknown) => void>();
       const onComplete = vi.fn<() => void>();
       const providers: ProviderInfo[] = [
         {
@@ -140,7 +126,7 @@ describe('Model provider onboarding', () => {
         { provider: 'anthropic', source: 'none' },
       ];
       registerAuthHandler();
-      registerPersistenceHandlers(onFactoryModel, onOMDefaults);
+      registerPersistenceHandlers(onFactoryModel);
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers })),
         http.get(`${TEST_BASE_URL}/web/config/models`, () =>
@@ -165,22 +151,16 @@ describe('Model provider onboarding', () => {
 
       await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
       expect(onFactoryModel).toHaveBeenCalledWith({ defaultModelId: 'openai/gpt-5.6-sol' });
-      expect(onOMDefaults).toHaveBeenCalledWith({
-        providerId: 'openai',
-        factoryModelId: 'openai/gpt-5.6-sol',
-        factoryId: 'factory-1',
-      });
     });
   });
 
   describe('when OpenAI has only a personal API key', () => {
     it('still requires an organization credential and fixes the dialog to org scope', async () => {
       const onFactoryModel = vi.fn<(body: unknown) => void>();
-      const onOMDefaults = vi.fn<(body: unknown) => void>();
       const onComplete = vi.fn<() => void>();
       let connected = false;
       registerAuthHandler();
-      registerPersistenceHandlers(onFactoryModel, onOMDefaults);
+      registerPersistenceHandlers(onFactoryModel);
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
           HttpResponse.json({
@@ -227,11 +207,43 @@ describe('Model provider onboarding', () => {
 
       await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
       expect(onFactoryModel).toHaveBeenCalledWith({ defaultModelId: 'openai/gpt-5.6-sol' });
-      expect(onOMDefaults).toHaveBeenCalledWith({
-        providerId: 'openai',
-        factoryModelId: 'openai/gpt-5.6-sol',
-        factoryId: 'factory-1',
-      });
+    });
+  });
+
+  describe('when the deployment provides Amazon Bedrock', () => {
+    it('lets a member pick it as connected without an API-key dialog', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [{ provider: 'amazon-bedrock', source: 'deployment' }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: [
+              {
+                id: 'amazon-bedrock/anthropic.claude-sonnet-4-5',
+                provider: 'amazon-bedrock',
+                modelName: 'anthropic.claude-sonnet-4-5',
+                hasApiKey: true,
+              },
+            ],
+          }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
+
+      const bedrock = await screen.findByRole('button', { name: 'Amazon Bedrock' });
+      expect(bedrock).toBeEnabled();
+      expect(screen.queryByText(/Ask an organization admin/)).not.toBeInTheDocument();
+      await user.click(bedrock);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Finish setup' })).toBeInTheDocument();
+      expect(screen.getByText('amazon-bedrock/anthropic.claude-sonnet-4-5')).toBeInTheDocument();
     });
   });
 

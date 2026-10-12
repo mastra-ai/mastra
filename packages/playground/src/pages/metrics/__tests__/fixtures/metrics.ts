@@ -1,4 +1,4 @@
-import type { GetObservabilityCapabilitiesResponse, MastraClient } from '@mastra/client-js';
+import type { GetObservabilityCapabilitiesResponse, ListScoresResponseNew, MastraClient } from '@mastra/client-js';
 
 export const unsupportedStorage: GetObservabilityCapabilitiesResponse = {
   observabilityStorageType: 'ObservabilityLibSQL',
@@ -18,3 +18,8 @@ export const emptyTags: Awaited<ReturnType<MastraClient['getTags']>> = { tags: [
 export const emptyEntityNames: Awaited<ReturnType<MastraClient['getEntityNames']>> = { names: [] };
 export const emptyServiceNames: Awaited<ReturnType<MastraClient['getServiceNames']>> = { serviceNames: [] };
 export const emptyEnvironments: Awaited<ReturnType<MastraClient['getEnvironments']>> = { environments: [] };
+
+export const emptyScores: ListScoresResponseNew = {
+  scores: [],
+  pagination: { total: 0, page: 0, perPage: 100, hasMore: false },
+};

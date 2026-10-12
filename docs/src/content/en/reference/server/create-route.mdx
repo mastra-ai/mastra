@@ -116,9 +116,9 @@ function createRoute<TPath, TQuery, TBody, TResponse, TResponseType>(
   },
   {
     name: 'onValidationError',
-    type: "(error: ZodError, context: 'query' | 'body' | 'path') => { status: number; body: unknown } | undefined",
+    type: "(error: ZodError, context: 'query' | 'body' | 'path') => { status: number; body: unknown } | undefined | void",
     description:
-      'Custom validation error handler for this route. Overrides the server-level `onValidationError` hook. Return `{ status, body }` to customize the response, or `undefined` to use the default.',
+      'Custom validation error handler for this route. Overrides the server-level `onValidationError` hook. Return `{ status, body }` to customize the response, or return nothing (`undefined`) to use the default.',
     isOptional: true,
   },
 ]}

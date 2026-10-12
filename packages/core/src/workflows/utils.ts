@@ -292,6 +292,23 @@ export function createDeprecationProxy<T extends Record<string, any>>(
   });
 }
 
+/**
+ * Defines `writer` on execute params as a memoized getter so the stream is only
+ * allocated when step code actually reads it. The property stays enumerable so
+ * spreading the params still carries `writer` along.
+ */
+export function defineLazyWriter<T extends object, W>(
+  params: T,
+  createWriter: () => W,
+): NoInfer<T> & { writer: NoInfer<W> } {
+  let writer: W | undefined;
+  return Object.defineProperty(params, 'writer', {
+    enumerable: true,
+    configurable: true,
+    get: () => (writer ??= createWriter()),
+  }) as T & { writer: W };
+}
+
 const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'classifier', 'mapping'] as const;
 
 /**
@@ -629,7 +646,9 @@ export const createRestartExecutionParams = ({
     activePaths: isPreFirstStepRestart ? [0] : snapshot.activePaths,
     activeStepsPath: isPreFirstStepRestart ? firstEntryActiveStepsPath : snapshot.activeStepsPath,
     stepResults: snapshot.context,
-    state: snapshot.value,
+    // The evented engine records mid-run state as `context.__state` alongside step results;
+    // `value` only holds the state from the run's start or last suspension.
+    state: (snapshot.context as Record<string, any>)?.__state ?? snapshot.value,
     stepExecutionPath: snapshot?.stepExecutionPath,
     isPreFirstStepRestart,
   };

@@ -8,6 +8,7 @@ import { expect } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { thinkingConfig } from '../../../../__tests__/fixtures/thinkingConfig';
 import { OverlaysProvider } from '../../../../lib/overlays';
 import { ChatSessionRouteProvider } from '../../Chat';
 import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
@@ -117,6 +118,7 @@ export function stubPreparingSession({
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-4o-mini' })),
+    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(thinkingConfig)),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () =>
       HttpResponse.json({
         connections: [

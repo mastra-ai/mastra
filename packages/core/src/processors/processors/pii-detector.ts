@@ -338,10 +338,9 @@ export class PIIDetector implements Processor<'pii-detector'> {
           if (this.strategy === 'filter') {
             continue; // Skip this message
           } else if (this.strategy === 'redact') {
+            // No usable redaction (e.g. the whole message was removed): drop it rather than send the original
             if (processedMessage) {
               processedMessages.push(processedMessage);
-            } else {
-              processedMessages.push(message); // Fallback to original if redaction failed
             }
             continue;
           }
@@ -546,7 +545,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
         return null; // Return null to indicate message should be filtered
 
       case 'redact':
-        if (result.redacted_content) {
+        if (result.redacted_content?.trim()) {
           console.info(`[PIIDetector] Redacted PII: ${alertMessage}`);
           return this.createRedactedMessage(message, result.redacted_content);
         } else {
@@ -1242,10 +1241,9 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
           if (this.strategy === 'filter') {
             continue; // Skip this message
           } else if (this.strategy === 'redact') {
+            // No usable redaction (e.g. the whole message was removed): drop it rather than send the original
             if (processedMessage) {
               processedMessages.push(processedMessage);
-            } else {
-              processedMessages.push(message); // Fallback to original if redaction failed
             }
             continue;
           }

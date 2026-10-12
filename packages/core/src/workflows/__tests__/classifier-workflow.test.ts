@@ -298,7 +298,7 @@ describe('classifier workflow construction', () => {
 
   it('keeps workflow retries separate from classifier model retries and forwards abort signals', async () => {
     const classifier = createClassifier();
-    const evaluate = vi.spyOn(classifier, 'evaluate');
+    const decide = vi.spyOn(classifier, 'decide');
     const workflow = createWorkflow({ id: 'options', inputSchema: z.string(), outputSchema: z.any() })
       .classifier(classifier, { maxRetries: 4, retries: 2, providerOptions: { test: { mode: 'fast' } } })
       .commit();
@@ -314,7 +314,7 @@ describe('classifier workflow construction', () => {
 
     expect(result.status).toBe('success');
     expect(workflow.stepGraph[0]).toMatchObject({ options: { maxRetries: 4, retries: 2 } });
-    expect(evaluate).toHaveBeenCalledWith(
+    expect(decide).toHaveBeenCalledWith(
       expect.objectContaining({
         maxRetries: 4,
         providerOptions: { test: { mode: 'fast' } },

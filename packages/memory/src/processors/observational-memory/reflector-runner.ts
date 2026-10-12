@@ -13,6 +13,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 import type { Memory } from '../..';
 import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
 import { BufferingCoordinator } from './buffering-coordinator';
+import { runOMCommit } from './commit-queue';
 import { omDebug, omError } from './debug';
 import { isOmModelExecutionError, isOmModelExecutionFailure, OmModelExecutionError } from './error';
 import {
@@ -150,14 +151,21 @@ function getLastModelFromMessageList(messageList?: MessageList): string | undefi
   return undefined;
 }
 
-type ConcreteReflectionModel = Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens>;
+type ConcreteReflectionModel = Exclude<ResolvedReflectionConfig['model'], ModelByInputTokens | 'auto'>;
 
-type ReflectionModelResolver = (inputTokens: number) => {
+type ReflectionModelResolver = (
+  inputTokens: number,
+  options?: {
+    requestContext?: RequestContext;
+    mainAgent?: ProcessorContext['agent'];
+    currentModel?: ObservationModelContext;
+  },
+) => Promise<{
   model: ConcreteReflectionModel;
   selectedThreshold?: number;
   routingStrategy?: 'model-by-input-tokens';
   routingThresholds?: string;
-};
+}>;
 
 async function withAbortCheck<T>(fn: () => Promise<T>, abortSignal?: AbortSignal): Promise<T> {
   if (abortSignal?.aborted) throw new Error('The operation was aborted.');
@@ -184,8 +192,34 @@ const EARLY_ACTIVATION_SIZE_FLOOR_RATIO = 0.75;
  */
 type TryActivateResult =
   | { status: 'activated' }
+  | { status: 'not-applied' }
   | { status: 'no-buffer' }
   | { status: 'suppressed'; reason: 'composition' | 'size' };
+
+/** A reflection commit that created nothing because the reflected record is no longer the head. */
+class ReflectionNotAppliedError extends Error {
+  constructor(recordId: string, headId: string) {
+    super(`Reflection not applied: record ${recordId} is no longer the current generation (head is ${headId})`);
+    this.name = 'ReflectionNotAppliedError';
+  }
+}
+
+/**
+ * Whether a reflection commit created the generation the caller asked for. Storage creates
+ * nothing (and returns the current head or the stored record) when the reflected record was
+ * already retired or its observations were rewritten since the reflection read them.
+ *
+ * Adapters that predate `newRecordId` ignore it and do not report `supersededBy`; for those a
+ * returned record other than the reflected one means a new generation was created.
+ */
+export function isReflectionApplied(
+  returned: ObservationalMemoryRecord,
+  newRecordId: string,
+  reflectedRecordId: string,
+): boolean {
+  if (returned.id === newRecordId) return true;
+  return returned.supersededBy === undefined && returned.id !== reflectedRecordId;
+}
 
 /**
  * Runs the Reflector agent for compressing observations.
@@ -365,6 +399,7 @@ export class ReflectorRunner {
     model?: ConcreteReflectionModel,
     mainAgent?: ProcessorContext['agent'],
     sendSignal?: ProcessorContext['sendSignal'],
+    currentModel?: ObservationModelContext,
   ): Promise<{
     observations: string;
     suggestedContinuation?: string;
@@ -374,7 +409,9 @@ export class ReflectorRunner {
     providerMetadata?: ProviderMetadata;
   }> {
     const originalTokens = this.tokenCounter.countObservations(observations);
-    const resolvedModel = model ? { model } : this.resolveModel(originalTokens);
+    const resolvedModel = model
+      ? { model }
+      : await this.resolveModel(originalTokens, { requestContext, mainAgent, currentModel });
     const activeExtractors = await resolveExtractors(
       (skipContinuationHints
         ? this.reflectionConfig.extractors?.filter(
@@ -668,6 +705,7 @@ export class ReflectorRunner {
     mainAgent?: ProcessorContext['agent'],
     sendSignal?: ProcessorContext['sendSignal'],
     trigger?: ObserveTrigger,
+    currentModel?: ObservationModelContext,
   ): void {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -702,6 +740,7 @@ export class ReflectorRunner {
           mainAgent,
           sendSignal,
           trigger,
+          currentModel,
         );
       } catch (error) {
         reflectionError = error instanceof Error ? error : new Error(String(error));
@@ -759,7 +798,7 @@ export class ReflectorRunner {
    */
   private async doAsyncBufferedReflection(
     record: ObservationalMemoryRecord,
-    _bufferKey: string,
+    bufferKey: string,
     writer?: ProcessorStreamWriter,
     requestContext?: RequestContext,
     observabilityContext?: ObservabilityContext,
@@ -767,6 +806,7 @@ export class ReflectorRunner {
     mainAgent?: ProcessorContext['agent'],
     sendSignal?: ProcessorContext['sendSignal'],
     trigger?: ObserveTrigger,
+    currentModel?: ObservationModelContext,
   ): Promise<
     | {
         usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -782,7 +822,7 @@ export class ReflectorRunner {
     const startedAt = new Date().toISOString();
     const cycleId = `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 
-    BufferingCoordinator.reflectionBufferCycleIds.set(_bufferKey, cycleId);
+    BufferingCoordinator.reflectionBufferCycleIds.set(bufferKey, cycleId);
 
     const fullObservations = currentRecord.activeObservations ?? '';
     const allLines = fullObservations.split('\n');
@@ -852,6 +892,7 @@ export class ReflectorRunner {
       undefined,
       mainAgent,
       sendSignal,
+      currentModel,
     );
     reflectResult.observations = await applyTextTransform(
       this.hooks,
@@ -872,13 +913,30 @@ export class ReflectorRunner {
       `[OM:reflect] doAsyncBufferedReflection: reflector returned ${reflectionTokenCount} tokens (${reflectResult.observations?.length} chars), saving to recordId=${currentRecord.id}`,
     );
 
-    await this.storage.updateBufferedReflection({
-      id: currentRecord.id,
-      reflection: reflectResult.observations,
-      tokenCount: reflectionTokenCount,
-      inputTokenCount: sliceTokenEstimate,
-      reflectedObservationLineCount,
-    });
+    // `reflectedObservationLineCount` counts lines of this record's text, so the buffered
+    // reflection is only valid on this record. If a reflection retired it meanwhile, discard.
+    const saved = await runOMCommit(
+      this.buffering.getLockKey(currentRecord.threadId, currentRecord.resourceId),
+      async () => {
+        const head = await this.storage.getObservationalMemory(currentRecord.threadId, currentRecord.resourceId);
+        if (head?.id !== currentRecord.id) return false;
+        await this.storage.updateBufferedReflection({
+          id: currentRecord.id,
+          reflection: reflectResult.observations,
+          tokenCount: reflectionTokenCount,
+          inputTokenCount: sliceTokenEstimate,
+          reflectedObservationLineCount,
+        });
+        return true;
+      },
+    );
+    if (!saved) {
+      omDebug(
+        `[OM:reflect] doAsyncBufferedReflection: record ${currentRecord.id} is no longer the head; discarding the buffered reflection`,
+      );
+      BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
+      return { usage: reflectResult.usage, providerMetadata: reflectResult.providerMetadata };
+    }
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: bufferedReflection saved with lineCount=${reflectedObservationLineCount}`,
     );
@@ -1023,10 +1081,25 @@ export class ReflectorRunner {
     omDebug(
       `[OM:reflect] tryActivateBufferedReflection: activating, beforeTokens=${beforeTokens}, combinedTokenCount=${combinedTokenCount}, reflectedLineCount=${reflectedLineCount}, unreflectedLines=${unreflectedLines.length}`,
     );
-    await this.storage.swapBufferedReflectionToActive({
-      currentRecord: freshRecord,
-      tokenCount: combinedTokenCount,
-    });
+    const newRecordId = crypto.randomUUID();
+    const swapped = await runOMCommit(
+      lockKey,
+      () =>
+        this.storage.swapBufferedReflectionToActive({
+          currentRecord: freshRecord,
+          tokenCount: combinedTokenCount,
+          newRecordId,
+        }),
+      { priority: 'reflection' },
+    );
+    if (!isReflectionApplied(swapped, newRecordId, freshRecord.id)) {
+      // The record was retired by another reflection, or its observations were rewritten
+      // after this read. Nothing changed; the next turn re-evaluates against the head.
+      omDebug(
+        `[OM:reflect] tryActivateBufferedReflection: buffered reflection on ${freshRecord.id} not applied (head is ${swapped.id})`,
+      );
+      return { status: 'not-applied' };
+    }
     if (committedContext) {
       await this.notifyReflectionCommitted({
         ...committedContext,
@@ -1115,7 +1188,7 @@ export class ReflectorRunner {
     lastActivityAt?: number;
   }): Promise<void> {
     const {
-      record,
+      record: callerRecord,
       observationTokens,
       writer,
       abortSignal,
@@ -1131,6 +1204,9 @@ export class ReflectorRunner {
       lastActivityAt,
       threadId: requestedThreadId,
     } = opts;
+    // The reflection commit compares the stored record against the text the Reflector read, so
+    // that text must be a fixed snapshot (some stores hand out live record references).
+    const record = { ...callerRecord };
     const lockKey = this.buffering.getLockKey(record.threadId, record.resourceId);
     const reflectThreshold = getMaxThreshold(this.getEffectiveReflectionTokens(record));
     const priorExtractedValues = await getThreadExtractedValues(
@@ -1170,6 +1246,7 @@ export class ReflectorRunner {
           mainAgent,
           sendSignal,
           trigger,
+          currentModel,
         );
       }
     }
@@ -1235,7 +1312,7 @@ export class ReflectorRunner {
           observabilityContext,
         },
       );
-      if (activationResult.status === 'activated') {
+      if (activationResult.status === 'activated' || activationResult.status === 'not-applied') {
         return;
       }
       // Early-trigger overshoot guard: tryActivateBufferedReflection already
@@ -1277,6 +1354,7 @@ export class ReflectorRunner {
           mainAgent,
           sendSignal,
           trigger,
+          currentModel,
         );
         return;
       }
@@ -1378,6 +1456,7 @@ export class ReflectorRunner {
         undefined,
         mainAgent,
         sendSignal,
+        currentModel,
       );
       reflectResult.observations = await applyTextTransform(
         this.hooks,
@@ -1387,19 +1466,34 @@ export class ReflectorRunner {
       );
       reflectionUsage = reflectResult.usage;
       reflectionProviderMetadata = reflectResult.providerMetadata;
+      const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
+
+      const newRecordId = crypto.randomUUID();
+      const committedRecord = await runOMCommit(
+        this.buffering.getLockKey(record.threadId, record.resourceId),
+        () =>
+          this.storage.createReflectionGeneration({
+            currentRecord: record,
+            reflection: reflectResult.observations,
+            tokenCount: reflectionTokenCount,
+            newRecordId,
+          }),
+        { priority: 'reflection' },
+      );
+      if (!isReflectionApplied(committedRecord, newRecordId, record.id)) {
+        // Another reflection retired this record, or its observations were rewritten while the
+        // Reflector ran. Nothing was committed: skip the commit side effects and close the
+        // cycle as not applied. The next turn re-evaluates against the head.
+        omDebug(`[OM:reflect] reflection of ${record.id} not applied (head is ${committedRecord.id})`);
+        throw new ReflectionNotAppliedError(record.id, committedRecord.id);
+      }
+      // Only an applied reflection's extracted values belong to the thread.
       await persistThreadExtractedValues(
         this.storage,
         this.reflectionConfig.extractors,
         record.threadId ?? undefined,
         reflectResult.extractedValues,
       );
-      const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
-
-      await this.storage.createReflectionGeneration({
-        currentRecord: record,
-        reflection: reflectResult.observations,
-        tokenCount: reflectionTokenCount,
-      });
 
       // Best-effort results still over threshold are committed (they usually
       // shrink observations somewhat), but shouldReflect remains true — record
@@ -1500,6 +1594,8 @@ export class ReflectorRunner {
         failureKind: failedMarker.data.failureKind,
         error: reflectionError.message,
       });
+      // A reflection that lost to a newer head changed nothing; it is not a failure of the turn.
+      if (error instanceof ReflectionNotAppliedError) return;
       if (
         lifecycleError !== undefined ||
         abortSignal?.aborted ||

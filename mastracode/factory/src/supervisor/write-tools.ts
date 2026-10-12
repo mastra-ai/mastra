@@ -5,6 +5,7 @@ import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { overtakenDecisionIds } from '../rules/decision-applicability.js';
+import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import type { AuditAction } from '../storage/domains/audit/actions.js';
@@ -60,7 +61,16 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
           deps.scope.factoryProjectId,
           decisionId,
         );
-        if (current && (await overtakenDecisionIds(deps.workItems, deps.boards, deps.scope, [current])).size > 0) {
+        if (!current || current.status !== 'failed') {
+          throw new Error('The decision is not failed, no longer exists, or belongs to another factory.');
+        }
+        const failure = factoryDispatchFailureMetadata(current.failureCode);
+        if (!failure.canRetry) {
+          throw new Error(
+            `This failure (${failure.label}) cannot be fixed by a retry; repair the cause and start a new run instead.`,
+          );
+        }
+        if ((await overtakenDecisionIds(deps.workItems, deps.boards, deps.scope, [current])).size > 0) {
           throw new Error('The work item has moved on from the phase this run was decided for; it cannot be retried.');
         }
         const decision = await deps.workItems.retryDeferredDecision(

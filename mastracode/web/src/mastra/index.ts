@@ -367,6 +367,9 @@ export const factory = new MastraFactory({
   secretEncryption,
   integrations,
   configVersion: factoryConfigVersion,
+  // Providers every signed-in account may run on this server's own credentials,
+  // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
+  deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
   sandbox: ctx => {
     const useLocalSandbox = process.env.FACTORY_SANDBOX_PROVIDER?.trim() === 'local';
     if (!useLocalSandbox && hasPlatformSandboxEnv) {

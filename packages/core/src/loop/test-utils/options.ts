@@ -8383,7 +8383,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "stepResult": {
                   "isContinued": false,
-                  "reason": "tripwire",
+                  "reason": "abort",
                   "warnings": undefined,
                 },
               },
@@ -9051,7 +9051,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 },
                 "stepResult": {
                   "isContinued": false,
-                  "reason": "tripwire",
+                  "reason": "abort",
                   "warnings": undefined,
                 },
               },

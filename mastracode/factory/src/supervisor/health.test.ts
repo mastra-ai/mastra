@@ -253,7 +253,7 @@ describe('computeFactoryHealth', () => {
         ...empty,
         items: [
           item({ id: 'stranded', stages: ['planning'] }),
-          item({ id: 'in-flight', stages: ['execute'] }),
+          item({ id: 'in-flight', stages: ['planning'] }),
           item({ id: 'resting', stages: ['intake'] }),
         ],
         decisions: [decision({ id: 'd-pending', status: 'pending', workItemId: 'in-flight', availableAt: ago(1_000) })],
@@ -268,6 +268,67 @@ describe('computeFactoryHealth', () => {
         suggestedRepair: { action: 'start-run', workItemId: 'stranded', role: 'plan' },
       }),
     ]);
+  });
+
+  it('still reports a missing seat when only an earlier phase left a seat or proposal behind', () => {
+    const report = computeFactoryHealth(
+      {
+        ...empty,
+        items: [
+          item({ id: 'held-proposal', stages: ['planning'] }),
+          item({ id: 'leftover-seat', stages: ['planning'] }),
+        ],
+        decisions: [
+          decision({
+            id: 'd-triage',
+            status: 'proposed',
+            workItemId: 'held-proposal',
+            decision: { type: 'invokeSkill', role: 'triage' },
+          }),
+        ],
+        bindings: [binding({ id: 'b-triage', workItemId: 'leftover-seat', role: 'triage' })],
+      },
+      NOW,
+    );
+    expect(report.findings).toEqual([
+      expect.objectContaining({
+        kind: 'seat-missing',
+        workItemId: 'held-proposal',
+        suggestedRepair: { action: 'start-run', workItemId: 'held-proposal', role: 'plan' },
+      }),
+      expect.objectContaining({
+        kind: 'seat-missing',
+        workItemId: 'leftover-seat',
+        suggestedRepair: { action: 'start-run', workItemId: 'leftover-seat', role: 'plan' },
+      }),
+    ]);
+    expect(report.findings[0]!.evidence).toContain('no active plan seat and no plan decision in flight');
+  });
+
+  it('counts a seat or decision for the phase role, and any decision without a role, as moving the card', () => {
+    const report = computeFactoryHealth(
+      {
+        ...empty,
+        items: [
+          item({ id: 'plan-seat', stages: ['planning'] }),
+          item({ id: 'plan-decision', stages: ['planning'] }),
+          item({ id: 'queued-transition', stages: ['planning'] }),
+        ],
+        bindings: [binding({ id: 'b-plan', workItemId: 'plan-seat', role: 'plan' })],
+        decisions: [
+          decision({ id: 'd-plan', status: 'pending', workItemId: 'plan-decision', availableAt: ago(1_000) }),
+          decision({
+            id: 'd-move',
+            status: 'pending',
+            workItemId: 'queued-transition',
+            availableAt: ago(1_000),
+            decision: { type: 'transition', board: 'work', stage: 'execute' },
+          }),
+        ],
+      },
+      NOW,
+    );
+    expect(report.findings).toEqual([]);
   });
 
   it('treats a triaged non-bug card as held, and only nags once it has waited long enough', () => {

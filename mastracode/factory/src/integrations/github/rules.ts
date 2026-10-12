@@ -1,8 +1,16 @@
 import { createHash } from 'node:crypto';
 
-import { boardForWorkItem, workItemPhaseSemantics } from '../../boards/index.js';
+import {
+  boardEventHandlers,
+  boardForWorkItem,
+  eventBoardId,
+  rulePhaseField,
+  withBoardClosure,
+  workItemPhaseSemantics,
+} from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
+import { selectEventRule } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -24,6 +32,7 @@ import {
   WorkItemUpdateConflictError,
 } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
@@ -50,6 +59,11 @@ async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
 
 function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function timestamp(value: unknown): number | undefined {
+  const parsed = typeof value === 'string' ? Date.parse(value) : NaN;
+  return Number.isNaN(parsed) ? undefined : parsed;
 }
 
 function string(value: unknown): string | undefined {
@@ -141,6 +155,8 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
  * authoritative; the intake-stamped `githubRepositoryId` covers URL-less
  * cards. A card with neither signal cannot be attributed by number alone.
  */
+const MAX_STALE_RULE_ATTEMPTS = 3;
+
 export function cardBelongsToRepository(item: WorkItemRow, repositoryId: number, repositoryFullName: string): boolean {
   const url = item.externalSource?.url;
   if (url) {
@@ -275,8 +291,11 @@ export interface GithubRulesOptions {
   storage: WorkItemsStorage;
   configVersion: string;
   boards: BoardRegistry;
-  /** Label routes decide which installed board a labelled issue lands on. Absent means Work. */
-  intake?: Pick<IntakeStorage, 'listLabelRoutes'>;
+  /**
+   * Decides which installed board an issue lands on: a label route first, then the repository's
+   * intake source binding. Absent means Work.
+   */
+  intake?: Pick<IntakeStorage, 'listLabelRoutes' | 'listBindings'>;
 }
 
 /** Identity under which label-driven relocations are recorded. */
@@ -322,18 +341,33 @@ export class GithubRules {
   }
 
   /**
-   * Board an issue's labels select under the project's label routes, when that board is installed.
-   * Undefined leaves built-in routing (Work) in charge.
+   * Board an issue lands on: the one its labels select under the project's label routes, else the
+   * board the repository's intake source binding names. Only installed boards count. Undefined
+   * leaves built-in routing (Work) in charge.
    */
-  async #labelRouteTarget(
-    orgId: string,
-    factoryProjectId: string,
+  async #intakeTarget(
+    project: ExternalRepositoryProjectTarget,
+    repositoryName: string,
     labels: readonly string[],
   ): Promise<{ board: string; initialPhase: string } | undefined> {
-    if (!this.options.intake || labels.length === 0) return undefined;
-    const routes = await this.options.intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
-    const route = resolveIntakeLabelRoute(routes, labels);
-    const board = route ? this.options.boards.get(route.board) : undefined;
+    const intake = this.options.intake;
+    if (!intake) return undefined;
+    const { orgId, factoryProjectId } = project;
+    if (labels.length > 0) {
+      const routes = await intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
+      const route = resolveIntakeLabelRoute(routes, labels);
+      const board = route ? this.options.boards.get(route.board) : undefined;
+      if (board) return { board: board.id, initialPhase: board.initialPhase };
+    }
+    // GitHub bindings are keyed by the internal repository id; the slug is accepted too since the
+    // bindings API stores whatever source id it is given.
+    const slug = repositoryName.toLowerCase();
+    const binding = (await intake.listBindings({ orgId, integrationId: 'github' })).find(
+      candidate =>
+        candidate.factoryProjectId === factoryProjectId &&
+        (candidate.sourceId === project.projectRepository.repositoryId || candidate.sourceId.toLowerCase() === slug),
+    );
+    const board = binding?.board ? this.options.boards.get(binding.board) : undefined;
     return board ? { board: board.id, initialPhase: board.initialPhase } : undefined;
   }
 
@@ -385,7 +419,7 @@ export class GithubRules {
       item = updated.item;
       changed = true;
     }
-    const target = await this.#labelRouteTarget(project.orgId, project.factoryProjectId, labels);
+    const target = await this.#intakeTarget(project, repositoryName, labels);
     const outcome = await moveCardToBoard({
       workItems: this.options.storage,
       boardRegistry: this.options.boards,
@@ -502,7 +536,7 @@ export class GithubRules {
     const relatedItem =
       reviewEntryRequested && resolvedItem?.externalSource?.type !== 'pull-request' ? undefined : resolvedItem;
     const intake = issueNumber
-      ? await this.#labelRouteTarget(project.orgId, project.factoryProjectId, labelNames(issue?.labels))
+      ? await this.#intakeTarget(project, repositoryName, labelNames(issue?.labels))
       : undefined;
     const actor = await githubActor(this.options.github, {
       installationId,
@@ -533,6 +567,7 @@ export class GithubRules {
       ingressIdentity: string,
       /** Set on the evaluation that files the pull request's own Review card. */
       pullRequestIntake = false,
+      attempt = 1,
     ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> => {
       const context: FactoryGithubRuleContext = {
         tenant: { orgId: project.orgId, projectId: project.factoryProjectId },
@@ -556,6 +591,8 @@ export class GithubRules {
               },
               board: boardForWorkItem(item),
               itemRevision: item.revision,
+              ...withBoardClosure(this.options.boards, item),
+              ...rulePhaseField(this.options.boards, item),
             }
           : {}),
         ...(intake ? { intake } : {}),
@@ -647,7 +684,11 @@ export class GithubRules {
           : {}),
       };
 
-      const rule = this.options.github.rules[event];
+      const rule = selectEventRule(
+        this.options.github.rules,
+        boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
+        event,
+      );
       let decision: FactoryRuleDecision | void;
       let decisions: Record<string, unknown>[] = [];
       let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
@@ -687,6 +728,16 @@ export class GithubRules {
         causalChain: [],
         now: new Date(),
       });
+      if (committed.status === 'stale') {
+        // The item was written concurrently. Re-read it and run the rule again
+        // against the fresh revision; nothing was persisted for this attempt.
+        if (attempt >= MAX_STALE_RULE_ATTEMPTS) {
+          throw new Error(`Factory GitHub rule evaluation for ${ingressIdentity} kept losing revision races.`);
+        }
+        const fresh = item ? await this.options.storage.get({ orgId: project.orgId, id: item.id }) : null;
+        if (item && !fresh) return { status: 'missing' };
+        return evaluate(fresh ?? undefined, ingressIdentity, pullRequestIntake, attempt + 1);
+      }
       return { status: committed.status };
     };
 
@@ -744,11 +795,21 @@ export class GithubRules {
             ? reviewCard !== undefined && reviewCard.metadata?.state !== 'closed'
             : reviewCard?.metadata?.state !== 'closed';
         if (authoringItem && trusted && stillOpen) {
+          // The head comes along so a head recorded for an earlier pull
+          // request cannot mark this one's verdict outdated. A replayed opening
+          // of the pull request already recorded keeps the head its pushes left.
+          const rebinding = authoringItem.metadata?.openPullRequestNumber !== pullRequestNumber;
+          const head = rebinding
+            ? {
+                pullRequestHeadSha: string(object(pullRequest?.head)?.sha)?.toLowerCase() ?? null,
+                pullRequestHeadAt: timestamp(pullRequest?.updated_at) ?? null,
+              }
+            : {};
           await this.options.storage.update({
             orgId: authoringItem.orgId,
             id: authoringItem.id,
             userId: 'factory-rule-dispatcher',
-            patch: { metadata: { openPullRequestNumber: pullRequestNumber } },
+            patch: { metadata: { openPullRequestNumber: pullRequestNumber, ...head } },
           });
         }
         return;
@@ -794,8 +855,43 @@ export class GithubRules {
       relatedItem.externalSource?.type !== 'pull-request'
         ? relatedItem
         : undefined;
+    // A push moves the head a recorded review verdict was given on. Recording
+    // the new head lets the verdict badge show that it is outdated, while the
+    // verdict itself stays so the next pass still runs as a re-review.
+    const stampHead = async () => {
+      const headSha = string(object(pullRequest?.head)?.sha)?.toLowerCase();
+      if (event !== 'pullRequestUpdated' || !headSha || !pullRequestNumber) return;
+      const headAt = timestamp(pullRequest?.updated_at);
+      if (relatedItem?.externalSource?.type !== 'pull-request') return;
+      const parent = await this.#linkedClosureItem(
+        project.orgId,
+        project.factoryProjectId,
+        repositoryId,
+        repositoryName,
+        pullRequestNumber,
+        relatedItem,
+      );
+      // The authoring Work item mirrors the verdict of the pull request it has
+      // out; a push to an older one must not mark its successor's verdict.
+      await recordPullRequestHead(this.options.storage, {
+        orgId: relatedItem.orgId,
+        id: relatedItem.id,
+        headSha,
+        headAt,
+      });
+      if (parent) {
+        await recordPullRequestHead(this.options.storage, {
+          orgId: parent.orgId,
+          id: parent.id,
+          headSha,
+          headAt,
+          ownedPullRequestNumber: pullRequestNumber,
+        });
+      }
+    };
     if (linked === undefined && authoringItem === undefined) {
       await stampClosed();
+      await stampHead();
       return primary;
     }
     const companion = linked ?? authoringItem;

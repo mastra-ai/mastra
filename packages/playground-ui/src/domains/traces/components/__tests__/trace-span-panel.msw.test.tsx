@@ -340,7 +340,7 @@ describe('TraceSpanPanel', () => {
     const { queryClient } = renderPanel({ onClose });
 
     expect(await screen.findByRole('heading', { name: `Trace ${TRACE_ID}` })).not.toBeNull();
-    fireEvent.click(screen.getByLabelText('Close Panel'));
+    fireEvent.click(screen.getByLabelText('Close trace'));
     expect(onClose).toHaveBeenCalledOnce();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });

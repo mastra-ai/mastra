@@ -366,6 +366,10 @@ export async function handleTypedOperation(
   switch (request.op) {
     case 'omGetLatest':
     case 'omGetHistory':
+    case 'omInitialize':
+    case 'omCreateReflectionGeneration':
+    case 'omSetPendingMessageTokens':
+    case 'omSetBufferingObservationFlag':
     case 'omUpdateActive':
     case 'omAppendBufferedChunk':
     case 'omSwapBuffered':
@@ -845,6 +849,7 @@ export async function handleTypedOperation(
         stepId: request.stepId,
         result: JSON.parse(request.result),
         requestContext: JSON.parse(request.requestContext),
+        state: request.state === undefined ? undefined : JSON.parse(request.state),
       });
 
       await ctx.db.patch(existing._id, {

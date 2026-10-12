@@ -13,7 +13,7 @@
   "dependencies": {
     "@mastra/client-js": "^1.35.0",
     "@mastra/mcp": "^1.15.0",
-    "hono": "4.13.8",
+    "hono": "4.13.11",
     "octokit": "^5.0.5"
   },
   "overrides": {
@@ -27,7 +27,9 @@
     "@ai-sdk/provider-utils": "3.0.38",
     "adm-zip@<=0.6.0": "0.6.1",
     "image-size@<=2.0.2": "2.0.4",
-    "undici": "8.11.2"
+    "undici": "8.11.2",
+    "@modelcontextprotocol/client": "2.2.0",
+    "@modelcontextprotocol/sdk@<1.31.0": "1.31.0"
   },
   "devDependencies": {
     "dotenv": "^17.4.2"

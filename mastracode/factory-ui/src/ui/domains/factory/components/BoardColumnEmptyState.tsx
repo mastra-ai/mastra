@@ -86,7 +86,7 @@ function boardEmptyCopy(
   if (filtersExcludeAll) {
     return {
       title: kind === 'review' ? 'No change requests match filters' : 'No work items match filters',
-      description: 'Try another teammate or relevance type.',
+      description: 'Try adjusting or clearing your filters.',
     };
   }
   const copy = boardColumnEmptyCopy(stage, kind, hasIntakeSource);

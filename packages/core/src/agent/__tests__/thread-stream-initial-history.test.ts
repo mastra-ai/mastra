@@ -110,6 +110,31 @@ describe('subscribeToThread withInitialHistory', () => {
     await consumed;
   });
 
+  it('drops a suspension left on an older message once a newer assistant message exists', async () => {
+    let stored: MastraDBMessage[] = [];
+    const { emitRun, subscribe } = setup(() => stored);
+    const run = emitRun(runId, streamId);
+    await run.registered();
+    await run.part({ type: 'start', payload: { messageId: 'm1' } });
+    await run.part({ type: 'tool-call-suspended', payload: { toolCallId: 'tc-1', toolName: 't', suspendPayload: {} } });
+    await run.part({ type: 'finish', payload: {} });
+    await run.completed();
+    const now = Date.now();
+    stored = [
+      assistantMessage('m1', new Date(now), {
+        suspendedTools: { t: { toolCallId: 'tc-1', toolName: 't', args: {} } },
+      }),
+      assistantMessage('m2', new Date(now + 1)),
+    ];
+
+    const { subscription, collected, consumed } = await subscribe();
+    await nextTicks(10);
+
+    expect(collected.map(p => p.type)).toEqual(['thread-history']);
+    subscription.unsubscribe();
+    await consumed;
+  });
+
   it('joins mid-run: drops saved parts, streams unsaved and live parts once', async () => {
     let stored: MastraDBMessage[] = [];
     const { emitRun, subscribe, pubsub } = setup(() => stored);

@@ -103,6 +103,9 @@ export { prepareForDurableExecution, type PreparationOptions, type PreparationRe
 // Run registry for non-serializable state
 export { RunRegistry, ExtendedRunRegistry, globalRunRegistry, type ExtendedRunRegistryEntry } from './run-registry';
 
+// Lets shared test suites simulate a process crash
+export { __resetExecutionFencesForTests } from './execution-fence';
+
 // Shared thread-stream runtime, so durable-agent integrations outside core
 // (e.g. @mastra/inngest) can register their runs the same way DurableAgent does.
 export { agentThreadStreamRuntime } from '../thread-stream-runtime';
@@ -151,6 +154,7 @@ export type {
   AgentStreamEvent,
   AgentChunkEventData,
   AgentStepFinishEventData,
+  DurableAgentStepFinishResult,
   AgentFinishEventData,
   AgentErrorEventData,
   AgentSuspendedEventData,
@@ -201,6 +205,7 @@ export {
 // Shared workflow utilities
 export {
   executeDurableAgentScorers,
+  loadRunStoredMessages,
   modelConfigSchema,
   modelListEntrySchema,
   accumulatedUsageSchema,
@@ -224,3 +229,6 @@ export type {
 // surface stays additive at patch level. Removed in v2.
 export { executeDurableToolCalls } from './workflows/deprecated-tool-execution';
 export type { ToolExecutionContext, ToolExecutionError } from './workflows/deprecated-tool-execution';
+
+// Snapshot pruning hook shared with external durable engines (e.g. Inngest)
+export { pruneAgentLoopSnapshot } from '../../loop/workflows/prune-snapshot';

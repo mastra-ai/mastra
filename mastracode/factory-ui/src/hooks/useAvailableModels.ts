@@ -1,3 +1,4 @@
+import type { ModelReasoningOption } from '@mastra/core/llm';
 import { useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
@@ -9,6 +10,7 @@ export interface AvailableModelOption {
   provider: string;
   modelName: string;
   hasApiKey: boolean;
+  reasoningOptions?: ModelReasoningOption[];
 }
 
 /**
@@ -30,4 +32,9 @@ export function useAvailableModelsQuery() {
       return data.models;
     },
   });
+}
+
+export function useModelReasoningOptions(modelId: string | undefined): ModelReasoningOption[] | undefined {
+  const { data: models } = useAvailableModelsQuery();
+  return models?.find(model => model.id === modelId)?.reasoningOptions;
 }
