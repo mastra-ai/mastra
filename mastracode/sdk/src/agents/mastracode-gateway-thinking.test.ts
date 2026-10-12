@@ -85,7 +85,11 @@ describe('MastraCodeGateway thinking level forwarding', () => {
 
   it('caps the effort at what the provider package accepts, so the request is not rejected', async () => {
     expect((await requestBody(resolve('max', 'mistral', 'zai-glm-5-2'))).reasoning_effort).toBe('high');
+  });
+
+  it('sends Extra high only to xAI models that list it', async () => {
     expect((await requestBody(resolve('max', 'xai', 'grok-4.6'))).reasoning).toEqual({ effort: 'xhigh' });
+    expect((await requestBody(resolve('xhigh', 'xai', 'grok-4.5'))).reasoning).toEqual({ effort: 'high' });
   });
 
   it.each([
