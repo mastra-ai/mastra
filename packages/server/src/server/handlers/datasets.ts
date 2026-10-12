@@ -1293,24 +1293,16 @@ export const COMPARE_EXPERIMENTS_ROUTE = createRoute({
   pathParamSchema: datasetIdPathParams,
   bodySchema: compareExperimentsBodySchema,
   responseSchema: comparisonResponseSchema,
-  summary: 'Compare two experiments',
-  description: 'Compares two experiments to detect score regressions',
+  summary: 'Compare two to ten experiments',
+  description: 'Compares two to ten experiments item by item against a baseline experiment',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId, ...params }) => {
+  handler: async ({ mastra, datasetId, experimentIds, baselineId }) => {
     assertDatasetsAvailable();
     try {
-      const { experimentIdA, experimentIdB } = params as {
-        experimentIdA: string;
-        experimentIdB: string;
-      };
       // Validate dataset exists
       await mastra.datasets.get({ id: datasetId });
-      const result = await mastra.datasets.compareExperiments({
-        experimentIds: [experimentIdA, experimentIdB],
-        baselineId: experimentIdA,
-      });
-      return result;
+      return await mastra.datasets.compareExperiments({ experimentIds, baselineId });
     } catch (error) {
       if (error instanceof MastraError) {
         throw new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, { message: error.message });

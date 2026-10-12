@@ -20883,12 +20883,19 @@ export interface PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Ro
 // ============================================================================
 export type PostDatasetsDatasetIdCompare_PathParams = GetDatasetsDatasetId_PathParams;
 
-export type PostDatasetsDatasetIdCompare_Body = {
-  /** ID of baseline experiment */
-  experimentIdA: string;
-  /** ID of candidate experiment */
-  experimentIdB: string;
-};
+export type PostDatasetsDatasetIdCompare_Body =
+  | {
+      /** IDs of the experiments to compare (2 to 10). Each one gets a result entry per item. */
+      experimentIds: string[];
+      /** Experiment the others are compared against. Must be one of experimentIds. Defaults to the first. */
+      baselineId?: string | undefined;
+    }
+  | {
+      /** Deprecated: use experimentIds. Baseline experiment ID. */
+      experimentIdA: string;
+      /** Deprecated: use experimentIds. Contender experiment ID. */
+      experimentIdB: string;
+    };
 
 export type PostDatasetsDatasetIdCompare_Response = {
   baselineId: string;

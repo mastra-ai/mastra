@@ -2500,7 +2500,8 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Compares two dataset experiments for regression detection
+   * Compares two to ten dataset experiments item by item against a baseline.
+   * Every experiment in `experimentIds` gets a result entry per item (`null` when it did not run that item).
    */
   public compareExperiments(params: CompareExperimentsParams): Promise<CompareExperimentsResponse> {
     const { datasetId, ...body } = params;

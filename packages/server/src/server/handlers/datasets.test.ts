@@ -18,6 +18,7 @@ import { DATASETS_ROUTES } from '../server-adapter/routes/datasets';
 import {
   ADD_ITEM_ROUTE,
   BATCH_INSERT_ITEMS_ROUTE,
+  COMPARE_EXPERIMENTS_ROUTE,
   DELETE_ANY_EXPERIMENT_ROUTE,
   DELETE_DATASET_ROUTE,
   DELETE_EXPERIMENT_ROUTE,
@@ -237,6 +238,86 @@ describe('Datasets Handlers', () => {
       expect(startExperimentAsync).toHaveBeenCalledWith(
         expect.objectContaining({ requestContext: { tenantId: 'tenant-1' } }),
       );
+    });
+  });
+
+  describe('COMPARE_EXPERIMENTS_ROUTE', () => {
+    async function createExperimentWithOutput(datasetId: string, itemId: string, output: string) {
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId,
+        start: false,
+      } as any)) as any;
+      await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId,
+        experimentId: created.experimentId,
+        itemId,
+        output,
+      } as any);
+      await FINALIZE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId,
+        experimentId: created.experimentId,
+      } as any);
+      return created.experimentId as string;
+    }
+
+    describe('when three experiments are compared', () => {
+      it('returns a result for every experiment on each item', async () => {
+        const dataset = await mastra.datasets.create({ name: 'Compare DS' });
+        const item = await dataset.addItem({ input: { q: 'q1' } });
+        const ids = [
+          await createExperimentWithOutput(dataset.id, item.id, 'one'),
+          await createExperimentWithOutput(dataset.id, item.id, 'two'),
+          await createExperimentWithOutput(dataset.id, item.id, 'three'),
+        ];
+
+        const body = COMPARE_EXPERIMENTS_ROUTE.bodySchema.parse({ experimentIds: ids, baselineId: ids[1] });
+        const result = (await COMPARE_EXPERIMENTS_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          ...body,
+        } as any)) as any;
+
+        expect(result.baselineId).toBe(ids[1]);
+        expect(result.items).toHaveLength(1);
+        expect(Object.keys(result.items[0].results).sort()).toEqual([...ids].sort());
+        expect(ids.map(id => result.items[0].results[id].output)).toEqual(['one', 'two', 'three']);
+      });
+    });
+
+    describe('when ten experiments are compared', () => {
+      it('accepts them', () => {
+        const experimentIds = Array.from({ length: 10 }, (_, i) => `exp-${i}`);
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds }).success).toBe(true);
+      });
+    });
+
+    describe('when the body is invalid', () => {
+      it('rejects fewer than two experiment ids', () => {
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds: ['a'] }).success).toBe(false);
+      });
+
+      it('rejects more than ten experiment ids', () => {
+        const experimentIds = Array.from({ length: 11 }, (_, i) => `exp-${i}`);
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds }).success).toBe(false);
+      });
+
+      it('rejects a baselineId that is not one of experimentIds', () => {
+        expect(
+          COMPARE_EXPERIMENTS_ROUTE.bodySchema.safeParse({ experimentIds: ['a', 'b'], baselineId: 'c' }).success,
+        ).toBe(false);
+      });
+    });
+
+    describe('when an older client sends experimentIdA/experimentIdB', () => {
+      it('compares them with experimentIdA as the baseline', () => {
+        expect(COMPARE_EXPERIMENTS_ROUTE.bodySchema.parse({ experimentIdA: 'a', experimentIdB: 'b' })).toEqual({
+          experimentIds: ['a', 'b'],
+          baselineId: 'a',
+        });
+      });
     });
   });
 
