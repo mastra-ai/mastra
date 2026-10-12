@@ -19,6 +19,7 @@ import { Txt } from '@/ds/components/Txt';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { inputFocusBorderWithin, unstyledFormElementStyle } from '@/ds/primitives/form-element';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
@@ -352,6 +353,7 @@ function FilterBarInputImpl({
             }}
             aria-label={ariaLabel}
             spellCheck={false}
+            {...passwordManagerOptOutProps}
             data-slot="filter-bar-input"
             data-step={step}
             data-target={targetGroup?.id}

@@ -141,7 +141,7 @@ describe('Metrics storage support', () => {
       expect(await screen.findByText(unavailableTitle)).toBeTruthy();
 
       fireEvent.click(screen.getByRole('button', { name: 'Last 24 hours' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 7 days' }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 7 days' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/metrics?period=7d'));
       expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();

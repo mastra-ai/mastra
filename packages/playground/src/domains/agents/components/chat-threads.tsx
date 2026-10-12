@@ -1,6 +1,7 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import {
   ThreadList,
@@ -19,7 +20,7 @@ import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
 import { panelIconButtonClass } from '@mastra/playground-ui/resize/panel-icon-button';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { ChevronRight, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useThreadsPanel } from '../context/use-threads-panel';
@@ -277,7 +278,7 @@ function CollapsibleSection({ labelId, label, collapsed, onToggle, children }: C
       <h2 className="flex px-3 pt-3 pb-1 text-placeholder group-first-of-type/section:pt-0">
         <CollapsibleTrigger id={labelId} className="inline-flex items-center gap-1 rounded-sm text-meta">
           {label}
-          <ChevronRight aria-hidden className="size-3" />
+          <DisclosureChevron direction="right" className="size-3" />
         </CollapsibleTrigger>
       </h2>
       <CollapsibleContent>{children}</CollapsibleContent>

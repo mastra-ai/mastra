@@ -1,11 +1,15 @@
-import { useExperiments } from '@mastra/react/hooks/datasets';
+import { useExperiment } from '@mastra/react/hooks/datasets';
 import { useParams } from 'react-router';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
 
 const useCurrentExperiment = () => {
   const { experimentId } = useParams<{ experimentId: string }>();
-  const { data } = useExperiments();
-  return { experimentId, experiment: data?.experiments?.find(e => e.id === experimentId) };
+  // The page owns the fetch; re-fetching an errored lookup on mount would loop with the page's not-found shell.
+  const { data } = useExperiment({
+    experimentId: experimentId ?? '',
+    queryOptions: { enabled: Boolean(experimentId), retryOnMount: false },
+  });
+  return { experimentId, experiment: data };
 };
 
 /**

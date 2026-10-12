@@ -20,7 +20,13 @@
  *                      reasoning, sources, objects and step boundaries are compared
  * - `streamedText`   → concatenated `text-delta` payloads
  * - `finishChunk`    → payload keys, reason, usage and normalised payload contents
- * - `fullOutput`     → `getFullOutput()` text, finishReason, usage and keys
+ * - `fullOutput`     → `getFullOutput()` text, finishReason, usage, keys and the
+ *                      parsed object when the run produced one
+ * - `error`          → a failed run reduced to `{ name, message }`; a recorded
+ *                      error is an observation like any other, so two engines
+ *                      that fail the same way still compare equal
+ * - `generate`       → present only on a turn driven by `generate()`, which has
+ *                      no chunks to compare
  * Plus, across the whole run:
  * - `requests`       → every request sent to the model, with per-message
  *                      `createdAt` timestamps stripped
@@ -56,6 +62,14 @@
  *     });
  *     for (const r of Object.values(results)) expect(r.requests).toHaveLength(2);
  *
+ * A `generate()` turn is driven through the handle too. It produces no chunks,
+ * so it is compared through the output the caller receives, and the request the
+ * model got is what both engines must have sent identically:
+ *
+ *     run: async h => {
+ *       await h.generate('Summarise the thread');
+ *     },
+ *
  * A turn that suspends or awaits approval is driven to completion in the same
  * turn: `options.resume` names the continuation, and the helper calls the
  * matching API (`resumeStream` / `approveToolCall` / `declineToolCall`) with the
@@ -89,6 +103,7 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
+import type { BackgroundTaskManagerConfig } from '../../../background-tasks/types';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
@@ -104,6 +119,31 @@ import type { DurableAgent, DurableAgentStreamOptions } from '../durable-agent';
 // ---------------------------------------------------------------------------
 // Snapshot shape — what we compare for parity
 // ---------------------------------------------------------------------------
+
+/**
+ * A run that failed instead of finishing, reduced to what is stable across
+ * machines: `stack` embeds the absolute checkout path, so it is never recorded.
+ */
+export interface ParityRunError {
+  name: string;
+  message: string;
+}
+
+/**
+ * Reduces a thrown value to the shape `ParitySnapshot.error` compares. Engines
+ * do not all throw `Error` instances — the wrapped ones re-emit a failure as a
+ * serialised `{ name, message }` — so an object carrying both is read the same
+ * way instead of collapsing to `'[object Object]'` and comparing equal to a
+ * different failure.
+ */
+function describeRunError(thrown: unknown): ParityRunError {
+  if (thrown instanceof Error) return { name: thrown.name, message: thrown.message };
+  if (thrown && typeof thrown === 'object') {
+    const { name, message } = thrown as { name?: unknown; message?: unknown };
+    if (typeof name === 'string' && typeof message === 'string') return { name, message };
+  }
+  return { name: 'Error', message: String(thrown) };
+}
 
 export interface ParitySnapshot {
   text: string;
@@ -124,20 +164,44 @@ export interface ParitySnapshot {
   chunks: string[];
   /** Each chunk's `type`, in the same order as `chunks`, for exact type matching (use with `chunksOfType`). */
   chunkTypes: string[];
-  /** Each chunk's payload, in the same order as `chunks`, normalised by `normalizePayload`. */
+  /**
+   * Each chunk's payload, in the same order as `chunks`, normalised by
+   * `normalizePayload`. `object` and `object-result` chunks record their parsed
+   * value here as `{ object }`, because those chunks carry it outside `payload`.
+   */
   chunkPayloads: unknown[];
   /** Concatenated `text-delta` payloads, as a streaming consumer would render them. */
   streamedText: string;
   /** Sorted defined payload keys, reason, usage and normalised contents of the last `finish` chunk. */
   finishChunk: { payloadKeys: string[]; reason: unknown; usage: unknown; payload: unknown };
   /** `getFullOutput()` as a non-streaming consumer reads it. */
-  fullOutput: { text: string | undefined; finishReason: string | undefined; usage: unknown; keys: string[] };
+  fullOutput: {
+    text: string | undefined;
+    finishReason: string | undefined;
+    usage: unknown;
+    keys: string[];
+    /** The parsed structured output, when the run ran with one. */
+    object: unknown;
+  };
   /**
    * Whether the turn ran a continuation after suspending. Scenario bookkeeping
    * rather than consumer output, but it is derived from the chunk sequence both
    * sides already compare, and COR-1398 is scoped to these turns.
    */
   resumed: boolean;
+  /**
+   * Set on a turn driven by `generate()` rather than `stream()`. A generate
+   * call produces no chunks, so the turn is compared through its full output,
+   * and the scenario guard counts it as an observation of its own.
+   */
+  generate?: true;
+  /**
+   * Set when the run failed instead of finishing: `getFullOutput()` rejected,
+   * the stream rejected while it was drained, or `stream()` rejected before it
+   * produced one. The turn keeps whatever chunks preceded the failure, so a
+   * failed run is compared across engines rather than aborting the scenario.
+   */
+  error?: ParityRunError;
 }
 
 /**
@@ -168,12 +232,27 @@ export const VOLATILE_PAYLOAD_KEYS = new Set([
 ]);
 
 /**
- * Recursively strips volatile keys in `VOLATILE_PAYLOAD_KEYS` and values no
- * transport can carry, so two engines' chunk payloads compare on what a
- * consumer actually receives. Only true cycles (an object containing itself)
- * become `'[circular]'`; an object shared twice is serialised twice.
+ * Recursively strips volatile keys in `VOLATILE_PAYLOAD_KEYS`, an error's
+ * `stack`, and values no transport can carry, so two engines' chunk payloads
+ * compare on what a consumer actually receives. Only true cycles (an object
+ * containing itself) become `'[circular]'`; an object shared twice is
+ * serialised twice.
+ *
+ * A live `Error` becomes its enumerable properties plus `{ name, message }`:
+ * plain hands a failure on as the error itself, whose name and message are not
+ * enumerable properties, while a wrapped engine hands on a serialised
+ * `{ name, message, stack }`. Reading both as name and message is what makes
+ * them comparable — and recording the bare `Error` as `{}` would hide the
+ * message the whole comparison is about. Its enumerable properties are kept, so
+ * an application error whose `code` differs still compares as different.
+ *
+ * `dropStack` is set only where the payload is known to be a failure — the
+ * `error` chunk, where the engines hand the error on as data. There the error's
+ * `stack` embeds the absolute checkout path and so differs on every machine.
+ * Anywhere else a key called `stack` is the application's, and dropping it by
+ * name would hide a real difference between two engines.
  */
-export function normalizePayload(value: unknown, ancestors: readonly object[] = []): unknown {
+export function normalizePayload(value: unknown, ancestors: readonly object[] = [], dropStack = false): unknown {
   if (value === null) return null;
   if (typeof value === 'function' || typeof value === 'symbol') return undefined;
   if (typeof value !== 'object') return value;
@@ -182,14 +261,23 @@ export function normalizePayload(value: unknown, ancestors: readonly object[] = 
   if (ancestors.includes(value)) return '[circular]';
   const nested = [...ancestors, value];
 
-  if (Array.isArray(value)) return value.map(entry => normalizePayload(entry, nested) ?? null);
-  if (value instanceof Map) return normalizePayload(Object.fromEntries(value), nested);
-  if (value instanceof Set) return normalizePayload([...value], nested);
+  if (value instanceof Error) {
+    return normalizePayload(
+      { ...Object.fromEntries(Object.entries(value)), name: value.name, message: value.message },
+      nested,
+      dropStack,
+    );
+  }
+
+  if (Array.isArray(value)) return value.map(entry => normalizePayload(entry, nested, dropStack) ?? null);
+  if (value instanceof Map) return normalizePayload(Object.fromEntries(value), nested, dropStack);
+  if (value instanceof Set) return normalizePayload([...value], nested, dropStack);
 
   const out: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
     if (VOLATILE_PAYLOAD_KEYS.has(key)) continue;
-    const normalized = normalizePayload(entry, nested);
+    if (key === 'stack' && dropStack) continue;
+    const normalized = normalizePayload(entry, nested, dropStack);
     // An absent key and a `undefined` value are the same thing to a consumer.
     if (normalized !== undefined) out[key] = normalized;
   }
@@ -212,12 +300,22 @@ interface TurnChunks {
   finishPayload: any;
   /** See `ParitySnapshot.resumed`. */
   resumed: boolean;
-  /** The stream the turn's output fields are read from: the last one to run. */
-  lastOutput: MastraModelOutput<any>;
+  /**
+   * The stream the turn's output fields are read from: the last one to run.
+   * Absent when the `stream()` call itself rejected.
+   */
+  lastOutput?: MastraModelOutput<any>;
+  /** See `ParitySnapshot.error`. */
+  error?: ParityRunError;
+  /** See `ParitySnapshot.generate`. */
+  generate?: true;
 }
 
-/** `from`/`type`/`payload` are shared by every chunk `fullStream` emits. */
-type StreamChunk = { from?: string; type: string; payload?: any };
+/**
+ * `from`/`type`/`payload` are shared by every chunk `fullStream` emits.
+ * Structured-output chunks additionally carry the parsed value on `object`.
+ */
+type StreamChunk = { from?: string; type: string; payload?: any; object?: unknown };
 
 /**
  * Drains one stream into `acc`, returning the suspended tool call's id when the
@@ -228,22 +326,45 @@ type StreamChunk = { from?: string; type: string; payload?: any };
  * never finish, and plain is stopped at the same point so the engines are
  * compared over the same span. Whatever a `resume` produced is drained into the
  * same turn, which is why draining is separate from building the snapshot.
+ *
+ * A stream that rejects mid-iteration stops the drain and is recorded on the
+ * turn, so a failed run is still an observation.
  */
 async function drainInto(acc: TurnChunks, output: MastraModelOutput<any>): Promise<string | undefined> {
   let suspendedToolCallId: string | undefined;
-  for await (const chunk of output.fullStream as AsyncIterable<StreamChunk>) {
-    // Tool chunks carry their tool name so a swapped tool order shows up here;
-    // toolCallIds are compared through `toolCalls`/`toolResults`.
-    const toolName = chunk.payload?.toolName;
-    acc.chunks.push(toolName ? `${chunk.from}:${chunk.type}:${toolName}` : `${chunk.from}:${chunk.type}`);
-    acc.chunkTypes.push(chunk.type);
-    acc.chunkPayloads.push(normalizePayload(chunk.payload));
-    if (chunk.type === 'text-delta') acc.streamedText += chunk.payload?.text ?? '';
-    if (chunk.type === 'finish') acc.finishPayload = chunk.payload ?? {};
-    if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
-      suspendedToolCallId = chunk.payload?.toolCallId;
-      break;
+  try {
+    for await (const chunk of output.fullStream as AsyncIterable<StreamChunk>) {
+      // Tool chunks carry their tool name so a swapped tool order shows up here;
+      // toolCallIds are compared through `toolCalls`/`toolResults`.
+      const toolName = chunk.payload?.toolName;
+      acc.chunks.push(toolName ? `${chunk.from}:${chunk.type}:${toolName}` : `${chunk.from}:${chunk.type}`);
+      acc.chunkTypes.push(chunk.type);
+      // `object` and `object-result` chunks carry the parsed value at the top
+      // level rather than in `payload`, so it is folded into the recorded payload
+      // — otherwise the value a consumer receives is never compared. It is
+      // recorded as parsed: the value is the schema's output, not engine
+      // metadata, so a field named `id` or `timestamp` is the application's and
+      // is compared like any other.
+      if (chunk.type === 'object' || chunk.type === 'object-result') {
+        const payload = normalizePayload(chunk.payload);
+        acc.chunkPayloads.push({
+          ...(typeof payload === 'object' && payload !== null ? payload : {}),
+          object: chunk.object,
+        });
+      } else {
+        // An `error` chunk's payload is the failure itself, so its `stack` goes:
+        // see `normalizePayload`.
+        acc.chunkPayloads.push(normalizePayload(chunk.payload, [], chunk.type === 'error'));
+      }
+      if (chunk.type === 'text-delta') acc.streamedText += chunk.payload?.text ?? '';
+      if (chunk.type === 'finish') acc.finishPayload = chunk.payload ?? {};
+      if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
+        suspendedToolCallId = chunk.payload?.toolCallId;
+        break;
+      }
     }
+  } catch (thrown) {
+    acc.error ??= describeRunError(thrown);
   }
   return suspendedToolCallId;
 }
@@ -262,24 +383,92 @@ function emptyTurnChunks(output?: MastraModelOutput<any>): TurnChunks {
     streamedText: '',
     finishPayload: undefined,
     resumed: false,
-    lastOutput: output as MastraModelOutput<any>,
+    lastOutput: output,
   };
+}
+
+/**
+ * A failed run can leave an individual output read rejecting (`text`, `usage`,
+ * …). That rejection is not an observation of its own, so it reads as absent:
+ * the failure itself is recorded once, on `ParitySnapshot.error`.
+ */
+async function readSettled<T>(read: () => Promise<T>): Promise<T | undefined> {
+  try {
+    return await read();
+  } catch {
+    return undefined;
+  }
 }
 
 /** Builds a turn's snapshot from the chunks its streams produced. */
 async function snapshotFromDrainedTurn(acc: TurnChunks): Promise<ParitySnapshot> {
-  const { chunks, chunkTypes, chunkPayloads, streamedText, finishPayload, resumed } = acc;
   const output = acc.lastOutput;
+  let error = acc.error;
 
-  const full = await output.getFullOutput();
+  let full: Awaited<ReturnType<MastraModelOutput<any>['getFullOutput']>> | undefined;
+  if (output) {
+    try {
+      full = await output.getFullOutput();
+    } catch (thrown) {
+      // The run failed after it streamed: whatever it produced still stands.
+      error ??= describeRunError(thrown);
+    }
+  }
+
+  // A failed run's reads can reject too, because the failure rejects every
+  // pending promise. That rejection is not an observation of its own — it is the
+  // failure already recorded on `error` — so on a failed turn a read reads as
+  // absent, while a turn that did not fail keeps surfacing its rejection.
+  const read = <T>(readOutput: () => Promise<T>): Promise<T | undefined> => {
+    if (!output) return Promise.resolve(undefined);
+    return error ? readSettled(readOutput) : readOutput();
+  };
   const [text, finishReason, usage, toolCalls, toolResults, steps] = await Promise.all([
-    output.text,
-    output.finishReason,
-    output.usage,
-    output.toolCalls,
-    output.toolResults,
-    output.steps,
+    read(() => output!.text),
+    read(() => output!.finishReason),
+    read(() => output!.usage),
+    read(() => output!.toolCalls),
+    read(() => output!.toolResults),
+    read(() => output!.steps),
   ]);
+
+  return assembleSnapshot(acc, { text, finishReason, usage, toolCalls, toolResults, steps, full, error });
+}
+
+/**
+ * A `generate()` turn. A generate call returns its full output directly, so
+ * there is no stream to drain and every read is already settled.
+ */
+function snapshotFromGenerateResult(acc: TurnChunks, result: unknown): ParitySnapshot {
+  const full = result as Awaited<ReturnType<MastraModelOutput<any>['getFullOutput']>> | undefined;
+  return assembleSnapshot(acc, {
+    text: full?.text,
+    finishReason: full?.finishReason,
+    usage: full?.usage,
+    toolCalls: full?.toolCalls,
+    toolResults: full?.toolResults,
+    steps: full?.steps,
+    full,
+    error: acc.error,
+  });
+}
+
+/** Everything a snapshot is assembled from, however the turn was driven. */
+interface TurnReads {
+  text: string | undefined;
+  finishReason: string | undefined;
+  usage: { inputTokens?: number; outputTokens?: number; totalTokens?: number; raw?: unknown } | undefined;
+  toolCalls: any[] | undefined;
+  toolResults: any[] | undefined;
+  steps: unknown[] | undefined;
+  /** The run's full output, as a non-streaming consumer reads it; absent when the run failed. */
+  full: Awaited<ReturnType<MastraModelOutput<any>['getFullOutput']>> | undefined;
+  error: ParityRunError | undefined;
+}
+
+function assembleSnapshot(acc: TurnChunks, reads: TurnReads): ParitySnapshot {
+  const { chunks, chunkTypes, chunkPayloads, streamedText, finishPayload, resumed, generate } = acc;
+  const { text, finishReason, usage, toolCalls, toolResults, steps, full, error } = reads;
 
   return {
     text: text ?? '',
@@ -320,12 +509,20 @@ async function snapshotFromDrainedTurn(acc: TurnChunks): Promise<ParitySnapshot>
       payload: normalizePayload(finishPayload),
     },
     fullOutput: {
-      text: full.text,
-      finishReason: full.finishReason as string | undefined,
-      usage: full.usage,
-      keys: Object.keys(full).sort(),
+      text: full?.text,
+      finishReason: full?.finishReason as string | undefined,
+      usage: full?.usage,
+      // A run whose `getFullOutput()` rejected has no full output to read.
+      keys: full ? Object.keys(full).sort() : [],
+      // The object the run parsed, when it ran with structured output.
+      object: full?.object,
     },
     resumed,
+    // Omitted rather than set to `undefined`, so a turn that did not fail
+    // serialises exactly as it did before this field existed.
+    ...(error ? { error } : {}),
+    // Likewise omitted on a streamed turn.
+    ...(generate ? { generate } : {}),
   };
 }
 
@@ -358,6 +555,54 @@ export interface RecordingModel {
   requests: CapturedRequest[];
 }
 
+/**
+ * Folds a stream tape into the result a `doGenerate` call returns. The tape
+ * describes what a streaming consumer sees; this is the same call as a
+ * non-streaming consumer sees it, which is what `generate()` reads. A tape that
+ * ends in an `error` part fails the streaming run, so it rejects this call too,
+ * rather than reporting a success the stream never produced.
+ */
+function tapeToGenerateResult(tape: ModelTape): Awaited<ReturnType<LanguageModelV2['doGenerate']>> {
+  const failed = tape.find(part => part.type === 'error');
+  if (failed) {
+    const error = failed.error;
+    if (error instanceof Error) throw error;
+    // A tape may script the failure in the serialised shape the wrapped engines
+    // hand back. The provider layer replaces a thrown non-`Error` with its own
+    // message, so the scripted name and message are rebuilt into an `Error` and
+    // the same failure survives on either path.
+    const { name, message } = (error ?? {}) as { name?: unknown; message?: unknown };
+    const rebuilt = new Error(typeof message === 'string' ? message : String(error));
+    if (typeof name === 'string') rebuilt.name = name;
+    throw rebuilt;
+  }
+
+  const text = tape
+    .filter(part => part.type === 'text-delta')
+    .map(part => String(part.delta ?? ''))
+    .join('');
+  const toolCalls = tape
+    .filter(part => part.type === 'tool-call')
+    .map(part => ({
+      type: 'tool-call' as const,
+      toolCallId: String(part.toolCallId),
+      toolName: String(part.toolName),
+      input: String(part.input ?? '{}'),
+    }));
+  const finish = tape.find(part => part.type === 'finish');
+
+  return {
+    content: [...(text ? [{ type: 'text' as const, text }] : []), ...toolCalls],
+    finishReason: (finish?.finishReason ?? 'stop') as Awaited<
+      ReturnType<LanguageModelV2['doGenerate']>
+    >['finishReason'],
+    usage: (finish?.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0 }) as Awaited<
+      ReturnType<LanguageModelV2['doGenerate']>
+    >['usage'],
+    warnings: [],
+  };
+}
+
 /** Creates a fresh mock model that records every request it receives. */
 export function createRecordingModel(script: ModelScript): RecordingModel {
   const requests: CapturedRequest[] = [];
@@ -381,11 +626,12 @@ export function createRecordingModel(script: ModelScript): RecordingModel {
         rawCall: { rawPrompt: null, rawSettings: {} },
       };
     },
-    // Agents stream even for generate(), so a doGenerate call is itself a
-    // behaviour change worth seeing. Record it, then fail loudly.
+    // Plain's `generate()` calls `doGenerate`; the wrapped engines reach the
+    // same scripted outcome through the workflow. Both record the request the
+    // same way, so `requests` compares across engines either way.
     doGenerate: async (options: LanguageModelV2CallOptions) => {
-      record(options);
-      throw new Error('parity recording model: doGenerate was called; scripts only support doStream');
+      const { tape } = record(options);
+      return tapeToGenerateResult(tape);
     },
   }) as unknown as LanguageModelV2;
 
@@ -509,6 +755,12 @@ export interface EngineHandle {
   agent: Agent<string, any, any>;
   /** Streams one turn on this engine, drains it and records its snapshot. */
   turn: (messages: MessageListInput, options?: EngineTurnOptions) => Promise<ParitySnapshot>;
+  /**
+   * Runs one `generate()` turn on this engine and records its snapshot. A
+   * generate call has no chunks, so the turn is compared through its full
+   * output; a rejected call is recorded on `error`, like a failed stream.
+   */
+  generate: (messages: MessageListInput, options?: ParityStreamOptions) => Promise<ParitySnapshot>;
 }
 
 /**
@@ -546,6 +798,14 @@ export interface EngineParityScenario {
   differences?: Partial<Record<Exclude<ParityEngine, 'plain'>, EngineDifference>>;
   /** Storage for the evented engine's Mastra host. Defaults to a fresh `InMemoryStore`. */
   createStorage?: () => MastraCompositeStore;
+  /**
+   * Extra host options. A background-task scenario needs the host to enable
+   * them (`backgroundTasks`) and its workers running, which the helper then
+   * does before the run. Without both, a deferred tool call degrades silently
+   * to a foreground run, so the scenario would pass without ever dispatching
+   * anything.
+   */
+  host?: { backgroundTasks?: BackgroundTaskManagerConfig };
 }
 
 export interface EngineRunResult extends EngineObservation {
@@ -554,6 +814,23 @@ export interface EngineRunResult extends EngineObservation {
 }
 
 export type EngineParityResults = Partial<Record<ParityEngine, EngineRunResult>>;
+
+/**
+ * Marks an error as harness misuse rather than a run failure. `turn()` records
+ * a failed run and compares it, but a scenario that breaks the harness contract
+ * (a resume with nothing to resume, a turn left suspended) must still surface.
+ */
+const MISUSE = Symbol('parityMisuse');
+
+function parityMisuse(message: string): Error {
+  const error = new Error(`expectEngineParity: ${message}`);
+  (error as Error & { [MISUSE]?: true })[MISUSE] = true;
+  return error;
+}
+
+function isParityMisuse(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && (error as { [MISUSE]?: true })[MISUSE] === true;
+}
 
 /**
  * Runs the scenario on every engine and asserts durable and evented match
@@ -573,8 +850,11 @@ export async function expectEngineParity(scenario: EngineParityScenario): Promis
   // Plain first, so it's the reference regardless of the order given.
   const results: EngineParityResults = { plain: await runOnEngine('plain', scenario) };
   const plain = results.plain!;
-  // Equal empty observations would compare as parity.
-  if (plain.turns.length === 0 || plain.turns.every(t => t.chunks.length === 0)) {
+  // Equal empty observations would compare as parity. A turn that recorded an
+  // error is an observation of its own — a run that failed on every engine the
+  // same way is parity, and that is what the failed-run cases assert. So is a
+  // generate turn, which produces no chunks by design.
+  if (plain.turns.length === 0 || plain.turns.every(t => t.chunks.length === 0 && !t.error && !t.generate)) {
     throw new Error('expectEngineParity: the scenario produced no turns or no stream chunks on plain');
   }
   for (const engine of compared) results[engine] = await runOnEngine(engine, scenario);
@@ -598,12 +878,18 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
   }
 
   // Every engine runs on a host, as it would in a real app: a suspended run is
-  // only resumable when the run's snapshot reached storage.
+  // only resumable when the run's snapshot reached storage, and a deferred
+  // background task is only dispatched when the host manages them and its
+  // workers are running. Both need the host the engines actually share.
   const host = new Mastra({
     agents: { [agent.id]: wrapper ?? agent },
     storage: scenario.createStorage?.() ?? new InMemoryStore(),
     logger: false,
+    ...scenario.host,
   });
+  // Workers are a host concern, not an agent one: the run only sees a bound
+  // manager once they are up.
+  if (scenario.host?.backgroundTasks?.enabled) await host.startWorkers();
 
   const turns: ParitySnapshot[] = [];
   const cleanups: Array<() => void | Promise<void>> = [];
@@ -621,43 +907,79 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
       const target: Pick<Agent<string, any, any>, 'resumeStream' | 'approveToolCall' | 'declineToolCall'> = wrapper ??
       agent;
       const acc = emptyTurnChunks();
+      // The stream whose output the snapshot reads; a continuation replaces it.
+      let streamed: MastraModelOutput<any> | undefined;
 
-      if (wrapper) {
-        const result = await wrapper.stream(messages, { ...streamOptions, runId });
-        cleanups.push(result.cleanup);
-        acc.lastOutput = result.output;
-      } else {
-        acc.lastOutput = await agent.stream(messages, { ...streamOptions, runId });
-      }
-      let suspendedToolCallId = await drainInto(acc, acc.lastOutput);
-
-      for (const continuation of continuations) {
-        if (!suspendedToolCallId) {
-          throw new Error('expectEngineParity: turn() was given a `resume`, but the turn did not suspend');
-        }
-        const resumeOptions = { ...streamOptions, runId, toolCallId: suspendedToolCallId };
-        if ('resumeData' in continuation) {
-          acc.lastOutput = await target.resumeStream(continuation.resumeData, resumeOptions);
-        } else if ('approve' in continuation) {
-          acc.lastOutput = await target.approveToolCall(resumeOptions);
+      try {
+        if (wrapper) {
+          const result = await wrapper.stream(messages, { ...streamOptions, runId });
+          cleanups.push(result.cleanup);
+          streamed = result.output;
         } else {
-          acc.lastOutput = await target.declineToolCall(resumeOptions);
+          streamed = await agent.stream(messages, { ...streamOptions, runId });
         }
-        suspendedToolCallId = await drainInto(acc, acc.lastOutput);
-        acc.resumed = true;
+        let suspendedToolCallId = await drainInto(acc, streamed);
+
+        for (const continuation of continuations) {
+          if (!suspendedToolCallId) {
+            throw parityMisuse('turn() was given a `resume`, but the turn did not suspend');
+          }
+          const resumeOptions = { ...streamOptions, runId, toolCallId: suspendedToolCallId };
+          // The stream that suspended is still open, so reading its output would
+          // hang until the test times out. Drop it before the call: if the call
+          // rejects, the turn is recorded as a failure with the chunks drained
+          // so far rather than left holding an unreadable stream.
+          streamed = undefined;
+          if ('resumeData' in continuation) {
+            streamed = await target.resumeStream(continuation.resumeData, resumeOptions);
+          } else if ('approve' in continuation) {
+            streamed = await target.approveToolCall(resumeOptions);
+          } else {
+            streamed = await target.declineToolCall(resumeOptions);
+          }
+          suspendedToolCallId = await drainInto(acc, streamed);
+          acc.resumed = true;
+        }
+
+        // A turn that is still suspended leaves its output stream open until a
+        // resume, so reading the output here would hang until the test times out.
+        // The missing continuation is the real problem, so report that instead.
+        if (suspendedToolCallId) {
+          throw parityMisuse(
+            `turn ${turns.length} on ${engine} ended suspended on tool call ` +
+              `'${suspendedToolCallId}'; add a \`resume\` continuation`,
+          );
+        }
+      } catch (error) {
+        // The run failed — a `stream()` or continuation call rejected, or the
+        // stream rejected mid-drain. That is an observation to compare, not a
+        // reason to abort the scenario, so it is recorded on the turn.
+        if (isParityMisuse(error)) throw error;
+        acc.error ??= describeRunError(error);
       }
 
-      // A turn that is still suspended leaves its output stream open until a
-      // resume, so reading the output here would hang until the test times out.
-      // The missing continuation is the real problem, so report that instead.
-      if (suspendedToolCallId) {
-        throw new Error(
-          `expectEngineParity: turn ${turns.length} on ${engine} ended suspended on tool call ` +
-            `'${suspendedToolCallId}'; add a \`resume\` continuation`,
-        );
-      }
-
+      acc.lastOutput = streamed;
       const snapshot = await snapshotFromDrainedTurn(acc);
+      turns.push(snapshot);
+      return snapshot;
+    },
+    generate: async (messages, options) => {
+      // Vitest stubs randomUUID per test, so give every run its own id.
+      const runId = options?.runId ?? `parity-${engine}-${turns.length}`;
+      const acc = emptyTurnChunks();
+      acc.generate = true;
+
+      let result: unknown;
+      try {
+        result = wrapper
+          ? await wrapper.generate(messages, { ...options, runId })
+          : await agent.generate(messages, { ...options, runId });
+      } catch (error) {
+        // A rejected generate() is an observation to compare, like a failed run.
+        acc.error ??= describeRunError(error);
+      }
+
+      const snapshot = snapshotFromGenerateResult(acc, result);
       turns.push(snapshot);
       return snapshot;
     },
@@ -689,8 +1011,9 @@ async function runOnEngine(engine: ParityEngine, scenario: EngineParityScenario)
         errors.push(error);
       }
     }
-    // The host starts workers; stop it so many scenarios in one file don't
-    // pile up. Done last, after the runs' own cleanups.
+    // Stop the host so many scenarios in one file don't pile up, including the
+    // workers a background-task scenario started. Done last, after the runs'
+    // own cleanups.
     try {
       await host.shutdown();
     } catch (error) {
@@ -758,15 +1081,31 @@ const KNOWN_CHUNK_DIFFERENCES: readonly KnownChunkDifference[] = [
   {
     ticket: 'COR-1390',
     reason:
+      "Plain forwards a failed run as the live `Error` under `type: 'error'`; durable and evented forward the " +
+      'serialised error alone.',
+    chunkType: 'error',
+    paths: ['type'],
+  },
+  {
+    ticket: 'COR-1390',
+    reason:
       'Durable and evented re-emit the loop step-finish payload as the serialised workflow step envelope: extra ' +
-      '`type`/`_durableStepContent`, empty `messages`, `metadata` without model metadata, a slim `output` and no ' +
-      '`processorRetryCount`.',
+      '`type`/`_durableStepContent`, no `messages` envelope at all, `metadata` without model metadata, a slim ' +
+      '`output` and no `processorRetryCount`.',
     chunkType: 'step-finish',
     paths: [
       'type',
       '_durableStepContent',
       'processorRetryCount',
       'metadata.modelMetadata',
+      // `messages` is a closed envelope — `{ all, user, nonUser }`, the shape
+      // `LLMIterationData.messages` declares and its zod schema enforces
+      // (loop/workflows/schema.ts) — so declaring the parent cannot hide a
+      // sibling key the type does not allow. The three child paths stay for the
+      // stale check: the parent delete removes them from the comparison, but the
+      // check still reads the original payload, where each child is a way for
+      // this declaration to stop reproducing.
+      'messages',
       'messages.all',
       'messages.user',
       'messages.nonUser',

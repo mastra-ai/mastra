@@ -8,6 +8,7 @@ export const automatedChatScenario: McE2eScenario = {
   description: 'Submit one prompt to real Mastra Code and assert the AIMock-backed model response appears.',
   testName: 'submits an automated chat prompt to real Mastra Code',
   useOpenAIModel: true,
+  enableTitleGeneration: true,
   aimockFixture: 'automated-chat.json',
   prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
