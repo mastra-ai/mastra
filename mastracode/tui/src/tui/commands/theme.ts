@@ -9,12 +9,23 @@ import { applyThemeMode, getSelectListTheme, getThemeMode, theme } from '../them
 import type { SlashCommandContext } from './types.js';
 
 /**
+ * Serialize theme applications. Auto detection awaits the terminal for up to
+ * ~200ms, so overlapping requests (picker previews, restores) could otherwise
+ * finish out of order and leave a stale theme applied. A request that loses to
+ * a newer one returns `stale: true` without touching the theme.
+ */
+let applyRequestId = 0;
+
+/**
  * Apply a stored theme preference: 'auto' | 'dark' | 'light' or the name of a
  * custom theme file. Returns a human-readable description of what was applied,
  * or an error string for a broken/missing custom theme (after falling back to
  * auto-detection so the UI is never left unstyled).
  */
-export async function applyThemePreference(pref: string): Promise<{ applied: string; error?: string }> {
+export async function applyThemePreference(
+  pref: string,
+): Promise<{ applied: string; error?: string; stale?: boolean }> {
+  const requestId = ++applyRequestId;
   if (pref === 'dark' || pref === 'light') {
     applyThemeMode(pref);
     return { applied: pref };
@@ -26,10 +37,12 @@ export async function applyThemePreference(pref: string): Promise<{ applied: str
       return { applied: `${result.theme.name} (${result.theme.appearance})` };
     }
     const detection = await detectTerminalTheme();
+    if (requestId !== applyRequestId) return { applied: pref, stale: true };
     applyThemeMode(detection.mode, detection.detectedBgHex);
     return { applied: `auto (detected: ${detection.mode})`, error: result.error };
   }
   const detection = await detectTerminalTheme();
+  if (requestId !== applyRequestId) return { applied: pref, stale: true };
   applyThemeMode(detection.mode, detection.detectedBgHex);
   return { applied: `auto (detected: ${detection.mode})` };
 }
@@ -49,17 +62,22 @@ function repaint(ctx: SlashCommandContext): void {
 }
 
 async function setThemePreference(ctx: SlashCommandContext, pref: string): Promise<boolean> {
-  const { applied, error } = await applyThemePreference(pref);
-  if (error) {
-    ctx.showError(`Could not load theme: ${error}`);
-    repaint(ctx);
+  const result = await applyThemePreference(pref);
+  if (result.stale) return false;
+  repaint(ctx);
+  if (result.error) {
+    ctx.showError(`Could not load theme: ${result.error}`);
     return false;
   }
-  const settings = loadSettings();
-  settings.preferences.theme = pref;
-  saveSettings(settings);
-  ctx.showInfo(`Theme set to ${applied}`);
-  repaint(ctx);
+  try {
+    const settings = loadSettings();
+    settings.preferences.theme = pref;
+    saveSettings(settings);
+  } catch (err) {
+    ctx.showError(`Theme applied but the preference could not be saved: ${err instanceof Error ? err.message : err}`);
+    return true; // keep the applied theme
+  }
+  ctx.showInfo(`Theme set to ${result.applied}`);
   return true;
 }
 
@@ -90,8 +108,13 @@ async function showThemePicker(ctx: SlashCommandContext): Promise<void> {
     })),
   ];
 
-  // Snapshot for restoring on cancel / failed preview
-  const restore = () => void applyThemePreference(currentPref).then(() => repaint(ctx));
+  // Snapshot for restoring on cancel / failed preview. Stale results (a newer
+  // apply raced ahead) skip the repaint — the winner already repainted.
+  const preview = (pref: string) =>
+    void applyThemePreference(pref).then(result => {
+      if (!result.stale) repaint(ctx);
+    });
+  const restore = () => preview(currentPref);
 
   await new Promise<void>(resolve => {
     const container = new Box(4, 2, text => theme.bg('overlayBg', text));
@@ -107,15 +130,20 @@ async function showThemePicker(ctx: SlashCommandContext): Promise<void> {
 
     // Live preview as the selection moves
     selectList.onSelectionChange = item => {
-      void applyThemePreference(item.value).then(() => repaint(ctx));
+      preview(item.value);
     };
 
     selectList.onSelect = item => {
       closeOverlay();
-      void setThemePreference(ctx, item.value).then(ok => {
-        if (!ok) restore();
-        resolve();
-      });
+      setThemePreference(ctx, item.value)
+        .then(ok => {
+          if (!ok) restore();
+        })
+        .catch((err: unknown) => {
+          ctx.showError(`Could not set theme: ${err instanceof Error ? err.message : err}`);
+          restore();
+        })
+        .finally(resolve);
     };
 
     selectList.onCancel = () => {

@@ -68,7 +68,8 @@ you can tweak one by copying its definition into a file and editing it.
   built-in near-black/white values.
 - `vars` (optional): named palette. Values must be hex colors (`#rrggbb` or `#rgb`).
 - `colors` (optional): any subset of the color keys below. Values are a hex
-  color or the name of a `var`. Unknown keys are ignored.
+  color or the name of a `var`. The loader ignores unknown keys, but the JSON
+  schema is stricter and flags them so typos show up in your editor.
 
 Foreground colors are still contrast-adapted against the actual terminal
 background (WCAG-based), so a theme stays readable even if the terminal

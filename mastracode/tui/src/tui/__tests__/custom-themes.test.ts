@@ -166,6 +166,23 @@ describe('loadCustomTheme / listCustomThemes', () => {
   it('returns an empty list when the directory is missing', () => {
     expect(listCustomThemes(path.join(dir, 'missing'))).toEqual([]);
   });
+
+  it('rejects theme names that escape the themes directory', () => {
+    for (const name of ['../outside', 'a/b', 'bad\0name']) {
+      const result = loadCustomTheme(name, dir);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toContain('invalid theme name');
+    }
+  });
+
+  it('does not resolve prototype members as vars or bundled themes', () => {
+    const viaVars = parseCustomTheme(JSON.stringify({ appearance: 'dark', colors: { accent: 'constructor' } }), 'test');
+    expect(viaVars.ok).toBe(false);
+
+    const viaBundled = loadCustomTheme('constructor', dir);
+    expect(viaBundled.ok).toBe(false);
+  });
 });
 
 describe('bundled themes', () => {

@@ -117,7 +117,9 @@ export function parseCustomTheme(json: string, fallbackName: string): CustomThem
   const name = typeof obj.name === 'string' && obj.name.trim() ? obj.name.trim() : fallbackName;
 
   // Resolve the optional named palette
-  const vars: Record<string, string> = {};
+  // Prototype-free so lookups like vars['constructor'] can't resolve to
+  // inherited Object.prototype members.
+  const vars: Record<string, string> = Object.create(null);
   if (obj.vars !== undefined) {
     if (!obj.vars || typeof obj.vars !== 'object' || Array.isArray(obj.vars)) {
       return { ok: false, error: '"vars" must be an object of name → hex color' };
@@ -235,6 +237,11 @@ function closestThemeName(name: string, themesDir: string): string | undefined {
  * bundled theme of the same name.
  */
 export function loadCustomTheme(name: string, themesDir: string = getThemesDir()): CustomThemeResult {
+  // The name can come from MASTRA_THEME or saved settings — never let it
+  // escape the themes directory.
+  if (name !== path.basename(name) || name.includes('\0')) {
+    return { ok: false, error: `invalid theme name "${name}"` };
+  }
   const filePath = path.join(themesDir, `${name}.json`);
   let json: string | undefined;
   try {
@@ -243,7 +250,7 @@ export function loadCustomTheme(name: string, themesDir: string = getThemesDir()
     // fall through to bundled themes
   }
   if (json === undefined) {
-    const bundled = BUNDLED_THEMES[name];
+    const bundled = Object.hasOwn(BUNDLED_THEMES, name) ? BUNDLED_THEMES[name] : undefined;
     if (!bundled) {
       const suggestion = closestThemeName(name, themesDir);
       const hint = suggestion ? `did you mean "${suggestion}"?` : `run /theme list to see available themes`;

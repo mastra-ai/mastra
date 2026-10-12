@@ -508,6 +508,19 @@ function hexToOscRgb(hex: string): string {
 }
 
 /**
+ * Whether the terminal understands OSC color sequences. Legacy Windows
+ * conhost doesn't and prints them as garbage; Windows Terminal, ConEmu, and
+ * terminals that set TERM/TERM_PROGRAM do.
+ */
+function supportsOscColors(): boolean {
+  if (!process.stdout.isTTY) return false;
+  if (process.platform !== 'win32') return true;
+  return Boolean(
+    process.env.WT_SESSION || process.env.TERM_PROGRAM || process.env.ConEmuANSI === 'ON' || process.env.TERM,
+  );
+}
+
+/**
  * Apply a theme mode, updating both the surface palette and the theme colors.
  * Pass `customColors` (from a custom theme file) to use them as the base
  * palette instead of the built-in dark/light theme; pass undefined to clear
@@ -529,7 +542,7 @@ export function applyThemeMode(
   computeAdaptedColors();
   // Set terminal default foreground via OSC 10 so unstyled text (e.g. editor input)
   // adapts to the theme; OSC 11 repaints the terminal background for themes that set one.
-  if (process.stdout.isTTY) {
+  if (supportsOscColors()) {
     process.stdout.write(`\x1b]10;${hexToOscRgb(currentTheme.text)}\x07`);
     if (customBg) {
       process.stdout.write(`\x1b]11;${hexToOscRgb(customBg)}\x07`);
@@ -552,7 +565,7 @@ export function applyThemeMode(
  * defaults. Call on exit to undo OSC 10/11 changes.
  */
 export function restoreTerminalForeground(): void {
-  if (process.stdout.isTTY) {
+  if (supportsOscColors()) {
     // OSC 110/111 reset the terminal's default foreground/background to their original values.
     process.stdout.write('\x1b]110\x07');
     if (customBgApplied) {
