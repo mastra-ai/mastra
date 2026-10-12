@@ -159,6 +159,11 @@ test('publishes an empty 0.0.0 placeholder containing no workspace code', async 
   assert.equal(manifest.name, '@mastra/sprites');
   assert.equal(manifest.version, '0.0.0');
   assert.equal(manifest.license, 'Apache-2.0');
+  // Prereleases publish under `alpha`, so `latest` stays on the placeholder
+  // until the first stable release; installers must be pointed at @alpha.
+  assert.match(manifest.description, /install @mastra\/sprites@alpha/);
+  const readme = spawnSync('tar', ['-xzOf', tarball, 'package/README.md'], { encoding: 'utf8' }).stdout;
+  assert.match(readme, /npm install @mastra\/sprites@alpha/);
 });
 
 // Runs the real `npm trust` (fetched via npx) against the mock registry.

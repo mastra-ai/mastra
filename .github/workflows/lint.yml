@@ -139,15 +139,21 @@ jobs:
       # promotions); PRs that touch no package.json make no registry calls.
       - name: Fetch base branch
         if: ${{ github.event.pull_request.head.repo.full_name != github.repository || !startsWith(github.head_ref, 'changeset-release/') }}
-        run: git fetch --no-tags origin "+refs/heads/${{ github.base_ref }}:refs/remotes/origin/${{ github.base_ref }}"
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
 
-      - name: Fail on publishable packages missing from npm
-        run: |
-          if [[ "${{ github.event.pull_request.head.repo.full_name }}" == "${{ github.repository }}" && "${{ github.head_ref }}" == changeset-release/* ]]; then
-            node .github/scripts/check-npm-packages-exist.mjs
-          else
-            node .github/scripts/check-npm-packages-exist.mjs --since "origin/${{ github.base_ref }}"
-          fi
+      # PR-controlled values (head_ref, base_ref) stay out of `run:` scripts:
+      # the routing lives in `if:` and the base ref reaches bash via `env:`.
+      - name: Fail on publishable packages missing from npm (release PR, all packages)
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/') }}
+        run: node .github/scripts/check-npm-packages-exist.mjs
+
+      - name: Fail on publishable packages missing from npm (changed packages)
+        if: ${{ github.event.pull_request.head.repo.full_name != github.repository || !startsWith(github.head_ref, 'changeset-release/') }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: node .github/scripts/check-npm-packages-exist.mjs --since "origin/$BASE_REF"
 
   lint:
     name: Lint

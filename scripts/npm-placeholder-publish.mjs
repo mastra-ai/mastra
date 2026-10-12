@@ -6,8 +6,10 @@
 // fallback, and npm only allows a trusted publisher on a package that already
 // exists. A brand-new package therefore needs to exist on npm before CI can
 // publish it. The placeholder contains only a package.json and README — no code
-// from any branch — so nothing unreviewed is published. The first real version
-// is published by CI through Changesets and supersedes 0.0.0 as `latest`.
+// from any branch — so nothing unreviewed is published. CI then publishes the
+// real versions through Changesets. Prereleases go out under the `alpha`
+// dist-tag, which leaves `latest` on 0.0.0 until the package's first stable
+// release, so the placeholder tells installers to use `@alpha` until then.
 //
 // Run by an npm org admin, logged in with `npm login`, from the repo root:
 //   node scripts/npm-placeholder-publish.mjs <package-name> [--dry-run]
@@ -100,14 +102,14 @@ function publishPlaceholder(manifest, options) {
     const placeholder = {
       name: manifest.name,
       version: PLACEHOLDER_VERSION,
-      description: `Placeholder reserving ${manifest.name} on npm. The first real release is published from mastra-ai/mastra by CI.`,
+      description: `Empty placeholder reserving ${manifest.name} on npm. Until its first stable release, install ${manifest.name}@alpha.`,
       ...(manifest.license ? { license: manifest.license } : {}),
       ...(manifest.repository ? { repository: manifest.repository } : {}),
     };
     writeFileSync(path.join(dir, 'package.json'), `${JSON.stringify(placeholder, null, 2)}\n`);
     writeFileSync(
       path.join(dir, 'README.md'),
-      `# ${manifest.name}\n\nThis ${PLACEHOLDER_VERSION} release is an empty placeholder that reserves the package name so npm trusted publishing can be configured. Install a later version.\n`,
+      `# ${manifest.name}\n\nThis ${PLACEHOLDER_VERSION} release is an empty placeholder with no code. It reserves the package name so npm trusted publishing can be configured for mastra-ai/mastra.\n\nUntil the first stable release, real versions are published as prereleases under the \`alpha\` dist-tag, and \`latest\` still points to this placeholder. Install with:\n\n\`\`\`\nnpm install ${manifest.name}@alpha\n\`\`\`\n`,
     );
 
     const args = ['publish', '--access', 'public', '--registry', options.registry];
@@ -140,5 +142,5 @@ if (options.dryRun || options.skipTrust) {
 
 console.log('');
 console.log(
-  'Next: re-run the failed "New packages exist on npm" PR check or the failed publish job. The first real version is published by CI.',
+  'Next: re-run the failed "New packages exist on npm" PR check or the failed publish job. CI publishes the real versions.',
 );
