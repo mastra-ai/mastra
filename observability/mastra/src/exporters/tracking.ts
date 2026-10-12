@@ -605,11 +605,11 @@ export abstract class TrackingExporter<
   /**
    * Wait for fire-and-forget hard-cap enforcements, so the aborts they issue are
    * handed to the vendor before flush() / shutdown() send or abort anything else.
+   * Only the ones running right now are joined; enforcements started by spans that
+   * arrive later belong to a later flush, so this never spins under traffic.
    */
   async #drainHardCapEnforcements(): Promise<void> {
-    while (this.#activeHardCapEnforcements.size > 0) {
-      await Promise.all(this.#activeHardCapEnforcements);
-    }
+    await Promise.all([...this.#activeHardCapEnforcements]);
   }
 
   /**
