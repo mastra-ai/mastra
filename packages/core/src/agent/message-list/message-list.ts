@@ -9,6 +9,7 @@ import type { AnySpan } from '../../observability/types';
 import { resolveCurrentSpan } from '../../observability/utils';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
+import { safeStringify } from '../../utils/safe-stringify';
 import { createSignal, isCreatedAgentSignal, isTransientSignalMessage, mastraDBMessageToSignal } from '../signals';
 import type { CreatedAgentSignal } from '../signals';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
@@ -1505,8 +1506,14 @@ export class MessageList {
     const parts = message.content.parts.map(part => {
       if (part.type === 'tool-invocation' && part.toolInvocation) {
         const inputTransform = getTransformedToolPayload(part.providerMetadata, 'transcript', 'input-available');
+        // A provider-flagged error (`output-error` with a structured `result`) comes from a tool-result
+        // chunk, so its transcript transform is stored under the output-available phase.
+        const isProviderErrorResult =
+          part.toolInvocation.state === 'output-error' &&
+          part.toolInvocation.result !== undefined &&
+          part.providerExecuted === true;
         const outputTransform =
-          part.toolInvocation.state === 'result'
+          part.toolInvocation.state === 'result' || isProviderErrorResult
             ? (getTransformedToolPayload(part.providerMetadata, 'transcript', 'output-available') ??
               getTransformedToolPayload(part.providerMetadata, 'transcript', 'error'))
             : part.toolInvocation.state === 'output-error'
@@ -1527,16 +1534,30 @@ export class MessageList {
               ? outputTransform.transformed
               : part.toolInvocation.result
             : undefined;
+        const transformedErrorResult = isProviderErrorResult
+          ? hasTransformedToolPayload(outputTransform)
+            ? outputTransform.transformed
+            : part.toolInvocation.result
+          : undefined;
         const transformedErrorText =
           part.toolInvocation.state === 'output-error'
-            ? hasTransformedToolPayload(outputTransform)
-              ? (outputTransform.transformed as string)
-              : part.toolInvocation.errorText
+            ? isProviderErrorResult && hasTransformedToolPayload(outputTransform)
+              ? typeof transformedErrorResult === 'string'
+                ? transformedErrorResult
+                : safeStringify(transformedErrorResult)
+              : hasTransformedToolPayload(outputTransform)
+                ? (outputTransform.transformed as string)
+                : part.toolInvocation.errorText
             : undefined;
         transformedByToolCallId.set(part.toolInvocation.toolCallId, {
           args: transformedArgs,
           ...(part.toolInvocation.state === 'result' ? { result: transformedResult } : {}),
-          ...(part.toolInvocation.state === 'output-error' ? { errorText: transformedErrorText } : {}),
+          ...(part.toolInvocation.state === 'output-error'
+            ? {
+                errorText: transformedErrorText,
+                ...(isProviderErrorResult ? { result: transformedErrorResult } : {}),
+              }
+            : {}),
         });
 
         return {
@@ -1545,7 +1566,12 @@ export class MessageList {
             ...part.toolInvocation,
             args: transformedArgs,
             ...(part.toolInvocation.state === 'result' ? { result: transformedResult } : {}),
-            ...(part.toolInvocation.state === 'output-error' ? { errorText: transformedErrorText } : {}),
+            ...(part.toolInvocation.state === 'output-error'
+              ? {
+                  errorText: transformedErrorText,
+                  ...(isProviderErrorResult ? { result: transformedErrorResult } : {}),
+                }
+              : {}),
           },
         };
       }
@@ -1575,7 +1601,9 @@ export class MessageList {
       return {
         ...invocation,
         ...(transformed.args !== undefined ? { args: transformed.args } : {}),
-        ...(invocation.state === 'result' && transformed.result !== undefined ? { result: transformed.result } : {}),
+        ...((invocation.state === 'result' || invocationState === 'output-error') && 'result' in transformed
+          ? { result: transformed.result }
+          : {}),
         ...(invocationState === 'output-error' && transformed.errorText !== undefined
           ? { errorText: transformed.errorText }
           : {}),
@@ -1923,7 +1951,14 @@ export class MessageList {
     // the result and the (possibly reconciled) toolCallId, matching the entry by
     // the id it held before reconciliation. Spread the legacy entry first to
     // preserve its type, then override only the fields that change here.
-    if (Array.isArray(msg.content.toolInvocations) && inputPart.toolInvocation.state === 'result') {
+    // A provider-executed error (`output-error`) is mirrored as a result: v4 has no error state.
+    // Client-tool errors stay out of the mirror so v4 never reads them as successes.
+    if (
+      Array.isArray(msg.content.toolInvocations) &&
+      (inputPart.toolInvocation.state === 'result' ||
+        (inputPart.toolInvocation.state === 'output-error' &&
+          (inputPartWithMeta.providerExecuted ?? originalPart.providerExecuted) === true))
+    ) {
       const resultInvocation = inputPart.toolInvocation;
       msg.content.toolInvocations = msg.content.toolInvocations.map(invocation =>
         invocation.toolCallId === priorToolCallId
