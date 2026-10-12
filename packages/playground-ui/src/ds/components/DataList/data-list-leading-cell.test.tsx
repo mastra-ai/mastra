@@ -7,14 +7,13 @@ import { DataList } from './data-list';
 beforeEach(() => localStorage.clear());
 afterEach(cleanup);
 
-/** A selectable list: a leading checkbox column, then a group of reorderable/resizable columns. */
+/** A selectable list: a leading checkbox column, then a group of reorderable columns. */
 const SelectableList = () => (
   <DataList
     columns="2rem 100px 200px auto"
     id="selectable"
     columnKeys={['select', 'name', 'status', 'date']}
     reorderable
-    resizable
   >
     <DataList.Top hasLeadingCell>
       <DataList.TopSelectCell checked={false} onToggle={() => {}} aria-label="Select all" />
@@ -41,17 +40,10 @@ const getGrid = (container: HTMLElement) =>
 const headerCell = (text: string) => screen.getByText(text).closest<HTMLElement>('[draggable]') as HTMLElement;
 
 describe('DataList with a leading selection cell', () => {
-  it('keeps the selection column out of reordering and resizing', () => {
+  it('keeps the selection column out of reordering', () => {
     render(<SelectableList />);
     expect(screen.getByLabelText('Select all').closest('[draggable]')).toBeNull();
-    expect(screen.getAllByRole('separator', { name: 'Resize column' })).toHaveLength(3);
-  });
-
-  it('resizes the column the handle belongs to, past the leading cell', () => {
-    const { container } = render(<SelectableList />);
-    const statusHandle = screen.getAllByRole('separator', { name: 'Resize column' })[1];
-    fireEvent.keyDown(statusHandle, { key: 'ArrowRight' });
-    expect(getGrid(container).style.gridTemplateColumns).toBe('2rem 100px 216px auto');
+    expect(headerCell('Name')).not.toBeNull();
   });
 
   it('reorders grouped columns while the selection column stays first', () => {

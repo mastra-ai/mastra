@@ -148,7 +148,6 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
       scrollRef={containerRef}
       fit="container"
       reorderable
-      resizable
       id={listId}
       columnKeys={columnKeys}
     >
