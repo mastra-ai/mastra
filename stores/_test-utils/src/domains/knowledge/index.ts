@@ -1394,6 +1394,84 @@ export function createKnowledgeStorageTests(
       await expect(
         store.claimImportRun({ importerId: 'recovery-runner', binding, workerId: 'new-worker', leaseKey: 'lease/' }),
       ).resolves.toMatchObject({ id: 'zzz-recovery-replacement' });
+      const replacementAuthority = {
+        runId: 'zzz-recovery-replacement',
+        importerId: 'recovery-runner',
+        binding,
+        workerId: 'new-worker',
+        leaseKey: 'lease/zzz-recovery-replacement',
+      };
+      const convergeReplacement = () =>
+        store.createNodeWithAddress({
+          source: 'calendar:recovery',
+          address: 'event:recovered',
+          node: {
+            id: '00000000-0000-4000-8000-000000000387',
+            name: 'Recovered event',
+            scopeIds: [PROJECT_SCOPE_ID],
+            importRunId: 'zzz-recovery-replacement',
+            importAuthority: replacementAuthority,
+          },
+        });
+      const converged = await convergeReplacement();
+      const convergedRecord = await store.createRecord({
+        id: 'recovered-event-record',
+        node: converged,
+        text: 'Recovered event details',
+        source: 'calendar:recovery',
+        scopeIds: [PROJECT_SCOPE_ID],
+        importRunId: 'zzz-recovery-replacement',
+        importAuthority: replacementAuthority,
+      });
+      const convergedState = {
+        address: await store.getNodeAddress({ source: 'calendar:recovery', address: 'event:recovered' }),
+        nodes: (await store.listNodes({ scopeIds: [PROJECT_SCOPE_ID] })).filter(node => node.id === converged.id),
+        scopeIds: await store.getNodeScopeIds(converged.id),
+        record: await store.getRecord({ id: convergedRecord.id }),
+        recordScopeIds: await store.getRecordScopeIds(convergedRecord.id),
+        activity: (await store.listActivity({ scopeIds: [PROJECT_SCOPE_ID] })).filter(
+          event => event.targetId === converged.id || event.targetId === convergedRecord.id,
+        ),
+        outbox: (await store.listSemanticOutbox({ scopeIds: [PROJECT_SCOPE_ID] })).filter(
+          event => event.documentId === converged.id || event.documentId === convergedRecord.id,
+        ),
+      };
+      expect(convergedState.address).toEqual({
+        source: 'calendar:recovery',
+        address: 'event:recovered',
+        nodeId: converged.id,
+      });
+      expect(convergedState.nodes).toEqual([converged]);
+      expect(convergedState.scopeIds).toEqual([PROJECT_SCOPE_ID]);
+      expect(convergedState.record).toEqual(convergedRecord);
+      expect(convergedState.recordScopeIds).toEqual([PROJECT_SCOPE_ID]);
+      expect(convergedState.activity).toHaveLength(2);
+      expect(convergedState.activity).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: 'create',
+            targetType: 'node',
+            targetId: converged.id,
+            importRunId: 'zzz-recovery-replacement',
+          }),
+          expect.objectContaining({
+            action: 'create',
+            targetType: 'record',
+            targetId: convergedRecord.id,
+            importRunId: 'zzz-recovery-replacement',
+          }),
+        ]),
+      );
+      if (convergedState.outbox.length > 0) {
+        expect(convergedState.outbox).toEqual([
+          expect.objectContaining({
+            documentId: convergedRecord.id,
+            documentType: 'record',
+            operation: 'upsert',
+            idempotencyKey: `${convergedRecord.id}:upsert:1`,
+          }),
+        ]);
+      }
 
       const stateOf = (key: string) => store.getImportState({ importerId: 'recovery-runner', binding, key });
       await expect(stateOf('lease/recovery-original')).resolves.toBeNull();
