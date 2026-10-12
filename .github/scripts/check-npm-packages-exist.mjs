@@ -29,12 +29,19 @@ const CONCURRENCY = 8;
 
 function parseArgs(argv) {
   const options = { registry: DEFAULT_REGISTRY, retry404: 0, since: undefined, pnpmFilter: undefined };
+  const value = i => {
+    if (argv[i] === undefined || argv[i].startsWith('--')) {
+      console.error(`Missing value for ${argv[i - 1]}`);
+      process.exit(2);
+    }
+    return argv[i];
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    if (arg === '--since') options.since = argv[++i];
-    else if (arg === '--registry') options.registry = argv[++i].replace(/\/+$/, '');
-    else if (arg === '--retry-404') options.retry404 = Number(argv[++i]);
-    else if (arg === '--pnpm-filter') options.pnpmFilter = argv[++i];
+    if (arg === '--since') options.since = value(++i);
+    else if (arg === '--registry') options.registry = value(++i).replace(/\/+$/, '');
+    else if (arg === '--retry-404') options.retry404 = Number(value(++i));
+    else if (arg === '--pnpm-filter') options.pnpmFilter = value(++i);
     else if (arg === '--help' || arg === '-h') {
       console.log(
         'Usage: node check-npm-packages-exist.mjs [--since <git-ref>] [--registry <url>] [--retry-404 <ms>] [--pnpm-filter <filter>]',
@@ -83,7 +90,7 @@ function changedPackageDirectories(since) {
 }
 
 async function fetchStatus(registry, name) {
-  const url = `${registry}/${name.replace('/', '%2f')}`;
+  const url = `${registry}/${name.replaceAll('/', '%2f')}`;
   for (let attempt = 1; attempt <= TRANSIENT_RETRIES; attempt++) {
     try {
       const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });

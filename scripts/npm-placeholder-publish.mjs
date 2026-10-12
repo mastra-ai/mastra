@@ -40,12 +40,16 @@ function fail(message, code = 1) {
 
 function parseArgs(argv) {
   const options = { name: undefined, registry: DEFAULT_REGISTRY, dryRun: false, otp: undefined, skipTrust: false };
+  const value = i => {
+    if (argv[i] === undefined || argv[i].startsWith('-')) fail(`Missing value for ${argv[i - 1]}\n${usage()}`);
+    return argv[i];
+  };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '--dry-run') options.dryRun = true;
     else if (arg === '--skip-trust') options.skipTrust = true;
-    else if (arg === '--otp') options.otp = argv[++i];
-    else if (arg === '--registry') options.registry = argv[++i].replace(/\/+$/, '');
+    else if (arg === '--otp') options.otp = value(++i);
+    else if (arg === '--registry') options.registry = value(++i).replace(/\/+$/, '');
     else if (arg === '--help' || arg === '-h') {
       console.log(usage());
       process.exit(0);
@@ -73,7 +77,7 @@ function findWorkspacePackage(name) {
 
 async function existsOnRegistry(registry, name) {
   try {
-    const response = await fetch(`${registry}/${name.replace('/', '%2f')}`, { signal: AbortSignal.timeout(15_000) });
+    const response = await fetch(`${registry}/${name.replaceAll('/', '%2f')}`, { signal: AbortSignal.timeout(15_000) });
     await response.arrayBuffer();
     if (response.status === 200) return true;
     if (response.status === 404) return false;

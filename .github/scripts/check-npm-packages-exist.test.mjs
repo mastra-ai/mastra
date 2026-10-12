@@ -81,6 +81,15 @@ test('fails with recovery instructions when a non-private package is missing', a
   assert.doesNotMatch(result.stderr, /@mastra\/core .*never been published/);
 });
 
+test('a flag with no value is a usage error, not a crash', async t => {
+  const cwd = makeWorkspace(t, pkgs);
+  const registry = await startRegistry(t, {});
+  const result = await run(t, cwd, registry, ['--since']);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Missing value for --since/);
+  assert.doesNotMatch(result.stderr, /TypeError/);
+});
+
 test('private packages are not checked', async t => {
   const cwd = makeWorkspace(t, [{ name: '@internal/playground', private: true }]);
   const registry = await startRegistry(t, {});

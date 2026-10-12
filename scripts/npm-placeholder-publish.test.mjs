@@ -90,6 +90,15 @@ test('refuses a name that is not a workspace package, without touching the regis
   assert.deepEqual(registry.requests, []);
 });
 
+test('--otp with no value is a usage error, and does not swallow the next flag', async t => {
+  const registry = await startRegistry(t);
+  // run() appends `--registry <url>`, so `--otp` is followed by a flag rather than a code.
+  const result = await run(t, makeWorkspace(t), registry.url, ['@mastra/sprites', '--otp']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Missing value for --otp/);
+  assert.deepEqual(registry.requests, []);
+});
+
 test('refuses a private workspace package', async t => {
   const registry = await startRegistry(t);
   const result = await run(t, makeWorkspace(t), registry.url, ['@internal/playground', '--skip-trust']);
