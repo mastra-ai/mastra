@@ -84,7 +84,9 @@ async function setThemePreference(ctx: SlashCommandContext, pref: string): Promi
 /** Interactive theme picker with live preview while navigating. */
 async function showThemePicker(ctx: SlashCommandContext): Promise<void> {
   const settings = loadSettings();
-  const currentPref = settings.preferences.theme ?? 'auto';
+  // The effective theme may differ from the saved preference (MASTRA_THEME
+  // overrides it at startup) — restore what's actually active on cancel.
+  const currentPref = process.env.MASTRA_THEME || settings.preferences.theme || 'auto';
   const customNames = listCustomThemes();
   const bundledNames = listBundledThemes().filter(name => !customNames.includes(name));
 
