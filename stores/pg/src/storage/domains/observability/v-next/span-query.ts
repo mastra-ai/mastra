@@ -115,6 +115,33 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
   return { text, values };
 }
 
+const PREVIEW_PAYLOADS = [
+  ['inputPreview', 'input'],
+  ['outputPreview', 'output'],
+  ['errorPreview', 'error'],
+] as const;
+
+/**
+ * Stored previews of a hydrated row, built from the payload where the stored preview is NULL.
+ * jsonb comes back decoded, so the fallback uses `buildPreview(value)`. jsonb normalizes object key
+ * order, so a compact-JSON fallback preview can differ from what the writer would have stored from
+ * the original value; that is acceptable for rows written before the preview columns existed.
+ */
+function toSpanQueryPayload(row: Record<string, unknown>): SpanQueryPayload {
+  const [inputPreview, outputPreview, errorPreview] = PREVIEW_PAYLOADS.map(([preview, payload]) =>
+    typeof row[preview] === 'string' ? row[preview] : coreStorage.buildPreview(row[payload]),
+  );
+  return {
+    organizationId: (row.organizationId as string | null) ?? null,
+    resourceId: (row.resourceId as string | null) ?? null,
+    traceId: String(row.traceId),
+    spanId: String(row.spanId),
+    inputPreview: inputPreview!,
+    outputPreview: outputPreview!,
+    errorPreview: errorPreview!,
+  };
+}
+
 type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt'> & {
   startedAt: Date;
   endedAt: Date;
@@ -150,12 +177,15 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
           return `(${key} AND "cursorId" = $${payloadValues.length}::bigint)`;
         })
         .join(' OR ');
-      const payloads = await tx.any<SpanQueryPayload>(
+      // Stored previews, plus the payload only where its preview is NULL (a row written before the
+      // preview columns existed), so new rows never read their payloads here.
+      const payloadRows = await tx.any<Record<string, unknown>>(
         `SELECT ${identities},
-      left(input::text, ${coreStorage.SPAN_QUERY_MAX_PREVIEW_CHARACTERS + 1}) AS "inputPreview", left(output::text, ${coreStorage.SPAN_QUERY_MAX_PREVIEW_CHARACTERS + 1}) AS "outputPreview"
+      ${PREVIEW_PAYLOADS.map(([preview, payload]) => `"${preview}", CASE WHEN "${preview}" IS NULL THEN "${payload}" END AS "${payload}"`).join(',\n      ')}
       FROM ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} WHERE ${payloadWhere}`,
         payloadValues,
       );
+      const payloads = payloadRows.map(toSpanQueryPayload);
       await remaining();
       const metricValues: unknown[] = [];
       const metricWhere = selectedKeys(page, metricValues);

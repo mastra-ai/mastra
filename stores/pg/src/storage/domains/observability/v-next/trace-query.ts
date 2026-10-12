@@ -116,7 +116,10 @@ const TRACE_SELECT = `
   r."entityId" AS "entityId",
   r."parentSpanId" AS "parentSpanId",
   r."metadataRaw" AS "metadata",
-  r."input" AS "input",
+  r."inputPreview" AS "inputPreview",
+  r."outputPreview" AS "outputPreview",
+  r."errorPreview" AS "errorPreview",
+  r."cursorId" AS "cursorId",
   r."threadId" AS "threadId",
   r."resourceId" AS "resourceId",
   r."startedAt" AS "startedAt",
@@ -674,7 +677,7 @@ export function compilePostgresTraceQuery(
   const { ctes, values } = compilePostgresTraceCandidates(
     schema,
     plan,
-    `${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r."xactId", r."cursorId"' : ''}`,
+    `${TRACE_SELECT}${plan.paginationMode === 'delta' ? ', r."xactId"' : ''}`,
     deltaWindow,
   );
   const candidates = `WITH ${ctes.join(',\n')}`;
@@ -983,6 +986,46 @@ async function setRemainingTimeout(transaction: TxClient, deadline: number): Pro
   await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${remainingTimeoutMs}ms`]);
 }
 
+const PREVIEW_PAYLOADS = [
+  ['inputPreview', 'input'],
+  ['outputPreview', 'output'],
+  ['errorPreview', 'error'],
+] as const;
+
+/**
+ * Fill the previews of root rows written before the preview columns existed (stored preview NULL)
+ * by reading just those rows' payloads, and only the payloads whose preview is missing. Rows are
+ * keyed by `cursorId`, which identifies the exact root row the list picked.
+ *
+ * jsonb comes back decoded, so the preview is built with `buildPreview(value)`. jsonb also
+ * normalizes object key order, so a compact-JSON fallback preview can differ from the one the
+ * writer would have stored from the original value. That is acceptable for these old rows.
+ */
+async function fillMissingTracePreviews(
+  transaction: TxClient,
+  schema: string,
+  rows: Record<string, unknown>[],
+  deadline: number,
+): Promise<void> {
+  const missing = rows.filter(row => PREVIEW_PAYLOADS.some(([preview]) => row[preview] == null));
+  if (!missing.length) return;
+  await setRemainingTimeout(transaction, deadline);
+  const payloads = await transaction.any<Record<string, unknown>>(
+    `SELECT e."cursorId"::text AS "cursorId",
+      ${PREVIEW_PAYLOADS.map(([preview, payload]) => `CASE WHEN e."${preview}" IS NULL THEN e."${payload}" END AS "${payload}"`).join(',\n      ')}
+    FROM ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} e
+    WHERE (e."traceId", e."cursorId") IN (SELECT * FROM unnest($1::text[], $2::bigint[]))`,
+    [missing.map(row => String(row.traceId)), missing.map(row => String(row.cursorId))],
+  );
+  const byCursor = new Map(payloads.map(payload => [String(payload.cursorId), payload]));
+  for (const row of missing) {
+    const payload = byCursor.get(String(row.cursorId));
+    for (const [preview, column] of PREVIEW_PAYLOADS) {
+      if (row[preview] == null) row[preview] = coreStorage.buildPreview(payload?.[column]) ?? '';
+    }
+  }
+}
+
 function traceRowToResult(row: Record<string, unknown>) {
   return {
     traceId: String(row.traceId),
@@ -992,7 +1035,9 @@ function traceRowToResult(row: Record<string, unknown>) {
     parentSpanId: row.parentSpanId ?? null,
     createdAt: asIsoTimestamp(row.startedAt),
     metadata: row.metadata ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    inputPreview: row.inputPreview ? String(row.inputPreview) : null,
+    outputPreview: row.outputPreview ? String(row.outputPreview) : null,
+    errorPreview: row.errorPreview ? String(row.errorPreview) : null,
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),
@@ -1029,6 +1074,7 @@ export async function queryTraces(
           rows = await transaction.any<Record<string, unknown>>(query.text, query.values);
         }
         const visible = rows.slice(0, plan.limit);
+        await fillMissingTracePreviews(transaction, schema, visible, deadline);
         const last = visible.at(-1);
         return coreStorage.traceQueryResponseSchema.parse({
           traces: visible.map(traceRowToResult),
@@ -1065,6 +1111,7 @@ export async function queryTraces(
         if (remainingTimeoutMs <= 0) throw new coreStorage.TraceQueryExecutionError();
         await transaction.query(`SELECT set_config('statement_timeout', $1, true)`, [`${remainingTimeoutMs}ms`]);
         const rows = await transaction.any<Record<string, unknown>>(dataQuery.text, dataQuery.values);
+        await fillMissingTracePreviews(transaction, schema, rows, deadline);
         return { total: Number(countRows[0]?.count ?? 0), rows, deltaCursor };
       },
       { repeatableRead: true },
@@ -1083,9 +1130,13 @@ export async function queryTraces(
   }
 
   const query = compilePostgresTraceQuery(schema, plan);
-  const rows = await runWithPostgresTraceQueryTimeout(client, timeoutMs, transaction =>
-    transaction.any<Record<string, unknown>>(query.text, query.values),
-  );
+  const deadline = performance.now() + coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
+  const rows = await runWithPostgresTraceQueryTimeout(client, timeoutMs, async transaction => {
+    const rows = await transaction.any<Record<string, unknown>>(query.text, query.values);
+    if (plan.result === 'traces')
+      await fillMissingTracePreviews(transaction, schema, rows.slice(0, plan.limit), deadline);
+    return rows;
+  });
   const visibleRows = rows.slice(0, plan.limit);
 
   if (plan.result === 'groups') {

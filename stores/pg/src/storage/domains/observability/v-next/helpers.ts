@@ -21,8 +21,10 @@ import type {
   ScoreRecord,
   SpanRecord,
 } from '@mastra/core/storage';
-import { EntityType } from '@mastra/core/storage';
+import { buildStoredPreview, EntityType } from '@mastra/core/storage';
+import { toPgText } from '../../../db/sanitize-json';
 import { coerceFeedbackReviewStatus } from './review-status';
+import { encodeJsonbValue } from './sql';
 
 const PROMOTED_KEYS = new Set([
   'experimentId',
@@ -237,6 +239,17 @@ function commonContextToRow(record: CommonContextWritable): Record<string, unkno
 // Span ↔ row
 // ---------------------------------------------------------------------------
 
+/**
+ * Serialize a span payload for its jsonb column and build its stored preview from the same value.
+ * Upstream previews win (cut to the shared format). The preview goes into a `text` column, which
+ * rejects NUL, so it gets the same repair `toPgJson` applies to the payload.
+ */
+function spanPayload(value: unknown, upstream: string | null | undefined) {
+  const encoded = encodeJsonbValue(value);
+  const preview = buildStoredPreview(upstream, value, encoded?.json);
+  return { encoded, preview: toPgText(preview) };
+}
+
 export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown> {
   // `endedAt` is both a primary key and a partition key column, so a span that
   // has started but not ended still needs a value there. Synthesize it from
@@ -245,6 +258,9 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
   const isPending = !span.isEvent && span.endedAt == null;
   const endedAt = span.isEvent ? span.startedAt : (span.endedAt ?? span.startedAt);
   const metadata = span.metadata ?? null;
+  const input = spanPayload(span.input, span.inputPreview);
+  const output = spanPayload(span.output, span.outputPreview);
+  const error = spanPayload(span.error, span.errorPreview);
   return {
     ...commonContextToRow(span),
     traceId: span.traceId,
@@ -262,10 +278,13 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     scope: jsonField(span.scope),
     attributes: jsonField(span.attributes),
     links: jsonField(span.links),
-    input: jsonField(span.input),
-    output: jsonField(span.output),
-    error: jsonField(span.error),
+    input: input.encoded,
+    output: output.encoded,
+    error: error.encoded,
     requestContext: jsonField(span.requestContext),
+    inputPreview: input.preview,
+    outputPreview: output.preview,
+    errorPreview: error.preview,
   };
 }
 
@@ -278,6 +297,19 @@ function spanRowEndedAt(row: Record<string, any>, startedAt: Date): Date | null 
   if (row.isEvent) return startedAt;
   if (row.isPending) return null;
   return toDateOrNull(row.endedAt);
+}
+
+/**
+ * Stored previews a row carries, for core's `toLightSpanRecord()` to prefer over building them from
+ * the payload. A NULL column (a row written before the preview columns existed) is left off, so the
+ * light list falls back to building that preview from the payload.
+ */
+function storedPreviews(row: Record<string, any>): Pick<SpanRecord, 'inputPreview' | 'outputPreview' | 'errorPreview'> {
+  const previews: Pick<SpanRecord, 'inputPreview' | 'outputPreview' | 'errorPreview'> = {};
+  if (typeof row.inputPreview === 'string') previews.inputPreview = row.inputPreview;
+  if (typeof row.outputPreview === 'string') previews.outputPreview = row.outputPreview;
+  if (typeof row.errorPreview === 'string') previews.errorPreview = row.errorPreview;
+  return previews;
 }
 
 export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
@@ -306,6 +338,7 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     output: parsedJson(row.output) ?? undefined,
     error: error ?? undefined,
     requestContext: (parsedJson(row.requestContext) as Record<string, unknown> | null) ?? undefined,
+    ...storedPreviews(row),
     createdAt: startedAt,
     updatedAt: null,
   };

@@ -607,7 +607,7 @@ describe('Postgres advanced trace query', () => {
       ],
       page: { next: expect.any(String) },
     });
-    expect(Object.keys(response.traces[0]!)).toHaveLength(16);
+    expect(Object.keys(response.traces[0]!)).toHaveLength(18);
     expect(response.traces[0]).toMatchObject({
       name: 'Agent run',
       entityId: 'agent-1',
@@ -615,8 +615,13 @@ describe('Postgres advanced trace query', () => {
       createdAt: '2026-01-01T12:00:00.000Z',
       metadata: { customer: { id: 'customer-1' }, count: 2 },
       inputPreview: 'Help with my order',
+      outputPreview: null,
+      errorPreview: null,
     });
     expect(response.traces[0]).not.toHaveProperty('input');
+    expect(response.traces[0]).not.toHaveProperty('cursorId');
+    // Every preview was stored, so no payload is read.
+    expect(any).toHaveBeenCalledTimes(1);
   });
 
   it('returns null for absent optional root span details', async () => {
@@ -624,7 +629,7 @@ describe('Postgres advanced trace query', () => {
       ...traceRow('trace-a', '2026-01-01T12:00:00.000Z'),
       entityId: null,
       metadata: null,
-      input: null,
+      inputPreview: '',
     };
     const any = vi.fn().mockResolvedValue([row]);
     const query = vi.fn();
@@ -639,6 +644,35 @@ describe('Postgres advanced trace query', () => {
       inputPreview: null,
     });
     expect(response.page.next).toBeNull();
+  });
+
+  it('reads payloads only for roots whose stored previews are NULL', async () => {
+    const stored = traceRow('trace-new', '2026-01-01T12:00:00.000Z');
+    const old = {
+      ...traceRow('trace-old', '2026-01-01T11:00:00.000Z'),
+      inputPreview: null,
+      outputPreview: 'stored output',
+      errorPreview: null,
+      cursorId: '7',
+    };
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const any = vi
+      .fn()
+      .mockResolvedValueOnce([stored, old])
+      .mockResolvedValueOnce([
+        { cursorId: '7', input: { messages: [{ role: 'user', content: 'old question' }] }, output: null, error: null },
+      ]);
+    const tx = vi.fn(async callback => callback({ query, any }));
+    const response = await queryTraces({ tx } as unknown as DbClient, 'public', plan(), 15_000);
+
+    expect(any).toHaveBeenCalledTimes(2);
+    const [text, values] = any.mock.calls[1]!;
+    expect(text).toContain('CASE WHEN e."inputPreview" IS NULL THEN e."input" END');
+    expect(values).toEqual([['trace-old'], ['7']]);
+    expect(response.traces.map(trace => [trace.inputPreview, trace.outputPreview, trace.errorPreview])).toEqual([
+      ['Help with my order', null, null],
+      ['old question', 'stored output', null],
+    ]);
   });
 
   it('reuses the transaction timeout and returns fixed thread identities with a next cursor', async () => {
@@ -714,7 +748,10 @@ function traceRow(traceId: string, startedAt: string) {
     entityId: 'agent-1',
     parentSpanId: null,
     metadata: { customer: { id: 'customer-1' }, count: 2 },
-    input: { messages: [{ role: 'user', content: 'Help with my order' }] },
+    inputPreview: 'Help with my order',
+    outputPreview: '',
+    errorPreview: '',
+    cursorId: '1',
     threadId: null,
     resourceId: null,
     startedAt: new Date(startedAt),
