@@ -1,15 +1,14 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
-import { AlertCircleIcon, GaugeIcon } from 'lucide-react';
-import { getResultErrorMessage, getResultOutputText } from '../utils/result-output';
+import { GaugeIcon } from 'lucide-react';
+import { getResultErrorMessage, getResultOutputPreview } from '../utils/result-output';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 /**
@@ -35,6 +34,8 @@ export type ExperimentResultsListItem = {
 const BUILT_IN_COLUMNS = new Set(['itemId', 'id', 'status', 'input', 'output', 'error', 'tags', 'scores', 'startedAt']);
 
 export type ExperimentResultsSortKey = 'startedAt';
+
+const SELECT_COLUMN_KEY = '__select__';
 
 export type ExperimentResultsListColumn = {
   /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | `startedAt` | a scorer id */
@@ -62,6 +63,8 @@ export type ExperimentResultsListProps<T extends ExperimentResultsListItem> = {
   /** Server-side sort; the `startedAt` header is only sortable when `onSortChange` is provided. */
   sort?: ListSort<ExperimentResultsSortKey>;
   onSortChange?: (direction: 'asc' | 'desc', key: ExperimentResultsSortKey) => void;
+  /** Persists the user's column order and widths under this id. */
+  listId?: string;
 };
 
 /**
@@ -84,6 +87,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   onToggleSelectAll,
   sort,
   onSortChange,
+  listId = 'experiment-results',
 }: ExperimentResultsListProps<T>) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const hasSelection = Boolean(selectedIds && onToggleSelect);
@@ -91,6 +95,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   // an unknown name would shift every following cell away from its header.
   const columns = requestedColumns.filter(c => BUILT_IN_COLUMNS.has(c.name) || scorerIds?.includes(c.name));
   const gridColumns = [hasSelection ? '2rem' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
+  const columnKeys = [...(hasSelection ? [SELECT_COLUMN_KEY] : []), ...columns.map(c => c.name)];
   const hasColumn = (name: string) => columns.some(col => col.name === name);
   const hasItemIdColumn = hasColumn('itemId') || hasColumn('id');
   const hasStatusColumn = hasColumn('status');
@@ -137,7 +142,16 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   }
 
   return (
-    <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef} fit="container">
+    <DataList
+      columns={gridColumns}
+      className="min-w-0"
+      scrollRef={containerRef}
+      fit="container"
+      reorderable
+      resizable
+      id={listId}
+      columnKeys={columnKeys}
+    >
       <DataList.Top hasLeadingCell={hasSelection}>
         {hasSelection &&
           (onToggleSelectAll ? (
@@ -147,7 +161,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
               aria-label="Select all"
             />
           ) : (
-            <DataList.TopCell>&nbsp;</DataList.TopCell>
+            <DataList.TopCell fixed>&nbsp;</DataList.TopCell>
           ))}
         {hasSelection ? (
           <DataList.TopCells colStart={2}>{columns.map(renderTopCell)}</DataList.TopCells>
@@ -167,23 +181,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
             const rowCells = (
               <>
                 {hasItemIdColumn && (
-                  <DataList.Cell className="flex items-center gap-1.5 text-muted-foreground">
-                    <span>{result.itemId?.slice(0, 8) ?? ''}</span>
-                    {hasError && (
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <AlertCircleIcon
-                              role="img"
-                              aria-label="Error"
-                              className="size-3.5 text-destructive-foreground"
-                            />
-                          }
-                        />
-                        <TooltipContent>{errorMessage(result.error)}</TooltipContent>
-                      </Tooltip>
-                    )}
-                  </DataList.Cell>
+                  <DataList.Cell className="text-muted-foreground">{result.itemId?.slice(0, 8) ?? ''}</DataList.Cell>
                 )}
 
                 {hasStatusColumn && (
@@ -202,7 +200,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
 
                 {hasOutputColumn && (
                   <DataList.Cell className="truncate font-mono" data-testid={`result-output-${result.id}`}>
-                    {getResultOutputText(result) ?? ''}
+                    {getResultOutputPreview(result) ?? ''}
                   </DataList.Cell>
                 )}
 
@@ -256,6 +254,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                 <DataList.RowButton
                   key={result.id}
                   featured={isFeatured}
+                  variant={hasError ? 'error' : 'default'}
                   data-selected={isFeatured || undefined}
                   onClick={() => onResultClick(result.id)}
                   {...getRowProps(index)}
@@ -275,6 +274,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                 <DataList.RowButton
                   colStart={2}
                   featured={isFeatured}
+                  variant={hasError ? 'error' : 'default'}
                   data-selected={isFeatured || undefined}
                   onClick={() => onResultClick(result.id)}
                   {...getRowProps(index)}
@@ -318,13 +318,6 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
       {values.length > 1 && <Badge>+{values.length - 1}</Badge>}
     </div>
   );
-}
-
-function errorMessage(error: unknown): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message || 'Error';
-  }
-  return typeof error === 'string' && error ? error : 'Error';
 }
 
 /** Format unknown value for display */

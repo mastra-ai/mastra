@@ -717,6 +717,7 @@ export function DatasetReview({
               featuredResultId={featuredItemId}
               onResultClick={handleRowClick}
               columns={REVIEW_LIST_COLUMNS}
+              listId="review-queue"
               selectedIds={showCompleted ? undefined : selectedItemIds}
               onToggleSelect={showCompleted ? undefined : toggleSelect}
               onToggleSelectAll={showCompleted ? undefined : toggleSelectAll}

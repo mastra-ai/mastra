@@ -1,4 +1,4 @@
-import { useExperiment } from '@mastra/react/hooks/datasets';
+import { useDatasetExperiment, useExperiment } from '@mastra/react/hooks/datasets';
 import { useParams } from 'react-router';
 import { ExperimentStatusIcon } from '@/domains/experiments/components/experiment-stats';
 
@@ -26,6 +26,15 @@ export function ExperimentCrumb() {
 
 /** Run status icon rendered through the crumb `icon` slot. */
 export function ExperimentCrumbStatusIcon() {
-  const { experiment } = useCurrentExperiment();
-  return experiment ? <ExperimentStatusIcon status={experiment.status} /> : null;
+  const { experimentId, experiment } = useCurrentExperiment();
+  const datasetId = experiment?.datasetId ?? '';
+  // `useExperiment` doesn't poll; the dataset-scoped query does while the run is active, so the icon follows it.
+  const { data: datasetExperiment } = useDatasetExperiment({
+    datasetId,
+    experimentId: experimentId ?? '',
+    queryOptions: { enabled: Boolean(datasetId && experimentId), retryOnMount: false },
+  });
+
+  const status = datasetExperiment?.status ?? experiment?.status;
+  return status ? <ExperimentStatusIcon status={status} /> : null;
 }

@@ -96,6 +96,30 @@ export type DataListRowSharedProps = {
   featured?: boolean;
 };
 
+/**
+ * Class + attributes of a group whose children map 1:1 to grid tracks, so
+ * reorder and resize can address its cells. A group placed after leading cells
+ * (`colStart`, e.g. beside a selection checkbox) records how many tracks it
+ * skips; groups that stop before the last track (`colEnd`) are not addressable.
+ */
+export function getDataListCellsProps(colStart: number | undefined, colEnd: number | undefined) {
+  if (colEnd !== undefined && colEnd !== -1) return { className: undefined, offset: undefined };
+  const offset = colStart && colStart > 1 ? colStart - 1 : undefined;
+  return { className: 'data-list-cells', offset };
+}
+
+/** Original column index (in the full grid) of a cell inside a `.data-list-cells` group, or `null`. */
+export function getDataListColumnIndex(cell: Element): number | null {
+  const parent = cell.parentElement;
+  if (!parent?.classList.contains('data-list-cells')) return null;
+  return getDataListCellsOffset(parent) + Array.from(parent.children).indexOf(cell);
+}
+
+/** Number of leading tracks a `.data-list-cells` group skips. */
+export function getDataListCellsOffset(group: HTMLElement): number {
+  return Number(group.dataset.dataListCellsOffset ?? 0) || 0;
+}
+
 /** Split a grid-template-columns string on top-level whitespace only, so `minmax(0, 10rem)` stays one track. */
 export function splitColumns(columns: string): string[] {
   const parts: string[] = [];

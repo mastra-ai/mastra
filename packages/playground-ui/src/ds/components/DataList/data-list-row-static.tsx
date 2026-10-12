@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useDataListRowWrapperContext } from './data-list-row-wrapper-context';
-import { dataListRowStaticStyles } from './shared';
+import { dataListRowStaticStyles, getDataListCellsProps } from './shared';
 import type { DataListRowSharedProps } from './shared';
 import { cn } from '@/lib/utils';
 
@@ -15,15 +15,20 @@ export const DataListRowStatic = forwardRef<HTMLDivElement, DataListRowStaticPro
   ({ children, className, colStart, colEnd, featured, variant, style, ...rest }, ref) => {
     const isWrapped = useDataListRowWrapperContext();
     const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
-    const cellsClass = hasColumnOverride ? undefined : 'data-list-cells';
+    const cells = getDataListCellsProps(colStart, colEnd);
     const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
     return (
       <div
         ref={ref}
-        className={cn(isWrapped ? 'grid grid-cols-subgrid gap-4 px-3' : dataListRowStaticStyles, cellsClass, className)}
+        className={cn(
+          isWrapped ? 'grid grid-cols-subgrid gap-4 px-3' : dataListRowStaticStyles,
+          cells.className,
+          className,
+        )}
         style={resolvedStyle}
         data-featured={featured || undefined}
         data-variant={variant ?? 'default'}
+        data-data-list-cells-offset={cells.offset}
         {...rest}
       >
         {children}

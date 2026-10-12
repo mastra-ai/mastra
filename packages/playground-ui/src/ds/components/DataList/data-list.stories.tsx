@@ -134,6 +134,44 @@ export const Reorderable: Story = {
   ),
 };
 
+/**
+ * `resizable` shows a drag handle at the end of each header cell (Arrow keys also work when it is focused;
+ * double-click resets a column). Widths persist in localStorage under the list `id`, which is required.
+ * It combines with `reorderable`.
+ */
+export const Resizable: Story = {
+  render: () => (
+    <div className="max-w-190">
+      <DataList
+        columns="minmax(12rem,auto) 8rem 8rem 8rem 8rem 8rem"
+        mask={{ left: false }}
+        resizable
+        reorderable
+        id="storybook-resizable"
+      >
+        <DataList.Top>
+          <DataList.TopCell sticky="start">Resource</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Input</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Output</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Latency</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Runs</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Cost</DataList.TopCell>
+        </DataList.Top>
+        {Array.from({ length: 5 }, (_, index) => (
+          <DataList.RowButton key={index} onClick={() => {}}>
+            <DataList.RowHeaderCell>Resource {index + 1}</DataList.RowHeaderCell>
+            <DataList.NumberCell>{(index * 1300 + 6200).toLocaleString()}</DataList.NumberCell>
+            <DataList.NumberCell>{(index * 840 + 2100).toLocaleString()}</DataList.NumberCell>
+            <DataList.NumberCell>{180 + index * 24}ms</DataList.NumberCell>
+            <DataList.NumberCell>{(index + 1) * 17}</DataList.NumberCell>
+            <DataList.NumberCell highlight>${(index * 0.014 + 0.008).toFixed(3)}</DataList.NumberCell>
+          </DataList.RowButton>
+        ))}
+      </DataList>
+    </div>
+  ),
+};
+
 /** `light` drops the panel behind the rows so the list sits directly on the page. */
 export const Light: Story = {
   render: () => (
