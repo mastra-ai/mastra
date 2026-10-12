@@ -1763,6 +1763,19 @@ describe('Scorer Utils', () => {
         expect(result.missingSteps).toEqual(['web_search']);
       });
 
+      it('should fail provider_tool_call ExpectedStep when success differs', () => {
+        const actual: Trajectory = {
+          steps: [{ stepType: 'provider_tool_call', name: 'web_search', toolArgs: { query: 'hello' }, success: false }],
+        };
+        const expected: { steps: ExpectedStep[] } = {
+          steps: [{ name: 'web_search', stepType: 'provider_tool_call', toolArgs: { query: 'hello' }, success: true }],
+        };
+
+        const result = compareTrajectories(actual, expected);
+        expect(result.matchedSteps).toBe(0);
+        expect(result.missingSteps).toEqual(['web_search']);
+      });
+
       it('should match by name+type only when no data fields are specified', () => {
         const actual: Trajectory = {
           steps: [{ stepType: 'tool_call', name: 'search', toolArgs: { query: 'anything' } }],
