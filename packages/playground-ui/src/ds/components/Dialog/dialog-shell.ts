@@ -19,15 +19,3 @@ export const dialogContentSizeClasses: Record<DialogSize, string> = {
   xl: 'max-h-[calc(100dvh-4rem)] max-w-4xl',
   full: 'h-[calc(100dvh-2rem)]',
 };
-
-// DrawerContent wraps children in its own `drawer-content` div, so a direct `<form>` sits one level down.
-const formFillsDrawerClassName =
-  '[&_[data-slot=drawer-content]>form]:flex [&_[data-slot=drawer-content]>form]:min-h-0 [&_[data-slot=drawer-content]>form]:flex-1 [&_[data-slot=drawer-content]>form]:flex-col [&_[data-slot=drawer-content]>form]:gap-0';
-
-// 3rem = the drawer's swipe bleed (`-mb-12` / drawer.css `--bleed`), hidden below the screen edge.
-export const dialogDrawerPopupClassName = ['max-h-[calc(85dvh+3rem)] pb-3', formFillsDrawerClassName].join(' ');
-
-// An element, not padding, so call-site padding classes cannot pull content into the hidden bleed.
-export const dialogDrawerBleedSpacerClassName = 'h-[calc(3rem+env(safe-area-inset-bottom))] shrink-0';
-
-export const dialogDrawerFullHeightClassName = 'h-[calc(85dvh+3rem)]';

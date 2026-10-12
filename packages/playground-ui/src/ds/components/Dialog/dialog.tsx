@@ -5,14 +5,7 @@ import * as React from 'react';
 import { DialogAction } from './dialog-action';
 import { DialogContext, dialogActionLayoutClasses, dialogActionSizeClasses, useDialogContext } from './dialog-context';
 import type { DialogIntent } from './dialog-context';
-import {
-  DIALOG_DRAWER_BREAKPOINT_PX,
-  dialogContentSizeClasses,
-  dialogDrawerBleedSpacerClassName,
-  dialogDrawerFullHeightClassName,
-  dialogDrawerPopupClassName,
-  dialogPopupClassName,
-} from './dialog-shell';
+import { DIALOG_DRAWER_BREAKPOINT_PX, dialogContentSizeClasses, dialogPopupClassName } from './dialog-shell';
 import type { DialogSize } from './dialog-shell';
 import { Button } from '@/ds/components/Button';
 import type { TextButtonSize } from '@/ds/components/Button';
@@ -149,15 +142,16 @@ function DialogContent({
         {...popupProps}
         showCloseButton={false}
         className={cn(
-          dialogDrawerPopupClassName,
-          size === 'full' && dialogDrawerFullHeightClassName,
+          'pb-3',
+          size === 'full' && 'h-[calc(85vh+3rem)]',
           '[&_[data-slot=dialog-header]]:pr-12',
           className,
         )}
       >
         {children}
         {closeButton}
-        <div aria-hidden className={dialogDrawerBleedSpacerClassName} />
+        {/* Fills the drawer's 3rem swipe bleed below the screen edge; an element so call-site padding can't shrink it. */}
+        <div aria-hidden className="h-12 shrink-0" />
       </DrawerContent>
     );
   }
