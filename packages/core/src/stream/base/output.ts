@@ -279,6 +279,17 @@ function resolveMessageText(message: MastraDBMessage): string {
 }
 
 function reconcileBufferedStepTexts<OUTPUT>(steps: LLMStepResult<OUTPUT>[], processedText: string): void {
+  const originalLength = steps.reduce((length, step) => length + step.text.length, 0);
+  if (processedText.length === originalLength) {
+    let offset = 0;
+    for (const step of steps) {
+      const end = offset + step.text.length;
+      step.text = processedText.slice(offset, end);
+      offset = end;
+    }
+    return;
+  }
+
   let offset = 0;
   let index = 0;
 

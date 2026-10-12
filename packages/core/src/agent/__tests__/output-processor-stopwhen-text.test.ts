@@ -413,6 +413,46 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(fullOutput.text).toBe('FIRSTMORE');
   });
 
+  it('keeps rewritten text attributed across three feedback continuation steps', async () => {
+    const model = scriptedModel([
+      [...textPart('t1', 'first'), finish('stop')],
+      [...textPart('t2', 'second'), finish('stop')],
+      [...textPart('t3', 'third'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'uppercase-result',
+          processOutputResult: async ({ messages }) =>
+            messages.map(message => ({
+              ...message,
+              content: {
+                ...message.content,
+                parts: message.content.parts?.map(part =>
+                  part.type === 'text' ? { ...part, text: part.text.toUpperCase() } : part,
+                ),
+              },
+            })),
+        },
+      ],
+    });
+    let iteration = 0;
+
+    const stream = await agent.stream('hi', {
+      maxSteps: 3,
+      onIterationComplete: async () => (++iteration < 3 ? { continue: true, feedback: 'Continue.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    expect(await stream.text).toBe('FIRSTSECONDTHIRD');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['FIRST', 'SECOND', 'THIRD']);
+    expect(fullOutput.text).toBe('FIRSTSECONDTHIRD');
+  });
+
   it('removes final step text when its response is removed', async () => {
     const model = scriptedModel([
       [...textPart('t1', 'first'), finish('stop')],
