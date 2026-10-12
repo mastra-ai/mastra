@@ -504,10 +504,22 @@ export const submitExperimentResultBodySchema = z.object({
     .describe('Externally computed scores, persisted keyed by runId = experimentId'),
 });
 
-export const compareExperimentsBodySchema = z.object({
-  experimentIdA: z.string().describe('ID of baseline experiment'),
-  experimentIdB: z.string().describe('ID of candidate experiment'),
-});
+export const compareExperimentsBodySchema = z
+  .object({
+    experimentIds: z
+      .array(z.string().min(1))
+      .min(2)
+      .max(5)
+      .describe('IDs of the experiments to compare (2 to 5). Each one gets a result entry per item.'),
+    baselineId: z
+      .string()
+      .optional()
+      .describe('Experiment the others are compared against. Must be one of experimentIds. Defaults to the first.'),
+  })
+  .refine(body => !body.baselineId || body.experimentIds.includes(body.baselineId), {
+    path: ['baselineId'],
+    message: 'baselineId must be one of experimentIds',
+  });
 
 // ============================================================================
 // Response Schemas

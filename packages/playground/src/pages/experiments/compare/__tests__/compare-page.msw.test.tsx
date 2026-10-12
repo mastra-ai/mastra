@@ -1,13 +1,23 @@
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { useLocation } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 import CompareExperimentsPage from '..';
-import { sameDatasetA, sameDatasetB, otherDataset, emptyComparison, emptyResults, emptyScores } from './fixtures/page';
+import {
+  sameDatasetA,
+  sameDatasetB,
+  otherDataset,
+  moreSameDataset,
+  emptyComparison,
+  emptyResults,
+  emptyScores,
+  comparisonOf,
+} from './fixtures/page';
 import { buildListExperimentsResponse } from '@/domains/experiments/components/__tests__/fixtures/experiments';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
-const allExperiments = [sameDatasetA, sameDatasetB, otherDataset];
+const allExperiments = [sameDatasetA, sameDatasetB, otherDataset, ...moreSameDataset];
 
 beforeEach(() => {
   server.use(
@@ -28,10 +38,32 @@ beforeEach(() => {
   );
 });
 
+function LocationProbe() {
+  const location = useLocation();
+  return <div data-testid="location">{location.search}</div>;
+}
+
 function renderPage(query: string) {
-  return renderWithProviders(<CompareExperimentsPage />, {
-    router: { initialEntries: [`/experiments/compare${query}`] },
-  });
+  return renderWithProviders(
+    <>
+      <LocationProbe />
+      <CompareExperimentsPage />
+    </>,
+    { router: { initialEntries: [`/experiments/compare${query}`] } },
+  );
+}
+
+/** Answers the compare request with one row for every requested experiment, and records the request body. */
+function useEchoComparison() {
+  const requests: Array<{ experimentIds: string[]; baselineId?: string }> = [];
+  server.use(
+    http.post(`${TEST_BASE_URL}/api/datasets/:datasetId/compare`, async ({ request }) => {
+      const body = (await request.json()) as { experimentIds: string[]; baselineId?: string };
+      requests.push(body);
+      return HttpResponse.json(comparisonOf(body.experimentIds, body.baselineId ?? body.experimentIds[0]));
+    }),
+  );
+  return requests;
 }
 
 describe('CompareExperimentsPage', () => {
@@ -49,6 +81,76 @@ describe('CompareExperimentsPage', () => {
       );
       renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');
       expect(await screen.findByText('Experiments comparison')).toBeDefined();
+    });
+  });
+
+  describe('when the URL has a baseline and two contenders', () => {
+    it('renders a column per experiment', async () => {
+      useEchoComparison();
+      renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b&contender=exp-d');
+
+      expect(await screen.findByRole('columnheader', { name: 'Baseline' })).toBeDefined();
+      expect(screen.getByRole('columnheader', { name: 'Contender 1' })).toBeDefined();
+      expect(screen.getByRole('columnheader', { name: 'Contender 2' })).toBeDefined();
+    });
+  });
+
+  describe('when the user sets a contender as the baseline', () => {
+    it('moves that contender to the baseline and the old baseline first among contenders', async () => {
+      useEchoComparison();
+      renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b&contender=exp-d');
+
+      const header = await screen.findByRole('columnheader', { name: 'Contender 2' });
+      fireEvent.click(within(header).getByRole('button', { name: 'Set as baseline' }));
+
+      await waitFor(() =>
+        expect(screen.getByTestId('location').textContent).toBe(
+          '?dataset=dataset-1&baseline=exp-d&contender=exp-a&contender=exp-b',
+        ),
+      );
+    });
+
+    it('compares against the new baseline', async () => {
+      const requests = useEchoComparison();
+      renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b');
+
+      const header = await screen.findByRole('columnheader', { name: 'Contender 1' });
+      fireEvent.click(within(header).getByRole('button', { name: 'Set as baseline' }));
+
+      await waitFor(() => expect(requests.at(-1)).toEqual({ experimentIds: ['exp-b', 'exp-a'], baselineId: 'exp-b' }));
+    });
+  });
+
+  describe('when the URL repeats experiment ids', () => {
+    it('compares each experiment once', async () => {
+      const requests = useEchoComparison();
+      renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b&contender=exp-a&contender=exp-b');
+
+      await waitFor(() => expect(requests[0]).toEqual({ experimentIds: ['exp-a', 'exp-b'], baselineId: 'exp-a' }));
+    });
+  });
+
+  describe('when the URL lists more than four contenders', () => {
+    it('keeps the first four contenders', async () => {
+      const requests = useEchoComparison();
+      renderPage(
+        '?dataset=dataset-1&baseline=exp-a&contender=exp-b&contender=exp-d&contender=exp-e&contender=exp-f&contender=exp-g',
+      );
+
+      await waitFor(() =>
+        expect(requests[0]).toEqual({
+          experimentIds: ['exp-a', 'exp-b', 'exp-d', 'exp-e', 'exp-f'],
+          baselineId: 'exp-a',
+        }),
+      );
+    });
+  });
+
+  describe('when a contender belongs to another dataset', () => {
+    it('refuses to compare', async () => {
+      renderPage('?dataset=dataset-1&baseline=exp-a&contender=exp-b&contender=exp-c');
+      expect(await screen.findByText(/must belong to the same dataset/i)).toBeDefined();
+      expect(screen.queryByText('Experiments comparison')).toBeNull();
     });
   });
 
@@ -76,9 +178,9 @@ describe('CompareExperimentsPage', () => {
   });
 
   describe('when a comparison parameter is missing', () => {
-    it('asks for two experiments when a parameter is missing', async () => {
+    it('asks for two to five experiments when a parameter is missing', async () => {
       renderPage('?dataset=dataset-1&baseline=exp-a');
-      expect(await screen.findByText(/select two experiments to compare/i)).toBeDefined();
+      expect(await screen.findByText(/select two to five experiments to compare/i)).toBeDefined();
     });
 
     it('waits for complete parameters before requesting experiment metadata', async () => {
@@ -91,7 +193,7 @@ describe('CompareExperimentsPage', () => {
       );
       const { queryClient } = renderPage('?dataset=dataset-1&baseline=exp-a');
 
-      await screen.findByText(/select two experiments to compare/i);
+      await screen.findByText(/select two to five experiments to compare/i);
       await waitForMutationsIdle(queryClient);
 
       expect(metadataRequests).toBe(0);
