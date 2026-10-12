@@ -1,5 +1,18 @@
 # @mastra/mysql
 
+## 0.13.1-alpha.0
+
+### Patch Changes
+
+- Fixed observational memory losing buffered observations or activated context when reflections, observation activation, and background buffering overlap, including from several processes or connection pools. Observational memory writes now lock the row they change and retry on deadlocks. ([#25906](https://github.com/mastra-ai/mastra/pull/25906))
+
+  **Upgrading.** A nullable `supersededBy` column is added to the observational memory table automatically at startup. Existing rows are backfilled at the next startup of any process, so older generations stop accepting writes. Protection is complete once every process that shares the database runs the new version; older versions running alongside it neither set nor check the new column.
+
+  If you manage the schema yourself (`disableInit: true` or `MASTRA_DISABLE_STORAGE_INIT=true`), startup does not run this migration. Add a nullable `supersededBy` column, of the same type as `id`, to `mastra_observational_memory` before you upgrade, or reflections and buffered activation fail with a missing-column error.
+
+- Updated dependencies [[`eaa9d12`](https://github.com/mastra-ai/mastra/commit/eaa9d12407f4962e94e0d5cd49a643e6e317d60a), [`958bdc9`](https://github.com/mastra-ai/mastra/commit/958bdc942aa78f00c9ec25f8adfb8e14a0dd4fd9), [`4659a11`](https://github.com/mastra-ai/mastra/commit/4659a1130842f07364d4778aa360f3cb7877679d)]:
+  - @mastra/core@1.77.0-alpha.0
+
 ## 0.13.0
 
 ### Minor Changes

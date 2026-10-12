@@ -1,5 +1,62 @@
 # @mastra/memory
 
+## 1.37.1-alpha.0
+
+### Patch Changes
+
+- Observational Memory no longer blocks an agent step on the Observer as soon as unobserved messages reach `messageTokens` with async buffering enabled. Between `messageTokens` and `observation.blockAfter` (default `1.2`, so 36k tokens with the default 30k threshold), background buffering keeps running and the next ready chunk activates on a later step. A blocking synchronous observation now runs only when pending tokens still reach `blockAfter` after buffered activation, and observes only the uncovered tail. Previously, reaching the threshold without a ready chunk forced a blocking Observer call, and buffering couldn't start above the threshold, so long agent sessions blocked on observation turn after turn. ([#22078](https://github.com/mastra-ai/mastra/pull/22078))
+
+  Unobserved messages can now grow up to `blockAfter` before a step blocks. To keep the previous behavior of observing synchronously at the threshold, set `blockAfter: 1`:
+
+  ```ts
+  observationalMemory: {
+    observation: { messageTokens: 30_000, blockAfter: 1 },
+  }
+  ```
+
+  A multiplier `blockAfter` now scales a per-thread `messageTokens` override instead of the instance threshold. With `blockAfter: 1.2`, this thread blocks at 12,000 tokens:
+
+  ```ts
+  await memory.updateObservationalMemoryConfig({
+    threadId,
+    config: { observation: { messageTokens: 10_000 } },
+  });
+  ```
+
+  `getStatus()` also returns `observationBlockAfter` and `inAsyncObservationBand`.
+
+  At `blockAfter`, activation waits a bounded time for a buffered observation that is still being produced so it activates with the rest. If that takes longer, the step observes the remaining messages synchronously; a late observation whose messages are all already observed is then dropped instead of stored. Activations triggered by the idle TTL or a model change don't wait for buffered observations still in progress.
+
+  Fixed semantic recall missing a turn's new user message when background buffering picked it up on the first step.
+
+- **Fixed out-of-order observations** ([#26129](https://github.com/mastra-ai/mastra/pull/26129))
+
+  Observational memory now keeps observations in the order events happened. Before, an important user message could be listed ahead of earlier events from the same period, so an outdated state looked like the latest one. For example, a "plan not approved, wait for revision instructions" result could be recorded after the user's actual revision instructions, and the agent kept waiting for instructions it already had.
+
+- Fixed `observation.previousObserverTokens` being ignored. Setting a budget now limits Observer calls to the most recent previous observations that fit it, on every observation path, and the Observer is told when its context was truncated. `previousObserverTokens: 0` omits previous observations. The default is now `false`, which sends the full previous observations. That matches how Observer calls have behaved since the budget stopped being applied, so nothing changes unless you set a budget. Stored memory is unaffected: new observations are still appended to the full observation text. ([#26193](https://github.com/mastra-ai/mastra/pull/26193))
+
+- Fixed observational memory buffering end markers going missing from saved message history, and a rare case where an agent's final response content could be overwritten. ([#26149](https://github.com/mastra-ai/mastra/pull/26149))
+
+  When background buffering finished, its end marker was written onto the newest assistant message, usually one the agent was still streaming. The agent's next save of that message dropped the marker. If the agent's last save landed while the marker was being written, the marker write could replace the agent's newer content. The end marker now goes on the message that carries the cycle's start marker, and the message the agent is streaming is never rewritten. The start marker now goes on the newest assistant message the cycle buffers, never on the message the agent continues streaming into, so the end marker can always find it.
+
+- Observational memory now runs its buffering, activation, observation, reflection, and config-override writes for a thread (or resource) one at a time within a process, and a due reflection goes ahead of other waiting writes. Agents and `Memory` instances that share a thread in one process no longer race each other's buffering, activation, and reflection commits, and a reflection is not held back behind a run of buffered-observation writes. Observer and Reflector model calls still run concurrently. If a storage write has not returned after 60 seconds, later writes for that thread stop waiting for it and a warning is logged, so one stuck database call cannot block the thread's memory. ([#25998](https://github.com/mastra-ai/mastra/pull/25998))
+
+- Reflections now keep more of the details users ask about later. The default Reflector instructions tell it to keep every concrete fact (names, places, dates, numbers, amounts, versions, and who said what). They also tell it to keep both the old and new value, with dates, when the user changes their mind, and to keep what the user explicitly said they have never done, do not know, or refused. Reflections favor short factual lines over general summaries, and older observations are condensed in wording rather than stripped of their facts. Custom `reflection.instruction` text is still appended as before. ([#26465](https://github.com/mastra-ai/mastra/pull/26465))
+
+- Fixed observational memory losing context for the agent when background buffering, observation activation, and reflection overlap, including across processes and durable agent steps. ([#25906](https://github.com/mastra-ai/mastra/pull/25906))
+
+  - Observations buffered or activated while a reflection runs are kept in the new generation instead of being dropped and re-observed later in larger batches.
+  - Activation and sync observation commit only to the current generation. Messages leave the agent's context only after their observations are saved there; otherwise the observation retries against the current generation or the messages stay in context.
+  - A reflection that was superseded by another one no longer marks itself as completed.
+  - Messages saved by another agent or process while an observation runs are no longer marked as observed, and an observation that finds nothing new no longer skips messages saved with earlier timestamps.
+  - When two agents or processes observe the same messages at once, the second no longer saves a second copy of those observations.
+  - Overlapping background buffering calls for the same thread now run one after another, so the same messages are no longer sent to the Observer and stored more than once.
+  - An observation or buffered observation that finishes after its thread's observational memory was cleared (or the thread deleted) is discarded instead of being saved into the thread's new record.
+  - Copying a thread while a reflection replaces its observational memory no longer gives the copy a record that rejects writes.
+
+- Updated dependencies [[`eaa9d12`](https://github.com/mastra-ai/mastra/commit/eaa9d12407f4962e94e0d5cd49a643e6e317d60a), [`958bdc9`](https://github.com/mastra-ai/mastra/commit/958bdc942aa78f00c9ec25f8adfb8e14a0dd4fd9), [`4659a11`](https://github.com/mastra-ai/mastra/commit/4659a1130842f07364d4778aa360f3cb7877679d)]:
+  - @mastra/core@1.77.0-alpha.0
+
 ## 1.37.0
 
 ### Minor Changes

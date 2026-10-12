@@ -1,5 +1,58 @@
 # @mastra/core
 
+## 1.77.0-alpha.0
+
+### Minor Changes
+
+- Fixed observational memory losing context when a reflection, a buffered-observation write, and an observation activation overlap. The in-memory store now keeps buffered observations across a reflection, never lets activation drop a chunk written by someone else or move the observation cursor backward, and refuses observational memory lifecycle writes (buffered-observation appends, activation, active-observation commits, reflections) to a superseded generation. ([#25906](https://github.com/mastra-ai/mastra/pull/25906))
+
+  Storage gained two methods that report the outcome of a write, plus optional inputs, so callers can detect these cases:
+
+  - `commitActiveObservations` writes active observations and returns `{ applied, reason }`. It accepts `expectedActiveObservations` and never writes to a superseded generation.
+  - `appendBufferedObservations` appends a buffered chunk to the current generation and returns `{ persisted, recordId }`.
+  - `createReflectionGeneration` and `swapBufferedReflectionToActive` accept `newRecordId`; the reflection applied when the returned record has that id. `swapBufferedToActive` reports `retired`.
+  - Observational memory records carry `supersededBy`, set when a newer generation replaces them.
+
+  **Before:**
+
+  ```ts
+  const memory = await storage.getStore('memory');
+  await memory.updateActiveObservations({
+    id: record.id,
+    observations,
+    tokenCount,
+    lastObservedAt: new Date(),
+  });
+  ```
+
+  **After:**
+
+  ```ts
+  const memory = await storage.getStore('memory');
+  const result = await memory.commitActiveObservations({
+    id: record.id,
+    observations,
+    tokenCount,
+    lastObservedAt: new Date(),
+    expectedActiveObservations: record.activeObservations,
+  });
+
+  if (!result.applied) {
+    // 'retired': a newer generation replaced this record. 'conflict': another writer changed it first.
+    // Read the current record and observe again.
+  }
+  ```
+
+  `updateActiveObservations` and `updateBufferedObservations` keep returning `Promise<void>`. In stores that implement the new methods, `updateActiveObservations` now throws when the observations were not written (the generation was superseded, or `expectedActiveObservations` no longer matches) instead of resolving as if they had been. An older `@mastra/memory` running against an upgraded store therefore reports a failed observation and observes the same messages again next turn, rather than marking them observed without saving their observations.
+
+  Storage adapters that do not implement these keep their previous behavior. Upgrade `@mastra/core`, `@mastra/memory`, and your storage adapter together to get the full fix; every process writing to the same database needs the upgraded adapter.
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`eaa9d12`](https://github.com/mastra-ai/mastra/commit/eaa9d12407f4962e94e0d5cd49a643e6e317d60a))
+
+- Updated the `observation.blockAfter` documentation for Observational Memory: between `messageTokens` and `blockAfter` only background buffering and activation run, and a blocking observation runs at or above `blockAfter` when no buffered chunk activates. ([#22078](https://github.com/mastra-ai/mastra/pull/22078))
+
 ## 1.76.0
 
 ### Minor Changes

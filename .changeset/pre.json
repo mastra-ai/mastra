@@ -192,5 +192,24 @@
     "@mastra/sprites": "0.1.0",
     "@mastra/vercel": "1.6.0"
   },
-  "changesets": []
+  "changesets": [
+    "automated-provider-registry-20261011-182631",
+    "cozy-spoons-share",
+    "curly-nights-study",
+    "every-rings-drive",
+    "gold-lions-wave",
+    "little-beers-hang",
+    "many-candies-check",
+    "observer-chronology-attribution",
+    "observer-context-budget",
+    "om-buffering-end-marker-placement",
+    "quiet-queues-line",
+    "reflector-keep-facts",
+    "silly-cycles-serve",
+    "smart-humans-kick",
+    "some-buttons-talk",
+    "thirty-owls-take",
+    "wild-sides-smell",
+    "wise-insects-trade"
+  ]
 }

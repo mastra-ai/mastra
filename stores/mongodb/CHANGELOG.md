@@ -1,5 +1,16 @@
 # @mastra/mongodb
 
+## 1.23.1-alpha.0
+
+### Patch Changes
+
+- Fixed observational memory losing buffered observations or activated context when reflections, observation activation, and background buffering overlap, including from several processes. Works on standalone servers and replica sets without transactions. Fixed buffered observations whose text starts with `$` being stored incorrectly. ([#25906](https://github.com/mastra-ai/mastra/pull/25906))
+
+  **Upgrading.** A `supersededBy` field is set on observational memory documents automatically: existing documents are backfilled at the next startup of any process. Protection is complete once every process that shares the database runs the new version. Safe concurrent use relies on the unique `id` index on the observational memory collection, which is created by default; if you use `skipDefaultIndexes`, create it yourself (a warning is logged when it is missing).
+
+- Updated dependencies [[`eaa9d12`](https://github.com/mastra-ai/mastra/commit/eaa9d12407f4962e94e0d5cd49a643e6e317d60a), [`958bdc9`](https://github.com/mastra-ai/mastra/commit/958bdc942aa78f00c9ec25f8adfb8e14a0dd4fd9), [`4659a11`](https://github.com/mastra-ai/mastra/commit/4659a1130842f07364d4778aa360f3cb7877679d)]:
+  - @mastra/core@1.77.0-alpha.0
+
 ## 1.23.0
 
 ### Minor Changes
