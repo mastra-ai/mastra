@@ -1,5 +1,72 @@
 # @mastra/core
 
+## 1.77.0-alpha.1
+
+### Minor Changes
+
+- Added `links` to spans: references to spans in other traces. Pass `links` when starting a span to relate it to a span in another trace without joining that trace. Mastra storage saves the links with the span. ([#26059](https://github.com/mastra-ai/mastra/pull/26059))
+
+  ```ts
+  const span = getOrCreateSpan({
+    type: SpanType.GENERIC,
+    name: 'handle request',
+    links: [{ traceId: callerTraceId, spanId: callerSpanId }],
+    mastra,
+  });
+  ```
+
+  Also added `parseTraceparent()` and `formatTraceparent()` to `@mastra/core/observability` for W3C `traceparent` values.
+
+### Patch Changes
+
+- Fixed agent experiment results losing their error details. A failed agent run now stores `error.message` and `error.stack` instead of an empty object. Added exported `AgentExperimentOutput`, `ScorerExperimentOutput`, and `ExperimentResultOutput` types that describe what each experiment target stores in `output`. ([#26726](https://github.com/mastra-ai/mastra/pull/26726))
+
+- Added `targetType` to experiment results. The result `output` is now typed based on the target, so checking `targetType` gives you typed agent and scorer outputs: ([#26726](https://github.com/mastra-ai/mastra/pull/26726))
+
+  ```ts
+  const { results } = await client.listDatasetExperimentResults(datasetId, experimentId);
+
+  for (const result of results) {
+    if (result.targetType === 'agent') {
+      console.log(result.output?.text, result.output?.error?.message);
+    } else if (result.targetType === 'scorer') {
+      console.log(result.output?.score);
+    }
+  }
+  ```
+
+  Workflow, processor, and caller-driven results (`targetType: null`) keep `output` as `unknown`.
+
+- Workflow steps, conditions, and dynamic sleeps now create their `writer` stream only when your code reads `writer`. Steps that never use it no longer allocate a stream on every run, which reduces memory churn in agent loops. An agent turn, including a durable agent turn, now creates only the writers its tools use. Steps that call `writer.write()` or `writer.custom()` behave as before. ([#26665](https://github.com/mastra-ai/mastra/pull/26665))
+
+- Fixed `mastra.datasets.compareExperiments()` silently comparing only the baseline and one other experiment. Every ID in `experimentIds` now gets a result entry on each item (`null` when that experiment did not run the item). Duplicate IDs are ignored, and passing a `baselineId` that isn't one of `experimentIds` now throws instead of being ignored. ([#26725](https://github.com/mastra-ai/mastra/pull/26725))
+
+  ```ts
+  const comparison = await mastra.datasets.compareExperiments({
+    experimentIds: ['exp-baseline', 'exp-prompt-v2', 'exp-new-model'],
+    baselineId: 'exp-baseline',
+  });
+  // comparison.items[0].results has entries for all three experiments
+  ```
+
+- Fixed the `StorageMCPClientToolsConfig` and `StoredMCPClientToolsConfig` JSDoc. It previously said that omitting `tools` includes all MCP tools. For an agent-level MCP client reference, omitting `tools` selects no tools. Use `tools: {}` to include all tools. ([#26738](https://github.com/mastra-ai/mastra/pull/26738))
+
+- `ExpectedStep` now supports `provider_tool_call` steps, so you can write typed trajectory expectations for provider-executed tools such as web search. The trajectory scorer compares their `toolArgs`, `toolResult`, and `success` fields. ([#26778](https://github.com/mastra-ai/mastra/pull/26778))
+
+  ```ts
+  const steps: ExpectedStep[] = [
+    { name: 'web_search', stepType: 'provider_tool_call', toolArgs: { query: 'weather' } },
+  ];
+  ```
+
+- Fixed `structuredOutput` so it only uses the final answer of a run. ([#26639](https://github.com/mastra-ai/mastra/pull/26639))
+
+  - Text an agent writes before calling a tool (like "Let me look that up.") no longer fails validation or ends the run early.
+  - `stream.object` now resolves to the final answer, not an earlier JSON draft.
+  - Durable agents now return the final answer instead of the first JSON they saw.
+
+  ([#25038](https://github.com/mastra-ai/mastra/issues/25038))
+
 ## 1.77.0-alpha.0
 
 ### Minor Changes

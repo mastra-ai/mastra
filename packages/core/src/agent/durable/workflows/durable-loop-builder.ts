@@ -42,6 +42,7 @@ import {
   executeDurableAgentScorers,
   dehydrateSnapshotTranscripts,
   hydrateMessageListState,
+  loadRunStoredMessages,
   openMessageListState,
   readMessageListState,
   releaseMessageListState,
@@ -1053,13 +1054,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   hydrateMessageListState(params, initData.messageListState),
                   hydrateMessageListState(params, inputData.messageListState),
                 ]);
-                executeDurableAgentScorers({
+                void executeDurableAgentScorers({
                   initData: { ...initData, messageListState: initial },
                   finalOutput: { ...inputData, messageListState: final },
                   mastra: mastra as Mastra | undefined,
                   requestContext,
                   tracingContext,
-                });
+                  loadStoredMessages: loadRunStoredMessages(params),
+                }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));
               } catch (error) {
                 mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`);
               }

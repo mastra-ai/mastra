@@ -44,20 +44,21 @@ describe('ExperimentResultsList', () => {
   afterEach(cleanup);
 
   describe('for a result without an error', () => {
-    it('renders no success or status indicator', () => {
-      renderList([makeResult('r-1')]);
+    it('renders no success or status indicator and keeps the default row tone', () => {
+      const { container } = renderList([makeResult('r-1')]);
 
-      expect(screen.queryByRole('img', { name: 'Error' })).toBeNull();
+      expect(container.querySelector('[data-variant="error"]')).toBeNull();
       expect(screen.queryByText('Success')).toBeNull();
       expect(screen.queryByText('Status')).toBeNull();
     });
   });
 
   describe('for a result with an error', () => {
-    it('renders an error marker', () => {
-      renderList([makeResult('r-1', { message: 'boom' } as DatasetExperimentResult['error'])]);
+    it('tints the row with the error tone instead of rendering an icon', () => {
+      const { container } = renderList([makeResult('r-1', { message: 'boom' } as DatasetExperimentResult['error'])]);
 
-      expect(screen.getByRole('img', { name: 'Error' })).toBeDefined();
+      expect(container.querySelector('[data-variant="error"]')).not.toBeNull();
+      expect(screen.queryByRole('img', { name: 'Error' })).toBeNull();
     });
   });
 
