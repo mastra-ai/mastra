@@ -31,7 +31,7 @@ type CommandDialogVariant = 'default' | 'inset';
 
 const commandDialogContentClasses: Record<CommandDialogVariant, string> = {
   default: 'overflow-hidden py-0',
-  inset: 'top-1/4 translate-y-0 overflow-hidden rounded-[calc(var(--radius-xl)+--spacing(1))] bg-muted p-1',
+  inset: 'overflow-hidden sm:top-1/4 sm:translate-y-0 rounded-[calc(var(--radius-xl)+--spacing(1))] bg-muted p-1',
 };
 
 const commandDialogCommandClasses: Record<CommandDialogVariant, string> = {

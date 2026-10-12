@@ -20,6 +20,7 @@ import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import type { DurableAgent } from '../durable-agent';
 import { globalRunRegistry } from '../run-registry';
+import { emitChunkEvent, emitFinishEvent } from '../stream-adapter';
 
 function makeSnapshot(
   runId: string,
@@ -310,6 +311,93 @@ describe('DurableAgent.recoverActiveRuns', () => {
     expect(bad?.status).toBe('failed');
     expect(bad?.error).toBeInstanceOf(Error);
     expect(bad?.error?.message).toBe('boom-run-bad');
+  });
+
+  it('skips a run another execution still owns, with when to check again, and leaves out runs no longer running', async () => {
+    for (const id of ['run-live-elsewhere', 'run-orphan', 'run-suspends']) {
+      await seed(store, makeSnapshot(id, 'running', { agentId: 'agent-A', threadId: `t-${id}`, resourceId: 'r' }), 'r');
+    }
+    await seed(
+      store,
+      makeSnapshot('run-suspended', 'suspended', { agentId: 'agent-A', threadId: 't-suspended', resourceId: 'r' }),
+      'r',
+    );
+    const workflows = (await store.getStore('workflows'))!;
+    await workflows.claimRunOwnership({ runId: 'run-live-elsewhere', ownerId: 'other-instance', leaseMs: 30_000 });
+    // run-suspends suspends after discovery listed it, before its recovery.
+    const listActiveRuns = agent.listActiveRuns.bind(agent);
+    vi.spyOn(agent, 'listActiveRuns').mockImplementationOnce(async options => {
+      const result = await listActiveRuns(options);
+      await seed(
+        store,
+        makeSnapshot('run-suspends', 'suspended', { agentId: 'agent-A', threadId: 't-run-suspends', resourceId: 'r' }),
+        'r',
+      );
+      return result;
+    });
+    const { restartedRunIds } = stubWorkflow(agent);
+    const before = Date.now();
+
+    const { recovered, succeeded, failed } = await agent.recoverActiveRuns();
+
+    expect(restartedRunIds).toEqual(['run-orphan']);
+    expect({ succeeded, failed }).toEqual({ succeeded: 1, failed: 0 });
+    expect(recovered.map(r => r.runId).sort()).toEqual(['run-live-elsewhere', 'run-orphan']);
+    const live = recovered.find(r => r.runId === 'run-live-elsewhere')!;
+    expect(live).toMatchObject({ status: 'skipped', reason: 'run-active' });
+    expect(live.retryAt).toBeGreaterThanOrEqual(before + 1_000);
+    expect(live.retryAt).toBeLessThanOrEqual(Date.now() + 30_000);
+    expect((await workflows.getRunOwnership({ runId: 'run-live-elsewhere' }))?.ownerId).toBe('other-instance');
+
+    // An explicit runId, as the boot re-check passes, is held to the same rule.
+    await seed(
+      store,
+      makeSnapshot('run-finished', 'success', { agentId: 'agent-A', threadId: 't-finished', resourceId: 'r' }),
+      'r',
+    );
+    for (const id of ['run-suspended', 'run-finished', 'run-missing']) {
+      await expect(agent.recoverActiveRuns({ runId: id })).resolves.toEqual({ recovered: [], succeeded: 0, failed: 0 });
+    }
+    expect(restartedRunIds).toEqual(['run-orphan']);
+  });
+
+  it('replays a boot-recovered run via observe() after recovery finishes (#26433)', async () => {
+    const runId = 'run-replay';
+    await seed(store, makeSnapshot(runId, 'running', { agentId: 'agent-A', threadId: 't', resourceId: 'r' }), 'r');
+    const restart = vi.fn(async () => {
+      await emitChunkEvent(agent.pubsub, runId, {
+        type: 'text-delta',
+        runId,
+        from: 'AGENT',
+        payload: { text: 'recovered output' },
+      } as any);
+      await emitFinishEvent(agent.pubsub, runId, {
+        output: { text: 'recovered output', steps: [] },
+        stepResult: { reason: 'stop' },
+      } as any);
+      return { status: 'success' as const };
+    });
+    vi.spyOn(agent, 'getWorkflow').mockReturnValue({
+      createRun: vi.fn(async () => ({ restart, runId })),
+      restart,
+      deleteWorkflowRunById: vi.fn(async () => {}),
+    } as any);
+
+    const { succeeded } = await agent.recoverActiveRuns();
+    expect(succeeded).toBe(1);
+
+    const observed = await agent.observe(runId, { offset: 0, idleTimeoutMs: 2000 });
+    const types: string[] = [];
+    let text = '';
+    for await (const chunk of observed.fullStream as AsyncIterable<any>) {
+      types.push(chunk.type);
+      if (chunk.type === 'text-delta') text += chunk.payload.text;
+    }
+    observed.detach();
+
+    expect(types).not.toContain('error');
+    expect(types).toContain('finish');
+    expect(text).toBe('recovered output');
   });
 
   it('restarts a specific run when `runId` is given and skips discovery', async () => {

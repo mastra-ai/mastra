@@ -42,10 +42,11 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
           toolCalls?: Array<{ toolName?: string; args?: unknown }>;
           toolResults?: Array<{ toolName?: string; result?: unknown }>;
         }>;
-        lastStepResult?: { isContinued?: boolean; reason?: string };
+        lastStepResult?: { isContinued?: boolean; reason?: string; signalPreempted?: boolean };
         options?: { maxSteps?: number };
         backgroundTaskPending?: boolean;
       };
+      if (state.lastStepResult?.signalPreempted) return state;
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
       const initData = getInitData() as {
         agentId?: string;
@@ -55,14 +56,17 @@ export function createDurableIsTaskCompleteStep(defaultMaxSteps: number = Durabl
       };
 
       const registryEntry = globalRunRegistry.get(state.runId);
+      // No scorers → nothing to grade.
+      if (!registryEntry?.isTaskComplete?.scorers?.length) return state;
 
-      // Rehydrate the message list lazily — only when the core actually
-      // grades this iteration does it read the transcript / append feedback.
+      // Build the message list lazily — only when the core actually grades
+      // this iteration does it read the transcript / append feedback.
+      const messageListState = await readMessageListState(params, state);
       let messageList: MessageList | undefined;
       const list = () => {
         if (!messageList) {
           messageList = new MessageList();
-          messageList.deserialize(readMessageListState(params.state, state));
+          messageList.deserialize(messageListState);
         }
         return messageList;
       };

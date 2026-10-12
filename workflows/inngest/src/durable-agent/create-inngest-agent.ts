@@ -295,7 +295,7 @@ export interface InngestAgentStreamOptions<OUTPUT = undefined> {
   /** Callback when chunk is received */
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Callback when step finishes */
-  onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+  onStepFinish?: (result: AgentStepFinishEventData & { runId: string }) => void | Promise<void>;
   /** Callback when execution finishes */
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   /** Callback on error */
@@ -388,7 +388,7 @@ export interface InngestAgentResumeOptions<OUTPUT = undefined> {
    */
   actor?: AgentExecutionOptions<OUTPUT>['actor'];
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
-  onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+  onStepFinish?: (result: AgentStepFinishEventData & { runId: string }) => void | Promise<void>;
   onFinish?: MastraOnFinishCallback<OUTPUT>;
   onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
@@ -484,7 +484,7 @@ export interface InngestAgent<TOutput = undefined> {
     options?: {
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
-      onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+      onStepFinish?: (result: AgentStepFinishEventData & { runId: string }) => void | Promise<void>;
       onFinish?: MastraOnFinishCallback<TOutput>;
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;

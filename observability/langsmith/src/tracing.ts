@@ -313,6 +313,8 @@ export class LangSmithExporter extends TrackingExporter<
       }
     }
 
+    // LangSmith accepts one update per run, so updates only mutate the local
+    // RunTree and the single patch is sent on end with the final state.
     if (isEnd) {
       // End the span with the correct endTime
       if (span.endTime) {
@@ -320,8 +322,8 @@ export class LangSmithExporter extends TrackingExporter<
       } else {
         await langSmithSpan.end();
       }
+      await langSmithSpan.patchRun();
     }
-    await langSmithSpan.patchRun();
   }
 
   /**

@@ -806,6 +806,40 @@ describe('TestLangSmithExporter', () => {
         }),
       );
     });
+
+    it('should not patch on update, only once on end with the final output', async () => {
+      const span = createMockSpan({
+        id: 'update-then-end',
+        name: 'test',
+        type: SpanType.GENERIC,
+        isRoot: true,
+        attributes: {},
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: span,
+      });
+
+      span.output = { text: 'partial' };
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_UPDATED,
+        exportedSpan: span,
+      });
+
+      expect(mockRunTree.patchRun).not.toHaveBeenCalled();
+      expect(mockRunTree.outputs).toEqual({ text: 'partial' });
+
+      span.endTime = new Date();
+      span.output = { text: 'final' };
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: span,
+      });
+
+      expect(mockRunTree.patchRun).toHaveBeenCalledTimes(1);
+      expect(mockRunTree.outputs).toEqual({ text: 'final' });
+    });
   });
 
   describe('RunTree Ending', () => {

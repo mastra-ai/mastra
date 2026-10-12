@@ -182,9 +182,9 @@ const agent = new Agent({
   },
   {
     name: 'processInput',
-    type: '(args: ProcessInputArgs) => ProcessInputResult',
+    type: '(args: ProcessInputArgs) => ProcessInputResult | Promise<ProcessInputResult>',
     description:
-      'Checks input messages against all configured rules. Blocks, redacts, or warns depending on strategy. Skipped when phase is output.',
+      'Checks input messages against all configured rules. Blocks, redacts, or warns depending on strategy. Skipped when phase is output. Returns a promise when redaction reporting is pending.',
     isOptional: false,
   },
   {
