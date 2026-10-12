@@ -144,7 +144,7 @@
   },
   "scripts": {
     "build": "vite build",
-    "dev": "node scripts/prune-dist.mjs && vite build --watch --mode development",
+    "dev": "vite build --watch --mode development",
     "test": "vitest",
     "test:mutate": "stryker run --mutate",
     "typecheck": "tsc",
