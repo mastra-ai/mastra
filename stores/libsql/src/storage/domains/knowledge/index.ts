@@ -407,47 +407,238 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       }
       if (markerVersion === 1) {
         await this.#transaction(async tx => {
-          const objects = await tx.execute(
-            "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
+          const transactionalMarker = await tx.execute(
+            `SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`,
           );
-          const canonicalIndexes = new Set([
-            'idx_knowledge_nodes_name',
-            'idx_knowledge_records_node_latest',
-            'idx_knowledge_mentions_record',
-            'idx_knowledge_activity_latest',
-            'idx_knowledge_outbox_idempotency',
-            'idx_knowledge_outbox_claim',
-            'idx_knowledge_node_scopes_scope',
-            'idx_knowledge_record_scopes_scope',
-            'idx_knowledge_scope_grants_ref',
-            'idx_knowledge_node_addresses_node',
-            'idx_knowledge_import_runs_lookup',
-            'idx_knowledge_activity_import_run',
+          if (Number(transactionalMarker.rows[0]?.version) !== 1) {
+            throw new KnowledgeSchemaError(
+              `Knowledge schema reset required: the existing Knowledge schema marker changed during initialization. ${KNOWLEDGE_RESET_GUIDANCE}`,
+            );
+          }
+          const objects = await tx.execute(
+            "SELECT type, name, sql FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
+          );
+          const canonicalIndexes = new Map([
+            ['idx_knowledge_nodes_name', ['null']],
+            ['idx_knowledge_records_node_latest', ['nodeId', 'id']],
+            ['idx_knowledge_mentions_record', ['recordId', 'targetNodeId']],
+            ['idx_knowledge_activity_latest', ['id']],
+            ['idx_knowledge_outbox_idempotency', ['idempotencyKey']],
+            ['idx_knowledge_outbox_claim', ['status', 'availableAt', 'createdAt']],
+            ['idx_knowledge_node_scopes_scope', ['scopeNodeId', 'nodeId']],
+            ['idx_knowledge_record_scopes_scope', ['scopeNodeId', 'recordId']],
+            ['idx_knowledge_scope_grants_ref', ['scopeRefId', 'scopeNodeId']],
+            ['idx_knowledge_node_addresses_node', ['nodeId']],
+            ['idx_knowledge_import_runs_lookup', ['importerId', 'binding', 'queuedAt']],
+            ['idx_knowledge_activity_import_run', ['importRunId', 'id']],
           ]);
+          const canonicalIndexSql = new Map([
+            [
+              'idx_knowledge_nodes_name',
+              'create index idx_knowledge_nodes_name on mastra_knowledge_nodes (lower(name))',
+            ],
+            [
+              'idx_knowledge_records_node_latest',
+              'create index idx_knowledge_records_node_latest on mastra_knowledge_records (nodeid, id desc)',
+            ],
+            [
+              'idx_knowledge_mentions_record',
+              'create index idx_knowledge_mentions_record on mastra_knowledge_mentions (recordid, targetnodeid)',
+            ],
+            [
+              'idx_knowledge_activity_latest',
+              'create index idx_knowledge_activity_latest on mastra_knowledge_activity (id desc)',
+            ],
+            [
+              'idx_knowledge_outbox_idempotency',
+              'create unique index idx_knowledge_outbox_idempotency on mastra_knowledge_semantic_outbox (idempotencykey)',
+            ],
+            [
+              'idx_knowledge_outbox_claim',
+              'create index idx_knowledge_outbox_claim on mastra_knowledge_semantic_outbox (status, availableat, createdat)',
+            ],
+            [
+              'idx_knowledge_node_scopes_scope',
+              'create index idx_knowledge_node_scopes_scope on mastra_knowledge_node_scopes (scopenodeid, nodeid)',
+            ],
+            [
+              'idx_knowledge_record_scopes_scope',
+              'create index idx_knowledge_record_scopes_scope on mastra_knowledge_record_scopes (scopenodeid, recordid)',
+            ],
+            [
+              'idx_knowledge_scope_grants_ref',
+              'create index idx_knowledge_scope_grants_ref on mastra_knowledge_scope_grants (scoperefid, scopenodeid)',
+            ],
+            [
+              'idx_knowledge_node_addresses_node',
+              'create index idx_knowledge_node_addresses_node on mastra_knowledge_node_addresses (nodeid)',
+            ],
+            [
+              'idx_knowledge_import_runs_lookup',
+              'create index idx_knowledge_import_runs_lookup on mastra_knowledge_import_runs (importerid, binding, queuedat desc)',
+            ],
+            [
+              'idx_knowledge_activity_import_run',
+              'create index idx_knowledge_activity_import_run on mastra_knowledge_activity (importrunid, id desc)',
+            ],
+          ]);
+          const normalizeSql = (sql: unknown) =>
+            String(sql)
+              .toLowerCase()
+              .replace(/\bif\s+not\s+exists\b/g, '')
+              .replace(/["`]/g, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+          const canonicalTableSql = new Map([
+            [
+              'mastra_knowledge_access_state',
+              'create table mastra_knowledge_access_state ( id text not null primary key, epoch integer not null )',
+            ],
+            [
+              'mastra_knowledge_activity',
+              'create table mastra_knowledge_activity ( id text not null primary key, action text not null, targettype text not null, targetid text not null, contextscopeid text, importrunid text, details text, createdat text not null )',
+            ],
+            [
+              'mastra_knowledge_import_runs',
+              'create table mastra_knowledge_import_runs ( id text not null primary key, importerid text not null, binding text not null, importkind text not null, triggerkind text not null, status text not null, error text, transcriptthreadid text, traceid text, queuedat text not null, startedat text, completedat text )',
+            ],
+            [
+              'mastra_knowledge_import_state',
+              'create table mastra_knowledge_import_state ( importerid text not null, binding text not null, key text not null, value text not null, primary key (importerid, binding, key) )',
+            ],
+            [
+              'mastra_knowledge_mentions',
+              'create table mastra_knowledge_mentions ( recordid text not null, targetnodeid text not null, primary key (recordid, targetnodeid) )',
+            ],
+            [
+              'mastra_knowledge_node_addresses',
+              'create table mastra_knowledge_node_addresses ( source text not null, address text not null, nodeid text not null, primary key (source, address) )',
+            ],
+            [
+              'mastra_knowledge_node_scopes',
+              'create table mastra_knowledge_node_scopes ( nodeid text not null, scopenodeid text not null, addedat text not null, primary key (nodeid, scopenodeid) )',
+            ],
+            [
+              'mastra_knowledge_nodes',
+              'create table mastra_knowledge_nodes ( id text not null primary key, name text not null, kind text, isscope integer not null, metadata text, version integer not null, createdat text not null, updatedat text not null, deletedat text, deletedby text )',
+            ],
+            [
+              'mastra_knowledge_proposals',
+              'create table mastra_knowledge_proposals ( id text not null primary key, targettype text not null, targetid text not null, action text not null, changes text not null, reason text, proposercontextscopeid text not null, expectedversion integer not null, status text not null, reviewercontextscopeid text, reviewedat text, createdat text not null )',
+            ],
+            [
+              'mastra_knowledge_record_scopes',
+              'create table mastra_knowledge_record_scopes ( recordid text not null, scopenodeid text not null, addedat text not null, primary key (recordid, scopenodeid) )',
+            ],
+            [
+              'mastra_knowledge_records',
+              'create table mastra_knowledge_records ( id text not null primary key, nodeid text not null, text text not null, metadata text, source text, version integer not null, createdat text not null, updatedat text not null, deletedat text, deletedby text )',
+            ],
+            [
+              'mastra_knowledge_schema',
+              'create table mastra_knowledge_schema ( id text not null primary key, version integer not null )',
+            ],
+            [
+              'mastra_knowledge_scope_addresses',
+              'create table mastra_knowledge_scope_addresses ( address text not null primary key, scopenodeid text not null )',
+            ],
+            [
+              'mastra_knowledge_scope_grants',
+              'create table mastra_knowledge_scope_grants ( scopenodeid text not null, scoperefid text not null, role text not null, cansuggest integer, primary key (scopenodeid, scoperefid) )',
+            ],
+            [
+              'mastra_knowledge_semantic_outbox',
+              'create table mastra_knowledge_semantic_outbox ( id text not null primary key, idempotencykey text not null, documentid text not null, documenttype text not null, operation text not null, scopeids text not null, status text not null, attempts integer not null, availableat text not null, claimedat text, claimedby text, createdat text not null, completedat text )',
+            ],
+          ]);
+          const seenCanonicalIndexes = new Set<string>();
           for (const row of objects.rows) {
             const type = String(row.type);
             const name = String(row.name);
-            if (type === 'table' && KNOWLEDGE_TABLE_NAMES.includes(name as (typeof KNOWLEDGE_TABLE_NAMES)[number]))
+            if (
+              type === 'table' &&
+              KNOWLEDGE_TABLE_NAMES.includes(name as (typeof KNOWLEDGE_TABLE_NAMES)[number]) &&
+              normalizeSql(row.sql) === canonicalTableSql.get(name)
+            )
               continue;
-            if (type === 'index' && (canonicalIndexes.has(name) || name.startsWith('sqlite_autoindex_'))) continue;
+            if (type === 'index' && name.startsWith('sqlite_autoindex_')) continue;
+            const expectedIndexColumns = canonicalIndexes.get(name);
+            if (type === 'index' && expectedIndexColumns) {
+              const indexColumns = await tx.execute(`PRAGMA index_info("${name}")`);
+              const actualIndexColumns = indexColumns.rows.map(indexRow => String(indexRow.name));
+              const unique = /CREATE\s+UNIQUE\s+INDEX/i.test(String(row.sql));
+              if (
+                actualIndexColumns.length === expectedIndexColumns.length &&
+                actualIndexColumns.every((column, index) => column === expectedIndexColumns[index]) &&
+                unique === (name === 'idx_knowledge_outbox_idempotency') &&
+                normalizeSql(row.sql) === canonicalIndexSql.get(name)
+              ) {
+                seenCanonicalIndexes.add(name);
+                continue;
+              }
+            }
             throw new KnowledgeSchemaError(
               `Knowledge schema reset required: the existing Knowledge schema contains an unfamiliar ${type} ${name}. ${KNOWLEDGE_RESET_GUIDANCE}`,
             );
           }
+          if (seenCanonicalIndexes.size !== canonicalIndexes.size) {
+            throw new KnowledgeSchemaError(
+              `Knowledge schema reset required: the existing Knowledge schema is missing a canonical index. ${KNOWLEDGE_RESET_GUIDANCE}`,
+            );
+          }
+          const sqliteTypes = {
+            text: 'TEXT',
+            timestamp: 'TEXT',
+            uuid: 'TEXT',
+            jsonb: 'TEXT',
+            integer: 'INTEGER',
+            float: 'REAL',
+            bigint: 'INTEGER',
+            boolean: 'INTEGER',
+          } as const;
+          const compositePrimaryKeys: Partial<Record<(typeof KNOWLEDGE_TABLE_NAMES)[number], string[]>> = {
+            [TABLE_KNOWLEDGE_MENTIONS]: ['recordId', 'targetNodeId'],
+            [TABLE_KNOWLEDGE_NODE_SCOPES]: ['nodeId', 'scopeNodeId'],
+            [TABLE_KNOWLEDGE_RECORD_SCOPES]: ['recordId', 'scopeNodeId'],
+            [TABLE_KNOWLEDGE_SCOPE_GRANTS]: ['scopeNodeId', 'scopeRefId'],
+            [TABLE_KNOWLEDGE_NODE_ADDRESSES]: ['source', 'address'],
+            [TABLE_KNOWLEDGE_IMPORT_STATE]: ['importerId', 'binding', 'key'],
+          };
           for (const table of KNOWLEDGE_TABLE_NAMES) {
             const columns = await tx.execute(`PRAGMA table_info("${table}")`);
-            const actual = columns.rows.map(row => String(row.name));
-            const expected = Object.keys(TABLE_SCHEMAS[table]);
-            if (actual.length !== expected.length || actual.some((column, index) => column !== expected[index])) {
+            const expected = Object.entries(TABLE_SCHEMAS[table]);
+            const compositePrimaryKey = compositePrimaryKeys[table];
+            const unfamiliar =
+              columns.rows.length !== expected.length ||
+              columns.rows.some((row, index) => {
+                const [name, definition] = expected[index]!;
+                return (
+                  String(row.name) !== name ||
+                  String(row.type).toUpperCase() !== sqliteTypes[definition.type] ||
+                  Number(row.notnull) !== (definition.nullable === false ? 1 : 0) ||
+                  Number(row.pk) !==
+                    (compositePrimaryKey
+                      ? Math.max(0, compositePrimaryKey.indexOf(name) + 1)
+                      : definition.primaryKey
+                        ? 1
+                        : 0)
+                );
+              });
+            if (unfamiliar) {
               throw new KnowledgeSchemaError(
                 `Knowledge schema reset required: the existing Knowledge table ${table} has an unfamiliar layout. ${KNOWLEDGE_RESET_GUIDANCE}`,
               );
             }
           }
-          await tx.execute({
+          const markerUpdate = await tx.execute({
             sql: `UPDATE ${TABLE_KNOWLEDGE_SCHEMA} SET version = ? WHERE id = 'canonical' AND version = 1`,
             args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
           });
+          if (markerUpdate.rowsAffected !== 1) {
+            throw new KnowledgeSchemaError(
+              `Knowledge schema reset required: the existing Knowledge schema marker changed during initialization. ${KNOWLEDGE_RESET_GUIDANCE}`,
+            );
+          }
         });
       }
     }

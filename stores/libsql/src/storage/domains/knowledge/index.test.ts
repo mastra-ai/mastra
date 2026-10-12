@@ -279,6 +279,74 @@ describe('KnowledgeLibSQL schema completion marker', () => {
     }
   });
 
+  it('rejects a marked version-1 schema with a familiar index name but wrong definition', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await new KnowledgeLibSQL({ client }).init();
+      await client.execute(`UPDATE ${TABLE_KNOWLEDGE_SCHEMA} SET version = 1 WHERE id = 'canonical'`);
+      await client.execute('DROP INDEX idx_knowledge_records_node_latest');
+      await client.execute('CREATE INDEX idx_knowledge_records_node_latest ON mastra_knowledge_records (id)');
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+      const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
+      expect(marker.rows[0]?.version).toBe(1);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('rejects a familiar version-1 index whose sort direction changed', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await new KnowledgeLibSQL({ client }).init();
+      await client.execute(`UPDATE ${TABLE_KNOWLEDGE_SCHEMA} SET version = 1 WHERE id = 'canonical'`);
+      await client.execute('DROP INDEX idx_knowledge_import_runs_lookup');
+      await client.execute(
+        'CREATE INDEX idx_knowledge_import_runs_lookup ON mastra_knowledge_import_runs (importerId, binding, queuedAt)',
+      );
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+      expect(
+        (await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`)).rows[0]?.version,
+      ).toBe(1);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('rejects a version-1 schema missing a canonical index', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await new KnowledgeLibSQL({ client }).init();
+      await client.execute(`UPDATE ${TABLE_KNOWLEDGE_SCHEMA} SET version = 1 WHERE id = 'canonical'`);
+      await client.execute('DROP INDEX idx_knowledge_activity_import_run');
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+      expect((await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA}`)).rows[0]?.version).toBe(1);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('rejects a version-1 table with the canonical columns but an altered default', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await new KnowledgeLibSQL({ client }).init();
+      await client.execute(`UPDATE ${TABLE_KNOWLEDGE_SCHEMA} SET version = 1 WHERE id = 'canonical'`);
+      await client.execute('DROP TABLE mastra_knowledge_access_state');
+      await client.execute(
+        'CREATE TABLE mastra_knowledge_access_state (id TEXT NOT NULL PRIMARY KEY, epoch INTEGER NOT NULL DEFAULT 0)',
+      );
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+      expect(
+        (await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`)).rows[0]?.version,
+      ).toBe(1);
+    } finally {
+      client.close();
+    }
+  });
+
   it('rejects a markerless partial schema without mutating it', async () => {
     const client = createClient({ url: ':memory:' });
     try {
