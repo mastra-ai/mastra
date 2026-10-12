@@ -27,7 +27,7 @@ export interface ZodErrorLike {
  * against an older core would otherwise crash at startup with
  * `ERR_MODULE_NOT_FOUND` on `@mastra/core/dist/agent-builder/ee/index.js`.
  */
-const MODEL_NOT_ALLOWED_CODE = 'MODEL_NOT_ALLOWED';
+const MODEL_NOT_ALLOWED_CODE = MASTRA_ERROR_CODES.MODEL_NOT_ALLOWED;
 
 interface ModelNotAllowedErrorLike extends Error {
   code: typeof MODEL_NOT_ALLOWED_CODE;
