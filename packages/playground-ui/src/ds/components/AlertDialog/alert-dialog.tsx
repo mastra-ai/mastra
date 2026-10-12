@@ -26,12 +26,12 @@ function AlertDialog(props: AlertDialogProps) {
 
 type AlertDialogContentProps = Omit<
   React.ComponentProps<typeof DialogContent>,
-  'showCloseButton' | 'showOverlay' | 'overlayClassName'
+  'showCloseButton' | 'showOverlay' | 'overlayClassName' | 'role'
 >;
 
 function AlertDialogContent({ size = 'sm', ...props }: AlertDialogContentProps) {
   return (
-    <DialogContent data-slot="alert-dialog-content" role="alertdialog" size={size} showCloseButton={false} {...props} />
+    <DialogContent data-slot="alert-dialog-content" size={size} showCloseButton={false} {...props} role="alertdialog" />
   );
 }
 

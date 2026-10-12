@@ -114,9 +114,13 @@ describe('AlertDialog on a phone viewport', () => {
         ({
           matches: query === '(max-width: 639px)',
           media: query,
+          onchange: null,
+          addListener: () => {},
+          removeListener: () => {},
           addEventListener: () => {},
           removeEventListener: () => {},
-        }) as unknown as MediaQueryList,
+          dispatchEvent: () => false,
+        }) satisfies MediaQueryList,
     );
   });
 
