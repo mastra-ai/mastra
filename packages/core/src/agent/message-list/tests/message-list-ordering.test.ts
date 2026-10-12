@@ -474,6 +474,57 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       });
     });
 
+    it('places a signal just before the message named by precedesMessageId', () => {
+      const userTime = new Date('2024-01-01T10:00:00.000Z');
+      const list = new MessageList();
+      list.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Book the meeting' }] },
+          createdAt: userTime,
+        },
+        'input',
+      );
+
+      const signalForTranscript = list.addSignal(
+        createSignal({
+          id: 'gap-reminder',
+          type: 'system-reminder',
+          contents: 'Two hours passed since the last message.',
+          metadata: { precedesMessageId: 'user-1' },
+        }),
+      );
+
+      expect(signalForTranscript.createdAt.getTime()).toBe(userTime.getTime() - 1);
+      expect(list.get.all.db().map(message => message.id)).toEqual(['gap-reminder', 'user-1']);
+    });
+
+    it('keeps the default order when precedesMessageId names no message in the list', () => {
+      const userTime = new Date('2024-01-01T10:00:00.000Z');
+      const list = new MessageList();
+      list.add(
+        {
+          id: 'user-1',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Book the meeting' }] },
+          createdAt: userTime,
+        },
+        'input',
+      );
+
+      const signalForTranscript = list.addSignal(
+        createSignal({
+          id: 'gap-reminder',
+          type: 'system-reminder',
+          contents: 'Two hours passed since the last message.',
+          metadata: { precedesMessageId: 'missing' },
+        }),
+      );
+
+      expect(signalForTranscript.createdAt.getTime()).toBeGreaterThan(userTime.getTime());
+    });
+
     it('should normalize regular input signals using transcript timestamps', () => {
       const baseTime = Date.now() + 60_000;
       const responseTime = new Date(baseTime);
