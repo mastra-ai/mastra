@@ -1,5 +1,29 @@
 # @mastra/voice-openai-realtime
 
+## 0.14.4
+
+### Patch Changes
+
+- Fixed the `speaker` stream never ending for responses that have no audio. A response that only calls a tool, a text-only response, or a response cut off by a dropped socket never got `output_audio.done`, so its stream stayed open. Anything piping it or waiting for `end` hung, and repeated tool turns piled up pipes until Node printed a `MaxListenersExceededWarning`. The stream now ends on `response.done` (before tools run), and all open streams end when the socket closes or on `close()`/`disconnect()`. ([#26697](https://github.com/mastra-ai/mastra/pull/26697))
+
+  Fixes [#26693](https://github.com/mastra-ai/mastra/issues/26693).
+
+- Tools that return nothing no longer produce an invalid `function_call_output`. The result is now serialised as `null` instead of being dropped, so the item always carries the required `output` string, matching the xAI realtime provider. The same fix is applied to the Inworld realtime provider, which uses the same `function_call_output` shape. Fixes [#26505](https://github.com/mastra-ai/mastra/issues/26505). ([#26624](https://github.com/mastra-ai/mastra/pull/26624))
+
+## 0.14.4-alpha.1
+
+### Patch Changes
+
+- Fixed the `speaker` stream never ending for responses that have no audio. A response that only calls a tool, a text-only response, or a response cut off by a dropped socket never got `output_audio.done`, so its stream stayed open. Anything piping it or waiting for `end` hung, and repeated tool turns piled up pipes until Node printed a `MaxListenersExceededWarning`. The stream now ends on `response.done` (before tools run), and all open streams end when the socket closes or on `close()`/`disconnect()`. ([#26697](https://github.com/mastra-ai/mastra/pull/26697))
+
+  Fixes [#26693](https://github.com/mastra-ai/mastra/issues/26693).
+
+## 0.14.4-alpha.0
+
+### Patch Changes
+
+- Tools that return nothing no longer produce an invalid `function_call_output`. The result is now serialised as `null` instead of being dropped, so the item always carries the required `output` string, matching the xAI realtime provider. The same fix is applied to the Inworld realtime provider, which uses the same `function_call_output` shape. Fixes [#26505](https://github.com/mastra-ai/mastra/issues/26505). ([#26624](https://github.com/mastra-ai/mastra/pull/26624))
+
 ## 0.14.3
 
 ### Patch Changes

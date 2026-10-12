@@ -23,13 +23,8 @@ function renderSequence(components: Component[]): string[] {
   return container.render(100);
 }
 
-function quietTool(name = 'view'): ToolExecutionComponentEnhanced {
-  const component = new ToolExecutionComponentEnhanced(
-    name,
-    { path: 'src/example.ts', command: 'echo hi' },
-    { quietDisplayMode: 'quiet' },
-    ui,
-  );
+function compactTool(name = 'view'): ToolExecutionComponentEnhanced {
+  const component = new ToolExecutionComponentEnhanced(name, { path: 'src/example.ts', command: 'echo hi' }, {}, ui);
   component.updateResult({ content: [{ type: 'text', text: 'done' }], isError: false });
   return component;
 }
@@ -50,7 +45,7 @@ function assistant(text = 'assistant text'): AssistantMessageComponent {
 describe('ChatBoundarySpacer', () => {
   it('inserts boundary spacing together with live components', () => {
     const container = new Container();
-    insertChatComponentWithBoundarySpacing(container, quietTool('view'));
+    insertChatComponentWithBoundarySpacing(container, compactTool('view'));
     insertChatComponentWithBoundarySpacing(container, assistant());
 
     expect(container.render(100).filter(line => line === '')).toHaveLength(1);
@@ -59,7 +54,7 @@ describe('ChatBoundarySpacer', () => {
   it('preserves completed component caches across boundary reconciliation', () => {
     const container = new Container();
     const first = assistant('stable assistant text');
-    const second = quietTool('view');
+    const second = compactTool('view');
     const firstInvalidate = vi.spyOn(first, 'invalidate');
     const secondInvalidate = vi.spyOn(second, 'invalidate');
 
@@ -76,54 +71,44 @@ describe('ChatBoundarySpacer', () => {
 
   it('spaces unrelated singleton tool changes across empty streaming message placeholders', () => {
     const container = new Container();
-    insertChatComponentWithBoundarySpacing(container, quietTool('view'));
+    insertChatComponentWithBoundarySpacing(container, compactTool('view'));
     insertChatComponentWithBoundarySpacing(container, new AssistantMessageComponent());
-    insertChatComponentWithBoundarySpacing(container, quietTool('string_replace_lsp'));
+    insertChatComponentWithBoundarySpacing(container, compactTool('string_replace_lsp'));
 
     expect(container.render(100).filter(line => line === '')).toHaveLength(1);
   });
 
-  it('renders no blank line between adjacent quiet compact tools with the same tool name', () => {
-    const lines = renderSequence([quietTool('view'), quietTool('view')]);
+  it('renders no blank line between adjacent compact tools with the same tool name', () => {
+    const lines = renderSequence([compactTool('view'), compactTool('view')]);
     expect(lines).not.toContain('');
   });
 
-  it('renders one blank line between unrelated sibling quiet compact tools', () => {
+  it('renders one blank line between unrelated sibling compact tools', () => {
     const lines = renderSequence([
-      quietTool('view'),
-      quietTool('string_replace_lsp'),
-      quietTool('view'),
-      quietTool('string_replace_lsp'),
+      compactTool('view'),
+      compactTool('string_replace_lsp'),
+      compactTool('view'),
+      compactTool('string_replace_lsp'),
     ]);
     expect(lines.filter(line => line === '')).toHaveLength(3);
   });
 
-  it('renders blank lines around repeated quiet compact tool runs', () => {
+  it('renders blank lines around repeated compact tool runs', () => {
     const lines = renderSequence([
-      quietTool('view'),
-      quietTool('string_replace_lsp'),
-      quietTool('string_replace_lsp'),
-      quietTool('string_replace_lsp'),
-      quietTool('view'),
-      quietTool('string_replace_lsp'),
+      compactTool('view'),
+      compactTool('string_replace_lsp'),
+      compactTool('string_replace_lsp'),
+      compactTool('string_replace_lsp'),
+      compactTool('view'),
+      compactTool('string_replace_lsp'),
     ]);
     expect(lines.filter(line => line === '')).toHaveLength(3);
   });
 
   it('keeps the visible grouped tool label orange unless a continuation fails', () => {
-    const first = new ToolExecutionComponentEnhanced(
-      'view',
-      { path: 'src/example.ts' },
-      { quietDisplayMode: 'quiet' },
-      ui,
-    );
+    const first = new ToolExecutionComponentEnhanced('view', { path: 'src/example.ts' }, {}, ui);
     const second = completeTool(
-      new ToolExecutionComponentEnhanced(
-        'view',
-        { path: 'src/example.ts', offset: 1, limit: 1 },
-        { quietDisplayMode: 'quiet' },
-        ui,
-      ),
+      new ToolExecutionComponentEnhanced('view', { path: 'src/example.ts', offset: 1, limit: 1 }, {}, ui),
     );
 
     let lines = renderSequence([first, second]);
@@ -134,13 +119,13 @@ describe('ChatBoundarySpacer', () => {
     expect(lines[0]).toContain('view');
   });
 
-  it('groups adjacent quiet compact tools of the same type and blanks shared prefixes', () => {
+  it('groups adjacent compact tools of the same type and blanks shared prefixes', () => {
     const lines = renderSequence([
       completeTool(
         new ToolExecutionComponentEnhanced(
           'view',
           { path: 'mastracode/src/tui/components/tool-execution-enhanced.ts', offset: 301, limit: 84 },
-          { quietDisplayMode: 'quiet' },
+          {},
           ui,
         ),
       ),
@@ -148,7 +133,7 @@ describe('ChatBoundarySpacer', () => {
         new ToolExecutionComponentEnhanced(
           'view',
           { path: 'mastracode/src/tui/chat-boundary-reconciliation.ts', offset: 1, limit: 45 },
-          { quietDisplayMode: 'quiet' },
+          {},
           ui,
         ),
       ),
@@ -156,7 +141,7 @@ describe('ChatBoundarySpacer', () => {
         new ToolExecutionComponentEnhanced(
           'view',
           { path: 'mastracode/src/tui/chat-boundary-reconciliation.ts', offset: 50, limit: 10 },
-          { quietDisplayMode: 'quiet' },
+          {},
           ui,
         ),
       ),
@@ -169,23 +154,23 @@ describe('ChatBoundarySpacer', () => {
     expect(stripAnsi(lines[2]!)).toContain('/tui/chat-boundary-reconciliation.ts:50-59');
   });
 
-  it('renders one blank line between a quiet compact tool and quiet shell tool', () => {
-    const lines = renderSequence([quietTool('view'), quietTool('execute_command')]);
+  it('renders one blank line between a compact tool and compact shell tool', () => {
+    const lines = renderSequence([compactTool('view'), compactTool('execute_command')]);
     expect(lines.filter(line => line === '')).toHaveLength(1);
   });
 
-  it('renders one blank line between a quiet shell tool and quiet compact tool', () => {
-    const lines = renderSequence([quietTool('execute_command'), quietTool('view')]);
+  it('renders one blank line between a compact shell tool and compact tool', () => {
+    const lines = renderSequence([compactTool('execute_command'), compactTool('view')]);
     expect(lines.filter(line => line === '')).toHaveLength(1);
   });
 
-  it('renders one blank line between a same-tool quiet run and assistant text', () => {
-    const lines = renderSequence([quietTool('view'), quietTool('view'), assistant()]);
+  it('renders one blank line between a same-tool compact run and assistant text', () => {
+    const lines = renderSequence([compactTool('view'), compactTool('view'), assistant()]);
     expect(lines.filter(line => line === '')).toHaveLength(1);
   });
 
-  it('renders one blank line between assistant text and a quiet tool', () => {
-    const lines = renderSequence([assistant(), quietTool('view')]);
+  it('renders one blank line between assistant text and a compact tool', () => {
+    const lines = renderSequence([assistant(), compactTool('view')]);
     expect(lines.filter(line => line === '')).toHaveLength(1);
   });
 
@@ -194,22 +179,22 @@ describe('ChatBoundarySpacer', () => {
     expect(lines.filter(line => line === '')).toHaveLength(1);
   });
 
-  it('renders one blank line between quiet compact tool and user message', () => {
-    const lines = renderSequence([quietTool('view'), new UserMessageComponent('hello')]);
+  it('renders one blank line between compact tool and user message', () => {
+    const lines = renderSequence([compactTool('view'), new UserMessageComponent('hello')]);
     expect(lines.filter(line => line === '')).toHaveLength(1);
   });
 
   it('keeps plan components full size and separated normally', () => {
     const plan = PlanApprovalInlineComponent.createStreaming(ui);
     plan.updateArgs({ path: '.mastracode/plans/test-plan.md' });
-    const lines = renderSequence([quietTool('view'), plan]);
+    const lines = renderSequence([compactTool('view'), plan]);
 
     const visible = lines.map(line => line.replace(/\x1b\[[0-9;]*m/g, ''));
     expect(visible.join('\n')).toContain('Plan: Untitled plan');
     expect(visible.join('\n')).toContain('.mastracode/plans/test-plan.md');
     expect(lines.filter(line => line === '')).toHaveLength(1);
   });
-  it('leaves Thinking out of the chat and groups described shell calls into one box in quiet mode', () => {
+  it('leaves Thinking out of the chat and groups described shell calls into one box', () => {
     const thinking = () => {
       const component = new AssistantMessageComponent(
         {
@@ -220,14 +205,13 @@ describe('ChatBoundarySpacer', () => {
         } as never,
         true,
       );
-      component.setQuietModeDisplay('quiet');
       return component;
     };
     const shell = (description: string) => {
       const component = new ToolExecutionComponentEnhanced(
         'execute_command',
         { command: 'git log', description, cwd: '/tmp/work' },
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        { collapsedByDefault: true, previewLineLimit: 0 },
         ui,
       );
       component.updateResult({ content: [{ type: 'text', text: 'out' }], isError: false }, false);
@@ -253,12 +237,12 @@ describe('ChatBoundarySpacer', () => {
       expect.stringMatching(/^╰─+╯$/),
     ]);
   });
-  it('sizes a quiet shell box to its widest row, between a narrow default and the full width', () => {
+  it('sizes a compact shell box to its widest row, between a narrow default and the full width', () => {
     const shell = (description: string) => {
       const component = new ToolExecutionComponentEnhanced(
         'execute_command',
         { command: 'x', description, cwd: '/tmp/w' },
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        { collapsedByDefault: true, previewLineLimit: 0 },
         ui,
       );
       component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
@@ -283,7 +267,7 @@ describe('ChatBoundarySpacer', () => {
     expect(full).toBeLessThanOrEqual(100);
     expect(boxWidths([long.repeat(3)], 100).size).toBe(1);
   });
-  it('keeps one box width across hidden quiet Thinking messages between shell calls', () => {
+  it('keeps one box width across hidden Thinking messages between shell calls', () => {
     const thinking = () => {
       const component = new AssistantMessageComponent(
         {
@@ -294,14 +278,13 @@ describe('ChatBoundarySpacer', () => {
         } as never,
         true,
       );
-      component.setQuietModeDisplay('quiet');
       return component;
     };
     const shell = (description: string) => {
       const component = new ToolExecutionComponentEnhanced(
         'execute_command',
         { command: 'x', description, cwd: '/tmp/w' },
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        { collapsedByDefault: true, previewLineLimit: 0 },
         ui,
       );
       component.updateResult({ content: [{ type: 'text', text: 'ok' }], isError: false }, false);
@@ -328,7 +311,7 @@ describe('ChatBoundarySpacer', () => {
       new ToolExecutionComponentEnhanced(
         'execute_command',
         args,
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        { collapsedByDefault: true, previewLineLimit: 0 },
         ui,
       );
     const done = make({ command: 'cd /tmp && gh api graphql', description: 'Reading PR reviews' });
@@ -383,7 +366,7 @@ describe('ChatBoundarySpacer', () => {
       new ToolExecutionComponentEnhanced(
         'execute_command',
         args,
-        { quietDisplayMode: 'quiet', collapsedByDefault: true, quietPreviewLineLimit: 0 },
+        { collapsedByDefault: true, previewLineLimit: 0 },
         ui,
       );
     const root = make({ command: 'sed -n 1,5p file.ts', description: 'Reading the processor block' });

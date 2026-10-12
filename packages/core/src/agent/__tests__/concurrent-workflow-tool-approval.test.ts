@@ -100,95 +100,89 @@ afterEach(() => {
 });
 
 describe('concurrent workflow tool approvals', () => {
-  it.each(['forward', 'reverse', 'concurrent'] as const)(
-    'resumes every suspended workflow in %s order',
-    async order => {
-      const workflowA = createSuspendingWorkflow('workflow-a');
-      const workflowB = createSuspendingWorkflow('workflow-b');
-      const agent = new Agent({
-        id: 'concurrent-workflow-agent',
-        name: 'Concurrent Workflow Agent',
-        instructions: 'Run both workflows.',
-        model: createConcurrentWorkflowModel(),
-        memory: new MockMemory(),
-        workflows: { workflowA, workflowB },
-      });
-      const mastra = new Mastra({
-        agents: { agent },
-        workflows: { workflowA, workflowB },
-        storage: new InMemoryStore(),
-        logger: false,
-      });
-      const registeredAgent = mastra.getAgent('agent');
-      const threadId = `concurrent-workflow-${order}`;
-      const resourceId = 'concurrent-workflow-user';
-      const chunks: any[] = [];
-      const subscription = await registeredAgent.subscribeToThread({ threadId, resourceId });
-      const consumeSubscription = (async () => {
-        for await (const chunk of subscription.stream) {
-          chunks.push(chunk);
-        }
-      })();
-
-      try {
-        await registeredAgent.stream('Run workflow A and workflow B together.', {
-          maxSteps: 6,
-          memory: { thread: threadId, resource: resourceId },
-        });
-
-        await vi.waitFor(
-          () => {
-            expect(chunks.filter(chunk => chunk.type === 'tool-call-suspended')).toHaveLength(2);
-          },
-          { timeout: 10_000 },
-        );
-
-        const suspendedIds = chunks
-          .filter(chunk => chunk.type === 'tool-call-suspended')
-          .map(chunk => chunk.payload.toolCallId as string);
-
-        const orderedIds = order === 'reverse' ? [...suspendedIds].reverse() : suspendedIds;
-        const approve = (toolCallId: string) =>
-          registeredAgent.sendToolApproval({
-            threadId,
-            resourceId,
-            toolCallId,
-            approved: true,
-            resumeData: { note: 'hello' },
-          });
-
-        if (order === 'concurrent') {
-          await Promise.all(orderedIds.map(approve));
-        } else {
-          for (const toolCallId of orderedIds) {
-            await approve(toolCallId);
-          }
-        }
-
-        await vi.waitFor(
-          () => {
-            const successfulToolCallIds = new Set(
-              chunks.filter(chunk => chunk.type === 'tool-result').map(chunk => chunk.payload.toolCallId as string),
-            );
-            expect(successfulToolCallIds).toEqual(new Set(['call-workflow-a', 'call-workflow-b']));
-            expect(chunks.filter(chunk => chunk.type === 'tool-error' || chunk.type === 'error')).toEqual([]);
-            expect(
-              chunks
-                .filter(chunk => chunk.type === 'text-delta')
-                .map(chunk => chunk.payload.text)
-                .join(''),
-            ).toContain('Both workflows completed.');
-            expect(chunks.some(chunk => chunk.type === 'finish' && chunk.payload.stepResult?.reason === 'stop')).toBe(
-              true,
-            );
-          },
-          { timeout: 10_000 },
-        );
-      } finally {
-        subscription.unsubscribe();
-        await consumeSubscription;
+  // Suspending workflow tools advertise a suspend schema, so the tool-call
+  // concurrency gate runs them one at a time (#26539). Each approval must
+  // still resume the matching workflow run (#20322).
+  it('runs suspending workflow tools one at a time and resumes each run', async () => {
+    const workflowA = createSuspendingWorkflow('workflow-a');
+    const workflowB = createSuspendingWorkflow('workflow-b');
+    const agent = new Agent({
+      id: 'concurrent-workflow-agent',
+      name: 'Concurrent Workflow Agent',
+      instructions: 'Run both workflows.',
+      model: createConcurrentWorkflowModel(),
+      memory: new MockMemory(),
+      workflows: { workflowA, workflowB },
+    });
+    const mastra = new Mastra({
+      agents: { agent },
+      workflows: { workflowA, workflowB },
+      storage: new InMemoryStore(),
+      logger: false,
+    });
+    const registeredAgent = mastra.getAgent('agent');
+    const threadId = 'concurrent-workflow';
+    const resourceId = 'concurrent-workflow-user';
+    const chunks: any[] = [];
+    const subscription = await registeredAgent.subscribeToThread({ threadId, resourceId });
+    const consumeSubscription = (async () => {
+      for await (const chunk of subscription.stream) {
+        chunks.push(chunk);
       }
-    },
-    30_000,
-  );
+    })();
+
+    try {
+      await registeredAgent.stream('Run workflow A and workflow B together.', {
+        maxSteps: 6,
+        memory: { thread: threadId, resource: resourceId },
+      });
+
+      const approved = new Set<string>();
+      for (let i = 0; i < 2; i++) {
+        let pending: string[] = [];
+        await vi.waitFor(
+          () => {
+            pending = chunks
+              .filter(chunk => chunk.type === 'tool-call-suspended')
+              .map(chunk => chunk.payload.toolCallId as string)
+              .filter(id => !approved.has(id));
+            expect(pending).toHaveLength(1);
+          },
+          { timeout: 10_000 },
+        );
+        const [toolCallId] = pending;
+        approved.add(toolCallId!);
+        await registeredAgent.sendToolApproval({
+          threadId,
+          resourceId,
+          toolCallId: toolCallId!,
+          approved: true,
+          resumeData: { note: 'hello' },
+        });
+      }
+
+      await vi.waitFor(
+        () => {
+          const successfulToolCallIds = new Set(
+            chunks.filter(chunk => chunk.type === 'tool-result').map(chunk => chunk.payload.toolCallId as string),
+          );
+          expect(successfulToolCallIds).toEqual(new Set(['call-workflow-a', 'call-workflow-b']));
+          expect(chunks.filter(chunk => chunk.type === 'tool-error' || chunk.type === 'error')).toEqual([]);
+          expect(
+            chunks
+              .filter(chunk => chunk.type === 'text-delta')
+              .map(chunk => chunk.payload.text)
+              .join(''),
+          ).toContain('Both workflows completed.');
+          expect(chunks.some(chunk => chunk.type === 'finish' && chunk.payload.stepResult?.reason === 'stop')).toBe(
+            true,
+          );
+        },
+        { timeout: 10_000 },
+      );
+    } finally {
+      subscription.unsubscribe();
+      await consumeSubscription;
+    }
+  }, 30_000);
 });

@@ -72,7 +72,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   },
   ModelLoopStreamArgs<any, OUTPUT>
 >['execute'] {
-  return async ({ inputData, bail, ..._observabilityContext }) => {
+  return async ({ inputData, bail }) => {
     const memoryData = inputData['prepare-memory-step'];
 
     // Class instances written to runScope by upstream steps. These never travel

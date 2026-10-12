@@ -1,18 +1,20 @@
-import { useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 // Default breakpoint 1024 matches Sidebar's mobile breakpoint.
 export const useIsMobile = (breakpoint: number = 1024) => {
-  const query = useMemo(() => `(max-width: ${breakpoint - 1}px)`, [breakpoint]);
-  const [isMobile, setIsMobile] = useState(false);
+  const query = `(max-width: ${breakpoint - 1}px)`;
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const mql = window.matchMedia(query);
+      mql.addEventListener('change', onChange);
+      return () => mql.removeEventListener('change', onChange);
+    },
+    [query],
+  );
 
-  useLayoutEffect(() => {
-    const mq = window.matchMedia(query);
-    const update = () => setIsMobile(mq.matches);
-
-    update();
-    mq.addEventListener('change', update);
-    return () => mq.removeEventListener('change', update);
-  }, [query]);
-
-  return isMobile;
+  return useSyncExternalStore(
+    subscribe,
+    () => window.matchMedia(query).matches,
+    () => false,
+  );
 };
