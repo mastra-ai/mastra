@@ -70,6 +70,24 @@ vi.mock('@mastra/otel-exporter', () => {
     return { [key]: serialized };
   }
 
+  // Mirrors the real SpanConverter's mastra.<span_type>.<snake_key> attributes
+  // for the span types used in these tests.
+  function spanTypeAttributes(span: any): Record<string, unknown> {
+    const attrs = span.attributes ?? {};
+    const prefix = `mastra.${String(span.type).toLowerCase()}.`;
+    const out: Record<string, unknown> = {};
+    if (span.type === SpanType.MODEL_STEP) {
+      if (attrs.stepIndex !== undefined) out[`${prefix}step_index`] = attrs.stepIndex;
+      if (attrs.isContinued !== undefined) out[`${prefix}is_continued`] = attrs.isContinued;
+    }
+    if (span.type === SpanType.RAG_EMBEDDING) {
+      if (attrs.mode) out[`${prefix}mode`] = attrs.mode;
+      if (attrs.dimensions !== undefined) out[`${prefix}dimensions`] = attrs.dimensions;
+      if (attrs.inputCount !== undefined) out[`${prefix}input_count`] = attrs.inputCount;
+    }
+    return out;
+  }
+
   class MockSpanConverter {
     constructor(params: any) {
       converterConstructorArgs.push(params);
@@ -95,6 +113,7 @@ vi.mock('@mastra/otel-exporter', () => {
           : {}),
         ...ioAttributes(span, 'input'),
         ...ioAttributes(span, 'output'),
+        ...spanTypeAttributes(span),
         // Pass through entityId/entityName as gen_ai.agent.* (mirrors real SpanConverter behavior)
         ...(span.entityId ? { 'gen_ai.agent.id': span.entityId } : {}),
         ...(span.entityName ? { 'gen_ai.agent.name': span.entityName } : {}),
@@ -753,6 +772,46 @@ describe('LangfuseExporter', () => {
 
       const attrs = processedSpans[0].attributes;
       expect(attrs['langfuse.observation.metadata.spanType']).toBe(SpanType.MODEL_GENERATION);
+    });
+
+    it('promotes span-type attributes to camelCase observation metadata', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.MODEL_STEP,
+          input: [{ role: 'user', content: 'Hello' }],
+          output: { text: 'Hi', toolCalls: [] },
+          attributes: { stepIndex: 1, isContinued: false },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.metadata.stepIndex']).toBe('1');
+      expect(attrs['langfuse.observation.metadata.isContinued']).toBe('false');
+      // Source attributes stay in place; input/output keep their own mapping.
+      expect(attrs['mastra.model_step.step_index']).toBe(1);
+      expect(attrs['mastra.model_step.is_continued']).toBe(false);
+      expect(attrs['langfuse.observation.metadata.input']).toBeUndefined();
+      expect(attrs['langfuse.observation.metadata.output']).toBeUndefined();
+      expect(attrs['langfuse.observation.input']).toBeDefined();
+    });
+
+    it('promotes embedding span attributes without touching existing observation metadata', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.RAG_EMBEDDING,
+          attributes: { model: 'text-embedding-3-small', mode: 'batch', dimensions: 1536, inputCount: 3 },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.metadata.mode']).toBe('batch');
+      expect(attrs['langfuse.observation.metadata.dimensions']).toBe('1536');
+      expect(attrs['langfuse.observation.metadata.inputCount']).toBe('3');
+      expect(attrs['langfuse.observation.metadata.spanType']).toBe(SpanType.RAG_EMBEDDING);
     });
 
     it('does not set observation metadata when source attributes are absent', async () => {

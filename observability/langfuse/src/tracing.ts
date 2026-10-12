@@ -510,6 +510,28 @@ function mapMastraToLangfuseAttributes(
     attributes['langfuse.observation.metadata.operationName'] = attributes['gen_ai.operation.name'];
   }
 
+  // Span-type attributes (mastra.<span_type>.<snake_key>, e.g.
+  // mastra.model_step.step_index) are promoted the same way, as camelCase keys,
+  // so every span attribute is filterable in observation-level evaluator rules
+  // without a per-key mapping. Input/output have their own mapping below.
+  // Values are sent as strings; Langfuse restores numbers and booleans on ingestion.
+  if (span.type) {
+    const spanAttrPrefix = `mastra.${String(span.type).toLowerCase()}.`;
+    for (const [key, value] of Object.entries(attributes)) {
+      if (!key.startsWith(spanAttrPrefix) || value === null || value === undefined) {
+        continue;
+      }
+      const name = key.slice(spanAttrPrefix.length);
+      if (name === 'input' || name === 'output') {
+        continue;
+      }
+      const metadataKey = `langfuse.observation.metadata.${snakeToCamel(name)}`;
+      if (attributes[metadataKey] === undefined) {
+        attributes[metadataKey] = typeof value === 'string' ? value : JSON.stringify(value);
+      }
+    }
+  }
+
   // Input/Output: mastra.*.input/output → langfuse.observation.input/output
   // For gen_ai spans, Langfuse reads gen_ai.input.messages natively.
   // For non-gen_ai spans, we map the first mastra.*.input/output we find.
@@ -531,6 +553,10 @@ function mapMastraToLangfuseAttributes(
       }
     }
   }
+}
+
+function snakeToCamel(name: string): string {
+  return name.replace(/_([a-z0-9])/g, (_, c: string) => c.toUpperCase());
 }
 
 /**
