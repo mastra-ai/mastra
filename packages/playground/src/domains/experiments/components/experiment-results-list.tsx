@@ -35,8 +35,6 @@ const BUILT_IN_COLUMNS = new Set(['itemId', 'id', 'status', 'input', 'output', '
 
 export type ExperimentResultsSortKey = 'startedAt';
 
-const SELECT_COLUMN_KEY = '__select__';
-
 export type ExperimentResultsListColumn = {
   /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | `startedAt` | a scorer id */
   name: string;
@@ -63,8 +61,6 @@ export type ExperimentResultsListProps<T extends ExperimentResultsListItem> = {
   /** Server-side sort; the `startedAt` header is only sortable when `onSortChange` is provided. */
   sort?: ListSort<ExperimentResultsSortKey>;
   onSortChange?: (direction: 'asc' | 'desc', key: ExperimentResultsSortKey) => void;
-  /** Persists the user's column order and widths under this id. */
-  listId?: string;
 };
 
 /**
@@ -87,7 +83,6 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   onToggleSelectAll,
   sort,
   onSortChange,
-  listId = 'experiment-results',
 }: ExperimentResultsListProps<T>) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const hasSelection = Boolean(selectedIds && onToggleSelect);
@@ -95,7 +90,6 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   // an unknown name would shift every following cell away from its header.
   const columns = requestedColumns.filter(c => BUILT_IN_COLUMNS.has(c.name) || scorerIds?.includes(c.name));
   const gridColumns = [hasSelection ? '2rem' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
-  const columnKeys = [...(hasSelection ? [SELECT_COLUMN_KEY] : []), ...columns.map(c => c.name)];
   const hasColumn = (name: string) => columns.some(col => col.name === name);
   const hasItemIdColumn = hasColumn('itemId') || hasColumn('id');
   const hasStatusColumn = hasColumn('status');
@@ -142,15 +136,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   }
 
   return (
-    <DataList
-      columns={gridColumns}
-      className="min-w-0"
-      scrollRef={containerRef}
-      fit="container"
-      reorderable
-      id={listId}
-      columnKeys={columnKeys}
-    >
+    <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef} fit="container">
       <DataList.Top hasLeadingCell={hasSelection}>
         {hasSelection &&
           (onToggleSelectAll ? (
@@ -160,7 +146,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
               aria-label="Select all"
             />
           ) : (
-            <DataList.TopCell fixed>&nbsp;</DataList.TopCell>
+            <DataList.TopCell>&nbsp;</DataList.TopCell>
           ))}
         {hasSelection ? (
           <DataList.TopCells colStart={2}>{columns.map(renderTopCell)}</DataList.TopCells>

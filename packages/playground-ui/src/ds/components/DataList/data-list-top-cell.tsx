@@ -1,7 +1,7 @@
 import type { ComponentPropsWithoutRef, DragEvent, ElementType, KeyboardEvent, ReactNode } from 'react';
 import { forwardRef, useState } from 'react';
 import { useDataListReorder } from './data-list-reorder-context';
-import { dataListStickyStartStyles, getDataListCellsOffset, getDataListColumnIndex } from './shared';
+import { dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
@@ -18,17 +18,15 @@ export type DataListTopCellProps = {
   as?: ElementType;
   /** Pins the top cell to the horizontal start edge while the list scrolls sideways. */
   sticky?: DataListSticky;
-  /** Keeps the cell out of column reordering (e.g. a leading selection checkbox). */
-  fixed?: boolean;
 } & Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className' | 'ref'>;
 
 export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>(
-  ({ children, className, as, sticky, fixed, ...rest }, ref) => {
+  ({ children, className, as, sticky, ...rest }, ref) => {
     const Component = as || 'span';
     const isText = typeof children === 'string' || typeof children === 'number';
     const { reorderable, order, move } = useDataListReorder();
     const [isDropTarget, setIsDropTarget] = useState(false);
-    const canReorder = reorderable && !sticky && !fixed;
+    const canReorder = reorderable && !sticky;
 
     const reorderProps = canReorder
       ? {
@@ -97,21 +95,17 @@ const DRAG_TYPE = 'application/x-mastra-data-list-column';
 
 /** Visual position of a header cell, or `null` when it is not in a full-width cells container. */
 function getVisualPosition(cell: HTMLElement, order: number[]): number | null {
-  const original = getDataListColumnIndex(cell);
-  if (original === null) return null;
-  const visual = order.indexOf(original);
+  const parent = cell.parentElement;
+  if (!parent?.classList.contains('data-list-cells')) return null;
+  const visual = order.indexOf(Array.from(parent.children).indexOf(cell));
   return visual === -1 ? null : visual;
 }
 
 /** Whether the header cell at `visual` is pinned (so nothing may move into its slot). */
 function isStickyAt(cell: HTMLElement, order: number[], visual: number): boolean {
   const original = order[visual];
-  const group = cell.parentElement;
-  if (original === undefined || !group) return true;
-  // Leading columns outside this group (e.g. a selection checkbox) stay pinned.
-  const offset = getDataListCellsOffset(group);
-  if (original < offset) return true;
-  return group.children[original - offset]?.classList.contains('data-list-sticky-start') ?? true;
+  if (original === undefined) return true;
+  return cell.parentElement?.children[original]?.classList.contains('data-list-sticky-start') ?? true;
 }
 
 export type DataListTopCellWithTooltipProps = {
@@ -187,7 +181,6 @@ export function DataListTopSelectCell({ checked, onToggle, ...rest }: DataListTo
   return (
     <DataListTopCell
       as="label"
-      fixed
       className="w-8 cursor-pointer justify-center overflow-visible px-0 py-0!"
       onClick={e => e.stopPropagation()}
     >

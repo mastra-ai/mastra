@@ -238,9 +238,14 @@ function DataListBase({
     gridTemplateColumns: columns,
   };
   // Cells keep their DOM order; CSS `order` places each one in its moved track.
-  // Groups placed after pinned leading columns (e.g. a selection checkbox) skip
-  // `offset` tracks, so their nth child maps to column `offset + n`.
-  const orderRules = reorder.reorderable ? getOrderRules(scopeId, reorder.order) : null;
+  const orderRules = reorder.reorderable
+    ? reorder.order
+        .map(
+          (original, visual) =>
+            `[data-data-list="${scopeId}"] .data-list-cells > :nth-child(${original + 1}) { order: ${visual}; }`,
+        )
+        .join('\n')
+    : null;
 
   // One hover surface travels between rows (same primitive as menus/selects).
   // Subheaders, pagination and whitespace stay inert, so no gap-click routing.
@@ -288,21 +293,4 @@ function DataListBase({
       </ScrollAreaViewport>
     </ScrollArea>
   );
-}
-
-function getOrderRules(scopeId: string, order: number[]): string {
-  const rules: string[] = [];
-  for (let offset = 0; offset < order.length; offset++) {
-    // Only offsets whose leading columns are still in place can host a group.
-    if (offset > 0 && order[offset - 1] !== offset - 1) break;
-    const group =
-      offset === 0
-        ? '.data-list-cells:not([data-data-list-cells-offset])'
-        : `.data-list-cells[data-data-list-cells-offset="${offset}"]`;
-    order.forEach((original, visual) => {
-      if (original < offset) return;
-      rules.push(`[data-data-list="${scopeId}"] ${group} > :nth-child(${original - offset + 1}) { order: ${visual}; }`);
-    });
-  }
-  return rules.join('\n');
 }
