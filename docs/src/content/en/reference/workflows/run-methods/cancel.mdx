@@ -40,7 +40,7 @@ await run.cancel()
     name: 'result',
     type: 'Promise<void>',
     description:
-      'A promise that resolves once cancellation is requested and the canceled status is saved. It does not wait for running steps to stop. With the default execution engine, calling cancel() on a run that already finished leaves its status unchanged.',
+      'A promise that resolves once cancellation is requested and, if storage is configured, the status update to canceled has been attempted. It does not wait for running steps to stop. Calling cancel() on a run that already finished leaves its status unchanged, except with the Inngest engine.',
   },
 ]}
 />
