@@ -885,7 +885,8 @@ export class SessionThread {
    */
   async getOwner({ threadId = this.#threadId }: { threadId?: string | null } = {}): Promise<string | undefined> {
     if (!threadId) return undefined;
-    const thread = await this.#store?.getById({ threadId });
+    if (!this.#store?.hasStorage()) return this.#owner.identity.getOwnerId();
+    const thread = await this.#store.getById({ threadId });
     if (!thread) {
       if (threadId === this.#threadId) return this.#owner.identity.getOwnerId();
       throw new Error(`Thread not found: ${threadId}`);
