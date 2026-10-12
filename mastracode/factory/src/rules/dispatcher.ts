@@ -662,6 +662,16 @@ export class FactoryDecisionDispatcher {
       const revoked = await this.#storage.revokeStaleRunBindings({
         olderThan: new Date(now.getTime() - this.#staleBindingTtlMs),
         now,
+        // A run parked on a person, or resumed after one answered, is alive however
+        // old its binding is. Any lookup failure falls back to revoking.
+        keep: async binding => {
+          try {
+            const session = await this.#controller.getSessionByResource(binding.resourceId);
+            return !!session && (session.suspensions.hasPending() || session.run.isRunning());
+          } catch {
+            return false;
+          }
+        },
       });
       if (revoked > 0) console.info(`Factory stale-binding sweep revoked ${revoked} binding(s)`);
     } catch (error) {
