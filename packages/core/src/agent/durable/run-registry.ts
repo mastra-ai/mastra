@@ -49,23 +49,29 @@ export const globalRunRegistry = new TTLCache<string, RunRegistryEntry>({
  * Entries are keyed only by runId, so when another Mastra instance in this
  * process reuses the runId, a still-running workflow from the earlier run
  * would otherwise read (and write its transcript into) the new run's entry.
- * An entry owned by a different Mastra instance is treated as absent.
+ * An entry owned by a different Mastra instance is treated as absent. An
+ * ownerless entry (a placeholder or rehydrated entry) is claimed by the first
+ * scoped reader, so a later instance reusing the runId cannot adopt it.
  */
 export function getRunRegistryEntry(runId: string, mastra: Mastra | undefined): RunRegistryEntry | undefined {
   const entry = globalRunRegistry.get(runId);
-  if (entry?.mastra && mastra && unwrapMastraTracingProxy(entry.mastra) !== unwrapMastraTracingProxy(mastra))
-    return undefined;
-  return entry;
+  if (!entry || !mastra) return entry;
+  if (!entry.mastra) {
+    entry.mastra = mastra;
+    return entry;
+  }
+  return unwrapMastraTracingProxy(entry.mastra) === unwrapMastraTracingProxy(mastra) ? entry : undefined;
 }
 
 /**
- * Publish a rebuilt entry for `runId` unless the slot holds another Mastra
- * instance's live run. Returns whether the entry was stored.
+ * Publish an entry for `runId`, owned by `mastra`, unless the slot holds
+ * another Mastra instance's live run. Returns whether the entry was stored.
  */
 export function setRunRegistryEntry(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined): boolean {
   const current = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
   if (current?.mastra && mastra && unwrapMastraTracingProxy(current.mastra) !== unwrapMastraTracingProxy(mastra))
     return false;
+  if (mastra) entry.mastra ??= mastra;
   globalRunRegistry.set(runId, entry);
   return true;
 }

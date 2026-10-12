@@ -8,8 +8,11 @@ import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { ensureRemoteAbortListener } from '../abort-transport';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
+import { getRunRegistryEntry, globalRunRegistry, setRunRegistryEntry } from '../run-registry';
+import type { RunRegistryEntry } from '../types';
 
 function model(prompts: string[]) {
   return new MockLanguageModelV2({
@@ -98,6 +101,48 @@ describe('runId reuse across Mastra apps', () => {
     const bobPrompts = await runTenant('bob', second, false);
 
     expect(bobPrompts.length).toBeGreaterThan(0);
-    expect(bobPrompts.join('\n')).not.toMatch(/alice/);
+    const all = bobPrompts.join('\n');
+    expect(all).not.toMatch(/alice/);
+    // Bob's own run is intact: his message and his tool result reach his model.
+    expect(all).toContain('bob private message');
+    expect(all).toContain('bob-tool-secret');
+  });
+});
+
+describe('ownerless registry entries', () => {
+  const alice = new Mastra({ logger: false });
+  const bob = new Mastra({ logger: false });
+
+  it('a rehydrated entry is owned by the instance that published it', () => {
+    const runId = 'rehydrated-run';
+    const rebuilt = { isPlaceholder: false, tools: {} } as unknown as RunRegistryEntry;
+    expect(setRunRegistryEntry(runId, rebuilt, alice)).toBe(true);
+
+    expect(getRunRegistryEntry(runId, alice)).toBe(rebuilt);
+    expect(getRunRegistryEntry(runId, bob)).toBeUndefined();
+    expect(setRunRegistryEntry(runId, { tools: {} } as unknown as RunRegistryEntry, bob)).toBe(false);
+    globalRunRegistry.delete(runId);
+  });
+
+  it('an ownerless entry is claimed by its first scoped reader', () => {
+    const runId = 'ownerless-run';
+    globalRunRegistry.set(runId, { isPlaceholder: true } as RunRegistryEntry);
+
+    expect(getRunRegistryEntry(runId, alice)).toBeDefined();
+    expect(getRunRegistryEntry(runId, bob)).toBeUndefined();
+    globalRunRegistry.delete(runId);
+  });
+
+  it("a remote-abort placeholder never hands one instance's controller to another", async () => {
+    const runId = 'abort-placeholder-run';
+    const pubsub = new EventEmitterPubSub();
+    await ensureRemoteAbortListener(pubsub, runId, alice);
+    const aliceController = globalRunRegistry.get(runId)?.abortController;
+    expect(aliceController).toBeDefined();
+
+    expect(getRunRegistryEntry(runId, bob)).toBeUndefined();
+    await ensureRemoteAbortListener(pubsub, runId, bob);
+    expect(globalRunRegistry.get(runId)?.abortController).toBe(aliceController);
+    globalRunRegistry.delete(runId);
   });
 });

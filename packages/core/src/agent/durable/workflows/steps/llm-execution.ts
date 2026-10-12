@@ -271,7 +271,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // so it is logged rather than thrown.
       if (pubsub) {
         try {
-          await ensureRemoteAbortListener(pubsub, runId);
+          await ensureRemoteAbortListener(pubsub, runId, mastra);
         } catch (error) {
           logger?.warn?.('Failed to subscribe to cross-process abort requests', {
             runId,
