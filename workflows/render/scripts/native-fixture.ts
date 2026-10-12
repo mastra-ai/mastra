@@ -142,9 +142,42 @@ export const retryWorkflow = adapter
   .then(nested)
   .then(finish)
   .commit();
+const schemaInput = z.object({ audit: z.string().uuid(), value: z.number() });
+const incrementedInput = schemaInput.extend({ value: z.number().transform(value => value + 1) });
+const positiveIncrementedInput = schemaInput.extend({
+  value: z
+    .number()
+    .positive()
+    .transform(value => value + 1),
+});
+/** Exercise actual Mastra input preparation across the native worker boundary. */
+function schemaProbe(
+  id: string,
+  rootInput: typeof schemaInput | typeof incrementedInput,
+  stepInput: typeof schemaInput | typeof incrementedInput,
+) {
+  return adapter
+    .createWorkflow({ id, inputSchema: rootInput, outputSchema: schemaInput })
+    .then(
+      adapter.createStep({
+        id: 'schema-echo',
+        inputSchema: stepInput,
+        outputSchema: schemaInput,
+        execute: async ({ inputData }) => {
+          await audit(inputData.audit, 'schema-echo', { value: inputData.value });
+          return inputData;
+        },
+      }),
+    )
+    .commit();
+}
+export const stepSchemaWorkflow = schemaProbe('step-schema-proof', schemaInput, incrementedInput);
+export const rootSchemaWorkflow = schemaProbe('root-schema-proof', incrementedInput, schemaInput);
+export const invalidSchemaWorkflow = schemaProbe('invalid-schema-proof', schemaInput, positiveIncrementedInput);
+
 const model = process.env.NATIVE_TEST_MODEL;
 export const mastra = new Mastra({
-  workflows: { workflow, retryWorkflow },
+  workflows: { workflow, retryWorkflow, stepSchemaWorkflow, rootSchemaWorkflow, invalidSchemaWorkflow },
   storage,
   logger: false,
   agents: model

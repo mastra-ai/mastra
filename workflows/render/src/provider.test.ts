@@ -1,7 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import { createStep as coreCreateStep, type AnyWorkflow } from '@mastra/core/workflows';
+import {
+  createStep as coreCreateStep,
+  createWorkflow as coreCreateWorkflow,
+  type AnyWorkflow,
+} from '@mastra/core/workflows';
 import { task } from '@renderinc/sdk/workflows';
 import type { TaskContext, TaskDefinition } from '@renderinc/sdk/workflows';
 import { describe, expect, it, vi } from 'vitest';
@@ -73,6 +77,106 @@ function harness(options: Partial<RenderOptions> = {}) {
     },
   };
 }
+
+describe('schema transformations match ordinary Mastra', () => {
+  async function compareInputTransformation(boundary: 'workflow' | 'step') {
+    const transform = z.number().transform(value => value + 1);
+    const inputSchema = boundary === 'workflow' ? transform : z.number();
+    const stepSchema = boundary === 'step' ? transform : z.number();
+    const ordinary = coreCreateWorkflow({
+      id: `ordinary-${boundary}-input`,
+      inputSchema,
+      outputSchema: z.number(),
+      options: { validateInputs: true },
+    })
+      .then(
+        coreCreateStep({
+          id: 'echo',
+          inputSchema: stepSchema,
+          outputSchema: z.number(),
+          execute: async ({ inputData }) => inputData,
+        }),
+      )
+      .commit();
+    new Mastra({ workflows: { ordinary }, logger: false });
+    const expected = await (await ordinary.createRun()).start({ inputData: 1 });
+    expect(expected.status).toBe('success');
+    if (expected.status !== 'success') throw new Error('Ordinary Mastra comparison failed');
+    expect(expected.result).toBe(2);
+
+    const h = harness();
+    const remote = h
+      .createWorkflow({ id: `render-${boundary}-input`, inputSchema, outputSchema: z.number() })
+      .then(
+        h.createStep({
+          id: 'echo',
+          inputSchema: stepSchema,
+          outputSchema: z.number(),
+          execute: async ({ inputData }) => inputData,
+        }),
+      )
+      .commit();
+    h.register(remote);
+    const actual = await (await remote.createRun()).start({ inputData: 1 });
+    expect(actual.status).toBe('success');
+    if (actual.status !== 'success') throw new Error('Render comparison failed');
+    return { actual: actual.result, expected: expected.result };
+  }
+
+  // Known root-input bug in #25345: submit and executeLocal both apply the schema.
+  // Keep this executable reproduction until the root validation contract is fixed.
+  it.fails('known root-input bug: applies workflow input transformation once', async () => {
+    const { actual, expected } = await compareInputTransformation('workflow');
+    expect(actual).toBe(expected);
+  });
+
+  it('applies step input transformation once', async () => {
+    const { actual, expected } = await compareInputTransformation('step');
+    expect(actual).toBe(expected);
+  });
+
+  it('preserves an asynchronous step input transformation', async () => {
+    const h = harness();
+    const transform = async (value: number) => value + 1;
+    const step = h.createStep({
+      id: 'async-transform',
+      inputSchema: z.number().transform(transform),
+      outputSchema: z.number(),
+      execute: async ({ inputData }) => inputData,
+    });
+    const workflow = h
+      .createWorkflow({ id: 'async-input', inputSchema: z.number(), outputSchema: z.number() })
+      .then(step)
+      .commit();
+    h.register(workflow);
+    const result = await (await workflow.createRun()).start({ inputData: 1 });
+    expect(result.status).toBe('success');
+    if (result.status === 'success') expect(result.result).toBe(2);
+  });
+
+  it('rejects invalid step input before dispatching business code', async () => {
+    const h = harness();
+    const execute = vi.fn(async ({ inputData }: { inputData: number }) => inputData);
+    const step = h.createStep({
+      id: 'positive-input',
+      inputSchema: z
+        .number()
+        .positive()
+        .transform(value => value + 1),
+      outputSchema: z.number(),
+      execute,
+    });
+    const workflow = h
+      .createWorkflow({ id: 'invalid-step-input', inputSchema: z.number(), outputSchema: z.number() })
+      .then(step)
+      .commit();
+    h.register(workflow);
+    const result = await (await workflow.createRun()).start({ inputData: -1 });
+    expect(result.status).toBe('failed');
+    expect(execute).not.toHaveBeenCalled();
+    expect(h.dispatched).toEqual([]);
+  });
+});
 
 describe('provider feasibility and graph behavior', () => {
   it.each(['dowhile', 'dountil'] as const)(

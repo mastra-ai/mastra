@@ -102,7 +102,9 @@ export async function executeRemoteStep(
   mastra: Mastra | undefined,
   allowed: readonly string[],
 ): Promise<StepOutcome> {
-  const inputData = json(await validate(step.inputSchema, envelope.input, 'step input'));
+  // Mastra has already validated and transformed this input before authorizing dispatch.
+  // Reapplying the input schema would transform the value again.
+  const inputData = json(envelope.input, 'step input');
   const initialState = json(await validate(step.stateSchema, envelope.state, 'step state'));
   const requestContext = new RequestContext<unknown>(Object.entries(envelope.requestContext));
   encodeRequestContext(requestContext, allowed);

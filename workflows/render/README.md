@@ -6,6 +6,8 @@ An experimental execution provider for Mastra. Developers author Mastra graphs; 
 
 **Reliability boundary:** roots default to zero retries. You can opt into native root retries, which restart the entire graph from its original input and state. They do not resume from snapshots or reuse completed steps. Child tasks can retry independently. Make external effects idempotent wherever retries are enabled; there is no exactly-once guarantee.
 
+**Known schema limitation:** Workflow-level input transformations currently run twice, once before submission and once in the coordinator. Keep workflow-level input schemas free of transformations until that separate validation issue is fixed. Step-level input transformations are applied by Mastra before dispatch; the worker preserves the converted value. See the [regression verification](docs/verification.md#input-schema-regression).
+
 ## Build and install locally
 
 Requirements: Node 22.13 or newer, npm, PostgreSQL for separate caller/worker processes, and Render CLI for local task execution. The verified environment used Node 24.18.0, Render CLI 2.28.0 and PostgreSQL 17.9.

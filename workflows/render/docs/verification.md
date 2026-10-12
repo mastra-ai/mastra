@@ -94,3 +94,19 @@ The in-process suite additionally rejects forged native ancestry, superseded des
 The dedicated native test worker also registers `native-submission-proof`. Never add this probe to an application worker. Invoke it through the Render SDK with `{ mode }`, using `lost-response`, `late-rejected`, `before-dispatch` and `abandoned`. It uses isolated logical IDs and the shared test PostgreSQL store. `lost-response` starts a real Render child but throws before delivering its result to the adapter, then verifies one successful child effect and repair by the late worker claim. `late-rejected` closes parent authority before the real native child starts and verifies zero business effects. The other modes verify rejection before native dispatch and reconciliation of an abandoned reservation. Faults are injected by the fixture; they do not simulate every infrastructure outage.
 
 Unit regressions also cover persistence failure, claim/update races, terminal-state preservation, ancestor expiration/replacement, invalid polling delays and delayed or failed native cancellation.
+
+## Input schema regression
+
+`src/provider.test.ts` compares ordinary Mastra with Render-backed workflow and step input transformations. The step-input case must return `2` for input `1` with an incrementing schema. An asynchronous transform and rejection before business-task dispatch are also covered.
+
+The workflow-input case is explicitly marked `it.fails`: `RenderRun.submit` and the coordinator still both apply the workflow schema. It currently returns `3` where ordinary Mastra returns `2`. This known failure remains separate from the step-input fix; remove the expected-failure marker only when root validation and asynchronous submission behavior are fixed.
+
+`scripts/schema-smoke.ts` uses the native fixture worker and PostgreSQL to repeat the step, invalid-step and known root cases across real task processes. Configure the same `DATABASE_URL`, `APP_BUILD_ID` and `RENDER_WORKFLOW_SLUG` on caller and worker. Run the existing `scripts/native-worker.ts` worker, then:
+
+```sh
+node node_modules/tsx/dist/cli.mjs scripts/schema-smoke.ts
+```
+
+For local development, also set `RENDER_USE_LOCAL_DEV=true` and the same `RENDER_LOCAL_DEV_URL` in both processes. The script stores `.scratch/schema-observations.json` (or `SCHEMA_RESULTS_FILE`) with native task IDs, results and audited business effects. `matchesMastra: false` with `knownFailure: true` explicitly records the unfixed workflow-input case. Successful validation of the step fix must not be described as fixing root input.
+
+The package is private and excluded by the repository changeset CLI's public-package selection. Publication/version wiring remains in `docs/upstream.md`.
