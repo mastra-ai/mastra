@@ -45,7 +45,7 @@ import { TripWire } from '../../../trip-wire';
 import { DurableStepIds } from '../../constants';
 import { assertExecutionNotSuperseded, assertExecutionOwned, isExecutionFenceError } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
-import { globalRunRegistry, markRunActive } from '../../run-registry';
+import { getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -416,7 +416,7 @@ export function createDurableToolCallStep() {
           };
           // After a prior resume, end the resume spans (registry override) — they are the
           // active root for this segment. Otherwise end the threaded originals.
-          const reg = globalRunRegistry.get(runId);
+          const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
           const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
           const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
           if (typedInput.stepSpanData) {
@@ -456,7 +456,7 @@ export function createDurableToolCallStep() {
       // provider tool advertises the snake-case name), then by id, then fall
       // back to the Mastra-wide tool registry (exact name, provider-tool
       // name, then by id). Mirrors the non-durable tool-call step.
-      let registryEntry = globalRunRegistry.get(runId);
+      let registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
       const registryModel = registryEntry?.model as { __metadataOnly?: boolean } | undefined;
       const hasAuthoritativeToolSnapshot =
         !!registryEntry &&
@@ -539,7 +539,7 @@ export function createDurableToolCallStep() {
           logger,
         });
         if (rebuilt) {
-          registryEntry = globalRunRegistry.get(runId);
+          registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
           rebuiltTools = rebuilt.tools;
           rebuiltWorkspace = rebuilt.workspace;
           rebuiltMemory = rebuilt.memory;
@@ -634,19 +634,22 @@ export function createDurableToolCallStep() {
       const memory = registryEntry?.memory ?? rebuiltMemory;
       const workspace = registryEntry?.workspace ?? rebuiltWorkspace;
       const toolPayloadTransform =
-        globalRunRegistry.get(runId)?.toolPayloadTransform ??
+        getRunRegistryEntry(runId, mastra as Mastra | undefined)?.toolPayloadTransform ??
         Object.values(mastra?.listAgents?.() ?? {})
           .find(agent => agent.id === initData.agentId)
           ?.getToolPayloadTransform?.() ??
         mastra?.getToolPayloadTransform?.();
       let threadExists = state?.threadExists ?? false;
 
-      const toolsForTransform = globalRunRegistry.get(runId)?.tools ?? rebuiltTools;
-      const messageList: MessageList | undefined = globalRunRegistry.get(runId)?.messageList;
+      const toolsForTransform = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools ?? rebuiltTools;
+      const messageList: MessageList | undefined = getRunRegistryEntry(
+        runId,
+        mastra as Mastra | undefined,
+      )?.messageList;
       // Hold suspension chunks/events until the engine has saved the suspended
       // snapshot, when the running engine supports that (#26435).
       const publishAfterPersist = async (publish: () => Promise<void>) => {
-        const pending = globalRunRegistry.get(runId)?.pendingSuspensionEvents;
+        const pending = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.pendingSuspensionEvents;
         if (pending) pending.push(publish);
         else await publish();
       };
@@ -1553,7 +1556,7 @@ export function createDurableToolCallStep() {
               // Resolve the mapping tool at completion time: the registry entry
               // may have been rebuilt (or expired) if the task finished after a
               // process restart.
-              const liveEntry = globalRunRegistry.get(runId);
+              const liveEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
               const mappingTool = liveEntry?.tools?.[toolName] ?? tool;
               await applyBackgroundToolResult({
                 params,
@@ -1779,7 +1782,7 @@ export function createDurableToolCallStep() {
         // the raw pre-serialization result for the same reason.
         let providerMetadata = typedInput.providerMetadata;
         let modelOutputComputed: boolean | undefined;
-        const mappingTool = globalRunRegistry.get(runId)?.tools?.[toolName] ?? tool;
+        const mappingTool = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools?.[toolName] ?? tool;
         const toModelOutput = mappingTool.toModelOutput;
         if (toModelOutput) {
           modelOutputComputed = true;

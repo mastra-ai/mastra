@@ -1,6 +1,7 @@
 import { TTLCache } from '@isaacs/ttlcache';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Mastra } from '../../mastra';
+import { unwrapMastraTracingProxy } from '../../observability/context';
 import type { CoreTool } from '../../tools/types';
 import type { MessageList } from '../message-list';
 import type { SaveQueueManager } from '../save-queue';
@@ -41,6 +42,33 @@ export const globalRunRegistry = new TTLCache<string, RunRegistryEntry>({
   },
   noDisposeOnSet: true,
 });
+
+/**
+ * Read a run's registry entry as seen from a workflow step running under `mastra`.
+ *
+ * Entries are keyed only by runId, so when another Mastra instance in this
+ * process reuses the runId, a still-running workflow from the earlier run
+ * would otherwise read (and write its transcript into) the new run's entry.
+ * An entry owned by a different Mastra instance is treated as absent.
+ */
+export function getRunRegistryEntry(runId: string, mastra: Mastra | undefined): RunRegistryEntry | undefined {
+  const entry = globalRunRegistry.get(runId);
+  if (entry?.mastra && mastra && unwrapMastraTracingProxy(entry.mastra) !== unwrapMastraTracingProxy(mastra))
+    return undefined;
+  return entry;
+}
+
+/**
+ * Publish a rebuilt entry for `runId` unless the slot holds another Mastra
+ * instance's live run. Returns whether the entry was stored.
+ */
+export function setRunRegistryEntry(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined): boolean {
+  const current = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
+  if (current?.mastra && mastra && unwrapMastraTracingProxy(current.mastra) !== unwrapMastraTracingProxy(mastra))
+    return false;
+  globalRunRegistry.set(runId, entry);
+  return true;
+}
 
 /** runId -> number of in-flight operations holding the entry alive. */
 const activeRuns = new Map<string, number>();

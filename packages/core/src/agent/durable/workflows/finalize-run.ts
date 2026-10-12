@@ -19,7 +19,7 @@ import { TripWire } from '../../trip-wire';
 import type { StructuredOutputOptions } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
-import { globalRunRegistry } from '../run-registry';
+import { getRunRegistryEntry } from '../run-registry';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
 
@@ -104,7 +104,7 @@ export async function runDurableFinishSideEffects({
   // A connect() worker has a separate process-local registry. Rebuild the
   // agent's runtime dependencies when the terminal step cannot see the
   // processor pipeline or the memory save queue prepared by stream().
-  let registryEntry = globalRunRegistry.get(runId);
+  let registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
   // resolveRuntimeDependencies only writes its rebuild back into the registry when it
   // rehydrated from Mastra, so an already-hydrated entry that was seeded without a save
   // queue would still be missing one afterwards. Keep what it returns and prefer that.
@@ -124,7 +124,7 @@ export async function runDurableFinishSideEffects({
       });
       rebuiltSaveQueueManager = resolved.saveQueueManager;
       rebuiltMemory = resolved.memory;
-      registryEntry = globalRunRegistry.get(runId);
+      registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     } catch (error) {
       effectiveLogger.error('[DurableAgent] Failed to rebuild finish-time dependencies', {
         agentId: initData.agentId,

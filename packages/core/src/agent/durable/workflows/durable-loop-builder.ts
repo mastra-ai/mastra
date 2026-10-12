@@ -20,7 +20,7 @@ import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
-import { globalRunRegistry } from '../run-registry';
+import { getRunRegistryEntry, globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -254,7 +254,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
     const initData = predicateParams.getInitData() as DurableAgenticWorkflowInput;
     const mastra = predicateParams.mastra as Mastra | undefined;
     const runId = state.runId ?? initData.runId;
-    const registryEntry = globalRunRegistry.get(runId);
+    const registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     return {
       runId,
       agentId: state.agentId ?? initData.agentId,
@@ -1001,7 +1001,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({
                 requestContext,
               });
-              const reg = globalRunRegistry.has(initData.runId) ? globalRunRegistry.get(initData.runId) : undefined;
+              const reg = globalRunRegistry.has(initData.runId)
+                ? getRunRegistryEntry(initData.runId, mastra as Mastra | undefined)
+                : undefined;
               const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
               const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
               if (observability) {
