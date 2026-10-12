@@ -11,20 +11,14 @@ describe('processing policy and deterministic result contracts', () => {
       reasoningEffort: 'medium',
       serviceTier: 'default',
       concurrency: 4,
-      budgetUsd: 5,
-      maxPhysicalCalls: 100,
-      draftTurns: 3,
       transientRetries: 2,
     });
     for (const key of [
       'concurrency',
-      'budgetUsd',
-      'maxPhysicalCalls',
       'maxRunElapsedMs',
       'callTimeoutMs',
       'maxInputTokens',
       'maxOutputTokens',
-      'draftTurns',
       'maxDetectorAttemptsPerPayload',
     ])
       expect(executionPolicySchema.safeParse({ ...defaultExecutionPolicy, [key]: 0 }).success).toBe(false);

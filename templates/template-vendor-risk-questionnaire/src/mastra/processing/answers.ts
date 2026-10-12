@@ -1,10 +1,20 @@
+import { generatePhase } from '../agents/runtime.ts';
+import { isStorageFailure } from '../persistence/client.ts';
 import { RequestContext } from '@mastra/core/request-context';
 
-import { bindEvidenceAnswerAgent } from '../agents/evidence-answer.ts';
-import { bindSupportVerifierAgent } from '../agents/support-verifier.ts';
-import { createQuestionEvidenceTools, modelEvidenceExcerpt } from '../tools/question-evidence.ts';
+import { evidenceAnswerAgent } from '../agents/evidence-answer.ts';
+import { supportVerifierAgent } from '../agents/support-verifier.ts';
+import { modelEvidenceExcerpt } from '../evidence/context.ts';
 import type { CanonicalQuestion } from '../contracts/question.ts';
-import { draftSchema, draftResponseSchema, questionResultSchema, verificationSchema } from '../contracts/answer.ts';
+import {
+  draftSchema,
+  compatibleResponseSchema,
+  draftResponseSchema,
+  draftInvariantSchema,
+  interpretationSchema,
+  questionResultSchema,
+  verificationSchema,
+} from '../contracts/answer.ts';
 import type { QuestionResult, Reason, AnswerDraft, Interpretation } from '../contracts/answer.ts';
 import type { ExecutionPolicy } from '../contracts/execution-policy.ts';
 import type { ProcessingStore } from '../persistence/processing.ts';
@@ -12,11 +22,11 @@ import { canonicalJson } from '../intake/source.ts';
 import { validateEvidenceCitation } from '../evidence/snapshot.ts';
 import type { buildEvidenceSnapshot, EvidenceExcerpt } from '../evidence/snapshot.ts';
 import type { InputAdapterContext } from '../intake/source.ts';
-import { providerOptions } from './model.ts';
 import type { ModelFactory } from './model.ts';
 import { createScreening } from './security.ts';
 import { checkLocalContent } from './local-filter.ts';
-import { ProcessingFailure, globalFailures } from './failure.ts';
+import { ProcessingFailure, OutputValidationFailure, globalFailures } from './failure.ts';
+import { telemetryId } from '../observability/privacy.ts';
 
 export interface QuestionEnvironment {
   runId: string;
@@ -43,7 +53,9 @@ export function reviewResult(question: CanonicalQuestion, reason: Reason, attemp
 
 export function trustedQuestionContext(
   questionId: string,
-  environment: Pick<QuestionEnvironment, 'runId' | 'policy' | 'evidence'>,
+  environment: Pick<QuestionEnvironment, 'runId' | 'policy'> & {
+    evidence: Pick<QuestionEnvironment['evidence'], 'record'>;
+  },
 ) {
   const context = new RequestContext();
   context.set('runId', environment.runId);
@@ -65,7 +77,7 @@ export function questionPayload(question: CanonicalQuestion) {
   };
 }
 
-export async function processQuestion(
+async function processQuestionImpl(
   question: CanonicalQuestion,
   environment: QuestionEnvironment,
   interpreted: Interpretation,
@@ -98,26 +110,9 @@ export async function processQuestion(
     }
   };
 
-  async function validateGeneratedToolInput(input: string) {
-    try {
-      await checkLocalContent(input, question.id);
-    } catch {
-      questionFailure = 'SECURITY_BLOCKED';
-      await store.persistSecurity({
-        runId,
-        questionId: question.id,
-        policyVersion: policy.version,
-        boundary: 'tool_result',
-        gate: 'SEC-002',
-        status: 'blocked',
-        reason: 'REGEX_BLOCKED',
-        retryEligible: false,
-      });
-      throw new ProcessingFailure('SECURITY_BLOCKED');
-    }
-  }
-
   const interpretation = interpreted;
+  let nativeStage: 'draft' | 'verification' = 'draft';
+  let nativeTurn = 0;
   try {
     const existing = await store.status(runId);
     if (existing?.run.stopReason) throw new ProcessingFailure(existing.run.stopReason);
@@ -126,15 +121,84 @@ export async function processQuestion(
     if (
       !evidence.record.scope.domains.includes(interpretation.domain) ||
       interpretation.product !== evidence.record.scope.product ||
-      interpretation.environment !== evidence.record.scope.environment
+      interpretation.environment !== evidence.record.scope.environment ||
+      interpretation.timeQualifier.startsWith('unresolved-')
     )
       reasons.push('AMBIGUOUS_APPLICABILITY');
     const delivered = new Map<string, EvidenceExcerpt>();
-    const tools = createQuestionEvidenceTools({ evidence, delivered, screen });
-
-    // Query planning is screened too: generated tool arguments cannot introduce unscreened content.
-    await screen(canonicalJson(interpretation), 'tool_result');
-    const answerer = bindEvidenceAnswerAgent(
+    // Bound the lexical pass with distinct source terms; all original wording stays in the answer input.
+    const sourceWords = interpretation.subparts
+      .join(' ')
+      .replace(
+        /\b(?:what|which|how|does|do|did|is|are|was|were|the|a|an|of|for|to|in|and|or|you|your|we|our|it|its|please|describe|provide|explain|state|currently|current|security|period|answer|distinguish|policy|operational|evidence)\b/gi,
+        ' ',
+      )
+      .replace(/[^\p{L}\p{N}._:-]+/gu, ' ')
+      .trim()
+      .split(/\s+/)
+      .filter(
+        word => ![evidence.record.scope.organizationId, evidence.record.scope.product].includes(word.toLowerCase()),
+      )
+      .map(word => (/(?:ss|us|is)\b/i.test(word) ? word : word.replace(/([a-z]{3,})s\b/gi, '$1')));
+    const lexicalQuery = [...new Set(sourceWords)].reduce((query, word) => {
+      const candidate = query ? `${query} ${word}` : word;
+      return interpretationSchema.shape.query.safeParse(candidate).success ? candidate : query;
+    }, '');
+    const queries = [...new Set([interpretation.query, lexicalQuery].filter(Boolean))];
+    for (const query of queries) {
+      for (const { excerpt } of await evidence.search(query, 3)) {
+        const previous = delivered.get(excerpt.id);
+        const original = evidence.record.excerpts.find(candidate => candidate.id === excerpt.id);
+        if (
+          !original ||
+          canonicalJson(original) !== canonicalJson(excerpt) ||
+          (previous && canonicalJson(modelEvidenceExcerpt(previous)) !== canonicalJson(modelEvidenceExcerpt(excerpt)))
+        )
+          throw new ProcessingFailure('INVALID_ATTRIBUTION');
+        try {
+          await checkLocalContent(canonicalJson(modelEvidenceExcerpt(excerpt)), question.id);
+        } catch {
+          await store.persistSecurity({
+            runId,
+            questionId: question.id,
+            policyVersion: policy.version,
+            boundary: 'evidence',
+            gate: 'SEC-002',
+            status: 'blocked',
+            reason: 'REGEX_BLOCKED',
+            retryEligible: false,
+          });
+          throw new ProcessingFailure('SECURITY_BLOCKED');
+        }
+        delivered.set(excerpt.id, excerpt);
+      }
+    }
+    const applicability = {
+      product: evidence.record.scope.product,
+      environment: evidence.record.scope.environment,
+      asOf: evidence.record.asOf,
+    };
+    const answerInput = canonicalJson({
+      question: questionInput,
+      interpretation,
+      required: { domain: interpretation.domain, subparts: interpretation.subparts },
+      applicability,
+      excerpts: [...delivered.values()].map(modelEvidenceExcerpt),
+    });
+    await screen(answerInput, 'tool_result');
+    for (const excerpt of delivered.values()) {
+      try {
+        if (
+          canonicalJson(modelEvidenceExcerpt(await evidence.read(excerpt.id))) !==
+          canonicalJson(modelEvidenceExcerpt(excerpt))
+        )
+          throw new ProcessingFailure('INVALID_ATTRIBUTION');
+      } catch {
+        throw new ProcessingFailure('INVALID_ATTRIBUTION');
+      }
+    }
+    const draftResponse = await generatePhase(
+      evidenceAnswerAgent,
       {
         runId,
         questionId: question.id,
@@ -142,24 +206,38 @@ export async function processQuestion(
         store,
         provider: models('draft', question.id),
         phase: 'draft',
-        maxTurns: policy.draftTurns,
+        maxTurns: 1,
         onAttempt,
         beforeCall,
-        validateOutput: value => draftResponseSchema.parse(value),
-        validateToolInput: validateGeneratedToolInput,
+        validateOutput: value => {
+          const parsed = draftResponseSchema.safeParse(value);
+          if (parsed.success) return parsed.data;
+          const invariants = [
+            ...new Set(
+              parsed.error.issues.flatMap(issue => {
+                const invariant = draftInvariantSchema.safeParse(
+                  issue.code === 'custom' ? issue.params?.invariant : undefined,
+                );
+                return invariant.success ? [invariant.data] : [];
+              }),
+            ),
+          ];
+          throw new OutputValidationFailure(
+            'CALLBACK_SCHEMA',
+            invariants.length
+              ? { schemaInvariants: invariants, schemaIssueCount: parsed.error.issues.length }
+              : undefined,
+          );
+        },
+        onFinish: event => {
+          nativeTurn = event.turn;
+        },
       },
       requestContext,
-      tools,
+      answerInput,
+      draftResponseSchema,
     );
-    const response = await answerer.generate(canonicalJson({ question: questionInput, interpretation }), {
-      requestContext,
-      structuredOutput: { schema: draftResponseSchema, errorStrategy: 'strict' },
-      maxSteps: policy.draftTurns,
-      modelSettings: { maxRetries: 0 },
-      providerOptions,
-    });
     beforeCall();
-    const draftResponse = draftResponseSchema.parse(response.object);
     await screen(canonicalJson(draftResponse), 'draft');
     const draft =
       delivered.size === 0
@@ -214,31 +292,12 @@ export async function processQuestion(
     if (draft.confidence < policy.confidenceThreshold) reasons.push('LOW_CONFIDENCE');
     if (interpretation.subparts.some(subpart => !draft.coveredSubparts.includes(subpart)))
       reasons.push('PARTIAL_EVIDENCE');
-    if (question.answerConstraints.maxChars && draft.text.length > question.answerConstraints.maxChars)
-      reasons.push('INCOMPATIBLE_RESPONSE');
-    if (draft.value !== 'unknown') {
-      const allowedAliases =
-        draft.value === 'not_applicable'
-          ? ['not_applicable', 'n/a', 'na']
-          : draft.value === 'yes'
-            ? ['yes', 'true', '1']
-            : draft.value === 'no'
-              ? ['no', 'false', '0']
-              : [draft.value];
-      if (
-        question.answerType === 'free_text'
-          ? draft.responseOption !== null
-          : !question.answerConstraints.options?.some(
-              option =>
-                option.value === draft.responseOption &&
-                (question.answerType === 'single_choice' || allowedAliases.includes(option.value.toLowerCase())),
-            )
-      )
-        reasons.push('INCOMPATIBLE_RESPONSE');
-    }
+    if (!compatibleResponseSchema(question).safeParse(draft).success) reasons.push('INCOMPATIBLE_RESPONSE');
     // An invalid citation never enters the verifier context as purported support.
     if (draft.value !== 'unknown' && !reasons.includes('INVALID_ATTRIBUTION')) {
-      const verifier = bindSupportVerifierAgent(
+      nativeStage = 'verification';
+      const verification = await generatePhase(
+        supportVerifierAgent,
         {
           runId,
           questionId: question.id,
@@ -249,26 +308,23 @@ export async function processQuestion(
           maxTurns: 1,
           onAttempt,
           beforeCall,
-          validateOutput: value => verificationSchema.parse(value),
         },
         requestContext,
-      );
-      const supportResponse = await verifier.generate(
         canonicalJson({
           question: questionInput,
-          interpretation,
-          draft: draftResponse,
+          applicability,
+          draft: {
+            questionId: draftResponse.questionId,
+            domain: draftResponse.domain,
+            value: draftResponse.value,
+            text: draftResponse.text,
+            claims: draftResponse.claims,
+            citations: draftResponse.citations.map(c => ({ id: c.id, excerptId: c.excerptId })),
+          },
           excerpts: [...delivered.values()].map(modelEvidenceExcerpt),
         }),
-        {
-          requestContext,
-          structuredOutput: { schema: verificationSchema, errorStrategy: 'strict' },
-          maxSteps: 1,
-          modelSettings: { maxRetries: 0 },
-          providerOptions,
-        },
+        verificationSchema,
       );
-      const verification = verificationSchema.parse(supportResponse.object);
       if (
         [...verification.supportedClaimIds, ...verification.conflictedClaimIds].some(
           id => !draft.claims.some(claim => claim.id === id),
@@ -295,6 +351,10 @@ export async function processQuestion(
     await store.persistResult(runId, result);
     return result;
   } catch (error) {
+    if (isStorageFailure(error) || (error instanceof ProcessingFailure && error.code === 'STORAGE_FAILURE')) {
+      store.stopAdmission();
+      await store.stop(runId, 'STORAGE_FAILURE');
+    }
     const state = await store.status(runId);
     const code =
       state?.run.stopReason ??
@@ -304,6 +364,27 @@ export async function processQuestion(
         : (state?.usage.filter(usage => usage.questionId === question.id && usage.reason).at(-1)?.reason ??
           'INVALID_MODEL_OUTPUT'));
     if (globalFailures.includes(code)) await store.stop(runId, code);
+    const recorded = await store.diagnostics(runId);
+    const own = recorded.some(d => d.questionId === telemetryId(question.id) && d.origin !== 'sibling_cancelled');
+    if (state?.run.stopReason && !own)
+      await store.persistDiagnostic(runId, {
+        questionId: telemetryId(question.id)!,
+        at: new Date().toISOString(),
+        phase: nativeStage,
+        origin: 'sibling_cancelled',
+        category: 'RUN_STOPPED',
+        reason: code,
+      });
+    else if (code === 'INVALID_MODEL_OUTPUT' && !own)
+      await store.persistDiagnostic(runId, {
+        questionId: telemetryId(question.id)!,
+        at: new Date().toISOString(),
+        phase: nativeStage,
+        origin: 'downstream',
+        category: 'NATIVE_STRUCTURED_OUTPUT',
+        reason: code,
+        turn: nativeTurn,
+      });
     const result = { ...reviewResult(question, code, attempts), interpretation };
     await store.persistResult(runId, result);
     return result;
@@ -323,4 +404,17 @@ export function unknownDraft(questionId: string, domain: string): AnswerDraft {
     confidence: 0,
     limitations: ['No supporting evidence was returnedExcerpt.'],
   });
+}
+
+export async function processQuestion(
+  question: CanonicalQuestion,
+  environment: QuestionEnvironment,
+  interpreted: Interpretation,
+): Promise<QuestionResult> {
+  const release = environment.store.trackWork();
+  try {
+    return await processQuestionImpl(question, environment, interpreted);
+  } finally {
+    release();
+  }
 }

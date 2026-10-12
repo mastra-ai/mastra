@@ -261,7 +261,6 @@ describe('approved evidence extraction and contained snapshots', () => {
   it('blocks_workspace_escape_and_agent_source_mutation', async () => {
     const manifest = await generateCorpus(root),
       snapshot = await build(manifest);
-    expect(Object.keys(snapshot.tools).sort()).toEqual(['evidence_read', 'evidence_search']);
     expect(snapshot).not.toHaveProperty('workspace');
     expect(snapshot).not.toHaveProperty('filesystem');
     expect(snapshot).not.toHaveProperty('index');
@@ -270,13 +269,6 @@ describe('approved evidence extraction and contained snapshots', () => {
     await expect(snapshot.read('/etc/passwd')).rejects.toMatchObject({ code: 'READ_FAILED' });
     await expect(snapshot.search('MFA', 11)).rejects.toBeDefined();
     await expect(snapshot.search('x'.repeat(1001))).rejects.toBeDefined();
-    const validation = await snapshot.tools.evidence_read.inputSchema!['~standard'].validate({
-      id: 'access:1:0',
-      path: '../other',
-      write: 'unsafe',
-    });
-    expect(validation.issues).toBeDefined();
-
     const outside = resolve(root, 'outside-secret.md');
     await writeFile(outside, 'EXCLUDED_CANARY_TEXT');
     await symlink(outside, resolve(root, 'evidence', 'escape.md'));

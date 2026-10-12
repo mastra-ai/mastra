@@ -1,6 +1,6 @@
 # Grounded draft processing
 
-Draft processing consumes a previously persisted questionnaire intake and evidence snapshot. It preserves original wording and response constraints. The local OS operator supplies the evidence root and the same trusted manifest used for intake. Original evidence bytes, validity, transfer permissions and snapshot identity are checked again before model work.
+Drafting consumes a persisted questionnaire intake and approved evidence snapshot. Before model work, the backend checks source bytes, validity, transfer permission and snapshot identity against the trusted manifest. Original wording and response constraints remain authoritative.
 
 ## Start and inspect
 
@@ -11,13 +11,13 @@ npm run draft -- start --run-id review-1 --manifest /path/to/manifest.json --roo
 npm run draft -- status --run-id review-1
 ```
 
-The first command persists processing identity, input/evidence digests and the execution policy before any provider request. Its summary reports the actual processing state and safe stop reason; a failed processing run exits unsuccessfully even when the workflow engine completed. The second reopens local state without model calls. Its summary contains safe question IDs, routing reasons, attempts and usage. Supporting answer text and source excerpts stay in the restricted local `.runtime/vrq.db` record; they are not printed to general CLI logs. Runtime data is not encrypted by this template.
+The first command persists run identity and policy before provider requests. It reports processing state and safe stop reasons, exiting unsuccessfully for a failed run. Status reopens state without model calls and reports question IDs, routes, attempts and usage. Supporting text stays in the restricted local database.
 
-A processing identity can be started once. A duplicate start is rejected, including concurrent starts. A changed source or policy requires a newly identified intake/evidence run. Opening status does not retry a failed call or spend additional tokens. Interrupted processing retains durable reservations and completed results; automatic restarting is disabled. Use the parent questionnaire workflow for persistent review and approved export, as described in [review and exports](review.md).
+A processing identity starts once. Changed sources or policy require a new intake/evidence run. Interrupted processing retains completed results and usage reservations; status does not restart it. Use the parent questionnaire workflow for persistent review and approved export, as described in [review and exports](review.md).
 
 ## Mastra Studio
 
-Run `npm run dev`, open [Mastra Studio](http://localhost:4111), and select **vendor-risk-drafts**. Supply this input using paths on the local machine:
+Run `npm run dev`, open [Mastra Studio](http://localhost:4111), and select **vendor-risk-drafts** after completing intake:
 
 ```json
 {
@@ -27,30 +27,38 @@ Run `npm run dev`, open [Mastra Studio](http://localhost:4111), and select **ven
 }
 ```
 
-The run must already have intake and approved evidence persisted through the intake CLI. Output contains original-order draft results and review reasons. `awaiting_review` means drafts are ready for human review, not approved for disclosure. The separate **vendor-risk-intake** workflow confirms an explicitly mapped local source, and `npm run dev` prepares absent demonstration data. See [review and exports](review.md).
+Output contains original-order drafts and review reasons. `awaiting_review` means drafts are ready for human review. The **vendor-risk-questionnaire** parent adds the persistent review checkpoint and approved export.
 
-Agent factories and prompts live under `src/mastra/agents`. The workflow composer is `src/mastra/workflows/vendor-risk-drafts.ts`; its steps, contracts and per-instance runtime live in the adjacent `vendor-risk-drafts` folder. Evidence tool builders live under `src/mastra/tools`. The lightweight Mastra index registers the guarded workflow; agent factories require a run-bound model configuration and are not registered as standalone Studio agents.
+## Interpretation and retrieval
 
-## Grounding and review reasons
+Interpretation uses immutable question and instruction spans. Model choices reference exact source text; trusted code reconstructs order and subparts. Missing, repeated, stale or foreign identities fail validation. Domain, product, environment and time qualifiers remain separate applicability dimensions. Ambiguous qualifiers require review. Repeated instructions appear once in the prompt registry while each question retains its source binding.
 
-Questions pass local secrets/PII checks and strict native prompt-injection/PII detectors before classification. Classification uses one pass when inputs fit, otherwise bounded batches. Each nested question workflow has a fresh trusted context and at most three drafting turns. Only run-scoped evidence search/read tools are available. Every tool argument, retrieved excerpt and serialized tool response is screened before subsequent model consumption. Drafts are screened before a fresh support-verification call.
+The backend uses a run-scoped Mastra Workspace BM25 index. It searches the selected source span and a lexical query derived from all immutable subparts, with up to three hits each. The second query removes common instruction words and configured organization/product names, with limited plural normalization. Results are deduplicated by excerpt identity. Negative facts, conflicting records and source qualifications remain distinct. Retrieval is lexical and can miss relevant paraphrases or contradictions.
 
-Citations must bind to excerpts actually returned to that question, eligible source metadata, immutable hashes, original locators and matching supporting text. Each material claim references citations. Policy evidence does not by itself prove operational execution, certification or contractual guarantees. These checks preserve provenance; semantic support still depends on fallible model judgment.
+Raw text, locators and hashes remain citation authority. A separate context projection carries exact JSON paths, branch/ancestor qualifications and table row/column relationships. Contextual sibling values cannot be cited through another field's raw anchor. The complete enriched excerpt must fit its 4,000-byte context limit; an oversized candidate produces `SOURCE_UNAVAILABLE` without truncation. Canonical intake, other questions and original citation validation remain available.
 
-Supported `yes`, `no`, `partial`, `not_applicable` and `free_text` drafts retain qualifications and constraints. Missing evidence becomes `unknown` with no factual assertion. Missing subparts, conflict, unsupported claims or commitments, invalid attribution, non-shareable disclosure, incompatible source response choices, ambiguous scope and low confidence produce explicit reasons. Equivalent-answer inconsistencies flag every affected answer while preserving its text; comparisons distinguish domain, product, environment and time qualifiers.
+## Screening and answering
 
-Equivalent answers in the same scope and time undergo bounded structured factual comparisons, including facts inside `free_text`, `yes` and `partial` answers. Harmless paraphrases do not by themselves imply conflict. Comparison guards and verifier calls consume the same run limits; a failed or uncompleted comparison adds explicit review reasons while retaining completed drafts. Security-blocked comparison content is discarded. Unrelated successful siblings remain persisted.
+Questions and each selected excerpt pass local secret/PII checks. Native injection and PII detectors screen the complete interpretation catalogue and assembled answer context before transfer. The answer context includes question metadata, instructions, applicability and all selected excerpts. Detector errors fail closed. Screening assembled content remains fallible, including when malicious text is mixed with benign material.
 
-The routes are `draft_eligible`, `review_required` and `security_review_required`. Eligibility is a candidate drafting result and never grants final release. Security-blocked payloads are discarded from draft results and recorded using safe IDs/codes. Completed siblings remain persisted when another question fails. Global authentication, model/API compatibility, storage, run time or budget failures stop new work and preserve available results with explicit gaps.
+The answer agent receives one structured request with no tools. Unexpected tool calls are rejected. The full provider input, including native schema/system overhead, must fit the configured envelope. Snapshot bytes are checked again after screening. Drafts pass native detectors and an independent support verifier before becoming eligible for review. Consistency checks compare equivalent questions without replacing their drafts.
 
-## Execution policy and usage
+Citations must match eligible source versions, hashes, locators and literal excerpts. Policy evidence proves policy, not operational execution. Unsupported claims, missing evidence, incompatible responses, restricted disclosures and ambiguous applicability require review. Unknown answers remain explicit. The routes are `draft_eligible`, `review_required` and `security_review_required`; none grants final release.
 
-The default model is `openai/gpt-6.1-sol`, explicitly routed through Responses with medium reasoning and Standard processing. There is no fallback. Offline tests use controlled provider streams through the production Agents, processors, tools, workflows and local persistence. Provider account access and live semantic quality require separate live verification.
+Successful siblings remain persisted when a question fails. Global authentication, model compatibility, storage or configured run-limit failures stop new work. Diagnostics retain only bounded categories, hashed correlations and counts; raw validation messages and rejected outputs are excluded from telemetry. See [evaluation and metrics](evaluation.md).
 
-Defaults are concurrency four, an estimated USD 5 run envelope, 100 physical calls, 30 minutes per run, 60 seconds per request/stream, 8,000 input tokens and 4,000 output tokens including reasoning per call. Drafting allows three turns and support verification one call per question. Each equivalent answer pair allows one separate consistency comparison turn. Transient provider failures allow at most two additional attempts. Detector invocations share a six-attempt payload bound; the wrapper adds no detector retry layer. All native/internal calls, consistency guards/comparisons and failed physical attempts reserve against the same durable run authority before transfer. The total token envelope is finite through the physical-call cap multiplied by per-call limits.
+## Execution policy
 
-Input and streamed output use conservative UTF-8 byte bounds before replay, and observed provider tokens are checked too. The wrapper buffers responses, validates requested JSON schemas, and removes raw reasoning, request/response metadata, warnings and provider errors before native processor consumption. Detector exceptions and timeouts fail closed. Local regex filtering is incomplete; semantic PII detection can itself transfer remaining payload content to the provider. Neither a detector pass nor a confidence score grants source, tool or release authority.
+Choose budget, call count and elapsed-time limits for your use case. Supply the complete validated policy with `--policy /path/to/policy.json`, the Studio workflow's `policy` field, or `.runtime/profile.json` for the parent workflow. Defaults are examples, not a recommended spend allowance. Every detector, interpretation, answer, verification and retry call contributes to usage; the default 100 calls can leave gaps in the 24-question demo.
 
-Reservations use Standard rates recorded on 2026-10-10: USD 2 per million input tokens and USD 10 per million output tokens. Observed usage reconciles each physical reservation once, including reasoning in total output. Missing, malformed or failed-call usage conservatively retains the reservation. Reservations left in progress after interruption also retain their cost estimate. This envelope is an application estimate, not a guaranteed provider billing cap; provider project spend controls remain separate. Rates require refresh before release.
+`budgetUsd`, `maxPhysicalCalls` and `maxRunElapsedMs` accept user-selected positive finite values. `rates` accepts an ISO date and nonnegative input/output prices per million tokens. Update the historical example rates for your provider account. Concurrency, per-call input/output size, retries and detector attempts retain bounded validation to protect local execution.
 
-The 100-call default can exhaust a larger questionnaire, including the 24-question fictional demo, because detector, classification, tool, draft and verification calls all count. Remaining questions retain explicit budget gaps. To configure a separately identified run, copy the complete validated policy from `src/mastra/contracts/execution-policy.ts` into a JSON file and pass `--policy /path/to/policy.json`, or supply `policy` in Studio. Limits stay finite and provider/model configuration remains explicit. Increasing limits can increase estimated spend.
+Usage reconciles once per physical call. Missing or malformed usage retains a conservative reservation; reasoning is included in output usage. Estimated cost is not a provider billing cap. A persisted run retains its original policy through review; use a new run to change it.
+
+## Extend a phase
+
+Agent definitions live under `src/mastra/agents`; workflow steps and runtime composition live under `src/mastra/workflows/vendor-risk-drafts`. Use `generatePhase(agent, options, context, prompt, schema)` for business phases. It binds backend authority, validates the response before exposing it to native consumers, and calls Mastra `Agent.generate` with strict structured output, one step, no tools and no additional native retries. Direct Studio agent prompts or forged request context cannot authorize provider execution.
+
+Keep schema refinements in the supplied schema. `compatibleResponseSchema(question)` enforces the original length and choice constraints for both generated drafts and reviewer corrections. Citation eligibility, current source bytes and reviewer authority remain execution checks.
+
+The provider boundary retains stream completion checks, duplicate JSON-key rejection, sanitized diagnostics and physical-attempt accounting. It accepts the installed router's flat and nested usage formats; malformed or absent usage stays uncertain. Application retries remain in this boundary so every physical attempt is recorded. Native injection and PII processors keep their own strict detector behavior and share the payload attempt limit.

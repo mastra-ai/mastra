@@ -36,15 +36,27 @@ export const demoQuestions = [
 ] as const;
 export function questionnaireRows(): string[][] {
   return [
-    ['Reference', 'Inquiry', 'Response kind', 'Allowed values', 'Domain', 'Guidance', 'Buyer response'],
+    [
+      'Reference',
+      'Inquiry',
+      'Response kind',
+      'Allowed values',
+      'Domain',
+      'Guidance',
+      'Buyer response',
+      'Explanation',
+      'Evidence',
+    ],
     ...demoQuestions.map(([domain, question], i) => [
       `VRQ-${String(i + 1).padStart(3, '0')}`,
       question,
-      [11, 17, 19, 20].includes(i) ? 'free_text' : 'boolean',
-      [11, 17, 19, 20].includes(i) ? '' : 'yes|no|partial|not_applicable|unknown',
+      [11, 14, 17, 19, 20].includes(i) ? 'free_text' : 'boolean',
+      [11, 14, 17, 19, 20].includes(i) ? '' : 'yes|no|partial|not_applicable|unknown|withheld',
       domain,
       'Answer for Northstar Tasks production; distinguish policy from operational evidence.',
       i === 0 ? 'Buyer supplied YES, unverified' : '',
+      '',
+      '',
     ]),
   ];
 }

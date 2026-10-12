@@ -1,12 +1,13 @@
+import { generatePhase } from '../agents/runtime.ts';
+import { isStorageFailure } from '../persistence/client.ts';
 import { z } from 'zod';
 
-import { bindAnswerConsistencyAgent } from '../agents/answer-consistency.ts';
+import { answerConsistencyAgent } from '../agents/answer-consistency.ts';
 import { questionResultSchema } from '../contracts/answer.ts';
 import type { QuestionResult, Reason } from '../contracts/answer.ts';
-import { canonicalJson } from '../intake/source.ts';
+import { canonicalJson, sha256 } from '../intake/source.ts';
 import { trustedQuestionContext } from './answers.ts';
 import type { QuestionEnvironment } from './answers.ts';
-import { providerOptions } from './model.ts';
 import { createScreening } from './security.ts';
 import { ProcessingFailure, globalFailures } from './failure.ts';
 
@@ -81,30 +82,35 @@ export async function flagInconsistentAnswers(inputResults: QuestionResult[], en
               limitations: answer.draft!.limitations,
             })),
           });
+          const digest = sha256(comparisonPayload),
+            cached = await environment.store.readConsistency(environment.runId, digest);
+          if (cached !== undefined) {
+            if (cached) await markForReview(questionIds, 'INCONSISTENT_ANSWERS');
+            continue;
+          }
           const screenComparison = createScreening({ ...environment, questionId, requestContext });
           await screenComparison(comparisonPayload, 'draft');
 
-          const verifier = bindAnswerConsistencyAgent(
+          const comparison = await generatePhase(
+            answerConsistencyAgent,
             {
               ...environment,
               questionId,
               phase: 'verification',
               provider: environment.models('verification', questionId),
               maxTurns: 1,
-              validateOutput: value => comparisonSchema.parse(value),
             },
             requestContext,
+            comparisonPayload,
+            comparisonSchema,
           );
-          const response = await verifier.generate(comparisonPayload, {
-            requestContext,
-            structuredOutput: { schema: comparisonSchema, errorStrategy: 'strict' },
-            maxSteps: 1,
-            modelSettings: { maxRetries: 0 },
-            providerOptions,
-          });
-          if (comparisonSchema.parse(response.object).materialContradiction)
-            await markForReview(questionIds, 'INCONSISTENT_ANSWERS');
+          await environment.store.persistConsistency(environment.runId, digest, comparison.materialContradiction);
+          if (comparison.materialContradiction) await markForReview(questionIds, 'INCONSISTENT_ANSWERS');
         } catch (error) {
+          if (isStorageFailure(error) || (error instanceof ProcessingFailure && error.code === 'STORAGE_FAILURE')) {
+            environment.store.stopAdmission();
+            await environment.store.stop(environment.runId, 'STORAGE_FAILURE');
+          }
           const state = await environment.store.status(environment.runId);
           const failureReason =
             state?.run.stopReason ??

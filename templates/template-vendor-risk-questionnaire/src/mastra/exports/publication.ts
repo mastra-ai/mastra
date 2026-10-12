@@ -5,7 +5,9 @@ import type { ExportManifest, ReviewState } from '../contracts/review.ts';
 import { openReviewStore } from '../persistence/review.ts';
 import { openProcessingStore } from '../persistence/processing.ts';
 import { canonicalJson, sha256 } from '../intake/source.ts';
-import { renderBundle, validateBundleContent } from './catalog.ts';
+import { readCompletion, prepareCompletion, sourceBytes } from '../persistence/completion.ts';
+import { planDigest } from '../completion/plan.ts';
+import { writeDocument, validateDocument, screenRetainedPackage } from '../completion/document.ts';
 import { revalidateEvidence, validateProjectionText } from '../review/validation.ts';
 import type { ReviewOptions } from '../review/service.ts';
 
@@ -37,35 +39,35 @@ export function bundlePath(root: string, s: Pick<ReviewState, 'runId' | 'revisio
 }
 export async function verifyPublished(path: string, s: ReviewState): Promise<ExportManifest> {
   const stat = await lstat(path);
-  if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('UNSAFE_BUNDLE');
-  const manifest = exportManifestSchema.parse(JSON.parse(await readFile(resolve(path, 'manifest.json'), 'utf8')));
-  if (s.stagedManifest && canonicalJson(manifest) !== canonicalJson(s.stagedManifest))
-    throw new Error('PUBLICATION_HASH_MISMATCH');
+  if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('UNSAFE_PUBLICATION');
+  const manifest = s.stagedManifest ?? s.manifest;
+  if (!manifest) throw new Error('MISSING_PUBLICATION_BINDING');
   if (
     manifest.runId !== s.runId ||
     manifest.revision !== s.revision ||
     manifest.approvalId !== s.projection?.approvalId ||
     manifest.projectionDigest !== sha256(canonicalJson(s.projection))
   )
-    throw new Error('BUNDLE_BINDING_MISMATCH');
-  if (
-    canonicalJson((await readdir(path)).sort()) !==
-    canonicalJson([...manifest.files.map(f => f.name), 'manifest.json'].sort())
-  )
-    throw new Error('INCOMPLETE_BUNDLE');
+    throw new Error('PUBLICATION_BINDING_MISMATCH');
+  const expectedNames =
+    manifest.schemaVersion === 1
+      ? [...manifest.files.map(f => f.name), 'manifest.json']
+      : manifest.files.map(f => f.name);
+  if (canonicalJson((await readdir(path)).sort()) !== canonicalJson(expectedNames.sort()))
+    throw new Error('INCOMPLETE_PUBLICATION');
   for (const f of manifest.files) {
     const file = resolve(path, f.name),
       stat = await lstat(file);
     if (stat.isSymbolicLink() || !stat.isFile()) throw new Error('UNSAFE_ARTIFACT');
-    const b = await readFile(file);
-    if (b.length !== f.bytes || sha256(b) !== f.sha256) throw new Error('ARTIFACT_HASH_MISMATCH');
+    const bytes = await readFile(file);
+    if (bytes.length !== f.bytes || sha256(bytes) !== f.sha256) throw new Error('ARTIFACT_HASH_MISMATCH');
   }
-  await validateBundleContent(
-    new Map(await Promise.all(manifest.files.map(async f => [f.name, await readFile(resolve(path, f.name))] as const))),
-    s.projection!,
-  );
-  const json = projectionSchema.parse(JSON.parse(await readFile(resolve(path, 'completed.json'), 'utf8')));
-  if (canonicalJson(json) !== canonicalJson(s.projection)) throw new Error('PROJECTION_MISMATCH');
+  if (manifest.schemaVersion === 1) {
+    const legacy = exportManifestSchema.parse(JSON.parse(await readFile(resolve(path, 'manifest.json'), 'utf8')));
+    if (canonicalJson(legacy) !== canonicalJson(manifest)) throw new Error('PUBLICATION_HASH_MISMATCH');
+    const json = projectionSchema.parse(JSON.parse(await readFile(resolve(path, 'completed.json'), 'utf8')));
+    if (canonicalJson(json) !== canonicalJson(s.projection)) throw new Error('PROJECTION_MISMATCH');
+  }
   return manifest;
 }
 export interface ExportOptions extends ReviewOptions {
@@ -77,6 +79,12 @@ export async function publishExport(runId: string, options: ExportOptions) {
     processing = await openProcessingStore(options.databaseUrl);
   let state: ReviewState | undefined, temp: string | undefined;
   try {
+    const completion = await readCompletion(options.databaseUrl, runId);
+    if (completion.version === 1) throw new Error('LEGACY_RUN_READ_ONLY');
+    const plan = await prepareCompletion(options.databaseUrl, runId);
+    const intake = await processing.readIntake(runId);
+    if (!intake) throw new Error('SOURCE_UNAVAILABLE');
+    const original = sourceBytes(intake.sourceBytes);
     state = await review.claimExport(runId);
     let evidence;
     try {
@@ -86,35 +94,54 @@ export async function publishExport(runId: string, options: ExportOptions) {
       throw new Error('SOURCE_DRIFT');
     }
     await validateProjectionText(state.projection!, evidence);
+    await screenRetainedPackage(original, plan.format, evidence);
     const parent = await containedDirectory(options.runtimeRoot, resolve(options.runtimeRoot, 'exports', runId), true),
       destination = bundlePath(options.runtimeRoot, state);
     try {
       await lstat(destination);
       const manifest = await verifyPublished(destination, state);
-      if (state.state === 'exported') return { state, manifest, path: destination };
-      return { state: await review.finishExport(runId, state.claimToken!, manifest), manifest, path: destination };
+      if (
+        manifest.schemaVersion !== 2 ||
+        manifest.sourceSha256 !== plan.sourceSha256 ||
+        manifest.mappingDigest !== plan.mappingDigest ||
+        manifest.writePlanDigest !== planDigest(plan)
+      )
+        throw new Error('PUBLICATION_BINDING_MISMATCH');
+      const output = await readFile(resolve(destination, manifest.files[0]!.name));
+      validateDocument(original, output, plan, state.projection!);
+      await screenRetainedPackage(output, plan.format, evidence);
+      if (state.state === 'exported') return { state, manifest, path: resolve(destination, manifest.files[0]!.name) };
+      return {
+        state: await review.finishExport(runId, state.claimToken!, manifest),
+        manifest,
+        path: resolve(destination, manifest.files[0]!.name),
+      };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     }
     if (state.state === 'exported') throw new Error('MISSING_EXPORTED_BUNDLE');
-    const files = await renderBundle(state.projection!);
+    const bytes = writeDocument(original, plan, state.projection!);
+    await screenRetainedPackage(bytes, plan.format, evidence);
     temp = await mkdtemp(resolve(parent, '.staging-'));
+    const name = `answered.${plan.format}` as const;
     const manifest = exportManifestSchema.parse({
-      schemaVersion: 1,
+      schemaVersion: 2,
       runId,
       revision: state.revision,
       approvalId: state.projection!.approvalId,
       projectionDigest: sha256(canonicalJson(state.projection)),
       quality: state.projection!.quality,
-      files: [...files].map(([name, bytes]) => ({ name, sha256: sha256(bytes), bytes: bytes.length })),
+      sourceSha256: plan.sourceSha256,
+      mappingDigest: plan.mappingDigest,
+      writePlanDigest: planDigest(plan),
+      format: plan.format,
+      files: [{ name, sha256: sha256(bytes), bytes: bytes.length }],
     });
-    for (const [name, bytes] of files) {
-      await options.fault?.('write');
-      await writeFile(resolve(temp, name), bytes, { flag: 'wx', mode: 0o600 });
-    }
-    await writeFile(resolve(temp, 'manifest.json'), canonicalJson(manifest), { flag: 'wx', mode: 0o600 });
-    await verifyPublished(temp, state);
+    await options.fault?.('write');
+    await writeFile(resolve(temp, name), bytes, { flag: 'wx', mode: 0o600 });
+    await verifyPublished(temp, { ...state, stagedManifest: manifest });
     await revalidateEvidence(processing, runId, options);
+    await prepareCompletion(options.databaseUrl, runId);
     const latest = await review.read(runId);
     if (latest?.claimToken !== state.claimToken || latest.digest !== state.digest) throw new Error('STALE_EXPORT');
     state = await review.prepareExport(runId, state.claimToken!, manifest);
@@ -122,7 +149,11 @@ export async function publishExport(runId: string, options: ExportOptions) {
     temp = undefined;
     await options.fault?.('published');
     await options.fault?.('state');
-    return { state: await review.finishExport(runId, state.claimToken!, manifest), manifest, path: destination };
+    return {
+      state: await review.finishExport(runId, state.claimToken!, manifest),
+      manifest,
+      path: resolve(destination, manifest.files[0]!.name),
+    };
   } catch (error) {
     if (state?.claimToken) await review.releaseExport(runId, state.claimToken).catch(() => {});
     throw error;

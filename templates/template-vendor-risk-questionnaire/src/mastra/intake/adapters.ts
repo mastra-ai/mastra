@@ -113,14 +113,25 @@ export function officeAdapter(format: 'xlsx' | 'docx'): QuestionnaireInputAdapte
           const first = r.rows[0];
           if (
             (r.kind === 'sheet' || r.kind === 'table') &&
-            first?.map(c => c?.text).join('|') ===
-              'Reference|Inquiry|Response kind|Allowed values|Domain|Guidance|Buyer response'
+            [
+              'Reference|Inquiry|Response kind|Allowed values|Domain|Guidance|Buyer response',
+              'Reference|Inquiry|Response kind|Allowed values|Domain|Guidance|Buyer response|Explanation|Evidence',
+            ].includes(first?.map(c => c?.text).join('|') ?? '')
           ) {
             mapped.push({
               regionId: r.id,
               startRow: (r.rowIndices[0] ?? 0) + 1,
               endRow: r.rowIndices.at(-1) ?? 0,
-              fields: { id: 0, question: 1, type: 2, options: 3, section: 4, instructions: 5, response: 6 },
+              fields: {
+                id: 0,
+                question: 1,
+                type: 2,
+                options: 3,
+                section: 4,
+                instructions: 5,
+                response: 6,
+                ...(first!.length === 9 ? { explanation: 7, evidence: 8 } : {}),
+              },
             });
             exclusions.push({
               regionId: r.id,
@@ -128,6 +139,14 @@ export function officeAdapter(format: 'xlsx' | 'docx'): QuestionnaireInputAdapte
               endRow: r.rowIndices[0] ?? 0,
               reason: 'Documented sample header.',
             });
+          } else if (
+            format === 'docx' &&
+            r.kind === 'paragraph' &&
+            r.part === 'word/document.xml' &&
+            /^ID: [^\n]+\nQuestion: [^]+\nResponse:[^]*$/.test(first?.[0]?.text ?? '') &&
+            (first?.[0]?.text ?? '').indexOf('\nResponse:') === (first?.[0]?.text ?? '').lastIndexOf('\nResponse:')
+          ) {
+            mapped.push({ regionId: r.id, startRow: 0, endRow: 0, fields: { question: 0 }, answerType: 'free_text' });
           } else if (r.rows.every(row => !nonempty(row)))
             exclusions.push({
               regionId: r.id,
@@ -136,14 +155,18 @@ export function officeAdapter(format: 'xlsx' | 'docx'): QuestionnaireInputAdapte
               reason: 'Inspected empty region.',
             });
         }
-        if (mapped.length && mapped.length === p.regions.filter(r => r.rows.some(nonempty)).length)
+        if (
+          mapped.length &&
+          mapped.length === p.regions.filter(r => r.rows.some(nonempty)).length &&
+          new Set(mapped.map(m => p.regions.find(r => r.id === m.regionId)!.kind)).size === 1
+        )
           candidates.push(
             mappingSchema.parse({
               contractVersion: 1,
               sourceSha256: s.sha256,
               adapterKey: descriptor.key,
               adapterVersion: descriptor.adapterVersion,
-              profile: `${format}.table.v1`,
+              profile: mapped[0]!.regionId.startsWith('paragraph:') ? 'docx.blocks.v1' : `${format}.table.v1`,
               profileVersion: 1,
               regions: mapped,
               exclusions,
@@ -255,7 +278,7 @@ export function officeAdapter(format: 'xlsx' | 'docx'): QuestionnaireInputAdapte
             let originalText = row[f.question]?.text ?? '',
               originalId = f.id === undefined ? undefined : row[f.id]?.text;
             if (r.kind === 'paragraph') {
-              const match = /^ID: ([^\n]+)\nQuestion: ([\s\S]+)\nResponse:$/.exec(originalText);
+              const match = /^ID: ([^\n]+)\nQuestion: ([\s\S]+)\nResponse:([^]*)$/.exec(originalText);
               if (!match) throw new IntakeFailure('UNSUPPORTED_LAYOUT', s.sourceId);
               originalId = match[1];
               originalText = match[2]!;
@@ -272,16 +295,22 @@ export function officeAdapter(format: 'xlsx' | 'docx'): QuestionnaireInputAdapte
             const sourceLocators = [locator(s, r, ri, f.question)];
             for (const ci of [f.section, f.instructions])
               if (ci !== undefined && row[ci]?.text) sourceLocators.push(locator(s, r, ri, ci));
-            const responseTargets = roleFields
-              .filter(role => f[role] !== undefined)
-              .map(role => ({ role, locator: locator(s, r, ri, f[role]!) }));
-            const existing = roleFields
-              .filter(role => f[role] !== undefined && row[f[role]!]?.text)
-              .map(role => ({
-                text: row[f[role]!]!.text,
-                formulaLiteral: row[f[role]!]!.formulaLiteral,
-                locator: locator(s, r, ri, f[role]!),
-              }));
+            const responseTargets =
+              r.kind === 'paragraph'
+                ? [{ role: 'response' as const, locator: locator(s, r, ri) }]
+                : roleFields
+                    .filter(role => f[role] !== undefined)
+                    .map(role => ({ role, locator: locator(s, r, ri, f[role]!) }));
+            const existing =
+              r.kind === 'paragraph' && row[0]?.text.split('\nResponse:')[1]
+                ? [{ text: row[0].text.split('\nResponse:')[1]!, locator: locator(s, r, ri) }]
+                : roleFields
+                    .filter(role => f[role] !== undefined && row[f[role]!]?.text)
+                    .map(role => ({
+                      text: row[f[role]!]!.text,
+                      formulaLiteral: row[f[role]!]!.formulaLiteral,
+                      locator: locator(s, r, ri, f[role]!),
+                    }));
             const q = questionSchema.parse({
               id: originalId || `q-${sha256(`${s.sha256}:${canonicalJson(sourceLocators[0])}`).slice(0, 24)}`,
               originalQuestionId: originalId || undefined,
@@ -502,7 +531,7 @@ export class IntakeCoordinator {
       const original = await a.resolve(s, a.locatorValidator.parse(binding.locator), c);
       if (
         original !== q.originalText &&
-        original !== `ID: ${q.originalQuestionId}\nQuestion: ${q.originalText}\nResponse:`
+        !original.startsWith(`ID: ${q.originalQuestionId}\nQuestion: ${q.originalText}\nResponse:`)
       )
         throw new IntakeFailure('INVALID_MAPPING', s.sourceId);
       const idField = binding.mapping.fields.id;

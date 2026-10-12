@@ -1,4 +1,5 @@
-import { createSnapshotEvidenceTools } from '../tools/snapshot-evidence.ts';
+import { ProcessingFailure } from '../processing/failure.ts';
+import { sourceContexts, bindSourceContext } from './context.ts';
 import { mkdir, writeFile, chmod, mkdtemp, rename, readdir, rm, lstat } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
@@ -90,6 +91,10 @@ export async function buildEvidenceSnapshot(options: {
   const sources: EligibleSource[] = [],
     denied: DeniedEvidence[] = [],
     excerpts: EvidenceExcerpt[] = [];
+  const projections = new Map<
+    string,
+    ReturnType<typeof sourceContexts> extends Map<string, infer Value> ? Value : never
+  >();
   let aggregate = 0;
   for (const d of manifest.documents) {
     const reason = deniedReason(d, scope, asOf);
@@ -108,9 +113,12 @@ export async function buildEvidenceSnapshot(options: {
     }
     const blocks = await runParser<ExtractedBlock[]>(source, d.format, 'evidence', context);
     sources.push({ document: d, source, blocks });
+    const contexts = sourceContexts(blocks);
     for (const [index, b] of blocks.entries()) {
       const locator = evidenceLocatorSchema.parse({ ...b.locator, sourceId: d.id, sourceSha256: d.sha256 });
-      for (let start = 0; start < b.text.length; start += 4000)
+      for (let start = 0; start < b.text.length; start += 4000) {
+        const id = `${d.id}:${index}:${start}`;
+        projections.set(id, contexts.get(canonicalJson(b.locator))!);
         excerpts.push({
           id: `${d.id}:${index}:${start}`,
           documentId: d.id,
@@ -122,6 +130,7 @@ export async function buildEvidenceSnapshot(options: {
           locator,
           text: b.text.slice(start, start + 4000),
         });
+      }
     }
   }
   const base = {
@@ -180,21 +189,20 @@ export async function buildEvidenceSnapshot(options: {
     filesystem: fs,
     bm25: true,
     autoSync: false,
-    tools: {
-      enabled: false,
-      mastra_workspace_read_file: { enabled: true },
-      mastra_workspace_search: { enabled: true },
-    },
+    tools: { enabled: false },
   });
   await workspace.init();
-  for (const e of excerpts) await workspace.index(e.id, e.text);
+  for (const e of excerpts)
+    if (projections.get(e.id)!.indexable) await workspace.index(e.id, `${projections.get(e.id)!.index}\n${e.text}`);
   const byId = new Map(excerpts.map(e => [e.id, e]));
   async function read(id: string): Promise<EvidenceExcerpt> {
     const e = byId.get(z.string().max(240).parse(id));
     if (!e) throw new IntakeFailure('READ_FAILED', runId);
     const bytes = await fs.readFile(paths.get(id)!);
     if (String(bytes) !== e.text) throw new IntakeFailure('SOURCE_CHANGED', e.documentId);
-    return structuredClone(e);
+    const projection = projections.get(e.id)!;
+    if (!projection.context) throw new ProcessingFailure('SOURCE_UNAVAILABLE');
+    return bindSourceContext(structuredClone(e), projection.context);
   }
   async function search(query: string, topK = 5): Promise<Array<{ excerpt: EvidenceExcerpt; score: number }>> {
     const args = z
@@ -209,8 +217,7 @@ export async function buildEvidenceSnapshot(options: {
     }
     return results;
   }
-  const tools = createSnapshotEvidenceTools({ search, read });
-  return Object.freeze({ record: structuredClone(record), sources, tools, read, search });
+  return Object.freeze({ record: structuredClone(record), sources, read, search });
 }
 export async function resolveEvidenceLocator(
   source: InputSourceSnapshot,

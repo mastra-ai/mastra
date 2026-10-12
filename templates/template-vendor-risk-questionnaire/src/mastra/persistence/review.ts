@@ -1,3 +1,5 @@
+import type { Client } from '@libsql/client';
+import { persistDomainEvent } from './telemetry.ts';
 import { randomUUID } from 'node:crypto';
 import { databaseUrl, openDatabase } from './database.ts';
 import { writeTransaction } from './transaction.ts';
@@ -5,15 +7,17 @@ import { canonicalJson, sha256 } from '../intake/source.ts';
 import { reviewStateSchema, reviewDecisionSchema } from '../contracts/review.ts';
 import type { ReviewState, ReviewDecision, Projection, ExportManifest } from '../contracts/review.ts';
 
-export async function openReviewStore(url = databaseUrl) {
-  const client = await openDatabase(url);
-  await client.batch(
-    [
-      'CREATE TABLE IF NOT EXISTS vrq_review (run_id TEXT PRIMARY KEY, state_json TEXT NOT NULL, claim_token TEXT)',
-      'CREATE TABLE IF NOT EXISTS vrq_decisions (run_id TEXT NOT NULL, decision_id TEXT NOT NULL, payload_hash TEXT NOT NULL, outcome_json TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(run_id,decision_id))',
-    ],
-    'write',
-  );
+export async function openReviewStore(url = databaseUrl, underlying?: Client) {
+  const client = await openDatabase(url, undefined, underlying);
+  if (!client.readOnly)
+    await client.batch(
+      [
+        'CREATE TABLE IF NOT EXISTS vrq_review (run_id TEXT PRIMARY KEY, state_json TEXT NOT NULL, claim_token TEXT)',
+        'CREATE TABLE IF NOT EXISTS vrq_review_payloads (run_id TEXT PRIMARY KEY, revision INTEGER NOT NULL, dispositions_json TEXT NOT NULL)',
+        'CREATE TABLE IF NOT EXISTS vrq_decisions (run_id TEXT NOT NULL, decision_id TEXT NOT NULL, payload_hash TEXT NOT NULL, outcome_json TEXT NOT NULL, actor TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(run_id,decision_id))',
+      ],
+      'write',
+    );
   async function read(db: Pick<typeof client, 'execute'>, runId: string) {
     const r = await db.execute({ sql: 'SELECT state_json FROM vrq_review WHERE run_id = ?', args: [runId] });
     return r.rows[0] ? reviewStateSchema.parse(JSON.parse(String(r.rows[0].state_json))) : undefined;
@@ -74,7 +78,16 @@ export async function openReviewStore(url = databaseUrl) {
           claimAt: new Date().toISOString(),
         };
         await save(tx, claimed);
-        return { token, state: s, payloadHash };
+        const validated = await tx.execute({
+          sql: 'SELECT revision,dispositions_json FROM vrq_review_payloads WHERE run_id = ?',
+          args: [d.runId],
+        });
+        const reuseValidated = Boolean(
+          s.projection &&
+          validated.rows[0]?.revision === s.revision &&
+          validated.rows[0]?.dispositions_json === canonicalJson(d.dispositions),
+        );
+        return { token, state: s, payloadHash, reuseValidated };
       }),
     finishDecision: async (
       d: ReviewDecision,
@@ -96,6 +109,25 @@ export async function openReviewStore(url = databaseUrl) {
           claimAt: null,
         });
         await save(tx, next);
+        await tx.execute({
+          sql: 'INSERT INTO vrq_review_payloads (run_id,revision,dispositions_json) VALUES (?,?,?) ON CONFLICT(run_id) DO UPDATE SET revision=excluded.revision,dispositions_json=excluded.dispositions_json',
+          args: [d.runId, next.revision, canonicalJson(d.dispositions)],
+        });
+        for (const disposition of d.dispositions) {
+          const original = s.results.find(r => r.questionId === disposition.questionId)?.draft;
+          const draft = disposition.correction ?? original;
+          await persistDomainEvent(tx, d.runId, `review:${d.decisionId}:${disposition.questionId}`, {
+            kind: 'reviewed',
+            at: new Date().toISOString(),
+            startedAt: s.claimAt ?? undefined,
+            questionId: disposition.questionId,
+            corrected: Boolean(
+              disposition.correction && canonicalJson(disposition.correction) !== canonicalJson(original),
+            ),
+            materialClaims: disposition.disposition === 'release' ? (draft?.claims.length ?? 0) : 0,
+            supportedClaims: disposition.disposition === 'release' ? (draft?.claims.length ?? 0) : 0,
+          });
+        }
         await tx.execute({
           sql: 'INSERT INTO vrq_decisions (run_id,decision_id,payload_hash,outcome_json,actor,created_at) VALUES (?,?,?,?,?,?)',
           args: [d.runId, d.decisionId, payloadHash, canonicalJson(next), actor, new Date().toISOString()],
@@ -167,6 +199,11 @@ export async function openReviewStore(url = databaseUrl) {
         )
           throw new Error('STALE_EXPORT');
         const next = { ...s, state: 'exported' as const, manifest, claimToken: null, claimAt: null };
+        await persistDomainEvent(tx, runId, `export:${manifest.revision}`, {
+          kind: 'exported',
+          at: new Date().toISOString(),
+          startedAt: s.claimAt ?? undefined,
+        });
         await save(tx, next);
         return next;
       }),

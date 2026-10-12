@@ -14,7 +14,8 @@ import type { ModelCall, ModelFactory, ModelPart, ModelStream } from '../../src/
 import { createDraftWorkflow } from '../../src/mastra/workflows/vendor-risk-drafts.ts';
 import { sha256 } from '../../src/mastra/intake/source.ts';
 import { canonicalJson } from '../../src/mastra/intake/source.ts';
-import { xlsxFixture } from '../fixtures/office.ts';
+import type { SourceSpan } from '../../src/mastra/processing/interpretation.ts';
+import { xlsxFixture, docxFixture } from '../fixtures/office.ts';
 import { source, context, tableMapping } from '../fixtures/support.ts';
 
 export const controlText =
@@ -22,40 +23,69 @@ export const controlText =
 export async function draftingFixture(
   root: string,
   options: {
-    questions?: Array<{ text: string; kind?: string; choices?: string }>;
+    questions?: Array<{ id?: string; text: string; kind?: string; choices?: string; instructions?: string }>;
+    domains?: string[];
     disclosure?: 'shareable' | 'review_required' | 'restricted';
     text?: string;
+    evidence?: { format: 'json' | 'csv'; bytes: string };
     denied?: boolean;
     databasePath?: string;
     runId?: string;
     runtimeRoot?: string;
+    format?: 'xlsx' | 'docx';
+    transform?: (bytes: Uint8Array) => Uint8Array;
   } = {},
 ) {
   const runId = options.runId ?? 'draft-run',
     url = `file:${options.databasePath ?? resolve(root, 'state.db')}`,
     runtimeRoot = options.runtimeRoot ?? resolve(root, 'runtime');
   const data = options.questions ?? [{ text: 'Does production require MFA?' }];
-  const s = source(
-    xlsxFixture([
-      {
-        name: 'Questions',
-        rows: [
-          ['Reference', 'Inquiry', 'Response kind', 'Allowed values'],
-          ...data.map((q, i) => [
-            `Q${i + 1}`,
-            q.text,
-            q.kind ?? 'boolean',
-            q.kind === 'free_text' ? '' : (q.choices ?? 'yes|no|partial|not_applicable|unknown'),
-          ]),
-        ],
-      },
+  const hasInstructions = data.some(q => q.instructions !== undefined);
+  const rows = [
+    [
+      'Reference',
+      'Inquiry',
+      'Response kind',
+      'Allowed values',
+      ...(hasInstructions ? ['Instructions'] : []),
+      'Response',
+      'Explanation',
+      'Evidence',
+    ],
+    ...data.map((q, i) => [
+      q.id ?? `Q${i + 1}`,
+      q.text,
+      q.kind ?? 'boolean',
+      q.kind === 'free_text' ? '' : (q.choices ?? 'yes|no|partial|not_applicable|unknown|withheld'),
+      ...(hasInstructions ? [q.instructions ?? ''] : []),
+      '',
+      '',
+      '',
     ]),
-  );
+  ];
+  const raw = options.format === 'docx' ? docxFixture([{ table: rows }]) : xlsxFixture([{ name: 'Questions', rows }]);
+  const s = source(options.transform?.(raw) ?? raw, `input.${options.format ?? 'xlsx'}`);
   const coordinator = new IntakeCoordinator();
   const mapping = tableMapping(
     s,
-    [{ regionId: 'sheet:0', startRow: 1, endRow: data.length, fields: { id: 0, question: 1, type: 2, options: 3 } }],
-    [{ regionId: 'sheet:0', startRow: 0, endRow: 0, reason: 'Table header' }],
+    [
+      {
+        regionId: options.format === 'docx' ? 'table:0' : 'sheet:0',
+        startRow: 1,
+        endRow: data.length,
+        fields: {
+          id: 0,
+          question: 1,
+          type: 2,
+          options: 3,
+          ...(hasInstructions ? { instructions: 4 } : {}),
+          response: hasInstructions ? 5 : 4,
+          explanation: hasInstructions ? 6 : 5,
+          evidence: hasInstructions ? 7 : 6,
+        },
+      },
+    ],
+    [{ regionId: options.format === 'docx' ? 'table:0' : 'sheet:0', startRow: 0, endRow: 0, reason: 'Table header' }],
   );
   const imported = await coordinator.import(
     s,
@@ -64,17 +94,23 @@ export async function draftingFixture(
     context(),
   );
   await mkdir(resolve(root, 'evidence'), { recursive: true });
-  const bytes = `# Approved record\n${options.text ?? controlText}\n`;
-  await writeFile(resolve(root, 'evidence', 'control.md'), bytes);
+  const bytes = options.evidence?.bytes ?? `# Approved record\n${options.text ?? controlText}\n`;
+  const relativePath = options.evidence ? `control.${options.evidence.format}` : 'control.md';
+  await writeFile(resolve(root, 'evidence', relativePath), bytes);
   const document = {
     id: 'control',
-    relativePath: 'control.md',
-    format: 'markdown',
+    relativePath,
+    format: options.evidence?.format ?? 'markdown',
     version: '1',
     sha256: sha256(bytes),
     title: 'Private control record',
     citationLabel: 'Approved control record',
-    scope: { organizationId: 'northstar', products: ['tasks'], environments: ['production'], domains: ['access'] },
+    scope: {
+      organizationId: 'northstar',
+      products: ['tasks'],
+      environments: ['production'],
+      domains: options.domains ?? ['access'],
+    },
     kind: 'operational_record',
     approvalState: 'approved',
     approvedBy: 'operator',
@@ -99,7 +135,12 @@ export async function draftingFixture(
     manifest,
     root: resolve(root, 'evidence'),
     runtimeRoot,
-    scope: { organizationId: 'northstar', product: 'tasks', environment: 'production', domains: ['access'] },
+    scope: {
+      organizationId: 'northstar',
+      product: 'tasks',
+      environment: 'production',
+      domains: options.domains ?? ['access'],
+    },
     context: context(),
   });
   const store = await openIntakeStore(url);
@@ -122,6 +163,7 @@ export async function draftingFixture(
 }
 export type DraftFixture = Awaited<ReturnType<typeof draftingFixture>>;
 export interface CasePlan {
+  requests?: (spans: SourceSpan[]) => Array<{ field: 'text' | 'instructions'; ref: string }>;
   value?: AnswerDraft['value'];
   text?: string;
   draft?: (draft: AnswerDraft) => AnswerDraft;
@@ -131,8 +173,6 @@ export interface CasePlan {
   status?: number;
   missingUsage?: boolean;
   delayMs?: number;
-  noSearch?: boolean;
-  toolQuery?: string;
   inconsistentWith?: string[];
 }
 export function userText(call: ModelCall): string {
@@ -143,6 +183,13 @@ export function userText(call: ModelCall): string {
     .filter(p => p.type === 'text')
     .map(p => p.text)
     .join('');
+}
+export function nativeWireChoices(call: ModelCall, questionId: string, field: string): string[] {
+  if (call.responseFormat?.type !== 'json') throw new Error('STRUCTURED_WIRE_REQUIRED');
+  const schema = call.responseFormat.schema as {
+    properties: { interpretations: { properties: Record<string, { properties: Record<string, { enum: string[] }> }> } };
+  };
+  return schema.properties.interpretations.properties[questionId]!.properties[field]!.enum;
 }
 export function stream(parts: ModelPart[], extra: Partial<ModelStream> = {}): ModelStream {
   return {
@@ -181,8 +228,8 @@ export function controlledProvider(
   let active = 0,
     maximum = 0;
   const finished: string[] = [];
-  const toolTurns = new Map<string, number>(),
-    failures = new Map<string, number>();
+  const representativeReferences = new Map<string, string>();
+  const failures = new Map<string, number>();
   const planFor = (id: string) => plans[fixture.questions.findIndex(q => q.id === id)] ?? {};
   const factory: ModelFactory = (phase, questionId) => {
     const doStream = async (call: ModelCall): Promise<ModelStream> => {
@@ -197,21 +244,41 @@ export function controlledProvider(
           )
         );
       if (phase === 'interpretation') {
-        const request = JSON.parse(text) as { questions: Array<{ id: string }> };
+        const request = JSON.parse(text) as {
+          questions: Array<{ id: string; spans: SourceSpan[]; equivalenceRef: string }>;
+        };
+        for (const q of request.questions) representativeReferences.set(q.id, q.equivalenceRef);
         return jsonStream({
-          interpretations: request.questions.map(q => ({
-            questionId: q.id,
-            interpretation: {
-              domain: 'access',
-              query: 'control',
-              subparts: ['control'],
-              equivalenceKey: '',
-              product: 'tasks',
-              environment: 'production',
-              timeQualifier: 'current',
-              ...planFor(q.id).interpretation,
-            },
-          })),
+          interpretations: Object.fromEntries(
+            request.questions.map(q => {
+              const p = planFor(q.id),
+                fields = p.interpretation ?? {};
+              const representative = fields.equivalenceKey
+                ? fixture.questions.find(
+                    question => planFor(question.id).interpretation?.equivalenceKey === fields.equivalenceKey,
+                  )?.id
+                : undefined;
+              const equivalence = (representative ? representativeReferences.get(representative) : undefined) ?? 'none';
+              return [
+                q.id,
+                {
+                  domain: fields.domain ?? 'access',
+                  product: fields.product ?? 'tasks',
+                  environment: fields.environment ?? 'production',
+                  timeQualifier:
+                    fields.timeQualifier ??
+                    (nativeWireChoices(call, q.id, 'timeQualifier').includes('current') ? 'current' : 'unspecified'),
+                  query: q.spans[0]!.ref,
+                  equivalenceKey: equivalence,
+                  requests: Object.fromEntries(
+                    (p.requests?.(q.spans) ?? q.spans.map(({ field, ref }) => ({ field, ref }))).map(
+                      ({ field, ref }) => [ref, field],
+                    ),
+                  ),
+                },
+              ];
+            }),
+          ),
         });
       }
       if (phase === 'verification' && questionId.startsWith('consistency-')) {
@@ -232,33 +299,17 @@ export function controlledProvider(
         throw Object.assign(new Error('Provider failed with private response.'), { statusCode: plan.status ?? 503 });
       }
       if (phase === 'draft') {
-        const turn = toolTurns.get(questionId) ?? 0;
-        toolTurns.set(questionId, turn + 1);
-        if (turn === 0 && !plan.noSearch) {
-          active++;
-          maximum = Math.max(maximum, active);
-          if (plan.delayMs) await new Promise(resolve => setTimeout(resolve, plan.delayMs));
-          return stream([
-            {
-              type: 'tool-call',
-              toolCallId: 'search',
-              toolName: 'evidence_search',
-              input: JSON.stringify({ query: plan.toolQuery ?? 'control', topK: 1 }),
-            },
-            {
-              type: 'finish',
-              finishReason: 'tool-calls',
-              usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-            },
-          ]);
-        }
+        active++;
+        maximum = Math.max(maximum, active);
+        if (plan.delayMs) await new Promise(resolve => setTimeout(resolve, plan.delayMs));
         const q = fixture.questions.find(q => q.id === questionId)!;
         const excerpt = fixture.snapshot.record.excerpts.find(e => e.text.includes('control'))!;
-        const draft = draftFor(q, excerpt, plan.value ?? 'yes', plan.text);
-        if (!plan.noSearch) {
-          active--;
-          finished.push(questionId);
-        }
+        const draft = {
+          ...draftFor(q, excerpt, plan.value ?? 'yes', plan.text),
+          coveredSubparts: JSON.parse(text).required.subparts,
+        };
+        active--;
+        finished.push(questionId);
         const finalDraft = plan.draft?.(draft) ?? draft;
         return jsonStream(
           {
@@ -281,7 +332,7 @@ export function controlledProvider(
       }
       return jsonStream(
         {
-          supportedClaimIds: ['claim'],
+          supportedClaimIds: JSON.parse(text).draft.claims.map((claim: { id: string }) => claim.id),
           conflictedClaimIds: [],
           unsupportedCommitment: false,
           applicable: true,

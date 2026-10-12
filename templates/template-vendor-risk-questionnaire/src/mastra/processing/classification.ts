@@ -1,21 +1,29 @@
+import { generatePhase } from '../agents/runtime.ts';
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 
-import { bindQuestionInterpretationAgent } from '../agents/question-interpretation.ts';
-import { interpretationSchema } from '../contracts/answer.ts';
-import type { Interpretation } from '../contracts/answer.ts';
+import { questionInterpretationAgent, interpretationInstructions } from '../agents/question-interpretation.ts';
+import {
+  interpretationChoices,
+  equivalenceCatalogue,
+  wireInterpretationSchema,
+  deriveInterpretation,
+  sourceCatalogue,
+} from './interpretation.ts';
 import type { CanonicalQuestion } from '../contracts/question.ts';
 import { canonicalJson } from '../intake/source.ts';
 import { createScreening } from './security.ts';
-import { providerOptions } from './model.ts';
+import { isStorageFailure } from '../persistence/client.ts';
 import { ProcessingFailure } from './failure.ts';
 import { reviewResult, questionPayload, trustedQuestionContext } from './answers.ts';
 import type { QuestionEnvironment } from './answers.ts';
 
 export async function classifyQuestions(questions: CanonicalQuestion[], environment: QuestionEnvironment) {
   const screenedQuestions: CanonicalQuestion[] = [];
-  const interpretations = new Map<string, Interpretation>();
+  const interpretations = await environment.store.readInterpretations(environment.runId);
 
   for (const question of questions) {
+    if (interpretations.has(question.id)) continue;
     let attempts = 0;
     try {
       const screen = createScreening({
@@ -29,6 +37,10 @@ export async function classifyQuestions(questions: CanonicalQuestion[], environm
       await screen(canonicalJson(questionPayload(question)), 'question');
       screenedQuestions.push(question);
     } catch (error) {
+      if (isStorageFailure(error) || (error instanceof ProcessingFailure && error.code === 'STORAGE_FAILURE')) {
+        environment.store.stopAdmission();
+        await environment.store.stop(environment.runId, 'STORAGE_FAILURE');
+      }
       const state = await environment.store.status(environment.runId);
       const failureReason =
         state?.run.stopReason ?? (error instanceof ProcessingFailure ? error.code : 'DETECTOR_FAILED');
@@ -38,58 +50,113 @@ export async function classifyQuestions(questions: CanonicalQuestion[], environm
 
   // Bound both input size and expected structured response size when grouping classification.
   const batches: CanonicalQuestion[][] = [];
-  const batchInputAllowance = Math.max(1, environment.policy.maxInputTokens - 4500);
+  const batchInputAllowance = Math.max(1, environment.policy.maxInputTokens - 6500);
   for (const question of screenedQuestions) {
     const currentBatch = batches.at(-1);
     if (
       currentBatch &&
-      currentBatch.length < Math.max(1, Math.floor(environment.policy.maxOutputTokens / 500)) &&
+      currentBatch.length < Math.max(1, Math.min(2, Math.floor(environment.policy.maxOutputTokens / 2000))) &&
       Buffer.byteLength(canonicalJson([...currentBatch, question].map(questionPayload))) <= batchInputAllowance
     )
       currentBatch.push(question);
     else batches.push([question]);
   }
 
-  for (const [batchIndex, batch] of batches.entries()) {
-    const questionIds = batch.map(question => question.id) as [string, ...string[]];
-    const batchSchema = z
+  const equivalences = equivalenceCatalogue(screenedQuestions, `${environment.runId}:${randomUUID()}`);
+  for (let batchIndex = 0; batchIndex < batches.length;) {
+    const batch = batches[batchIndex]!;
+    const scope = `${environment.runId}:${randomUUID()}`;
+    const catalogues = new Map(batch.map(question => [question.id, sourceCatalogue(question, scope)]));
+    const choices = new Map(
+      batch.map(question => [
+        question.id,
+        interpretationChoices(question, catalogues.get(question.id)!, environment.evidence.record.scope),
+      ]),
+    );
+    const responseSchema = z
       .object({
         interpretations: z
-          .array(z.object({ questionId: z.enum(questionIds), interpretation: interpretationSchema }).strict())
-          .length(batch.length),
+          .object(
+            Object.fromEntries(
+              batch.map(question => [
+                question.id,
+                wireInterpretationSchema(catalogues.get(question.id)!, choices.get(question.id)!, equivalences),
+              ]),
+            ),
+          )
+          .strict(),
       })
-      .strict()
-      .refine(
-        payload => new Set(payload.interpretations.map(item => item.questionId)).size === batch.length,
-        'Every requested question requires one interpretation.',
-      );
+      .strict();
     const questionId = `classification-${batchIndex}`;
     const requestContext = trustedQuestionContext(questionId, environment);
     try {
-      const interpretationAgent = bindQuestionInterpretationAgent(
+      const instructionSources = [
+        ...new Set(equivalences.filter(item => item.instructions).map(item => item.instructions)),
+      ];
+      const payload = canonicalJson({
+        questions: batch.map(question => ({
+          ...questionPayload(question),
+          text: undefined,
+          instructions: undefined,
+          spans: catalogues.get(question.id),
+          equivalenceRef: equivalences.find(item => item.questionId === question.id)!.ref,
+        })),
+        scope: environment.evidence.record.scope,
+        equivalences: Object.fromEntries(
+          equivalences.map(item => [
+            item.ref,
+            batch.some(q => q.id === item.questionId)
+              ? null
+              : [item.text, item.instructions ? instructionSources.indexOf(item.instructions) : null],
+          ]),
+        ),
+        instructionSources,
+      });
+      // Pre-call planning is conservative; boundedModel still checks actual native options.
+      const plannedBytes =
+        Buffer.byteLength(
+          JSON.stringify({
+            prompt: [
+              { role: 'system', content: interpretationInstructions },
+              { role: 'user', content: payload },
+            ],
+            responseFormat: { type: 'json', schema: z.toJSONSchema(responseSchema) },
+            tools: [],
+          }),
+        ) + 1024;
+      if (batch.length > 1 && plannedBytes > environment.policy.maxInputTokens) {
+        batches.splice(batchIndex, 1, ...batch.map(question => [question]));
+        continue;
+      }
+      // Screen the exact assembled untrusted catalogue, including fragments from other batches.
+      await createScreening({ ...environment, questionId, requestContext })(payload, 'question');
+      const result = await generatePhase(
+        questionInterpretationAgent,
         {
           ...environment,
           phase: 'interpretation',
           questionId,
           provider: environment.models('interpretation', questionId),
           maxTurns: 1,
-          validateOutput: value => batchSchema.parse(value),
         },
         requestContext,
+        payload,
+        responseSchema,
       );
-      const interpretationResponse = await interpretationAgent.generate(
-        canonicalJson({ questions: batch.map(questionPayload), scope: environment.evidence.record.scope }),
-        {
-          requestContext,
-          structuredOutput: { schema: batchSchema, errorStrategy: 'strict' },
-          maxSteps: 1,
-          modelSettings: { maxRetries: 0 },
-          providerOptions,
-        },
-      );
-      for (const item of batchSchema.parse(interpretationResponse.object).interpretations)
-        interpretations.set(item.questionId, item.interpretation);
+      for (const question of batch) {
+        const interpretation = deriveInterpretation(
+          catalogues.get(question.id)!,
+          result.interpretations[question.id]!,
+          equivalences,
+        );
+        await environment.store.persistInterpretation(environment.runId, question.id, interpretation);
+        interpretations.set(question.id, interpretation);
+      }
     } catch (error) {
+      if (isStorageFailure(error) || (error instanceof ProcessingFailure && error.code === 'STORAGE_FAILURE')) {
+        environment.store.stopAdmission();
+        await environment.store.stop(environment.runId, 'STORAGE_FAILURE');
+      }
       const state = await environment.store.status(environment.runId);
       const failureReason =
         state?.run.stopReason ??
@@ -100,6 +167,7 @@ export async function classifyQuestions(questions: CanonicalQuestion[], environm
       for (const question of batch)
         await environment.store.persistResult(environment.runId, reviewResult(question, failureReason));
     }
+    batchIndex++;
   }
 
   return interpretations;

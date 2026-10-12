@@ -7,6 +7,7 @@ import { openReviewStore } from '../persistence/review.ts';
 import { reviewStateSchema, scopedRunId } from '../contracts/review.ts';
 import { hash } from '../contracts/primitives.ts';
 import { canonicalJson, sha256 } from '../intake/source.ts';
+import { telemetryId } from '../observability/privacy.ts';
 import { containedDirectory } from '../exports/publication.ts';
 import type { MastraStorage } from '@mastra/core/storage';
 import type { createQuestionnaireWorkflow } from '../workflows/vendor-risk-questionnaire.ts';
@@ -15,6 +16,8 @@ export const cleanupConfirmationSchema = z
   .object({ runId: scopedRunId, revision: z.int().nonnegative(), previewDigest: hash, confirm: z.literal(true) })
   .strict();
 const tables = [
+  'vrq_events',
+  'vrq_diagnostics',
   'vrq_decisions',
   'vrq_review',
   'vrq_security',
@@ -23,7 +26,15 @@ const tables = [
   'vrq_processing',
   'vrq_evidence_snapshots',
   'vrq_intakes',
+  'vrq_document_plans',
+  'vrq_respond',
+  'vrq_draft_owners',
+  'vrq_review_payloads',
+  'vrq_draft_inputs',
+  'vrq_interpretations',
+  'vrq_consistency',
 ] as const;
+const partition = (table: string, runId: string) => (table === 'vrq_diagnostics' ? telemetryId(runId)! : runId);
 export interface CleanupOptions {
   databaseUrl: string;
   runtimeRoot: string;
@@ -75,7 +86,7 @@ export async function previewCleanup(runId: string, options: CleanupOptions) {
     for (const table of tables) {
       const rows = await client.execute({
         sql: `SELECT * FROM ${table} WHERE run_id = ? ORDER BY rowid`,
-        args: [runId],
+        args: [partition(table, runId)],
       });
       records.push({ table, count: rows.rows.length, digest: sha256(canonicalJson(rows.rows)) });
     }
@@ -138,7 +149,7 @@ export async function confirmCleanup(raw: unknown, options: CleanupOptions) {
       for (const record of preview.records) {
         const current = await tx.execute({
           sql: `SELECT * FROM ${record.table} WHERE run_id = ? ORDER BY rowid`,
-          args: [c.runId],
+          args: [partition(record.table, c.runId)],
         });
         if (sha256(canonicalJson(current.rows)) !== record.digest) throw new Error('STALE_CLEANUP_PREVIEW');
       }
@@ -164,7 +175,8 @@ export async function confirmCleanup(raw: unknown, options: CleanupOptions) {
       else await workflowStore.deleteWorkflowRunById({ workflowName: run.workflowName, runId: run.runId });
     }
     await writeTransaction(client, async tx => {
-      for (const table of tables) await tx.execute({ sql: `DELETE FROM ${table} WHERE run_id = ?`, args: [c.runId] });
+      for (const table of tables)
+        await tx.execute({ sql: `DELETE FROM ${table} WHERE run_id = ?`, args: [partition(table, c.runId)] });
     });
     return {
       runId: c.runId,

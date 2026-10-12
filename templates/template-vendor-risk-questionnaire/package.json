@@ -21,19 +21,22 @@
     "demo": "node scripts/generate-demo.ts",
     "draft": "node --env-file-if-exists=.env scripts/draft.ts",
     "predev": "node scripts/predev.ts",
-    "review": "node --env-file-if-exists=.env scripts/review.ts"
+    "review": "node --env-file-if-exists=.env scripts/review.ts",
+    "recover:writer": "node scripts/recover-writer.ts",
+    "eval:live": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run --config vitest.live.config.ts",
+    "respond": "node --env-file-if-exists=.env scripts/respond.ts"
   },
   "dependencies": {
     "@libsql/client": "0.18.0",
     "@mastra/core": "latest",
+    "@mastra/duckdb": "latest",
     "@mastra/libsql": "latest",
+    "@mastra/observability": "latest",
     "csv-parse": "7.0.3",
     "fast-xml-parser": "5.11.2",
     "fflate": "0.8.3",
     "pdfjs-dist": "6.4.299",
-    "zod": "4.6.5",
-    "pdfkit": "0.19.1",
-    "@fontsource/noto-sans": "5.3.0"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@mastra/evals": "latest",
@@ -41,7 +44,6 @@
     "mastra": "latest",
     "oxfmt": "0.72.0",
     "typescript": "^5.9.3",
-    "vitest": "4.1.11",
-    "@types/pdfkit": "0.17.6"
+    "vitest": "4.1.11"
   }
 }

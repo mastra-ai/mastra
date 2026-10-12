@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { artifactNames, artifactCatalog } from './artifact.ts';
 import { id, hash } from './primitives.ts';
 import { questionSchema } from './question.ts';
 import { draftSchema, questionResultSchema } from './answer.ts';
+import { documentPublicationSchema } from './completion.ts';
 
 export const scopedRunId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,100}$/);
 const exportText = z
@@ -108,7 +108,15 @@ export const projectionSchema = z
     )
       c.addIssue({ code: 'custom', message: 'Projection coverage, ordering and evidence bindings must agree.' });
   });
-export const exportManifestSchema = z
+const legacyArtifactNames = [
+  'questionnaire.xlsx',
+  'questionnaire.csv',
+  'evidence.csv',
+  'completed.json',
+  'completed.md',
+  'completed.pdf',
+] as const;
+export const legacyExportManifestSchema = z
   .object({
     schemaVersion: z.literal(1),
     runId: scopedRunId,
@@ -120,16 +128,20 @@ export const exportManifestSchema = z
       .array(
         z
           .object({
-            name: z.enum(artifactNames),
+            name: z.enum(legacyArtifactNames),
             sha256: hash,
             bytes: z.int().positive(),
           })
           .strict(),
       )
-      .length(artifactCatalog.length),
+      .length(legacyArtifactNames.length),
   })
   .strict()
-  .refine(v => new Set(v.files.map(f => f.name)).size === artifactCatalog.length, 'Complete bundle required.');
+  .refine(v => new Set(v.files.map(f => f.name)).size === legacyArtifactNames.length, 'Complete bundle required.');
+export const exportManifestSchema = z.discriminatedUnion('schemaVersion', [
+  legacyExportManifestSchema,
+  documentPublicationSchema,
+]);
 export const reviewStateSchema = z
   .object({
     runId: scopedRunId,

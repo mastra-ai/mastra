@@ -11,7 +11,7 @@ import type { ConfirmedInputMapping } from '../contracts/mapping.ts';
 import type { InputSourceSnapshot } from '../intake/source.ts';
 
 export async function persistIntake(
-  client: Client,
+  client: Pick<Client, 'transaction'>,
   limits: InputLimits,
   runId: string,
   input: QuestionnaireInput,
@@ -65,11 +65,15 @@ export async function persistIntake(
         sql: 'INSERT INTO vrq_intakes (run_id,digest,canonical_json,mapping_json,source_digest,created_at) VALUES (?,?,?,?,?,?)',
         args: [runId, digest, json, map, source.sha256, new Date().toISOString()],
       });
+      await transaction.execute({
+        sql: 'INSERT INTO vrq_document_plans (run_id,plan_json) VALUES (?,NULL)',
+        args: [runId],
+      });
     }
     return { runId, digest };
   });
 }
-export async function readIntake(client: Client, runId: string) {
+export async function readIntake(client: Pick<Client, 'execute'>, runId: string) {
   const result = await client.execute({
     sql: 'SELECT canonical_json, mapping_json, source_digest FROM vrq_intakes WHERE run_id = ?',
     args: [runId],

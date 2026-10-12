@@ -1,7 +1,16 @@
+import { readDomainMetrics } from '../src/mastra/observability/metrics.ts';
+import { createLocalObservability, SafeLogger } from '../src/mastra/observability/privacy.ts';
 import { parseArgs } from 'node:util';
 import { readFile } from 'node:fs/promises';
 import { Mastra } from '@mastra/core';
-import { databaseUrl, runtimeRoot, storage } from '../src/mastra/persistence/database.ts';
+import {
+  databaseUrl,
+  runtimeRoot,
+  storage,
+  nativeStorage,
+  configureReadOnlyAccess,
+  telemetryHealth,
+} from '../src/mastra/persistence/database.ts';
 import { vendorRiskQuestionnaire, recoverQuestionnaire } from '../src/mastra/workflows/vendor-risk-questionnaire.ts';
 import { openReviewStore } from '../src/mastra/persistence/review.ts';
 import { reviewDecisionSchema, scopedRunId } from '../src/mastra/contracts/review.ts';
@@ -10,7 +19,8 @@ import { publishExport } from '../src/mastra/exports/publication.ts';
 import { previewCleanup, confirmCleanup, cleanupConfirmationSchema } from '../src/mastra/runtime/maintenance.ts';
 import { loadEvidenceProfile } from '../src/mastra/runtime/profile.ts';
 
-new Mastra({ storage, workflows: { vendorRiskQuestionnaire } });
+const observability = createLocalObservability();
+
 try {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
@@ -23,6 +33,18 @@ try {
   });
   const runId = scopedRunId.parse(values['run-id']),
     options = { databaseUrl, runtimeRoot };
+  if (['status', 'metrics'].includes(positionals[0]!)) configureReadOnlyAccess();
+  else {
+    const tracing = !['cleanup-preview', 'cleanup', 'recover-claim'].includes(positionals[0]!);
+    if (!tracing) nativeStorage.deferTelemetry();
+    await storage.init();
+    new Mastra({
+      logger: new SafeLogger(),
+      ...(tracing ? { observability } : {}),
+      storage,
+      workflows: { vendorRiskQuestionnaire },
+    });
+  }
   async function evidenceOptions() {
     if ((values.root === undefined) !== (values.manifest === undefined))
       throw new Error('COMPLETE_EVIDENCE_OVERRIDE_REQUIRED');
@@ -36,7 +58,8 @@ try {
   }
   const review = await openReviewStore();
   try {
-    if (positionals[0] === 'status') console.log(JSON.stringify(await review.read(runId), null, 2));
+    if (positionals[0] === 'metrics') console.log(JSON.stringify(await readDomainMetrics(databaseUrl, runId), null, 2));
+    else if (positionals[0] === 'status') console.log(JSON.stringify(await review.read(runId), null, 2));
     else if (positionals[0] === 'recover-claim') {
       await review.recoverClaim(runId, values['claim-token']!);
       console.log(JSON.stringify({ runId, state: 'claim-recovered' }));
@@ -77,11 +100,16 @@ try {
           }),
         ),
       );
-    } else throw new Error('Use status, submit, resume, export, cleanup-preview or cleanup.');
+    } else throw new Error('Use metrics, status, submit, resume, export, cleanup-preview or cleanup.');
   } finally {
     review.close();
   }
 } catch {
   console.error(JSON.stringify({ code: 'REVIEW_OPERATION_FAILED' }));
   process.exitCode = 1;
+} finally {
+  await observability.shutdown();
+  await nativeStorage.close();
+  if (telemetryHealth.status === 'degraded_incomplete')
+    console.error(JSON.stringify({ telemetry: telemetryHealth.status }));
 }

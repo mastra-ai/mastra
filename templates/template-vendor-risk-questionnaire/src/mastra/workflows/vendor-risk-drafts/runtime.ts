@@ -1,3 +1,5 @@
+import type { Client } from '@libsql/client';
+import type { StorageOwner } from '../../persistence/client.ts';
 import type { Interpretation } from '../../contracts/answer.ts';
 import type { CanonicalQuestion } from '../../contracts/question.ts';
 import type { ProcessingStore } from '../../persistence/processing.ts';
@@ -8,6 +10,8 @@ export interface DraftWorkflowOptions {
   databaseUrl?: string;
   runtimeRoot?: string;
   models?: ModelFactory;
+  storageOwner?: StorageOwner;
+  applicationClient?: Client;
 }
 
 export interface DraftRunSession {
@@ -21,11 +25,17 @@ export interface DraftWorkflowRuntime {
   sessions: Map<string, DraftRunSession>;
   stores: Map<string, ProcessingStore>;
   workflowOwners: Map<string, string>;
+  rehydrating: Map<string, Promise<void>>;
 }
 
-export function closeDraftRun(runtime: DraftWorkflowRuntime, intakeRunId: string) {
-  runtime.stores.get(intakeRunId)?.close();
-  runtime.stores.delete(intakeRunId);
-  runtime.sessions.delete(intakeRunId);
-  runtime.workflowOwners.delete(intakeRunId);
+export async function closeDraftRun(runtime: DraftWorkflowRuntime, intakeRunId: string) {
+  try {
+    await runtime.stores.get(intakeRunId)?.close();
+  } finally {
+    runtime.options.storageOwner?.release(intakeRunId);
+    runtime.stores.delete(intakeRunId);
+    runtime.sessions.delete(intakeRunId);
+    runtime.workflowOwners.delete(intakeRunId);
+    runtime.rehydrating.delete(intakeRunId);
+  }
 }

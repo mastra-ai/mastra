@@ -1,5 +1,8 @@
+import { renderedValues } from '../completion/document.ts';
+import { prepareCompletion } from '../persistence/completion.ts';
+import { generatePhase } from '../agents/runtime.ts';
 import { userInfo } from 'node:os';
-import { verificationSchema } from '../contracts/answer.ts';
+import { verificationSchema, compatibleResponseSchema } from '../contracts/answer.ts';
 import type { AnswerDraft, QuestionResult } from '../contracts/answer.ts';
 import { projectionSchema } from '../contracts/review.ts';
 import type { ReviewDecision, Projection } from '../contracts/review.ts';
@@ -11,9 +14,9 @@ import { openReviewStore } from '../persistence/review.ts';
 import { canonicalJson } from '../intake/source.ts';
 import { checkLocalContent } from '../processing/local-filter.ts';
 import { createScreening } from '../processing/security.ts';
-import { createProvider, providerOptions } from '../processing/model.ts';
+import { createProvider } from '../processing/model.ts';
 import type { ModelFactory } from '../processing/model.ts';
-import { bindSupportVerifierAgent } from '../agents/support-verifier.ts';
+import { supportVerifierAgent } from '../agents/support-verifier.ts';
 import { trustedQuestionContext, questionPayload } from '../processing/answers.ts';
 import {
   sourceContext,
@@ -35,68 +38,62 @@ const trustedReasons = new Set([
   'No releasable supported answer is available.',
   'Evidence is withheld.',
 ]);
-async function verifyCorrection(
-  draft: AnswerDraft,
+// Corrections and custom gap reasons share the same reviewer screening and verifier.
+async function verifyReviewedText(
+  draft: AnswerDraft | undefined,
   result: QuestionResult,
   store: ProcessingStore,
   options: ReviewOptions,
   evidence: EvidenceSnapshotRecord,
   externalReason: string,
 ) {
-  const status = (await store.status(evidence.runId))!,
-    intake = (await store.readIntake(evidence.runId))!;
-  const question = intake.input.questions.find(q => q.id === result.questionId)!;
-  if (!result.interpretation || draft.domain !== result.interpretation.domain)
-    throw new Error('UNSUPPORTED_CORRECTION');
-  if (
-    draft.confidence < status.run.policy.confidenceThreshold ||
-    result.interpretation.subparts.some(part => !draft.coveredSubparts.includes(part)) ||
-    draft.claims.some(
-      claim =>
-        claim.kind !== 'policy' &&
-        draft.citations
-          .filter(c => claim.citationIds.includes(c.id))
-          .every(c => evidence.documents.find(d => d.id === c.documentId)?.kind === 'policy'),
+  const status = (await store.status(evidence.runId))!;
+  let payload: unknown;
+  if (draft) {
+    const intake = (await store.readIntake(evidence.runId))!;
+    const question = intake.input.questions.find(q => q.id === result.questionId)!;
+    if (!result.interpretation || draft.domain !== result.interpretation.domain)
+      throw new Error('UNSUPPORTED_CORRECTION');
+    if (
+      draft.confidence < status.run.policy.confidenceThreshold ||
+      result.interpretation.subparts.some(part => !draft.coveredSubparts.includes(part)) ||
+      draft.claims.some(
+        claim =>
+          claim.kind !== 'policy' &&
+          draft.citations
+            .filter(c => claim.citationIds.includes(c.id))
+            .every(c => evidence.documents.find(d => d.id === c.documentId)?.kind === 'policy'),
+      )
     )
-  )
-    throw new Error('UNSUPPORTED_CORRECTION');
-  if (question.answerConstraints.maxChars && draft.text.length > question.answerConstraints.maxChars)
-    throw new Error('INCOMPATIBLE_RESPONSE');
-  const aliases =
-    draft.value === 'not_applicable'
-      ? ['not_applicable', 'n/a', 'na']
-      : draft.value === 'yes'
-        ? ['yes', 'true', '1']
-        : draft.value === 'no'
-          ? ['no', 'false', '0']
-          : [draft.value];
-  if (
-    question.answerType === 'free_text'
-      ? draft.responseOption !== null
-      : !question.answerConstraints.options?.some(
-          o =>
-            o.value === draft.responseOption &&
-            (question.answerType === 'single_choice' || aliases.includes(o.value.toLowerCase())),
-        )
-  )
-    throw new Error('INCOMPATIBLE_RESPONSE');
+      throw new Error('UNSUPPORTED_CORRECTION');
+    if (!compatibleResponseSchema(question).safeParse(draft).success) throw new Error('INCOMPATIBLE_RESPONSE');
+    payload = {
+      question: questionPayload(question),
+      interpretation: result.interpretation,
+      draft,
+      externalReason,
+      excerpts: draft.citations.map(c => ({
+        text: c.supportingExcerpt,
+        documentId: c.documentId,
+        kind: evidence.documents.find(d => d.id === c.documentId)!.kind,
+      })),
+    };
+  } else {
+    payload = {
+      questionId: result.questionId,
+      draft: { value: 'unknown', text: '', claims: [], citations: [] },
+      externalReason,
+      excerpts: [],
+      instruction:
+        'The external gap reason must contain no unsupported organizational control, certification, commitment or protected detail. It may describe only missing or withheld support.',
+    };
+  }
   const models = options.models ?? (() => createProvider(status.run.policy));
   const context = trustedQuestionContext(result.questionId, {
     runId: evidence.runId,
     policy: status.run.policy,
-    evidence: { record: evidence } as Parameters<typeof trustedQuestionContext>[1]['evidence'],
+    evidence: { record: evidence },
   });
-  const payload = {
-    question: questionPayload(question),
-    interpretation: result.interpretation,
-    draft,
-    externalReason,
-    excerpts: draft.citations.map(c => ({
-      text: c.supportingExcerpt,
-      documentId: c.documentId,
-      kind: evidence.documents.find(d => d.id === c.documentId)!.kind,
-    })),
-  };
   await createScreening({
     runId: evidence.runId,
     questionId: result.questionId,
@@ -105,7 +102,8 @@ async function verifyCorrection(
     models,
     requestContext: context,
   })(canonicalJson(payload), 'reviewer');
-  const verifier = bindSupportVerifierAgent(
+  const verification = await generatePhase(
+    supportVerifierAgent,
     {
       runId: evidence.runId,
       questionId: result.questionId,
@@ -114,91 +112,29 @@ async function verifyCorrection(
       provider: models('verification', result.questionId),
       phase: 'verification',
       maxTurns: 1,
-      validateOutput: v => verificationSchema.parse(v),
     },
     context,
-  );
-  const response = await verifier.generate(canonicalJson(payload), {
-    requestContext: context,
-    structuredOutput: { schema: verificationSchema, errorStrategy: 'strict' },
-    maxSteps: 1,
-    modelSettings: { maxRetries: 0 },
-    providerOptions,
-  });
-  const v = verificationSchema.parse(response.object);
-  if (
-    v.conflictedClaimIds.length ||
-    v.unsupportedCommitment ||
-    !v.applicable ||
-    !v.complete ||
-    v.sensitive ||
-    draft.claims.some(c => !v.supportedClaimIds.includes(c.id)) ||
-    v.supportedClaimIds.some(id => !draft.claims.some(c => c.id === id))
-  )
-    throw new Error('UNSUPPORTED_CORRECTION');
-}
-async function verifyGapReason(
-  reason: string,
-  questionId: string,
-  store: ProcessingStore,
-  options: ReviewOptions,
-  evidence: EvidenceSnapshotRecord,
-) {
-  const status = (await store.status(evidence.runId))!,
-    models = options.models ?? (() => createProvider(status.run.policy));
-  const context = trustedQuestionContext(questionId, {
-    runId: evidence.runId,
-    policy: status.run.policy,
-    evidence: { record: evidence } as Parameters<typeof trustedQuestionContext>[1]['evidence'],
-  });
-  const payload = {
-    questionId,
-    draft: { value: 'unknown', text: '', claims: [], citations: [] },
-    externalReason: reason,
-    excerpts: [],
-    instruction:
-      'The external gap reason must contain no unsupported organizational control, certification, commitment or protected detail. It may describe only missing or withheld support.',
-  };
-  await createScreening({ runId: evidence.runId, questionId, policy: status.run.policy, store, models })(
     canonicalJson(payload),
-    'reviewer',
+    verificationSchema,
   );
-  const agent = bindSupportVerifierAgent(
-    {
-      runId: evidence.runId,
-      questionId,
-      policy: status.run.policy,
-      store,
-      provider: models('verification', questionId),
-      phase: 'verification',
-      maxTurns: 1,
-      validateOutput: v => verificationSchema.parse(v),
-    },
-    context,
-  );
-  const response = await agent.generate(canonicalJson(payload), {
-    requestContext: context,
-    structuredOutput: { schema: verificationSchema, errorStrategy: 'strict' },
-    maxSteps: 1,
-    modelSettings: { maxRetries: 0 },
-    providerOptions,
-  });
-  const v = verificationSchema.parse(response.object);
+  const claims = draft?.claims ?? [];
   if (
-    v.supportedClaimIds.length ||
-    v.conflictedClaimIds.length ||
-    v.unsupportedCommitment ||
-    !v.applicable ||
-    !v.complete ||
-    v.sensitive
+    verification.conflictedClaimIds.length ||
+    verification.unsupportedCommitment ||
+    !verification.applicable ||
+    !verification.complete ||
+    verification.sensitive ||
+    claims.some(c => !verification.supportedClaimIds.includes(c.id)) ||
+    verification.supportedClaimIds.some(id => !claims.some(c => c.id === id))
   )
-    throw new Error('UNSUPPORTED_GAP_REASON');
+    throw new Error(draft ? 'UNSUPPORTED_CORRECTION' : 'UNSUPPORTED_GAP_REASON');
 }
 export async function submitReview(raw: ReviewDecision, options: ReviewOptions) {
   const review = await openReviewStore(options.databaseUrl);
   let store: ProcessingStore | undefined;
   let token: string | undefined;
   try {
+    const completionPlan = await prepareCompletion(options.databaseUrl, raw.runId);
     const claim = await review.claimDecision(raw);
     if ('replay' in claim) return claim.replay;
     token = claim.token;
@@ -268,8 +204,8 @@ export async function submitReview(raw: ReviewDecision, options: ReviewOptions) 
         label = 'Question withheld for safety review.';
       }
       if (d.disposition !== 'release') {
-        if (!trustedReasons.has(d.safeReason))
-          await verifyGapReason(d.safeReason, result.questionId, store, options, evidence);
+        if (!claim.reuseValidated && !trustedReasons.has(d.safeReason))
+          await verifyReviewedText(undefined, result, store, options, evidence, d.safeReason);
         answers.push({
           questionId: question.id,
           order: question.order,
@@ -320,8 +256,11 @@ export async function submitReview(raw: ReviewDecision, options: ReviewOptions) 
         )
       )
         throw new Error('FOREIGN_RELEASE');
-      if ((d.correction && canonicalJson(draft) !== canonicalJson(result.draft)) || !trustedReasons.has(d.safeReason))
-        await verifyCorrection(draft, result, store, options, evidence, d.safeReason);
+      if (
+        !claim.reuseValidated &&
+        ((d.correction && canonicalJson(draft) !== canonicalJson(result.draft)) || !trustedReasons.has(d.safeReason))
+      )
+        await verifyReviewedText(draft, result, store, options, evidence, d.safeReason);
       answers.push({
         questionId: question.id,
         order: question.order,
@@ -350,6 +289,7 @@ export async function submitReview(raw: ReviewDecision, options: ReviewOptions) 
       answers,
       evidence: releasable,
     });
+    renderedValues(completionPlan, projection);
     await validateProjectionText(projection, evidence);
     // Newly introduced public labels/reasons are screened through the native detector boundary too.
     // The exhausted branch admits only static gap prose and locally checked, schema-bound identifiers.
@@ -358,7 +298,7 @@ export async function submitReview(raw: ReviewDecision, options: ReviewOptions) 
       raw.dispositions.some(d => d.correction) ||
       !previous ||
       canonicalJson(previous.answers.map(a => a.safeReason)) !== canonicalJson(answers.map(a => a.safeReason));
-    if (changed && !exhaustion) {
+    if (changed && !exhaustion && !claim.reuseValidated) {
       const models = options.models ?? (() => createProvider(status.run.policy));
       const screen = createScreening({
         runId: raw.runId,

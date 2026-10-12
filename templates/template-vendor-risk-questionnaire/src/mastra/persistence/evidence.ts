@@ -7,7 +7,7 @@ import { writeTransaction } from './transaction.ts';
 import type { EvidenceSnapshotRecord, EligibleSource } from '../evidence/snapshot.ts';
 
 export async function persistEvidence(
-  client: Client,
+  client: Pick<Client, 'transaction'>,
   limits: InputLimits,
   record: EvidenceSnapshotRecord,
   sources: EligibleSource[],
@@ -54,7 +54,7 @@ export async function persistEvidence(
     }
   });
 }
-export async function readEvidence(client: Client, runId: string) {
+export async function readEvidence(client: Pick<Client, 'execute'>, runId: string) {
   const result = await client.execute({
     sql: 'SELECT snapshot_json FROM vrq_evidence_snapshots WHERE run_id = ?',
     args: [runId],

@@ -1,3 +1,4 @@
+import type { CanonicalQuestion } from './question.ts';
 import { z } from 'zod';
 import { id } from './primitives.ts';
 import { evidenceCitationSchema } from './evidence-citation.ts';
@@ -40,6 +41,7 @@ export const interpretationSchema = z
   })
   .strict();
 export const answerValueSchema = z.enum(['yes', 'no', 'partial', 'not_applicable', 'unknown', 'free_text']);
+export const draftInvariantSchema = z.enum(['DRAFT_UNIQUENESS', 'DRAFT_CITATION_REFERENCE', 'DRAFT_ASSERTION']);
 export const draftSchema = z
   .object({
     questionId: id,
@@ -90,15 +92,27 @@ function refineDraft(
     new Set(v.citations.map(x => x.id)).size !== v.citations.length ||
     new Set(v.coveredSubparts).size !== v.coveredSubparts.length
   )
-    c.addIssue({ code: 'custom', message: 'Draft identities and coverage must be unique.' });
+    c.addIssue({
+      code: 'custom',
+      message: 'Draft identities and coverage must be unique.',
+      params: { invariant: 'DRAFT_UNIQUENESS' },
+    });
   if (v.claims.some(x => x.citationIds.some(id => !v.citations.some(c => c.id === id))))
-    c.addIssue({ code: 'custom', message: 'Claims require existing citation references.' });
+    c.addIssue({
+      code: 'custom',
+      message: 'Claims require existing citation references.',
+      params: { invariant: 'DRAFT_CITATION_REFERENCE' },
+    });
   if (
     v.value === 'unknown'
       ? v.claims.length > 0 || v.citations.length > 0 || v.text !== '' || v.responseOption !== null
       : v.text.length === 0 || v.claims.length === 0
   )
-    c.addIssue({ code: 'custom', message: 'Factual answers require claims; unknown carries no factual assertion.' });
+    c.addIssue({
+      code: 'custom',
+      message: 'Factual answers require claims; unknown carries no factual assertion.',
+      params: { invariant: 'DRAFT_ASSERTION' },
+    });
 }
 export const verificationSchema = z
   .object({
@@ -159,3 +173,37 @@ export const questionResultSchema = z
 export type Interpretation = z.infer<typeof interpretationSchema>;
 export type AnswerDraft = z.infer<typeof draftSchema>;
 export type QuestionResult = z.infer<typeof questionResultSchema>;
+
+// Draft generation and human corrections must fit the same questionnaire fields.
+export function compatibleResponseSchema(question: CanonicalQuestion) {
+  return z
+    .object({
+      value: draftSchema.shape.value,
+      text: draftSchema.shape.text,
+      responseOption: draftSchema.shape.responseOption,
+    })
+    .refine(
+      draft => {
+        if (question.answerConstraints.maxChars && draft.text.length > question.answerConstraints.maxChars)
+          return false;
+        if (draft.value === 'unknown') return true;
+        if (question.answerType === 'free_text') return draft.responseOption === null;
+        const aliases =
+          draft.value === 'not_applicable'
+            ? ['not_applicable', 'n/a', 'na']
+            : draft.value === 'yes'
+              ? ['yes', 'true', '1']
+              : draft.value === 'no'
+                ? ['no', 'false', '0']
+                : [draft.value];
+        return Boolean(
+          question.answerConstraints.options?.some(
+            option =>
+              option.value === draft.responseOption &&
+              (question.answerType === 'single_choice' || aliases.includes(option.value.toLowerCase())),
+          ),
+        );
+      },
+      { message: 'Response must fit the original question length, type and supplied choices.' },
+    );
+}

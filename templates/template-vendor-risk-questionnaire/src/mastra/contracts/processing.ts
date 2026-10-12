@@ -68,8 +68,8 @@ export const processingStatusSchema = z
   .object({
     run: processingRunSchema,
     results: z.array(questionResultSchema).max(100),
-    usage: z.array(usageRecordSchema).max(10000),
-    security: z.array(securityOutcomeSchema).max(10000),
+    usage: z.array(usageRecordSchema),
+    security: z.array(securityOutcomeSchema),
   })
   .strict();
 export type ProcessingRun = z.infer<typeof processingRunSchema>;

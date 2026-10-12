@@ -28,7 +28,8 @@ export function createQuestionnaireWorkflow(options: DraftWorkflowOptions = {}) 
   });
   return createWorkflow({
     id: 'vendor-risk-questionnaire',
-    description: 'Persist drafts, suspend once for exact-set review and publish a complete approved bundle.',
+    description:
+      'Persist drafts, suspend once for exact-set review and publish one source-preserving answered document.',
     inputSchema: draftInputSchema,
     outputSchema: exportManifestSchema,
     options: { autoRestartActiveRuns: false },

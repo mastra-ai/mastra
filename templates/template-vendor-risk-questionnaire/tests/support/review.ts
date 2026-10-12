@@ -3,24 +3,26 @@ import { evidenceAnswerAgent } from '../../src/mastra/agents/evidence-answer.ts'
 import { supportVerifierAgent } from '../../src/mastra/agents/support-verifier.ts';
 import { answerConsistencyAgent } from '../../src/mastra/agents/answer-consistency.ts';
 import { Mastra } from '@mastra/core';
-import { LibSQLStore } from '@mastra/libsql';
+import { createNativeStorage } from '../../src/mastra/persistence/database.ts';
 import { resolve } from 'node:path';
 import { createQuestionnaireWorkflow } from '../../src/mastra/workflows/vendor-risk-questionnaire.ts';
 import { openReviewStore } from '../../src/mastra/persistence/review.ts';
 import { openProcessingStore } from '../../src/mastra/persistence/processing.ts';
-import { defaultExecutionPolicy } from '../../src/mastra/contracts/execution-policy.ts';
+import { fixturePolicy } from './policy.ts';
 import type { ExecutionPolicy } from '../../src/mastra/contracts/execution-policy.ts';
 import type { ReviewDecision } from '../../src/mastra/contracts/review.ts';
 import type { CasePlan, DraftFixture } from './drafting.ts';
 import { draftingFixture, controlledProvider } from './drafting.ts';
 
 export function attachParent(fixture: DraftFixture, models: ReturnType<typeof controlledProvider>['factory']) {
+  const native = createNativeStorage('review-local', fixture.url);
   const workflow = createQuestionnaireWorkflow({
+    storageOwner: native.owner,
     databaseUrl: fixture.url,
     runtimeRoot: fixture.runtimeRoot,
     models,
   });
-  const storage = new LibSQLStore({ id: 'review-local', url: fixture.url });
+  const storage = native.storage;
   const mastra = new Mastra({
     storage,
     agents: { questionInterpretationAgent, evidenceAnswerAgent, supportVerifierAgent, answerConsistencyAgent },
@@ -44,10 +46,7 @@ export async function reviewFixture(
       evidenceRoot: resolve(root, 'evidence'),
       manifestPath: fixture.manifestPath,
       policy: {
-        ...defaultExecutionPolicy,
-        maxPhysicalCalls: 3000,
-        budgetUsd: 100,
-        maxRunElapsedMs: 86400000,
+        ...fixturePolicy,
         ...policy,
       },
     },

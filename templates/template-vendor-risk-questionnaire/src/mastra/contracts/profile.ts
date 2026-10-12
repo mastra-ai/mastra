@@ -12,4 +12,3 @@ export const evidenceProfileSchema = z
     policy: executionPolicySchema,
   })
   .strict();
-export type EvidenceProfile = z.infer<typeof evidenceProfileSchema>;

@@ -2,15 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { realpath, readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate';
 import { Mastra } from '@mastra/core';
 import { RequestContext } from '@mastra/core/request-context';
 import { temporaryDirectory, cleanupDirectory, context } from '../fixtures/support.ts';
 import { generateCorpus, demoProfile } from '../fixtures/corpus.ts';
 import { reviewFixture, decision } from '../support/review.ts';
 import { submitReview } from '../../src/mastra/review/service.ts';
-import { artifactCatalog, renderBundle, validateBundleContent } from '../../src/mastra/exports/catalog.ts';
-import { renderPdf } from '../../src/mastra/exports/pdf.ts';
+import { prepareCompletion, sourceBytes } from '../../src/mastra/persistence/completion.ts';
+import { writeDocument, validateDocument } from '../../src/mastra/completion/document.ts';
 import { loadEvidenceProfile } from '../../src/mastra/runtime/profile.ts';
 import { buildEvidenceSnapshot } from '../../src/mastra/evidence/snapshot.ts';
 import { openIntakeStore } from '../../src/mastra/persistence/store.ts';
@@ -30,85 +29,30 @@ afterEach(async () => {
   await cleanupDirectory(root);
 });
 describe('Configured evidence and registered runtime', () => {
-  it('artifact_catalog_accepts_equivalent_serialization_and_rejects_semantic_tampering', async () => {
+  it('document_validator_accepts_zip_recompression_and_rejects_unapproved_xml_edits', async () => {
     const f = await reviewFixture(root),
-      approved = (await submitReview(decision(f), f.options))!,
-      p = approved.projection!;
-    const original = await renderBundle(p),
-      equivalent = new Map<string, Buffer>(original);
-    expect(artifactCatalog).toHaveLength(6);
-    expect(new Set(artifactCatalog.map(a => a.format)).size).toBe(5);
-    expect(artifactCatalog.every(a => a.mime && a.role)).toBe(true);
-    equivalent.set('completed.json', Buffer.from(JSON.stringify(p, null, 4)));
-    for (const name of ['questionnaire.csv', 'evidence.csv'])
-      equivalent.set(
-        name,
-        Buffer.from(
-          original
-            .get(name as 'questionnaire.csv')!
-            .toString()
-            .replace(/\r\n/g, '\n'),
-        ),
-      );
-    equivalent.set(
-      'completed.md',
-      Buffer.from(original.get('completed.md')!.toString().replace(/\n\n/g, '\r\n\r\n\r\n')),
-    );
-    const archive = unzipSync(original.get('questionnaire.xlsx')!);
-    for (const name of Object.keys(archive))
-      if (name.endsWith('.xml'))
-        archive[name] = strToU8(
-          strFromU8(archive[name]!).replace(/r="([A-Z]+\d+)" t="inlineStr"/g, 't="inlineStr" r="$1"'),
-        );
-    equivalent.set('questionnaire.xlsx', Buffer.from(zipSync(archive, { level: 9 })));
-    await expect(validateBundleContent(equivalent, p)).resolves.toBeUndefined();
-    const mutations: Array<[string, Buffer]> = [
-      ['questionnaire.csv', Buffer.from(original.get('questionnaire.csv')!.toString().replace('Q1', 'FOREIGN'))],
-      [
-        'evidence.csv',
-        Buffer.from(original.get('evidence.csv')!.toString().replace('Approved control record', 'False citation')),
-      ],
-      [
-        'completed.json',
-        Buffer.from(JSON.stringify({ ...p, answers: p.answers.map(a => ({ ...a, question: 'Altered question' })) })),
-      ],
-      ['completed.md', Buffer.from(original.get('completed.md')!.toString() + '\n\n<script>execute()</script>')],
-      [
-        'completed.pdf',
-        await renderPdf({ ...p, answers: p.answers.map(a => ({ ...a, question: 'Altered question' })) }),
-      ],
-    ];
-    for (const [name, bytes] of mutations) {
-      const changed = new Map<string, Buffer>(equivalent);
-      changed.set(name, bytes);
-      await expect(validateBundleContent(changed, p)).rejects.toThrow();
+      approved = (await submitReview(decision(f), f.options))!;
+    const store = await openIntakeStore(f.url),
+      intake = (await store.readIntake(f.runId))!;
+    const plan = await prepareCompletion(f.url, f.runId),
+      original = sourceBytes(intake.sourceBytes);
+    const output = writeDocument(original, plan, approved.projection!);
+    expect(() => validateDocument(original, output, plan, approved.projection!)).not.toThrow();
+    const { unzipSync, zipSync, strFromU8, strToU8 } = await import('fflate');
+    expect(() =>
+      validateDocument(original, zipSync(unzipSync(output), { level: 9 }), plan, approved.projection!),
+    ).not.toThrow();
+    for (const mutation of [
+      '<f>1+1</f>',
+      '<hyperlink ref="A1" location="evil"/>',
+      '<definedName name="Auto_Open">CALL("evil")</definedName>',
+    ]) {
+      const entries = unzipSync(output),
+        part = 'xl/worksheets/sheet1.xml';
+      entries[part] = strToU8(strFromU8(entries[part]!).replace('</worksheet>', mutation + '</worksheet>'));
+      expect(() => validateDocument(original, zipSync(entries), plan, approved.projection!)).toThrow();
     }
-    for (const [part, transform] of [
-      [
-        'xl/workbook.xml',
-        (s: string) =>
-          s.replace(
-            '</workbook>',
-            '<definedNames><definedName name="Auto_Open">CALL("evil")</definedName></definedNames></workbook>',
-          ),
-      ],
-      ['xl/worksheets/sheet1.xml', (s: string) => s.replace('<is>', '<f>1+1</f><is>')],
-      [
-        'xl/worksheets/sheet1.xml',
-        (s: string) =>
-          s.replace('</worksheet>', '<hyperlinks><hyperlink ref="A1" location="evil"/></hyperlinks></worksheet>'),
-      ],
-      ['xl/worksheets/sheet1.xml', (s: string) => s.replace('t="inlineStr"', 't="str"')],
-    ] as const) {
-      const changedArchive = unzipSync(original.get('questionnaire.xlsx')!);
-      changedArchive[part] = strToU8(transform(strFromU8(changedArchive[part]!)));
-      const changed = new Map<string, Buffer>(equivalent);
-      changed.set('questionnaire.xlsx', Buffer.from(zipSync(changedArchive)));
-      await expect(validateBundleContent(changed, p)).rejects.toThrow();
-    }
-    const unexpected = new Map<string, Buffer>(equivalent);
-    unexpected.set('foreign.txt', Buffer.from('extra'));
-    await expect(validateBundleContent(unexpected, p)).rejects.toThrow();
+    store.close();
     await f.mastra.shutdown();
   });
   it('retrieves_only_eligible_configured_evidence_by_question_topics', async () => {
@@ -179,7 +123,7 @@ describe('Configured evidence and registered runtime', () => {
     store.close();
     await f.mastra.shutdown();
   });
-  it('registered_agents_reject_untrusted_context_and_share_physical_call_limits', async () => {
+  it('registered_agents_reject_untrusted_context', async () => {
     const f = await reviewFixture(
       root,
       { questions: [{ text: 'Does production require MFA?' }, { text: 'Is MFA required in production?' }] },
@@ -213,11 +157,6 @@ describe('Configured evidence and registered runtime', () => {
     expect((await processing.status(f.runId))!.usage).toHaveLength(calls);
     processing.close();
     await f.mastra.shutdown();
-    const limited = await reviewFixture(resolve(root, 'limited'), {}, [], { maxPhysicalCalls: 1 });
-    expect(limited.provider.calls).toHaveLength(1);
-    expect(limited.status.usage).toHaveLength(1);
-    expect(limited.status.run.stopReason).toBe('BUDGET_EXHAUSTED');
-    await limited.mastra.shutdown();
   });
   it('dev_bootstrap_preserves_custom_configuration_and_existing_runtime_state', async () => {
     const corpus = resolve(root, 'custom-evidence');
@@ -249,9 +188,11 @@ describe('Configured evidence and registered runtime', () => {
     const cliRoot = resolve(root, 'cli'),
       cliRuntime = resolve(cliRoot, '.runtime');
     await mkdir(cliRuntime, { recursive: true });
-    const f = await reviewFixture(cliRoot, { databasePath: resolve(cliRuntime, 'vrq.db') }, [], {
-      maxPhysicalCalls: 1,
-    });
+    const f = await reviewFixture(cliRoot, { databasePath: resolve(cliRuntime, 'vrq.db') }, [{ value: 'unknown' }]);
+    await submitReview(decision(f), f.options);
+    const approvedStore = await openProcessingStore(f.url),
+      approvedUsage = (await approvedStore.status(f.runId))!.usage;
+    await approvedStore.close();
     await f.mastra.shutdown();
     const cli = (...args: string[]) =>
       execFileSync(process.execPath, [resolve('scripts/review.ts'), ...args, '--run-id', f.runId], {
@@ -259,7 +200,7 @@ describe('Configured evidence and registered runtime', () => {
         encoding: 'utf8',
         env: { ...process.env, MASTRA_TELEMETRY_DISABLED: '1' },
       });
-    expect(cli('status')).toContain('awaiting_review');
+    expect(cli('status')).toContain('approved');
     await writeFile(
       resolve(cliRuntime, 'profile.json'),
       JSON.stringify({
@@ -280,9 +221,8 @@ describe('Configured evidence and registered runtime', () => {
     );
     const processing = await openProcessingStore(f.url),
       after = (await processing.status(f.runId))!;
-    expect(after.usage).toEqual(f.status.usage);
+    expect(after.usage).toEqual(approvedUsage);
     expect(after.run.policy).toEqual(f.status.run.policy);
-    expect(after.usage).toHaveLength(1);
     processing.close();
   });
 });

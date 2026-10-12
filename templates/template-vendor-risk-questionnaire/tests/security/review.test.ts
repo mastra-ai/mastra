@@ -1,12 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { realpath, readFile, readdir, mkdir } from 'node:fs/promises';
+import { realpath, readFile, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { userInfo } from 'node:os';
 import { unzipSync, strFromU8 } from 'fflate';
-import { parse } from 'csv-parse/sync';
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { reviewFixture, decision } from '../support/review.ts';
-import { jsonStream } from '../support/drafting.ts';
+import { jsonStream, userText } from '../support/drafting.ts';
 import { temporaryDirectory, cleanupDirectory } from '../fixtures/support.ts';
 import { submitReview } from '../../src/mastra/review/service.ts';
 import { publishExport } from '../../src/mastra/exports/publication.ts';
@@ -109,8 +107,7 @@ describe('Review authority and release security', () => {
     expect(status.usage.length).toBeGreaterThan(f.status.usage.length);
     expect(status.usage).toHaveLength(f.provider.calls.length + customCalls);
     expect(JSON.stringify(status.security)).not.toContain(canary);
-    for (const name of await readdir(bundle.path))
-      expect((await readFile(resolve(bundle.path, name))).includes(Buffer.from(canary))).toBe(false);
+    expect((await readFile(bundle.path)).includes(Buffer.from(canary))).toBe(false);
     // Unsupported reasons are retained in the local decision audit; no old final approval can release changed text.
     expect((await review.read(f.runId))?.projection?.approvalId).toBe('safe-revision');
     processing.close();
@@ -150,18 +147,11 @@ describe('Review authority and release security', () => {
         text: 'control Production workforce MFA is required.',
       }),
       d = decision(f);
+    expect(f.status.results[0]!.draft).toMatchObject({ value: 'unknown', claims: [], citations: [] });
     d.dispositions[0]!.safeReason = value;
     await submitReview(d, f.options);
     const bundle = await publishExport(f.runId, f.options),
-      csv = await readFile(resolve(bundle.path, 'questionnaire.csv'), 'utf8'),
-      md = await readFile(resolve(bundle.path, 'completed.md'), 'utf8'),
-      zip = unzipSync(await readFile(resolve(bundle.path, 'questionnaire.xlsx')));
-    const rows = parse(csv, { columns: true }) as Array<Record<string, string>>;
-    expect(rows[0]!.Question).toBe("'" + value);
-    expect(rows[0]!['Safe reason']).toBe("'" + value);
-    expect(md).toContain('&lt;script&gt;');
-    expect(md).not.toContain('<script>');
-    expect(md).not.toContain('[open](https://example.test)');
+      zip = unzipSync(await readFile(bundle.path));
     for (const [name, bytes] of Object.entries(zip)) {
       const xml = strFromU8(bytes);
       expect(xml).not.toContain('<f>');
@@ -171,19 +161,12 @@ describe('Review authority and release security', () => {
         expect(xml).toContain('&lt;script&gt;');
       }
     }
-    const task = getDocument({
-        data: new Uint8Array(await readFile(resolve(bundle.path, 'completed.pdf'))),
-        disableFontFace: true,
-      }),
-      pdf = await task.promise;
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      expect(await page.getAnnotations()).toEqual([]);
-    }
-    await task.destroy();
-    const json = JSON.parse(await readFile(resolve(bundle.path, 'completed.json'), 'utf8'));
-    expect(json.answers[0].question).toBe(value);
-    expect(json.answers[0].safeReason).toBe(value);
+    expect(bundle.manifest.quality).toBe('delivered_with_gaps');
+    const gapCheck = f.provider.calls.find(
+      c => c.phase === 'verification' && JSON.parse(userText(c.call)).externalReason === value,
+    );
+    expect(gapCheck).toBeDefined();
+    expect(JSON.parse(userText(gapCheck!.call))).toMatchObject({ draft: { claims: [], citations: [] }, excerpts: [] });
     await f.mastra.shutdown();
   });
 });

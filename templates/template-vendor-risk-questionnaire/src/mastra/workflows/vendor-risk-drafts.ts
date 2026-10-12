@@ -1,3 +1,5 @@
+import { StorageOwner } from '../persistence/client.ts';
+import { databaseUrl, storageOwner } from '../persistence/database.ts';
 import { createWorkflow } from '@mastra/core/workflows';
 
 import { questionResultSchema } from '../contracts/answer.ts';
@@ -12,10 +14,16 @@ export { draftInputSchema } from './vendor-risk-drafts/contracts.ts';
 
 export function createDraftWorkflow(options: DraftWorkflowOptions = {}) {
   const runtime: DraftWorkflowRuntime = {
-    options,
+    options: {
+      ...options,
+      storageOwner:
+        options.storageOwner ??
+        (!options.databaseUrl || options.databaseUrl === databaseUrl ? storageOwner : new StorageOwner()),
+    },
     sessions: new Map(),
     stores: new Map(),
     workflowOwners: new Map(),
+    rehydrating: new Map(),
   };
 
   const prepare = createPrepareDraftRunStep(runtime);
@@ -38,13 +46,19 @@ export function createDraftWorkflow(options: DraftWorkflowOptions = {}) {
     outputSchema: draftOutputSchema,
     options: {
       autoRestartActiveRuns: false,
-      onFinish: async ({ runId: workflowRunId, getInitData }) => {
+      onFinish: async ({ runId: workflowRunId, getInitData, mastra }) => {
         const intakeRunId = getInitData()?.runId;
         if (typeof intakeRunId !== 'string' || runtime.workflowOwners.get(intakeRunId) !== workflowRunId) return;
 
-        const store = runtime.stores.get(intakeRunId);
-        if (store) await store.stop(intakeRunId, 'STORAGE_FAILURE').catch(() => {});
-        closeDraftRun(runtime, intakeRunId);
+        try {
+          await mastra?.observability.flush();
+          const store = runtime.stores.get(intakeRunId);
+          if (runtime.options.storageOwner?.stopped) await runtime.options.storageOwner.settle(intakeRunId);
+          else if (store && (await store.status(intakeRunId))?.run.state === 'processing')
+            await store.stop(intakeRunId, 'STORAGE_FAILURE');
+        } finally {
+          await closeDraftRun(runtime, intakeRunId);
+        }
       },
     },
   })
