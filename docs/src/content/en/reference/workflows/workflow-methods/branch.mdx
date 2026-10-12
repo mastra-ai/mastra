@@ -13,8 +13,8 @@ The `.branch()` method creates conditional branches between workflow steps, allo
 
 ```typescript
 workflow.branch([
-  [async ({ context }) => true, step1],
-  [async ({ context }) => false, step2],
+  [async () => true, step1],
+  [async () => false, step2],
 ])
 ```
 
