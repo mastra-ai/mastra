@@ -27,6 +27,7 @@ const AI_SDK_PROVIDER_NAMESPACE_ALIASES = new Map([
 
 let cachedLoadError: string | null = null;
 let globalRegistry: PricingRegistry | null = null;
+let bundledRegistry: PricingRegistry | null = null;
 // When the global pricing was last confirmed against models.dev. 0 means the bundled snapshot.
 let refreshedAt = 0;
 let lastRefreshAttemptAt = 0;
@@ -49,10 +50,8 @@ export class PricingRegistry {
    */
   static getGlobal(): PricingRegistry | null {
     if (!globalRegistry) {
-      const pricingModels = loadCachedPricingModels() ?? loadPricingModels();
-      if (pricingModels) {
-        globalRegistry = new PricingRegistry(pricingModels);
-      }
+      const cachedPricingModels = loadCachedPricingModels();
+      globalRegistry = cachedPricingModels ? new PricingRegistry(cachedPricingModels) : getBundledRegistry();
     }
 
     if (Date.now() - refreshedAt >= REFRESH_INTERVAL_MS) {
@@ -63,21 +62,42 @@ export class PricingRegistry {
   }
 
   get(args: { provider: string; model: string }): PricingModel | null {
+    const match = this.find(args);
+    if (match || this !== globalRegistry) {
+      return match;
+    }
+
+    // models.dev can drop or rename a model after a release, so refreshed prices may miss a
+    // model the bundled snapshot still has.
+    const bundledMatch = this === bundledRegistry ? null : getBundledRegistry()?.find(args);
+    if (bundledMatch) {
+      return bundledMatch;
+    }
+
+    // A model with no price anywhere may be newer than the pricing in use.
+    refreshGlobalPricing();
+    return null;
+  }
+
+  private find(args: { provider: string; model: string }): PricingModel | null {
     for (const provider of getPricingProviderCandidates(args.provider, args.model)) {
-      const variants = getModelVariants(args.model, provider);
-      for (const variant of variants) {
-        const key = makePricingKey({ provider, model: variant });
-        const match = this.pricingModels.get(key);
+      for (const variant of getModelVariants(args.model, provider)) {
+        const match = this.pricingModels.get(makePricingKey({ provider, model: variant }));
         if (match) return match;
       }
     }
-
-    // A model with no price may be newer than the pricing in use.
-    if (this === globalRegistry) {
-      refreshGlobalPricing();
-    }
     return null;
   }
+}
+
+function getBundledRegistry(): PricingRegistry | null {
+  if (!bundledRegistry) {
+    const pricingModels = loadPricingModels();
+    if (pricingModels) {
+      bundledRegistry = new PricingRegistry(pricingModels);
+    }
+  }
+  return bundledRegistry;
 }
 
 /**

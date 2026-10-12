@@ -99,6 +99,16 @@ describe('PricingRegistry.getGlobal refresh', () => {
     await vi.waitFor(() => expect(Date.now() - fs.statSync(cacheFile()).mtimeMs).toBeLessThan(60_000));
   });
 
+  it('falls back to the bundled snapshot when refreshed prices miss a model it has', async () => {
+    const bundled = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, 'pricing-data.json'), 'utf-8'));
+    const [bundledModel] = Object.keys(bundled.openai.models);
+    writeCache(catalog(), 'W/"v1"', 0);
+    const Registry = await loadRegistry();
+
+    expect(Registry.getGlobal()?.get({ provider: 'openai', model: bundledModel! })?.id).toBe(`openai/${bundledModel}`);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('does not refresh a fresh cache until a model has no price', async () => {
     writeCache(catalog(), 'W/"v1"', 0);
     const Registry = await loadRegistry();
