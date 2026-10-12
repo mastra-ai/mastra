@@ -17,6 +17,7 @@ import {
   getExperimentDatasetOptions,
   NoExperimentsInfo,
 } from '@/domains/experiments';
+import { MAX_COMPARED_EXPERIMENTS } from '@/domains/experiments/components/comparison/constants';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import { buildReviewByExperimentMap } from '@/domains/review/review-maps';
 import {
@@ -89,14 +90,15 @@ export default function Experiments() {
   const isLoading = isLoadingDatasets || isLoadingExperiments;
   const error = errorExperiments || errorDatasets;
 
-  // Max 2 selected: keep the oldest pick, replace the most recent one.
+  // At the cap: keep the earlier picks (the first is the baseline), replace the most recent one.
   const toggleExperimentSelection = (experimentId: string) => {
     const knownIds = new Set(experiments.map(exp => exp.id));
     setSelectedExperimentIds(current => {
       // Drop ids whose experiment disappeared so they don't occupy a compare slot.
       const prev = current.filter(id => knownIds.has(id));
       if (prev.includes(experimentId)) return prev.filter(id => id !== experimentId);
-      if (prev.length >= 2) return [prev[0], experimentId];
+      if (prev.length >= MAX_COMPARED_EXPERIMENTS)
+        return [...prev.slice(0, MAX_COMPARED_EXPERIMENTS - 1), experimentId];
       return [...prev, experimentId];
     });
   };
@@ -113,14 +115,15 @@ export default function Experiments() {
     return { selectedIds: ids, selectedDatasetIds: new Set(ids.map(id => datasetByExperimentId.get(id))) };
   }, [experiments, selectedExperimentIds]);
   const compareDisabledReason =
-    selectedIds.length === 2 && selectedDatasetIds.size !== 1 ? 'not the same dataset' : undefined;
+    selectedIds.length >= 2 && selectedDatasetIds.size !== 1 ? 'not the same dataset' : undefined;
 
   const executeCompare = () => {
-    if (selectedIds.length !== 2 || compareDisabledReason) return;
-    const [baseline, contender] = selectedIds;
+    if (selectedIds.length < 2 || compareDisabledReason) return;
+    const [baseline, ...contenders] = selectedIds;
     const [dataset] = selectedDatasetIds;
     if (!dataset) return;
-    const query = new URLSearchParams({ dataset, baseline, contender });
+    const query = new URLSearchParams({ dataset, baseline });
+    for (const contender of contenders) query.append('contender', contender);
     void navigate(`/experiments/compare?${query.toString()}`);
   };
 

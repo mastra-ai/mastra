@@ -2117,7 +2117,11 @@ export type ListDatasetExperimentResultsResponse = Omit<
   results: DatasetExperimentResult[];
 };
 
-export type DatasetExperimentResultRow = Omit<DatasetExperimentResult, 'scores'>;
+export type DatasetExperimentResultRow = DatasetExperimentResult extends infer R
+  ? R extends unknown
+    ? Omit<R, 'scores'>
+    : never
+  : never;
 
 export type RunExperimentItemResponse =
   GeneratedResponse<'POST /datasets/:datasetId/experiments/:experimentId/items/:itemId/run'>;
