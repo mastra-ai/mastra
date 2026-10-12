@@ -160,6 +160,47 @@ describe('UpstashTransport', () => {
     expect(fetchMock).toHaveBeenCalled();
   });
 
+  describe('timestamp handling', () => {
+    const now = 1_700_000_000_000;
+
+    const getPushedLog = () => {
+      const commands = JSON.parse(fetchMock.mock.calls[0][1].body);
+      return JSON.parse(commands[0][2]);
+    };
+
+    beforeEach(() => {
+      vi.setSystemTime(now);
+    });
+
+    it('should preserve a zero timestamp from object input', async () => {
+      transport.write({ msg: 'epoch record', time: 0 } as any);
+      await transport._flush();
+
+      expect(getPushedLog().time).toBe(0);
+    });
+
+    it('should preserve a zero timestamp from JSON string input', async () => {
+      transport.write(JSON.stringify({ msg: 'epoch record', time: 0 }));
+      await transport._flush();
+
+      expect(getPushedLog().time).toBe(0);
+    });
+
+    it('should add the current time when time is null', async () => {
+      transport.write(JSON.stringify({ msg: 'null time', time: null }));
+      await transport._flush();
+
+      expect(getPushedLog().time).toBe(now);
+    });
+
+    it('should add the current time when time is missing', async () => {
+      transport.write(JSON.stringify({ msg: 'no time' }));
+      await transport._flush();
+
+      expect(getPushedLog().time).toBe(now);
+    });
+  });
+
   describe('error handling', () => {
     it('should handle Upstash API errors', async () => {
       fetchMock.mockImplementationOnce(() =>
@@ -201,7 +242,212 @@ describe('UpstashTransport', () => {
     });
   });
 
+  describe('outage buffering', () => {
+    const write = (target: UpstashTransport, count: number) => {
+      for (let i = 1; i <= count; i++) {
+        target._transform(JSON.stringify({ msg: `message${i}` }), 'utf8', () => {});
+      }
+    };
+
+    const deferred = () => {
+      let resolve!: (value: unknown) => void;
+      let reject!: (error: Error) => void;
+      const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    };
+
+    beforeEach(() => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    it('should cap the buffer and drop the oldest records while Upstash is down', async () => {
+      fetchMock.mockImplementation(() => Promise.reject(new Error('Upstash down')));
+      const outageTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2, maxBufferSize: 10 });
+
+      write(outageTransport, 100);
+      await expect(outageTransport._flush()).rejects.toThrow('Upstash down');
+
+      expect(outageTransport.logBuffer).toHaveLength(10);
+      expect(outageTransport.droppedRecords).toBe(90);
+      expect(outageTransport.logBuffer.map(log => log.msg)).toEqual(
+        Array.from({ length: 10 }, (_, index) => `message${index + 91}`),
+      );
+    });
+
+    it('should default the buffer limit to maxListLength', () => {
+      expect(transport.maxBufferSize).toBe(defaultOptions.maxListLength);
+      expect(new UpstashTransport({ ...defaultOptions, maxBufferSize: 5 }).maxBufferSize).toBe(5);
+    });
+
+    it('should flush instead of dropping when maxBufferSize is smaller than batchSize', async () => {
+      const smallBufferTransport = new UpstashTransport({ ...defaultOptions, batchSize: 100, maxBufferSize: 5 });
+
+      // Six writes per round: the fifth must trigger a flush so the sixth does not evict the oldest record
+      for (let round = 0; round < 4; round++) {
+        for (let i = 1; i <= 6; i++) {
+          smallBufferTransport._transform(JSON.stringify({ msg: `message${round * 6 + i}` }), 'utf8', () => {});
+        }
+        while (smallBufferTransport.logBuffer.length > 0) {
+          await smallBufferTransport._flush();
+        }
+      }
+
+      expect(smallBufferTransport.logBuffer).toHaveLength(0);
+
+      expect(smallBufferTransport.droppedRecords).toBe(0);
+      const sent = fetchMock.mock.calls.flatMap(([, request]: any[]) =>
+        JSON.parse(request.body)[0]
+          .slice(2)
+          .map((log: string) => JSON.parse(log).msg),
+      );
+      expect(sent).toEqual(Array.from({ length: 24 }, (_, index) => `message${index + 1}`));
+    });
+
+    it('should use a positive buffer limit when maxListLength disables trimming', async () => {
+      const untrimmedTransport = new UpstashTransport({ ...defaultOptions, maxListLength: -1, batchSize: 2 });
+
+      expect(untrimmedTransport.maxBufferSize).toBe(10000);
+      write(untrimmedTransport, 10);
+      while (untrimmedTransport.logBuffer.length > 0) {
+        await untrimmedTransport._flush();
+      }
+
+      expect(untrimmedTransport.droppedRecords).toBe(0);
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+    });
+
+    it('should reject a maxBufferSize that is not a positive integer', () => {
+      for (const maxBufferSize of [0, -1, 1.5]) {
+        expect(() => new UpstashTransport({ ...defaultOptions, maxBufferSize })).toThrow(
+          'maxBufferSize must be a positive integer',
+        );
+      }
+    });
+
+    it('should not drop records when flushes succeed', async () => {
+      write(transport, 50);
+      await transport._flush();
+      await transport._flush();
+
+      expect(transport.droppedRecords).toBe(0);
+    });
+
+    it('should keep only one flush request in flight', async () => {
+      const pending = deferred();
+      fetchMock.mockImplementationOnce(() => pending.promise);
+      const batchTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2 });
+
+      write(batchTransport, 50);
+      const inFlight = batchTransport._flush();
+      vi.advanceTimersByTime(defaultOptions.flushInterval);
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      pending.resolve({ ok: true, json: () => Promise.resolve({ result: 'success' }) });
+      await inFlight;
+
+      await Promise.all([batchTransport._flush(), batchTransport._flush()]);
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('should resend failed records before newer ones', async () => {
+      fetchMock.mockImplementationOnce(() => Promise.reject(new Error('Upstash down')));
+      const batchTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2 });
+
+      write(batchTransport, 3);
+      await expect(batchTransport._flush()).rejects.toThrow('Upstash down');
+      await batchTransport._flush();
+
+      const [, request] = fetchMock.mock.calls[1];
+      const [lpush] = JSON.parse(request.body);
+      expect(lpush.slice(2).map((log: string) => JSON.parse(log).msg)).toEqual(['message1', 'message2']);
+    });
+
+    it('should wait for an in-flight flush and drain the rest on destroy', async () => {
+      const pending = deferred();
+      fetchMock.mockImplementationOnce(() => pending.promise);
+      const batchTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2 });
+
+      write(batchTransport, 5);
+      const destroyed = new Promise<void>((resolve, reject) => {
+        batchTransport._destroy(null as any, (error?: Error | null) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      pending.resolve({ ok: true, json: () => Promise.resolve({ result: 'success' }) });
+      await destroyed;
+
+      expect(fetchMock.mock.calls.map(([, request]: any[]) => JSON.parse(request.body)[0].length - 2)).toEqual([
+        2, 2, 1,
+      ]);
+      expect(batchTransport.logBuffer).toEqual([]);
+    });
+
+    it('should resend the batch from a failed in-flight flush on destroy', async () => {
+      const pending = deferred();
+      fetchMock.mockImplementationOnce(() => pending.promise);
+      const batchTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2 });
+
+      write(batchTransport, 5);
+      const destroyed = new Promise<void>((resolve, reject) => {
+        batchTransport._destroy(null as any, (error?: Error | null) => {
+          if (error) reject(error);
+          else resolve();
+        });
+      });
+      pending.reject(new Error('Upstash down'));
+      await destroyed;
+
+      const sent = fetchMock.mock.calls.map(([, request]: any[]) =>
+        JSON.parse(request.body)[0]
+          .slice(2)
+          .map((log: string) => JSON.parse(log).msg),
+      );
+      expect(sent).toEqual([
+        ['message1', 'message2'],
+        ['message1', 'message2'],
+        ['message3', 'message4'],
+        ['message5'],
+      ]);
+      expect(batchTransport.logBuffer).toEqual([]);
+    });
+  });
+
   describe('listLogs and listLogsByRunId', () => {
+    it('should normalize page 0 to page 1 when listLogs fails', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      fetchMock.mockImplementation(() => Promise.reject(new Error('Upstash down')));
+
+      expect(await transport.listLogs({ page: 0 })).toEqual({
+        logs: [],
+        total: 0,
+        page: 1,
+        perPage: 100,
+        hasMore: false,
+      });
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should normalize page 0 to page 1 when listLogsByRunId fails', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.spyOn(transport, 'listLogs').mockRejectedValueOnce(new Error('Upstash down'));
+
+      expect(await transport.listLogsByRunId({ runId: 'run-1', page: 0 })).toEqual({
+        logs: [],
+        total: 0,
+        page: 1,
+        perPage: 100,
+        hasMore: false,
+      });
+
+      consoleSpy.mockRestore();
+    });
+
     it('should fetch only the requested page for unfiltered queries', async () => {
       const logs = Array.from({ length: 2 }, (_, index) =>
         JSON.stringify({ msg: `message${index + 3}`, time: index + 3 }),

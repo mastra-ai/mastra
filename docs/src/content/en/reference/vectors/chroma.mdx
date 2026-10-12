@@ -181,7 +181,7 @@ Query an index using a `queryVector`. Returns an array of semantically similar r
   score: number;
   document?: string;
   metadata?: Record<string, string | number | boolean>;
-  embedding?: number[]
+  vector?: number[] // Only included if includeVector is true
 }
 ```
 
@@ -314,7 +314,7 @@ Returns:
 interface IndexStats {
   dimension: number
   count: number
-  metric: 'cosine' | 'euclidean' | 'dotproduct'
+  metric?: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
 
@@ -481,17 +481,21 @@ interface QueryResult {
 
 ## Error handling
 
-The store throws typed errors that can be caught:
+The store throws `MastraError` instances from `@mastra/core/error`:
 
 ```typescript
+import { MastraError } from '@mastra/core/error'
+
 try {
   await store.query({
     indexName: 'index_name',
     queryVector: queryVector,
   })
 } catch (error) {
-  if (error instanceof VectorStoreError) {
-    console.log(error.code) // 'connection_failed' | 'invalid_dimension' | etc
+  if (error instanceof MastraError) {
+    console.log(error.id) // 'MASTRA_VECTOR_CHROMA_QUERY_FAILED'
+    console.log(error.domain) // 'MASTRA_VECTOR'
+    console.log(error.category) // 'USER' | 'THIRD_PARTY'
     console.log(error.details) // Additional error context
   }
 }

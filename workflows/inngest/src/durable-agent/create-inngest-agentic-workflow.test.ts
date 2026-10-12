@@ -657,3 +657,43 @@ describe('Inngest per-step processor history (#25193)', () => {
     expect(mapped.accumulatedSteps).toEqual([priorStep]);
   });
 });
+
+describe('Inngest fallback model list (#26146)', () => {
+  it('carries modelList into the LLM step on every iteration', async () => {
+    const inngest = new Inngest({ id: 'inngest-model-list-tests' });
+    const workflow = createInngestDurableAgenticWorkflow({ inngest });
+    const steps = (workflow as any).executionGraph.steps;
+    const byId = (id: string) => findEntry(steps, c => c.type === 'mapping' && c.id === id);
+
+    const modelList = [
+      { id: 'primary', config: { provider: 'openai', modelId: 'a' }, maxRetries: 0, enabled: true },
+      { id: 'backup', config: { provider: 'openai', modelId: 'b' }, maxRetries: 0, enabled: true },
+    ];
+    const state = await byId('init-iteration-state').mapConfig({
+      inputData: {
+        runId: 'run-1',
+        agentId: 'agent-1',
+        messageId: 'msg-1',
+        messageListState: emptyMessageListState(),
+        toolsMetadata: [],
+        modelConfig: {},
+        modelList,
+        options: {},
+        state: {},
+      },
+    });
+    expect((await byId('map-to-llm-input').mapConfig({ inputData: state })).modelList).toEqual(modelList);
+
+    const next = await byId('update-iteration-state').mapConfig({
+      inputData: {
+        messageListState: emptyMessageListState(),
+        messageId: 'msg-1',
+        state: {},
+        output: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        stepResult: { reason: 'tool-calls' },
+      },
+      getInitData: () => state,
+    });
+    expect((await byId('map-to-llm-input').mapConfig({ inputData: next })).modelList).toEqual(modelList);
+  });
+});

@@ -168,6 +168,7 @@ export class MCPClientsPG extends MCPClientsStorage {
 
   async create(input: { mcpClient: StorageCreateMCPClientInput }): Promise<StorageMCPClientType> {
     const { mcpClient } = input;
+    let draftInserted = false;
     try {
       const tableName = getTableName({ indexName: TABLE_MCP_CLIENTS, schemaName: getSchemaName(this.#schema) });
       const now = new Date();
@@ -182,6 +183,7 @@ export class MCPClientsPG extends MCPClientsStorage {
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [mcpClient.id, 'draft', null, mcpClient.authorId ?? null, metadataJson, nowIso, nowIso, nowIso, nowIso],
       );
+      draftInserted = true;
 
       // 2. Extract snapshot fields and create version 1
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = mcpClient;
@@ -205,18 +207,21 @@ export class MCPClientsPG extends MCPClientsStorage {
         updatedAt: now,
       };
     } catch (error) {
-      // Best-effort cleanup
-      try {
-        const tableName = getTableName({
-          indexName: TABLE_MCP_CLIENTS,
-          schemaName: getSchemaName(this.#schema),
-        });
-        await this.#db.client.none(
-          `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
-          [mcpClient.id],
-        );
-      } catch {
-        // Ignore cleanup errors
+      // Best-effort cleanup, only for a draft this call inserted. If our INSERT failed
+      // (e.g. duplicate id), the row belongs to a concurrent creator and must be kept.
+      if (draftInserted) {
+        try {
+          const tableName = getTableName({
+            indexName: TABLE_MCP_CLIENTS,
+            schemaName: getSchemaName(this.#schema),
+          });
+          await this.#db.client.none(
+            `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
+            [mcpClient.id],
+          );
+        } catch {
+          // Ignore cleanup errors
+        }
       }
 
       if (error instanceof MastraError) throw error;
