@@ -10,11 +10,13 @@
  * user in onboarding once a factory exists.
  */
 import { z } from 'zod';
+import type { SourceControlRepository } from './github';
 
 export const ONBOARDING_REVIEW_RETURN_KEY = 'mastracode.factory-onboarding.return-to-review';
 export const ONBOARDING_DRAFT_KEY = 'mastracode.factory-onboarding.draft';
 export const ONBOARDING_STEP_KEY = 'mastracode.factory-onboarding.step';
 export const ONBOARDING_FACTORY_KEY = 'mastracode.factory-onboarding.factory-id';
+export const ONBOARDING_LINKED_REPOSITORY_KEY = 'mastracode.factory-onboarding.linked-repository-id';
 export const ONBOARDING_UPDATED_AT_KEY = 'mastracode.factory-onboarding.updated-at';
 
 /**
@@ -47,20 +49,19 @@ const repositoryFields = {
   sandboxProvider: z.string(),
   sandboxWorkdir: z.string(),
 };
+const repositorySchema: z.ZodType<SourceControlRepository> = z.union([
+  z.object({ ...repositoryFields, id: z.number(), installationId: z.number(), installationStorageId: z.string() }),
+  z.object({
+    ...repositoryFields,
+    provider: z.literal('gitlab'),
+    id: z.string(),
+    externalId: z.string(),
+    installationStorageId: z.string().optional(),
+  }),
+]);
 const connectionSchema = z.object({ providerId: z.string(), method: z.enum(['api_key', 'oauth']) });
 const draftSchema = z.object({
-  repository: z
-    .union([
-      z.object({ ...repositoryFields, id: z.number(), installationId: z.number(), installationStorageId: z.string() }),
-      z.object({
-        ...repositoryFields,
-        provider: z.literal('gitlab'),
-        id: z.string(),
-        externalId: z.string(),
-        installationStorageId: z.string().optional(),
-      }),
-    ])
-    .optional(),
+  repository: repositorySchema.optional(),
   model: connectionSchema.extend({ modelId: z.string() }).optional(),
   personal: connectionSchema.extend({ modelId: z.string().optional() }).optional(),
 });
@@ -99,6 +100,15 @@ export function readOnboardingFactory(): string | undefined {
   return sessionStorage.getItem(ONBOARDING_FACTORY_KEY) ?? undefined;
 }
 
+/** The repository link this onboarding created, so a retry never unlinks someone else's repository. */
+export function persistOnboardingLinkedRepository(projectRepositoryId: string): void {
+  sessionStorage.setItem(ONBOARDING_LINKED_REPOSITORY_KEY, projectRepositoryId);
+}
+
+export function readOnboardingLinkedRepository(): string | undefined {
+  return sessionStorage.getItem(ONBOARDING_LINKED_REPOSITORY_KEY) ?? undefined;
+}
+
 export function readOnboardingReviewReturn(): boolean {
   return sessionStorage.getItem(ONBOARDING_REVIEW_RETURN_KEY) === 'true';
 }
@@ -120,6 +130,7 @@ export function clearOnboardingFlow(): void {
   sessionStorage.removeItem(ONBOARDING_DRAFT_KEY);
   sessionStorage.removeItem(ONBOARDING_STEP_KEY);
   sessionStorage.removeItem(ONBOARDING_FACTORY_KEY);
+  sessionStorage.removeItem(ONBOARDING_LINKED_REPOSITORY_KEY);
   sessionStorage.removeItem(ONBOARDING_UPDATED_AT_KEY);
 }
 

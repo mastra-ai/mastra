@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { OnboardingConnectionChoice } from '../services/onboardingFlow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -31,6 +32,7 @@ export function PersonalProviderFactoryStep({
     connectedProvider && connection.method
       ? { providerId: connectedProvider.provider, method: connection.method }
       : undefined;
+  const [previouslyConnectedChoice, setPreviouslyConnectedChoice] = useState<OnboardingConnectionChoice>();
   return (
     <section aria-label="Personal provider setup" className="flex max-w-xl flex-col gap-6">
       {connectedProvider && requireModel && (
@@ -61,6 +63,7 @@ export function PersonalProviderFactoryStep({
             <Button
               variant="ghost"
               onClick={() => {
+                setPreviouslyConnectedChoice(connectedChoice);
                 connection.clear();
                 onPreviewProvider?.(undefined);
               }}
@@ -78,7 +81,7 @@ export function PersonalProviderFactoryStep({
       )}
       {!requireModel && (
         <div>
-          <Button variant="primary" size="lg" onClick={() => onContinue(connectedChoice)}>
+          <Button variant="primary" size="lg" onClick={() => onContinue(connectedChoice ?? previouslyConnectedChoice)}>
             Review setup
           </Button>
         </div>

@@ -159,9 +159,9 @@ export function VcsFactoryStep({
           />
           {repositoryQuery.isError && <RepositoryError message={repositoryQuery.error.message} />}
           <div
-            onMouseLeave={() => onPreviewRepository?.(chosenRepository)}
+            onMouseLeave={() => onPreviewRepository?.(repositoryForProvider)}
             onBlur={event => {
-              if (!event.currentTarget.contains(event.relatedTarget)) onPreviewRepository?.(chosenRepository);
+              if (!event.currentTarget.contains(event.relatedTarget)) onPreviewRepository?.(repositoryForProvider);
             }}
           >
             <RepositoryRows

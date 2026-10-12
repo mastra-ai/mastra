@@ -53,8 +53,9 @@ export function AddApiKeyDialog({
   const canWriteOrgKey = !authEnabled || (orgKeyAdminQuery.data ?? true);
   const preferredScope = provider.source === 'stored-org' ? 'org' : defaultScope;
   const [keyDraft, setKeyDraft] = useState('');
-  const writableScope = canWriteOrgKey ? preferredScope : 'user';
-  const [scope, setScope] = useState<KeyScope>(fixedScope ?? writableScope);
+  const [chosenScope, setChosenScope] = useState<KeyScope>();
+  const writableScope = canWriteOrgKey ? (chosenScope ?? preferredScope) : 'user';
+  const scope: KeyScope = fixedScope ?? writableScope;
 
   const fixedScopeCredential = fixedScope === 'org' ? provider.orgCredential : provider.userCredential;
   const replacesSignIn = fixedScope !== undefined && fixedScopeCredential === 'oauth';
@@ -112,7 +113,7 @@ export function AddApiKeyDialog({
               <SegmentedControl
                 aria-label="API key access"
                 value={scope}
-                onValueChange={setScope}
+                onValueChange={setChosenScope}
                 disabled={saveKeyMutation.isPending}
               >
                 <SegmentedControlItem value="user">Just me</SegmentedControlItem>

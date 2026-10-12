@@ -26,10 +26,16 @@ describe('contextual onboarding previews', () => {
         personalConnectionMethod="api_key"
       />,
     );
-    const personal = within(screen.getByRole('region', { name: 'Personal access preview' }));
+    const personalScene = screen.getByLabelText('Personal access preview');
+    expect(personalScene.closest('[data-active]')).toHaveAttribute('data-active', 'true');
+    const personal = within(personalScene);
     expect(within(personal.getByLabelText('Factory work model')).getByText('anthropic/claude-fable-5')).toBeVisible();
     expect(await personal.findByText('Connected · your account')).toBeVisible();
-    expect(screen.queryByRole('region', { name: 'Default model preview' })).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Default model preview').closest('[data-active]')).toHaveAttribute(
+      'data-active',
+      'false',
+    );
+    expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   });
 
   it('shows the selected tracker’s issue becoming a backlog card and uses its connection state', async () => {

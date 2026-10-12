@@ -2,7 +2,7 @@
 '@mastra/factory': patch
 ---
 
-Redesigned Factory onboarding around an editable draft and a final review. Repository and model choices stay editable until you confirm, survive redirects and reloads, and are only saved when you select **Create factory**. If confirmation fails, retrying reuses the same pending Factory instead of creating a duplicate.
+Redesigned Factory onboarding around an editable draft and a final review. Repository and model choices stay editable until you confirm, survive redirects and reloads, and are only saved when you select **Create factory**. If confirmation fails, retrying reuses the same pending Factory instead of creating a duplicate and only replaces the repository link onboarding created. **Create factory** stops with a clear message when the chosen model is no longer available.
 
 **Model providers**
 

@@ -9,6 +9,7 @@ import {
 } from '../../../../hooks/use-providers';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { providerDisplayName } from '../../settings/components/provider-display-name';
+import { credentialAt } from '../../settings/components/provider-credential';
 
 export type ProviderCredentialScope = 'org' | 'user';
 export type ProviderConnectionMethod = 'api_key' | 'oauth';
@@ -55,19 +56,9 @@ export function providerCredentialMethod(
   provider: ProviderInfo,
   scope?: ProviderCredentialScope,
 ): ProviderConnectionMethod | undefined {
-  if (provider.source === 'deployment') return scope === 'user' ? undefined : 'api_key';
-  if (scope === 'org') {
-    if (provider.orgCredential) return provider.orgCredential;
-    if (provider.orgKey || provider.source === 'stored-org') return 'api_key';
-    if (provider.source === 'oauth-org') return 'oauth';
-    return undefined;
-  }
-  if (scope === 'user') {
-    if (provider.userCredential) return provider.userCredential;
-    if (provider.source === 'stored-user') return 'api_key';
-    if (provider.source === 'oauth-user') return 'oauth';
-    return undefined;
-  }
+  if (scope === 'user') return credentialAt(provider, 'user');
+  if (provider.source === 'deployment') return 'api_key';
+  if (scope === 'org') return credentialAt(provider, 'org');
   if (provider.source === 'none') return undefined;
   return provider.source.startsWith('oauth') ? 'oauth' : 'api_key';
 }

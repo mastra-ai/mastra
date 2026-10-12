@@ -7,31 +7,18 @@ import { OnboardingConnectionRow } from './OnboardingConnectionRow';
 export function OnboardingLinearConnection({ onConnect }: { onConnect: () => void }) {
   const query = useLinearStatusQuery();
   if (query.isPending) return <SkeletonRows label="Loading Linear status" rows={1} rowClassName="h-22 w-full" />;
-  if (query.data?.connected)
+  const status = query.data;
+  if (status?.connected)
     return (
       <OnboardingConnectionRow
         compact
         icon={<LinearIcon />}
         name="Linear connected"
         connected
-        description={`Connected to ${query.data.workspace?.name ?? 'Linear'}.`}
+        description={`Connected to ${status.workspace?.name ?? 'Linear'}.`}
       />
     );
-  if (query.isError)
-    return (
-      <OnboardingConnectionRow
-        compact
-        icon={<LinearIcon />}
-        name="Linear"
-        description="Couldn't load Linear connection."
-        action={
-          <Button variant="ghost" size="sm" aria-label="Retry Linear" onClick={() => void query.refetch()}>
-            Retry
-          </Button>
-        }
-      />
-    );
-  if (query.data?.reason === 'missing_config')
+  if (status?.reason === 'missing_config')
     return (
       <OnboardingConnectionRow
         compact
@@ -40,7 +27,7 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
         description="Unavailable for this deployment."
       />
     );
-  if (query.data?.reason === 'organization_required')
+  if (status?.reason === 'organization_required')
     return (
       <OnboardingConnectionRow
         compact
@@ -49,16 +36,29 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
         description="Join an organization to connect Linear."
       />
     );
-  const action = query.data?.reason === 'not_connected' ? 'Connect' : 'Reconnect';
+  if (status?.reason === 'not_connected')
+    return (
+      <OnboardingConnectionRow
+        compact
+        icon={<LinearIcon />}
+        name="Linear"
+        description="Issues and priorities for your work board."
+        action={
+          <Button size="sm" aria-label="Connect Linear" onClick={onConnect}>
+            Connect
+          </Button>
+        }
+      />
+    );
   return (
     <OnboardingConnectionRow
       compact
       icon={<LinearIcon />}
       name="Linear"
-      description="Issues and priorities for your work board."
+      description="Couldn't load Linear connection."
       action={
-        <Button size="sm" aria-label={`${action} Linear`} onClick={onConnect}>
-          {action}
+        <Button variant="ghost" size="sm" aria-label="Retry Linear" onClick={() => void query.refetch()}>
+          Retry
         </Button>
       }
     />

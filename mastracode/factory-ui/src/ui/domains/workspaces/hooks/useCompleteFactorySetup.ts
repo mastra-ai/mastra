@@ -2,22 +2,32 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
+import { availableModelsQueryOptions } from '../../../../hooks/useAvailableModels';
 import { useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSetDefaultModel } from '../../../../hooks/use-default-model';
 import {
   createFactoryProject,
-  listFactoryProjects,
+  fetchFactoryProject,
   renameFactoryProject,
   unlinkRepository,
   updateFactoryDefaultModel,
 } from '../services/github';
-import { clearOnboardingFlow, persistOnboardingFactory, readOnboardingFactory } from '../services/onboardingFlow';
+import {
+  clearOnboardingFlow,
+  persistOnboardingFactory,
+  persistOnboardingLinkedRepository,
+  readOnboardingFactory,
+  readOnboardingLinkedRepository,
+} from '../services/onboardingFlow';
 import type { OnboardingDraft } from '../services/onboardingFlow';
 
 async function findPendingFactory(baseUrl: string, pendingId: string) {
-  const factories = await listFactoryProjects(baseUrl);
-  if (!factories) throw new Error('Unable to load your factories. Please try again.');
-  return factories.find(factory => factory.id === pendingId);
+  try {
+    return await fetchFactoryProject(baseUrl, pendingId);
+  } catch (error) {
+    if (error instanceof Error && 'status' in error && error.status === 404) return undefined;
+    throw error;
+  }
 }
 
 export function useCompleteFactorySetup() {
@@ -32,6 +42,13 @@ export function useCompleteFactorySetup() {
       if (!repo) throw new Error('Choose a repository before creating your factory.');
       const factoryModel = draft.model?.modelId ?? draft.personal?.modelId;
       if (!factoryModel) throw new Error('Choose a model before creating your factory.');
+      const personalModel = draft.personal?.modelId;
+      const availableModels = await queryClient.fetchQuery({ ...availableModelsQueryOptions(baseUrl), staleTime: 0 });
+      const unavailableModel = [factoryModel, personalModel].find(
+        modelId => modelId && !availableModels.some(available => available.id === modelId),
+      );
+      if (unavailableModel) throw new Error(`${unavailableModel} is no longer available. Choose another model.`);
+
       const pendingId = readOnboardingFactory();
       const existing = pendingId ? await findPendingFactory(baseUrl, pendingId) : undefined;
       const factory = existing ?? (await createFactoryProject(baseUrl, repo.name));
@@ -39,15 +56,14 @@ export function useCompleteFactorySetup() {
       persistOnboardingFactory(factory.id);
       if (existing && existing.name !== repo.name) await renameFactoryProject(baseUrl, factory.id, repo.name);
       const linked = await link.mutateAsync({ factoryProjectId: factory.id, repo });
-      for (const previous of existing?.repositories ?? []) {
-        if (previous.projectRepositoryId !== linked.projectRepositoryId) {
-          await unlinkRepository(baseUrl, factory.id, previous.projectRepositoryId);
-        }
+      const previouslyLinked = existing && readOnboardingLinkedRepository();
+      if (previouslyLinked && previouslyLinked !== linked.projectRepositoryId) {
+        await unlinkRepository(baseUrl, factory.id, previouslyLinked);
       }
-      const personalModel = draft.personal?.modelId;
+      persistOnboardingLinkedRepository(linked.projectRepositoryId);
       await Promise.all([
         updateFactoryDefaultModel(baseUrl, factory.id, factoryModel),
-        personalModel && setPersonalDefault.mutateAsync(personalModel),
+        personalModel ? setPersonalDefault.mutateAsync(personalModel) : undefined,
       ]);
       return factory.id;
     },

@@ -94,6 +94,9 @@ function registerSetup(failure?: 'connection' | 'model') {
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: project ? [project] : [] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+      project ? HttpResponse.json({ project }) : HttpResponse.json({ error: 'not_found' }, { status: 404 }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({ connections: [] }),
     ),
@@ -256,15 +259,10 @@ describe('Draft Factory onboarding', () => {
     },
   );
 
-  it('replaces the pending Factory’s repository when the codebase changes after a failed save', async () => {
+  it('replaces only its own repository link when the codebase changes after a failed save', async () => {
     const writes = registerSetup('model');
     const links: { id: string; repository: { slug: string; externalId: string; defaultBranch: string } }[] = [];
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
-        HttpResponse.json({
-          connections: [{ id: 'conn-1', integrationId: 'github', installationId: 'inst-7', repositories: links }],
-        }),
-      ),
       http.post(
         `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`,
         async ({ request }) => {
@@ -293,6 +291,7 @@ describe('Draft Factory onboarding', () => {
     await user.click(await screen.findByRole('button', { name: 'Create factory' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('502');
 
+    links.push({ id: 'link-teammate', repository: { slug: 'octo/teammate', externalId: '7', defaultBranch: 'main' } });
     await user.click(screen.getByRole('button', { name: 'Edit codebase' }));
     await user.click(await screen.findByRole('radio', { name: 'octo/other' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
@@ -302,7 +301,18 @@ describe('Draft Factory onboarding', () => {
     expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
     expect(writes.filter(item => item.path === 'unlink')).toEqual([{ path: 'unlink', body: 'link-99' }]);
     expect(writes.filter(item => item.path === 'model').map(item => item.body)).toContainEqual({ name: 'other' });
-    expect(links.map(link => link.repository.slug)).toEqual(['octo/other']);
+    expect(links.map(link => link.repository.slug)).toEqual(['octo/teammate', 'octo/other']);
+  });
+
+  it('refuses to create a Factory whose model is no longer available', async () => {
+    const writes = registerSetup();
+    persistOnboardingDraft({ repository: repo, model: { ...model, modelId: 'openai/retired-model' } });
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('openai/retired-model is no longer available');
+    expect(writes).toEqual([]);
   });
 });
 

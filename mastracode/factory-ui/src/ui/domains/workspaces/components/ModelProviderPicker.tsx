@@ -3,7 +3,7 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, KeyRound, LogIn } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { providerDisplayName } from '../../settings/components/provider-display-name';
 import type { PreviewProvider, ProviderConnection, ProviderConnectionMethod } from '../hooks/useProviderConnection';
@@ -19,6 +19,7 @@ export function ModelProviderPicker({
 }) {
   const [search, setSearch] = useState('');
   const [method, setMethod] = useState<ProviderConnectionMethod>(connection.method ?? 'api_key');
+  const connectedDescriptionId = useId();
   if (connection.isPending) return <SkeletonRows label="Loading model providers" rows={3} rowClassName="h-9 w-full" />;
   if (connection.catalogError)
     return (
@@ -65,11 +66,15 @@ export function ModelProviderPicker({
               value={search}
               onValueChange={setSearch}
             />
+            <span id={connectedDescriptionId} hidden>
+              Connected
+            </span>
             <div role="group" aria-label="API key providers" className="flex flex-wrap gap-2 overflow-y-auto">
               {visible.map(provider => (
                 <Button
                   key={provider.provider}
                   aria-label={providerDisplayName(provider.provider)}
+                  aria-describedby={connection.isConfigured(provider, 'api_key') ? connectedDescriptionId : undefined}
                   disabled={connection.pending || !connection.canConfigure(provider, 'api_key')}
                   onMouseEnter={() => onPreviewProvider?.(provider.provider, 'api_key')}
                   onFocus={() => onPreviewProvider?.(provider.provider, 'api_key')}
@@ -80,7 +85,7 @@ export function ModelProviderPicker({
                 >
                   <ProviderBrandIcon provider={provider.provider} />
                   {providerDisplayName(provider.provider)}
-                  {connection.isConfigured(provider, 'api_key') && <Check aria-label="Connected" />}
+                  {connection.isConfigured(provider, 'api_key') && <Check aria-hidden="true" />}
                 </Button>
               ))}
             </div>

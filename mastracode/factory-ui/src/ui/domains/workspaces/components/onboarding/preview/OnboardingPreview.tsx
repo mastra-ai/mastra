@@ -23,7 +23,7 @@ export interface OnboardingPreviewProps {
 
 function OnboardingScene({ active, children }: { active: boolean; children: ReactNode }) {
   return (
-    <div className="onboarding-scene absolute inset-0" data-active={active} aria-hidden={!active} inert={!active}>
+    <div className="onboarding-scene absolute inset-0" data-active={active} inert={!active}>
       {children}
     </div>
   );
@@ -117,7 +117,7 @@ export function OnboardingPreview({
   const personalIsFactoryModel = !model;
   const reviewing = step === 'review';
   return (
-    <aside className="onboarding-preview min-w-0 px-8 xl:px-12" aria-label="Factory preview">
+    <aside className="onboarding-preview min-w-0 px-8 xl:px-12" aria-hidden="true">
       <div className="onboarding-diagram relative mx-auto w-full max-w-150">
         <OnboardingScene active={step === 'initial'}>
           <OnboardingWelcomePreview />

@@ -22,7 +22,8 @@ describe('ProjectManagementFactoryStep', () => {
       renderStep();
 
       expect(await screen.findByRole('button', { name: /Connect Linear/ })).toBeInTheDocument();
-      expect(screen.queryByText('Connect Jira')).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByLabelText('Loading Jira connections')).not.toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: 'Connect Jira' })).not.toBeInTheDocument();
     });
   });
 
@@ -132,5 +133,21 @@ describe('Tracker connection recovery', () => {
     }
     await waitFor(() => expect(reconnects).toHaveLength(1));
     expect(screen.queryByRole('button', { name: `Connect ${name}` })).not.toBeInTheDocument();
+  });
+
+  it('offers Retry instead of Reconnect when Linear status fails to load', async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () => {
+        calls += 1;
+        if (calls === 1) return HttpResponse.json({ error: 'Temporary outage' }, { status: 503 });
+        return HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' });
+      }),
+    );
+    renderWithProviders(<ProjectManagementFactoryStep onConnect={() => {}} onContinue={() => {}} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Retry Linear' }));
+    expect(await screen.findByRole('button', { name: 'Connect Linear' })).toBeInTheDocument();
+    expect(calls).toBe(2);
   });
 });

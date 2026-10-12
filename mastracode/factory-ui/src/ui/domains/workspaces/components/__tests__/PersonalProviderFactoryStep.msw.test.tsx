@@ -77,4 +77,24 @@ describe('PersonalProviderFactoryStep', () => {
     await user.click(screen.getByRole('button', { name: 'Review setup' }));
     await waitFor(() => expect(onContinue).toHaveBeenCalledOnce());
   });
+
+  it('keeps the connected provider when Add another is abandoned', async () => {
+    registerAuthHandler();
+    server.use(
+      http.get(PROVIDERS_URL, () =>
+        HttpResponse.json({ providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }] }),
+      ),
+    );
+    const onContinue = vi.fn();
+    const user = userEvent.setup();
+    renderWithProviders(<PersonalProviderFactoryStep onContinue={onContinue} />);
+
+    const openai = await screen.findByRole('button', { name: 'OpenAI' });
+    expect(openai).toHaveAccessibleDescription('Connected');
+    await user.click(openai);
+    await user.click(screen.getByRole('button', { name: 'Add another' }));
+    await user.click(screen.getByRole('button', { name: 'Review setup' }));
+
+    expect(onContinue).toHaveBeenCalledExactlyOnceWith({ providerId: 'openai', method: 'api_key' });
+  });
 });
