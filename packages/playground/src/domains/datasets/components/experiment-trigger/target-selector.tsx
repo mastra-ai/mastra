@@ -30,12 +30,9 @@ export function TargetSelector({
   onTargetNameChange,
   container,
 }: TargetSelectorProps) {
-  // Only the list for the picked target type is fetched.
-  const { data: agents, isLoading: agentsLoading } = useAgents({ queryOptions: { enabled: targetType === 'agent' } });
-  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({
-    queryOptions: { enabled: targetType === 'workflow' },
-  });
-  const { data: scorers, isLoading: scorersLoading } = useScorers({ enabled: targetType === 'scorer' });
+  const { data: agents, isLoading: agentsLoading } = useAgents();
+  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({});
+  const { data: scorers, isLoading: scorersLoading } = useScorers();
 
   // Get list of targets based on selected type
   const targetOptions =

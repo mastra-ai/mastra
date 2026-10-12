@@ -122,28 +122,6 @@ async function pickAgentTarget() {
 }
 
 describe('ExperimentTriggerDialog', () => {
-  describe('when a target type is picked', () => {
-    it('fetches only the targets of that type', async () => {
-      // Given the workflow list is observed
-      setupHandlers();
-      const workflowsRequested = vi.fn();
-      server.use(
-        http.get(`${BASE_URL}/api/workflows`, () => {
-          workflowsRequested();
-          return HttpResponse.json({});
-        }),
-      );
-      renderDialog();
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-
-      // When agents are picked as the target type
-      await pickAgentTarget();
-
-      // Then no workflow list is requested
-      expect(workflowsRequested).not.toHaveBeenCalled();
-    });
-  });
-
   describe('when opened without an initial dataset', () => {
     it('starts with an empty dataset combobox and a disabled Run button', async () => {
       setupHandlers();
