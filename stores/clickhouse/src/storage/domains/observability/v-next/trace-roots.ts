@@ -20,6 +20,8 @@ import { buildTraceFilterConditions, buildTraceOrderByClause } from './filters';
 import { CH_SETTINGS, rowToLightSpanRecord, rowToSpanRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+import { needsPreviewPayloads } from './previews';
+import { compileClickHouseTraceRootPayloads } from './trace-query';
 
 // ---------------------------------------------------------------------------
 // getRootSpan
@@ -63,9 +65,9 @@ type TraceRootProjection = {
 };
 
 /**
- * Columns a trace list renders. `input` is selected only so the row mapper can
- * derive a short `inputPreview` at read time (see `rowToLightSpanRecord`); the
- * raw blob itself never leaves the store.
+ * Columns a trace list renders. The previews are the stored ones; rows written
+ * before they were stored get theirs from the payload columns, fetched for just
+ * those rows (see `withPreviewPayloads`).
  */
 const LIGHT_TRACE_ROOT_FIELDS = [
   'traceId',
@@ -83,7 +85,9 @@ const LIGHT_TRACE_ROOT_FIELDS = [
   'resourceId',
   'error',
   'metadataRaw',
-  'input',
+  'inputPreview',
+  'outputPreview',
+  'errorPreview',
 ];
 
 const FULL_PROJECTION: TraceRootProjection = {
@@ -118,7 +122,7 @@ async function listTraceRows<TSpan>(
   args: ListTracesArgs,
   strategy: ClickHouseDeltaCursorStrategy | null,
   projection: TraceRootProjection,
-  mapRows: (rows: Record<string, any>[]) => TSpan[],
+  mapRows: (rows: Record<string, any>[]) => TSpan[] | Promise<TSpan[]>,
 ): Promise<{
   pagination?: { total: number; page: number; perPage: number; hasMore: boolean };
   delta?: { limit: number; hasMore: boolean };
@@ -167,7 +171,7 @@ async function listTraceRows<TSpan>(
     const visibleRows = rows.slice(0, limit);
 
     return {
-      spans: mapRows(visibleRows),
+      spans: await mapRows(visibleRows),
       delta: { limit, hasMore: rows.length > limit },
       deltaCursor: visibleRows.length > 0 ? buildTraceCursor(visibleRows[visibleRows.length - 1]!) : streamHeadCursor,
     };
@@ -248,7 +252,7 @@ async function listTraceRows<TSpan>(
       perPage,
       hasMore: (page + 1) * perPage < total,
     },
-    spans: mapRows(rows),
+    spans: await mapRows(rows),
     ...(deltaCursorEnabled ? { deltaCursor: currentDeltaCursor } : {}),
   };
 }
@@ -263,16 +267,41 @@ export async function listTraces(
 }
 
 /**
+ * Adds `input` / `output` / `error` to the rows written before previews were stored, read from
+ * the same root row version (same `endedAt`) the list kept.
+ */
+async function withPreviewPayloads(client: ClickHouseClient, rows: Record<string, any>[]) {
+  const missing = rows.filter(needsPreviewPayloads);
+  if (missing.length === 0) return rows;
+  const rootKey = (row: Record<string, any>) => `${row.traceId}\u0000${row.spanId ?? row.rootSpanId}`;
+  const compiled = compileClickHouseTraceRootPayloads(
+    missing.map(row => ({
+      traceId: String(row.traceId),
+      rootSpanId: String(row.spanId),
+      startedAt: new Date(row.startedAt).toISOString(),
+      endedAt: new Date(row.endedAt).toISOString(),
+    })),
+    undefined,
+    'previewPayloads',
+  );
+  const result = await client.query({ ...compiled, format: 'JSONEachRow', clickhouse_settings: CH_SETTINGS });
+  const payloads = new Map(((await result.json()) as Record<string, any>[]).map(row => [rootKey(row), row]));
+  return rows.map(row => (needsPreviewPayloads(row) ? { ...row, ...payloads.get(rootKey(row)) } : row));
+}
+
+/**
  * List traces projecting only the columns a trace list renders.
- * Skips the attributes/output blobs and reduces `input` to a short preview in
- * the mapper, so the response payload stays flat as traces grow.
+ * Skips the attributes/input/output blobs and reads the stored previews instead,
+ * so the response payload stays flat as traces grow.
  */
 export async function listTracesLight(
   client: ClickHouseClient,
   args: ListTracesArgs,
   strategy: ClickHouseDeltaCursorStrategy | null,
 ): Promise<ListTracesLightResponse> {
-  return listTraceRows(client, args, strategy, LIGHT_PROJECTION, rows => rows.map(rowToLightSpanRecord));
+  return listTraceRows(client, args, strategy, LIGHT_PROJECTION, async rows =>
+    (await withPreviewPayloads(client, rows)).map(rowToLightSpanRecord),
+  );
 }
 
 type TraceDeltaRow = Record<string, any> & {

@@ -185,9 +185,12 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   metadataRaw        Nullable(String),
   requestContext     Nullable(String),
 
-  -- Trace-list preview of \`input\`, written on root spans only ('' when there is
-  -- nothing to preview). NULL on rows written before the column existed.
-  inputPreview       Nullable(String)
+  -- Previews of \`input\` / \`output\` / \`error\` in core's \`buildPreview\` format, written
+  -- on every span ('' when there is nothing to preview). NULL on rows written before
+  -- the columns existed; readers build those from the payload columns.
+  inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String)
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
@@ -260,9 +263,11 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   metadataRaw        Nullable(String),
   requestContext     Nullable(String),
 
-  -- Trace-list preview of \`input\`, written on root spans only ('' when there is
-  -- nothing to preview). NULL on rows written before the column existed.
+  -- Previews of \`input\` / \`output\` / \`error\` ('' when there is nothing to preview).
+  -- NULL on rows written before the columns existed.
   inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String),
 
   -- traceId is second in the sort key, behind startedAt, so point lookups by
   -- traceId (getRootSpan, trace deletes, trace-query root dedupe) need a skip
@@ -361,6 +366,8 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   metadataRaw        Nullable(String),
   requestContext     Nullable(String),
   inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String),
 
   INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 1
 )
@@ -1266,11 +1273,15 @@ const LOG_SKIP_INDEX_COLUMNS = [
 ] as const;
 
 export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
-  // Root input preview. The view targets first, so the roots view has somewhere to put the value
-  // once span_events carries it.
-  addColumn(TABLE_TRACE_ROOTS, 'inputPreview', 'Nullable(String)'),
-  addColumn(TABLE_TRACE_BRANCHES, 'inputPreview', 'Nullable(String)'),
+  // Stored previews. The view targets first, so the `SELECT *` views have somewhere to put the
+  // values once span_events carries them.
+  ...(['inputPreview', 'outputPreview', 'errorPreview'] as const).flatMap(column => [
+    addColumn(TABLE_TRACE_ROOTS, column, 'Nullable(String)'),
+    addColumn(TABLE_TRACE_BRANCHES, column, 'Nullable(String)'),
+  ]),
   addColumn(TABLE_SPAN_EVENTS, 'inputPreview', 'Nullable(String)'),
+  addColumn(TABLE_SPAN_EVENTS, 'outputPreview', 'Nullable(String)'),
+  addColumn(TABLE_SPAN_EVENTS, 'errorPreview', 'Nullable(String)'),
   // Span events
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),

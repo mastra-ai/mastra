@@ -45,6 +45,8 @@ const row: SpanQueryRow = {
   inputTruncated: false,
   outputPreview: null,
   outputTruncated: false,
+  errorPreview: null,
+  errorTruncated: false,
   cost: { state: 'unavailable' },
 };
 
@@ -285,7 +287,8 @@ describe('bounded result contract', () => {
     { endedAt: '2026-10-01T11:59:59Z' },
     { durationMs: 999 },
     { inputPreview: null, inputTruncated: true },
-    { outputPreview: fourByteCharacter.repeat(257) },
+    { outputPreview: fourByteCharacter.repeat(102) },
+    { errorPreview: null, errorTruncated: true },
     { input: 'full-payload-is-not-a-list-field' },
   ])('rejects invalid result states: %j', overrides => {
     expect(spanQueryRowSchema.safeParse({ ...row, ...overrides }).success).toBe(false);
@@ -293,12 +296,12 @@ describe('bounded result contract', () => {
 
   it.each<[string | null, string | null, boolean]>([
     [null, null, false],
-    ['', '', false],
-    ['{malformed', '{malformed', false],
-    [fourByteCharacter.repeat(256), fourByteCharacter.repeat(256), false],
-    [fourByteCharacter.repeat(257), fourByteCharacter.repeat(256), true],
-    ['x'.repeat(257), 'x'.repeat(256), true],
-  ])('preserves the expected preview and truncation state for input %#', (input, value, truncated) => {
+    ['', null, false],
+    ['short preview', 'short preview', false],
+    ['x'.repeat(100), 'x'.repeat(100), false],
+    [`${'x'.repeat(100)}…`, `${'x'.repeat(100)}…`, true],
+    [`${'x'.repeat(99)}…`, `${'x'.repeat(99)}…`, true],
+  ])('maps a stored preview to its value and truncation state %#', (input, value, truncated) => {
     expect(createSpanQueryPreview(input)).toEqual({ value, truncated });
   });
 

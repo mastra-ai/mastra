@@ -1049,6 +1049,8 @@ describe('ObservabilityStorageDuckDB', () => {
       expect((row as Record<string, unknown>).input).toBeUndefined();
       expect((row as Record<string, unknown>).output).toBeUndefined();
       expect(row.inputPreview).toBe('summarize this thread');
+      expect(row.outputPreview).toBe('a long answer');
+      expect(row.errorPreview).toBeNull();
       expect(row.status).toBe('success');
       expect(row.metadata).toEqual({ customer: 'acme' });
       expect(row.threadId).toBe('thread-light');
@@ -3509,7 +3511,9 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(listed.spans).toHaveLength(1);
       expect(listed.spans[0]).toMatchObject(missingPayload);
       const light = await storage.listTracesLight({ filters: { entityId: 'agent-bare' } });
-      expect(light.spans[0]!.inputPreview).toBeUndefined();
+      expect(light.spans[0]!.inputPreview).toBeNull();
+      expect(light.spans[0]!.outputPreview).toBeNull();
+      expect(light.spans[0]!.errorPreview).toBeNull();
 
       const queried = await storage.queryTraces(
         planTraceQuery(
@@ -3521,6 +3525,8 @@ describe('ObservabilityStorageDuckDB', () => {
       );
       expect(queried.traces.map(t => t.traceId)).toEqual(['trace-bare']);
       expect(queried.traces[0]!.inputPreview).toBeNull();
+      expect(queried.traces[0]!.outputPreview).toBeNull();
+      expect(queried.traces[0]!.errorPreview).toBeNull();
 
       const spans = await storage.querySpans(
         planSpanQuery({ timeRange: { from: '2026-04-01T00:00:00Z', to: '2026-04-02T00:00:00Z' } }),

@@ -8,7 +8,7 @@ import type {
 } from '@mastra/core/storage';
 import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
-import { payloadColumnSql } from './helpers';
+import { payloadColumnSql, previewFromPayload } from './helpers';
 import { compileSpanQueryPredicate } from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
@@ -103,6 +103,12 @@ export function compileDuckDBSpanQuery(plan: TrustedSpanQueryPlan) {
   return { sql, values };
 }
 
+const previewPayloads = [
+  ['inputPreview', payloadColumnSql('input')],
+  ['outputPreview', payloadColumnSql('output')],
+  ['errorPreview', 'error'],
+] as const;
+
 type Selected = Omit<SpanQuerySelectedRow, 'startedAt' | 'endedAt'> & {
   startedAt: Date;
   endedAt: Date;
@@ -140,12 +146,35 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
       return `(${key} AND cursorId IS NOT DISTINCT FROM ? AND endedAt = ?)`;
     })
     .join(' OR ');
-  const payloads = await query<SpanQueryPayload>(
+  // Stored previews of the selected event row. A row written before previews were stored has NULL
+  // previews, so its payload is read instead (only for that row) and previewed the same way.
+  const previewRows = await query<SpanQueryIdentity & Record<(typeof previewPayloads)[number][0], string | null>>(
     `SELECT DISTINCT ${identities},
-    substring(CAST(${payloadColumnSql('input')} AS VARCHAR), 1, ${coreStorage.SPAN_QUERY_MAX_PREVIEW_CHARACTERS + 1}) AS inputPreview, substring(CAST(${payloadColumnSql('output')} AS VARCHAR), 1, ${coreStorage.SPAN_QUERY_MAX_PREVIEW_CHARACTERS + 1}) AS outputPreview
+    ${previewPayloads
+      .map(
+        ([preview, payload]) =>
+          `${preview}, CASE WHEN ${preview} IS NULL THEN CAST(${payload} AS VARCHAR) END AS ${preview}Payload`,
+      )
+      .join(',\n    ')}
     FROM span_events WHERE ${payloadWhere}`,
     payloadValues,
   );
+  const payloads: SpanQueryPayload[] = previewRows.map(row => {
+    const payload: SpanQueryPayload = {
+      organizationId: row.organizationId,
+      resourceId: row.resourceId,
+      traceId: row.traceId,
+      spanId: row.spanId,
+      inputPreview: null,
+      outputPreview: null,
+      errorPreview: null,
+    };
+    for (const [preview] of previewPayloads) {
+      const stored = row[preview];
+      payload[preview] = stored ?? previewFromPayload((row as Record<string, unknown>)[`${preview}Payload`] ?? null);
+    }
+    return payload;
+  });
   const metricValues: unknown[] = [];
   const metricWhere = keys(page, metricValues);
   const metrics = await query<SpanQueryCostMetric>(

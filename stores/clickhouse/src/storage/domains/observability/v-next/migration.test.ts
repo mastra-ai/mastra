@@ -2,7 +2,7 @@ import { createClient } from '@clickhouse/client';
 import type { ClickHouseClient } from '@clickhouse/client';
 import { MastraError } from '@mastra/core/error';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import { buildInputPreview, parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
+import { buildPreview, parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ALL_TABLE_NAMES,
@@ -965,7 +965,7 @@ describe('migrateLegacySpans (mastra_ai_spans → mastra_span_events)', () => {
   });
 });
 
-describe('inputPreview column (ClickHouse v-next)', () => {
+describe('preview columns (ClickHouse v-next)', () => {
   let client: ClickHouseClient;
   const config = {
     url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
@@ -986,15 +986,17 @@ describe('inputPreview column (ClickHouse v-next)', () => {
     await client.close();
   });
 
-  it('adds the column to existing tables and lists rows written before it with the same preview', async () => {
+  it('adds the columns to existing tables and lists rows written before them with the same previews', async () => {
     const store = new ObservabilityStorageClickhouseVNext(config);
     await store.init();
-    // A deployment from before the column: the tables lack it, the views were created without it,
-    // and the writer doesn't send it.
+    // A deployment from before the columns: the tables lack them, the views were created without
+    // them, and the writer doesn't send them.
     await client.command({ query: `DROP VIEW ${MV_TRACE_ROOTS}` });
     await client.command({ query: `DROP VIEW ${MV_TRACE_BRANCHES}` });
     for (const table of [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES]) {
-      await client.command({ query: `ALTER TABLE ${table} DROP COLUMN inputPreview` });
+      await client.command({
+        query: `ALTER TABLE ${table} DROP COLUMN inputPreview, DROP COLUMN outputPreview, DROP COLUMN errorPreview`,
+      });
     }
     await client.command({ query: TRACE_ROOTS_MV_DDL });
     await client.command({ query: TRACE_BRANCHES_MV_DDL });
@@ -1017,6 +1019,8 @@ describe('inputPreview column (ClickHouse v-next)', () => {
           startedAt: '2026-08-01 10:00:00.000',
           endedAt: '2026-08-01 10:00:01.000',
           input: oldInput,
+          output: JSON.stringify({ text: 'old answer' }),
+          error: JSON.stringify({ message: 'old failure' }),
         },
       ],
       format: 'JSONEachRow',
@@ -1033,7 +1037,14 @@ describe('inputPreview column (ClickHouse v-next)', () => {
     };
     const newInput = { messages: [{ role: 'user', content: 'x'.repeat(150) }] };
     await store.createSpan({
-      span: { ...span, traceId: 'trace-new', spanId: 'root-new', name: 'new run', input: newInput },
+      span: {
+        ...span,
+        traceId: 'trace-new',
+        spanId: 'root-new',
+        name: 'new run',
+        input: newInput,
+        output: { text: 'new answer' },
+      },
     });
     await store.createSpan({ span: { ...span, traceId: 'trace-empty', spanId: 'root-empty', name: 'empty run' } });
     await store.createSpan({
@@ -1047,36 +1058,46 @@ describe('inputPreview column (ClickHouse v-next)', () => {
       },
     });
 
-    // Written on root spans only, and copied into trace_roots by the roots view.
+    // Written on every span, and copied into trace_roots by the roots view.
     const stored = await client.query({
       query: `SELECT * FROM (
-          SELECT 'spans' AS t, spanId, inputPreview FROM ${TABLE_SPAN_EVENTS}
-          UNION ALL SELECT 'roots' AS t, spanId, inputPreview FROM ${TABLE_TRACE_ROOTS}
+          SELECT 'spans' AS t, spanId, inputPreview, outputPreview, errorPreview FROM ${TABLE_SPAN_EVENTS}
+          UNION ALL SELECT 'roots' AS t, spanId, inputPreview, outputPreview, errorPreview FROM ${TABLE_TRACE_ROOTS}
         ) ORDER BY t, spanId`,
       format: 'JSONEachRow',
     });
-    const newPreview = buildInputPreview(JSON.stringify(newInput))!;
+    const newPreview = buildPreview(newInput)!;
     expect(newPreview).toHaveLength(101);
+    const none = { inputPreview: '', outputPreview: '', errorPreview: '' };
+    const old = { inputPreview: null, outputPreview: null, errorPreview: null };
+    const fresh = { inputPreview: newPreview, outputPreview: 'new answer', errorPreview: '' };
     expect(await stored.json()).toEqual([
-      { t: 'roots', spanId: 'root-empty', inputPreview: '' },
-      { t: 'roots', spanId: 'root-new', inputPreview: newPreview },
-      { t: 'roots', spanId: 'root-old', inputPreview: null },
-      { t: 'spans', spanId: 'child', inputPreview: null },
-      { t: 'spans', spanId: 'root-empty', inputPreview: '' },
-      { t: 'spans', spanId: 'root-new', inputPreview: newPreview },
-      { t: 'spans', spanId: 'root-old', inputPreview: null },
+      { t: 'roots', spanId: 'root-empty', ...none },
+      { t: 'roots', spanId: 'root-new', ...fresh },
+      { t: 'roots', spanId: 'root-old', ...old },
+      { t: 'spans', spanId: 'child', inputPreview: newPreview, outputPreview: '', errorPreview: '' },
+      { t: 'spans', spanId: 'root-empty', ...none },
+      { t: 'spans', spanId: 'root-new', ...fresh },
+      { t: 'spans', spanId: 'root-old', ...old },
     ]);
 
     const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-08-02T00:00:00Z' };
     const expected = {
-      'trace-empty': null,
-      'trace-new': newPreview,
-      'trace-old': 'written before the column existed',
+      'trace-empty': [null, null, null],
+      'trace-new': [newPreview, 'new answer', null],
+      'trace-old': ['written before the column existed', 'old answer', 'old failure'],
     };
+    const previews = (row: {
+      inputPreview?: string | null;
+      outputPreview?: string | null;
+      errorPreview?: string | null;
+    }) => [row.inputPreview ?? null, row.outputPreview ?? null, row.errorPreview ?? null];
     for (const request of [{}, { pagination: { page: 0, perPage: 10 } }]) {
       const response = await store.queryTraces(planTraceQuery(parseTraceQueryRequest({ timeRange, ...request })));
       if (!('traces' in response)) throw new Error('Expected traces');
-      expect(Object.fromEntries(response.traces.map(trace => [trace.traceId, trace.inputPreview]))).toEqual(expected);
+      expect(Object.fromEntries(response.traces.map(trace => [trace.traceId, previews(trace)]))).toEqual(expected);
     }
+    const light = await store.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+    expect(Object.fromEntries(light.spans.map(span => [span.traceId, previews(span)]))).toEqual(expected);
   });
 });

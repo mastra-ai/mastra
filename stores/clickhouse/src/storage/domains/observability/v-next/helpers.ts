@@ -19,7 +19,8 @@ import type {
   FeedbackRecord,
   CreateFeedbackRecord,
 } from '@mastra/core/storage';
-import { buildInputPreview, computeTraceStatus, EntityType } from '@mastra/core/storage';
+import { buildStoredPreview, computeTraceStatus, EntityType } from '@mastra/core/storage';
+import { resolveStoredPreviews } from './previews';
 import { coerceFeedbackReviewStatus } from './review-status';
 
 // ---------------------------------------------------------------------------
@@ -224,9 +225,8 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
     error,
     status: computeTraceStatus({ error, endedAt }),
     metadata: (parseJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
-    // Derived at read time from the raw `input` column; buildInputPreview parses
-    // internally and previews an unparseable document as empty.
-    inputPreview: buildInputPreview(row.input ?? null),
+    // Stored previews; rows written before they were stored carry the payload columns instead.
+    ...resolveStoredPreviews(row),
     createdAt: startedAt,
     updatedAt: null,
   };
@@ -236,6 +236,8 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
   const endedAt = span.isEvent ? span.startedAt : (span.endedAt ?? span.startedAt);
   const metadata = span.metadata ?? null;
   const input = jsonEncode(span.input);
+  const output = jsonEncode(span.output);
+  const error = jsonEncode(span.error);
 
   return {
     dedupeKey: buildDedupeKey(span.traceId, span.spanId),
@@ -277,11 +279,14 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     attributes: jsonEncode(span.attributes),
     links: jsonEncode(span.links),
     input,
-    output: jsonEncode(span.output),
-    error: jsonEncode(span.error),
+    output,
+    error,
     requestContext: jsonEncode(span.requestContext),
-    // Built from the stored text, so it matches a preview built from `input` at read time.
-    inputPreview: span.parentSpanId == null ? (buildInputPreview(input) ?? '') : null,
+    // Upstream previews win; otherwise built from the stored value and its JSON text, so they
+    // match a preview built from the column at read time. '' means nothing to preview.
+    inputPreview: buildStoredPreview(span.inputPreview, span.input, input),
+    outputPreview: buildStoredPreview(span.outputPreview, span.output, output),
+    errorPreview: buildStoredPreview(span.errorPreview, span.error, error),
   };
 }
 

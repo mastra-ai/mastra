@@ -10,6 +10,7 @@ import type {
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
 import { TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import { needsPreviewPayloads, PREVIEW_COLUMNS, resolveStoredPreviews } from './previews';
 import { compileSpanQueryPredicate, runWithClickHouseTraceQueryTimeout } from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
@@ -128,6 +129,8 @@ export function compileClickHouseSpanQuery(plan: TrustedSpanQueryPlan) {
   return { query, query_params: { ...parameters.values, ...predicate.params } };
 }
 
+type StoredPreviewRow = Record<(typeof PREVIEW_COLUMNS)[number], string | null>;
+
 function iso(value: string): string {
   return new Date(value.includes('T') ? value : `${value.replace(' ', 'T')}Z`).toISOString();
 }
@@ -153,15 +156,31 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
   if (!page.length) return { spans: [], page: { next: null } };
   // One typed array parameter avoids ClickHouse's HTTP form-field limit at large page sizes.
   const payloadWhere = `tuple(${identitySetColumns}, endedAt) IN {page:Array(Tuple(UInt8, String, UInt8, String, String, String, DateTime64(3, 'UTC')))}`;
-  const payloads = await run<SpanQuerySelectedRow & SpanQueryPayload>({
-    query: `SELECT ${identities}, ${displayFields.map((field, index) => `data.${index + 1} AS ${field}`).join(', ')},
-      data.${displayFields.length + 1} AS inputPreview, data.${displayFields.length + 2} AS outputPreview
-    FROM (SELECT ${identities}, any(tuple(${displayFields.map(fieldExpression).join(', ')}, substringUTF8(input, 1, ${coreStorage.SPAN_QUERY_MAX_PREVIEW_CHARACTERS + 1}), substringUTF8(output, 1, ${coreStorage.SPAN_QUERY_MAX_PREVIEW_CHARACTERS + 1}))) AS data
+  const pageParameter = (rows: Array<SpanQueryIdentity & { endedAt: string }>) =>
+    rows.map(row => new TupleParam([...identityValues(row), row.endedAt.replace('T', ' ').replace(/Z$/, '')]));
+  const rowsWithPreviews = await run<SpanQuerySelectedRow & StoredPreviewRow>({
+    query: `SELECT ${identities}, ${[...displayFields, ...PREVIEW_COLUMNS].map((field, index) => `data.${index + 1} AS ${field}`).join(', ')}
+    FROM (SELECT ${identities}, any(tuple(${[...displayFields.map(fieldExpression), ...PREVIEW_COLUMNS].join(', ')})) AS data
       FROM ${TABLE_SPAN_EVENTS} e WHERE ${payloadWhere} GROUP BY ${identities})`,
-    query_params: {
-      page: page.map(row => new TupleParam([...identityValues(row), row.endedAt.replace('T', ' ').replace(/Z$/, '')])),
-    },
+    query_params: { page: pageParameter(page) },
   });
+  // Rows written before the previews were stored: read the payloads of just those rows.
+  const missingKeys = new Set(rowsWithPreviews.filter(needsPreviewPayloads).map(coreStorage.spanQueryIdentityKey));
+  const missing = page.filter(row => missingKeys.has(coreStorage.spanQueryIdentityKey(row)));
+  const previewPayloads = new Map<string, Record<string, unknown>>();
+  if (missing.length) {
+    const rows = await run<SpanQueryIdentity & { input: string | null; output: string | null; error: string | null }>({
+      query: `SELECT ${identities}, data.1 AS input, data.2 AS output, data.3 AS error
+      FROM (SELECT ${identities}, any(tuple(input, output, error)) AS data
+        FROM ${TABLE_SPAN_EVENTS} e WHERE ${payloadWhere} GROUP BY ${identities})`,
+      query_params: { page: pageParameter(missing) },
+    });
+    for (const row of rows) previewPayloads.set(coreStorage.spanQueryIdentityKey(row), row);
+  }
+  const payloads: Array<SpanQuerySelectedRow & SpanQueryPayload> = rowsWithPreviews.map(row => ({
+    ...row,
+    ...resolveStoredPreviews(row, previewPayloads.get(coreStorage.spanQueryIdentityKey(row))),
+  }));
   // Metrics can be emitted after the span search window; hydrate costs by selected identity, not that time range.
   const metricWhere = `${identitySetKey} IN {page:Array(Tuple(UInt8, String, UInt8, String, String, String))}`;
   const metrics = await run<SpanQueryCostMetric>({
@@ -179,7 +198,7 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
   const hydrated = page.flatMap(identity => {
     const row = byIdentity.get(coreStorage.spanQueryIdentityKey(identity));
     if (!row) return []; // The selected record can be deleted between reads.
-    const { inputPreview: _input, outputPreview: _output, ...metadata } = row;
+    const { inputPreview: _input, outputPreview: _output, errorPreview: _error, ...metadata } = row;
     return [{ ...metadata, ...identity, durationMs: Number(row.durationMs) }];
   });
   const result = coreStorage.buildSpanQueryResponse(plan, hydrated, payloads, metrics);

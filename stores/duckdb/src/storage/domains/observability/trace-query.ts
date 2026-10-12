@@ -21,7 +21,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DuckDBConnection } from '../../db/index';
-import { parseJson, payloadColumnSql } from './helpers';
+import { apiPreview, parseJson, payloadColumnSql, previewFromPayload } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 
 type ParameterType = 'scalar' | 'timestamp';
@@ -118,7 +118,12 @@ const TRACE_SELECT = `
   r.entityId AS entityId,
   r.parentSpanId AS parentSpanId,
   r.metadata AS metadata,
-  ${payloadColumnSql('r.input')} AS input,
+  r.inputPreview AS inputPreview,
+  r.outputPreview AS outputPreview,
+  r.errorPreview AS errorPreview,
+  r.eventType AS rootEventType,
+  r.timestamp AS rootTimestamp,
+  r.cursorId AS rootCursorId,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -863,12 +868,56 @@ export function asIsoTimestamp(value: unknown): string {
   return value instanceof Date ? value.toISOString() : new Date(value as string | number).toISOString();
 }
 
+const TRACE_PREVIEW_PAYLOADS = [
+  ['inputPreview', 'input'],
+  ['outputPreview', 'output'],
+  ['errorPreview', 'error'],
+] as const;
+
+/**
+ * Builds the previews of listed roots whose current row was written before previews were stored
+ * (NULL preview), from that same row's payload. Only the flagged rows' payloads are read, so the
+ * fallback fades out as old rows age out of the listed range. Rows written since then carry a
+ * non-NULL preview (`''` when there is nothing to preview) for every payload they hold.
+ */
+async function fillMissingTracePreviews(db: DuckDBConnection, rows: Record<string, unknown>[]): Promise<void> {
+  const flagged = rows.filter(
+    row => row.traceId != null && TRACE_PREVIEW_PAYLOADS.some(([preview]) => row[preview] == null),
+  );
+  if (flagged.length === 0) return;
+
+  const values: unknown[] = [];
+  const where = flagged
+    .map(row => {
+      values.push(row.traceId, row.rootSpanId, row.rootEventType, row.rootTimestamp, row.rootCursorId);
+      return '(traceId = ? AND spanId = ? AND eventType = ? AND timestamp = ? AND cursorId IS NOT DISTINCT FROM ?)';
+    })
+    .join(' OR ');
+  const payloads = await db.query<Record<string, unknown>>(
+    `SELECT traceId,
+      ${payloadColumnSql('input')} AS input,
+      ${payloadColumnSql('output')} AS output,
+      error
+    FROM span_events
+    WHERE parentSpanId IS NULL AND (${where})`,
+    values,
+  );
+  const byTrace = new Map(payloads.map(payload => [String(payload.traceId), payload]));
+  for (const row of flagged) {
+    const payload = byTrace.get(String(row.traceId));
+    for (const [preview, column] of TRACE_PREVIEW_PAYLOADS) {
+      if (row[preview] == null) row[preview] = previewFromPayload(payload?.[column] ?? null);
+    }
+  }
+}
+
 export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryPlan): Promise<TraceQueryResponse> {
   if (plan.paginationMode === 'delta') assertDeltaPollingEnabled();
   if (plan.paginationMode === 'page') {
     const query = compileDuckDBTraceQuery(plan);
     const rows = await db.query<Record<string, unknown>>(query.sql, query.values);
     const total = Number(rows[0]?.total ?? 0);
+    await fillMissingTracePreviews(db, rows);
     const traces = rows
       .filter(row => row.traceId != null)
       .map(row => ({
@@ -879,7 +928,9 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
         parentSpanId: row.parentSpanId ?? null,
         createdAt: asIsoTimestamp(row.startedAt),
         metadata: parseJson(row.metadata) ?? null,
-        inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+        inputPreview: apiPreview(row.inputPreview),
+        outputPreview: apiPreview(row.outputPreview),
+        errorPreview: apiPreview(row.errorPreview),
         threadId: row.threadId == null ? null : String(row.threadId),
         resourceId: row.resourceId == null ? null : String(row.resourceId),
         startedAt: asIsoTimestamp(row.startedAt),
@@ -923,6 +974,7 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     });
   }
 
+  await fillMissingTracePreviews(db, visibleRows);
   const traces = visibleRows.map(row => ({
     traceId: String(row.traceId),
     rootSpanId: String(row.rootSpanId),
@@ -931,7 +983,9 @@ export async function queryTraces(db: DuckDBConnection, plan: TrustedTraceQueryP
     parentSpanId: row.parentSpanId ?? null,
     createdAt: asIsoTimestamp(row.startedAt),
     metadata: parseJson(row.metadata) ?? null,
-    inputPreview: coreStorage.buildInputPreview(row.input) ?? null,
+    inputPreview: apiPreview(row.inputPreview),
+    outputPreview: apiPreview(row.outputPreview),
+    errorPreview: apiPreview(row.errorPreview),
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),

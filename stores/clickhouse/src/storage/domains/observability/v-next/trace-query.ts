@@ -27,6 +27,7 @@ import { TABLE_FEEDBACK_EVENTS, TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRAC
 import { CH_SETTINGS, parseJson } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { assertDeltaPollingSupported, deltaPollingSupported } from './polling';
+import { needsPreviewPayloads, PREVIEW_COLUMNS, resolveStoredPreviews } from './previews';
 import { currentScoresRelation } from './scores';
 
 export type ClickHouseParameterType = 'String' | 'Float64' | 'UInt64' | "DateTime64(3, 'UTC')";
@@ -123,6 +124,8 @@ const TRACE_SELECT = `
   r.parentSpanId AS parentSpanId,
   r.metadataRaw AS metadata,
   r.inputPreview AS inputPreview,
+  r.outputPreview AS outputPreview,
+  r.errorPreview AS errorPreview,
   r.threadId AS threadId,
   r.resourceId AS resourceId,
   r.startedAt AS startedAt,
@@ -603,13 +606,13 @@ export function compileClickHouseTraceCandidates(
 
 /**
  * `queryTraces()` statements read one root per trace and only test spans for existence
- * (TraceScopeOptions). The list statements carry narrow columns; `metadata` / `inputPreview` are fetched
+ * (TraceScopeOptions). The list statements carry narrow columns; `metadata` and the previews are fetched
  * for the returned rows afterwards (compileClickHouseTraceRootPayloads).
  */
 const QUERY_TRACES_SCOPE = { oneRootPerTrace: true, spanExistence: true } as const;
 
 const TRACE_LIST_SELECT = TRACE_SELECT.split('\n')
-  .filter(line => !/ AS (metadata|inputPreview),$/.test(line))
+  .filter(line => !/ AS (metadata|inputPreview|outputPreview|errorPreview),$/.test(line))
   .join('\n');
 
 type TraceOrder = { field: 'startedAt' | 'endedAt'; direction: 'ASC' | 'DESC' };
@@ -676,7 +679,7 @@ export type ClickHouseTraceRootKey = { traceId: string; dedupeKey: string; sortV
 
 /**
  * Second statement of keyset and page mode: the rows of the keyed roots, with `metadata`
- * and `inputPreview`, read by sort-key tuple. Unmerged copies of a root key are redeliveries of one
+ * and the stored previews, read by sort-key tuple. Unmerged copies of a root key are redeliveries of one
  * span; the relation-free `where` conjuncts are re-applied so a copy that doesn't match isn't
  * returned, and the copy that sorts first is kept, as in the keys statement.
  */
@@ -724,7 +727,7 @@ FROM candidates`,
 
 /**
  * The list statement of groups and delta mode, and a single-statement keyset / page list (rows
- * without `metadata` / `inputPreview`). `queryTraces()` lists keyset and page mode with
+ * without `metadata` and the previews). `queryTraces()` lists keyset and page mode with
  * compileClickHouseTraceQueryKeys and compileClickHouseTraceRowsByKey instead.
  */
 export function compileClickHouseTraceQuery(
@@ -801,8 +804,8 @@ ${limit}`,
 }
 
 /**
- * Fetches payloads for listed rows: `metadata` and the stored `inputPreview`, or `input` alone
- * for rows written before `inputPreview` existed. Looks rows up by the
+ * Fetches payloads for listed rows: `metadata` and the stored previews, or `input` / `output` /
+ * `error` alone for rows written before the previews were stored. Looks rows up by the
  * trace_roots sort-key prefix `(startedAt, traceId)`, so only the page's
  * granules are read. A root can have unmerged versions in different `endedAt`
  * partitions, so `endedAt` is part of the key: the payload comes from the same
@@ -812,7 +815,7 @@ ${limit}`,
 export function compileClickHouseTraceRootPayloads(
   keys: Array<{ traceId: string; rootSpanId: string; startedAt: string; endedAt: string }>,
   scope?: TraceQueryTenantScope,
-  columns: 'payload' | 'input' = 'payload',
+  columns: 'payload' | 'previewPayloads' = 'payload',
 ): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
   const tuples = keys.map(
@@ -820,7 +823,7 @@ export function compileClickHouseTraceRootPayloads(
       `(${parameters.add(key.startedAt, "DateTime64(3, 'UTC')")}, ${parameters.add(key.traceId, 'String')}, ${parameters.add(key.rootSpanId, 'String')}, ${parameters.add(key.endedAt, "DateTime64(3, 'UTC')")})`,
   );
   return {
-    query: `SELECT traceId, spanId AS rootSpanId, ${columns === 'payload' ? 'metadataRaw AS metadata, inputPreview' : 'input'}
+    query: `SELECT traceId, spanId AS rootSpanId, ${columns === 'payload' ? `metadataRaw AS metadata, ${PREVIEW_COLUMNS.join(', ')}` : 'input, output, error'}
 FROM ${TABLE_TRACE_ROOTS}
 WHERE (startedAt, traceId, spanId, endedAt) IN (${tuples.join(', ')})${compileTenantScope(scope, parameters)}
 LIMIT 1 BY traceId, spanId`,
@@ -1106,19 +1109,19 @@ export async function queryTraces(
       startedAt: asIsoTimestamp(row.startedAt),
       endedAt: asIsoTimestamp(row.endedAt),
     }));
-  /** Rows written before `inputPreview` existed have none stored; their preview is built from `input`. */
+  /** Rows written before the previews were stored have none; theirs are built from the payloads. */
   const toTraceRecords = async (rows: Record<string, unknown>[]) => {
-    const missing = rows.filter(row => row.inputPreview == null);
-    const previews = new Map<string, string>();
+    const missing = rows.filter(needsPreviewPayloads);
+    const payloads = new Map<string, Record<string, unknown>>();
     if (missing.length > 0) {
-      const inputs = await run(compileClickHouseTraceRootPayloads(payloadKeys(missing), plan.scope, 'input'));
-      for (const row of inputs) previews.set(rootKey(row), coreStorage.buildInputPreview(row.input) ?? '');
+      const payloadRows = await run(
+        compileClickHouseTraceRootPayloads(payloadKeys(missing), plan.scope, 'previewPayloads'),
+      );
+      for (const row of payloadRows) payloads.set(rootKey(row), row);
     }
-    return rows.map(row =>
-      toTraceRecord(row.inputPreview == null ? { ...row, inputPreview: previews.get(rootKey(row)) } : row),
-    );
+    return rows.map(row => toTraceRecord({ ...row, ...resolveStoredPreviews(row, payloads.get(rootKey(row))) }));
   };
-  /** Lists rows, then fetches `metadata` / `inputPreview` for the rows that are returned. */
+  /** Lists rows, then fetches `metadata` and the previews for the rows that are returned. */
   const listTraces = async (rows: Record<string, unknown>[]) => {
     const payloads = new Map<string, Record<string, unknown>>();
     if (rows.length > 0) {
@@ -1135,7 +1138,9 @@ export async function queryTraces(
     parentSpanId: row.parentSpanId ?? null,
     createdAt: asIsoTimestamp(row.startedAt),
     metadata: parseJson(row.metadata) ?? null,
-    inputPreview: row.inputPreview ? String(row.inputPreview) : null,
+    inputPreview: row.inputPreview ?? null,
+    outputPreview: row.outputPreview ?? null,
+    errorPreview: row.errorPreview ?? null,
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),
