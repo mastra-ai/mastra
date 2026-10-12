@@ -22,6 +22,7 @@ import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { ScorerResult } from '../loop';
+import type { TranscriptStep } from '../loop/shared/transcript-step';
 import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
@@ -327,6 +328,7 @@ export interface StepFinishPayload<Tools extends ToolSet = ToolSet, OUTPUT = und
   response?: LanguageModelV2ResponseMetadata;
   messageId?: string;
   stepResult: {
+    transcriptStep?: TranscriptStep;
     logprobs?: LanguageModelV1LogProbs;
     isContinued?: boolean;
     warnings?: LanguageModelV2CallWarning[];

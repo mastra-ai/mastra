@@ -25,6 +25,7 @@ import {
 } from './run-scope-keys';
 import { decideContinuation } from './shared/continuation-core';
 import { drainSignalsToTranscript } from './shared/steps/signal-drain-core';
+import { getTranscriptStepContent } from './shared/transcript-step';
 import type { LoopRun } from './types';
 import { createBackgroundTaskCheckStep } from './workflows/agentic-execution/background-task-check-step';
 import { EagerToolExecutionCoordinator } from './workflows/agentic-execution/eager-tool-execution';
@@ -430,11 +431,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
     // contract shape (the durable loop flows the same shape through workflow
     // input/output as serialized state; here it stays in memory, owned by
     // this predicate closure).
-    const state: MainLoopIterationState<StepResult<Tools>> = {
+    const state: MainLoopIterationState<StepResult<ToolSet>> = {
       // Steps accumulated across iterations, passed to stopWhen
       accumulatedSteps: [],
-      // Content length seen so far — determines what's new in each step
-      previousContentLength: 0,
       // When continue:false + feedback, allow one more LLM turn then stop
       pendingFeedbackStop: false,
       // When this loop is a resume (e.g. after tool approval), the suspended run
@@ -500,18 +499,14 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         return typedInputData.stepResult.isContinued;
       }
 
-      const responseMessages = typedInputData.messages.nonUser;
-      const allContent: StepResult<Tools>['content'] = responseMessages.flatMap(
-        message => message.content as unknown as StepResult<Tools>['content'],
-      );
-
-      // Only include new content in this step (content added since the previous iteration)
-      const currentContent = allContent.slice(state.previousContentLength);
-      state.previousContentLength = allContent.length;
+      const currentContent: StepResult<ToolSet>['content'] =
+        typedInputData.stepResult.reason === 'retry'
+          ? []
+          : getTranscriptStepContent(messageList, typedInputData.stepResult.transcriptStep);
 
       const toolResultParts = currentContent.filter(part => part.type === 'tool-result');
 
-      const currentStep: StepResult<Tools> = {
+      const currentStep: StepResult<ToolSet> = {
         content: currentContent,
         usage: typedInputData.output.usage || { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
         // we need to cast this because we add 'tripwire' and 'retry' for processor scenarios

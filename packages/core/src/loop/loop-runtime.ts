@@ -56,12 +56,6 @@ export interface LoopIterationState<TStep = unknown> {
 export interface MainLoopIterationState<TStep> extends LoopIterationState<TStep> {
   pendingFeedbackStop: boolean;
   resumeContinuationPending: boolean;
-  /**
-   * Response-content length after the previous iteration; the predicate
-   * slices from here to isolate the content this iteration added. (The
-   * durable loop instead materializes a per-iteration `lastStepResult`.)
-   */
-  previousContentLength: number;
 }
 
 /**

@@ -1388,6 +1388,16 @@ export class MessageList {
     return messages.map(message => this.transformMessageForTranscript(message));
   }
 
+  /** Requeue failed writes using the current messages, preserving updates made during the save. */
+  public markMessagesUnsaved(messageIds: readonly string[]): void {
+    const ids = new Set(messageIds);
+    for (const message of this.messages) {
+      if (!ids.has(message.id)) continue;
+      if (this.newUserMessagesPersisted.has(message)) this.newUserMessages.add(message);
+      if (this.newResponseMessagesPersisted.has(message)) this.newResponseMessages.add(message);
+    }
+  }
+
   /**
    * Apply transcript payload transforms to messages without draining them.
    *

@@ -8,6 +8,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
+import { getTranscriptStepContent } from '../../loop/shared/transcript-step';
 import type { ObservabilityContext } from '../../observability';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
@@ -953,7 +954,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 // A retried attempt was rolled back, so the last response content belongs to an earlier step.
                 content: isRetriedStep
                   ? []
-                  : ((chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1)),
+                  : ((chunk.payload as any)?._durableStepContent ??
+                    getTranscriptStepContent(messageList, chunk.payload.stepResult.transcriptStep)),
                 text: stepText,
                 // Include tripwire data if present
                 tripwire: stepTripwire,

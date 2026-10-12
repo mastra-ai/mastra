@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MockMemory } from '../../memory/mock';
 import { MessageList } from '../message-list';
 import { createSignal } from '../signals';
 import type { MastraDBMessage } from '../types';
@@ -46,6 +47,99 @@ describe('SaveQueueManager', () => {
     const list = new MessageList({ threadId: 'thread-4' });
     await manager.flushMessages(list, 'thread-4');
     expect(saveCalls).toBe(0);
+  });
+
+  it('keeps failed input and response writes pending for the next flush', async () => {
+    const memory = new MockMemory();
+    const save = vi.spyOn(memory, 'saveMessages').mockRejectedValueOnce(new Error('temporary storage failure'));
+    const manager = new SaveQueueManager({ memory });
+    const list = new MessageList({ threadId: 'retry-thread' });
+    list.add(makeTestMessage('input', 'retry-thread', 'user', 'Hello'), 'input');
+    list.add(makeTestMessage('response', 'retry-thread', 'assistant', 'Progress'), 'response');
+
+    await manager.flushMessages(list, 'retry-thread');
+    expect(list.get.input.db().map(message => message.id)).toEqual(['input']);
+    expect(list.get.response.db().map(message => message.id)).toEqual(['response']);
+
+    await manager.flushMessages(list, 'retry-thread');
+    expect(save).toHaveBeenCalledTimes(2);
+    const recalled = await memory.recall({ threadId: 'retry-thread', perPage: false });
+    expect(recalled.messages.map(message => message.id)).toEqual(['input', 'response']);
+    expect(list.drainUnsavedMessages()).toEqual([]);
+  });
+
+  it('retries the latest message when a failed write overlaps new content', async () => {
+    const memory = new MockMemory();
+    let rejectSave: (error: Error) => void = () => {};
+    const save = vi.spyOn(memory, 'saveMessages').mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectSave = reject;
+        }),
+    );
+    const manager = new SaveQueueManager({ memory });
+    const list = new MessageList({ threadId: 'overlap-thread' });
+    list.add(makeTestMessage('response', 'overlap-thread', 'assistant', 'First'), 'response');
+    const first = manager.flushMessages(list, 'overlap-thread');
+    await vi.waitFor(() => expect(save).toHaveBeenCalledOnce());
+    list.add(makeTestMessage('response', 'overlap-thread', 'assistant', 'Updated'), 'response');
+    list.add(makeTestMessage('next', 'overlap-thread', 'user', 'Next message'), 'input');
+    rejectSave(new Error('temporary storage failure'));
+    await first;
+    await manager.flushMessages(list, 'overlap-thread');
+
+    const recalled = await memory.recall({ threadId: 'overlap-thread', perPage: false });
+    expect(recalled.messages.map(message => message.id)).toEqual(['response', 'next']);
+    expect(
+      recalled.messages[0]?.content.parts
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join(''),
+    ).toContain('Updated');
+    expect(list.drainUnsavedMessages()).toEqual([]);
+  });
+
+  it('keeps raw messages in the run while retrying a transformed transcript write', async () => {
+    const memory = new MockMemory();
+    vi.spyOn(memory, 'saveMessages').mockRejectedValueOnce(new Error('temporary storage failure'));
+    const manager = new SaveQueueManager({ memory });
+    const list = new MessageList({ threadId: 'transform-retry-thread' });
+    list.add(
+      {
+        id: 'response',
+        role: 'assistant',
+        threadId: 'transform-retry-thread',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'lookup-1',
+                toolName: 'lookup',
+                args: { secret: 'private' },
+                result: 'found',
+              },
+              providerMetadata: {
+                mastra: {
+                  toolPayloadTransform: { transcript: { 'input-available': { transformed: { redacted: true } } } },
+                },
+              },
+            },
+          ],
+        },
+      },
+      'response',
+    );
+    await manager.flushMessages(list, 'transform-retry-thread');
+    const raw = list.get.response.db()[0]?.content.parts.find(part => part.type === 'tool-invocation');
+    expect(raw?.toolInvocation.args).toEqual({ secret: 'private' });
+    await manager.flushMessages(list, 'transform-retry-thread');
+    const recalled = await memory.recall({ threadId: 'transform-retry-thread', perPage: false });
+    const saved = recalled.messages[0]?.content.parts.find(part => part.type === 'tool-invocation');
+    expect(saved?.toolInvocation.args).toEqual({ redacted: true });
   });
 
   it('handles batchMessages with stale messages (forces flush)', async () => {

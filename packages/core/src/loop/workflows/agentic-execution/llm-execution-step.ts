@@ -1517,7 +1517,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       if (openedBoundary?.appended) appendedStepBoundary = iterationBoundary;
       let transcriptStep: TranscriptStep = {
         messageId: currentMessageId,
-        start: messageList.get.response.aiV5.ui().find(message => message.id === currentMessageId)?.parts.length ?? 0,
+        start:
+          messageList.getPersisted.response.aiV5.ui().find(message => message.id === currentMessageId)?.parts.length ??
+          0,
         end: 0,
       };
 
@@ -1637,11 +1639,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // input-step processors.
         const previousSteps = inputData.output?.steps || [];
         const lastPreviousStep = previousSteps[previousSteps.length - 1];
-        const lastTranscriptStep = transcriptSteps?.[previousSteps.length - 1];
+        const lastTranscriptStep = transcriptSteps[previousSteps.length - 1] ?? inputData.stepResult?.transcriptStep;
         if (lastPreviousStep) {
-          const refreshedContent = lastTranscriptStep
-            ? getTranscriptStepContent(messageList, lastTranscriptStep)
-            : messageList.get.response.aiV5.modelContent(previousSteps.length);
+          const refreshedContent = getTranscriptStepContent(messageList, lastTranscriptStep);
           // Durable agents deserialize a fresh MessageList per workflow step, so
           // the re-extraction can legitimately come back empty there. Never let
           // that wipe content we already have.
@@ -3204,7 +3204,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const steps = inputData.output?.steps || [];
 
       transcriptStep.end =
-        messageList.get.response.aiV5.ui().find(message => message.id === transcriptStep?.messageId)?.parts.length ?? 0;
+        messageList.getPersisted.response.aiV5.ui().find(message => message.id === transcriptStep.messageId)?.parts
+          .length ?? 0;
       transcriptSteps[steps.length] = transcriptStep;
       const currentIterationContent = getTranscriptStepContent(messageList, transcriptStep);
 
@@ -3310,6 +3311,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         messageId: outputStream.messageId,
         stepResult: {
           reason: stepReason,
+          transcriptStep,
           ...(runState.state.stepResult?.rawReason && { rawReason: runState.state.stepResult.rawReason }),
           warnings,
           isContinued: shouldContinue,

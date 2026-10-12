@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { llmIterationOutputSchema, toolCallOutputSchema } from './schema';
+import { llmIterationOutputSchema, llmIterationStepResultSchema, toolCallOutputSchema } from './schema';
+
+it('keeps transcript step positions through the suspend snapshot boundary', () => {
+  const step = {
+    reason: 'tool-calls',
+    warnings: [],
+    isContinued: true,
+    transcriptStep: { messageId: 'response', start: 3, end: 5 },
+  };
+  expect(llmIterationStepResultSchema.parse(JSON.parse(JSON.stringify(step)))).toEqual(step);
+  expect(
+    llmIterationStepResultSchema.parse({ reason: 'stop', warnings: [], isContinued: false }).transcriptStep,
+  ).toBeUndefined();
+});
 
 // Guards the `aborted` field on toolCallOutputSchema (#17995). Note: no engine actually
 // validates step outputs against this schema today — the workflows engine has no

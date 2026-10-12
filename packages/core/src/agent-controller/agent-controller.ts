@@ -2202,7 +2202,6 @@ export class AgentController<TState = {}> {
     const channelAutoApprove = this.#channels?.__isAutoApproveResource(session.identity.getResourceId()) === true;
     const shared: Record<string, unknown> = {
       maxSteps: CONTROLLER_MAX_STEPS,
-      savePerStep: false,
       requireToolApproval: !isYolo && !channelAutoApprove,
     };
 

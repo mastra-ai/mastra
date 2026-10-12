@@ -288,6 +288,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -420,6 +425,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -642,6 +652,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -792,6 +807,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -1130,6 +1150,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
       "stepResult": {
         "isContinued": true,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -1461,6 +1486,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "id-0",
+          "start": 2,
+        },
         "warnings": undefined,
       },
     },
@@ -1754,6 +1784,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "id-0",
+          "start": 2,
+        },
         "warnings": undefined,
       },
     },
@@ -2012,6 +2047,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "msg-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -2198,6 +2238,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "msg-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -2790,6 +2835,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 6,
+          "messageId": "msg-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -3102,6 +3152,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 6,
+          "messageId": "msg-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -3322,6 +3377,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "msg-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -3454,6 +3514,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "msg-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -3658,6 +3723,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -3790,6 +3860,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -4106,6 +4181,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
       "stepResult": {
         "isContinued": false,
         "reason": "tool-calls",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -4285,6 +4365,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
       "stepResult": {
         "isContinued": false,
         "reason": "tool-calls",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -4525,6 +4610,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -4723,6 +4813,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -5061,6 +5156,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       "stepResult": {
         "isContinued": true,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -5392,6 +5492,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "id-0",
+          "start": 2,
+        },
         "warnings": undefined,
       },
     },
@@ -5685,6 +5790,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "id-0",
+          "start": 2,
+        },
         "warnings": undefined,
       },
     },
@@ -5893,6 +6003,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-2000",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -6029,6 +6144,11 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-2000",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -6791,6 +6911,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
       "stepResult": {
         "isContinued": true,
         "reason": "tool-calls",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "msg-0",
+          "start": 0,
+        },
         "warnings": [],
       },
     },
@@ -7158,6 +7283,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "msg-0",
+          "start": 2,
+        },
         "warnings": [],
       },
     },
@@ -7486,6 +7616,11 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "msg-0",
+          "start": 2,
+        },
         "warnings": [],
       },
     },
@@ -7729,6 +7864,11 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -7933,6 +8073,11 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -8174,6 +8319,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -8318,6 +8468,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -8552,6 +8707,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -8714,6 +8874,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -9070,6 +9235,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
       "stepResult": {
         "isContinued": true,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -9419,6 +9589,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "id-0",
+          "start": 2,
+        },
         "warnings": undefined,
       },
     },
@@ -9730,6 +9905,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "id-0",
+          "start": 2,
+        },
         "warnings": undefined,
       },
     },
@@ -10000,6 +10180,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "msg-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -10198,6 +10383,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "msg-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -10802,6 +10992,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 6,
+          "messageId": "msg-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -11126,6 +11321,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 6,
+          "messageId": "msg-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -11358,6 +11558,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "msg-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -11502,6 +11707,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "msg-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -11718,6 +11928,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -11862,6 +12077,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -12190,6 +12410,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "stepResult": {
         "isContinued": false,
         "reason": "tool-calls",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -12381,6 +12606,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "stepResult": {
         "isContinued": false,
         "reason": "tool-calls",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -12633,6 +12863,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -12843,6 +13078,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -13199,6 +13439,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "stepResult": {
         "isContinued": true,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-0",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -13548,6 +13793,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "id-0",
+          "start": 2,
+        },
         "warnings": undefined,
       },
     },
@@ -13859,6 +14109,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 3,
+          "messageId": "id-0",
+          "start": 2,
+        },
         "warnings": undefined,
       },
     },
@@ -14079,6 +14334,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-2000",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },
@@ -14227,6 +14487,11 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
+        "transcriptStep": {
+          "end": 1,
+          "messageId": "id-2000",
+          "start": 0,
+        },
         "warnings": undefined,
       },
     },

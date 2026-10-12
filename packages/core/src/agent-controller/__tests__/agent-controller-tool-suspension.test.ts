@@ -475,7 +475,7 @@ describe('AgentController: tool suspension and resumption', () => {
     const [resumeOptions] = sendStreamResumeSpy.mock.calls[0] as [any];
     // Must match the budget used for the initial stream, not the agent default.
     expect(resumeOptions.streamOptions.maxSteps).toBe(1000);
-    expect(resumeOptions.streamOptions.savePerStep).toBe(false);
+    expect(resumeOptions.streamOptions.savePerStep).toBeUndefined();
     expect(resumeOptions.streamOptions.modelSettings).toBeUndefined();
   });
 });

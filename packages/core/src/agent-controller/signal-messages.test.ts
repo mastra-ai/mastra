@@ -786,12 +786,12 @@ describe('AgentController signal messages', () => {
           streamOptions: expect.objectContaining({
             memory: expect.objectContaining({ thread: thread.id, resource: thread.resourceId }),
             maxSteps: 1000,
-            savePerStep: false,
             requireToolApproval: true,
           }),
         }),
       }),
     );
+    expect(queueMessage.mock.calls[0]?.[1].ifIdle?.streamOptions?.savePerStep).toBeUndefined();
     expect(sendSignal).not.toHaveBeenCalled();
     expect(session.displayState.get().queuedFollowUps).toBe(1);
     expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });

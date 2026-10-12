@@ -438,6 +438,6 @@ describe('tool approvals keep the run step budget', () => {
 
     expect(sendToolApproval).toHaveBeenCalledTimes(1);
     expect(sendToolApproval.mock.calls[0]?.[0].streamOptions?.maxSteps).toBe(1000);
-    expect(sendToolApproval.mock.calls[0]?.[0].streamOptions?.savePerStep).toBe(false);
+    expect(sendToolApproval.mock.calls[0]?.[0].streamOptions?.savePerStep).toBeUndefined();
   });
 });

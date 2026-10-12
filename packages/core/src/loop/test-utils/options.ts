@@ -937,6 +937,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "stepResult": {
                   "isContinued": true,
                   "reason": "tool-calls",
+                  "transcriptStep": {
+                    "end": 2,
+                    "messageId": "id-0",
+                    "start": 0,
+                  },
                   "warnings": undefined,
                 },
               },
@@ -1369,6 +1374,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "stepResult": {
                   "isContinued": false,
                   "reason": "stop",
+                  "transcriptStep": {
+                    "end": 4,
+                    "messageId": "id-0",
+                    "start": 3,
+                  },
                   "warnings": undefined,
                 },
               },
@@ -1752,6 +1762,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "stepResult": {
                   "isContinued": false,
                   "reason": "stop",
+                  "transcriptStep": {
+                    "end": 4,
+                    "messageId": "id-0",
+                    "start": 3,
+                  },
                   "warnings": undefined,
                 },
               },
@@ -7876,6 +7891,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "stepResult": {
                   "isContinued": false,
                   "reason": "stop",
+                  "transcriptStep": {
+                    "end": 4,
+                    "messageId": "id-0",
+                    "start": 0,
+                  },
                   "warnings": [],
                 },
               },
@@ -8060,6 +8080,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "stepResult": {
                   "isContinued": false,
                   "reason": "stop",
+                  "transcriptStep": {
+                    "end": 4,
+                    "messageId": "id-0",
+                    "start": 0,
+                  },
                   "warnings": [],
                 },
               },
@@ -8873,6 +8898,11 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "stepResult": {
                   "isContinued": true,
                   "reason": "tool-calls",
+                  "transcriptStep": {
+                    "end": 1,
+                    "messageId": "msg-0",
+                    "start": 0,
+                  },
                   "warnings": undefined,
                 },
               },

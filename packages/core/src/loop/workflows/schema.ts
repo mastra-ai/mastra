@@ -20,6 +20,8 @@ import type {
   GeneratedFile,
 } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
+import { transcriptStepSchema } from '../shared/transcript-step';
+import type { TranscriptStep } from '../shared/transcript-step';
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
@@ -29,6 +31,8 @@ export interface LLMIterationStepResult {
   isContinued: boolean;
   /** Private continuation: the physical attempt did not complete a logical step. */
   signalPreempted?: boolean;
+  /** Accepted iteration's message/part positions; survives persistence and resume. */
+  transcriptStep?: TranscriptStep;
   logprobs?: LanguageModelV1LogProbs;
   totalUsage: LanguageModelUsage;
   headers?: Record<string, string>;
@@ -118,6 +122,7 @@ export const llmIterationStepResultSchema = z.object({
   warnings: z.array(z.any()),
   isContinued: z.boolean(),
   signalPreempted: z.boolean().optional(),
+  transcriptStep: transcriptStepSchema.optional(),
   logprobs: z.any().optional(),
   totalUsage: languageModelUsageSchema.optional(),
   headers: z.record(z.string(), z.string()).optional(),

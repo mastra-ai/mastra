@@ -80,10 +80,10 @@ describe('AgentController notification signals', () => {
           streamOptions: expect.objectContaining({
             memory: expect.objectContaining({ resource: 'resource-1', thread: threadId }),
             maxSteps: 1000,
-            savePerStep: false,
           }),
         }),
       }),
     );
+    expect(agent.sendNotificationSignal.mock.calls[0]?.[1].ifIdle?.streamOptions?.savePerStep).toBeUndefined();
   });
 });
