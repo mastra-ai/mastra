@@ -12,7 +12,7 @@ Redesigned Factory onboarding around an editable draft and a final review. Repos
 
 **Codebase and work**
 
-- GitHub and GitLab repositories are picked from one list, with an explicit **Continue**.
-- Linear, Jira, and incident.io keep their availability and authorization behavior.
+- Selecting a repository no longer moves you on by itself; **Continue** does.
+- Jira and incident.io offer **Reconnect** when a connection needs to be authorized again.
 
 A contextual illustration follows each step and respects reduced-motion settings.
