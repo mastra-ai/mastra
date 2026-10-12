@@ -27,12 +27,6 @@ describe('ComparisonSideHeader', () => {
       expect(link.getAttribute('target')).toBeNull();
       expect(link.getAttribute('rel')).toBeNull();
     });
-
-    it('keeps the shortened id visible as secondary detail', () => {
-      renderColumn(<ComparisonSideHeader role="baseline" label="Baseline" experiment={namedExperiment} />);
-
-      expect(screen.getByText('a1b2c3d4')).toBeDefined();
-    });
   });
 
   describe('when the experiment has no usable name', () => {
@@ -90,12 +84,14 @@ describe('ComparisonSideHeader', () => {
       expect(screen.getByText('0.75')).toBeDefined();
     });
 
-    it('titles the summary as a collapsible overall score section', () => {
+    it('titles the summary above its key/value list', () => {
       renderColumn(
         <ComparisonSideHeader role="baseline" label="Baseline" experiment={namedExperiment} summary={summary} />,
       );
 
-      expect(screen.getByRole('button', { name: 'Overall score' })).toBeDefined();
+      expect(screen.getByText('Summary')).toBeDefined();
+      expect(screen.getByRole('region', { name: 'Summary' })).toBeDefined();
+      expect(screen.queryByRole('button', { name: 'Summary' })).toBeNull();
     });
 
     it('links each scorer out to its playground page', () => {
@@ -122,6 +118,65 @@ describe('ComparisonSideHeader', () => {
       );
 
       expect(screen.getByText('0.25', { exact: false })).toBeDefined();
+    });
+  });
+
+  describe('when the run metrics are known', () => {
+    const metrics = { errorCount: 1, averageScore: 0.5, averageDurationMs: 1500 };
+
+    it('summarizes errors, average score and average duration', () => {
+      renderColumn(
+        <ComparisonSideHeader role="baseline" label="Baseline" experiment={namedExperiment} metrics={metrics} />,
+      );
+
+      expect(screen.queryByText('Items')).toBeNull();
+      expect(screen.getByText('Errors')).toBeDefined();
+      expect(screen.getByText('1')).toBeDefined();
+      expect(screen.getByText('Avg score')).toBeDefined();
+      expect(screen.getByText('0.50')).toBeDefined();
+      expect(screen.getByText('Avg duration')).toBeDefined();
+    });
+
+    it('shows a dash for a metric that cannot be computed', () => {
+      renderColumn(
+        <ComparisonSideHeader
+          role="baseline"
+          label="Baseline"
+          experiment={namedExperiment}
+          metrics={{ ...metrics, errorCount: 0, averageScore: null, averageDurationMs: null }}
+        />,
+      );
+
+      expect(screen.getAllByText('-')).toHaveLength(2);
+    });
+
+    it('does not trend the baseline against itself', () => {
+      renderColumn(
+        <ComparisonSideHeader
+          role="baseline"
+          label="Baseline"
+          experiment={namedExperiment}
+          metrics={metrics}
+          baselineMetrics={metrics}
+        />,
+      );
+
+      expect(screen.queryByText('+', { exact: false })).toBeNull();
+    });
+
+    it('trends a contender against the baseline, lower durations and errors reading as improvements', () => {
+      renderColumn(
+        <ComparisonSideHeader
+          role="contender"
+          label="Contender 1"
+          experiment={namedExperiment}
+          metrics={{ ...metrics, errorCount: 0, averageScore: 0.8, averageDurationMs: 1000 }}
+          baselineMetrics={metrics}
+        />,
+      );
+
+      expect(screen.getByText('+0.30').className).toContain('text-success-indicator');
+      expect(screen.getByText('-500ms').className).toContain('text-success-indicator');
     });
   });
 

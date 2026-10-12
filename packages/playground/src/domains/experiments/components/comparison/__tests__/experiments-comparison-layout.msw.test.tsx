@@ -1,5 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 
@@ -114,27 +114,14 @@ describe('experiments comparison table', () => {
       expect(itemRow('item-c')).toBeTruthy();
     });
 
-    it('links each item id to its page in the dataset', async () => {
-      renderComparison();
-
-      const link = await within(await findItemRow('item-a')).findByRole('link', { name: 'Open item item-a' });
-
-      expect(link.getAttribute('href')).toBe('/datasets/dataset-1/items/item-a');
-      expect(link.getAttribute('target')).toBeNull();
-    });
-
-    it('reveals the item input and ground truth without leaving the page', async () => {
+    it('shows the item input and ground truth by default', async () => {
       renderComparison();
       const row = await findItemRow('item-a');
 
-      expect(within(row).queryByRole('region', { name: 'Input' })).toBeNull();
-
-      fireEvent.click(within(row).getByRole('button', { name: 'Input' }));
       const input = await within(row).findByRole('region', { name: 'Input' });
       expect(within(input).getByText(/What is the capital of France/)).toBeTruthy();
 
-      fireEvent.click(within(row).getByRole('button', { name: 'Ground truth' }));
-      const groundTruth = await within(row).findByRole('region', { name: 'Ground truth' });
+      const groundTruth = within(row).getByRole('region', { name: 'Ground truth' });
       expect(within(groundTruth).getByText(/Paris/)).toBeTruthy();
     });
 
@@ -171,14 +158,14 @@ describe('experiments comparison table', () => {
     });
   });
 
-  describe('when scores carry a reason', () => {
-    it('shows the reason on each side and the delta once, on the contender', async () => {
+  describe('when scores are known', () => {
+    it('shows the delta once, on the contender, without the scorer reason', async () => {
       renderComparison();
 
       await waitFor(() => {
-        expect(within(sideOf('item-a', 'Baseline')).getByText('Missing the country')).toBeTruthy();
+        expect(within(sideOf('item-a', 'Contender 1')).getByRole('link', { name: 'Open accuracy' })).toBeTruthy();
       });
-      expect(within(sideOf('item-a', 'Contender 1')).getByText('Complete answer')).toBeTruthy();
+      expect(within(sideOf('item-a', 'Baseline')).queryByText('Missing the country')).toBeNull();
       expect(within(sideOf('item-a', 'Contender 1')).getByText('0.40', { exact: false })).toBeTruthy();
       expect(within(sideOf('item-a', 'Baseline')).queryByText('0.40', { exact: false })).toBeNull();
     });
@@ -233,13 +220,13 @@ describe('experiments comparison table', () => {
       renderComparison([CONTENDER_ID, CHALLENGER_ID]);
 
       await waitFor(() => {
-        expect(within(sideOf('item-a', 'Contender 2')).getByText('Close enough')).toBeTruthy();
+        expect(within(sideOf('item-a', 'Contender 1')).getByText('0.40', { exact: false })).toBeTruthy();
       });
-      expect(within(sideOf('item-a', 'Contender 1')).getByText('0.40', { exact: false })).toBeTruthy();
       // +0.10 on accuracy and -0.10 on relevancy.
-      expect(within(sideOf('item-a', 'Contender 2')).getAllByText('0.10')).toHaveLength(2);
+      expect(within(sideOf('item-a', 'Contender 2')).getByText('+0.10')).toBeTruthy();
+      expect(within(sideOf('item-a', 'Contender 2')).getByText('-0.10')).toBeTruthy();
       expect(within(sideOf('item-a', 'Baseline')).queryByText('0.40')).toBeNull();
-      expect(within(sideOf('item-a', 'Baseline')).queryByText('0.10')).toBeNull();
+      expect(within(sideOf('item-a', 'Baseline')).queryByText('0.10', { exact: false })).toBeNull();
     });
   });
 
