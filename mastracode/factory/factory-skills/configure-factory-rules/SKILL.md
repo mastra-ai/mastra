@@ -82,7 +82,7 @@ Working roles identify bindings on the shared Code Agent, not separately configu
 
 Verify the actual journey: initial entry, lifecycle kickoff, the declared role's phase signal and binding, a bound transition tool, role handoff, completed tool-result ingestion, deferred transition, and terminal cleanup. Polling and persisted-message ingestion resolve the single current phase through the installed board. Live binding, reassignment, revision, topology, approval, and external-author checks still apply. Custom roles named `triage` do not inherit Work classification requirements. A tool-result handler receives normalized `result.status` and `result.value`; it does not receive raw tool arguments. Check the result payload needed by the board's policy rather than treating every completed tool call as business success.
 
-Keep the remaining limits explicit: `factory-ui` still uses built-in stages and roles, completion metrics still use Work's `done` phase, `held-waiting` is Work-specific, and built-in board replacement/customization is unsupported. Existing integration defaults do not automatically route events to a custom board.
+Keep the remaining limits explicit: `factory-ui` still uses built-in stages and roles, completion metrics still use Work's `done` phase, and `held-waiting` is Work-specific. Existing integration defaults do not automatically route events to a custom board.
 
 ## Change a built-in handler
 
