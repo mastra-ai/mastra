@@ -7,7 +7,7 @@ This directory contains the pricing snapshot used by `@mastra/observability` for
 Prices come from [models.dev](https://models.dev) (`https://models.dev/api.json`), the same catalog the model router in `@mastra/core` uses.
 
 - `scripts/generate-pricing.ts` converts the models.dev `cost` data into `pricing-data.jsonl` (see `models-dev.ts`). The "Regenerate Providers & Docs" workflow runs it every 6 hours and commits changes with an `@mastra/observability` changeset.
-- At runtime, `PricingRegistry.getGlobal()` starts from the copy cached in `~/.cache/mastra/pricing-data.json`, or from this snapshot, and refreshes from models.dev in the background once a day and when a model has no price. `MASTRA_AUTO_REFRESH_PRICING=false` or `MASTRA_OFFLINE=true` turns the refresh off.
+- At runtime, `PricingRegistry.getGlobal()` uses this snapshot. Refresh uses the same switches as the model router's auto-refresh: on by default only under `mastra dev` (`MASTRA_DEV=true`), on elsewhere with `MASTRA_AUTO_REFRESH_PRICING=true`, and off with `MASTRA_AUTO_REFRESH_PRICING=false` or `MASTRA_OFFLINE=true`. When refresh is on, the registry starts from the copy cached in `~/.cache/mastra/pricing-data.json` and refreshes from models.dev in the background once a day and when a model has no price. Bump `CACHE_VERSION` in `pricing-registry.ts` when the cached rows change shape or meaning.
 - A model with a missing or wrong price is fixed upstream, with a pull request to [models.dev](https://github.com/anomalyco/models.dev). Do not hand-edit `pricing-data.jsonl`.
 
 models.dev data is MIT licensed, Copyright (c) 2025 models.dev.

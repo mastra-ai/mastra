@@ -42,9 +42,9 @@ describe('PricingRegistry.getGlobal refresh', () => {
     return (await import('./pricing-registry')).PricingRegistry;
   }
 
-  function writeCache(rows: unknown[], etag: string, ageMs: number): void {
+  function writeCache(rows: unknown[], etag: string, ageMs: number, version = 1): void {
     fs.mkdirSync(path.dirname(cacheFile()), { recursive: true });
-    fs.writeFileSync(cacheFile(), JSON.stringify({ etag, rows }));
+    fs.writeFileSync(cacheFile(), JSON.stringify({ version, etag, rows }));
     const mtime = new Date(Date.now() - ageMs);
     fs.utimesSync(cacheFile(), mtime, mtime);
   }
@@ -53,6 +53,8 @@ describe('PricingRegistry.getGlobal refresh', () => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), 'mastra-pricing-'));
     vi.stubEnv('HOME', home);
     vi.stubEnv('USERPROFILE', home);
+    // Refresh is on by default only under `mastra dev`.
+    vi.stubEnv('MASTRA_DEV', 'true');
     vi.stubEnv('MASTRA_AUTO_REFRESH_PRICING', '');
     vi.stubEnv('MASTRA_OFFLINE', '');
     fetchMock = vi.fn(async () => new Response(JSON.stringify(catalog()), { headers: { etag: 'W/"v2"' } }));
@@ -73,7 +75,21 @@ describe('PricingRegistry.getGlobal refresh', () => {
     await vi.waitFor(() => expect(Registry.getGlobal()?.get(NEW_MODEL)?.tiers[0]?.rates.input_tokens).toBe(7e-6));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() => expect(JSON.parse(fs.readFileSync(cacheFile(), 'utf-8')).etag).toBe('W/"v2"'));
+    await vi.waitFor(() =>
+      expect(JSON.parse(fs.readFileSync(cacheFile(), 'utf-8'))).toMatchObject({ version: 1, etag: 'W/"v2"' }),
+    );
+  });
+
+  it('ignores a cache file written in another format', async () => {
+    writeCache(modelsDevToPricingRows(catalog(9)), 'W/"v1"', 0, 2);
+    const Registry = await loadRegistry();
+
+    expect(Registry.getGlobal()?.get(NEW_MODEL)).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://models.dev/api.json',
+      expect.objectContaining({ headers: undefined }),
+    );
+    await vi.waitFor(() => expect(Registry.getGlobal()?.get(NEW_MODEL)?.tiers[0]?.rates.input_tokens).toBe(7e-6));
   });
 
   it('starts from a stale cache and revalidates it with its ETag', async () => {
@@ -138,14 +154,30 @@ describe('PricingRegistry.getGlobal refresh', () => {
   });
 
   it.each([
-    ['MASTRA_OFFLINE', 'true'],
-    ['MASTRA_AUTO_REFRESH_PRICING', 'false'],
-  ])('uses only the bundled snapshot when %s=%s', async (name, value) => {
-    vi.stubEnv(name, value);
+    ['outside `mastra dev` by default', { MASTRA_DEV: '' }],
+    ['with MASTRA_AUTO_REFRESH_PRICING=false', { MASTRA_AUTO_REFRESH_PRICING: 'false' }],
+    [
+      'with MASTRA_OFFLINE=true, even when refresh is turned on',
+      { MASTRA_OFFLINE: 'true', MASTRA_AUTO_REFRESH_PRICING: 'true' },
+    ],
+  ])('uses only the bundled snapshot %s', async (_name, env) => {
+    for (const [name, value] of Object.entries(env)) {
+      vi.stubEnv(name, value);
+    }
     writeCache(modelsDevToPricingRows(catalog()), 'W/"v1"', 2 * 24 * 60 * 60 * 1000);
     const Registry = await loadRegistry();
 
     expect(Registry.getGlobal()?.get(NEW_MODEL)).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('refreshes outside `mastra dev` with MASTRA_AUTO_REFRESH_PRICING=true', async () => {
+    vi.stubEnv('MASTRA_DEV', '');
+    vi.stubEnv('MASTRA_AUTO_REFRESH_PRICING', 'true');
+    const Registry = await loadRegistry();
+
+    expect(Registry.getGlobal()?.get(NEW_MODEL)).toBeNull();
+    await vi.waitFor(() => expect(Registry.getGlobal()?.get(NEW_MODEL)?.tiers[0]?.rates.input_tokens).toBe(7e-6));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

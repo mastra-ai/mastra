@@ -13,6 +13,9 @@ const REFRESH_TIMEOUT_MS = 5_000;
 // Same cache folder as the model router. A function, so importing this module never calls
 // os.homedir(), which throws in some sandboxes.
 const CACHE_FILE = () => path.join(os.homedir(), '.cache', 'mastra', 'pricing-data.json');
+// Every installed version of this package shares the cache file. Bump this when the cached rows
+// change shape or meaning, so other versions ignore the file instead of misreading it.
+const CACHE_VERSION = 1;
 const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac', 'jp', 'au']);
 const AI_SDK_VERCEL_GATEWAY_PROVIDER_ID = 'gateway';
 const VERCEL_PRICING_PROVIDER_ID = 'vercel';
@@ -82,9 +85,10 @@ export class PricingRegistry {
   }
 
   /**
-   * The registry used for cost estimates. It starts from the models.dev copy cached in
-   * `~/.cache/mastra`, or from the bundled snapshot, and refreshes from models.dev in the
-   * background once a day and when a model has no price. Lookups never wait for a refresh.
+   * The registry used for cost estimates. It uses the bundled snapshot. When refresh is on (under
+   * `mastra dev`, or with `MASTRA_AUTO_REFRESH_PRICING=true`), it starts from the models.dev copy
+   * cached in `~/.cache/mastra` instead, and refreshes from models.dev in the background once a day
+   * and when a model has no price. Lookups never wait for a refresh.
    */
   static getGlobal(): PricingRegistry | null {
     if (!globalRegistry) {
@@ -119,19 +123,27 @@ export class PricingRegistry {
   }
 }
 
-/** Same `MASTRA_OFFLINE` switch as the model router's `isOfflineMode()` in `@mastra/core`. */
+/**
+ * Same switches as the model router's auto-refresh in `@mastra/core`: on by default only under
+ * `mastra dev` (`MASTRA_DEV`), opt-in elsewhere, and always off with `MASTRA_OFFLINE`.
+ */
 function isRefreshEnabled(): boolean {
   const offline = process.env.MASTRA_OFFLINE;
-  return offline !== 'true' && offline !== '1' && process.env.MASTRA_AUTO_REFRESH_PRICING !== 'false';
+  if (offline === 'true' || offline === '1') {
+    return false;
+  }
+  const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
+  const setting = process.env.MASTRA_AUTO_REFRESH_PRICING;
+  return setting === 'true' || (setting !== 'false' && isDev);
 }
 
 /**
- * Start a background refresh from models.dev. Returns false when refresh is off, one is
- * already running, or the last attempt was less than an hour ago.
+ * Start a background refresh from models.dev, unless refresh is off, one is already
+ * running, or the last attempt was less than an hour ago.
  */
-function refreshGlobalPricing(): boolean {
+function refreshGlobalPricing(): void {
   if (refreshInFlight || !isRefreshEnabled() || Date.now() - lastRefreshAttemptAt < MIN_REFRESH_ATTEMPT_INTERVAL_MS) {
-    return false;
+    return;
   }
 
   refreshInFlight = true;
@@ -143,7 +155,6 @@ function refreshGlobalPricing(): boolean {
     .finally(() => {
       refreshInFlight = false;
     });
-  return true;
 }
 
 async function fetchModelsDevPricing(): Promise<void> {
@@ -171,7 +182,7 @@ async function fetchModelsDevPricing(): Promise<void> {
   globalRegistry = new PricingRegistry(rowsToPricingModels(rows));
   refreshedAt = Date.now();
   refreshEtag = response.headers.get('etag') ?? undefined;
-  await writeCacheFile(JSON.stringify({ etag: refreshEtag, rows }));
+  await writeCacheFile(JSON.stringify({ version: CACHE_VERSION, etag: refreshEtag, rows }));
 }
 
 /** The cache file's mtime records when its rows were last confirmed against models.dev. */
@@ -182,8 +193,16 @@ function loadCachedPricingModels(): Map<string, PricingModel> | null {
 
   try {
     const cacheFile = CACHE_FILE();
-    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf-8')) as { etag?: unknown; rows?: unknown };
-    if (!Array.isArray(cached.rows) || cached.rows.length < MIN_MODELS_DEV_PRICING_ROWS) {
+    const cached = JSON.parse(fs.readFileSync(cacheFile, 'utf-8')) as {
+      version?: unknown;
+      etag?: unknown;
+      rows?: unknown;
+    };
+    if (
+      cached.version !== CACHE_VERSION ||
+      !Array.isArray(cached.rows) ||
+      cached.rows.length < MIN_MODELS_DEV_PRICING_ROWS
+    ) {
       return null;
     }
 
