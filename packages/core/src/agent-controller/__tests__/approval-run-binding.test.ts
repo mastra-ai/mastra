@@ -141,7 +141,6 @@ describe('tool approvals resolve against the run that raised them', () => {
     const { controller, agent } = createController();
     await controller.init();
     const session = await controller.createSession({ id: 'test-session', ownerId: 'owner-a' });
-    const threadId = session.thread.getId()!;
     const streamOptions = await session.machinery.buildStreamOptions({});
     const runRequestContext = streamOptions.requestContext as RequestContext;
 
@@ -155,9 +154,7 @@ describe('tool approvals resolve against the run that raised them', () => {
         {
           __effect: () =>
             session.thread.transferOwnership({
-              threadId,
               toOwnerId: 'owner-b',
-              expectedOwnerId: 'owner-a',
             }),
         },
         toolCallApprovalChunk(),

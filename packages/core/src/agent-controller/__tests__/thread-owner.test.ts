@@ -97,7 +97,7 @@ describe('AgentController thread ownership', () => {
     expect((await memory.getThreadById({ threadId }))?.metadata?.ownerId).toBeUndefined();
   });
 
-  it('transfers with compare-and-set, emits the change, and preserves createdBy', async () => {
+  it('transfers the active thread, emits the change, and preserves createdBy', async () => {
     const { controller } = createController();
     await controller.init();
     const session = await controller.createSession({ id: 'session-a', ownerId: 'owner-a' });
@@ -107,12 +107,7 @@ describe('AgentController thread ownership', () => {
       events.push(event);
     });
 
-    await expect(
-      session.thread.transferOwnership({ toOwnerId: 'owner-b', expectedOwnerId: 'owner-a' }),
-    ).resolves.toEqual({ ok: true });
-    await expect(
-      session.thread.transferOwnership({ toOwnerId: 'owner-c', expectedOwnerId: 'owner-a' }),
-    ).resolves.toEqual({ ok: false, currentOwnerId: 'owner-b' });
+    await session.thread.transferOwnership({ toOwnerId: 'owner-b' });
 
     expect(await session.thread.getOwner()).toBe('owner-b');
     expect((await session.thread.getById({ threadId }))?.metadata?.createdBy).toBe('owner-a');
@@ -124,22 +119,27 @@ describe('AgentController thread ownership', () => {
     });
   });
 
-  it('allows exactly one concurrent compare-and-set transfer to win', async () => {
+  it('serializes concurrent transfers of the active thread', async () => {
     const { controller } = createController();
     await controller.init();
     const session = await controller.createSession({ id: 'session-a', ownerId: 'owner-a' });
+    const events: Array<{ type: string; fromOwnerId?: string; toOwnerId?: string }> = [];
+    session.subscribe(event => {
+      if (event.type === 'thread_owner_changed') events.push(event);
+    });
 
-    const results = await Promise.all([
-      session.thread.transferOwnership({ toOwnerId: 'owner-b', expectedOwnerId: 'owner-a' }),
-      session.thread.transferOwnership({ toOwnerId: 'owner-c', expectedOwnerId: 'owner-a' }),
+    await Promise.all([
+      session.thread.transferOwnership({ toOwnerId: 'owner-b' }),
+      session.thread.transferOwnership({ toOwnerId: 'owner-c' }),
     ]);
 
-    expect(results.filter(result => result.ok)).toHaveLength(1);
-    expect(results.filter(result => !result.ok)).toHaveLength(1);
-    expect(['owner-b', 'owner-c']).toContain(await session.thread.getOwner());
+    expect(events).toHaveLength(2);
+    expect(events[0]?.fromOwnerId).toBe('owner-a');
+    expect(events[1]?.fromOwnerId).toBe(events[0]?.toOwnerId);
+    expect(await session.thread.getOwner()).toBe(events[1]?.toOwnerId);
   });
 
-  it('rejects ownership access through a session for another resource', async () => {
+  it('rejects owner reads through a session for another resource', async () => {
     const { controller } = createController();
     await controller.init();
     const sessionA = await controller.createSession({
@@ -155,9 +155,6 @@ describe('AgentController thread ownership', () => {
     const threadA = sessionA.thread.getId()!;
 
     await expect(sessionB.thread.getOwner({ threadId: threadA })).rejects.toThrow(`Thread not found: ${threadA}`);
-    await expect(
-      sessionB.thread.transferOwnership({ threadId: threadA, toOwnerId: 'owner-b', expectedOwnerId: 'owner-a' }),
-    ).rejects.toThrow(`Thread not found: ${threadA}`);
     await expect(sessionA.thread.getOwner()).resolves.toBe('owner-a');
   });
 
@@ -172,9 +169,9 @@ describe('AgentController thread ownership', () => {
     });
     vi.spyOn(memory, 'saveThread').mockRejectedValueOnce(new Error('write failed'));
 
-    await expect(
-      session.thread.transferOwnership({ toOwnerId: 'owner-b', expectedOwnerId: 'owner-a' }),
-    ).rejects.toThrow(`Failed to persist owner for thread: ${session.thread.getId()}`);
+    await expect(session.thread.transferOwnership({ toOwnerId: 'owner-b' })).rejects.toThrow(
+      `Failed to persist owner for thread: ${session.thread.getId()}`,
+    );
     expect(events).not.toContainEqual(expect.objectContaining({ type: 'thread_owner_changed' }));
     await expect(session.thread.getOwner()).resolves.toBe('owner-a');
   });
@@ -256,7 +253,7 @@ describe('AgentController thread ownership', () => {
 
     const firstRun = session.sendMessage({ content: 'Capture owner' });
     await firstModelStart;
-    await session.thread.transferOwnership({ toOwnerId: 'owner-b', expectedOwnerId: 'owner-a' });
+    await session.thread.transferOwnership({ toOwnerId: 'owner-b' });
     releaseFirstModel();
     await firstRun;
     await session.sendMessage({ content: 'Capture owner again' });
