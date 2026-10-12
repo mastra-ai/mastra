@@ -53,7 +53,7 @@ export function OnboardingIllustration({ scene, mode }: { scene: DrawingScene; m
         <path d={factoryPaths.wall} className="onboarding-sketch-surface" />
         <path d={factoryPaths.wallMarks} className="onboarding-sketch-detail" />
         <g data-belts>
-          <path d={factoryPaths.belts} className="onboarding-sketch-surface" />
+          <path d={factoryPaths.belts} className="onboarding-sketch-surface" stroke="none" />
           <path d={factoryPaths.beltEdges} />
         </g>
       </g>

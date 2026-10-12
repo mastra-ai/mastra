@@ -163,7 +163,9 @@ function box(
     return worldLine(along(roundingInset(from)), along(1 - roundingInset(to)));
   };
   return {
-    silhouette: hull(vertices.map(project)).flatMap(point => (square.has(point.join()) ? [point, point] : [point])),
+    silhouette: hull(vertices.map(project)),
+    flushCorners: square,
+    creaseCorner: project([x + width, y + depth, top]),
     creases: [
       ...crease([x, y + depth, top], [x + width, y + depth, top]),
       ...crease([x + width, y, top], [x + width, y + depth, top]),
@@ -303,8 +305,39 @@ export function drawingPose(scene: DrawingScene, mode: AccountsMode): DrawingPos
 const jambStrokeClearance = 0.5;
 const outsideBay = (x: readonly [number, number], y: readonly [number, number]) =>
   polygon(hull(x.flatMap(u => y.flatMap(v => [project([u, v, -1]), project([u, v, 14])]))));
-const inputBelt = box(-52, 40, 42, 102, 0, 7, ([, v]) => v === 40),
-  outputBelt = box(57, -10, 88, 38, 0, 7, ([u]) => u === 57);
+
+/** A closed fill with an open outline: the edge against the loading bay is hidden. */
+function conveyorOutline(belt: ReturnType<typeof box>) {
+  const corners = belt.silhouette.map((point, index, points) => {
+    const flush = belt.flushCorners.has(point.join());
+    const inset = (neighbor: Point) =>
+      pointBetween(
+        point,
+        neighbor,
+        flush ? 0 : Math.min(0.45, 3 / Math.hypot(neighbor[0] - point[0], neighbor[1] - point[1])),
+      );
+    const before = inset(points[(index + points.length - 1) % points.length]);
+    const after = inset(points[(index + 1) % points.length]);
+    return { before, after, flush, turn: flush ? '' : `Q${point.join(',')} ${after.join(',')}` };
+  });
+  const start = `M${corners[corners.length - 1].after.join(',')}`;
+  const fill = start + corners.map(corner => `L${corner.before.join(',')}${corner.turn}`).join('') + 'Z';
+  const outline =
+    start +
+    corners
+      .map((corner, index) => {
+        const previous = corners[(index + corners.length - 1) % corners.length];
+        const command = previous.flush && corner.flush ? 'M' : 'L';
+        return `${command}${corner.before.join(',')}${corner.turn}`;
+      })
+      .join('');
+  const [a, b, c, d] = belt.creases;
+  const crease = `M${a.join(',')}L${b.join(',')}Q${belt.creaseCorner.join(',')} ${d.join(',')}L${c.join(',')}`;
+  return { fill, outline: outline + crease };
+}
+
+const inputBelt = conveyorOutline(box(-52, 40, 42, 102, 0, 7, ([, v]) => v === 40)),
+  outputBelt = conveyorOutline(box(57, -10, 88, 38, 0, 7, ([u]) => u === 57));
 
 // Belts stop at the wall, so they always sit in front of it; tickets cross it and keep only what the shell leaves visible.
 export const factoryPaths = {
@@ -325,8 +358,8 @@ export const factoryPaths = {
     ]),
   ],
   foundation: contour(slab(-66, -41, 130, 86, -5, 5, false).outline),
-  belts: contour(rounded(inputBelt.silhouette, 1.5)) + contour(rounded(outputBelt.silhouette, 1.5)),
-  beltEdges: segments([...inputBelt.creases, ...outputBelt.creases]),
+  belts: inputBelt.fill + outputBelt.fill,
+  beltEdges: inputBelt.outline + outputBelt.outline,
   chimney: contour(slab(30, -34, 16, 16, 0, 93, false).outline),
   chimneyCap: contour(slab(28, -36, 20, 20, 89, 7, false).outline),
   recess:
