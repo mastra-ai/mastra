@@ -227,8 +227,8 @@ export function createKnowledgeStorageTests(
     it('reports one canonical storage contract', () => {
       expect(store.getCapabilities()).toEqual({
         supported: true,
-        schemaVersion: 1,
-        contractVersion: 1,
+        schemaVersion: 2,
+        contractVersion: 2,
       });
     });
 

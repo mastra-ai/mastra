@@ -106,11 +106,11 @@ describe('Knowledge core compatibility', () => {
   it('rejects a core with a different Knowledge storage contract', async () => {
     const loadCore = knowledgeCompat.createKnowledgeCoreLoader(new Set(['knowledge-v2']), async () => ({
       ...coreStorage,
-      KNOWLEDGE_STORAGE_CONTRACT_VERSION: 2,
+      KNOWLEDGE_STORAGE_CONTRACT_VERSION: 3,
     }));
 
     await expect(loadCore()).rejects.toThrow(
-      "Knowledge storage contract 2 in @mastra/core does not match the adapter's contract 1",
+      "Knowledge storage contract 3 in @mastra/core does not match the adapter's contract 2",
     );
   });
 

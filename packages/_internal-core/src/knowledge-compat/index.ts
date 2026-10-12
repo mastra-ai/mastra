@@ -7,8 +7,8 @@
  */
 export const KNOWLEDGE_CORE_FEATURE = 'knowledge-v2';
 
-export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 1 as const;
-export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 1 as const;
+export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 2 as const;
+export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 2 as const;
 
 const TABLE_KNOWLEDGE_NODES = 'mastra_knowledge_nodes';
 const TABLE_KNOWLEDGE_RECORDS = 'mastra_knowledge_records';

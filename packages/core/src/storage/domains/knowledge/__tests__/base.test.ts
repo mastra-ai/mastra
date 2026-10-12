@@ -1,12 +1,32 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { InMemoryDB } from '../../inmemory-db';
-import { KnowledgeNotFoundError } from '../base';
+import { inspectKnowledgeSchema, KnowledgeNotFoundError } from '../base';
 import { InMemoryKnowledgeStorage } from '../inmemory';
 
 const ORG_SCOPE_ID = '10000000-0000-4000-8000-000000000001';
 const PROJECT_SCOPE_ID = '10000000-0000-4000-8000-000000000002';
 const OTHER_SCOPE_ID = '10000000-0000-4000-8000-000000000003';
+
+describe('inspectKnowledgeSchema', () => {
+  it('classifies compatible, uninitialized, and unavailable snapshots without mutation', () => {
+    expect(inspectKnowledgeSchema({ available: true, tableNames: [], schemaVersion: 2 })).toEqual({
+      status: 'uninitialized',
+      schemaVersion: null,
+    });
+    expect(
+      inspectKnowledgeSchema({ available: true, tableNames: ['mastra_knowledge_nodes'], schemaVersion: 2 }),
+    ).toEqual({
+      status: 'compatible',
+      schemaVersion: 2,
+    });
+    expect(inspectKnowledgeSchema({ available: false, tableNames: [], reason: 'offline' })).toEqual({
+      status: 'unavailable',
+      schemaVersion: null,
+      reason: 'offline',
+    });
+  });
+});
 
 describe('InMemoryKnowledgeStorage canonical model', () => {
   let store: InMemoryKnowledgeStorage;
@@ -83,8 +103,8 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
   it('reports one canonical storage contract', () => {
     expect(store.getCapabilities()).toEqual({
       supported: true,
-      schemaVersion: 1,
-      contractVersion: 1,
+      schemaVersion: 2,
+      contractVersion: 2,
     });
   });
 

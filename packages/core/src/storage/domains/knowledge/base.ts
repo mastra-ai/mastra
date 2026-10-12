@@ -3,13 +3,46 @@ import { StorageDomain } from '../base';
 export type KnowledgeScopeIds = string[];
 export type KnowledgeSemanticDocumentType = 'node' | 'record';
 export type KnowledgeSemanticOperation = 'upsert' | 'delete';
-export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 1 as const;
-export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 1 as const;
+export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 2 as const;
+export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 2 as const;
 
 export interface KnowledgeStorageCapabilities {
   contractVersion: typeof KNOWLEDGE_STORAGE_CONTRACT_VERSION;
   schemaVersion: typeof KNOWLEDGE_STORAGE_SCHEMA_VERSION | null;
   supported: boolean;
+}
+
+export type KnowledgeSchemaInspection =
+  | { status: 'compatible'; schemaVersion: typeof KNOWLEDGE_STORAGE_SCHEMA_VERSION }
+  | { status: 'uninitialized'; schemaVersion: null }
+  | { status: 'incompatible-reset-required'; schemaVersion: number | null; reason: string }
+  | { status: 'unavailable'; schemaVersion: null; reason: string };
+
+export interface KnowledgeSchemaSnapshot {
+  available: boolean;
+  tableNames: readonly string[];
+  schemaVersion?: number;
+  reason?: string;
+}
+
+/** Classifies an adapter-provided, read-only schema snapshot without mutating the backing store. */
+export function inspectKnowledgeSchema(snapshot: KnowledgeSchemaSnapshot): KnowledgeSchemaInspection {
+  if (!snapshot.available) {
+    return {
+      status: 'unavailable',
+      schemaVersion: null,
+      reason: snapshot.reason ?? 'The Knowledge storage adapter is unavailable.',
+    };
+  }
+  if (snapshot.tableNames.length === 0) return { status: 'uninitialized', schemaVersion: null };
+  if (snapshot.schemaVersion === KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
+    return { status: 'compatible', schemaVersion: KNOWLEDGE_STORAGE_SCHEMA_VERSION };
+  }
+  return {
+    status: 'incompatible-reset-required',
+    schemaVersion: snapshot.schemaVersion ?? null,
+    reason: snapshot.reason ?? 'Existing experimental Knowledge tables are not compatible with schema version 2.',
+  };
 }
 
 export type KnowledgeConcreteRole = 'readonly' | 'append' | 'edit' | 'owner';
@@ -264,17 +297,7 @@ export interface KnowledgeCurationCursor {
   updatedAt: Date;
 }
 export type KnowledgeActivityAction =
-  | 'create'
-  | 'edit'
-  | 'delete'
-  | 'restore'
-  | 'move'
-  | 'merge'
-  | 'promote'
-  | 'demote'
-  | 'stamp'
-  | 'rebind'
-  | 'skip';
+  'create' | 'edit' | 'delete' | 'restore' | 'move' | 'merge' | 'promote' | 'demote' | 'stamp' | 'rebind' | 'skip';
 export interface KnowledgeActivityEvent {
   id: string;
   action: KnowledgeActivityAction;

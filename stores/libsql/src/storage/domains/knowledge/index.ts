@@ -384,7 +384,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         );
       }
       const marker = await this.#client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      if (Number(marker.rows[0]?.version) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
+      const markerVersion = Number(marker.rows[0]?.version);
+      if (markerVersion !== 1 && markerVersion !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
         throw new KnowledgeSchemaError(
           `Knowledge schema reset required: the existing Knowledge schema version is unsupported. ${KNOWLEDGE_RESET_GUIDANCE}`,
         );
@@ -403,6 +404,51 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
             `Knowledge schema reset required: the existing Knowledge table ${table} is missing ${missingColumns.join(', ')}. ${KNOWLEDGE_RESET_GUIDANCE}`,
           );
         }
+      }
+      if (markerVersion === 1) {
+        await this.#transaction(async tx => {
+          const objects = await tx.execute(
+            "SELECT type, name FROM sqlite_master WHERE name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR tbl_name LIKE 'mastra\\_knowledge\\_%' ESCAPE '\\' OR sql LIKE '%mastra\\_knowledge\\_%' ESCAPE '\\'",
+          );
+          const canonicalIndexes = new Set([
+            'idx_knowledge_nodes_name',
+            'idx_knowledge_records_node_latest',
+            'idx_knowledge_mentions_record',
+            'idx_knowledge_activity_latest',
+            'idx_knowledge_outbox_idempotency',
+            'idx_knowledge_outbox_claim',
+            'idx_knowledge_node_scopes_scope',
+            'idx_knowledge_record_scopes_scope',
+            'idx_knowledge_scope_grants_ref',
+            'idx_knowledge_node_addresses_node',
+            'idx_knowledge_import_runs_lookup',
+            'idx_knowledge_activity_import_run',
+          ]);
+          for (const row of objects.rows) {
+            const type = String(row.type);
+            const name = String(row.name);
+            if (type === 'table' && KNOWLEDGE_TABLE_NAMES.includes(name as (typeof KNOWLEDGE_TABLE_NAMES)[number]))
+              continue;
+            if (type === 'index' && (canonicalIndexes.has(name) || name.startsWith('sqlite_autoindex_'))) continue;
+            throw new KnowledgeSchemaError(
+              `Knowledge schema reset required: the existing Knowledge schema contains an unfamiliar ${type} ${name}. ${KNOWLEDGE_RESET_GUIDANCE}`,
+            );
+          }
+          for (const table of KNOWLEDGE_TABLE_NAMES) {
+            const columns = await tx.execute(`PRAGMA table_info("${table}")`);
+            const actual = columns.rows.map(row => String(row.name));
+            const expected = Object.keys(TABLE_SCHEMAS[table]);
+            if (actual.length !== expected.length || actual.some((column, index) => column !== expected[index])) {
+              throw new KnowledgeSchemaError(
+                `Knowledge schema reset required: the existing Knowledge table ${table} has an unfamiliar layout. ${KNOWLEDGE_RESET_GUIDANCE}`,
+              );
+            }
+          }
+          await tx.execute({
+            sql: `UPDATE ${TABLE_KNOWLEDGE_SCHEMA} SET version = ? WHERE id = 'canonical' AND version = 1`,
+            args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
+          });
+        });
       }
     }
 
@@ -516,9 +562,8 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
 
   /**
    * Knowledge v1 and the interim canonical-model release were experimental and their data is not
-   * migrated. When exactly the published v1 or interim tables and indexes are the only Knowledge
-   * objects, drop them, discarding any rows they hold, so canonical storage can initialize. Partial or
-   * unfamiliar tables, views, triggers, and extra indexes all leave the database untouched.
+   * migrated. Replace only an empty, recognized layout. Populated, partial, or unfamiliar layouts,
+   * views, triggers, and extra indexes all leave the database untouched.
    */
   async #replacePublishedV1(): Promise<boolean> {
     return this.#transaction(async tx => {
@@ -545,6 +590,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       const knownIndexes = replaceableKnowledgeLayoutIndexNames(columnsByTable);
       if (!knownIndexes) return false;
       if (!indexes.every(name => knownIndexes.has(name) || name.startsWith('sqlite_autoindex_'))) return false;
+      for (const table of tables) {
+        if ((await tx.execute(`SELECT 1 FROM "${table}" LIMIT 1`)).rows.length > 0) return false;
+      }
       // Children before the tables they reference.
       const dropOrder: string[] = [...RETIRED_KNOWLEDGE_TABLE_NAMES, ...[...KNOWLEDGE_TABLE_NAMES].reverse()];
       tables.sort((a, b) => dropOrder.indexOf(a) - dropOrder.indexOf(b));

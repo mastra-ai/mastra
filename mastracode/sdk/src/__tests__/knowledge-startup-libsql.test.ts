@@ -57,15 +57,6 @@ function countV1Nodes(databasePath: string) {
   }
 }
 
-function knowledgeSchemaVersion(databasePath: string) {
-  const database = new DatabaseSync(databasePath, { readOnly: true });
-  try {
-    return database.prepare("SELECT version FROM mastra_knowledge_schema WHERE id = 'canonical'").get();
-  } finally {
-    database.close();
-  }
-}
-
 async function start(directory: string, databasePath: string) {
   return createMastraCode({
     cwd: directory,
@@ -96,17 +87,16 @@ describe('createMastraCode on a database with v1 Knowledge rows', () => {
     expect(countV1Nodes(databasePath)).toEqual({ count: 1 });
   });
 
-  it('replaces the v1 tables and opens Knowledge when Knowledge is on', async () => {
+  it('preserves populated v1 tables and explains that an explicit migration is required', async () => {
     vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', '1');
     const { directory, databasePath } = createV1Database();
 
     const code = await start(directory, databasePath);
 
     expect(code.knowledge).toBeDefined();
-    expect(code.knowledgeInspector).toBeDefined();
-    expect(code.knowledgeInspectorUnavailableReason).toBeUndefined();
-    expect(countV1Nodes(databasePath)).toEqual({ count: 0 });
-    expect(knowledgeSchemaVersion(databasePath)).toEqual({ version: 1 });
+    expect(code.knowledgeInspector).toBeUndefined();
+    expect(code.knowledgeInspectorUnavailableReason).toContain('Knowledge schema reset required');
+    expect(countV1Nodes(databasePath)).toEqual({ count: 1 });
   });
 
   it('starts and explains the reset when the Knowledge layout is not one Mastra published', async () => {

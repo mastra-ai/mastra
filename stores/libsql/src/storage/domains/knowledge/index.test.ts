@@ -237,6 +237,42 @@ describe('KnowledgeLibSQL schema completion marker', () => {
     try {
       await new KnowledgeLibSQL({ client }).init();
       const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
+      expect(marker.rows[0]?.version).toBe(2);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('upgrades a valid version-1 marker without changing canonical rows', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      const node = await store.createNode({ name: 'Preserved', scopeIds: [] });
+      await client.execute(`UPDATE ${TABLE_KNOWLEDGE_SCHEMA} SET version = 1 WHERE id = 'canonical'`);
+
+      await new KnowledgeLibSQL({ client }).init();
+
+      const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
+      expect(marker.rows[0]?.version).toBe(2);
+      expect(
+        (await client.execute({ sql: 'SELECT name FROM mastra_knowledge_nodes WHERE id = ?', args: [node.id] })).rows,
+      ).toEqual([expect.objectContaining({ name: 'Preserved' })]);
+    } finally {
+      client.close();
+    }
+  });
+
+  it('rejects a marked version-1 schema with an unfamiliar index without advancing its marker', async () => {
+    const client = createClient({ url: ':memory:' });
+    try {
+      await new KnowledgeLibSQL({ client }).init();
+      await client.execute(`UPDATE ${TABLE_KNOWLEDGE_SCHEMA} SET version = 1 WHERE id = 'canonical'`);
+      await client.execute('CREATE INDEX host_index ON mastra_knowledge_nodes (name)');
+
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
+
+      const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
       expect(marker.rows[0]?.version).toBe(1);
     } finally {
       client.close();
@@ -320,7 +356,7 @@ describe('KnowledgeLibSQL published v1 layout', () => {
       await new KnowledgeLibSQL({ client }).init();
 
       const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      expect(marker.rows[0]?.version).toBe(1);
+      expect(marker.rows[0]?.version).toBe(2);
       expect(await knowledgeObjects(client)).not.toContain('table:mastra_knowledge_cursors');
       const threads = await client.execute('SELECT id FROM mastra_threads');
       expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
@@ -329,23 +365,19 @@ describe('KnowledgeLibSQL published v1 layout', () => {
     }
   });
 
-  it('replaces a published layout that holds rows, discarding them and keeping other storage', async () => {
+  it('rejects a populated published layout without discarding its rows', async () => {
     const client = createClient({ url: ':memory:' });
     try {
       await seedPublishedKnowledgeV1(client);
       await client.execute(
         "INSERT INTO mastra_knowledge_nodes (id,type,name,canonicalName,scope,scopeKey,version,createdAt,updatedAt) VALUES ('legacy','node','Legacy','legacy','[]','legacy',1,'2026-01-01','2026-01-01')",
       );
-      await client.execute('CREATE TABLE mastra_threads (id TEXT PRIMARY KEY)');
-      await client.execute("INSERT INTO mastra_threads (id) VALUES ('preserved')");
+      const before = await knowledgeObjects(client);
 
-      await new KnowledgeLibSQL({ client }).init();
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
 
-      const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      expect(marker.rows[0]?.version).toBe(1);
-      expect((await client.execute("SELECT id FROM mastra_knowledge_nodes WHERE id = 'legacy'")).rows).toEqual([]);
-      const threads = await client.execute('SELECT id FROM mastra_threads');
-      expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
+      expect(await knowledgeObjects(client)).toEqual(before);
+      expect((await client.execute("SELECT id FROM mastra_knowledge_nodes WHERE id = 'legacy'")).rows).toHaveLength(1);
     } finally {
       client.close();
     }
@@ -377,7 +409,7 @@ describe('KnowledgeLibSQL published v1 layout', () => {
       await store.getStore('knowledge');
 
       const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      expect(marker.rows[0]?.version).toBe(1);
+      expect(marker.rows[0]?.version).toBe(2);
     } finally {
       await store.close();
       client.close();
@@ -667,26 +699,21 @@ describe('KnowledgeLibSQL shared-database concurrency', () => {
 describe('KnowledgeLibSQL interim canonical-model layout', () => {
   const INTERIM_FIXTURE = 'interim-1.76.0-alpha.3.sql';
 
-  it('replaces the layout the interim release created, discarding its rows and keeping other storage', async () => {
+  it('rejects a populated interim layout without discarding its rows', async () => {
     const client = createClient({ url: ':memory:' });
     try {
       await seedPublishedKnowledgeV1(client, INTERIM_FIXTURE);
       await client.execute(
         "INSERT INTO mastra_knowledge_semantic_outbox (id,idempotencyKey,documentId,documentType,operation,scope,scopeKey,status,attempts,availableAt,createdAt) VALUES ('legacy','legacy','legacy','node','upsert','[]','legacy','completed',1,'2026-10-01','2026-10-01')",
       );
-      await client.execute('CREATE TABLE mastra_threads (id TEXT PRIMARY KEY)');
-      await client.execute("INSERT INTO mastra_threads (id) VALUES ('preserved')");
+      const before = await knowledgeObjects(client);
 
-      await new KnowledgeLibSQL({ client }).init();
+      await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
 
-      const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      expect(marker.rows[0]?.version).toBe(1);
-      expect((await client.execute('SELECT id FROM mastra_knowledge_semantic_outbox')).rows).toEqual([]);
-      const nodeColumns = await client.execute('PRAGMA table_info("mastra_knowledge_nodes")');
-      expect(nodeColumns.rows.map(row => String(row.name))).not.toContain('canonicalName');
-      const threads = await client.execute('SELECT id FROM mastra_threads');
-      expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
-      await new KnowledgeLibSQL({ client }).init();
+      expect(await knowledgeObjects(client)).toEqual(before);
+      expect(
+        (await client.execute("SELECT id FROM mastra_knowledge_semantic_outbox WHERE id = 'legacy'")).rows,
+      ).toHaveLength(1);
     } finally {
       client.close();
     }
@@ -723,7 +750,7 @@ describe('KnowledgeLibSQL interim canonical-model layout', () => {
   });
 
   it.each(['snapshot-w1-20261006001735.sql', 'snapshot-w1-20261007232522.sql'])(
-    'replaces the layout published snapshot %s created, discarding its rows',
+    'rejects the populated layout published snapshot %s created without discarding rows',
     async fixture => {
       const client = createClient({ url: ':memory:' });
       try {
@@ -732,21 +759,24 @@ describe('KnowledgeLibSQL interim canonical-model layout', () => {
           "INSERT INTO mastra_knowledge_semantic_outbox (id,idempotencyKey,documentId,documentType,operation,scope,scopeKey,status,attempts,availableAt,createdAt) VALUES ('legacy','legacy','legacy','node','upsert','[]','legacy','completed',1,'2026-10-01','2026-10-01')",
         );
 
-        await new KnowledgeLibSQL({ client }).init();
+        const before = await knowledgeObjects(client);
+        await expect(new KnowledgeLibSQL({ client }).init()).rejects.toBeInstanceOf(KnowledgeSchemaError);
 
-        expect((await client.execute('SELECT id FROM mastra_knowledge_semantic_outbox')).rows).toEqual([]);
+        expect(await knowledgeObjects(client)).toEqual(before);
+        expect(
+          (await client.execute("SELECT id FROM mastra_knowledge_semantic_outbox WHERE id = 'legacy'")).rows,
+        ).toHaveLength(1);
         const tables = await client.execute(
           "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'mastra_knowledge_cursors'",
         );
-        expect(tables.rows).toEqual([]);
-        await new KnowledgeLibSQL({ client }).init();
+        expect(tables.rows).toHaveLength(fixture === 'snapshot-w1-20261006001735.sql' ? 1 : 0);
       } finally {
         client.close();
       }
     },
   );
 
-  it('replaces an early-snapshot layout that later interim builds re-initialized', async () => {
+  it('replaces an empty early-snapshot layout that later interim builds re-initialized', async () => {
     const client = createClient({ url: ':memory:' });
     try {
       await seedPublishedKnowledgeV1(client, 'snapshot-w1-20261006001735.sql');
@@ -760,7 +790,7 @@ describe('KnowledgeLibSQL interim canonical-model layout', () => {
       await new KnowledgeLibSQL({ client }).init();
 
       const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      expect(marker.rows[0]?.version).toBe(1);
+      expect(marker.rows[0]?.version).toBe(2);
     } finally {
       client.close();
     }
