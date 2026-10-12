@@ -160,10 +160,6 @@ if (initialResult.status === 'suspended') {
 }
 ```
 
-:::warning
-Unlike `resume()`, which atomically claims a suspended run (concurrent resumes fail with `WORKFLOW_RESUME_ALREADY_CLAIMED`), `timeTravel()` does not claim the run. If two `timeTravel()` calls target the same suspended run concurrently, both can proceed and re-execute steps from the target onward. If operators can trigger time travel on the same run (for example, via an API endpoint), guard against concurrent calls in your application layer.
-:::
-
 ## Streaming time travel results
 
 Use `timeTravelStream()` to receive streaming events during time travel execution:
@@ -204,7 +200,7 @@ const result = await run.timeTravel({
 
 ## Error handling
 
-Time travel throws errors in specific situations:
+Time travel throws errors in specific situations. It doesn't reject concurrent calls on the same run, so guard against duplicates in your application. See [Concurrent time travel calls](/reference/workflows/run-methods/timeTravel#concurrent-time-travel-calls).
 
 ### Running workflow
 
