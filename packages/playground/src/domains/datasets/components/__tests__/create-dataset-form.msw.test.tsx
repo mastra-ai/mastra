@@ -3,7 +3,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { CreateDatasetForm } from '../create-dataset-form';
-import { buildDataset, buildListDatasetsResponse } from './fixtures/datasets';
+import { buildDataset } from './fixtures/datasets';
 import { itemScorers } from './fixtures/item-scorers';
 import { getMultiSelect, setMultiSelectValues } from '@/test/mock-combobox-helpers';
 import { server } from '@/test/msw-server';
@@ -17,11 +17,10 @@ vi.mock('@mastra/playground-ui/utils/toast', () => ({
 
 const SCORERS_PLACEHOLDER = 'Select scorers...';
 
-function setupHandlers(existingDatasets = [buildDataset()]) {
+function setupHandlers() {
   const createBodies: Array<Record<string, unknown>> = [];
 
   server.use(
-    http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse(existingDatasets))),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json({})),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json({})),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(itemScorers)),
@@ -82,50 +81,33 @@ describe('CreateDatasetForm', () => {
     });
   });
 
-  describe('when no datasets exist yet', () => {
-    it('pre-fills the name with Dataset 1', async () => {
-      setupHandlers([]);
+  describe('when the form opens', () => {
+    it('pre-fills the name with Dataset and a short id', async () => {
+      setupHandlers();
       await renderForm();
 
-      await waitFor(() => expect(nameInput().value).toBe('Dataset 1'));
-    });
-  });
-
-  describe('when numbered datasets already exist', () => {
-    const existingDatasets = [
-      buildDataset({ id: 'dataset-4', name: 'Dataset 4' }),
-      buildDataset({ id: 'dataset-3', name: 'Dataset 3' }),
-      buildDataset({ id: 'not-english', name: 'not English' }),
-    ];
-
-    it('pre-fills the name with the next free number', async () => {
-      setupHandlers(existingDatasets);
-      await renderForm();
-
-      await waitFor(() => expect(nameInput().value).toBe('Dataset 5'));
+      expect(nameInput().value).toMatch(/^Dataset [0-9a-f]{4}$/);
     });
 
     it('creates the dataset with the pre-filled name', async () => {
-      const { createBodies } = setupHandlers(existingDatasets);
+      const { createBodies } = setupHandlers();
       const { onSuccess } = await renderForm();
-      await waitFor(() => expect(nameInput().value).toBe('Dataset 5'));
+      const defaultName = nameInput().value;
 
       submit();
 
       await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('created-dataset'));
-      expect(createBodies[0].name).toBe('Dataset 5');
+      expect(createBodies[0].name).toBe(defaultName);
     });
 
     it('keeps the name the user typed', async () => {
-      const { createBodies } = setupHandlers(existingDatasets);
+      const { createBodies } = setupHandlers();
       const { onSuccess } = await renderForm();
-      await waitFor(() => expect(nameInput().value).toBe('Dataset 5'));
 
       typeName('Refund questions');
       submit();
 
       await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('created-dataset'));
-      expect(nameInput().value).toBe('Refund questions');
       expect(createBodies[0].name).toBe('Refund questions');
     });
   });

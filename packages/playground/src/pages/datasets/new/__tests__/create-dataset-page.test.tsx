@@ -8,7 +8,6 @@ import { MemoryRouter, Route, Routes, useParams } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import CreateDatasetPage from '../index';
-import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -39,10 +38,7 @@ const renderPage = (initialEntry = '/datasets/new') => {
 };
 
 beforeEach(() => {
-  server.use(
-    http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json(emptyWorkflows)),
-    http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([]))),
-  );
+  server.use(http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json(emptyWorkflows)));
 });
 
 afterEach(() => cleanup());

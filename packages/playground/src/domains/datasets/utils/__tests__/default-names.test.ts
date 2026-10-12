@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDefaultExperimentName } from '../default-experiment-name';
+import { buildDefaultExperimentName } from '../default-names';
 
 describe('buildDefaultExperimentName', () => {
   describe('when the target name has spaces and symbols', () => {

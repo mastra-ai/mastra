@@ -30,8 +30,8 @@ import { DatasetCombobox } from '../dataset-combobox';
 import { DatasetVersions } from '../dataset-versions';
 import { ScorerSelector } from './scorer-selector';
 import { TargetSelector } from './target-selector';
+import type { TargetType } from './target-selector';
 import { useExperimentName } from './use-experiment-name';
-import type { TargetType } from './use-target-options';
 
 export interface ExperimentTriggerDialogProps {
   initialDatasetId?: string;
@@ -140,7 +140,9 @@ export function ExperimentTriggerDialog({
   const [requestContextRaw, setRequestContextRaw] = useState('');
 
   const { triggerExperiment } = useDatasetMutations();
-  const { name, defaultName, runName, setName, resetName } = useExperimentName(targetType, targetId, initialName);
+  // Starts as the id for a preselected target (its display name is only known once picked in the selector).
+  const [targetName, setTargetName] = useState(initialTargetId);
+  const { name, defaultName, runName, setName, resetName } = useExperimentName(targetName, initialName);
   const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
   const { total: itemCount } = useDatasetItems({
     datasetId: datasetId,
@@ -171,6 +173,7 @@ export function ExperimentTriggerDialog({
   };
 
   const resetState = () => {
+    setTargetName(initialTargetId);
     resetName();
     setDescription(initialDescription ?? '');
     setDatasetId(initialDatasetId ?? '');
@@ -316,6 +319,7 @@ export function ExperimentTriggerDialog({
                 setTargetType={setTargetType}
                 targetId={targetId}
                 setTargetId={setTargetId}
+                onTargetNameChange={setTargetName}
                 container={contentRef}
               />
               {targetType && !targetId && (

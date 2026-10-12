@@ -13,7 +13,7 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { X } from 'lucide-react';
 import { useState } from 'react';
-import { useNextDatasetName } from '../hooks/use-next-dataset-name';
+import { createNameSuffix } from '../utils/default-names';
 import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
 import { ScorerSelector } from './experiment-trigger/scorer-selector';
 import { SchemaConfigSection } from './schema-config-section';
@@ -27,9 +27,7 @@ export interface CreateDatasetFormProps {
 }
 
 export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }: CreateDatasetFormProps) {
-  const nextDatasetName = useNextDatasetName();
-  const [typedName, setTypedName] = useState<string>();
-  const name = typedName ?? nextDatasetName;
+  const [name, setName] = useState(() => `Dataset ${createNameSuffix()}`);
   const [description, setDescription] = useState('');
   const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(null);
   const [groundTruthSchema, setGroundTruthSchema] = useState<Record<string, unknown> | null>(null);
@@ -83,7 +81,7 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
         <Input
           required
           value={name}
-          onChange={e => setTypedName(e.target.value)}
+          onChange={e => setName(e.target.value)}
           placeholder="Enter dataset name"
           autoFocus
         />

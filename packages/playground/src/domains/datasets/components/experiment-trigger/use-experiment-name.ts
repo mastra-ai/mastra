@@ -1,19 +1,14 @@
 import { useState } from 'react';
-import { buildDefaultExperimentName, createExperimentNameSuffix } from './default-experiment-name';
-import { useTargetOptions } from './use-target-options';
-import type { TargetType } from './use-target-options';
+import { buildDefaultExperimentName, createNameSuffix } from '../../utils/default-names';
 
 /**
  * Experiment name state for the Run experiment dialog. The name defaults to the target name plus a
  * short id and follows the target until the user types. An `initialName` (rerun) counts as typed.
  */
-export function useExperimentName(targetType: TargetType | '', targetId: string, initialName?: string) {
+export function useExperimentName(targetName?: string, initialName?: string) {
   const [typedName, setTypedName] = useState(initialName);
-  const [suffix, setSuffix] = useState(createExperimentNameSuffix);
-  const { targetOptions } = useTargetOptions(targetType);
+  const [suffix, setSuffix] = useState(createNameSuffix);
 
-  // Falls back to the id while the target list is loading or if it fails to load.
-  const targetName = targetOptions.find(option => option.value === targetId)?.label ?? targetId;
   const defaultName = targetName ? buildDefaultExperimentName(targetName, suffix) : '';
   const name = typedName ?? defaultName;
   // A cleared field still runs, under the default name it shows as its placeholder.
@@ -21,7 +16,7 @@ export function useExperimentName(targetType: TargetType | '', targetId: string,
 
   const resetName = () => {
     setTypedName(initialName);
-    setSuffix(createExperimentNameSuffix());
+    setSuffix(createNameSuffix());
   };
 
   return { name, defaultName, runName, setName: setTypedName, resetName };

@@ -1,15 +1,18 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { useTargetOptions } from './use-target-options';
-import type { TargetType } from './use-target-options';
+import { useAgents } from '@mastra/react/hooks/agents';
+import { useWorkflows } from '@mastra/react/hooks/workflows';
+import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
-export type { TargetType };
+export type TargetType = 'agent' | 'workflow' | 'scorer';
 
 export interface TargetSelectorProps {
   targetType: TargetType | '';
   setTargetType: (type: TargetType | '') => void;
   targetId: string;
   setTargetId: (id: string) => void;
+  /** Reports the picked target's display name, or undefined when the target is cleared. */
+  onTargetNameChange?: (name?: string) => void;
   container?: React.RefObject<HTMLElement | null>;
 }
 
@@ -19,13 +22,52 @@ const targetTypeOptions = [
   { value: 'scorer', label: 'Scorer' },
 ];
 
-export function TargetSelector({ targetType, setTargetType, targetId, setTargetId, container }: TargetSelectorProps) {
-  const { targetOptions, isLoading: isTargetsLoading } = useTargetOptions(targetType);
+export function TargetSelector({
+  targetType,
+  setTargetType,
+  targetId,
+  setTargetId,
+  onTargetNameChange,
+  container,
+}: TargetSelectorProps) {
+  const { data: agents, isLoading: agentsLoading } = useAgents();
+  const { data: workflows, isLoading: workflowsLoading } = useWorkflows({});
+  const { data: scorers, isLoading: scorersLoading } = useScorers();
+
+  // Get list of targets based on selected type
+  const targetOptions =
+    targetType === 'agent'
+      ? Object.entries(agents ?? {}).map(([id, agent]) => ({
+          value: id,
+          label: agent.name ?? id,
+        }))
+      : targetType === 'workflow'
+        ? Object.entries(workflows ?? {}).map(([id, workflow]) => ({
+            value: id,
+            label: workflow.name ?? id,
+          }))
+        : targetType === 'scorer'
+          ? Object.entries(scorers ?? {}).map(([id, scorer]) => ({
+              value: id,
+              label: scorer.scorer?.config?.name ?? id,
+            }))
+          : [];
+
+  const isTargetsLoading =
+    (targetType === 'agent' && agentsLoading) ||
+    (targetType === 'workflow' && workflowsLoading) ||
+    (targetType === 'scorer' && scorersLoading);
 
   // Reset targetId when type changes
   const handleTypeChange = (value: string) => {
     setTargetType(value as TargetType);
     setTargetId('');
+    onTargetNameChange?.(undefined);
+  };
+
+  const handleTargetChange = (id: string) => {
+    setTargetId(id);
+    onTargetNameChange?.(targetOptions.find(option => option.value === id)?.label);
   };
 
   const targetLabel = targetType === 'agent' ? 'Agent' : targetType === 'workflow' ? 'Workflow' : 'Scorer';
@@ -51,7 +93,7 @@ export function TargetSelector({ targetType, setTargetType, targetId, setTargetI
           <Combobox
             options={targetOptions}
             value={targetId}
-            onValueChange={setTargetId}
+            onValueChange={handleTargetChange}
             placeholder={`Select ${targetType}`}
             searchPlaceholder="Search..."
             emptyText="No targets available"
