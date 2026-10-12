@@ -42,9 +42,15 @@ export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<Studi
   organizationId?: string;
   /**
    * Cookie domain for session cookies (e.g., '.example.com').
-   * When set, cookies will include Secure and Domain attributes.
-   * Defaults to auto-detecting from sharedApiUrl (uses '.mastra.ai' when sharedApiUrl contains '.mastra.ai').
-   * Can also be set via MASTRA_COOKIE_DOMAIN environment variable.
+   * When set, cookies include a `Domain` attribute (and `Secure` on production
+   * deployments).
+   *
+   * Unset by default: session cookies are **host-only** (no `Domain`), so a
+   * session is never presented to sibling hosts that share a parent domain.
+   * `MASTRA_COOKIE_DOMAIN` is deliberately not honored for setting - that env
+   * var was injected by the platform and re-scoped an account-scoped session
+   * onto the shared tenant domain. Set this option only if you consciously want
+   * a domain-scoped cookie.
    */
   cookieDomain?: string;
   /**
@@ -122,6 +128,12 @@ export class MastraAuthStudio
   private organizationId: string | undefined;
   private useProductionCookies: boolean;
   private cookieDomain: string | undefined;
+  /**
+   * Parent domain that older deployments stamped on `wos-session`
+   * (`MASTRA_COOKIE_DOMAIN`, or the old `.mastra.ai` auto-detect). Retained
+   * only to expire that legacy shared-domain cookie; never used for setting.
+   */
+  private legacyCookieDomain: string | undefined;
   private sessionMaxAgeSeconds: number;
   /**
    * `userId → sealed session cookie` cache. The `IOrganizationsProvider`
@@ -181,8 +193,11 @@ export class MastraAuthStudio
       this.sharedApiUrl = this.sharedApiUrl.slice(0, -1);
     }
 
-    // Cookie domain can be explicitly configured, read from env, or auto-detected from sharedApiUrl
-    this.cookieDomain = options?.cookieDomain || process.env.MASTRA_COOKIE_DOMAIN;
+    // Host-only by default: only an explicit `cookieDomain` option scopes the
+    // cookie to a domain. `MASTRA_COOKIE_DOMAIN` is no longer honored for
+    // setting (it re-scoped an account-scoped session onto the shared tenant
+    // domain); it is still read below to expire legacy shared-domain cookies.
+    this.cookieDomain = options?.cookieDomain;
 
     const envMaxAge = Number(process.env.MASTRA_SESSION_MAX_AGE);
     const maxAge = options?.sessionMaxAgeSeconds ?? (envMaxAge > 0 ? envMaxAge : undefined);
@@ -205,12 +220,14 @@ export class MastraAuthStudio
         autoDetectMastraAi = false;
       }
     }
-    this.useProductionCookies = !!this.cookieDomain || autoDetectMastraAi;
+    // `Secure` still applies on production deployments (explicit domain, legacy
+    // env, or an explicit `.mastra.ai` shared API); `Domain` is only stamped
+    // when `cookieDomain` was set explicitly.
+    this.useProductionCookies = !!this.cookieDomain || !!process.env.MASTRA_COOKIE_DOMAIN || autoDetectMastraAi;
 
-    // If no explicit domain but we're on .mastra.ai, use the default domain
-    if (!this.cookieDomain && autoDetectMastraAi) {
-      this.cookieDomain = '.mastra.ai';
-    }
+    // Legacy parent domain that older deployments stamped on the cookie. Used
+    // solely to emit an expiring clear-cookie.
+    this.legacyCookieDomain = process.env.MASTRA_COOKIE_DOMAIN || (autoDetectMastraAi ? '.mastra.ai' : undefined);
 
     if (options) {
       this.registerOptions(options);
@@ -462,8 +479,11 @@ export class MastraAuthStudio
       'Path=/',
       `Max-Age=${this.sessionMaxAgeSeconds}`,
     ];
-    if (this.useProductionCookies && this.cookieDomain) {
+    if (this.useProductionCookies) {
       parts.push('Secure');
+    }
+    // Host-only unless a domain was explicitly configured.
+    if (this.cookieDomain) {
       parts.push(`Domain=${this.cookieDomain}`);
     }
     return { 'Set-Cookie': parts.join('; ') };
@@ -471,11 +491,34 @@ export class MastraAuthStudio
 
   getClearSessionHeaders(): Record<string, string> {
     const parts = [`${COOKIE_NAME}=`, 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=0'];
-    if (this.useProductionCookies && this.cookieDomain) {
+    if (this.useProductionCookies) {
       parts.push('Secure');
+    }
+    if (this.cookieDomain) {
       parts.push(`Domain=${this.cookieDomain}`);
     }
     return { 'Set-Cookie': parts.join('; ') };
+  }
+
+  /**
+   * Expiring `Set-Cookie` for the legacy parent-scoped `wos-session` variant.
+   *
+   * Older deployments stamped `Domain=<parent>` on the session cookie, so a
+   * browser may still hold a shared-domain copy after this fix ships. Clearing
+   * a cookie requires matching its exact `(name, Domain, Path)` tuple, so this
+   * emits `Domain=<legacy>` with `Max-Age=0`. Returns `undefined` when there is
+   * no legacy parent domain, or it matches the explicitly configured one.
+   */
+  getLegacySessionClearCookie(): string | undefined {
+    if (!this.legacyCookieDomain || this.legacyCookieDomain === this.cookieDomain) {
+      return undefined;
+    }
+    const parts = [`${COOKIE_NAME}=`, 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=0'];
+    if (this.useProductionCookies) {
+      parts.push('Secure');
+    }
+    parts.push(`Domain=${this.legacyCookieDomain}`);
+    return parts.join('; ');
   }
 
   // ---------------------------------------------------------------------------

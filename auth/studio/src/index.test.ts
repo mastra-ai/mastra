@@ -981,7 +981,10 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).not.toContain('Domain');
     });
 
-    it('should include Secure and Domain when sharedApiUrl is on .mastra.ai', () => {
+    it('should include Secure but stay host-only when sharedApiUrl is on .mastra.ai', () => {
+      // SP-5: `.mastra.ai` used to be auto-detected and stamped as the cookie
+      // `Domain`, presenting the session to every sibling host. The cookie must
+      // stay host-only even on a production `.mastra.ai` deployment.
       const prodAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API_PROD });
 
       const headers = prodAuth.getSessionHeaders({
@@ -992,7 +995,7 @@ describe('MastraAuthStudio', () => {
       });
 
       expect(headers['Set-Cookie']).toContain('Secure');
-      expect(headers['Set-Cookie']).toContain('Domain=.mastra.ai');
+      expect(headers['Set-Cookie']).not.toContain('Domain=');
     });
 
     it('should use custom cookieDomain when provided', () => {
@@ -1013,7 +1016,11 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).not.toContain('.mastra.ai');
     });
 
-    it('should use MASTRA_COOKIE_DOMAIN env var when no explicit option', () => {
+    it('ignores MASTRA_COOKIE_DOMAIN for setting but exposes a legacy clear-cookie', () => {
+      // SP-5: the platform injected MASTRA_COOKIE_DOMAIN, which re-scoped the
+      // account-scoped session onto the shared tenant domain. It must no longer
+      // stamp `Domain`; it is only used to expire the legacy shared-domain
+      // cookie.
       process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
       const envAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
 
@@ -1025,7 +1032,8 @@ describe('MastraAuthStudio', () => {
       });
 
       expect(headers['Set-Cookie']).toContain('Secure');
-      expect(headers['Set-Cookie']).toContain('Domain=.env-domain.io');
+      expect(headers['Set-Cookie']).not.toContain('Domain=');
+      expect(envAuth.getLegacySessionClearCookie()).toContain('Domain=.env-domain.io');
       delete process.env.MASTRA_COOKIE_DOMAIN;
     });
 
@@ -1079,7 +1087,7 @@ describe('MastraAuthStudio', () => {
       const headers = prodAuth.getClearSessionHeaders();
 
       expect(headers['Set-Cookie']).toContain('Secure');
-      expect(headers['Set-Cookie']).toContain('Domain=.mastra.ai');
+      expect(headers['Set-Cookie']).not.toContain('Domain=');
       expect(headers['Set-Cookie']).toContain('Max-Age=0');
     });
 
@@ -1096,14 +1104,14 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).toContain('Max-Age=0');
     });
 
-    it('should use MASTRA_COOKIE_DOMAIN env var when no explicit option', () => {
+    it('ignores MASTRA_COOKIE_DOMAIN for the clear-cookie (host-only)', () => {
       process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
       const envAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
 
       const headers = envAuth.getClearSessionHeaders();
 
       expect(headers['Set-Cookie']).toContain('Secure');
-      expect(headers['Set-Cookie']).toContain('Domain=.env-domain.io');
+      expect(headers['Set-Cookie']).not.toContain('Domain=');
       expect(headers['Set-Cookie']).toContain('Max-Age=0');
       delete process.env.MASTRA_COOKIE_DOMAIN;
     });
