@@ -663,11 +663,13 @@ export class FactoryDecisionDispatcher {
         olderThan: new Date(now.getTime() - this.#staleBindingTtlMs),
         now,
         // A run parked on a person, or resumed after one answered, is alive however
-        // old its binding is. Any lookup failure falls back to revoking.
+        // old its binding is. The session must still be on the binding's thread: its
+        // suspension and run state belong to that thread. Lookup failures revoke.
         keep: async binding => {
           try {
             const session = await this.#controller.getSessionByResource(binding.resourceId);
-            return !!session && (session.suspensions.hasPending() || session.run.isRunning());
+            if (session?.thread.getId() !== binding.threadId) return false;
+            return session.suspensions.hasPending() || session.run.isRunning();
           } catch {
             return false;
           }

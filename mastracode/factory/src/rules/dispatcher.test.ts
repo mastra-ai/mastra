@@ -157,6 +157,7 @@ function createSession(
       }),
       rename: vi.fn(async () => {}),
       requireId: vi.fn(() => threadId),
+      getId: vi.fn(() => threadId),
       listActiveMessages: vi.fn(async () => [...deliveredSignals].map(id => ({ id }))),
     },
     stream: { isActive: vi.fn(() => options?.streamActive ?? false) },
@@ -569,7 +570,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date(t0.getTime() + 11 * 60_000));
     const keep = sweep.mock.calls[0]?.[0].keep;
     expect(keep).toBeTypeOf('function');
-    const binding = { resourceId: PROJECT_ID } as Parameters<NonNullable<typeof keep>>[0];
+    const binding = { resourceId: PROJECT_ID, threadId: 'thread-1' } as Parameters<NonNullable<typeof keep>>[0];
 
     // Idle session: nothing waits on it, so the age limit applies.
     await expect(keep!(binding)).resolves.toBe(false);
@@ -583,6 +584,9 @@ describe('FactoryDecisionDispatcher', () => {
     // Resumed after the answer and still running.
     session.run.isRunning.mockReturnValue(true);
     await expect(keep!(binding)).resolves.toBe(true);
+
+    // The session moved to another thread: its live state is not this binding's run.
+    await expect(keep!({ ...binding, threadId: 'thread-other' })).resolves.toBe(false);
 
     // No live session (e.g. after a restart) or a failed lookup: revoke.
     controller.getSessionByResource.mockResolvedValueOnce(undefined);
