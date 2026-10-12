@@ -3,6 +3,7 @@ import type { RequestContext } from '@mastra/core/di';
 import { MastraMemory } from '@mastra/core/memory';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, isReservedRequestContextKey } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
 
 // Validation helper
@@ -174,7 +175,7 @@ export async function validateThreadOwnership(
   if (thread && effectiveResourceId && thread.resourceId && thread.resourceId !== effectiveResourceId) {
     throw new HTTPException(403, {
       message: 'Access denied: thread belongs to a different resource',
-      code: 'THREAD_ACCESS_DENIED',
+      code: MASTRA_ERROR_CODES.THREAD_ACCESS_DENIED,
     });
   }
 }
@@ -231,7 +232,7 @@ export async function validateRunOwnership(
   if (run && effectiveResourceId && run.resourceId && run.resourceId !== effectiveResourceId) {
     throw new HTTPException(403, {
       message: 'Access denied: workflow run belongs to a different resource',
-      code: 'WORKFLOW_RUN_ACCESS_DENIED',
+      code: MASTRA_ERROR_CODES.WORKFLOW_RUN_ACCESS_DENIED,
     });
   }
 }

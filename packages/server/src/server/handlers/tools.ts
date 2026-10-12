@@ -3,6 +3,7 @@ import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-com
 import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
 import { MastraFGAPermissions } from '../fga-permissions';
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
 import {
   executeToolContextBodySchema,
@@ -210,7 +211,7 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
       }
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found', code: 'TOOL_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Tool not found', code: MASTRA_ERROR_CODES.TOOL_NOT_FOUND });
       }
 
       return serializeTool(tool);
@@ -258,7 +259,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
       }
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found', code: 'TOOL_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Tool not found', code: MASTRA_ERROR_CODES.TOOL_NOT_FOUND });
       }
 
       if (!tool?.execute) {
@@ -322,7 +323,7 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
       const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found', code: 'TOOL_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Tool not found', code: MASTRA_ERROR_CODES.TOOL_NOT_FOUND });
       }
 
       return serializeTool(tool);
@@ -355,7 +356,7 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
       const tool = Object.values(agentTools || {}).find((tool: any) => tool.id === toolId) as any;
 
       if (!tool) {
-        throw new HTTPException(404, { message: 'Tool not found', code: 'TOOL_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Tool not found', code: MASTRA_ERROR_CODES.TOOL_NOT_FOUND });
       }
 
       if (!tool?.execute) {

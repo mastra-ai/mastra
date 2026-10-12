@@ -29,6 +29,7 @@ import { z } from 'zod/v4';
 import { MASTRA_IS_STUDIO_KEY, MASTRA_RESOURCE_ID_KEY, WORKSPACE_TOOLS, resolveToolConfig } from '../constants';
 import type { WorkspaceToolName } from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -213,7 +214,7 @@ async function validateDurableToolCallAccess({
   if (!workflowsStore) {
     throw new HTTPException(403, {
       message: 'Access denied: durable run belongs to a different resource',
-      code: 'DURABLE_RUN_ACCESS_DENIED',
+      code: MASTRA_ERROR_CODES.DURABLE_RUN_ACCESS_DENIED,
     });
   }
   const workflowName = getDurableLoopWorkflowName(agent);
@@ -251,7 +252,7 @@ async function validateDurableToolCallAccess({
     ) {
       throw new HTTPException(403, {
         message: 'Access denied: durable run belongs to a different resource',
-        code: 'DURABLE_RUN_ACCESS_DENIED',
+        code: MASTRA_ERROR_CODES.DURABLE_RUN_ACCESS_DENIED,
       });
     }
 
@@ -265,7 +266,7 @@ async function validateDurableToolCallAccess({
       if (!workflowRun) {
         throw new HTTPException(403, {
           message: 'Access denied: durable run belongs to a different resource',
-          code: 'DURABLE_RUN_ACCESS_DENIED',
+          code: MASTRA_ERROR_CODES.DURABLE_RUN_ACCESS_DENIED,
         });
       }
 
@@ -273,14 +274,14 @@ async function validateDurableToolCallAccess({
       if (threadId && persistedThreadId !== threadId) {
         throw new HTTPException(403, {
           message: 'Access denied: durable run belongs to a different thread',
-          code: 'DURABLE_RUN_ACCESS_DENIED',
+          code: MASTRA_ERROR_CODES.DURABLE_RUN_ACCESS_DENIED,
         });
       }
 
       if (!ready || input?.agentId !== agent.id) {
         throw new HTTPException(403, {
           message: 'Access denied: tool call is not suspended on this durable run',
-          code: 'DURABLE_RUN_ACCESS_DENIED',
+          code: MASTRA_ERROR_CODES.DURABLE_RUN_ACCESS_DENIED,
         });
       }
       return;
@@ -1036,7 +1037,10 @@ export async function getAgentFromSystem({
   }
 
   if (!agent) {
-    throw new HTTPException(404, { message: `Agent with id ${agentId} not found`, code: 'AGENT_NOT_FOUND' });
+    throw new HTTPException(404, {
+      message: `Agent with id ${agentId} not found`,
+      code: MASTRA_ERROR_CODES.AGENT_NOT_FOUND,
+    });
   }
 
   return agent;
@@ -2750,7 +2754,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
+        throw new HTTPException(400, { message: 'Run id is required', code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED });
       }
 
       if (!params.toolCallId) {
@@ -2908,7 +2912,10 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
         }
         const thread = await memory.getThreadById({ threadId: effectiveThreadId });
         if (!thread) {
-          throw new HTTPException(403, { message: 'Access denied: thread not found', code: 'THREAD_ACCESS_DENIED' });
+          throw new HTTPException(403, {
+            message: 'Access denied: thread not found',
+            code: MASTRA_ERROR_CODES.THREAD_ACCESS_DENIED,
+          });
         }
         await enforceThreadAccess({
           mastra,
@@ -2954,7 +2961,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
+        throw new HTTPException(400, { message: 'Run id is required', code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED });
       }
 
       if (!params.toolCallId) {
@@ -3004,7 +3011,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
+        throw new HTTPException(400, { message: 'Run id is required', code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED });
       }
 
       sanitizeBody(params, ['tools', 'actor']);
@@ -3129,7 +3136,7 @@ export const RECOVER_ROUTE = createRoute({
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
+        throw new HTTPException(400, { message: 'Run id is required', code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED });
       }
 
       const { runId, versions } = params;
@@ -3203,7 +3210,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
+        throw new HTTPException(400, { message: 'Run id is required', code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED });
       }
 
       sanitizeBody(params, ['tools', 'actor']);
@@ -3333,7 +3340,7 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
+        throw new HTTPException(400, { message: 'Run id is required', code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED });
       }
 
       if (!params.toolCallId) {
@@ -3387,7 +3394,7 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
+        throw new HTTPException(400, { message: 'Run id is required', code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED });
       }
 
       if (!params.toolCallId) {
@@ -3489,7 +3496,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
+        throw new HTTPException(400, { message: 'Run id is required', code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -3529,7 +3536,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
       });
 
       if (!params.runId) {
-        throw new HTTPException(400, { message: 'Run id is required', code: 'RUN_ID_REQUIRED' });
+        throw new HTTPException(400, { message: 'Run id is required', code: MASTRA_ERROR_CODES.RUN_ID_REQUIRED });
       }
 
       // UI Frameworks may send "client tools" in the body,
@@ -3877,7 +3884,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
     try {
       const agent = agentId ? mastra.getAgentById(agentId) : null;
       if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found', code: 'AGENT_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Agent not found', code: MASTRA_ERROR_CODES.AGENT_NOT_FOUND });
       }
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name

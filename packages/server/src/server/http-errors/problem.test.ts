@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { z } from 'zod/v4';
 
 import { buildProblem } from './build-problem';
+import { MASTRA_ERROR_CODES } from './codes';
 import type { MastraErrorCode } from './codes';
 import { problemDetailsSchema } from './problem';
 import type { ProblemDetails } from './problem';
@@ -60,8 +61,14 @@ describe('buildProblem', () => {
     });
 
     it('produces something the schema accepts', () => {
-      const code: MastraErrorCode = 'THREAD_ACCESS_DENIED';
+      const code: MastraErrorCode = MASTRA_ERROR_CODES.THREAD_ACCESS_DENIED;
       expect(problemDetailsSchema.safeParse(buildProblem({ status: 403, code })).success).toBe(true);
+    });
+
+    it.each(Object.values(MASTRA_ERROR_CODES))('gives %s a human-readable title', code => {
+      const { title } = buildProblem({ status: 400, code });
+      expect(title.length).toBeGreaterThan(0);
+      expect(title).not.toBe(code);
     });
   });
 

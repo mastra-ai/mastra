@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core';
 import type { AgentSchedule, AnySchedule, WorkflowSchedule } from '@mastra/core/schedules';
 import type { WorkflowRunState } from '@mastra/core/workflows';
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
 import {
   createScheduleBodySchema,
@@ -82,7 +83,7 @@ async function hydrateScheduleResponse(
 async function loadSchedule(mastra: Mastra, scheduleId: string): Promise<AnySchedule> {
   const schedule = await mastra.schedules.get(scheduleId);
   if (!schedule) {
-    throw new HTTPException(404, { message: 'Schedule not found', code: 'SCHEDULE_NOT_FOUND' });
+    throw new HTTPException(404, { message: 'Schedule not found', code: MASTRA_ERROR_CODES.SCHEDULE_NOT_FOUND });
   }
   return schedule;
 }

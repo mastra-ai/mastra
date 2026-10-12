@@ -3,6 +3,7 @@ import type { MessageInput } from '@mastra/core/agent/message-list';
 import { isProcessorWorkflow } from '@mastra/core/processors';
 import type { Processor, ProcessorWorkflow } from '@mastra/core/processors';
 
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
 import {
   listProcessorsResponseSchema,
@@ -168,7 +169,7 @@ export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
       }
 
       if (!processorEntry) {
-        throw new HTTPException(404, { message: 'Processor not found', code: 'PROCESSOR_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Processor not found', code: MASTRA_ERROR_CODES.PROCESSOR_NOT_FOUND });
       }
 
       // Check if it's a workflow processor
@@ -245,7 +246,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
       }
 
       if (!processor) {
-        throw new HTTPException(404, { message: 'Processor not found', code: 'PROCESSOR_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Processor not found', code: MASTRA_ERROR_CODES.PROCESSOR_NOT_FOUND });
       }
 
       const messageList = new MessageList();

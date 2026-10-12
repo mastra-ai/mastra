@@ -6,6 +6,7 @@ import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { MastraFGAPermissions } from '../fga-permissions';
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
 import {
   threadIdPathParams,
@@ -259,7 +260,7 @@ async function getMemoryFromContext({
         logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
         return null;
       }
-      throw new HTTPException(404, { message: 'Agent not found', code: 'AGENT_NOT_FOUND' });
+      throw new HTTPException(404, { message: 'Agent not found', code: MASTRA_ERROR_CODES.AGENT_NOT_FOUND });
     }
   }
 
@@ -671,7 +672,7 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
       // Verify agent has OM enabled
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found', code: 'AGENT_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Agent not found', code: MASTRA_ERROR_CODES.AGENT_NOT_FOUND });
       }
 
       const historyLimit = limit ?? 5;
@@ -761,7 +762,7 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
     try {
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found', code: 'AGENT_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Agent not found', code: MASTRA_ERROR_CODES.AGENT_NOT_FOUND });
       }
 
       // Gateway proxy: poll the gateway OM record until buffering flags clear
@@ -1039,7 +1040,7 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
       if (memory) {
         const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
         if (!thread) {
-          throw new HTTPException(404, { message: 'Thread not found', code: 'THREAD_NOT_FOUND' });
+          throw new HTTPException(404, { message: 'Thread not found', code: MASTRA_ERROR_CODES.THREAD_NOT_FOUND });
         }
         await enforceThreadAccess({
           mastra,
@@ -1058,7 +1059,7 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
         if (memoryStore) {
           const thread = await memoryStore.getThreadById({ threadId: effectiveThreadId! });
           if (!thread) {
-            throw new HTTPException(404, { message: 'Thread not found', code: 'THREAD_NOT_FOUND' });
+            throw new HTTPException(404, { message: 'Thread not found', code: MASTRA_ERROR_CODES.THREAD_NOT_FOUND });
           }
           await enforceThreadAccess({
             mastra,
@@ -1144,7 +1145,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
             order: orderBy?.direction?.toLowerCase(),
           });
           if (!result) {
-            throw new HTTPException(404, { message: 'Thread not found', code: 'THREAD_NOT_FOUND' });
+            throw new HTTPException(404, { message: 'Thread not found', code: MASTRA_ERROR_CODES.THREAD_NOT_FOUND });
           }
           return {
             messages: result.messages.map(toLocalMessage),
@@ -1158,7 +1159,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
       if (memory) {
         const thread = await memory.getThreadById({ threadId: effectiveThreadId });
         if (!thread) {
-          throw new HTTPException(404, { message: 'Thread not found', code: 'THREAD_NOT_FOUND' });
+          throw new HTTPException(404, { message: 'Thread not found', code: MASTRA_ERROR_CODES.THREAD_NOT_FOUND });
         }
         await enforceThreadAccess({
           mastra,
@@ -1192,7 +1193,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
         if (memoryStore) {
           const thread = await memoryStore.getThreadById({ threadId: effectiveThreadId });
           if (!thread) {
-            throw new HTTPException(404, { message: 'Thread not found', code: 'THREAD_NOT_FOUND' });
+            throw new HTTPException(404, { message: 'Thread not found', code: MASTRA_ERROR_CODES.THREAD_NOT_FOUND });
           }
           await enforceThreadAccess({
             mastra,
@@ -1504,7 +1505,7 @@ export const UPDATE_THREAD_ROUTE = createRoute({
           }
           const result = await gwClient.updateThread(effectiveThreadId!, { title, metadata });
           if (!result) {
-            throw new HTTPException(404, { message: 'Thread not found', code: 'THREAD_NOT_FOUND' });
+            throw new HTTPException(404, { message: 'Thread not found', code: MASTRA_ERROR_CODES.THREAD_NOT_FOUND });
           }
           return toLocalThread(result.thread);
         }
@@ -1520,7 +1521,7 @@ export const UPDATE_THREAD_ROUTE = createRoute({
 
       const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
       if (!thread) {
-        throw new HTTPException(404, { message: 'Thread not found', code: 'THREAD_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Thread not found', code: MASTRA_ERROR_CODES.THREAD_NOT_FOUND });
       }
       await enforceThreadAccess({
         mastra,
@@ -1601,7 +1602,7 @@ export const DELETE_THREAD_ROUTE = createRoute({
 
       const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
       if (!thread) {
-        throw new HTTPException(404, { message: 'Thread not found', code: 'THREAD_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Thread not found', code: MASTRA_ERROR_CODES.THREAD_NOT_FOUND });
       }
       await enforceThreadAccess({
         mastra,
@@ -1742,7 +1743,7 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
         ? await memory.getThreadById({ threadId: effectiveThreadId! })
         : await memoryStore!.getThreadById({ threadId: effectiveThreadId! });
       if (!sourceThread) {
-        throw new HTTPException(404, { message: 'Thread not found', code: 'THREAD_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Thread not found', code: MASTRA_ERROR_CODES.THREAD_NOT_FOUND });
       }
 
       // Privileged context: ownership check is a no-op, but FGA MEMORY_WRITE still applies when configured.
@@ -1796,7 +1797,7 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
       }
       const thread = await memory.getThreadById({ threadId: effectiveThreadId! });
       if (!thread) {
-        throw new HTTPException(404, { message: 'Thread not found', code: 'THREAD_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Thread not found', code: MASTRA_ERROR_CODES.THREAD_NOT_FOUND });
       }
       await enforceThreadAccess({
         mastra,

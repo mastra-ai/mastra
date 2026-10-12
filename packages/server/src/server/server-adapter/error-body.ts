@@ -1,4 +1,4 @@
-import { buildProblem } from '../http-errors';
+import { MASTRA_ERROR_CODES, buildProblem } from '../http-errors';
 import type { MastraErrorCode, ProblemDetails } from '../http-errors';
 import { HTTPException } from '../http-exception';
 
@@ -44,9 +44,9 @@ export function toErrorBody(error: unknown): { status: number; body: ErrorBody }
 }
 
 const VALIDATION_CODES = {
-  body: 'INVALID_REQUEST_BODY',
-  query: 'INVALID_QUERY_PARAMS',
-  path: 'INVALID_PATH_PARAMS',
+  body: MASTRA_ERROR_CODES.INVALID_REQUEST_BODY,
+  query: MASTRA_ERROR_CODES.INVALID_QUERY_PARAMS,
+  path: MASTRA_ERROR_CODES.INVALID_PATH_PARAMS,
 } as const satisfies Record<'body' | 'query' | 'path', MastraErrorCode>;
 
 /** Enriches a `{ error, issues }` validation body with a coded `problem`. */

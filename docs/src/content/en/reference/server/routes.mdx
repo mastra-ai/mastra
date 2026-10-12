@@ -671,52 +671,56 @@ Error responses keep the `error` message field and add an optional `problem` fie
 
 The HTTP status gives the generic category. `problem.code` gives the business reason when Mastra knows it. Errors without a known reason use `type: "about:blank"` and omit `code`. For 5xx errors, `detail` is omitted so internal messages aren't exposed. Validation errors also include `problem.issues`.
 
-Import the schema, type, and codes from `@mastra/server/http-errors`. This entry point depends only on `zod`, so you can use it in client code:
+Import the codes, schema, and type from `@mastra/server/http-errors`. `MASTRA_ERROR_CODES` is a plain object of string constants, so your frontend can switch on `problem.code` to show a dedicated message. This entry point depends only on `zod`, so you can use it in client code:
 
 ```typescript
-import {
-  problemDetailsSchema,
-  type ProblemDetails,
-  isMastraErrorCode,
-} from '@mastra/server/http-errors'
+import { MASTRA_ERROR_CODES, problemDetailsSchema } from '@mastra/server/http-errors'
 
 const body = await response.json()
 const parsed = problemDetailsSchema.safeParse(body.problem)
-if (parsed.success && parsed.data.code === 'AGENT_NOT_FOUND') {
-  // handle missing agent
+
+switch (parsed.success ? parsed.data.code : undefined) {
+  case MASTRA_ERROR_CODES.AGENT_NOT_FOUND:
+    showToast('This agent no longer exists.')
+    break
+  case MASTRA_ERROR_CODES.THREAD_ACCESS_DENIED:
+    showToast("You don't have access to this conversation.")
+    break
+  default:
+    showToast(body.error)
 }
 ```
 
 ### Error codes
 
-| Code | Default status | Title |
-| - | - | - |
-| `AGENT_NOT_FOUND` | 404 | Agent not found |
-| `MODEL_NOT_ALLOWED` | 422 | Model not allowed |
-| `NO_MODEL_SELECTED` | 400 | No model selected |
-| `WORKFLOW_NOT_FOUND` | 404 | Workflow not found |
-| `WORKFLOW_RUN_NOT_FOUND` | 404 | Workflow run not found |
-| `WORKFLOW_RUN_ACCESS_DENIED` | 403 | Workflow run access denied |
-| `WORKFLOW_SCHEMA_VALIDATION_FAILED` | 400 | Workflow schema validation failed |
-| `WORKFLOW_RESUME_ALREADY_CLAIMED` | 409 | Workflow resume already claimed |
-| `RUN_ID_REQUIRED` | 400 | Run id required |
-| `DURABLE_RUN_ACTIVE` | 409 | Durable run already active |
-| `DURABLE_RUN_RECOVERY_IN_PROGRESS` | 409 | Durable run recovery in progress |
-| `DURABLE_RUN_SUSPENDED` | 409 | Durable run suspended |
-| `DURABLE_RUN_EXECUTION_CONFLICT` | 409 | Durable run execution conflict |
-| `DURABLE_RUN_ACCESS_DENIED` | 403 | Durable run access denied |
-| `THREAD_NOT_FOUND` | 404 | Thread not found |
-| `THREAD_ACCESS_DENIED` | 403 | Thread access denied |
-| `TOOL_NOT_FOUND` | 404 | Tool not found |
-| `PROCESSOR_NOT_FOUND` | 404 | Processor not found |
-| `WORKSPACE_NOT_FOUND` | 404 | Workspace not found |
-| `SCHEDULE_NOT_FOUND` | 404 | Schedule not found |
-| `BACKGROUND_TASK_NOT_FOUND` | 404 | Background task not found |
-| `PLAN_CAPABILITY_NOT_FOUND` | 404 | Plan capability not found |
-| `STORAGE_NOT_CONFIGURED` | 500 | Storage not configured |
-| `STORAGE_DOMAIN_UNAVAILABLE` | 500 | Storage domain unavailable |
-| `OBSERVABILITY_FEATURE_NOT_IMPLEMENTED` | 501 | Observability feature not implemented |
-| `FEEDBACK_REVIEW_STATUS_CONFLICT` | 409 | Feedback review status conflict |
-| `INVALID_REQUEST_BODY` | 400 | Invalid request body |
-| `INVALID_QUERY_PARAMS` | 400 | Invalid query parameters |
-| `INVALID_PATH_PARAMS` | 400 | Invalid path parameters |
+| Code | Meaning |
+| - | - |
+| `AGENT_NOT_FOUND` | The requested agent doesn't exist |
+| `MODEL_NOT_ALLOWED` | The selected model isn't in the allowed list |
+| `NO_MODEL_SELECTED` | The agent has no model configured |
+| `WORKFLOW_NOT_FOUND` | The requested workflow doesn't exist |
+| `WORKFLOW_RUN_NOT_FOUND` | The requested workflow run doesn't exist |
+| `WORKFLOW_RUN_ACCESS_DENIED` | The workflow run belongs to another resource |
+| `WORKFLOW_SCHEMA_VALIDATION_FAILED` | The workflow input or resume data doesn't match its schema |
+| `WORKFLOW_RESUME_ALREADY_CLAIMED` | Another request already resumed this workflow run |
+| `RUN_ID_REQUIRED` | The request is missing a run id |
+| `DURABLE_RUN_ACTIVE` | The durable agent run is already running |
+| `DURABLE_RUN_RECOVERY_IN_PROGRESS` | The durable agent run is already being recovered |
+| `DURABLE_RUN_SUSPENDED` | The durable agent run is suspended and must be resumed |
+| `DURABLE_RUN_EXECUTION_CONFLICT` | Another execution owns the durable agent run |
+| `DURABLE_RUN_ACCESS_DENIED` | The durable agent run belongs to another resource |
+| `THREAD_NOT_FOUND` | The requested memory thread doesn't exist |
+| `THREAD_ACCESS_DENIED` | The memory thread belongs to another resource |
+| `TOOL_NOT_FOUND` | The requested tool doesn't exist |
+| `PROCESSOR_NOT_FOUND` | The requested processor doesn't exist |
+| `WORKSPACE_NOT_FOUND` | The requested workspace doesn't exist |
+| `SCHEDULE_NOT_FOUND` | The requested schedule doesn't exist |
+| `BACKGROUND_TASK_NOT_FOUND` | The requested background task doesn't exist |
+| `PLAN_CAPABILITY_NOT_FOUND` | The requested plan capability doesn't exist |
+| `STORAGE_NOT_CONFIGURED` | The Mastra instance has no storage configured |
+| `STORAGE_DOMAIN_UNAVAILABLE` | The configured storage doesn't support this feature |
+| `OBSERVABILITY_FEATURE_NOT_IMPLEMENTED` | The observability store doesn't implement this feature |
+| `FEEDBACK_REVIEW_STATUS_CONFLICT` | The feedback changed during the review status update |
+| `INVALID_REQUEST_BODY` | The request body failed validation |
+| `INVALID_QUERY_PARAMS` | The query parameters failed validation |
+| `INVALID_PATH_PARAMS` | The path parameters failed validation |

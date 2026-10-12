@@ -12,14 +12,14 @@ Added an optional `problem` field to server error responses, following RFC 9457 
 
 `problem.code` carries a business error code such as `AGENT_NOT_FOUND`, `THREAD_ACCESS_DENIED`, or `DURABLE_RUN_ACTIVE`, while the HTTP status stays the generic category. For 5xx errors, `detail` is omitted so internal messages aren't exposed.
 
-The new `@mastra/server/http-errors` entry point exports the Zod schema, the `ProblemDetails` type, and the error code catalogue. It depends only on `zod`, so you can use it in client code:
+The new `@mastra/server/http-errors` entry point exports `MASTRA_ERROR_CODES` (a plain object of business code constants), the Zod schema, and the `ProblemDetails` type. It depends only on `zod`, so your frontend can use it to show a dedicated message per code:
 
 ```typescript
-import { problemDetailsSchema } from '@mastra/server/http-errors';
+import { MASTRA_ERROR_CODES, problemDetailsSchema } from '@mastra/server/http-errors';
 
 const { problem } = await response.json();
 const parsed = problemDetailsSchema.safeParse(problem);
-if (parsed.success && parsed.data.code === 'AGENT_NOT_FOUND') {
-  // handle missing agent
+if (parsed.success && parsed.data.code === MASTRA_ERROR_CODES.AGENT_NOT_FOUND) {
+  showToast('This agent no longer exists.');
 }
 ```

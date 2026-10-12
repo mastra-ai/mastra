@@ -1,6 +1,7 @@
 import type { StorageSkillFileNode } from '@mastra/core/storage';
 import { LocalSkillSource } from '@mastra/core/workspace';
 
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
 import {
   storedSkillIdPathParams,
@@ -135,14 +136,17 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: MASTRA_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+          code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -173,7 +177,7 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
         if (!favoritesStore) {
           throw new HTTPException(500, {
             message: 'Favorites storage domain is not available',
-            code: 'STORAGE_DOMAIN_UNAVAILABLE',
+            code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
           });
         }
         const starredIds = await favoritesStore.listFavoritedIds({ userId: favoriteSubjectId, entityType: 'skill' });
@@ -262,14 +266,17 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: MASTRA_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+          code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -323,14 +330,17 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: MASTRA_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+          code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -429,14 +439,17 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: MASTRA_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+          code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -523,14 +536,17 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: MASTRA_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+          code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -595,14 +611,17 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       const storage = mastra.getStorage();
 
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: MASTRA_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
 
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+          code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 
@@ -610,7 +629,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
       if (!blobStore) {
         throw new HTTPException(500, {
           message: 'Blob storage domain is not available',
-          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+          code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 

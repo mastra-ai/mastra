@@ -10,6 +10,7 @@
 import { coreFeatures } from '@mastra/core/features';
 import type { Workspace, WorkspaceSkills, WorkspaceFilesystem, CompositeFilesystem } from '@mastra/core/workspace';
 
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
 import {
   // Workspace info
@@ -1413,7 +1414,7 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace) {
-        throw new HTTPException(404, { message: 'Workspace not found', code: 'WORKSPACE_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Workspace not found', code: MASTRA_ERROR_CODES.WORKSPACE_NOT_FOUND });
       }
 
       if (!workspace.filesystem) {
@@ -1529,7 +1530,7 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace) {
-        throw new HTTPException(404, { message: 'Workspace not found', code: 'WORKSPACE_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Workspace not found', code: MASTRA_ERROR_CODES.WORKSPACE_NOT_FOUND });
       }
 
       if (!workspace.filesystem) {
@@ -1602,7 +1603,7 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
 
       const workspace = await getWorkspaceById(mastra, workspaceId);
       if (!workspace) {
-        throw new HTTPException(404, { message: 'Workspace not found', code: 'WORKSPACE_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Workspace not found', code: MASTRA_ERROR_CODES.WORKSPACE_NOT_FOUND });
       }
 
       if (!workspace.filesystem) {

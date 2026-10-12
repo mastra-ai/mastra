@@ -9,6 +9,7 @@ import type {
 } from '@mastra/core/storage';
 import * as coreStorage from '@mastra/core/storage';
 import { z } from 'zod/v4';
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
 import { wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
@@ -104,7 +105,7 @@ export async function getObservabilityStore(mastra: Mastra): Promise<Observabili
     // server failure — matching the other 501s in this file.
     throw new HTTPException(501, {
       message: 'Observability storage domain is not available',
-      code: 'STORAGE_DOMAIN_UNAVAILABLE',
+      code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
     });
   }
   return observability;
@@ -117,7 +118,7 @@ export async function getScoresStore(mastra: Mastra): Promise<ScoresStorage> {
   if (!scores) {
     throw new HTTPException(501, {
       message: 'Scores storage domain is not available',
-      code: 'STORAGE_DOMAIN_UNAVAILABLE',
+      code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
     });
   }
   return scores;

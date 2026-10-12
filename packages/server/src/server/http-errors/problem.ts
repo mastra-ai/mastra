@@ -2,8 +2,8 @@ import { z } from 'zod/v4';
 
 /**
  * RFC 9457 "Problem Details" object, exposed in the optional `problem` field of
- * Mastra error responses. `code` is a business code from `MASTRA_ERROR_CODES`
- * (kept as a string so clients tolerate codes added by newer servers).
+ * Mastra error responses. `code` is one of `MASTRA_ERROR_CODES`, typed as a plain
+ * string so clients tolerate codes added by newer servers.
  */
 export const problemDetailsSchema = z.object({
   type: z.string(),

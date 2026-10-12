@@ -1,5 +1,6 @@
 import type { ZodError } from 'zod';
 
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import type { MastraErrorCode } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
@@ -67,11 +68,11 @@ const DURABLE_RUN_CONFLICT_CODES = new Set([
 
 /** Explicit internal error id -> public business code. Unknown ids never leak. */
 const DURABLE_RUN_PUBLIC_CODES: Record<string, MastraErrorCode> = {
-  DURABLE_AGENT_RUN_ACTIVE: 'DURABLE_RUN_ACTIVE',
-  DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY: 'DURABLE_RUN_ACTIVE',
-  DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS: 'DURABLE_RUN_RECOVERY_IN_PROGRESS',
-  DURABLE_AGENT_RECOVER_RUN_SUSPENDED: 'DURABLE_RUN_SUSPENDED',
-  DURABLE_AGENT_EXECUTION_CONFLICT: 'DURABLE_RUN_EXECUTION_CONFLICT',
+  DURABLE_AGENT_RUN_ACTIVE: MASTRA_ERROR_CODES.DURABLE_RUN_ACTIVE,
+  DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY: MASTRA_ERROR_CODES.DURABLE_RUN_ACTIVE,
+  DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS: MASTRA_ERROR_CODES.DURABLE_RUN_RECOVERY_IN_PROGRESS,
+  DURABLE_AGENT_RECOVER_RUN_SUSPENDED: MASTRA_ERROR_CODES.DURABLE_RUN_SUSPENDED,
+  DURABLE_AGENT_EXECUTION_CONFLICT: MASTRA_ERROR_CODES.DURABLE_RUN_EXECUTION_CONFLICT,
 };
 
 function isDurableRunConflictError(error: unknown): error is Error {
@@ -137,7 +138,7 @@ export function formatZodError(
 // Internal MastraError ids that are safe and meaningful to expose as public business codes.
 // Any id missing from this table surfaces without a code so internal ids never leak.
 const PUBLIC_CODES_BY_ERROR_ID: Record<string, MastraErrorCode | undefined> = {
-  NO_MODEL_SELECTED: 'NO_MODEL_SELECTED',
+  NO_MODEL_SELECTED: MASTRA_ERROR_CODES.NO_MODEL_SELECTED,
 };
 
 /** Returns the public business code for an internal error id, or undefined so internal ids never leak. */
@@ -166,7 +167,7 @@ export function handleError(error: unknown, defaultMessage: string): never {
       res,
       message: error.message,
       cause: error,
-      code: 'MODEL_NOT_ALLOWED',
+      code: MASTRA_ERROR_CODES.MODEL_NOT_ALLOWED,
     });
   }
 
@@ -179,7 +180,7 @@ export function handleError(error: unknown, defaultMessage: string): never {
       stack: error.stack,
       cause: error,
       code: isWorkflowResumeAlreadyClaimedError(error)
-        ? 'WORKFLOW_RESUME_ALREADY_CLAIMED'
+        ? MASTRA_ERROR_CODES.WORKFLOW_RESUME_ALREADY_CLAIMED
         : DURABLE_RUN_PUBLIC_CODES[(error as { id: string }).id],
     });
   }
@@ -191,7 +192,7 @@ export function handleError(error: unknown, defaultMessage: string): never {
       message: error.message,
       stack: error.stack,
       cause: error,
-      code: 'FEEDBACK_REVIEW_STATUS_CONFLICT',
+      code: MASTRA_ERROR_CODES.FEEDBACK_REVIEW_STATUS_CONFLICT,
     });
   }
 
@@ -200,7 +201,7 @@ export function handleError(error: unknown, defaultMessage: string): never {
       message: error.message,
       stack: error.stack,
       cause: error,
-      code: 'WORKFLOW_SCHEMA_VALIDATION_FAILED',
+      code: MASTRA_ERROR_CODES.WORKFLOW_SCHEMA_VALIDATION_FAILED,
     });
   }
 
@@ -215,7 +216,7 @@ export function handleError(error: unknown, defaultMessage: string): never {
       message: error.message,
       stack: error.stack,
       cause: error,
-      code: 'OBSERVABILITY_FEATURE_NOT_IMPLEMENTED',
+      code: MASTRA_ERROR_CODES.OBSERVABILITY_FEATURE_NOT_IMPLEMENTED,
     });
   }
 

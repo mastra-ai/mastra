@@ -1,5 +1,6 @@
 import type { Mastra } from '@mastra/core/mastra';
 
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
 import {
   dynamicWorkflowIdPathParams,
@@ -35,13 +36,16 @@ export const LIST_DYNAMIC_WORKFLOWS_ROUTE = createRoute({
     try {
       const storage = mastra.getStorage();
       if (!storage)
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: MASTRA_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
 
       const store = await storage.getStore('workflowDefinitions');
       if (!store)
         throw new HTTPException(500, {
           message: 'workflowDefinitions storage domain is not available',
-          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+          code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
         });
 
       const result = await store.list({ status: status ?? 'active', authorId });
@@ -70,13 +74,16 @@ export const GET_DYNAMIC_WORKFLOW_ROUTE = createRoute({
     try {
       const storage = mastra.getStorage();
       if (!storage)
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: MASTRA_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
 
       const store = await storage.getStore('workflowDefinitions');
       if (!store)
         throw new HTTPException(500, {
           message: 'workflowDefinitions storage domain is not available',
-          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+          code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
         });
 
       const def = await store.get(dynamicWorkflowId);
@@ -181,13 +188,16 @@ export const DELETE_DYNAMIC_WORKFLOW_ROUTE = createRoute({
     try {
       const storage = mastra.getStorage();
       if (!storage)
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: MASTRA_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
 
       const store = await storage.getStore('workflowDefinitions');
       if (!store)
         throw new HTTPException(500, {
           message: 'workflowDefinitions storage domain is not available',
-          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+          code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
         });
 
       await store.delete(dynamicWorkflowId);

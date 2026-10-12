@@ -1,6 +1,37 @@
-import { MASTRA_ERROR_CODES } from './codes';
 import type { MastraErrorCode } from './codes';
 import type { ProblemDetails } from './problem';
+
+const CODE_TITLES: Record<MastraErrorCode, string> = {
+  AGENT_NOT_FOUND: 'Agent not found',
+  MODEL_NOT_ALLOWED: 'Model not allowed',
+  NO_MODEL_SELECTED: 'No model selected',
+  WORKFLOW_NOT_FOUND: 'Workflow not found',
+  WORKFLOW_RUN_NOT_FOUND: 'Workflow run not found',
+  WORKFLOW_RUN_ACCESS_DENIED: 'Workflow run access denied',
+  WORKFLOW_SCHEMA_VALIDATION_FAILED: 'Workflow schema validation failed',
+  WORKFLOW_RESUME_ALREADY_CLAIMED: 'Workflow resume already claimed',
+  RUN_ID_REQUIRED: 'Run id required',
+  DURABLE_RUN_ACTIVE: 'Durable run already active',
+  DURABLE_RUN_RECOVERY_IN_PROGRESS: 'Durable run recovery in progress',
+  DURABLE_RUN_SUSPENDED: 'Durable run suspended',
+  DURABLE_RUN_EXECUTION_CONFLICT: 'Durable run execution conflict',
+  DURABLE_RUN_ACCESS_DENIED: 'Durable run access denied',
+  THREAD_NOT_FOUND: 'Thread not found',
+  THREAD_ACCESS_DENIED: 'Thread access denied',
+  TOOL_NOT_FOUND: 'Tool not found',
+  PROCESSOR_NOT_FOUND: 'Processor not found',
+  WORKSPACE_NOT_FOUND: 'Workspace not found',
+  SCHEDULE_NOT_FOUND: 'Schedule not found',
+  BACKGROUND_TASK_NOT_FOUND: 'Background task not found',
+  PLAN_CAPABILITY_NOT_FOUND: 'Plan capability not found',
+  STORAGE_NOT_CONFIGURED: 'Storage not configured',
+  STORAGE_DOMAIN_UNAVAILABLE: 'Storage domain unavailable',
+  OBSERVABILITY_FEATURE_NOT_IMPLEMENTED: 'Observability feature not implemented',
+  FEEDBACK_REVIEW_STATUS_CONFLICT: 'Feedback review status conflict',
+  INVALID_REQUEST_BODY: 'Invalid request body',
+  INVALID_QUERY_PARAMS: 'Invalid query parameters',
+  INVALID_PATH_PARAMS: 'Invalid path parameters',
+};
 
 const STATUS_TITLES: Record<number, string> = {
   400: 'Bad Request',
@@ -40,7 +71,7 @@ export interface BuildProblemInput {
 export function buildProblem({ status, code, detail, instance, issues }: BuildProblemInput): ProblemDetails {
   const problem: ProblemDetails = {
     type: code ? `urn:mastra:error:${code}` : 'about:blank',
-    title: code ? MASTRA_ERROR_CODES[code].title : (STATUS_TITLES[status] ?? 'Error'),
+    title: code ? CODE_TITLES[code] : (STATUS_TITLES[status] ?? 'Error'),
     status,
   };
 

@@ -1,5 +1,6 @@
 import { submitPlanTool } from '@mastra/core/tools';
 import { MastraFGAPermissions } from '../fga-permissions';
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
 import { agentIdPathParams, agentPlanQuerySchema, agentPlanResponseSchema } from '../schemas/agents';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -41,7 +42,10 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
       );
 
       if (!hasSubmitPlan) {
-        throw new HTTPException(404, { message: 'Plan capability not found', code: 'PLAN_CAPABILITY_NOT_FOUND' });
+        throw new HTTPException(404, {
+          message: 'Plan capability not found',
+          code: MASTRA_ERROR_CODES.PLAN_CAPABILITY_NOT_FOUND,
+        });
       }
       if (!isPlanPath(path)) {
         throw new HTTPException(400, { message: 'Invalid plan path' });

@@ -14,6 +14,7 @@
 import type { Mastra } from '@mastra/core';
 import type { StorageSkillFileNode } from '@mastra/core/storage';
 
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
 import {
   builderRegistriesResponseSchema,
@@ -333,13 +334,16 @@ export const BUILDER_REGISTRY_INSTALL_ROUTE = createRoute({
 
       const storage = mastra.getStorage();
       if (!storage) {
-        throw new HTTPException(500, { message: 'Storage is not configured', code: 'STORAGE_NOT_CONFIGURED' });
+        throw new HTTPException(500, {
+          message: 'Storage is not configured',
+          code: MASTRA_ERROR_CODES.STORAGE_NOT_CONFIGURED,
+        });
       }
       const skillStore = await storage.getStore('skills');
       if (!skillStore) {
         throw new HTTPException(500, {
           message: 'Skills storage domain is not available',
-          code: 'STORAGE_DOMAIN_UNAVAILABLE',
+          code: MASTRA_ERROR_CODES.STORAGE_DOMAIN_UNAVAILABLE,
         });
       }
 

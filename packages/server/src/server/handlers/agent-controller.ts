@@ -17,6 +17,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 // value import.
 import { z } from 'zod/v4';
 
+import { MASTRA_ERROR_CODES } from '../http-errors/codes';
 import { HTTPException } from '../http-exception';
 import { filterSchema, includeSchema, messageOrderBySchema } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -1343,7 +1344,7 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const thread = await controller.queryThreadById({ threadId });
       if (!thread || (resourceId && thread.resourceId && thread.resourceId !== resourceId)) {
-        throw new HTTPException(404, { message: 'Thread not found', code: 'THREAD_NOT_FOUND' });
+        throw new HTTPException(404, { message: 'Thread not found', code: MASTRA_ERROR_CODES.THREAD_NOT_FOUND });
       }
       await enforceThreadAccess({
         mastra,
