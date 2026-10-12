@@ -241,15 +241,40 @@ export function createKnowledgeStorageTests(
       });
     });
 
+    it('finds a scope node through its own canonical identity', async () => {
+      expect(await store.search({ query: 'Acme', scopeIds: [ORG_SCOPE_ID] })).toContainEqual(
+        expect.objectContaining({ type: 'node', id: ORG_SCOPE_ID, recordId: ORG_SCOPE_ID }),
+      );
+    });
+
     it('makes records about a scope visible through that scope identity', async () => {
       const record = await store.createRecord({
         id: 'record-about-org-scope',
         node: ORG_SCOPE_ID,
-        text: 'The organization owns this policy.',
+        text: 'The organization owns this policy with parent-only heliotrope.',
         scopeIds: [ORG_SCOPE_ID],
       });
 
       expect((await store.listRecords({ node: ORG_SCOPE_ID, scopeIds: [ORG_SCOPE_ID] })).records).toEqual([record]);
+      expect(await store.search({ query: 'heliotrope', scopeIds: [ORG_SCOPE_ID] })).toContainEqual(
+        expect.objectContaining({ type: 'record', id: record.id, recordId: ORG_SCOPE_ID }),
+      );
+    });
+
+    it('makes records mentioning a scope visible through that scope identity', async () => {
+      const node = await store.createNode({ name: 'Organization summary', scopeIds: [ORG_SCOPE_ID] });
+      const record = await store.createRecord({
+        id: 'record-mentioning-org-scope',
+        node,
+        text: 'References [[Acme]] with target-only vermilion.',
+        scopeIds: [ORG_SCOPE_ID],
+        resolutionScopeIds: [ORG_SCOPE_ID],
+        contextScopeId: ORG_SCOPE_ID,
+      });
+
+      expect(await store.search({ query: 'vermilion', scopeIds: [ORG_SCOPE_ID] })).toContainEqual(
+        expect.objectContaining({ type: 'record', id: record.id, recordId: node.id }),
+      );
     });
 
     it('stores scope membership separately from node payloads', async () => {
