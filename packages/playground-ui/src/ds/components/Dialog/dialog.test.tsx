@@ -515,9 +515,13 @@ describe('Dialog on a phone viewport', () => {
             return query === PHONE_QUERY && phoneMatches;
           },
           media: query,
+          onchange: null,
+          addListener: () => {},
+          removeListener: () => {},
           addEventListener: (_event: string, listener: () => void) => listeners.add(listener),
           removeEventListener: (_event: string, listener: () => void) => listeners.delete(listener),
-        }) as unknown as MediaQueryList,
+          dispatchEvent: () => false,
+        }) satisfies MediaQueryList,
     );
   });
 
