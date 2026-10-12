@@ -74,6 +74,15 @@ describe('MASTRA_ERROR_CODES catalogue', () => {
           'INVALID_REQUEST_BODY',
           'INVALID_QUERY_PARAMS',
           'INVALID_PATH_PARAMS',
+          'TRACE_QUERY_INVALID',
+          'TRACE_QUERY_CURSOR_MALFORMED',
+          'TRACE_QUERY_CURSOR_CONFLICT',
+          'TRACE_QUERY_UNSUPPORTED',
+          'TRACE_QUERY_DISCOVERY_UNSUPPORTED',
+          'TRACE_AGGREGATE_UNSUPPORTED',
+          'SPAN_QUERY_UNSUPPORTED',
+          'TRACE_QUERY_EXECUTION_TIMEOUT',
+          'TRACE_QUERY_RESOURCE_LIMIT',
         ].sort(),
       );
     });

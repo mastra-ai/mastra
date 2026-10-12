@@ -625,6 +625,7 @@ describe('QUERY_TRACES', () => {
     expect(error.status).toBe(504);
     expect(getDeclaredErrorSchema(504).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
+      problem: expect.objectContaining({ code: 'TRACE_QUERY_EXECUTION_TIMEOUT' }),
       message: 'The query exceeded its execution timeout',
     });
   });
@@ -658,6 +659,7 @@ describe('QUERY_TRACES', () => {
     expect(error.status).toBe(501);
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_UNSUPPORTED',
+      problem: expect.objectContaining({ code: 'TRACE_QUERY_UNSUPPORTED' }),
       message: 'Root duration predicates are not supported by the configured observability store',
     });
     expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
@@ -708,6 +710,7 @@ describe('QUERY_TRACES', () => {
       expect(error.status).toBe(501);
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
+        problem: expect.objectContaining({ code: 'TRACE_QUERY_UNSUPPORTED' }),
         message: 'Context identifier predicates are not supported by the configured observability store',
       });
       expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
@@ -743,6 +746,7 @@ describe('QUERY_TRACES', () => {
     expect(error.status).toBe(501);
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_UNSUPPORTED',
+      problem: expect.objectContaining({ code: 'TRACE_QUERY_UNSUPPORTED' }),
       message: 'Advanced trace queries are not supported by the configured observability store',
     });
     expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
@@ -757,7 +761,106 @@ describe('QUERY_TRACES', () => {
     expect(error.status).toBe(501);
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_UNSUPPORTED',
+      problem: expect.objectContaining({ code: 'TRACE_QUERY_UNSUPPORTED' }),
       message: 'Observability storage domain is not available',
+    });
+  });
+
+  describe('problem details on trace-query errors', () => {
+    it('adds a coded problem to malformed-cursor (400) and cursor-conflict (409) bodies', async () => {
+      const malformed = await captureHttpException(
+        QUERY_TRACES.handler(
+          params(createHarness().mastra, { timeRange: TIME_RANGE, page: { after: 'not-a-cursor' } }),
+        ),
+      );
+      expect(getDeclaredErrorSchema(400).parse(await malformed.getResponse().json())).toMatchObject({
+        code: 'TRACE_QUERY_CURSOR_MALFORMED',
+        problem: {
+          type: 'urn:mastra:error:TRACE_QUERY_CURSOR_MALFORMED',
+          title: 'Trace query cursor malformed',
+          status: 400,
+          code: 'TRACE_QUERY_CURSOR_MALFORMED',
+          detail: 'The query cursor is malformed',
+        },
+      });
+
+      const { mastra, observabilityStore } = createHarness(['trace-query', 'delta-polling']);
+      observabilityStore.queryTraces.mockRejectedValueOnce(new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT'));
+      const conflict = await captureHttpException(
+        QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE, mode: 'delta' })),
+      );
+      expect(getDeclaredErrorSchema(409).parse(await conflict.getResponse().json())).toMatchObject({
+        problem: { status: 409, code: 'TRACE_QUERY_CURSOR_CONFLICT', title: 'Trace query cursor conflict' },
+      });
+    });
+
+    it('adds a coded problem with field-level issues to semantic 422 bodies', async () => {
+      const error = await captureHttpException(
+        QUERY_TRACES.handler(
+          params(createHarness().mastra, {
+            timeRange: TIME_RANGE,
+            where: { op: 'eq', left: { path: 'input' }, right: { literal: 'sensitive search' } },
+          }),
+        ),
+      );
+      const body = getDeclaredErrorSchema(422).parse(await error.getResponse().json());
+      expect(body).toMatchObject({
+        code: 'TRACE_QUERY_INVALID',
+        problem: {
+          type: 'urn:mastra:error:TRACE_QUERY_INVALID',
+          title: 'Trace query invalid',
+          status: 422,
+          code: 'TRACE_QUERY_INVALID',
+          issues: [{ field: 'where.left.path', message: expect.any(String) }],
+        },
+      });
+      expect(JSON.stringify(body)).not.toContain('sensitive search');
+    });
+
+    it('adds a coded problem to request-schema validation failures', () => {
+      const parsed = traceQueryRequestSchema.safeParse({ timeRange: TIME_RANGE, authorization: { resourceId: 'x' } });
+      if (parsed.success) throw new Error('Expected strict validation failure');
+      const validation = QUERY_TRACES.onValidationError?.(parsed.error, 'body');
+      expect(getDeclaredErrorSchema(422).parse(validation?.body)).toMatchObject({
+        code: 'TRACE_QUERY_INVALID',
+        problem: {
+          status: 422,
+          code: 'TRACE_QUERY_INVALID',
+          issues: [expect.objectContaining({ field: expect.any(String) })],
+        },
+      });
+    });
+
+    it('adds a coded problem without detail to 5xx bodies while keeping the legacy message', async () => {
+      const unsupported = await captureHttpException(
+        QUERY_TRACES.handler(params(createHarness([]).mastra, { timeRange: TIME_RANGE })),
+      );
+      expect(getDeclaredErrorSchema(501).parse(await unsupported.getResponse().json())).toEqual({
+        code: 'TRACE_QUERY_UNSUPPORTED',
+        problem: expect.objectContaining({ code: 'TRACE_QUERY_UNSUPPORTED' }),
+        message: 'Advanced trace queries are not supported by the configured observability store',
+        problem: {
+          type: 'urn:mastra:error:TRACE_QUERY_UNSUPPORTED',
+          title: 'Trace query unsupported',
+          status: 501,
+          code: 'TRACE_QUERY_UNSUPPORTED',
+        },
+      });
+
+      const { mastra, observabilityStore } = createHarness();
+      observabilityStore.queryTraces.mockRejectedValue(new TraceQueryExecutionError());
+      const timeout = await captureHttpException(QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE })));
+      expect(getDeclaredErrorSchema(504).parse(await timeout.getResponse().json())).toEqual({
+        code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
+        problem: expect.objectContaining({ code: 'TRACE_QUERY_EXECUTION_TIMEOUT' }),
+        message: 'The query exceeded its execution timeout',
+        problem: {
+          type: 'urn:mastra:error:TRACE_QUERY_EXECUTION_TIMEOUT',
+          title: 'Trace query execution timeout',
+          status: 504,
+          code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
+        },
+      });
     });
   });
 
@@ -997,6 +1100,7 @@ describe('trace-query discovery routes', () => {
       expect(error.status).toBe(501);
       await expect(error.getResponse().json()).resolves.toEqual({
         code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED',
+        problem: expect.objectContaining({ code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED' }),
         message: 'Trace query discovery is not supported by the configured observability store',
       });
     }
@@ -1016,6 +1120,7 @@ describe('trace-query discovery routes', () => {
     expect(error.status).toBe(503);
     await expect(error.getResponse().json()).resolves.toEqual({
       code: 'TRACE_QUERY_RESOURCE_LIMIT',
+      problem: expect.objectContaining({ code: 'TRACE_QUERY_RESOURCE_LIMIT' }),
       message: 'The query exceeded its resource limit',
     });
   });
@@ -1036,6 +1141,7 @@ describe('trace-query discovery routes', () => {
     expect(error.status).toBe(504);
     await expect(error.getResponse().json()).resolves.toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
+      problem: expect.objectContaining({ code: 'TRACE_QUERY_EXECUTION_TIMEOUT' }),
       message: 'The query exceeded its execution timeout',
     });
   });

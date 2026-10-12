@@ -221,6 +221,7 @@ describe('QUERY_SPANS', () => {
     expect(error.status).toBe(501);
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'SPAN_QUERY_UNSUPPORTED',
+      problem: expect.objectContaining({ code: 'SPAN_QUERY_UNSUPPORTED' }),
       message: 'Span queries are not supported by the configured observability store',
     });
     expect(observabilityStore.querySpans).not.toHaveBeenCalled();
@@ -235,6 +236,7 @@ describe('QUERY_SPANS', () => {
     expect(error.status).toBe(501);
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'SPAN_QUERY_UNSUPPORTED',
+      problem: expect.objectContaining({ code: 'SPAN_QUERY_UNSUPPORTED' }),
       message: 'Observability storage domain is not available',
     });
   });
@@ -257,6 +259,7 @@ describe('QUERY_SPANS', () => {
     expect(error.status).toBe(501);
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'SPAN_QUERY_UNSUPPORTED',
+      problem: expect.objectContaining({ code: 'SPAN_QUERY_UNSUPPORTED' }),
       message: 'The configured observability store cannot enforce the trusted tenant scope',
     });
     expect(unscopedStore.observabilityStore.querySpans).not.toHaveBeenCalled();

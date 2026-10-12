@@ -75,6 +75,7 @@ describe('QUERY_THREADS', () => {
       expect(error.status).toBe(501);
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
+        problem: expect.objectContaining({ code: 'TRACE_QUERY_UNSUPPORTED' }),
         message: 'Thread queries require a newer @mastra/core with observability thread-query support. Please upgrade.',
       });
       expect(getStore).not.toHaveBeenCalled();
@@ -99,6 +100,7 @@ describe('QUERY_THREADS', () => {
     expect(error.status).toBe(501);
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_UNSUPPORTED',
+      problem: expect.objectContaining({ code: 'TRACE_QUERY_UNSUPPORTED' }),
       message: 'Root duration predicates are not supported by the configured observability store',
     });
     expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
@@ -121,6 +123,7 @@ describe('QUERY_THREADS', () => {
       expect(error.status).toBe(501);
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
+        problem: expect.objectContaining({ code: 'TRACE_QUERY_UNSUPPORTED' }),
         message: 'Context identifier predicates are not supported by the configured observability store',
       });
       expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
@@ -145,6 +148,7 @@ describe('QUERY_THREADS', () => {
     expect(error.status).toBe(501);
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_UNSUPPORTED',
+      problem: expect.objectContaining({ code: 'TRACE_QUERY_UNSUPPORTED' }),
       message: 'Root duration predicates are not supported by the configured observability store',
     });
     expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
@@ -334,6 +338,7 @@ describe('QUERY_THREADS', () => {
       expect(error.status).toBe(501);
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
+        problem: expect.objectContaining({ code: 'TRACE_QUERY_UNSUPPORTED' }),
         message: 'Advanced thread queries are not supported by the configured observability store',
       });
       expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
@@ -351,6 +356,7 @@ describe('QUERY_THREADS', () => {
     expect(error.status).toBe(501);
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_UNSUPPORTED',
+      problem: expect.objectContaining({ code: 'TRACE_QUERY_UNSUPPORTED' }),
       message: 'Observability storage domain is not available',
     });
   });
@@ -367,6 +373,7 @@ describe('QUERY_THREADS', () => {
     const body = await error.getResponse().json();
     expect(getDeclaredErrorSchema(504).parse(body)).toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
+      problem: expect.objectContaining({ code: 'TRACE_QUERY_EXECUTION_TIMEOUT' }),
       message: 'The query exceeded its execution timeout',
     });
     expect(JSON.stringify(body)).not.toContain('driver');

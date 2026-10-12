@@ -66,6 +66,7 @@ describe('trace-query discovery Core compatibility', () => {
     expect(error.status).toBe(501);
     await expect(error.getResponse().json()).resolves.toEqual({
       code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED',
+      problem: expect.objectContaining({ code: 'TRACE_QUERY_DISCOVERY_UNSUPPORTED' }),
       message: 'Trace query discovery requires a newer @mastra/core. Please upgrade.',
     });
     expect(getStorage).not.toHaveBeenCalled();

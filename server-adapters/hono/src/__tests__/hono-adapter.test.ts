@@ -202,6 +202,7 @@ describe('Hono Server Adapter', () => {
 
       await expectErrorResponse(response, 400, {
         code: 'TRACE_QUERY_CURSOR_MALFORMED',
+        problem: expect.objectContaining({ status: 400, code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
         message: 'The query cursor is malformed',
       });
     });
@@ -221,6 +222,7 @@ describe('Hono Server Adapter', () => {
 
       await expectErrorResponse(response, 409, {
         code: 'TRACE_QUERY_CURSOR_CONFLICT',
+        problem: expect.objectContaining({ status: 409, code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
         message: 'The cursor does not match the query',
       });
     });
@@ -233,6 +235,7 @@ describe('Hono Server Adapter', () => {
 
       const body = await expectErrorResponse(response, 422, {
         code: 'TRACE_QUERY_INVALID',
+        problem: expect.objectContaining({ status: 422, code: 'TRACE_QUERY_INVALID' }),
         message: 'The trace query is invalid',
         issues: [
           {
@@ -254,6 +257,7 @@ describe('Hono Server Adapter', () => {
 
       await expectErrorResponse(response, 501, {
         code: 'TRACE_QUERY_UNSUPPORTED',
+        problem: expect.objectContaining({ status: 501, code: 'TRACE_QUERY_UNSUPPORTED' }),
         message: 'Advanced trace queries are not supported by the configured observability store',
       });
       expect(queryTraces).not.toHaveBeenCalled();
@@ -268,6 +272,7 @@ describe('Hono Server Adapter', () => {
 
       const body = await expectErrorResponse(response, 504, {
         code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
+        problem: expect.objectContaining({ status: 504, code: 'TRACE_QUERY_EXECUTION_TIMEOUT' }),
         message: 'The query exceeded its execution timeout',
       });
       expect(JSON.stringify(body)).not.toMatch(/select|parameter|stack|driver/i);
@@ -399,6 +404,12 @@ describe('Hono Server Adapter', () => {
       expect(body).toEqual({
         code: 'TRACE_AGGREGATE_UNSUPPORTED',
         message: 'Trace aggregation is not supported by the configured observability store',
+        problem: {
+          type: 'urn:mastra:error:TRACE_AGGREGATE_UNSUPPORTED',
+          title: 'Trace aggregation unsupported',
+          status: 501,
+          code: 'TRACE_AGGREGATE_UNSUPPORTED',
+        },
       });
       expect(aggregateTraces).not.toHaveBeenCalled();
     });

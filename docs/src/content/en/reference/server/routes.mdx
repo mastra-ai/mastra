@@ -721,6 +721,15 @@ switch (parsed.success ? parsed.data.code : undefined) {
 | `STORAGE_DOMAIN_UNAVAILABLE` | The configured storage doesn't support this feature |
 | `OBSERVABILITY_FEATURE_NOT_IMPLEMENTED` | The observability store doesn't implement this feature |
 | `FEEDBACK_REVIEW_STATUS_CONFLICT` | The feedback changed during the review status update |
+| `TRACE_QUERY_INVALID` | The trace, span, thread, or aggregate query is invalid |
+| `TRACE_QUERY_CURSOR_MALFORMED` | The query cursor is malformed |
+| `TRACE_QUERY_CURSOR_CONFLICT` | The cursor doesn't match the query |
+| `TRACE_QUERY_UNSUPPORTED` | The observability store doesn't support trace or thread queries |
+| `TRACE_QUERY_DISCOVERY_UNSUPPORTED` | The observability store doesn't support field or value discovery |
+| `TRACE_AGGREGATE_UNSUPPORTED` | The observability store doesn't support trace aggregation |
+| `SPAN_QUERY_UNSUPPORTED` | The observability store doesn't support span queries |
+| `TRACE_QUERY_EXECUTION_TIMEOUT` | The query exceeded its execution timeout |
+| `TRACE_QUERY_RESOURCE_LIMIT` | The query exceeded a resource limit |
 | `INVALID_REQUEST_BODY` | The request body failed validation |
 | `INVALID_QUERY_PARAMS` | The query parameters failed validation |
 | `INVALID_PATH_PARAMS` | The path parameters failed validation |

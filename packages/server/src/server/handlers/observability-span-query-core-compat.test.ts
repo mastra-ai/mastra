@@ -51,6 +51,7 @@ describe('span query Core compatibility', () => {
     expect(error.status).toBe(501);
     await expect(error.getResponse().json()).resolves.toEqual({
       code: 'SPAN_QUERY_UNSUPPORTED',
+      problem: expect.objectContaining({ code: 'SPAN_QUERY_UNSUPPORTED' }),
       message: 'Span queries require a newer @mastra/core. Please upgrade.',
     });
     expect(getStorage).not.toHaveBeenCalled();
