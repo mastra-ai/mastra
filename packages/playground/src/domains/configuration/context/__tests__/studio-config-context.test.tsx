@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { StudioConfigProvider } from '../studio-config-context';
 import { useStudioConfig } from '../studio-config-state';
+import { authDisabledCapabilities } from './fixtures/capabilities';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -40,7 +41,7 @@ describe('StudioConfigProvider auth header URL handoff', () => {
     server.use(
       http.get(`${BASE_URL}/api/auth/capabilities`, ({ request }) => {
         statusRequest(request.headers.get('Authorization'));
-        return HttpResponse.text('ok');
+        return HttpResponse.json(authDisabledCapabilities);
       }),
     );
     window.history.replaceState(null, '', '/?auth_header=Bearer+external-token&keep=1');
@@ -64,7 +65,7 @@ describe('StudioConfigProvider auth header URL handoff', () => {
     server.use(
       http.get(`${BASE_URL}/api/auth/capabilities`, ({ request }) => {
         statusRequest(request.headers.get('Authorization'));
-        return HttpResponse.text('ok');
+        return HttpResponse.json(authDisabledCapabilities);
       }),
     );
     window.localStorage.setItem(
@@ -103,7 +104,7 @@ describe('StudioConfigProvider instance status probe', () => {
   it('connects when Mastra is mounted under a prefix and the host app root rejects requests', async () => {
     server.use(
       http.get(`${BASE_URL}/`, () => new HttpResponse(null, { status: 401 })),
-      http.get(`${BASE_URL}/api/mastra/auth/capabilities`, () => HttpResponse.json({ enabled: false })),
+      http.get(`${BASE_URL}/api/mastra/auth/capabilities`, () => HttpResponse.json(authDisabledCapabilities)),
     );
 
     renderProvider('/api/mastra');
@@ -121,8 +122,19 @@ describe('StudioConfigProvider instance status probe', () => {
     expect(readConfig().baseUrl).toBe('');
   });
 
+  it('shows the configuration form when the prefixed route answers with a non-capabilities page', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/mastra/auth/capabilities`, () => HttpResponse.html('<!doctype html><html></html>')),
+    );
+
+    renderProvider('/api/mastra');
+
+    await waitFor(() => expect(readConfig().isLoading).toBe(false));
+    expect(readConfig().baseUrl).toBe('');
+  });
+
   it('normalizes a trailing slash in the API prefix', async () => {
-    server.use(http.get(`${BASE_URL}/api/mastra/auth/capabilities`, () => HttpResponse.json({ enabled: false })));
+    server.use(http.get(`${BASE_URL}/api/mastra/auth/capabilities`, () => HttpResponse.json(authDisabledCapabilities)));
 
     renderProvider('/api/mastra/');
 
@@ -131,7 +143,7 @@ describe('StudioConfigProvider instance status probe', () => {
   });
 
   it('probes the capabilities route at the server root when the API prefix is empty', async () => {
-    server.use(http.get(`${BASE_URL}/auth/capabilities`, () => HttpResponse.json({ enabled: false })));
+    server.use(http.get(`${BASE_URL}/auth/capabilities`, () => HttpResponse.json(authDisabledCapabilities)));
 
     renderProvider('');
 
