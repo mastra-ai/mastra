@@ -214,15 +214,15 @@ export function mapLangfuseSourceTrace(
   if ('skipped' in ordered) return { kind: 'skipped', skipped: ordered.skipped };
 
   const unknownTypes = new Set<string>();
-  const trace: TraceImportTrace = {
-    sourceTraceId: ordered.trace.sourceTraceId,
-    spans: ordered.trace.observations.map((observation, index) => {
-      const mappedType =
-        restoredMastraSpanType(observation) ?? genAiSpanType(observation) ?? LANGFUSE_TYPE_MAP[observation.type];
-      if (mappedType === undefined) unknownTypes.add(observation.type);
-      return mapObservationToSpan(observation, ordered.trace, options.importId, mappedType ?? 'generic', index);
-    }),
-  };
+  const spans = ordered.trace.observations.map((observation, index) => {
+    const mappedType =
+      restoredMastraSpanType(observation) ?? genAiSpanType(observation) ?? LANGFUSE_TYPE_MAP[observation.type];
+    if (mappedType === undefined) unknownTypes.add(observation.type);
+    return mapObservationToSpan(observation, ordered.trace, options.importId, mappedType ?? 'generic', index);
+  });
+  promoteVirtualRootEntity(spans, ordered.trace);
+  inheritOwningEntity(spans);
+  const trace: TraceImportTrace = { sourceTraceId: ordered.trace.sourceTraceId, spans };
 
   const warnings = [...unknownTypes].sort().map(type => `Unknown Langfuse observation type: ${type}`);
   return warnings.length > 0 ? { kind: 'trace', trace, warnings } : { kind: 'trace', trace };
@@ -576,6 +576,35 @@ function buildEntity(
     ...(entityId ? { entityId } : {}),
     ...(entityName ? { entityName } : {}),
   };
+}
+
+/**
+ * Langfuse exposes a trace as a virtual root span `t-<traceId>` above the real
+ * root. Platform lists a trace by its root's primitive, so the virtual root
+ * takes the primitive of the one real root beneath it.
+ */
+function promoteVirtualRootEntity(spans: TraceImportSpan[], trace: OrderedLangfuseTrace): void {
+  const root = spans[0];
+  if (!root || root.entityType || trace.observations[0]?.id !== `t-${trace.sourceTraceId}`) return;
+  const children = spans.filter(span => span.parentSpanId === root.spanId);
+  const child = children.length === 1 ? children[0] : undefined;
+  if (!child?.entityType) return;
+  root.entityType = child.entityType;
+  if (child.entityId) root.entityId = child.entityId;
+  if (child.entityName) root.entityName = child.entityName;
+}
+
+/** Native spans carry the primitive that owns them, so spans without one take their parent's. */
+function inheritOwningEntity(spans: TraceImportSpan[]): void {
+  const byId = new Map(spans.map(span => [span.spanId, span]));
+  for (const span of spans) {
+    if (span.entityType || !span.parentSpanId) continue;
+    const parent = byId.get(span.parentSpanId);
+    if (!parent?.entityType) continue;
+    span.entityType = parent.entityType;
+    if (parent.entityId) span.entityId = parent.entityId;
+    if (parent.entityName) span.entityName = parent.entityName;
+  }
 }
 
 function buildAttributes(
