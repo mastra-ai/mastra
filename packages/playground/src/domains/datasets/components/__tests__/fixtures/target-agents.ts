@@ -5,4 +5,5 @@ import { agent } from '@/domains/experiments/components/__tests__/fixtures/targe
 export const targetAgents: Record<string, GetAgentResponse> = {
   'agent-1': agent('agent-1', 'Agent One'),
   'agent-2': agent('agent-2', 'Agent Two'),
+  'agent-unnamed': agent('agent-unnamed', ''),
 };

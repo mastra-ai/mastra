@@ -275,6 +275,20 @@ describe('ExperimentTriggerDialog', () => {
       expect(nameInput().value).toBe(`agent-two-${suffix}`);
     });
 
+    it('should name the run after the target id when the target has no display name', async () => {
+      // Given a target is picked
+      setupHandlers();
+      renderDialog();
+      await screen.findByRole('combobox', { name: 'Select a dataset...' });
+      await pickAgentTarget();
+
+      // When the picked target has an empty name
+      selectOption('Select agent', 'agent-unnamed');
+
+      // Then the name falls back to its id
+      expect(nameInput().value).toMatch(/^agent-unnamed-[0-9a-f]{4}$/);
+    });
+
     it('should keep a name the user typed when the target changes', async () => {
       // Given the user typed their own name
       setupHandlers();

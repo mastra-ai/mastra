@@ -67,7 +67,7 @@ export function TargetSelector({
 
   const handleTargetChange = (id: string) => {
     setTargetId(id);
-    onTargetNameChange?.(targetOptions.find(option => option.value === id)?.label);
+    onTargetNameChange?.(targetOptions.find(option => option.value === id)?.label || id);
   };
 
   const targetLabel = targetType === 'agent' ? 'Agent' : targetType === 'workflow' ? 'Workflow' : 'Scorer';
