@@ -1,6 +1,7 @@
 export const TRACE_OPTIONAL_COLUMNS = [
   'type',
   'input',
+  'output',
   'duration',
   'endTime',
   'environment',
@@ -119,6 +120,7 @@ export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): s
   if (visible.has('type')) keys.push('type');
   keys.push('name');
   if (visible.has('input')) keys.push('input');
+  if (visible.has('output')) keys.push('output');
   keys.push('status');
   for (const column of ['duration', 'endTime', 'environment', ...TRACE_USAGE_COLUMNS] as const) {
     if (visible.has(column)) keys.push(column);
@@ -130,13 +132,13 @@ export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): s
 
 export function buildTraceListColumns(preferences: TraceColumnPreferences): string {
   const visible = new Set(preferences.visibleColumns);
-  // Name is bounded when Input is visible so Input (1fr) absorbs the free space;
-  // without Input, Name is the flexible track that fills the grid.
+  // Preview columns absorb free space; otherwise Name fills the grid.
   const columns = ['11rem'];
 
   if (visible.has('type')) columns.push('7rem');
-  columns.push(visible.has('input') ? '14rem' : 'minmax(8rem,1fr)');
+  columns.push(visible.has('input') || visible.has('output') ? '14rem' : 'minmax(8rem,1fr)');
   if (visible.has('input')) columns.push('minmax(8rem,1fr)');
+  if (visible.has('output')) columns.push('minmax(8rem,1fr)');
 
   columns.push('6rem');
 

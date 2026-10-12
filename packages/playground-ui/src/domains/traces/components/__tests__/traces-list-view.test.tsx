@@ -62,6 +62,18 @@ function headerTexts(container: HTMLElement): (string | null)[] {
 }
 
 describe('TracesListView columns', () => {
+  it('renders stored output when selected and accepts older rows without output', () => {
+    const { container } = render(
+      <TracesListView
+        traces={[makeTrace({ traceId: 'stored', outputPreview: 'Stored answer' }), makeTrace({ traceId: 'legacy' })]}
+        columnPreferences={{ visibleColumns: ['output'], customColumns: [], metadataKeys: [] }}
+        onTraceClick={vi.fn()}
+      />,
+    );
+    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Output', 'Status']);
+    expect(screen.getByText('Stored answer')).toBeTruthy();
+    expect(screen.getByText('run legacy')).toBeTruthy();
+  });
   describe('when no column preferences are provided', () => {
     it('renders the default headers in order with the matching grid', () => {
       const { container } = render(<TracesListView traces={[]} onTraceClick={vi.fn()} />);

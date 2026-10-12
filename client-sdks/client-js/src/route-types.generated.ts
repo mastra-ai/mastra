@@ -3593,6 +3593,7 @@ type Shared_Type_64 = {
     [key: string]: unknown;
   } | null;
   inputPreview: string | null;
+  outputPreview?: (string | null) | undefined;
   threadId: string | null;
   resourceId: string | null;
   startedAt: string;

@@ -383,6 +383,8 @@ export const traceQueryTraceSchema = z
     createdAt: z.string().datetime({ offset: true }),
     metadata: z.record(z.string(), z.unknown()).nullable(),
     inputPreview: z.string().nullable(),
+    /** Stored output preview, when supplied by the storage adapter. */
+    outputPreview: z.string().nullable().optional(),
     threadId: z.string().nullable(),
     resourceId: z.string().nullable(),
     startedAt: z.string().datetime({ offset: true }),
