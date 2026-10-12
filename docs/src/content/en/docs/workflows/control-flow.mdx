@@ -562,10 +562,6 @@ export const testWorkflow = createWorkflow({})
   .commit();
 ```
 
-:::note
-On every loop iteration, the accumulated context is revalidated against the loop body's `inputSchema`. Any context key that is not declared in that schema is dropped before the next iteration — including keys produced by steps inside the body, such as the output of a nested workflow (for example, a nested `gate` step's output is not visible as `inputData.gate` on re-entry). To carry data across iterations (feedback, counters, previous results), declare those fields as top-level fields in the body's `inputSchema` and have the last step of the body re-emit them, or use [workflow state](/docs/workflows/workflow-state) instead of threading values through context.
-:::
-
 ### Looping with `.dowhile()`
 
 Use `.dowhile()` to run a step repeatedly while a condition remains true.
@@ -599,6 +595,32 @@ export const testWorkflow = createWorkflow({})
   .dowhile(step2, async ({ inputData: { number } }) => number < 10)
   .commit();
 ```
+
+### Passing data between iterations
+
+Each iteration of `.dountil()` or `.dowhile()` receives the previous iteration's output as its `inputData`. Before the loop body runs, that output is validated against the body's `inputSchema`, and any keys the schema doesn't declare are removed. This also applies when the loop body is a nested workflow. Values produced by steps inside the nested workflow, such as feedback from a step that suspended and resumed, aren't available on the next iteration unless the body's output includes them and its `inputSchema` declares them.
+
+To carry data across iterations, declare it in the body's `inputSchema` and return it from the body's last step:
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const loopSchema = z.object({
+  draft: z.string(),
+  feedback: z.string().optional(),
+  attempts: z.number(),
+})
+
+const reviewStep = createStep({
+  id: 'review',
+  inputSchema: loopSchema,
+  outputSchema: loopSchema,
+  execute: async ({ inputData }) => {
+    // ...
+    return { draft, feedback, attempts: inputData.attempts + 1 }
+  },
+})
+```
+
+For values that don't belong in the step's input, such as counters or audit data, use [workflow state](/docs/workflows/workflow-state) instead.
 
 ### Looping with `.foreach()`
 
