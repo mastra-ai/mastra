@@ -20,15 +20,28 @@ import type {
   SpanType,
   SpanIds,
   InitExporterOptions,
+  SpanLink,
 } from '@mastra/core/observability';
 import { TracingEventType } from '@mastra/core/observability';
 import { BaseExporter, getExternalParentId } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanConverter, convertLog, getSpanKind } from '@mastra/otel-exporter';
 import { trace as otelTrace, context as otelContext, isSpanContextValid, TraceFlags } from '@opentelemetry/api';
-import type { Span as OtelSpan, Context as OtelContext, TracerProvider, Tracer } from '@opentelemetry/api';
+import type { Span as OtelSpan, Context as OtelContext, Link, TracerProvider, Tracer } from '@opentelemetry/api';
 import { logs as otelLogs } from '@opentelemetry/api-logs';
 import type { Logger as OtelLogger, LoggerProvider } from '@opentelemetry/api-logs';
+
+function linkKey(link: { traceId: string; spanId: string }): string {
+  return `${link.traceId}:${link.spanId}`;
+}
+
+/** OpenTelemetry links for Mastra span links, skipping any whose IDs are not valid OpenTelemetry IDs. */
+function toOtelLinks(links: SpanLink[]): Link[] {
+  return links
+    .map(link => ({ traceId: link.traceId, spanId: link.spanId, traceFlags: TraceFlags.SAMPLED, isRemote: true }))
+    .filter(context => isSpanContextValid(context))
+    .map(context => ({ context }));
+}
 
 const SETUP_DOCS_URL = 'https://mastra.ai/reference/observability/tracing/bridges/otel#setup-requirements';
 
@@ -67,7 +80,8 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   private loggerProvider: LoggerProvider;
   private otelTracer: Tracer;
   private otelLogger: OtelLogger;
-  private otelSpanMap = new Map<string, { otelSpan: OtelSpan; otelContext: OtelContext }>();
+  /** Live OTEL spans by span ID, with the keys of the links they were started with. */
+  private otelSpanMap = new Map<string, { otelSpan: OtelSpan; otelContext: OtelContext; startLinks?: Set<string> }>();
   private spanConverter?: SpanConverter;
   private hasCustomTracerProvider: boolean;
   private warnedNoTracerProvider = false;
@@ -221,6 +235,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
         {
           kind: getSpanKind(options.type),
           ...(options.startTime ? { startTime: options.startTime } : {}),
+          ...(options.links?.length ? { links: toOtelLinks(options.links) } : {}),
         },
         parentOtelContext,
       );
@@ -255,7 +270,11 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
       const traceId = otelSpanContext.traceId;
 
       // Store for later retrieval (for executeWithSpanContext and event handling)
-      this.otelSpanMap.set(spanId, { otelSpan, otelContext: spanContext });
+      this.otelSpanMap.set(spanId, {
+        otelSpan,
+        otelContext: spanContext,
+        ...(options.links?.length ? { startLinks: new Set(options.links.map(linkKey)) } : {}),
+      });
 
       // Get parentSpanId from parent context if available
       const parentSpan = otelTrace.getSpan(parentOtelContext);
@@ -354,6 +373,13 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
 
       // Set status from the converter
       otelSpan.setStatus(readableSpan.status);
+
+      // Links set after the span started, such as an MCP tool call's link to the
+      // server span that handled it
+      const lateLinks = readableSpan.links.filter(link => !entry.startLinks?.has(linkKey(link.context)));
+      if (lateLinks.length > 0 && typeof otelSpan.addLinks === 'function') {
+        otelSpan.addLinks(lateLinks);
+      }
 
       // Add exception events if present
       for (const event of readableSpan.events) {

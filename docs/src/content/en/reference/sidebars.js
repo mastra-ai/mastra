@@ -64,7 +64,6 @@ const sidebars = {
         { type: 'doc', id: 'agents/getMetadata', label: '.getMetadata()' },
         { type: 'doc', id: 'agents/getModel', label: '.getModel()' },
         { type: 'doc', id: 'agents/getSkill', label: '.getSkill()' },
-        { type: 'doc', id: 'agents/getTools', label: '.getTools()' },
         { type: 'doc', id: 'agents/getVoice', label: '.getVoice()' },
         { type: 'doc', id: 'agents/listAgents', label: '.listAgents()' },
         { type: 'doc', id: 'agents/listScorers', label: '.listScorers()' },

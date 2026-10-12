@@ -19,6 +19,7 @@ import type { Workspace } from '../../../workspace';
 import type { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
 import type { ToolsInput } from '../../types';
+import { recordRunSavedMessages } from '../run-message-refs';
 import { globalRunRegistry } from '../run-registry';
 import type {
   RunRegistryEntry,
@@ -70,9 +71,13 @@ export interface ResolvedRuntimeDependencies {
  * is configured. Shared by `resolveRuntimeDependencies` and
  * `rebuildRunToolsFromMastra` so the construction lives in one place.
  */
-function makeSaveQueueManager(memory: MastraMemory | undefined, mastra?: Mastra): SaveQueueManager | undefined {
+function makeSaveQueueManager(
+  memory: MastraMemory | undefined,
+  runId: string,
+  mastra?: Mastra,
+): SaveQueueManager | undefined {
   if (!memory) return undefined;
-  return new SaveQueueManager({ logger: mastra?.getLogger?.(), memory });
+  return new SaveQueueManager({ logger: mastra?.getLogger?.(), memory, onSaved: recordRunSavedMessages(runId) });
 }
 
 /**
@@ -353,7 +358,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
 
   // Build this before the registry write-back. On a remote worker that
   // write-back is what makes finish-time persistence available to later steps.
-  const saveQueueManager = makeSaveQueueManager(memory, mastra);
+  const saveQueueManager = makeSaveQueueManager(memory, runId, mastra);
 
   // Write the rebuilt state back into the per-process registry so sibling
   // durable steps in THIS process (e.g. the tool-call step that runs after the
@@ -507,7 +512,7 @@ export async function rebuildRunToolsFromMastra(options: {
 
     const memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
     const workspace = await (agent as any).getWorkspace?.({ requestContext: resolveRequestContext });
-    const saveQueueManager = makeSaveQueueManager(memory, mastra);
+    const saveQueueManager = makeSaveQueueManager(memory, runId, mastra);
     let existing = globalRunRegistry.get(runId);
     const rebuiltProcessors: Partial<Awaited<ReturnType<typeof rebuildProcessorPipeline>>> =
       !options.rehydrateProcessors
