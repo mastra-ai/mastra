@@ -1,5 +1,30 @@
 # Hosted validation
 
+## Step input conversion fix, 12 October 2026 UTC
+
+The Render adapter now preserves the step input that Mastra has already checked and converted. A schema that adds one to input `1` produces `2`, matching ordinary Mastra. Previously the remote step applied the same conversion again and produced `3`. Root workflow input has the same class of bug and remains unfixed: its comparison still produces `3` instead of `2`.
+
+Tested runtime commit: [`10b6b0657e715fc84b81b1873af3b75bc592ceb5`](https://github.com/ojusave/mastra/commit/10b6b0657e715fc84b81b1873af3b75bc592ceb5), on the dedicated `render-workflows-input-fix` branch. The existing paid [integration-test Workflow](https://dashboard.render.com/workflows/wfl-daq7jmh42hec738ka3c0) ran version `wfv-db6kb1t9fdbs73fop35g`. Mastra core was pinned to `1.67.0` and the Render SDK to `1.2.0`.
+
+Paid caller job `job-db6l8lbl550s73bet8qg` succeeded at 21:44:57 UTC on plan `plan-crn-005` (1 CPU, 2 GB). It ran on temporary paid runner `crn-db6l8a8n74is73aho320` with the existing paid PostgreSQL database. Before execution, the caller fetched 28 source and dependency files from the exact runtime commit and checked every SHA-256 hash. The worker had no `RENDER_API_KEY`.
+
+| Scenario             | Native root                     | Observed result                                                         | Task runs |
+| -------------------- | ------------------------------- | ----------------------------------------------------------------------- | --------- |
+| Step input           | `trn-08l4gdb6l8s9utons73b6kkv0` | Result `2`, matching ordinary Mastra; one business effect               | 2         |
+| Invalid step input   | `trn-08l4gdb6l8uputons73b6kkvg` | Root failed as expected; no child dispatched and no business effect     | 1         |
+| Known root input bug | `trn-08l4gdb6l909utons73b6kl00` | Result `3` versus ordinary Mastra's `2`; bug reproduced                 | 2         |
+| Nested success       | `trn-08l4gdb6l93hutons73b6kl1g` | Result `5`; one root attempt                                            | 5         |
+| Child retry          | `trn-08l4gdb6l991utons73b6kl20` | Result `5`; leaf retried once, preparation ran once, root ran once      | 5         |
+| Mastra agent         | `trn-08l4gdb6l9fputons73b6kl4g` | Result `5` and nonempty response from an actual worker-local agent call | 5         |
+
+The agent used `anthropic/claude-haiku-4-5-20251001`. An independent read of Render's API verified the exact set of 20 task runs, statuses, attempts, parent/root relationships, and task definitions against the deployed Workflow version. Root results and the successful caller job were also checked independently. The known root-input mismatch is an explicit expected failure, not a passing compatibility result.
+
+Both original input reproductions failed before the fix. Local validation now passes 219 ordinary checks and one marked expected failure for root input. Build, typecheck, and the packed consumer checks pass. Real local Render worker processes with isolated PostgreSQL also verified the corrected step result, invalid input rejection before dispatch, and the remaining root-input mismatch. All owned local worker and database processes were stopped.
+
+The temporary paid runner was deleted after verification: deletion returned HTTP 204, and a follow-up read returned HTTP 404 at 21:46:33 UTC. The existing paid Workflow and database remain for integration testing. The original test web service's credential was restored, and its deployment was unchanged. No credentials were placed in source or committed evidence.
+
+Machine-readable evidence, including source hashes, run identities, independent checks, and cleanup, is in the `stepInputValidation20261012` entry of [hosted-results.json](./hosted-results.json). These results validate this step-input correction and the listed execution scenarios. The separate root-input bug and the earlier release, compatibility, and recovery limitations still apply.
+
 ## PR review fixes and submission fault tests, 30 September 2026 UTC
 
 Runtime/test commit: `579edd318290e9f002c73da67919532a8ba42022`. Existing paid test Workflow `wfl-daq7jmh42hec738ka3c0` ran version `wfv-dau8sf7avr4c7386ecc0`; paid caller job `job-dau8tefavr4c7386ilu0` succeeded at 04:28:19 UTC. Caller sources were fetched from that exact commit and checked against SHA-256 hashes. The worker still has no Render API key or local-mode flags. Draftroom's live builds were unchanged.

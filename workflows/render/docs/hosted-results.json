@@ -123,12 +123,8 @@
     "passed": true,
     "runId": "f7dd6599-3926-4c1a-ba03-48b6acc2b447",
     "rootTaskRunId": "trn-08l4gdaq7uap7lnhs73c0stdg",
-    "instancesBefore": [
-      "srv-daq7jrh7lnhs73bvkco0-n78x8"
-    ],
-    "instancesAfter": [
-      "srv-daq7jrh7lnhs73bvkco0-mzvxd"
-    ],
+    "instancesBefore": ["srv-daq7jrh7lnhs73bvkco0-n78x8"],
+    "instancesAfter": ["srv-daq7jrh7lnhs73bvkco0-mzvxd"],
     "status": "success",
     "event": {
       "id": "trn-08l4gdaq7uap7lnhs73c0stdg",
@@ -222,5 +218,491 @@
       "applicationStatus": "failed"
     },
     "scope": "Real Mastra structured generation in three parallel review steps and a final editor; no agent tools, memory or streaming."
+  },
+  "stepInputValidation20261012": {
+    "commit": "10b6b0657e715fc84b81b1873af3b75bc592ceb5",
+    "schema": [
+      {
+        "scenario": "step-input",
+        "knownFailure": false,
+        "matchesMastra": true,
+        "expectedValue": 2,
+        "actualValue": 2,
+        "status": "success",
+        "runId": "45d66289-5a78-4e32-9ddb-7d4c7e20c207",
+        "rootId": "trn-08l4gdb6l8s9utons73b6kkv0",
+        "tasks": [
+          {
+            "id": "trn-08l4gdb6l8tfh6rpg00fkb680",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh60",
+            "parentTaskRunId": "trn-08l4gdb6l8s9utons73b6kkv0",
+            "rootTaskRunId": "trn-08l4gdb6l8s9utons73b6kkv0",
+            "attempts": 1
+          },
+          {
+            "id": "trn-08l4gdb6l8s9utons73b6kkv0",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh6g",
+            "parentTaskRunId": "",
+            "rootTaskRunId": "trn-08l4gdb6l8s9utons73b6kkv0",
+            "attempts": 1
+          }
+        ],
+        "effects": [
+          {
+            "details": {
+              "pid": 33,
+              "value": 2,
+              "native": {
+                "taskRunId": "trn-08l4gdb6l8tfh6rpg00fkb680",
+                "rootTaskRunId": "trn-08l4gdb6l8s9utons73b6kkv0",
+                "parentTaskRunId": "trn-08l4gdb6l8s9utons73b6kkv0"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "scenario": "invalid-step-input",
+        "knownFailure": false,
+        "matchesMastra": true,
+        "status": "failed",
+        "runId": "ff4ea105-a954-48d0-b8af-d657e078326d",
+        "rootId": "trn-08l4gdb6l8uputons73b6kkvg",
+        "tasks": [
+          {
+            "id": "trn-08l4gdb6l8uputons73b6kkvg",
+            "status": "failed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh8g",
+            "parentTaskRunId": "",
+            "rootTaskRunId": "trn-08l4gdb6l8uputons73b6kkvg",
+            "attempts": 1
+          }
+        ],
+        "effects": []
+      },
+      {
+        "scenario": "known-root-input-bug",
+        "knownFailure": true,
+        "matchesMastra": false,
+        "expectedValue": 2,
+        "actualValue": 3,
+        "status": "success",
+        "runId": "3607af3f-f710-4712-91e2-5ac223904665",
+        "rootId": "trn-08l4gdb6l909utons73b6kl00",
+        "tasks": [
+          {
+            "id": "trn-08l4gdb6l918m3shc73dvtekg",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh70",
+            "parentTaskRunId": "trn-08l4gdb6l909utons73b6kl00",
+            "rootTaskRunId": "trn-08l4gdb6l909utons73b6kl00",
+            "attempts": 1
+          },
+          {
+            "id": "trn-08l4gdb6l909utons73b6kl00",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh7g",
+            "parentTaskRunId": "",
+            "rootTaskRunId": "trn-08l4gdb6l909utons73b6kl00",
+            "attempts": 1
+          }
+        ],
+        "effects": [
+          {
+            "details": {
+              "pid": 33,
+              "value": 3,
+              "native": {
+                "taskRunId": "trn-08l4gdb6l918m3shc73dvtekg",
+                "rootTaskRunId": "trn-08l4gdb6l909utons73b6kl00",
+                "parentTaskRunId": "trn-08l4gdb6l909utons73b6kl00"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "native": [
+      {
+        "mode": "success",
+        "passed": true,
+        "runId": "b39332dc-ca42-433e-9702-b4ba80d7c312",
+        "rootId": "trn-08l4gdb6l93hutons73b6kl1g",
+        "status": "success",
+        "rootAttempts": 1,
+        "tasks": [
+          {
+            "id": "trn-08l4gdb6l97gm3shc73dvtem0",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh2g",
+            "parentTaskRunId": "trn-08l4gdb6l93hutons73b6kl1g",
+            "rootTaskRunId": "trn-08l4gdb6l93hutons73b6kl1g",
+            "attempts": 1
+          },
+          {
+            "id": "trn-08l4gdb6l96gm3shc73dvtelg",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh3g",
+            "parentTaskRunId": "trn-08l4gdb6l95nh6rpg00fkb68g",
+            "rootTaskRunId": "trn-08l4gdb6l93hutons73b6kl1g",
+            "attempts": 1
+          },
+          {
+            "id": "trn-08l4gdb6l95nh6rpg00fkb68g",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh40",
+            "parentTaskRunId": "trn-08l4gdb6l93hutons73b6kl1g",
+            "rootTaskRunId": "trn-08l4gdb6l93hutons73b6kl1g",
+            "attempts": 1
+          },
+          {
+            "id": "trn-08l4gdb6l94gm3shc73dvtel0",
+            "status": "completed",
+            "taskId": "tsk-db6kbrk8cs4c73eaeh20",
+            "parentTaskRunId": "trn-08l4gdb6l93hutons73b6kl1g",
+            "rootTaskRunId": "trn-08l4gdb6l93hutons73b6kl1g",
+            "attempts": 1
+          },
+          {
+            "id": "trn-08l4gdb6l93hutons73b6kl1g",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh30",
+            "parentTaskRunId": "",
+            "rootTaskRunId": "trn-08l4gdb6l93hutons73b6kl1g",
+            "attempts": 1
+          }
+        ]
+      },
+      {
+        "mode": "child-retry",
+        "passed": true,
+        "runId": "ffdc4550-decc-4b2f-b8c5-c8c1b433e059",
+        "rootId": "trn-08l4gdb6l991utons73b6kl20",
+        "status": "success",
+        "rootAttempts": 1,
+        "tasks": [
+          {
+            "id": "trn-08l4gdb6l9efntkc000c1cl2g",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh2g",
+            "parentTaskRunId": "trn-08l4gdb6l991utons73b6kl20",
+            "rootTaskRunId": "trn-08l4gdb6l991utons73b6kl20",
+            "attempts": 1
+          },
+          {
+            "id": "trn-08l4gdb6l9c0m3shc73dvteng",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh3g",
+            "parentTaskRunId": "trn-08l4gdb6l9b1kjpkg009332vg",
+            "rootTaskRunId": "trn-08l4gdb6l991utons73b6kl20",
+            "attempts": 2
+          },
+          {
+            "id": "trn-08l4gdb6l9b1kjpkg009332vg",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh40",
+            "parentTaskRunId": "trn-08l4gdb6l991utons73b6kl20",
+            "rootTaskRunId": "trn-08l4gdb6l991utons73b6kl20",
+            "attempts": 1
+          },
+          {
+            "id": "trn-08l4gdb6l9a1kjpkg009332v0",
+            "status": "completed",
+            "taskId": "tsk-db6kbrk8cs4c73eaeh20",
+            "parentTaskRunId": "trn-08l4gdb6l991utons73b6kl20",
+            "rootTaskRunId": "trn-08l4gdb6l991utons73b6kl20",
+            "attempts": 1
+          },
+          {
+            "id": "trn-08l4gdb6l991utons73b6kl20",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh30",
+            "parentTaskRunId": "",
+            "rootTaskRunId": "trn-08l4gdb6l991utons73b6kl20",
+            "attempts": 1
+          }
+        ]
+      },
+      {
+        "mode": "agent",
+        "passed": true,
+        "runId": "74cf2127-4933-4680-b2cc-82e4a8e20af0",
+        "rootId": "trn-08l4gdb6l9fputons73b6kl4g",
+        "status": "success",
+        "rootAttempts": 1,
+        "tasks": [
+          {
+            "id": "trn-08l4gdb6l9k1kjpkg00933350",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh2g",
+            "parentTaskRunId": "trn-08l4gdb6l9fputons73b6kl4g",
+            "rootTaskRunId": "trn-08l4gdb6l9fputons73b6kl4g",
+            "attempts": 1
+          },
+          {
+            "id": "trn-08l4gdb6l9ipkjpkg0093331g",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh3g",
+            "parentTaskRunId": "trn-08l4gdb6l9hpkjpkg00933310",
+            "rootTaskRunId": "trn-08l4gdb6l9fputons73b6kl4g",
+            "attempts": 1
+          },
+          {
+            "id": "trn-08l4gdb6l9hpkjpkg00933310",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh40",
+            "parentTaskRunId": "trn-08l4gdb6l9fputons73b6kl4g",
+            "rootTaskRunId": "trn-08l4gdb6l9fputons73b6kl4g",
+            "attempts": 1
+          },
+          {
+            "id": "trn-08l4gdb6l9gpkjpkg0093330g",
+            "status": "completed",
+            "taskId": "tsk-db6kbrk8cs4c73eaeh20",
+            "parentTaskRunId": "trn-08l4gdb6l9fputons73b6kl4g",
+            "rootTaskRunId": "trn-08l4gdb6l9fputons73b6kl4g",
+            "attempts": 1
+          },
+          {
+            "id": "trn-08l4gdb6l9fputons73b6kl4g",
+            "status": "completed",
+            "taskId": "tsk-db6kbrs8cs4c73eaeh30",
+            "parentTaskRunId": "",
+            "rootTaskRunId": "trn-08l4gdb6l9fputons73b6kl4g",
+            "attempts": 1
+          }
+        ],
+        "model": "anthropic/claude-haiku-4-5-20251001",
+        "agentText": "Retries need idempotent side effects because the same operation may execute multiple times, so it must produce the same result whether it runs once or repeatedly without causing duplicates or inconsistencies."
+      }
+    ],
+    "validatedAt": "2026-10-12T21:46:04.403280+00:00",
+    "workflowId": "wfl-daq7jmh42hec738ka3c0",
+    "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g",
+    "job": {
+      "id": "job-db6l8lbl550s73bet8qg",
+      "serviceId": "crn-db6l8a8n74is73aho320",
+      "status": "succeeded",
+      "planId": "plan-crn-005",
+      "createdAt": "2026-10-12T21:42:45.401788Z",
+      "startedAt": "2026-10-12T21:42:45Z",
+      "finishedAt": "2026-10-12T21:44:57Z"
+    },
+    "independentVerification": {
+      "taskRuns": 20,
+      "scenarios": [
+        {
+          "scenario": "step-input",
+          "rootId": "trn-08l4gdb6l8s9utons73b6kkv0",
+          "taskRuns": 2,
+          "status": "completed",
+          "resultValue": 2,
+          "verified": true
+        },
+        {
+          "scenario": "invalid-step-input",
+          "rootId": "trn-08l4gdb6l8uputons73b6kkvg",
+          "taskRuns": 1,
+          "status": "failed",
+          "resultValue": null,
+          "verified": true
+        },
+        {
+          "scenario": "known-root-input-bug",
+          "rootId": "trn-08l4gdb6l909utons73b6kl00",
+          "taskRuns": 2,
+          "status": "completed",
+          "resultValue": 3,
+          "verified": true
+        },
+        {
+          "scenario": "success",
+          "rootId": "trn-08l4gdb6l93hutons73b6kl1g",
+          "taskRuns": 5,
+          "status": "completed",
+          "resultValue": 5,
+          "verified": true
+        },
+        {
+          "scenario": "child-retry",
+          "rootId": "trn-08l4gdb6l991utons73b6kl20",
+          "taskRuns": 5,
+          "status": "completed",
+          "resultValue": 5,
+          "verified": true
+        },
+        {
+          "scenario": "agent",
+          "rootId": "trn-08l4gdb6l9fputons73b6kl4g",
+          "taskRuns": 5,
+          "status": "completed",
+          "resultValue": 5,
+          "verified": true
+        }
+      ],
+      "taskDefinitions": [
+        {
+          "createdAt": "2026-10-12T20:41:18.879094Z",
+          "id": "tsk-db6kbrk8cs4c73eaeh1g",
+          "name": "native-submission-proof",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:18.950612Z",
+          "id": "tsk-db6kbrk8cs4c73eaeh20",
+          "name": "mastra-native-proof-prepare-1c2af40d53bab23e",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:19.021702Z",
+          "id": "tsk-db6kbrs8cs4c73eaeh2g",
+          "name": "mastra-native-proof-finish-69fb175547749506",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:19.093225Z",
+          "id": "tsk-db6kbrs8cs4c73eaeh30",
+          "name": "mastra-native-proof-root-3706578949ec8e63",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:19.165239Z",
+          "id": "tsk-db6kbrs8cs4c73eaeh3g",
+          "name": "mastra-native-proof-child-leaf-d9737e2ed7e58e55",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:19.236843Z",
+          "id": "tsk-db6kbrs8cs4c73eaeh40",
+          "name": "mastra-native-proof-child-root-a812f3e1a5187cb0",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:19.30813Z",
+          "id": "tsk-db6kbrs8cs4c73eaeh4g",
+          "name": "mastra-native-proof-restart-prepare-e2f52be7b5211e76",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:19.379263Z",
+          "id": "tsk-db6kbrs8cs4c73eaeh50",
+          "name": "mastra-native-proof-restart-finish-c6f38d66534a565d",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:19.450252Z",
+          "id": "tsk-db6kbrs8cs4c73eaeh5g",
+          "name": "mastra-native-proof-restart-root-6dc8b011c634cc04",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:19.521287Z",
+          "id": "tsk-db6kbrs8cs4c73eaeh60",
+          "name": "mastra-step-schema-proof-schema-echo-08799c73a26938e3",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:19.592055Z",
+          "id": "tsk-db6kbrs8cs4c73eaeh6g",
+          "name": "mastra-step-schema-proof-root-07476bbee583c6fb",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:19.663253Z",
+          "id": "tsk-db6kbrs8cs4c73eaeh70",
+          "name": "mastra-root-schema-proof-schema-echo-12f508a50f462f25",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:19.736536Z",
+          "id": "tsk-db6kbrs8cs4c73eaeh7g",
+          "name": "mastra-root-schema-proof-root-4db0d483dcfb3e63",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:19.808147Z",
+          "id": "tsk-db6kbrs8cs4c73eaeh80",
+          "name": "mastra-invalid-schema-proof-schema-echo-731101fc63c84fec",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        },
+        {
+          "createdAt": "2026-10-12T20:41:19.879492Z",
+          "id": "tsk-db6kbrs8cs4c73eaeh8g",
+          "name": "mastra-invalid-schema-proof-root-7a09bf2c44868b39",
+          "workflowId": "wfl-daq7jmh42hec738ka3c0",
+          "workflowVersionId": "wfv-db6kb1t9fdbs73fop35g"
+        }
+      ]
+    },
+    "temporaryRunnerCleanup": {
+      "id": "crn-db6l8a8n74is73aho320",
+      "name": "mastra-schema-validation-10b6b06",
+      "plan": "1c-2g",
+      "deployId": "",
+      "temporary": true,
+      "removed": true,
+      "deleteStatus": 204,
+      "absenceVerified": true,
+      "removedAt": "2026-10-12T21:46:33.825526+00:00"
+    },
+    "sourceVerification": {
+      "algorithm": "SHA-256",
+      "commit": "10b6b0657e715fc84b81b1873af3b75bc592ceb5",
+      "files": {
+        "package-lock.json": "0facfd5ad997fcd31145080a48b931433dada21d9a383bad5cb0f053e2020e2a",
+        "package.json": "f71c3e1fcf48f3528696780ddcab96fab70181d0929d39ee16e8516b6b13c22b",
+        "scripts/native-cancellation.ts": "dd7759a4b5f9c95fec72d1aa557f4747fbcd1138eedcac2fda08a490fa960608",
+        "scripts/native-fixture.ts": "ed7a9a19b3fdded180890dc7f2868fe6e7bd950f755cbb52afad5fc4638af26b",
+        "scripts/native-smoke.ts": "69e84ce3d8ad67e53d7e398177f4d06ce9829fabbf678902cdf8cec3e01e8af3",
+        "scripts/schema-smoke.ts": "66c511d9628d9af1dd8ac3af46d857f8115801411d51298af8bccb2acdb1cd4e",
+        "src/authorization.ts": "d2ee10ac7466f2d5e771769d70efaecabc5103a1736255e6e82bc4e64cae5c0f",
+        "src/bindings.ts": "ee05dec78c74bf90ea14da82ffebaaff3ccd7d30edbf31473f551a07470acdf7",
+        "src/context.ts": "4e01a630dd5986d641f8f8f2dc10ef2932d894c7eac9db2d0c83c1df3ded8899",
+        "src/coordinator.ts": "01aa253eae3d80e743aced8d779f6c818c06ae449563d0f61277380cd89c597e",
+        "src/errors.ts": "23549a2e3b5480c44c787390bf1462d59da96968ae24d72f0ce29cf8a5608564",
+        "src/execution-engine.ts": "d08c9d1847c9467e88b816d787f0666e4b03da384dc9e350efe5ef5da82d046c",
+        "src/index.ts": "0b7b478503868217e159c8ddac9acd418ad40521cd92bdcf54fe5a36e59261b4",
+        "src/manifest.ts": "28582c60e126cbbdc1d622db5b0cb8a1d25d807f266eae67f004a5cbefdf1338",
+        "src/native.ts": "18a70554c4e0105d98ac297c0b824401872ff0b01641b4282731a1bee5cae23f",
+        "src/nested.ts": "20e215951542c94ccda57577a92751aadcc1035c79dc4603860db704741af7c4",
+        "src/persistence/memory.ts": "b3fa43f5a8410759562535d2f49e4b223e5b5ccce3b80ce481263d1c5149f45b",
+        "src/persistence/postgres.ts": "267d59f816813973a754f2d28cc30f25b2ef3ecf7555c3e5da6a137c0185fa7b",
+        "src/persistence/types.ts": "51156425db349a9daad16f0716c7a647aa6b735f01a38b5ad5aebc4f5c53f3ef",
+        "src/policy.ts": "93a38720629a13d58d3af2089d0987263055b2118f7d5e324a9c85c62306dfd6",
+        "src/protocol.ts": "71cb96c716c0d6ec4b3ab5c4e0996bd03205d79eda11636d5247602dd26ae0d4",
+        "src/provider.ts": "5efa8766f3c43c4130e6480409d777d17f1d90a7b473867acac7b5f44826684a",
+        "src/run.ts": "18ae683bd09cdfe11b1658259a22842b19a318e4fa7cfc034619549bfc6e4d6b",
+        "src/runtime-internal.ts": "6f85d0c75a0be7cc7d17a815af8b0c61c4320a9480ea65fc1e1d5c9c1dac71f0",
+        "src/runtime.ts": "177b3a10e64dd224a005ddcdf6480c4a058928e3d377b1db89b93206686a90e0",
+        "src/transport.ts": "41265593997bd5db06a67b992643d665a55c05bba950ff6b09781eb93845e07c",
+        "src/worker.ts": "d1788cde5ac3ca50be95139f2a757f57295d05e9f1056c650cde1b8c4f6a8fe6",
+        "src/workflow.ts": "1023e824395099862e33cc6055900894494bcd0f47ef2d3dff96003ece68679a"
+      }
+    },
+    "localVerification": {
+      "ordinaryChecksPassed": 219,
+      "expectedRootInputFailures": 1,
+      "build": "passed",
+      "typecheck": "passed",
+      "packagedConsumer": "passed",
+      "realWorkerAndPostgres": "passed",
+      "ownedProcessesStopped": true
+    }
   }
 }
