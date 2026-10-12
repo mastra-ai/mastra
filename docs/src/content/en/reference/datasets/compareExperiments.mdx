@@ -19,7 +19,7 @@ import { Mastra } from '@mastra/core'
 const mastra = new Mastra({/* storage config */})
 
 const comparison = await mastra.datasets.compareExperiments({
-  experimentIds: ['exp-baseline', 'exp-prompt-v2', 'exp-new-model'],
+  experimentIds: ['exp-baseline', 'exp-new'],
   baselineId: 'exp-baseline',
 })
 
@@ -30,13 +30,11 @@ for (const item of comparison.items) {
   console.log(`  Input: ${JSON.stringify(item.input)}`)
 
   for (const [expId, result] of Object.entries(item.results)) {
-    if (!result) {
-      console.log(`  ${expId}: did not run this item`)
-      continue
+    if (result) {
+      console.log(
+        `  ${expId}: output=${JSON.stringify(result.output)}, scores=${JSON.stringify(result.scores)}`,
+      )
     }
-    console.log(
-      `  ${expId}: output=${JSON.stringify(result.output)}, scores=${JSON.stringify(result.scores)}`,
-    )
   }
 }
 ```
@@ -48,21 +46,20 @@ for (const item of comparison.items) {
   {
     name: 'experimentIds',
     type: 'string[]',
-    description: 'Array of experiment IDs to compare. Duplicate IDs are ignored. Must contain at least 2 distinct IDs.',
+    description: 'Array of experiment IDs to compare. Must contain at least 2.',
   },
   {
     name: 'baselineId',
     type: 'string',
     isOptional: true,
-    description:
-      'ID of the baseline experiment. Must be one of `experimentIds`. Defaults to the first ID in `experimentIds`.',
+    description: 'ID of the baseline experiment. Defaults to the first ID in `experimentIds`.',
   },
 ]}
 />
 
 ## Returns
 
-Throws `MastraError` if fewer than 2 distinct experiment IDs are provided, or if `baselineId` isn't one of `experimentIds`.
+Throws `MastraError` if fewer than 2 experiment IDs are provided.
 
 <PropertiesTable
   content={[
@@ -106,7 +103,7 @@ Throws `MastraError` if fewer than 2 distinct experiment IDs are provided, or if
                     name: 'results',
                     type: 'Record<string, { output: unknown; scores: Record<string, number | null> } | null>',
                     description:
-                      'Results keyed by experiment ID, with an entry for every experiment in `experimentIds`. Each entry contains the output and scorer results for that experiment, or `null` when that experiment did not run the item.',
+                      'Results keyed by experiment ID. Each entry contains the output and scorer results for that experiment.',
                   },
                 ],
               },
