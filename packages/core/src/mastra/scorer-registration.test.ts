@@ -213,6 +213,19 @@ describe('Scorer Registration', () => {
     expect(allScorers?.['agent-level-scorer']).toBeDefined();
   });
 
+  it('should prefer an exact id match over a name match in getScorerById', () => {
+    const nameCollision = createScorer({ id: 'other-scorer', name: 'target-scorer', description: 'collides by name' });
+    const exact = createTestScorer('target-scorer');
+
+    const mastra = new Mastra({
+      logger: false,
+      scorers: { nameCollision, exact },
+    });
+
+    expect(mastra.getScorerById('target-scorer')).toBe(exact);
+    expect(mastra.getScorerById('target-scorer-name')).toBe(exact);
+  });
+
   it('should register static workflow step scorers before addWorkflow returns', () => {
     const workflowScorer = createTestScorer('workflow-step-scorer');
     const step = createStep({
