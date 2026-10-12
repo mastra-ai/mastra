@@ -1,6 +1,6 @@
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import userEvent from '@testing-library/user-event';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -149,5 +149,19 @@ describe('Tracker connection recovery', () => {
     await user.click(await screen.findByRole('button', { name: 'Retry Linear' }));
     expect(await screen.findByRole('button', { name: 'Connect Linear' })).toBeInTheDocument();
     expect(calls).toBe(2);
+  });
+
+  it('offers Reconnect instead of Retry when Linear authorization expired', async () => {
+    const onConnect = vi.fn();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ error: 'auth_required' }, { status: 401 }),
+      ),
+    );
+    renderWithProviders(<ProjectManagementFactoryStep onConnect={onConnect} onContinue={() => {}} />);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole('button', { name: 'Reconnect Linear' }));
+    expect(onConnect).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: 'Retry Linear' })).not.toBeInTheDocument();
   });
 });

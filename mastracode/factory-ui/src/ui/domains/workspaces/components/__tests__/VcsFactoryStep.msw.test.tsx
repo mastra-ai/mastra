@@ -90,6 +90,59 @@ describe('VCS Factory step', () => {
     expect(queries).toEqual(['jal']);
   });
 
+  it('offers Retry when the repository list fails to load', async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () => {
+        calls += 1;
+        if (calls === 1) return HttpResponse.json({ error: 'Temporary outage' }, { status: 503 });
+        return HttpResponse.json({ repos: [repo] });
+      }),
+    );
+    renderWithProviders(
+      <VcsFactoryStep
+        githubRedirecting={false}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />,
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('503');
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('radio', { name: 'octo/hello' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(calls).toBe(2);
+  });
+
+  it('offers Retry when GitLab status cannot be loaded', async () => {
+    let calls = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () => {
+        calls += 1;
+        if (calls === 1) return HttpResponse.json({ error: 'Temporary outage' }, { status: 503 });
+        return HttpResponse.json({ enabled: true, configured: false, reauthRequired: false, reason: 'not_connected' });
+      }),
+    );
+    renderWithProviders(
+      <VcsFactoryStep
+        githubRedirecting={false}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change provider' }));
+    expect(await screen.findByText("Couldn't load GitLab status.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Retry GitLab' }));
+    expect(await screen.findByRole('button', { name: /Connect GitLab/ })).toBeEnabled();
+    expect(screen.getByText('Projects, branches, and merge requests.')).toBeInTheDocument();
+    expect(calls).toBe(2);
+  });
+
   it('opens connected repositories directly and lets the user switch providers', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),

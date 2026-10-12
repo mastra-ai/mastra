@@ -7,11 +7,9 @@ import {
   ONBOARDING_STEP_KEY,
   ONBOARDING_UPDATED_AT_KEY,
   persistOnboardingFactory,
-  persistOnboardingLinkedRepositories,
   persistOnboardingStep,
   readOnboardingStep,
   readOnboardingLinkedRepositories,
-  clearOnboardingFlow,
 } from '../onboardingFlow';
 
 class MemoryStorage implements Storage {
@@ -48,13 +46,17 @@ beforeEach(() => {
 });
 
 describe('Factory onboarding flow', () => {
-  it('retains repository links from older pending onboarding flows', () => {
+  it('ignores a corrupt repository link marker', () => {
     sessionStorage.setItem(ONBOARDING_LINKED_REPOSITORY_KEY, 'link-original');
-    expect(readOnboardingLinkedRepositories()).toEqual(['link-original']);
-    persistOnboardingLinkedRepositories([...readOnboardingLinkedRepositories(), 'link-replacement']);
-    expect(readOnboardingLinkedRepositories()).toEqual(['link-original', 'link-replacement']);
-    clearOnboardingFlow();
     expect(readOnboardingLinkedRepositories()).toEqual([]);
+  });
+
+  it('keeps the flow going when session storage refuses writes', () => {
+    vi.spyOn(sessionStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota exceeded', 'QuotaExceededError');
+    });
+    expect(() => persistOnboardingStep('vcs')).not.toThrow();
+    expect(readOnboardingStep()).toBe('initial');
   });
 
   it('round-trips the personal provider step', () => {

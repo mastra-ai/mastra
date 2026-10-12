@@ -22,16 +22,18 @@ import { OnboardingConnectionRow } from './onboarding/OnboardingConnectionRow';
 
 type SourceControlView = 'github' | 'gitlab' | 'providers';
 
-type GitLabUnavailableReason = 'missing_config' | 'organization_required';
+type GitLabUnavailableReason = 'missing_config' | 'organization_required' | 'unavailable';
 
 const HOST_NAMES = { github: 'GitHub', gitlab: 'GitLab' } as const;
 
 const GITLAB_UNAVAILABLE_DESCRIPTIONS: Record<GitLabUnavailableReason, string> = {
   missing_config: 'Unavailable for this deployment.',
   organization_required: 'Join an organization to connect GitLab.',
+  unavailable: "Couldn't load GitLab status.",
 };
 
 function gitLabUnavailableReason(status?: { enabled: boolean; reason?: string }): GitLabUnavailableReason | undefined {
+  if (status?.reason === 'unavailable') return 'unavailable';
   if (!status?.enabled) return 'missing_config';
   if (status.reason === 'organization_required') return 'organization_required';
   return undefined;
@@ -122,9 +124,9 @@ export function VcsFactoryStep({
           onGitlabConnected={() => {
             setProviderChoice('gitlab');
             void gitlabStatus.refetch();
-            void gitlabProjects.refetch();
           }}
           onChooseGitlab={() => setProviderChoice('gitlab')}
+          onRetryGitlab={() => void gitlabStatus.refetch()}
         />
       )}
       {!statusPending && selectedProvider !== 'providers' && (
@@ -157,7 +159,9 @@ export function VcsFactoryStep({
               onPreviewRepository?.(undefined);
             }}
           />
-          {repositoryQuery.isError && <RepositoryError message={repositoryQuery.error.message} />}
+          {repositoryQuery.isError && (
+            <RepositoryError message={repositoryQuery.error.message} onRetry={() => void repositoryQuery.refetch()} />
+          )}
           <div
             onMouseLeave={() => onPreviewRepository?.(repositoryForProvider)}
             onBlur={event => {
@@ -212,6 +216,7 @@ function ProviderChoice({
   onChooseGithub,
   onChooseGitlab,
   onGitlabConnected,
+  onRetryGitlab,
 }: {
   githubConnected: boolean;
   githubRedirecting: boolean;
@@ -221,6 +226,7 @@ function ProviderChoice({
   onChooseGithub: () => void;
   onChooseGitlab: () => void;
   onGitlabConnected: () => void;
+  onRetryGitlab: () => void;
 }) {
   return (
     <div className="space-y-1">
@@ -249,10 +255,11 @@ function ProviderChoice({
         connected={gitlabConnected}
         action={
           <GitLabAction
-            unavailable={gitlabUnavailableReason !== undefined}
+            unavailableReason={gitlabUnavailableReason}
             connected={gitlabConnected}
             onChoose={onChooseGitlab}
             onConnected={onGitlabConnected}
+            onRetry={onRetryGitlab}
           />
         }
       />
@@ -261,17 +268,26 @@ function ProviderChoice({
 }
 
 function GitLabAction({
-  unavailable,
+  unavailableReason,
   connected,
   onChoose,
   onConnected,
+  onRetry,
 }: {
-  unavailable: boolean;
+  unavailableReason?: GitLabUnavailableReason;
   connected: boolean;
   onChoose: () => void;
   onConnected: () => void;
+  onRetry: () => void;
 }) {
-  if (unavailable) {
+  if (unavailableReason === 'unavailable') {
+    return (
+      <Button variant="ghost" aria-label="Retry GitLab" onClick={onRetry}>
+        Retry
+      </Button>
+    );
+  }
+  if (unavailableReason) {
     return (
       <Button variant="default" disabled>
         Connect GitLab
@@ -304,11 +320,16 @@ function ProviderHeading({ children }: { children: string }) {
   );
 }
 
-function RepositoryError({ message }: { message: string }) {
+function RepositoryError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <Txt variant="caption" role="alert" className="text-destructive-foreground m-0">
-      {message}
-    </Txt>
+    <div className="flex items-center justify-between gap-3">
+      <Txt variant="caption" role="alert" className="text-destructive-foreground m-0">
+        {message}
+      </Txt>
+      <Button variant="ghost" size="sm" onClick={onRetry}>
+        Retry
+      </Button>
+    </div>
   );
 }
 

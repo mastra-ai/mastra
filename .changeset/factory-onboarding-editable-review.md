@@ -13,6 +13,8 @@ Redesigned Factory onboarding around an editable draft and a final review. Repos
 **Codebase and work**
 
 - Selecting a repository no longer moves you on by itself; **Continue** does.
-- Jira and incident.io offer **Reconnect** when a connection needs to be authorized again.
+- Repository lists and GitLab status offer **Retry** when they fail to load, instead of reporting GitLab as unavailable.
+- Jira, incident.io, and Linear offer **Reconnect** when a connection needs to be authorized again.
+- **Create factory** starts a fresh Factory when the pending one is no longer accessible.
 
 A contextual illustration follows each step with smooth transitions and continuous work previews. The artwork and animation are implemented in the app, pause when offscreen, and respect reduced-motion settings.

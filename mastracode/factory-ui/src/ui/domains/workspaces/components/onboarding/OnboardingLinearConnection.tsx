@@ -36,6 +36,20 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
         description="Join an organization to connect Linear."
       />
     );
+  if (status?.reason === 'auth_required')
+    return (
+      <OnboardingConnectionRow
+        compact
+        icon={<LinearIcon />}
+        name="Linear"
+        description="Authorization expired. Reconnect Linear to continue."
+        action={
+          <Button size="sm" aria-label="Reconnect Linear" onClick={onConnect}>
+            Reconnect
+          </Button>
+        }
+      />
+    );
   if (status?.reason === 'not_connected')
     return (
       <OnboardingConnectionRow

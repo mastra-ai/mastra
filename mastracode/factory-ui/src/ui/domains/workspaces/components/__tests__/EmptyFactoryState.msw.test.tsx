@@ -265,6 +265,23 @@ describe('Draft Factory onboarding', () => {
     },
   );
 
+  it('creates a new Factory when the pending one is no longer accessible', async () => {
+    const writes = registerSetup();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-gone`, () =>
+        HttpResponse.json({ error: 'forbidden' }, { status: 403 }),
+      ),
+    );
+    persistOnboardingDraft({ repository: repo, model });
+    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+    sessionStorage.setItem(ONBOARDING_FACTORY_KEY, 'fp-gone');
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
+  });
+
   it.each(['intake', 'model'] as const)(
     'replaces only its own repository link when the codebase changes after a failed %s save',
     async failure => {

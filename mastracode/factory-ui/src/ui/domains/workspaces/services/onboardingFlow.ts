@@ -79,21 +79,29 @@ export function readOnboardingDraft(): OnboardingDraft {
   }
 }
 
+function writeOnboardingMarker(key: string, value: string): void {
+  try {
+    sessionStorage.setItem(key, value);
+  } catch {
+    // Storage quota or a private window must never block the wizard; markers only aid resume.
+  }
+}
+
 export function persistOnboardingDraft(draft: OnboardingDraft): void {
-  sessionStorage.setItem(ONBOARDING_DRAFT_KEY, JSON.stringify(draftSchema.parse(draft)));
-  sessionStorage.setItem(ONBOARDING_UPDATED_AT_KEY, String(Date.now()));
+  writeOnboardingMarker(ONBOARDING_DRAFT_KEY, JSON.stringify(draftSchema.parse(draft)));
+  writeOnboardingMarker(ONBOARDING_UPDATED_AT_KEY, String(Date.now()));
 }
 
 /** Persist the current step and refresh the resume window. */
 export function persistOnboardingStep(step: OnboardingStep): void {
-  sessionStorage.setItem(ONBOARDING_STEP_KEY, step);
-  sessionStorage.setItem(ONBOARDING_UPDATED_AT_KEY, String(Date.now()));
+  writeOnboardingMarker(ONBOARDING_STEP_KEY, step);
+  writeOnboardingMarker(ONBOARDING_UPDATED_AT_KEY, String(Date.now()));
 }
 
 /** Persist the mid-flow factory id and refresh the resume window. */
 export function persistOnboardingFactory(factoryId: string): void {
-  sessionStorage.setItem(ONBOARDING_FACTORY_KEY, factoryId);
-  sessionStorage.setItem(ONBOARDING_UPDATED_AT_KEY, String(Date.now()));
+  writeOnboardingMarker(ONBOARDING_FACTORY_KEY, factoryId);
+  writeOnboardingMarker(ONBOARDING_UPDATED_AT_KEY, String(Date.now()));
 }
 
 export function readOnboardingFactory(): string | undefined {
@@ -102,7 +110,7 @@ export function readOnboardingFactory(): string | undefined {
 
 /** All links this onboarding created, including superseded links whose cleanup may need retrying. */
 export function persistOnboardingLinkedRepositories(projectRepositoryIds: readonly string[]): void {
-  sessionStorage.setItem(ONBOARDING_LINKED_REPOSITORY_KEY, JSON.stringify(projectRepositoryIds));
+  writeOnboardingMarker(ONBOARDING_LINKED_REPOSITORY_KEY, JSON.stringify(projectRepositoryIds));
 }
 
 export function readOnboardingLinkedRepositories(): string[] {
@@ -111,8 +119,7 @@ export function readOnboardingLinkedRepositories(): string[] {
   try {
     return z.array(z.string()).parse(JSON.parse(value));
   } catch {
-    // Earlier drafts stored a single unencoded link ID at this key.
-    return [value];
+    return [];
   }
 }
 
@@ -121,7 +128,7 @@ export function readOnboardingReviewReturn(): boolean {
 }
 
 export function persistOnboardingReviewReturn(returnToReview: boolean): void {
-  if (returnToReview) sessionStorage.setItem(ONBOARDING_REVIEW_RETURN_KEY, 'true');
+  if (returnToReview) writeOnboardingMarker(ONBOARDING_REVIEW_RETURN_KEY, 'true');
   else sessionStorage.removeItem(ONBOARDING_REVIEW_RETURN_KEY);
 }
 

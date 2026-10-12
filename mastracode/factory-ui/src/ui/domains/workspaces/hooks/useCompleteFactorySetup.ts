@@ -25,7 +25,7 @@ async function findPendingFactory(baseUrl: string, pendingId: string) {
   try {
     return await fetchFactoryProject(baseUrl, pendingId);
   } catch (error) {
-    if (error instanceof Error && 'status' in error && error.status === 404) return undefined;
+    if (error instanceof Error && 'status' in error && (error.status === 404 || error.status === 403)) return undefined;
     throw error;
   }
 }
