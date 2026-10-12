@@ -760,7 +760,7 @@ describe('addSignal with precedesMessageId (Issue #26751)', () => {
     id: 'gap',
     type: 'system-reminder' as const,
     contents: '2 hours later',
-    createdAt: new Date(userTime.getTime() - 1),
+    createdAt: new Date(userTime.getTime() + 60_000),
     acceptedAt: userTime,
     metadata: { precedesMessageId },
   });
