@@ -1,4 +1,4 @@
-import { MASTRA_ERROR_CODES, buildProblem, isMastraErrorCode } from '../http-errors';
+import { MASTRA_ERROR_CODES, buildProblem } from '../http-errors';
 import type { MastraErrorCode, ProblemDetails } from '../http-errors';
 import { HTTPException } from '../http-exception';
 
@@ -23,12 +23,8 @@ function resolveStatus(error: unknown): number {
   return 500;
 }
 
-// Accepts HTTPException-like errors from packages that cannot depend on
-// @mastra/server (e.g. @internal/voice), as long as the code is in the catalogue.
 function resolveCode(error: unknown): MastraErrorCode | undefined {
-  if (error instanceof HTTPException) return error.code;
-  const code = (error as { code?: unknown } | null)?.code;
-  return isMastraErrorCode(code) ? code : undefined;
+  return error instanceof HTTPException ? error.code : undefined;
 }
 
 /**

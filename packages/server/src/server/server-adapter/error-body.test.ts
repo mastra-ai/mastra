@@ -138,14 +138,12 @@ describe('withProblem', () => {
     });
   });
 
-  it('honours a catalogue code carried by a foreign HTTPException-like error', () => {
+  it('ignores a catalogue code carried by a non-HTTPException error', () => {
     const foreign = Object.assign(new Error('Agent with id x not found'), { status: 404, code: 'AGENT_NOT_FOUND' });
-    const { body } = toErrorBody(foreign);
-    expect(body.problem).toMatchObject({
-      type: 'urn:mastra:error:AGENT_NOT_FOUND',
-      code: 'AGENT_NOT_FOUND',
-      status: 404,
-    });
+    const { status, body } = toErrorBody(foreign);
+    expect(status).toBe(404);
+    expect(body.problem).toMatchObject({ type: 'about:blank', status: 404 });
+    expect(body.problem).not.toHaveProperty('code');
   });
 
   it('ignores a code that is not in the catalogue', () => {

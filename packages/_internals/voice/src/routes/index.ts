@@ -38,6 +38,7 @@ type StatusCode = 400 | 404 | 500;
 
 // Mirrors @mastra/server's HTTPException, which this package cannot depend on.
 // `code` must be a key of MASTRA_ERROR_CODES (@mastra/server/http-errors).
+// @mastra/server's handlers/voice.ts converts it into a real HTTPException.
 class HTTPException extends Error {
   readonly status: StatusCode;
   readonly code?: string;

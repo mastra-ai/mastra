@@ -4,6 +4,7 @@ import { Mastra } from '@mastra/core/mastra';
 import type { MastraVoice } from '@mastra/core/voice';
 import { CompositeVoice } from '@mastra/core/voice';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { HTTPException } from '../http-exception';
 import { createTestServerContext } from './test-utils';
 import {
   GET_SPEAKERS_ROUTE,
@@ -59,9 +60,13 @@ describe('Voice Handlers', () => {
     });
 
     it('should throw error when agent is not found', async () => {
-      await expect(
-        GET_SPEAKERS_ROUTE.handler({ ...createTestServerContext({ mastra }), agentId: 'non-existent' as any }),
-      ).rejects.toThrow('Agent with id non-existent not found');
+      const result = GET_SPEAKERS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'non-existent' as any,
+      });
+      await expect(result).rejects.toThrow('Agent with id non-existent not found');
+      await expect(result).rejects.toBeInstanceOf(HTTPException);
+      await expect(result).rejects.toMatchObject({ status: 404, code: 'AGENT_NOT_FOUND' });
     });
 
     it('should return empty array when agent does not have voice capabilities', async () => {
@@ -138,6 +143,20 @@ describe('Voice Handlers', () => {
           speakerId: '1',
         }),
       ).rejects.toThrow('No voice provider configured');
+    });
+
+    it('should throw VOICE_NOT_CONFIGURED when the agent resolves no voice', async () => {
+      const agent = createAgentWithVoice();
+      vi.spyOn(agent, 'getVoice').mockResolvedValue(undefined as any);
+
+      const result = GENERATE_SPEECH_ROUTE.handler({
+        ...createTestServerContext({ mastra: new Mastra({ logger: false, agents: { 'test-agent': agent } }) }),
+        agentId: 'test-agent',
+        text: 'test',
+        speakerId: '1',
+      });
+      await expect(result).rejects.toBeInstanceOf(HTTPException);
+      await expect(result).rejects.toMatchObject({ status: 400, code: 'VOICE_NOT_CONFIGURED' });
     });
 
     it('should throw error when speech generation fails', async () => {
