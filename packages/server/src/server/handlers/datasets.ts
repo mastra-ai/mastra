@@ -1267,7 +1267,7 @@ export const COMPARE_EXPERIMENTS_ROUTE = createRoute({
   pathParamSchema: datasetIdPathParams,
   bodySchema: compareExperimentsBodySchema,
   responseSchema: comparisonResponseSchema,
-  summary: 'Compare two or more experiments',
+  summary: 'Compare two to ten experiments',
   description: 'Compares two to ten experiments item by item against a baseline experiment',
   tags: ['Datasets'],
   requiresAuth: true,
