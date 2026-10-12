@@ -513,10 +513,7 @@ export class GithubIntegration implements FactoryIntegration {
       // 401s within 5 s of minting), so drop this client and mint fresh next call.
       // Not on 403: GitHub also uses it for rate limits.
       created.hook.error('request', error => {
-        if (
-          (error as { status?: number }).status === 401 &&
-          this.#installationOctokits.get(installationId) === created
-        ) {
+        if ('status' in error && error.status === 401 && this.#installationOctokits.get(installationId) === created) {
           this.#installationOctokits.delete(installationId);
         }
         throw error;
