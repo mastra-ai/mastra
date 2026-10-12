@@ -6,12 +6,14 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import type { Processor } from '../../processors';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { createDurableAgent } from '../durable/create-durable-agent';
 import type { MastraDBMessage } from '../message-list';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 
@@ -342,4 +344,57 @@ describe('processOutputResult tripwire removes response messages saved earlier i
       expect(after.map(textOf)).toContain('clean up the temp file');
     },
   );
+
+  it('removes text a durable agent saved before a tool-approval suspension', async () => {
+    const memory = new MockMemory();
+    const durable = createDurableAgent({
+      agent: new Agent({
+        id: 'guarded-durable',
+        name: 'Guarded Durable',
+        instructions: 'test',
+        model: approvalModel(),
+        memory,
+        outputProcessors: [createGuardrail()],
+        tools: {
+          deleteFile: createTool({
+            id: 'deleteFile',
+            description: 'Deletes a file',
+            inputSchema: z.object({ path: z.string() }),
+            requireApproval: true,
+            execute: async () => ({ deleted: true }),
+          }),
+        },
+      }),
+      pubsub: new EventEmitterPubSub(),
+    });
+    new Mastra({ logger: false, storage: new InMemoryStore(), agents: { durable } });
+    const threadId = 'thread-durable-approval';
+    const resourceId = 'resource-1';
+    const memoryOption = { thread: threadId, resource: resourceId };
+
+    const stream = await durable.stream('clean up the temp file', { memory: memoryOption });
+    let toolCallId = '';
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        toolCallId = chunk.payload.toolCallId;
+        break;
+      }
+    }
+    expect(toolCallId).toBe('call-1');
+    await vi.waitFor(async () => {
+      const whileWaiting = await storedMessages(memory, threadId, resourceId);
+      expect(whileWaiting.some(message => textOf(message).includes(SECRET))).toBe(true);
+    });
+
+    const resumed = await durable.approveToolCall({ runId: stream.runId, toolCallId, memory: memoryOption });
+    for await (const _chunk of resumed.fullStream) {
+      // Drain the resumed segment.
+    }
+
+    await vi.waitFor(async () => {
+      const after = await storedMessages(memory, threadId, resourceId);
+      expect(after.some(message => textOf(message).includes(SECRET))).toBe(false);
+      expect(after.map(textOf)).toContain('clean up the temp file');
+    });
+  });
 });
