@@ -86,6 +86,8 @@ export class MastraStorageExporter extends BaseExporter {
   #observabilityStorage?: ObservabilityStorage;
   #resolvedStrategy?: TracingStorageStrategy;
   #flushTimer?: NodeJS.Timeout;
+  /** Storage writes (timer, size trigger, or flush()) that haven't finished yet */
+  #inFlightFlushes = new Set<Promise<void>>();
   #emitDropEvent?: (event: ObservabilityDropEvent) => void;
 
   // Signals whose storage methods threw "not implemented" — skip on future flushes
@@ -222,7 +224,7 @@ export class MastraStorageExporter extends BaseExporter {
     }
     this.#flushTimer = setTimeout(() => {
       this.#flushTimer = undefined;
-      this.flushBuffer().catch(error => {
+      this.trackFlushBuffer().catch(error => {
         this.logger.error('Scheduled flush failed', {
           error: error instanceof Error ? error.message : String(error),
         });
@@ -265,7 +267,7 @@ export class MastraStorageExporter extends BaseExporter {
    */
   private async handleBatchedFlush(): Promise<void> {
     if (this.shouldFlush()) {
-      await this.flushBuffer();
+      await this.trackFlushBuffer();
     } else if (this.#eventBuffer.totalSize === 1) {
       this.scheduleFlush();
     }
@@ -413,6 +415,16 @@ export class MastraStorageExporter extends BaseExporter {
       this.emitDrop('tracing', 'retry-exhausted', dropped.length, error);
       return { failed: true, retryAttempt };
     }
+  }
+
+  /**
+   * Runs flushBuffer() and tracks its promise so flush() can wait for writes
+   * that a timer or size trigger started on their own.
+   */
+  private trackFlushBuffer(): Promise<void> {
+    const promise = this.flushBuffer().finally(() => this.#inFlightFlushes.delete(promise));
+    this.#inFlightFlushes.add(promise);
+    return promise;
   }
 
   /**
@@ -611,11 +623,22 @@ export class MastraStorageExporter extends BaseExporter {
    * are exported before the runtime instance is terminated.
    */
   async flush(): Promise<void> {
+    // A timer or size trigger may have taken a batch out of the buffer and still be
+    // writing it, so an empty buffer doesn't mean the data reached storage. Join those
+    // writes first: they can also defer span updates back into the buffer.
+    while (this.#inFlightFlushes.size > 0) {
+      await Promise.allSettled([...this.#inFlightFlushes]);
+    }
     if (this.#eventBuffer.totalSize > 0) {
       this.logger.debug('Flushing buffered events', {
         bufferedEvents: this.#eventBuffer.totalSize,
       });
-      await this.flushBuffer();
+      await this.trackFlushBuffer();
+      // A write that started while ours ran may still be in flight (and may have
+      // deferred updates back into the buffer), so go around again.
+      if (this.#inFlightFlushes.size > 0) {
+        await this.flush();
+      }
     }
   }
 

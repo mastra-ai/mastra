@@ -908,6 +908,70 @@ describe('MastraStorageExporter', () => {
 
         await exporter.shutdown();
       });
+
+      it('should wait for a timer-started write that is still in flight', async () => {
+        const exporter = new MastraStorageExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        let releaseWrite!: () => void;
+        mockObservabilityStore.batchCreateSpans.mockReturnValueOnce(
+          new Promise<void>(resolve => {
+            releaseWrite = resolve;
+          }),
+        );
+
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED));
+        // Fire the batch timer: the write takes the batch out of the buffer and is now in flight
+        expect(timers).toHaveLength(1);
+        timers[0].fn();
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1);
+
+        let flushed = false;
+        const flushing = exporter.flush().then(() => {
+          flushed = true;
+        });
+        await new Promise(resolve => setImmediate(resolve));
+        expect(flushed).toBe(false);
+
+        releaseWrite();
+        await flushing;
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1);
+      });
+
+      it('should write span updates deferred behind an in-flight create', async () => {
+        const exporter = new MastraStorageExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        let releaseWrite!: () => void;
+        mockObservabilityStore.batchCreateSpans.mockReturnValueOnce(
+          new Promise<void>(resolve => {
+            releaseWrite = resolve;
+          }),
+        );
+
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED));
+        timers[0].fn();
+        // The span ends while its create is still being written
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_ENDED));
+
+        const flushing = exporter.flush();
+        await new Promise(resolve => setImmediate(resolve));
+        releaseWrite();
+        await flushing;
+
+        expect(mockObservabilityStore.batchUpdateSpans).toHaveBeenCalledTimes(1);
+        expect(mockObservabilityStore.batchUpdateSpans).toHaveBeenCalledWith({
+          records: [expect.objectContaining({ traceId: 'trace-1', spanId: 'span-1' })],
+        });
+      });
     });
 
     describe('Shutdown', () => {
@@ -925,6 +989,36 @@ describe('MastraStorageExporter', () => {
         await exporter.shutdown();
 
         expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalled();
+      });
+
+      it('should wait for a timer-started write that is still in flight', async () => {
+        const exporter = new MastraStorageExporter({
+          strategy: 'batch-with-updates',
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        let releaseWrite!: () => void;
+        mockObservabilityStore.batchCreateSpans.mockReturnValueOnce(
+          new Promise<void>(resolve => {
+            releaseWrite = resolve;
+          }),
+        );
+
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED));
+        timers[0].fn();
+
+        let done = false;
+        const shuttingDown = exporter.shutdown().then(() => {
+          done = true;
+        });
+        await new Promise(resolve => setImmediate(resolve));
+        expect(done).toBe(false);
+
+        releaseWrite();
+        await shuttingDown;
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1);
       });
     });
 
