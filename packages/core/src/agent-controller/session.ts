@@ -5464,15 +5464,23 @@ export class Session<TState = unknown> {
 
   private async resolveSuspendedThreadOwnerId(
     agent: Agent,
-    runId: string,
-    requestContext?: RequestContext,
+    { runId, threadId, resourceId }: Pick<SuspensionAddress, 'runId' | 'threadId' | 'resourceId'>,
   ): Promise<string | undefined> {
     const persisted = await agent.__getSuspendedRunRequestContextValue({ runId, key: THREAD_OWNER_ID_CONTEXT_KEY });
     if (typeof persisted === 'string') return persisted;
-    const controllerContext = requestContext?.get('controller') as AgentControllerRequestContext<TState> | undefined;
-    if (typeof controllerContext?.threadOwnerId === 'string') return controllerContext.threadOwnerId;
-    const inherited = requestContext?.getRaw(THREAD_OWNER_ID_CONTEXT_KEY);
-    return typeof inherited === 'string' ? inherited : undefined;
+
+    const thread = await this.thread.getById({ threadId });
+    if (thread) {
+      if (thread.resourceId !== resourceId) {
+        throw new Error(`Thread "${threadId}" does not belong to resource "${resourceId}"`);
+      }
+      return typeof thread.metadata?.ownerId === 'string' ? thread.metadata.ownerId : this.identity.getOwnerId();
+    }
+
+    if (threadId === this.thread.getId() && resourceId === this.identity.getResourceId()) {
+      return this.identity.getOwnerId();
+    }
+    return undefined;
   }
 
   private async resolveSuspensionAgent(address: SuspensionAddress): Promise<Agent> {
@@ -5625,7 +5633,7 @@ export class Session<TState = unknown> {
     }
 
     const agent = await this.resolveSuspensionAgent(address);
-    const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, address.runId, requestContext);
+    const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, address);
     let sourceRequestContext = await this.machinery.buildRequestContext(requestContext, {
       ...address,
       threadOwnerId,
@@ -5710,10 +5718,10 @@ export class Session<TState = unknown> {
 
     const agent =
       this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? inputAgent ?? this.machinery.getAgent();
-    const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, runId, requestContextInput);
     if (!threadId) {
       throw new Error('Cannot approve a tool call without a current thread');
     }
+    const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, { runId, threadId, resourceId });
     const abortSignal =
       inputAbortSignal ??
       (this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
@@ -5793,10 +5801,10 @@ export class Session<TState = unknown> {
 
     const agent =
       this.machinery.getRunScope(runId)?.get(SUSPENDED_RUN_AGENT_KEY) ?? inputAgent ?? this.machinery.getAgent();
-    const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, runId, requestContextInput);
     if (!threadId) {
       throw new Error('Cannot decline a tool call without a current thread');
     }
+    const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, { runId, threadId, resourceId });
     const abortSignal =
       inputAbortSignal ??
       (this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
@@ -6093,7 +6101,7 @@ export class Session<TState = unknown> {
     const { toolCallId, threadId, resourceId } = address;
 
     const agent = await this.resolveSuspensionAgent(address);
-    const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, address.runId, requestContextInput);
+    const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, address);
     const sourceIsActive = () => threadId === this.thread.getId() && resourceId === this.identity.getResourceId();
     const abortSignal = sourceIsActive() ? this.run.ensureAbortController().signal : new AbortController().signal;
     const requestContext = await this.machinery.buildRequestContext(requestContextInput, {

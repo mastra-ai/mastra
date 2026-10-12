@@ -20,7 +20,7 @@ import { Agent } from '../../agent';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { AgentController } from '../agent-controller';
-import { SUSPENDED_RUN_AGENT_KEY, type Session } from '../session';
+import { SUSPENDED_RUN_AGENT_KEY, THREAD_OWNER_ID_CONTEXT_KEY, type Session } from '../session';
 import { createMockWorkspace } from '../test-utils';
 import type { AgentControllerRequestContext } from '../types';
 
@@ -145,6 +145,7 @@ describe('tool approvals resolve against the run that raised them', () => {
     const runRequestContext = streamOptions.requestContext as RequestContext;
 
     vi.spyOn(session, 'resolveToolApproval').mockReturnValue('allow');
+    vi.spyOn(agent, '__getSuspendedRunRequestContextValue').mockResolvedValue('owner-a');
     const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({ accepted: true, runId: 'run-a' });
 
     await processSubscribedChunks(
@@ -169,6 +170,37 @@ describe('tool approvals resolve against the run that raised them', () => {
       | undefined;
     expect(approvalContext?.threadOwnerId).toBe('owner-a');
     await expect(session.thread.getOwner()).resolves.toBe('owner-b');
+  });
+
+  it('ignores a caller-supplied owner when a legacy approval has no persisted snapshot', async () => {
+    const { controller, agent } = createController();
+    await controller.init();
+    const session = await controller.createSession({ id: 'legacy-owner-session', ownerId: 'owner-a' });
+    const threadId = session.thread.getId()!;
+    await session.thread.transferOwnership({ toOwnerId: 'owner-b' });
+
+    vi.spyOn(agent, '__getSuspendedRunRequestContextValue').mockResolvedValue(undefined);
+    const sendToolApproval = vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({
+      accepted: true,
+      runId: 'legacy-run',
+    });
+    const callerContext = new RequestContext();
+    callerContext.setRaw(THREAD_OWNER_ID_CONTEXT_KEY, 'spoofed-owner');
+    callerContext.set('controller', { threadOwnerId: 'spoofed-owner' } as AgentControllerRequestContext);
+
+    await session.approveToolCall({
+      toolCallId: 'legacy-tool-call',
+      runId: 'legacy-run',
+      threadId,
+      resourceId: session.identity.getResourceId(),
+      agent,
+      requestContext: callerContext,
+    });
+
+    const approvalRequestContext = sendToolApproval.mock.calls[0]?.[0].requestContext;
+    const approvalContext = approvalRequestContext?.get('controller') as AgentControllerRequestContext | undefined;
+    expect(approvalContext?.threadOwnerId).toBe('owner-b');
+    expect(approvalRequestContext?.getRaw(THREAD_OWNER_ID_CONTEXT_KEY)).toBe('owner-b');
   });
 
   it('resolves a parked gate on the run thread after the session switched thread', async () => {

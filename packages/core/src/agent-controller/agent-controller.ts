@@ -2555,9 +2555,10 @@ export class AgentController<TState = {}> {
     const executionView = { session, view, retained };
     runScope?.set(this.#executionViewKey, executionView);
     const threadOwnerId =
-      scope?.threadOwnerId ??
-      inheritedControllerContext?.threadOwnerId ??
-      (typeof persistedThreadOwnerId === 'string' ? persistedThreadOwnerId : undefined);
+      scope && Object.prototype.hasOwnProperty.call(scope, 'threadOwnerId')
+        ? scope.threadOwnerId
+        : (inheritedControllerContext?.threadOwnerId ??
+          (typeof persistedThreadOwnerId === 'string' ? persistedThreadOwnerId : undefined));
     const controllerContext: AgentControllerRequestContext<TState> = {
       controllerId: this.id,
       harnessId: this.id,
