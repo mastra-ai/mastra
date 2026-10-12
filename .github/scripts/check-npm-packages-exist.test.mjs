@@ -76,10 +76,7 @@ test('fails with recovery instructions when a non-private package is missing', a
   const result = await run(t, cwd, registry);
   assert.equal(result.status, 1);
   assert.match(result.stderr, /@mastra\/sprites .* has never been published to npm/);
-  assert.match(
-    result.stderr,
-    /npm trust github @mastra\/sprites --file npm-publish\.yml --repo mastra-ai\/mastra --allow-publish/,
-  );
+  assert.match(result.stderr, /node scripts\/npm-placeholder-publish\.mjs @mastra\/sprites/);
   assert.match(result.stderr, /1 package\(s\) have never been published/);
   assert.doesNotMatch(result.stderr, /@mastra\/core .*never been published/);
 });

@@ -1,0 +1,182 @@
+import assert from 'node:assert/strict';
+import { spawn, spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+import { fileURLToPath } from 'node:url';
+
+const script = fileURLToPath(new URL('./npm-placeholder-publish.mjs', import.meta.url));
+
+function tempDir(t, prefix) {
+  const dir = mkdtempSync(path.join(tmpdir(), prefix));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  return dir;
+}
+
+// Mock npm registry: `packages` maps a package path to its GET status. Records
+// every request so tests can assert nothing was (or what was) published.
+async function startRegistry(t, { packages = {}, whoami = 200 } = {}) {
+  const requests = [];
+  const server = createServer((req, res) => {
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', chunk => (body += chunk));
+    req.on('end', () => {
+      requests.push({ method: req.method, url: req.url, body });
+      if (req.url === '/-/whoami') {
+        res.writeHead(whoami, { 'content-type': 'application/json' });
+        res.end(JSON.stringify(whoami === 200 ? { username: 'npm-admin' } : { error: 'unauthorized' }));
+      } else if (req.method === 'PUT' || req.method === 'POST') {
+        res.writeHead(201, { 'content-type': 'application/json' });
+        res.end('{"ok":true}');
+      } else {
+        res.writeHead(packages[req.url] ?? 404, { 'content-type': 'application/json' });
+        res.end('{}');
+      }
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => server.close());
+  return { url: `http://127.0.0.1:${server.address().port}`, requests };
+}
+
+function makeWorkspace(t) {
+  const cwd = tempDir(t, 'npm-placeholder-ws-');
+  writeFileSync(path.join(cwd, 'package.json'), JSON.stringify({ name: 'fixture', private: true }));
+  writeFileSync(path.join(cwd, 'pnpm-workspace.yaml'), 'packages:\n  - packages/*\n');
+  const packages = [
+    { dir: 'sprites', manifest: { name: '@mastra/sprites', version: '0.1.0', license: 'Apache-2.0' } },
+    { dir: 'playground', manifest: { name: '@internal/playground', version: '1.0.0', private: true } },
+  ];
+  for (const { dir, manifest } of packages) {
+    mkdirSync(path.join(cwd, 'packages', dir, 'src'), { recursive: true });
+    writeFileSync(path.join(cwd, 'packages', dir, 'package.json'), JSON.stringify(manifest));
+    // Branch code that must never end up in the placeholder.
+    writeFileSync(path.join(cwd, 'packages', dir, 'src', 'index.js'), 'export const secret = "unreviewed";\n');
+  }
+  return cwd;
+}
+
+// npm auth lives in an isolated userconfig pointing only at the mock registry,
+// so these tests can never publish to the real npm registry.
+function run(t, cwd, registry, args, input = '') {
+  const npmrc = path.join(tempDir(t, 'npm-placeholder-rc-'), '.npmrc');
+  writeFileSync(npmrc, `//${new URL(registry).host}/:_authToken=fake-token\n`);
+  const env = { ...process.env, npm_config_userconfig: npmrc };
+  for (const key of Object.keys(env)) {
+    if (/^npm_config_(registry|_auth|.*token)/i.test(key)) delete env[key];
+  }
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [script, ...args, '--registry', registry], { cwd, env });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.setEncoding('utf8').on('data', chunk => (stdout += chunk));
+    child.stderr.setEncoding('utf8').on('data', chunk => (stderr += chunk));
+    child.on('error', reject);
+    child.on('close', status => resolve({ status, stdout, stderr, output: stdout + stderr }));
+    child.stdin.end(input);
+  });
+}
+
+const puts = registry => registry.requests.filter(request => request.method === 'PUT');
+
+test('refuses a name that is not a workspace package, without touching the registry', async t => {
+  const registry = await startRegistry(t);
+  const result = await run(t, makeWorkspace(t), registry.url, ['@mastra/typo', '--skip-trust']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /@mastra\/typo is not a package in this workspace/);
+  assert.deepEqual(registry.requests, []);
+});
+
+test('refuses a private workspace package', async t => {
+  const registry = await startRegistry(t);
+  const result = await run(t, makeWorkspace(t), registry.url, ['@internal/playground', '--skip-trust']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /"private": true/);
+  assert.deepEqual(registry.requests, []);
+});
+
+test('does nothing when the package already exists on npm', async t => {
+  const registry = await startRegistry(t, { packages: { '/@mastra%2fsprites': 200 } });
+  const result = await run(t, makeWorkspace(t), registry.url, ['@mastra/sprites', '--skip-trust']);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.stdout, /already exists .* no placeholder needed/);
+  assert.deepEqual(puts(registry), []);
+});
+
+test('refuses to publish when the registry cannot be checked', async t => {
+  const registry = await startRegistry(t, { packages: { '/@mastra%2fsprites': 500 } });
+  const result = await run(t, makeWorkspace(t), registry.url, ['@mastra/sprites', '--skip-trust']);
+  assert.equal(result.status, 2);
+  assert.match(result.stderr, /Could not check @mastra\/sprites/);
+  assert.deepEqual(puts(registry), []);
+});
+
+test('refuses to publish when not logged in', async t => {
+  const registry = await startRegistry(t, { whoami: 401 });
+  const result = await run(t, makeWorkspace(t), registry.url, ['@mastra/sprites', '--skip-trust']);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Run `npm login`/);
+  assert.deepEqual(puts(registry), []);
+});
+
+test('--dry-run packs the placeholder and prints the trust command without publishing', async t => {
+  const registry = await startRegistry(t);
+  const result = await run(t, makeWorkspace(t), registry.url, ['@mastra/sprites', '--dry-run']);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.output, /@mastra\/sprites@0\.0\.0/);
+  assert.match(result.output, /total files:\s+2/);
+  assert.match(
+    result.stdout,
+    /npx --yes npm@\^11\.10\.0 trust github @mastra\/sprites --file npm-publish\.yml --repo mastra-ai\/mastra --allow-publish/,
+  );
+  assert.deepEqual(puts(registry), []);
+});
+
+test('publishes an empty 0.0.0 placeholder containing no workspace code', async t => {
+  const registry = await startRegistry(t);
+  const result = await run(t, makeWorkspace(t), registry.url, ['@mastra/sprites', '--skip-trust']);
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.stdout, /Published @mastra\/sprites@0\.0\.0 placeholder/);
+
+  const [put] = puts(registry);
+  assert.equal(put.url, '/@mastra%2fsprites');
+  const document = JSON.parse(put.body);
+  assert.deepEqual(Object.keys(document.versions), ['0.0.0']);
+  assert.equal(document['dist-tags'].latest, '0.0.0');
+  assert.equal(document.access, 'public');
+
+  const tarball = path.join(tempDir(t, 'npm-placeholder-tgz-'), 'placeholder.tgz');
+  writeFileSync(tarball, Buffer.from(Object.values(document._attachments)[0].data, 'base64'));
+  const files = spawnSync('tar', ['-tzf', tarball], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean).sort();
+  assert.deepEqual(files, ['package/README.md', 'package/package.json']);
+
+  const manifest = JSON.parse(
+    spawnSync('tar', ['-xzOf', tarball, 'package/package.json'], { encoding: 'utf8' }).stdout,
+  );
+  assert.equal(manifest.name, '@mastra/sprites');
+  assert.equal(manifest.version, '0.0.0');
+  assert.equal(manifest.license, 'Apache-2.0');
+});
+
+// Runs the real `npm trust` (fetched via npx) against the mock registry.
+test('configures trusted publishing for npm-publish.yml after publishing', async t => {
+  const registry = await startRegistry(t);
+  const result = await run(t, makeWorkspace(t), registry.url, ['@mastra/sprites'], 'y\n');
+  assert.equal(result.status, 0, result.output);
+  assert.match(result.stdout, /Trusted publishing configured for @mastra\/sprites/);
+
+  const methods = registry.requests.map(request => `${request.method} ${request.url}`);
+  const publishIndex = methods.indexOf('PUT /@mastra%2fsprites');
+  const trustIndex = methods.indexOf('POST /-/package/@mastra%2fsprites/trust');
+  assert.ok(publishIndex !== -1 && trustIndex > publishIndex, methods.join('\n'));
+  assert.deepEqual(JSON.parse(registry.requests[trustIndex].body), [
+    {
+      type: 'github',
+      claims: { repository: 'mastra-ai/mastra', workflow_ref: { file: 'npm-publish.yml' } },
+      permissions: ['createPackage'],
+    },
+  ]);
+});

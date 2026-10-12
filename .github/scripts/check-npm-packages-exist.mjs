@@ -139,10 +139,11 @@ function printRecoveryInstructions(pkg) {
   console.error('  already exists, so the publish will fail mid-release (E404 PUT /');
   console.error('  ERR_PNPM_AUTH_TOKEN_EXCHANGE) after earlier packages have gone out.');
   console.error('');
-  console.error('  An npm org admin must first-publish it once by hand, with an npm token:');
-  console.error(`    1. pnpm --filter ${pkg.name}... build`);
-  console.error(`    2. pnpm --filter ${pkg.name} publish --access public --no-git-checks`);
-  console.error(`    3. npm trust github ${pkg.name} --file npm-publish.yml --repo mastra-ai/mastra --allow-publish`);
+  console.error('  An npm org admin must reserve the name once with an empty 0.0.0 placeholder');
+  console.error('  (no code from any branch is published) and enable trusted publishing.');
+  console.error('  After `npm login`, from a checkout of mastra-ai/mastra that contains the package:');
+  console.error(`    node scripts/npm-placeholder-publish.mjs ${pkg.name}`);
+  console.error('  then re-run this check. CI publishes the first real version.');
   console.error('  If the package should not be published yet, mark it "private": true instead.');
   console.error('');
 }

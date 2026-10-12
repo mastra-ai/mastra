@@ -99,8 +99,8 @@ jobs:
       # brand-new package fails mid-publish (E404 PUT /
       # ERR_PNPM_AUTH_TOKEN_EXCHANGE) after earlier packages have gone out.
       # Fail before anything publishes. --retry-404 waits out registry
-      # propagation lag for a package an npm org admin first-published by hand
-      # minutes ago (the recovery flow for this exact failure).
+      # propagation lag for a package an npm org admin reserved minutes ago with
+      # scripts/npm-placeholder-publish.mjs (the recovery flow for this failure).
       - name: Preflight - verify publishable packages exist on npm
         run: node .github/scripts/check-npm-packages-exist.mjs --retry-404 300000
 
@@ -316,8 +316,8 @@ jobs:
       # ERR_PNPM_AUTH_TOKEN_EXCHANGE) after earlier packages have gone out.
       # Fail before the version commit is pushed to main and before anything
       # publishes. --retry-404 waits out registry propagation lag for a package
-      # an npm org admin first-published by hand minutes ago (the recovery
-      # flow for this exact failure).
+      # an npm org admin reserved minutes ago with
+      # scripts/npm-placeholder-publish.mjs (the recovery flow for this failure).
       - name: Preflight - verify publishable packages exist on npm
         run: node .github/scripts/check-npm-packages-exist.mjs --retry-404 300000
 
