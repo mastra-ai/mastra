@@ -24,14 +24,14 @@ import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-sche
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
 import { ChevronRight } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef } from 'react';
 import { toast } from 'sonner';
 import { DatasetCombobox } from '../dataset-combobox';
 import { DatasetVersions } from '../dataset-versions';
 import { ScorerSelector } from './scorer-selector';
 import { TargetSelector } from './target-selector';
 import type { TargetType } from './target-selector';
-import { useExperimentName } from './use-experiment-name';
+import { useExperimentTriggerForm } from './use-experiment-trigger-form';
 
 export interface ExperimentTriggerDialogProps {
   initialDatasetId?: string;
@@ -130,29 +130,37 @@ export function ExperimentTriggerDialog({
   onSuccess,
 }: ExperimentTriggerDialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const [description, setDescription] = useState(initialDescription ?? '');
-  const [datasetId, setDatasetId] = useState(initialDatasetId ?? '');
-  const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
-  const [targetType, setTargetType] = useState<TargetType | ''>(initialTargetType ?? '');
-  const [targetId, setTargetId] = useState<string>(initialTargetId ?? '');
-  const [selectedScorers, setSelectedScorers] = useState<string[] | null>(initialScorerIds ?? null);
-  const [requestContextValues, setRequestContextValues] = useState<Record<string, unknown>>({});
-  const [requestContextRaw, setRequestContextRaw] = useState('');
+  const { form, defaultName, runName, changeTargetName, resetForm } = useExperimentTriggerForm({
+    name: initialName,
+    description: initialDescription,
+    datasetId: initialDatasetId,
+    version: initialDatasetVersion,
+    targetType: initialTargetType,
+    targetId: initialTargetId,
+    scorerIds: initialScorerIds,
+  });
+  const { register, setValue, watch } = form;
+  const [datasetId, version, targetType, targetId, selectedScorers, requestContextValues, requestContextRaw] = watch([
+    'datasetId',
+    'version',
+    'targetType',
+    'targetId',
+    'scorerIds',
+    'requestContextValues',
+    'requestContextRaw',
+  ]);
 
   const { triggerExperiment } = useDatasetMutations();
-  // Starts as the id for a preselected target (its display name is only known once picked in the selector).
-  const [targetName, setTargetName] = useState(initialTargetId);
-  const { name, defaultName, runName, setName, resetName } = useExperimentName(targetName, initialName);
   const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
   const { total: itemCount } = useDatasetItems({
     datasetId: datasetId,
     search: undefined,
-    version: version,
+    version,
     queryOptions: { enabled: Boolean(datasetId) },
   });
   const requestContextSchema = dataset?.requestContextSchema as Record<string, unknown> | undefined;
   const datasetDefaultScorers = dataset?.scorerIds ?? [];
-  const usesDatasetDefaults = selectedScorers === null && datasetDefaultScorers.length > 0;
+  const usesDatasetDefaults = selectedScorers === undefined && datasetDefaultScorers.length > 0;
   const effectiveScorers = selectedScorers ?? datasetDefaultScorers;
 
   const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
@@ -166,23 +174,10 @@ export function ExperimentTriggerDialog({
     : requestContextRaw.trim().length > 0;
 
   const handleDatasetChange = (nextDatasetId: string) => {
-    setDatasetId(nextDatasetId);
-    setVersion(null);
-    setSelectedScorers(initialScorerIds ?? null);
-    setRequestContextValues({});
-  };
-
-  const resetState = () => {
-    setTargetName(initialTargetId);
-    resetName();
-    setDescription(initialDescription ?? '');
-    setDatasetId(initialDatasetId ?? '');
-    setVersion(initialDatasetVersion ?? null);
-    setTargetType(initialTargetType ?? '');
-    setTargetId(initialTargetId ?? '');
-    setSelectedScorers(initialScorerIds ?? null);
-    setRequestContextValues({});
-    setRequestContextRaw('');
+    setValue('datasetId', nextDatasetId);
+    setValue('version', undefined);
+    setValue('scorerIds', initialScorerIds);
+    setValue('requestContextValues', {});
   };
 
   const resolveRequestContext = (): Record<string, unknown> | undefined => {
@@ -205,7 +200,7 @@ export function ExperimentTriggerDialog({
     return undefined;
   };
 
-  const handleRun = async () => {
+  const handleRun = form.handleSubmit(async ({ description }) => {
     if (!datasetId || !targetType || !targetId || !runName) return;
 
     let requestContext: Record<string, unknown> | undefined;
@@ -225,7 +220,7 @@ export function ExperimentTriggerDialog({
         targetType,
         targetId,
         scorerIds: effectiveScorers.length > 0 ? effectiveScorers : undefined,
-        version: version ?? undefined,
+        version,
         requestContext,
       });
 
@@ -233,16 +228,16 @@ export function ExperimentTriggerDialog({
       onOpenChange(false);
       onSuccess?.(result.experimentId);
 
-      resetState();
+      resetForm();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to trigger experiment';
       toast.error(message);
     }
-  };
+  });
 
   const handleClose = () => {
     onOpenChange(false);
-    resetState();
+    resetForm();
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -267,8 +262,7 @@ export function ExperimentTriggerDialog({
             <Field>
               <FieldLabel>Name</FieldLabel>
               <Input
-                value={name}
-                onChange={e => setName(e.target.value)}
+                {...register('name')}
                 placeholder={defaultName || 'Enter experiment name'}
                 autoFocus
                 disabled={isRunning}
@@ -278,8 +272,7 @@ export function ExperimentTriggerDialog({
             <Field>
               <FieldLabel>Description</FieldLabel>
               <Textarea
-                value={description}
-                onChange={e => setDescription(e.target.value)}
+                {...register('description')}
                 placeholder="Enter experiment description (optional)"
                 disabled={isRunning}
                 rows={2}
@@ -299,8 +292,8 @@ export function ExperimentTriggerDialog({
                     <FieldLabel>Version</FieldLabel>
                     <DatasetVersions
                       datasetId={datasetId}
-                      value={version}
-                      onValueChange={setVersion}
+                      value={version ?? null}
+                      onValueChange={nextVersion => setValue('version', nextVersion ?? undefined)}
                       container={contentRef}
                     />
                   </Field>
@@ -316,10 +309,10 @@ export function ExperimentTriggerDialog({
             <PipelineStep index={2} done={Boolean(targetId)}>
               <TargetSelector
                 targetType={targetType}
-                setTargetType={setTargetType}
+                setTargetType={nextTargetType => setValue('targetType', nextTargetType)}
                 targetId={targetId}
-                setTargetId={setTargetId}
-                onTargetNameChange={setTargetName}
+                setTargetId={nextTargetId => setValue('targetId', nextTargetId)}
+                onTargetNameChange={changeTargetName}
                 container={contentRef}
               />
               {targetType && !targetId && (
@@ -332,7 +325,7 @@ export function ExperimentTriggerDialog({
             <PipelineStep index={3} done={effectiveScorers.length > 0} isLast>
               <ScorerSelector
                 selectedScorers={effectiveScorers}
-                setSelectedScorers={setSelectedScorers}
+                setSelectedScorers={scorerIds => setValue('scorerIds', scorerIds)}
                 disabled={isRunning}
                 container={contentRef}
                 helperText={
@@ -356,11 +349,14 @@ export function ExperimentTriggerDialog({
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-3">
               {hasSchema ? (
-                <RequestContextForm requestContextSchema={requestContextSchema!} onChange={setRequestContextValues} />
+                <RequestContextForm
+                  requestContextSchema={requestContextSchema!}
+                  onChange={values => setValue('requestContextValues', values)}
+                />
               ) : (
                 <CodeEditor
                   value={requestContextRaw}
-                  onChange={setRequestContextRaw}
+                  onChange={raw => setValue('requestContextRaw', raw)}
                   showCopyButton={false}
                   aria-label="Request context JSON"
                   className="min-h-[160px]"
