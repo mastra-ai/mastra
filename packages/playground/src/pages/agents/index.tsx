@@ -4,6 +4,7 @@ import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useAgents } from '@mastra/react/hooks/agents';
 import { useState } from 'react';
@@ -20,6 +21,10 @@ import { extractPrompt } from '@/domains/agents/utils/extractPrompt';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
 const crumbs = [navCrumb('/agents')];
+
+// Centers the list on wide screens. At this width the Purpose column shows about 70 characters
+// before it truncates; narrower viewports keep the full width.
+const agentsColumnClassName = 'mx-auto w-full max-w-6xl';
 
 function Agents() {
   const { data: agents = {}, isLoading, error } = useAgents();
@@ -88,7 +93,7 @@ function Agents() {
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={<AgentHeaderCreateAction />}
       actionRow={
-        <ActionRow>
+        <ActionRow className={agentsColumnClassName}>
           <ActionRow.Start>
             <div className="max-w-120 flex-1">
               <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
@@ -101,7 +106,7 @@ function Agents() {
       }
     >
       <h1 className="sr-only">Agents</h1>
-      {agentsView}
+      <div className={cn(agentsColumnClassName, 'h-full')}>{agentsView}</div>
     </PageLayout>
   );
 }
