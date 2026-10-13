@@ -402,7 +402,6 @@
     "entrim/deepseek-v4.1-flash",
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
-    "fireworks/deepseek-v4-pro",
     "fireworks/deepseek-v4.1-flash",
     "fireworks/glm-5.3",
     "fireworks/glm-5.3-flash",
@@ -707,7 +706,6 @@
     "entrim/deepseek-v4.1-flash",
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
-    "fireworks/deepseek-v4-pro",
     "fireworks/deepseek-v4.1-flash",
     "gonka24/glm-5.3-flash",
     "google-ai-studio/gemini-2.5-flash",
@@ -2379,12 +2377,6 @@
       }
     ],
     "fireworks/kimi-k3-fast": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "fireworks/deepseek-v4-pro": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
