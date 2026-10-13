@@ -100,6 +100,7 @@ describe('transformed Standard Schema type inference', () => {
       outputSchema: schema,
       requestContextSchema: dateFromString,
       execute: async ({ inputData, requestContext }) => {
+        expectTypeOf(requestContext.get('date')).toEqualTypeOf<string | Date>();
         expectTypeOf(requestContext.get('date')).not.toEqualTypeOf<Date>();
         // @ts-expect-error steps receive the raw request context values, not decoded ones
         requestContext.get('date').toISOString();
