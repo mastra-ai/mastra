@@ -311,3 +311,17 @@ describe('Table.RowButton', () => {
     expect(onRefund).toHaveBeenCalledTimes(1);
   });
 });
+
+it('forwards the legacy row ref to the rendered tr', () => {
+  const rowRef = createRef<HTMLTableRowElement>();
+  render(
+    <Table>
+      <Tbody>
+        <Row ref={rowRef}>
+          <Cell>Item</Cell>
+        </Row>
+      </Tbody>
+    </Table>,
+  );
+  expect(rowRef.current).toBe(screen.getByRole('row'));
+});

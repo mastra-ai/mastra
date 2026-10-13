@@ -1,5 +1,5 @@
 import type { ComponentProps, ComponentPropsWithoutRef, CSSProperties, ReactNode } from 'react';
-import { forwardRef, useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Cell } from './Cells';
 import { resolveTableAlign, tableAlignClasses } from './table-align';
 import type { TableAlign } from './table-align';
@@ -176,14 +176,7 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
     const internalRef = useRef<HTMLTableRowElement>(null);
 
     // Merge forwarded ref with internal ref
-    useEffect(() => {
-      if (!ref) return;
-      if (typeof ref === 'function') {
-        ref(internalRef.current);
-      } else {
-        ref.current = internalRef.current;
-      }
-    }, [ref]);
+    useImperativeHandle<HTMLTableRowElement | null, HTMLTableRowElement | null>(ref, () => internalRef.current, []);
 
     // Focus and scroll into view when active
     useEffect(() => {
