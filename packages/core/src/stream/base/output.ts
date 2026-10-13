@@ -326,44 +326,44 @@ function reconcileBufferedStepTexts<OUTPUT>(
   let processedOffsets: number[] | undefined;
 
   if (processedParts && stepPartBoundaries) {
+    const stepByCreatedAt = new Map<number, number>();
+    let hasAmbiguousCreatedAt = false;
+
+    for (const [stepIndex, createdAts] of stepPartBoundaries.createdAtsByStep.entries()) {
+      for (const createdAt of createdAts) {
+        const existingStep = stepByCreatedAt.get(createdAt);
+        if (existingStep !== undefined && existingStep !== stepIndex) {
+          hasAmbiguousCreatedAt = true;
+          break;
+        }
+        stepByCreatedAt.set(createdAt, stepIndex);
+      }
+    }
+
+    if (!hasAmbiguousCreatedAt) {
+      const processedStepTexts = steps.map(() => '');
+      let lastStepIndex = 0;
+      let hasUnknownPart = false;
+
+      for (const part of processedParts) {
+        if (part.type !== 'text') continue;
+        const stepIndex = part.createdAt === undefined ? undefined : stepByCreatedAt.get(part.createdAt);
+        if (stepIndex === undefined || stepIndex < lastStepIndex) {
+          hasUnknownPart = true;
+          break;
+        }
+        processedStepTexts[stepIndex] += part.text;
+        lastStepIndex = stepIndex;
+      }
+
+      if (!hasUnknownPart) {
+        for (const [index, step] of steps.entries()) step.text = processedStepTexts[index]!;
+        return;
+      }
+    }
+
     if (stepPartBoundaries.offsets.at(-1) === processedParts.length) {
       processedOffsets = stepPartBoundaries.offsets;
-    } else {
-      const stepByCreatedAt = new Map<number, number>();
-      let hasAmbiguousCreatedAt = false;
-
-      for (const [stepIndex, createdAts] of stepPartBoundaries.createdAtsByStep.entries()) {
-        for (const createdAt of createdAts) {
-          const existingStep = stepByCreatedAt.get(createdAt);
-          if (existingStep !== undefined && existingStep !== stepIndex) {
-            hasAmbiguousCreatedAt = true;
-            break;
-          }
-          stepByCreatedAt.set(createdAt, stepIndex);
-        }
-      }
-
-      if (!hasAmbiguousCreatedAt) {
-        const processedStepTexts = steps.map(() => '');
-        let lastStepIndex = 0;
-        let hasUnknownPart = false;
-
-        for (const part of processedParts) {
-          if (part.type !== 'text') continue;
-          const stepIndex = part.createdAt === undefined ? undefined : stepByCreatedAt.get(part.createdAt);
-          if (stepIndex === undefined || stepIndex < lastStepIndex) {
-            hasUnknownPart = true;
-            break;
-          }
-          processedStepTexts[stepIndex] += part.text;
-          lastStepIndex = stepIndex;
-        }
-
-        if (!hasUnknownPart) {
-          for (const [index, step] of steps.entries()) step.text = processedStepTexts[index]!;
-          return;
-        }
-      }
     }
   }
 

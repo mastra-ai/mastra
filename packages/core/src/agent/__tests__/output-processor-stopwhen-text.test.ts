@@ -459,6 +459,56 @@ describe('output processor + stopWhen on a text+tool-call step (#24917)', () => 
     expect(fullOutput.text).toBe('FIRST!SECOND!THIRD!');
   });
 
+  it('tracks step provenance when the total processed part count stays unchanged', async () => {
+    const model = scriptedModel([
+      [...textPart('t1a', 'fir'), ...textPart('t1b', 'st'), finish('stop')],
+      [...textPart('t2', 'second'), finish('stop')],
+      [...textPart('t3', 'third'), finish('stop')],
+    ]);
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'test',
+      model,
+      outputProcessors: [
+        {
+          id: 'reshape-result',
+          processOutputResult: async ({ messages }) =>
+            messages.map(message => ({
+              ...message,
+              content: {
+                ...message.content,
+                parts: message.content.parts?.flatMap(part => {
+                  if (part.type !== 'text') return part;
+                  if (part.text === 'fir') return { ...part, text: 'FIRST!' };
+                  if (part.text === 'st') return [];
+                  if (part.text === 'second') {
+                    return [
+                      { ...part, text: 'SECO' },
+                      { ...part, text: 'ND!' },
+                    ];
+                  }
+                  if (part.text === 'third') return { ...part, text: 'THIRD!' };
+                  return part;
+                }),
+              },
+            })),
+        },
+      ],
+    });
+    let iteration = 0;
+
+    const stream = await agent.stream('hi', {
+      maxSteps: 3,
+      onIterationComplete: async () => (++iteration < 3 ? { continue: true, feedback: 'Continue.' } : undefined),
+    });
+    const fullOutput = await stream.getFullOutput();
+
+    expect(await stream.text).toBe('FIRST!SECOND!THIRD!');
+    expect(fullOutput.steps.map(step => step.text)).toEqual(['FIRST!', 'SECOND!', 'THIRD!']);
+    expect(fullOutput.text).toBe('FIRST!SECOND!THIRD!');
+  });
+
   it('removes final step text when its response is removed', async () => {
     const model = scriptedModel([
       [...textPart('t1', 'first'), finish('stop')],
