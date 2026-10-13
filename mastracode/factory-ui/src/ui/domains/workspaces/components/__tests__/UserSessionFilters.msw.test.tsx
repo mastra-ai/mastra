@@ -96,9 +96,7 @@ beforeEach(() => {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
       HttpResponse.json({
         runs: [
@@ -170,7 +168,7 @@ describe('User session filters', () => {
 
   it('says so when the viewer owns no sessions yet', async () => {
     server.use(
-      http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
         HttpResponse.json({ sessions: sessions.filter(session => session.userId !== 'user-me') }),
       ),
     );

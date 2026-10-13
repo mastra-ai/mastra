@@ -23,10 +23,12 @@ import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 const user = { workosId: 'user-1', organizationId: 'org-1' };
 
+type RouteOptions = Parameters<typeof buildSourceControlSessionRoutes>[0];
+
 function buildApp(
   sourceControls: readonly SourceControlStorageHandle[],
-  memorySettings: Parameters<typeof buildSourceControlSessionRoutes>[0]['memorySettings'],
-  controller?: Parameters<typeof buildSourceControlSessionRoutes>[0]['controller'],
+  { memorySettings, projects }: Pick<RouteOptions, 'memorySettings' | 'projects'>,
+  controller?: RouteOptions['controller'],
 ) {
   const app = new Hono();
   app.use('*', async (context, next) => {
@@ -38,6 +40,7 @@ function buildApp(
     buildSourceControlSessionRoutes({
       auth: fakeRouteAuth(),
       sourceControls,
+      projects,
       memorySettings,
       controller,
     }),
@@ -236,7 +239,7 @@ describe('source-control session routes', () => {
 
     const queryThreads = vi.spyOn(controller, 'queryThreads');
     const generateTitle = vi.spyOn(controller, 'generateThreadTitle').mockResolvedValue('  Review   change  ');
-    const app = buildApp([sourceControl], seed.memorySettings, controller);
+    const app = buildApp([sourceControl], seed, controller);
     const response = await app.request(`/web/user-sessions/${sessionId}/title`, { method: 'POST' });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ title: 'Review change' });
@@ -264,7 +267,7 @@ describe('source-control session routes', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
-    const app = buildApp([sourceControl], seed.memorySettings);
+    const app = buildApp([sourceControl], seed);
 
     const listed = await app.request(`/web/source-control/projects/${projectRepository.id}/sessions`);
     expect(listed.status).toBe(200);
@@ -283,7 +286,7 @@ describe('source-control session routes', () => {
 
   it('creates a session through the provider-neutral project route', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
-    const app = buildApp([sourceControl], seed.memorySettings);
+    const app = buildApp([sourceControl], seed);
     const sessionId = '11111111-1111-4111-8111-111111111111';
 
     const response = await app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
@@ -309,7 +312,7 @@ describe('source-control session routes', () => {
 
   it('stamps the factory of the link on the session it creates', async () => {
     const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
-    const app = buildApp([sourceControl], seed.memorySettings);
+    const app = buildApp([sourceControl], seed);
     const response = await app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -327,7 +330,7 @@ describe('source-control session routes', () => {
     'rejects invalid ref %s before creating a session',
     async branch => {
       const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
-      const app = buildApp([sourceControl], seed.memorySettings);
+      const app = buildApp([sourceControl], seed);
       const sessionId = '22222222-2222-4222-8222-222222222222';
 
       const response = await app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
@@ -353,7 +356,7 @@ describe('source-control session routes', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
-    const app = buildApp([sourceControl], seed.memorySettings);
+    const app = buildApp([sourceControl], seed);
 
     const response = await app.request(`/web/github/projects/${projectRepository.id}/sessions`);
 
@@ -361,5 +364,90 @@ describe('source-control session routes', () => {
     await expect(response.json()).resolves.toMatchObject({
       sessions: [expect.objectContaining({ sessionId: 'gitlab-session-legacy-alias' })],
     });
+  });
+
+  it("lists a Factory's sessions across every link and provider partition", async () => {
+    const { seed, sourceControl: gitlab, projectRepository: gitlabLink, project } = await seedGitLabRepository();
+    const github = seed.sourceControl.forIntegration('github');
+    const installation = await github.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'install-1',
+    });
+    const repository = await github.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '1', slug: 'octocat/hello', defaultBranch: 'main' },
+    });
+    const connection = await github.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const githubLink = await github.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/workspace/hello',
+    });
+    const other = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Other' } });
+    const otherConnection = await github.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: other.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const otherLink = await github.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: otherConnection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/workspace/other',
+    });
+    const session = (sessionId: string, projectRepositoryId: string, userId: string, visibility: 'org' | 'private') =>
+      ({
+        sessionId,
+        projectRepositoryId,
+        orgId: 'org-1',
+        userId,
+        branch: `user/${sessionId}`,
+        baseBranch: 'main',
+        visibility,
+      }) as const;
+    await gitlab.sessions.create(session('on-gitlab', gitlabLink.id, 'user-2', 'org'));
+    await github.sessions.create(session('on-github', githubLink.id, 'user-1', 'org'));
+    await github.sessions.create(session('mine-private', githubLink.id, 'user-1', 'private'));
+    await github.sessions.create(session('their-private', githubLink.id, 'user-2', 'private'));
+    await github.sessions.create(session('other-factory', otherLink.id, 'user-1', 'org'));
+    const app = buildApp([github, gitlab], seed);
+
+    const listed = await app.request(`/web/factory/projects/${project.id}/sessions`);
+
+    expect(listed.status).toBe(200);
+    const { sessions } = (await listed.json()) as { sessions: Array<{ sessionId: string }> };
+    expect(sessions.map(row => row.sessionId).sort()).toEqual(['mine-private', 'on-github', 'on-gitlab']);
+  });
+
+  it("does not list sessions of a Factory outside the caller's organization", async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    await sourceControl.sessions.create({
+      sessionId: 'gitlab-session-org-1',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/issue-3',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const foreign = await seed.projects.create({ orgId: 'org-2', userId: 'user-9', input: { name: 'Foreign' } });
+    const app = buildApp([sourceControl], seed);
+
+    const response = await app.request(`/web/factory/projects/${foreign.id}/sessions`);
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: 'Factory not found' });
   });
 });
