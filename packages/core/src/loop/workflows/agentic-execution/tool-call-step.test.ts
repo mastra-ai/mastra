@@ -2607,18 +2607,44 @@ describe('createToolCallStep suspension metadata cleanup on resume', () => {
     expect(flushMessages).toHaveBeenCalled();
   });
 
-  it('clears suspendedTools when resumed via resumeData embedded in args', async () => {
+  it('clears suspendedTools when the model names the suspension and embeds resumeData in args', async () => {
     const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
     const flushMessages = vi.fn();
 
     await runResumedTool({
-      args: { prompt: 'do thing', resumeData: { confirmed: true } },
+      args: { prompt: 'do thing', resumeData: { confirmed: true }, suspendedToolCallId: 'hitl-call-id' },
       message,
       flushMessages,
     });
 
     expect(message.content.metadata.suspendedTools).toBeUndefined();
     expect(flushMessages).toHaveBeenCalled();
+  });
+
+  it.each([
+    ['missing', {}],
+    ['unknown', { suspendedToolCallId: 'made-up-call-id' }],
+    ['empty', { suspendedToolCallId: '' }],
+    ['malformed', { suspendedToolCallId: 0 }],
+    ['mismatched run', { suspendedToolCallId: 'hitl-call-id', suspendedToolRunId: 'different-run' }],
+  ])('preserves the current-id suspension when the model identity is %s', async (_label, identity) => {
+    const message = createSuspendedAssistantMessage('hitl-call-id', 'hitl-tool');
+    message.content.parts.push({
+      type: 'data-tool-call-suspended',
+      data: { toolCallId: 'hitl-call-id', toolName: 'hitl-tool', runId: 'parent-run-id' },
+    } as any);
+    const before = structuredClone(message);
+    const flushMessages = vi.fn();
+
+    await runResumedTool({
+      args: { prompt: 'do thing', resumeData: { confirmed: true }, ...identity },
+      message,
+      flushMessages,
+    });
+
+    expect(message).toEqual(before);
+    expect(flushMessages).not.toHaveBeenCalled();
+    expect(controller.enqueue).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'tool-call-resumed' }));
   });
 
   it('clears the suspension the model names when auto-resume re-calls the tool under a new id', async () => {

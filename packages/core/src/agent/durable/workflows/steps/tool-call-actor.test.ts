@@ -252,6 +252,68 @@ describe('durable tool-call context forwarding', () => {
     },
   );
 
+  it.each([
+    ['missing', {}],
+    ['unknown', { suspendedToolCallId: 'made-up' }],
+    ['empty', { suspendedToolCallId: '' }],
+    ['malformed', { suspendedToolCallId: 0 }],
+    ['mismatched run', { suspendedToolCallId: 'call-a', suspendedToolRunId: 'different-run' }],
+  ])('preserves the current-id suspension when the model identity is %s', async (_label, identity) => {
+    const runId = 'durable-unresolved-resume-run';
+    const execute = vi.fn().mockResolvedValue('ok');
+    const message = {
+      id: 'assistant-suspended',
+      role: 'assistant',
+      createdAt: new Date(0),
+      content: {
+        format: 2,
+        metadata: {
+          suspendedTools: {
+            'call-a': { toolCallId: 'call-a', toolName: 'askUser', runId: 'inner-a' },
+            'resume-call': { toolCallId: 'resume-call', toolName: 'askUser', runId: 'inner-a' },
+          },
+        },
+        parts: [
+          { type: 'data-tool-call-suspended', data: { toolCallId: 'call-a', toolName: 'askUser', runId: 'inner-a' } },
+          {
+            type: 'data-tool-call-suspended',
+            data: { toolCallId: 'resume-call', toolName: 'askUser', runId: 'inner-a' },
+          },
+        ],
+      },
+    };
+    const before = structuredClone(message);
+    const messageList = {
+      add: vi.fn(),
+      get: {
+        response: { db: () => [message] },
+        all: { db: () => [message] },
+        input: { aiV5: { model: () => [] } },
+      },
+    };
+    globalRunRegistry.set(runId, { tools: { askUser: { execute } }, messageList } as any);
+
+    try {
+      const result = await (createDurableToolCallStep() as any).execute({
+        inputData: {
+          toolCallId: 'resume-call',
+          toolName: 'askUser',
+          args: { resumeData: { answer: 'blue' }, ...identity },
+        },
+        mastra: { getLogger: () => undefined },
+        suspend: vi.fn(),
+        getInitData: () => ({ runId, agentId: 'agent-1', options: {}, state: {} }),
+      });
+
+      expect(result.error).toBeUndefined();
+      expect(execute).toHaveBeenCalledWith({}, expect.objectContaining({ resumeData: { answer: 'blue' } }));
+      expect(message).toEqual(before);
+      expect(messageList.add).not.toHaveBeenCalled();
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+  });
+
   it('forwards MCP protocol context from the run registry', async () => {
     const runId = 'durable-tool-mcp-run';
     const execute = vi.fn().mockResolvedValue('ok');

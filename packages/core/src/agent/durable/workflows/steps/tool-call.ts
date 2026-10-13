@@ -1152,7 +1152,9 @@ export function createDurableToolCallStep() {
             : undefined;
         const cleanupIdentity = isResumableTool
           ? resolvedSuspensionIdentity
-          : (modelResumedSuspension ?? { toolCallId, toolName });
+          : hasModelResumeData
+            ? modelResumedSuspension
+            : { toolCallId, toolName };
         // Ids in a model-driven resume are model-supplied, so removal also matches the tool
         // name and leaves another tool's suspension that reuses the id alone.
         const cleanupTarget =

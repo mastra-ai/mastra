@@ -923,7 +923,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               : undefined;
           const cleanupIdentity = needsRunIdLookup
             ? resolvedSuspensionIdentity
-            : (modelResumedSuspension ?? { toolCallId: inputData.toolCallId, toolName: inputData.toolName });
+            : isResumeToolCall
+              ? modelResumedSuspension
+              : { toolCallId: inputData.toolCallId, toolName: inputData.toolName };
           // Ids in a model-driven resume are model-supplied, so removal also matches the tool
           // name and leaves another tool's suspension that reuses the id alone.
           const cleanupTarget =
