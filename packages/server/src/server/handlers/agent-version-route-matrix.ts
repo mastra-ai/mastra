@@ -45,7 +45,7 @@ export const AGENT_VERSION_ROUTE_MATRIX = [
   route('GET', '/.well-known/:agentId/agent-card.json', ['resolved-read'], 'query-selector'),
   route('GET', '/stored/agents/:storedAgentId', ['resolved-read'], 'query-selector'),
 
-  // New executions select once at the HTTP root and forward only dependency overrides.
+  // New executions preserve the graph policy and freeze explicit HTTP root selectors.
   route('POST', '/agents/:agentId/generate', ['new-execution'], 'body-selector'),
   route('POST', '/agents/:agentId/generate/vnext', ['new-execution'], 'body-selector'),
   route('POST', '/agents/:agentId/generate-legacy', ['new-execution'], 'body-selector'),
