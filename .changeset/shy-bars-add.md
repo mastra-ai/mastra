@@ -23,6 +23,8 @@ const ws = new WebSocket(`wss://example.com/browser/my-agent/stream?threadId=${t
 
 The ticket is opaque, expires after 30 seconds, is bound to the agent and thread it was issued for, and is consumed by the first upgrade it authenticates. The credential is only ever presented to the mint endpoint, so it never reaches a proxy or an access log, and each connection attempt mints a fresh ticket.
 
+Issuance is bounded so the mint endpoint cannot be used to exhaust the server: each agent may request a limited number of tickets per minute and the process holds a capped number of unspent tickets, beyond which the endpoint answers `429` instead of allocating more.
+
 For clients that cannot call the mint endpoint, `?apiKey=` remains available as a handshake-only fallback:
 
 ```ts

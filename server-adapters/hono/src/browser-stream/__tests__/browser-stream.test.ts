@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { setupBrowserStream } from '../index.js';
 import type { BrowserStreamOrigin } from '../index.js';
+import { TICKET_ISSUANCE_LIMIT } from '../upgrade-tickets.js';
 
 /**
  * Minimal Mastra stand-in. `createAuthMiddleware` only reads `getServer().auth`,
@@ -674,6 +675,19 @@ describe('hono browser-stream routes', () => {
       );
 
       expect(upgrade.status).toBe(404);
+    });
+
+    it('rate limits ticket issuance instead of minting on every request', async () => {
+      for (let i = 0; i < TICKET_ISSUANCE_LIMIT; i++) {
+        expect((await mint()).status).toBe(200);
+      }
+
+      const response = await mint();
+
+      expect(response.status).toBe(429);
+      await expect(response.json()).resolves.toEqual({
+        error: 'Too many browser stream upgrade tickets requested',
+      });
     });
   });
 });

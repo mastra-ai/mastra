@@ -12,9 +12,7 @@ import { UpgradeTicketStore } from './upgrade-tickets';
  * as Hono's `cors.origin` option.
  */
 export type BrowserStreamOrigin =
-  | string
-  | string[]
-  | ((origin: string, c: Context) => Promise<string | undefined | null> | string | undefined | null);
+  string | string[] | ((origin: string, c: Context) => Promise<string | undefined | null> | string | undefined | null);
 
 /**
  * Hono-specific browser stream configuration.
@@ -299,7 +297,18 @@ export async function setupBrowserStream<E extends Env, S extends Schema, B exte
       // No body or invalid JSON - mint an agent-scoped ticket.
     }
 
-    return c.json(upgradeTickets.issue(agentId, threadId));
+    // Tickets are cheap, not free: without a bound this route lets any caller
+    // grow the process's memory and per-mint work with request volume.
+    const issued = upgradeTickets.issue(agentId, threadId);
+    if (!issued.ok) {
+      const error =
+        issued.reason === 'capacity'
+          ? 'Too many outstanding browser stream upgrade tickets'
+          : 'Too many browser stream upgrade tickets requested';
+      return c.json({ error }, 429);
+    }
+
+    return c.json({ ticket: issued.ticket, expiresIn: issued.expiresIn });
   });
 
   // Browser session probe endpoint - tells the client whether to open a WS.
