@@ -149,7 +149,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
 type UpdateManyArgs = [table: string, filter: { id?: string }, values: { position?: number }];
 
-describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
+describe.each(['libsql', 'libsql-memory', ...(postgresUrl ? ['postgres'] : [])])(
   'environment repository order across independent %s clients',
   backend => {
     async function withEnvironment(
@@ -166,10 +166,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
     ) {
       const directory = await mkdtemp(join(tmpdir(), 'factory-order-'));
       const url = `file:${join(directory, 'order.db')}`;
-      const backends = ['left', 'right'].map(id =>
+      // An in-memory database lives in one client, so that backend gets a single client.
+      const backends = (backend === 'libsql-memory' ? ['only'] : ['left', 'right']).map(id =>
         backend === 'postgres'
           ? new PgFactoryStorage({ id, connectionString: postgresUrl! })
-          : new LibSQLFactoryStorage({ id, url }),
+          : new LibSQLFactoryStorage({ id, url: backend === 'libsql-memory' ? ':memory:' : url }),
       );
       let projectId: string | undefined;
       try {
@@ -289,43 +290,46 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       });
     });
 
-    it('applies two concurrent reorders one after the other instead of mixing them', async () => {
-      await withEnvironment(async ({ apps, projectId, docs, api, intercept, positions }) => {
-        const swapStarted = Promise.withResolvers<void>();
-        const keepDone = Promise.withResolvers<void>();
-        let paused = false;
-        intercept(async ([table, filter, values], write) => {
-          const result = await write();
-          // Hold the swap after its first link write until the other reorder finishes (or a
-          // transaction keeps it from starting).
-          if (table === 'factory_project_repositories' && filter.id === docs && values.position === 2 && !paused) {
-            paused = true;
-            swapStarted.resolve();
-            await Promise.race([keepDone.promise, new Promise(resolve => setTimeout(resolve, 300))]);
-          }
-          return result;
+    it.skipIf(backend === 'libsql-memory')(
+      'applies two concurrent reorders one after the other instead of mixing them',
+      async () => {
+        await withEnvironment(async ({ apps, projectId, docs, api, intercept, positions }) => {
+          const swapStarted = Promise.withResolvers<void>();
+          const keepDone = Promise.withResolvers<void>();
+          let paused = false;
+          intercept(async ([table, filter, values], write) => {
+            const result = await write();
+            // Hold the swap after its first link write until the other reorder finishes (or a
+            // transaction keeps it from starting).
+            if (table === 'factory_project_repositories' && filter.id === docs && values.position === 2 && !paused) {
+              paused = true;
+              swapStarted.resolve();
+              await Promise.race([keepDone.promise, new Promise(resolve => setTimeout(resolve, 300))]);
+            }
+            return result;
+          });
+          const swap = patch(apps[0]!, projectId, {
+            repositories: [
+              { projectRepositoryId: docs, position: 2 },
+              { projectRepositoryId: api, position: 1 },
+            ],
+          });
+          await swapStarted.promise;
+          const keep = patch(apps[1]!, projectId, {
+            repositories: [
+              { projectRepositoryId: docs, position: 1 },
+              { projectRepositoryId: api, position: 2 },
+            ],
+          }).finally(() => keepDone.resolve());
+          expect((await Promise.all([swap, keep])).map(response => response.status)).toEqual([200, 200]);
+          vi.restoreAllMocks();
+          expect([
+            { docs: 2, api: 1 },
+            { docs: 1, api: 2 },
+          ]).toContainEqual(await positions());
         });
-        const swap = patch(apps[0]!, projectId, {
-          repositories: [
-            { projectRepositoryId: docs, position: 2 },
-            { projectRepositoryId: api, position: 1 },
-          ],
-        });
-        await swapStarted.promise;
-        const keep = patch(apps[1]!, projectId, {
-          repositories: [
-            { projectRepositoryId: docs, position: 1 },
-            { projectRepositoryId: api, position: 2 },
-          ],
-        }).finally(() => keepDone.resolve());
-        expect((await Promise.all([swap, keep])).map(response => response.status)).toEqual([200, 200]);
-        vi.restoreAllMocks();
-        expect([
-          { docs: 2, api: 1 },
-          { docs: 1, api: 2 },
-        ]).toContainEqual(await positions());
-      });
-    });
+      },
+    );
   },
 );
 
