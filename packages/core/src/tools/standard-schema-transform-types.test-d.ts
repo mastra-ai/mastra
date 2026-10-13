@@ -3,7 +3,8 @@ import { z } from 'zod/v4';
 import type { AgentConfig } from '../agent/types';
 import type { RequestContext } from '../request-context';
 import type { InferPublicSchema, StandardSchemaWithJSON } from '../schema';
-import type { WorkflowConfig } from '../workflows';
+import { createStep, createWorkflow } from '../workflows';
+import type { InferWorkflowRequestContext, WorkflowConfig } from '../workflows';
 import { createTool } from './tool';
 
 // Mirrors a Standard Schema adapter such as Effect's `Schema.toStandardSchemaV1`,
@@ -87,5 +88,31 @@ describe('transformed Standard Schema type inference', () => {
       requestContextSchema: dateFromString,
     };
     expectTypeOf(config.id).toEqualTypeOf<'transform-workflow'>();
+  });
+
+  it('does not type step request context as the decoded output', () => {
+    const schema = z.object({ value: z.number() });
+    expectTypeOf<InferWorkflowRequestContext<typeof dateFromString>>().not.toEqualTypeOf<{ date: Date }>();
+
+    const step = createStep({
+      id: 'transform-step',
+      inputSchema: schema,
+      outputSchema: schema,
+      requestContextSchema: dateFromString,
+      execute: async ({ inputData, requestContext }) => {
+        expectTypeOf(requestContext.get('date')).not.toEqualTypeOf<Date>();
+        // @ts-expect-error steps receive the raw request context values, not decoded ones
+        requestContext.get('date').toISOString();
+        return inputData;
+      },
+    });
+
+    const workflow = createWorkflow({
+      id: 'inferred-transform-workflow',
+      inputSchema: schema,
+      outputSchema: schema,
+      requestContextSchema: dateFromString,
+    }).then(step);
+    expectTypeOf(workflow.id).toEqualTypeOf<'inferred-transform-workflow'>();
   });
 });

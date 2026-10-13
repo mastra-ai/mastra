@@ -80,6 +80,7 @@ import type {
   StepMetadata,
   CreateWorkflowParams,
   InferSchemaOutput,
+  InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import type { ClassifierStepOutput } from '../entry-executors';
@@ -412,7 +413,7 @@ function createStepFromParams<
   TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
   TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+  InferWorkflowRequestContext<TRequestContextSchema>
 > {
   // Type assertion needed because toStandardSchema returns StandardSchemaWithJSON<unknown>
   // but we need it to match the inferred generic types. The public overloads ensure
@@ -437,7 +438,7 @@ function createStepFromParams<
       TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
       TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
       DefaultEngineType,
-      TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+      InferWorkflowRequestContext<TRequestContextSchema>
     >['execute'],
   };
 }
