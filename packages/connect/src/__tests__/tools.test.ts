@@ -97,8 +97,9 @@ describe('connect', () => {
     await connect({
       client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
     })();
-    const [url] = fetchMock.mock.calls[0]!;
+    const [url, init] = fetchMock.mock.calls[0]!;
     expect(String(url)).toContain('/v2/projects/proj_env/connections');
+    expect((init?.headers as Record<string, string>)['x-mastra-project-id']).toBe('proj_env');
   });
 
   it('resolves the toolset for the sole active connection', async () => {

@@ -195,7 +195,9 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
   }
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
 
-  const client = resolveClient(options.client);
+  // Force the client's attribution header to match the project whose
+  // connections this resolver discovers.
+  const client = resolveClient({ ...options.client, projectId });
   const resolverId = ++nextResolverId;
   // Keyed by `${integrationId}::${connectionId}` so multiple active
   // connections for the same provider each get their own MCP client.
