@@ -35,9 +35,9 @@ export function createBranchingWorkflows(ctx: WorkflowCreatorContext) {
       }),
     );
     mockRegistry.register('branch-if-then:final', () =>
-      vi.fn().mockImplementation(async ({ getStepResult }) => {
-        const startVal = getStepResult(startStep)?.newValue ?? 0;
-        const otherVal = getStepResult(otherStep)?.other ?? 0;
+      vi.fn().mockImplementation(async ({ getStepResultAsync }) => {
+        const startVal = (await getStepResultAsync(startStep))?.newValue ?? 0;
+        const otherVal = (await getStepResultAsync(otherStep))?.other ?? 0;
         return { finalValue: startVal + otherVal };
       }),
     );
@@ -435,9 +435,9 @@ export function createBranchingWorkflows(ctx: WorkflowCreatorContext) {
       }),
     );
     mockRegistry.register('branch-nested:final', () =>
-      vi.fn().mockImplementation(async ({ getStepResult }: any) => {
-        const startVal = getStepResult(startStepRef)?.newValue ?? 0;
-        const otherVal = getStepResult(otherStepRef)?.other ?? 0;
+      vi.fn().mockImplementation(async ({ getStepResultAsync }: any) => {
+        const startVal = (await getStepResultAsync(startStepRef))?.newValue ?? 0;
+        const otherVal = (await getStepResultAsync(otherStepRef))?.other ?? 0;
         return { finalValue: startVal + otherVal };
       }),
     );

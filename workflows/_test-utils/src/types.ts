@@ -573,6 +573,8 @@ export type SkippableTest =
   | 'mapRequestContextPath'
   | 'mapDynamicFn'
   | 'mapCustomStepId'
+  // Loop conditions reading the loop body's latest result via getStepResultAsync
+  | 'loopConditionStepResult'
   // Misc basic execution tests
   | 'executionFlowNotDefined'
   | 'executionGraphNotCommitted'
