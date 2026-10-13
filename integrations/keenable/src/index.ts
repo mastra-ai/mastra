@@ -3,6 +3,7 @@ export {
   keenableFetchRequest,
   DEFAULT_BASE_URL,
   type KeenableClientOptions,
+  type KeenableRequestInit,
   type KeenableSearchRequest,
   type KeenableSearchResponse,
   type KeenableSearchResultItem,

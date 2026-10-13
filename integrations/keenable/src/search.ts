@@ -8,6 +8,8 @@ import type { KeenableClientOptions, KeenableSearchResultItem } from './client.j
 // for an agent's context; the API treats it as a target, not a hard cap.
 const SNIPPET_MAX_LENGTH = 500;
 
+const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the YYYY-MM-DD format.');
+
 const inputSchema = z.object({
   query: z.string().describe('The search query.'),
   maxResults: z
@@ -18,12 +20,10 @@ const inputSchema = z.object({
     .optional()
     .describe('Maximum number of results to return (1-50). Defaults to 10.'),
   site: z.string().optional().describe('Restrict results to a single domain, for example `github.com`.'),
-  publishedAfter: z
-    .string()
+  publishedAfter: isoDate
     .optional()
     .describe('Exclude pages published before this date. Format: YYYY-MM-DD. Pages without a known date are kept.'),
-  publishedBefore: z
-    .string()
+  publishedBefore: isoDate
     .optional()
     .describe('Exclude pages published after this date. Format: YYYY-MM-DD. Pages without a known date are kept.'),
 });
@@ -65,7 +65,7 @@ export function createKeenableSearchTool(config?: KeenableClientOptions) {
       'Search the web using the Keenable Search API. Returns ranked results with titles, URLs, page text snippets, and publication dates when known. Supports restricting results to one site and filtering by publication date.',
     inputSchema,
     outputSchema,
-    execute: async input => {
+    execute: async (input, context) => {
       const response = await keenableSearchRequest(
         {
           query: input.query,
@@ -76,6 +76,7 @@ export function createKeenableSearchTool(config?: KeenableClientOptions) {
           snippet_max_length: SNIPPET_MAX_LENGTH,
         },
         config,
+        { signal: context?.abortSignal },
       );
 
       return {

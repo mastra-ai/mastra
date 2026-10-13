@@ -29,8 +29,10 @@ export function createKeenableFetchTool(config?: KeenableClientOptions) {
       'Read a web page using the Keenable Fetch API. Returns the main content as Markdown with the page title and publication date when known. Use it to read a page found with search.',
     inputSchema,
     outputSchema,
-    execute: async input => {
-      const response = await keenableFetchRequest({ url: input.url, max_chars: input.maxChars }, config);
+    execute: async (input, context) => {
+      const response = await keenableFetchRequest({ url: input.url, max_chars: input.maxChars }, config, {
+        signal: context?.abortSignal,
+      });
 
       return {
         url: response.url || input.url,

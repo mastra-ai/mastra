@@ -110,6 +110,29 @@ describe('createKeenableSearchTool', () => {
   });
 });
 
+describe('tool execution context', () => {
+  it('forwards the abort signal from the tool context to both requests', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ results: [], content: '# A' }));
+    const controller = new AbortController();
+    const tools = createKeenableTools({ fetch: fetchMock });
+
+    await tools.keenableSearch.execute!({ query: 'q' }, { abortSignal: controller.signal } as any);
+    await tools.keenableFetch.execute!({ url: 'https://a.test' }, { abortSignal: controller.signal } as any);
+
+    expect((fetchMock.mock.calls[0]![1] as RequestInit).signal).toBe(controller.signal);
+    expect((fetchMock.mock.calls[1]![1] as RequestInit).signal).toBe(controller.signal);
+  });
+
+  it('rejects publication dates that are not YYYY-MM-DD', () => {
+    const tool = createKeenableSearchTool();
+    const schema = tool.inputSchema as any;
+
+    expect(schema.safeParse({ query: 'q', publishedAfter: '2026-01-01' }).success).toBe(true);
+    expect(schema.safeParse({ query: 'q', publishedAfter: 'last week' }).success).toBe(false);
+    expect(schema.safeParse({ query: 'q', publishedBefore: '01/02/2026' }).success).toBe(false);
+  });
+});
+
 describe('createKeenableFetchTool', () => {
   it('exposes the expected tool id', () => {
     const tool = createKeenableFetchTool();

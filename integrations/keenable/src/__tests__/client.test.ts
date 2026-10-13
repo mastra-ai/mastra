@@ -136,6 +136,34 @@ describe('keenableFetchRequest', () => {
   });
 });
 
+describe('response handling', () => {
+  beforeEach(() => {
+    delete process.env.KEENABLE_API_KEY;
+  });
+
+  it.each([null, [1, 2], 'text'])('rejects a non-object JSON body (%j)', async body => {
+    const fetchMock = vi.fn(async () => jsonResponse(body));
+
+    await expect(keenableSearchRequest({ query: 'q' }, { fetch: fetchMock })).rejects.toThrow(
+      'Keenable Search request returned a non-object JSON body',
+    );
+    await expect(keenableFetchRequest({ url: 'https://a.test' }, { fetch: fetchMock })).rejects.toThrow(
+      'Keenable Fetch request returned a non-object JSON body',
+    );
+  });
+
+  it('passes the abort signal to fetch', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ results: [] }));
+    const controller = new AbortController();
+
+    await keenableSearchRequest({ query: 'q' }, { fetch: fetchMock }, { signal: controller.signal });
+    await keenableFetchRequest({ url: 'https://a.test' }, { fetch: fetchMock }, { signal: controller.signal });
+
+    expect((fetchMock.mock.calls[0]![1] as RequestInit).signal).toBe(controller.signal);
+    expect((fetchMock.mock.calls[1]![1] as RequestInit).signal).toBe(controller.signal);
+  });
+});
+
 describe('toIsoDate', () => {
   it('converts Unix seconds to an ISO string', () => {
     expect(toIsoDate(1789398666)).toBe('2026-09-14T15:11:06.000Z');

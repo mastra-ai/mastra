@@ -22,6 +22,11 @@ export type KeenableClientOptions = {
   fetch?: typeof fetch;
 };
 
+export type KeenableRequestInit = {
+  /** Aborts the request, for example when the agent run that called the tool is cancelled. */
+  signal?: AbortSignal;
+};
+
 export type KeenableSearchRequest = {
   query: string;
   max_results?: number;
@@ -93,6 +98,13 @@ async function failure(action: string, response: Response): Promise<Error> {
   return new Error(`Keenable ${action} request failed with status ${response.status}${text ? `: ${text}` : ''}`);
 }
 
+function parseJsonObject<T>(value: unknown, action: string): T {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`Keenable ${action} request returned a non-object JSON body`);
+  }
+  return value as T;
+}
+
 /**
  * Calls the Keenable search endpoint. Without an API key the request goes to the
  * keyless `/v1/search/public` endpoint.
@@ -100,6 +112,7 @@ async function failure(action: string, response: Response): Promise<Error> {
 export async function keenableSearchRequest(
   body: KeenableSearchRequest,
   options?: KeenableClientOptions,
+  init?: KeenableRequestInit,
 ): Promise<KeenableSearchResponse> {
   const { apiKey, baseUrl, fetchImpl } = resolveOptions(options);
   const path = apiKey ? '/v1/search' : '/v1/search/public';
@@ -108,13 +121,14 @@ export async function keenableSearchRequest(
     method: 'POST',
     headers: headers(apiKey, true),
     body: JSON.stringify(body),
+    signal: init?.signal,
   });
 
   if (!response.ok) {
     throw await failure('Search', response);
   }
 
-  const json = (await response.json()) as Partial<KeenableSearchResponse>;
+  const json = parseJsonObject<Partial<KeenableSearchResponse>>(await response.json(), 'Search');
   return {
     query: json.query,
     results: Array.isArray(json.results) ? json.results : [],
@@ -129,6 +143,7 @@ export async function keenableSearchRequest(
 export async function keenableFetchRequest(
   params: KeenableFetchRequest,
   options?: KeenableClientOptions,
+  init?: KeenableRequestInit,
 ): Promise<KeenableFetchResponse> {
   const { apiKey, baseUrl, fetchImpl } = resolveOptions(options);
   const path = apiKey ? '/v1/fetch' : '/v1/fetch/public';
@@ -138,11 +153,12 @@ export async function keenableFetchRequest(
   const response = await fetchImpl(`${baseUrl}${path}?${query}`, {
     method: 'GET',
     headers: headers(apiKey, false),
+    signal: init?.signal,
   });
 
   if (!response.ok) {
     throw await failure('Fetch', response);
   }
 
-  return (await response.json()) as KeenableFetchResponse;
+  return parseJsonObject<KeenableFetchResponse>(await response.json(), 'Fetch');
 }
