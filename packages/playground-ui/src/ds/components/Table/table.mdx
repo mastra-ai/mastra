@@ -145,7 +145,7 @@ Renders `a`, or the element you pass to `render`.
 
 ### `Table.Pagination`
 
-Numbered page navigation: Previous, page numbers, and Next. Render it **after** the `Table`, never inside `table`, `thead`, or `tbody`. It renders a `nav` landmark containing native buttons.
+Numbered page navigation: Previous, page numbers, and Next. It is a ready-made composition of `Pagination` from `@mastra/playground-ui/components/Pagination`; compose those parts yourself for links with URLs or for Previous and Next only (see **Navigation / Pagination**). Render it **after** the `Table`, never inside `table`, `thead`, or `tbody`. It renders a `nav` landmark containing native buttons.
 
 - `page: number` is the **zero-based** current page. `page={0}` highlights “1”.
 - `pageCount: number` is the total number of pages.

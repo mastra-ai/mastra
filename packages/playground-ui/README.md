@@ -147,6 +147,55 @@ The full guide, with recipes for column dividers, editable cells, sorting, clien
 
 Legacy named parts remain supported. `Thead` creates its own row; `Table.Header` takes an explicit `Table.Row`. In inset mode, `className` applies to the outer surface and native props (including `ref` and `style`) apply to the `table`.
 
+### Pagination
+
+`Pagination` is page navigation built from parts, shaped like shadcn's: `Pagination`, `PaginationContent`, `PaginationItem`, `PaginationLink`, `PaginationPrevious`, `PaginationNext`, and `PaginationEllipsis`. The current page wears a raised pill that slides between pages, and a fluid highlight follows the pointer. The caller owns the page.
+
+```tsx
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+  getPaginationRange,
+} from '@mastra/playground-ui/components/Pagination';
+
+<Pagination aria-label="Credit history pages">
+  <PaginationContent>
+    <PaginationItem>
+      <PaginationPrevious disabled={page === 0} onClick={() => setPage(page - 1)} />
+    </PaginationItem>
+    {getPaginationRange(page, pageCount).map(item => {
+      if (item.kind === 'ellipsis') {
+        return (
+          <PaginationItem key={item.key}>
+            <PaginationEllipsis />
+          </PaginationItem>
+        );
+      }
+      return (
+        <PaginationItem key={item.page}>
+          <PaginationLink isActive={item.page === page} onClick={() => setPage(item.page)}>
+            {item.page + 1}
+          </PaginationLink>
+        </PaginationItem>
+      );
+    })}
+    <PaginationItem>
+      <PaginationNext disabled={page === pageCount - 1} onClick={() => setPage(page + 1)} />
+    </PaginationItem>
+  </PaginationContent>
+</Pagination>;
+```
+
+- Page indexes are zero-based. `getPaginationRange(page, pageCount)` returns the pages to show, with ellipses past seven pages.
+- `PaginationLink` renders a button. Pass `render={<a href="?page=2" />}`, or a router link, when each page has a URL.
+- `disabled` keeps Previous and Next in place and focusable, and ignores their clicks.
+- For a table, `Table.Pagination` takes `page`, `pageCount`, and `onPageChange` and renders this composition for you.
+
 ### Semantic color tokens
 
 `theme.css` declares the semantic color tokens (`--background`, `--card`, `--foreground`, and friends) at the document root, so utilities such as `bg-card` and `text-foreground` resolve anywhere in the app, portalled content included. Importing `style.css` once is enough to get both the compiled utilities and those tokens.
