@@ -1374,9 +1374,15 @@ describe('MastraModelOutput', () => {
           inputTokens: 10,
           outputTokens: 20,
           totalTokens: 30,
+          reasoningTokens: 3,
           cachedInputTokens: 4,
         }),
-        createStepFinishChunk(runId, undefined, { inputTokens: 5, outputTokens: 5, totalTokens: 10 }),
+        createStepFinishChunk(runId, undefined, {
+          inputTokens: 5,
+          outputTokens: 5,
+          totalTokens: 10,
+          reasoningTokens: 2,
+        }),
         {
           type: 'abort',
           runId,
@@ -1405,9 +1411,15 @@ describe('MastraModelOutput', () => {
         inputTokens: 15,
         outputTokens: 25,
         totalTokens: 40,
+        reasoningTokens: 5,
         cachedInputTokens: 4,
       });
-      expect(finishPayload.usage).toMatchObject({ inputTokens: 5, outputTokens: 5, totalTokens: 10 });
+      expect(finishPayload.usage).toMatchObject({
+        inputTokens: 5,
+        outputTokens: 5,
+        totalTokens: 10,
+        reasoningTokens: 2,
+      });
     });
 
     it('should keep completed-step usage in the aborted payload after a continuing goal truncates the step buffer', async () => {
