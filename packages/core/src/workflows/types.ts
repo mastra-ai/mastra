@@ -395,6 +395,13 @@ export type WorkflowStateField =
   | 'requestContext'
   | 'tracingContext';
 
+export interface NestedWorkflowParent {
+  workflowId: string;
+  runId: string;
+  stepId: string;
+  foreachIndex?: number;
+}
+
 export interface WorkflowRunState {
   // Core state info
   runId: string;
@@ -420,6 +427,7 @@ export interface WorkflowRunState {
    * as children of the original suspended span.
    */
   tracingContext?: WorkflowStateTracingContext;
+  parentWorkflow?: NestedWorkflowParent;
 }
 
 /**
@@ -559,6 +567,29 @@ export interface WorkflowOptions {
    * for reduced snapshot writes and serialize their own resumes.
    */
   allowUnclaimedResumes?: boolean;
+
+  /**
+   * Identifies step errors raised because this execution lost, or could not
+   * confirm, ownership of the run — for example a durable agent run taken
+   * over by `recover()`. Another execution may be driving the run from its
+   * stored snapshot, so the evented engine fails such a run without any
+   * storage write: no step-result merge, no terminal `failed` update, and no
+   * snapshot cleanup.
+   *
+   * @internal Set by durable agent workflows.
+   */
+  isOwnershipLostError?: (error: unknown) => boolean;
+
+  /**
+   * Whether the serialized request context carried by a run event belongs to a
+   * different execution of the run than `requestContext` — for example one
+   * that lost the run to `recover()` but is still publishing. A caller waiting
+   * on the evented engine ignores such an execution's finish event and keeps
+   * waiting for its own.
+   *
+   * @internal Set by durable agent workflows.
+   */
+  isForeignExecution?: (eventRequestContext: unknown, requestContext: RequestContext) => boolean;
 
   /**
    * Transforms the run snapshot immediately before it is persisted.
@@ -1300,6 +1331,7 @@ export type SubsetOf<TStepState, TState> =
 export type ExecutionContext = {
   workflowId: string;
   runId: string;
+  parentWorkflow?: NestedWorkflowParent;
   executionPath: number[];
   stepExecutionPath?: string[];
   activeStepsPath: Record<string, number[]>;

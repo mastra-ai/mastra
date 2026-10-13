@@ -1164,6 +1164,53 @@ describe('suspended-run discovery', () => {
       );
     }, 30000);
 
+    it('resumes a generic suspension with approval-shaped resume data', async () => {
+      const resumedTool = vi.fn();
+      const storage = new InMemoryStore();
+      const approvalLikeTool = createTool({
+        id: 'approval-like-tool',
+        description: 'Suspends for an approval-shaped response',
+        inputSchema: z.object({}),
+        suspendSchema: z.object({ question: z.string() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute: async (_input, context) => {
+          if (context?.agent?.resumeData === undefined) {
+            return await context?.agent?.suspend({ question: 'Continue?' });
+          }
+          resumedTool(context.agent.resumeData);
+          return context.agent.resumeData;
+        },
+      });
+      const agent = new Agent({
+        id: 'approval-shaped-suspension-agent',
+        name: 'Approval-shaped Suspension Agent',
+        instructions: 'Suspend before continuing.',
+        model: createMockModel({ toolName: 'approvalLikeTool', toolCallOnFirstCall: true }),
+        tools: { approvalLikeTool },
+      });
+      new Mastra({ agents: { agent }, logger: false, storage });
+
+      const stream = await agent.stream('Continue after approval', {
+        memory: { thread: 'thread-1', resource: 'resource-1' },
+      });
+      let toolCallId = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'tool-call-suspended') {
+          toolCallId = chunk.payload.toolCallId;
+        }
+      }
+      expect(toolCallId).toBeTruthy();
+
+      const result = await agent.sendToolApproval({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        toolCallId,
+        approved: true,
+      });
+      expect(result).toEqual({ accepted: true, runId: stream.runId, toolCallId });
+      await vi.waitFor(() => expect(resumedTool).toHaveBeenCalledWith({ approved: true }));
+    }, 30000);
+
     it('declines a suspended run after a simulated restart', async () => {
       const storage = new InMemoryStore();
       const { agent } = createSuspendedSetup({ storage });
@@ -1509,4 +1556,70 @@ describe('snapshot path contract for threadId pushdown (#22627)', () => {
     );
     expect(getSnapshotMemoryInfo(snapshot)).toEqual(expect.objectContaining({ threadId: 'durable-thread-1' }));
   }, 60000);
+});
+
+describe('aborting a suspended run (#25903)', () => {
+  it('abortThreadStream removes the approval-suspended run from listSuspendedRuns', async () => {
+    const { agent } = createSuspendedSetup();
+    const { runId } = await suspendRun(agent, 'abort-thread', 'abort-resource');
+    expect((await agent.listSuspendedRuns({ threadId: 'abort-thread' })).runs.map(r => r.runId)).toContain(runId);
+
+    expect(await agent.abortThreadStream({ threadId: 'abort-thread', resourceId: 'abort-resource' })).toBe(true);
+
+    await vi.waitFor(async () => {
+      expect((await agent.listSuspendedRuns({ threadId: 'abort-thread' })).runs).toHaveLength(0);
+    });
+  });
+
+  it('abortRunStream removes the approval-suspended run from listSuspendedRuns', async () => {
+    const { agent } = createSuspendedSetup();
+    const { runId } = await suspendRun(agent, 'abort-run', 'abort-resource');
+
+    await agent.abortRunStream(runId);
+
+    await vi.waitFor(async () => {
+      expect((await agent.listSuspendedRuns({ threadId: 'abort-run' })).runs).toHaveLength(0);
+    });
+  });
+
+  async function suspendDurable(threadId: string) {
+    const baseAgent = new Agent({
+      id: 'durable-abort-agent',
+      name: 'Durable Abort Agent',
+      instructions: 'You find users.',
+      model: createMockModel(),
+      tools: { findUserTool: createFindUserTool() },
+    });
+    const durableAgent: any = createDurableAgent({ agent: baseAgent });
+    new Mastra({ agents: { durableAgent }, logger: false, storage: new InMemoryStore() });
+    const result: any = await durableAgent.stream('Find the user with name - Dero Israel', {
+      requireToolApproval: true,
+      memory: { thread: threadId, resource: 'abort-resource' },
+    });
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') break;
+    }
+    await vi.waitFor(async () => {
+      expect((await durableAgent.listSuspendedRuns({ threadId })).runs.length).toBeGreaterThan(0);
+    });
+    return { durableAgent, result };
+  }
+
+  it('DurableAgent abortThreadStream removes the suspended run', async () => {
+    const { durableAgent } = await suspendDurable('durable-abort-thread');
+    expect(
+      await durableAgent.abortThreadStream({ threadId: 'durable-abort-thread', resourceId: 'abort-resource' }),
+    ).toBe(true);
+    await vi.waitFor(async () => {
+      expect((await durableAgent.listSuspendedRuns({ threadId: 'durable-abort-thread' })).runs).toHaveLength(0);
+    });
+  }, 30000);
+
+  it("DurableAgent stream result's abort() removes the suspended run", async () => {
+    const { durableAgent, result } = await suspendDurable('durable-abort-result');
+    result.abort();
+    await vi.waitFor(async () => {
+      expect((await durableAgent.listSuspendedRuns({ threadId: 'durable-abort-result' })).runs).toHaveLength(0);
+    });
+  }, 30000);
 });

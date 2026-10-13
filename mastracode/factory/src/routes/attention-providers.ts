@@ -1,5 +1,5 @@
 import type { BoardRegistry } from '../boards/index.js';
-import { overtakenDecisionIds } from '../rules/decision-applicability.js';
+import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 /**
  * Per-kind attention providers. Each kind owns its counts, its bounded page
  * scan, and its wire item shape; the route layer k-way merges provider pages
@@ -348,7 +348,7 @@ export const failedDecisionAttentionSpec: DecisionAttentionSpec = {
   detail: decision => decision.lastError?.slice(0, 512) ?? factoryDispatchFailureMetadata(decision.failureCode).label,
   extra: (decision, { overtaken }) => ({
     failureCode: decision.failureCode,
-    canRetry: !overtaken && factoryDispatchFailureMetadata(decision.failureCode).canRetry,
+    canRetry: decisionRetryable(decision, overtaken),
   }),
   matches: (decision, item, search) =>
     item?.title.toLowerCase().includes(search) === true ||

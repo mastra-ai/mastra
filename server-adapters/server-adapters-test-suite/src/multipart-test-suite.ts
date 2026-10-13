@@ -354,5 +354,68 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
       const result = await response.json();
       expect(result).toMatchObject({ success: true, message: 'Hello, World!' });
     });
+
+    it('should ignore form fields named with special object keys', async () => {
+      const { adapter, app } = await setupAdapter(context);
+
+      const testRoute: ServerRoute<any, any, any> = {
+        method: 'POST',
+        path: '/test/upload-special-keys',
+        responseType: 'json',
+        handler: async (params: any) => {
+          return {
+            success: true,
+            name: params.name ?? null,
+            options: params.options ?? null,
+            // Any of these becoming truthy means a special-key field leaked into the body
+            inheritedIsAdmin: params.isAdmin ?? null,
+            bodyKeys: Object.keys(params).filter(
+              k =>
+                ![
+                  'mastra',
+                  'requestContext',
+                  'tools',
+                  'taskStore',
+                  'abortSignal',
+                  'registeredTools',
+                  'routePrefix',
+                  'request',
+                ].includes(k),
+            ),
+          };
+        },
+      };
+
+      applyMiddleware(app, getContextMiddleware(adapter));
+      await registerRoute(adapter, app, testRoute, { prefix: '' });
+
+      serverInfo = await startServer(app);
+
+      const formData = new FormData();
+      // Field names that must never be written onto the parsed body object
+      formData.append('__proto__', JSON.stringify({ isAdmin: true }));
+      formData.append('constructor', JSON.stringify({ prototype: { isAdmin: true } }));
+      const fileBlob = new Blob([new Uint8Array([1, 2, 3])], { type: 'application/octet-stream' });
+      formData.append('prototype', fileBlob, 'payload.bin');
+      // Legitimate fields alongside them
+      formData.append('name', 'legit-recording');
+      formData.append('options', JSON.stringify({ language: 'en' }));
+
+      const response = await fetch(`${serverInfo.baseUrl}/test/upload-special-keys`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      expect(response.status).toBe(200);
+      const result: any = await response.json();
+      expect(result.name).toBe('legit-recording');
+      expect(result.options).toMatchObject({ language: 'en' });
+      expect(result.inheritedIsAdmin).toBeNull();
+      expect(result.bodyKeys).not.toContain('__proto__');
+      expect(result.bodyKeys).not.toContain('constructor');
+      expect(result.bodyKeys).not.toContain('prototype');
+      // The process-wide Object.prototype must be untouched
+      expect(({} as any).isAdmin).toBeUndefined();
+    });
   });
 }

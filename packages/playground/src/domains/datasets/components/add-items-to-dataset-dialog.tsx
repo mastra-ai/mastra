@@ -15,8 +15,8 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useDatasetMutations, useDatasets } from '@mastra/playground-ui/domains/datasets';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations, useDatasets } from '@mastra/react/hooks/datasets';
 import { useState } from 'react';
 
 export interface AddItemsToDatasetDialogProps {
@@ -106,9 +106,9 @@ export function AddItemsToDatasetDialog({
                 </SelectTrigger>
                 <SelectContent>
                   {availableDatasets.length === 0 ? (
-                    <div className="px-2 py-4 text-center text-body text-muted-foreground">
+                    <Txt as="p" variant="body" tone="muted" className="px-2 py-4 text-center">
                       No other datasets available
-                    </div>
+                    </Txt>
                   ) : (
                     availableDatasets.map(dataset => (
                       <SelectItem key={dataset.id} value={dataset.id}>
@@ -128,7 +128,7 @@ export function AddItemsToDatasetDialog({
               <div className="space-y-2">
                 <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                   <div
-                    className="bg-primary h-full transition-all duration-200"
+                    className="h-full bg-success-indicator transition-all duration-200"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>

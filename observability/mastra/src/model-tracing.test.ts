@@ -2,9 +2,10 @@ import { ReadableStream } from 'node:stream/web';
 import { coreFeatures } from '@mastra/core/features';
 import type { ObservabilityExporter, TracingEvent, ExportedSpan, MetricEvent } from '@mastra/core/observability';
 import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { DefaultObservabilityInstance } from './instances';
+import { PricingRegistry } from './metrics/pricing-registry';
 import { ModelSpanTracker } from './model-tracing';
 
 /**
@@ -1980,7 +1981,7 @@ describe('ModelSpanTracker', () => {
       modelSpan.end();
     });
 
-    it('applies inference context (parameters / providerOptions / availableTools / toolChoice / responseFormat) set via setInferenceContext', async () => {
+    it('applies inference context (parameters / providerOptions / availableTools / tools / toolChoice / responseFormat) set via setInferenceContext', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,
         name: 'test-generation',
@@ -1992,6 +1993,7 @@ describe('ModelSpanTracker', () => {
         parameters: { temperature: 0.7, maxOutputTokens: 1024 },
         providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
         availableTools: ['weather', 'calculator'],
+        tools: [{ type: 'function', name: 'weather', description: 'Get weather', parameters: { type: 'object' } }],
         toolChoice: 'auto',
         responseFormat: 'json_schema',
       });
@@ -2018,6 +2020,7 @@ describe('ModelSpanTracker', () => {
         parameters: { temperature: 0.7, maxOutputTokens: 1024 },
         providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
         availableTools: ['weather', 'calculator'],
+        tools: [{ type: 'function', name: 'weather', description: 'Get weather', parameters: { type: 'object' } }],
         toolChoice: 'auto',
         responseFormat: 'json_schema',
       });
@@ -2273,6 +2276,12 @@ describe('ModelSpanTracker', () => {
       });
 
       it('falls back to pricing estimates when the aggregate Gateway cost is non-finite', () => {
+        onTestFinished(() => vi.restoreAllMocks());
+        vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(
+          PricingRegistry.fromModelsDev({
+            vercel: { models: { 'claude-haiku-4-5': { cost: { input: 1, output: 5 } } } },
+          }),
+        );
         const span = endGeneration({
           attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
           usage: { inputTokens: 100, outputTokens: 50 },

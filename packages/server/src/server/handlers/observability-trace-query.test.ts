@@ -625,7 +625,7 @@ describe('QUERY_TRACES', () => {
     expect(error.status).toBe(504);
     expect(getDeclaredErrorSchema(504).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-      message: 'The trace query exceeded its execution timeout',
+      message: 'The query exceeded its execution timeout',
     });
   });
 
@@ -1016,7 +1016,7 @@ describe('trace-query discovery routes', () => {
     expect(error.status).toBe(503);
     await expect(error.getResponse().json()).resolves.toEqual({
       code: 'TRACE_QUERY_RESOURCE_LIMIT',
-      message: 'The trace query exceeded its resource limit',
+      message: 'The query exceeded its resource limit',
     });
   });
 
@@ -1036,7 +1036,7 @@ describe('trace-query discovery routes', () => {
     expect(error.status).toBe(504);
     await expect(error.getResponse().json()).resolves.toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-      message: 'The trace query exceeded its execution timeout',
+      message: 'The query exceeded its execution timeout',
     });
   });
 });

@@ -8,6 +8,7 @@ import { createMastraCode } from '@mastra/code-sdk';
 import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
 import { hasHeadlessFlag, runMCCli } from '@mastra/code-sdk/headless/index';
+import { resolveModePackArg } from '@mastra/code-sdk/onboarding/pack-activation';
 import {
   createBrowserFromSettings,
   loadSettings,
@@ -23,7 +24,7 @@ import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
 import { TUI_CO_AUTHOR } from './commit-attribution.js';
-import { initialMessageOptions, pipedInputConflict, takeInitialPrompt } from './initial-prompt.js';
+import { initialMessageOptions, pipedInputConflict, takeInitialPrompt, takePackFlag } from './initial-prompt.js';
 import {
   createOneShotFatalErrorHandler,
   createShutdownCoordinator,
@@ -39,6 +40,7 @@ import { resolveTuiSubagents } from './subagent-settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
+import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
 import { getCurrentVersion } from './version.js';
 
 let controller: Awaited<ReturnType<typeof createMastraCode>>['controller'];
@@ -50,6 +52,7 @@ let storageMaintenance: Awaited<ReturnType<typeof createMastraCode>>['storageMai
 let stopPluginSignalProviders: Awaited<ReturnType<typeof createMastraCode>>['stopPluginSignalProviders'] | undefined;
 let threadScheduler: Awaited<ReturnType<typeof createMastraCode>>['threadScheduler'] | undefined;
 let stopNotificationDispatch: Awaited<ReturnType<typeof createMastraCode>>['stopNotificationDispatch'] | undefined;
+let releaseThreadClaims: Awaited<ReturnType<typeof createMastraCode>>['releaseThreadClaims'] | undefined;
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 let tui: MastraTUI | undefined;
 let processMemoryDiagnostics: ProcessMemoryDiagnostics | undefined;
@@ -63,8 +66,8 @@ function isTruthyEnv(name: string): boolean {
   return ['1', 'true', 'yes', 'on'].includes(process.env[name]?.trim().toLowerCase() ?? '');
 }
 
-function resolveInitialStateFromEnv() {
-  const currentModelId = process.env.MASTRACODE_MODEL_ID?.trim();
+function resolveInitialStateFromEnv(options: { ignoreModelEnv?: boolean } = {}) {
+  const currentModelId = options.ignoreModelEnv ? undefined : process.env.MASTRACODE_MODEL_ID?.trim();
   const initialState: Record<string, unknown> = {};
   if (currentModelId) initialState.currentModelId = currentModelId;
   if (isTruthyEnv('MASTRACODE_YOLO')) initialState.yolo = true;
@@ -83,7 +86,11 @@ process.on('unhandledRejection', reason => {
   handleFatalError(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
-async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> = {}, resumeThreadId?: string) {
+async function tuiMain(
+  startupMessage: ReturnType<typeof initialMessageOptions> = {},
+  resumeThreadId?: string,
+  startupPackId?: string,
+) {
   const settings = loadSettings();
   processMemoryDiagnostics = await startTuiProcessMemoryDiagnostics(process.env, warning => {
     console.info(`⚠ ${warning}`);
@@ -94,7 +101,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
     return browserPromise;
   };
 
-  const initialState = resolveInitialStateFromEnv();
+  const initialState = resolveInitialStateFromEnv({ ignoreModelEnv: startupPackId !== undefined });
   const result = await createMastraCode({
     createInitialThread: false,
     coAuthor: TUI_CO_AUTHOR,
@@ -114,6 +121,7 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
   stopPluginSignalProviders = result.stopPluginSignalProviders;
   threadScheduler = result.threadScheduler;
   stopNotificationDispatch = result.stopNotificationDispatch;
+  releaseThreadClaims = result.releaseThreadClaims;
 
   if (result.storageWarning) {
     console.info(`⚠ ${result.storageWarning}`);
@@ -173,10 +181,13 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
     storageMaintenance: result.storageMaintenance,
     processMemoryDiagnostics,
     knowledgeInspector: result.knowledgeInspector,
+    knowledgeInspectorUnavailableReason: result.knowledgeInspectorUnavailableReason,
     threadScheduler: result.threadScheduler,
     appName: 'Mastra Code',
     version: getCurrentVersion(),
     inlineQuestions: true,
+    initialModelOverride: Boolean(initialState?.currentModelId),
+    ...(startupPackId ? { initialPackId: startupPackId } : {}),
     ...(resumeThreadId ? { resumeThreadId } : {}),
     githubSignals: result.githubSignals,
     backgroundToolsEnabled: result.backgroundToolsEnabled,
@@ -209,6 +220,13 @@ async function tuiMain(startupMessage: ReturnType<typeof initialMessageOptions> 
 const asyncCleanup = (): Promise<void> => {
   cleanupPromise ??= (async () => {
     releaseAllThreadLocks();
+    // Release thread claims before the slow teardown below, so a restarted
+    // session can claim its thread (and peers can reach it) right away.
+    try {
+      releaseThreadClaims?.();
+    } catch {
+      // Best-effort — the process is exiting.
+    }
     // Stop plugin-contributed signal providers (and the plugin reload listener)
     // before quiescing workers: a provider that keeps polling past this point
     // could dispatch into a controller that is shutting down.
@@ -224,11 +242,15 @@ const asyncCleanup = (): Promise<void> => {
     threadScheduler?.stop();
     // Release this process's notification dispatch leases before the pubsub that holds them closes.
     await stopNotificationDispatch?.().catch(() => {});
-    const closeSignalsPubSub = (signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
-    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeSignalsPubSub?.()]);
+    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals()]);
     // Mastra owns the workspaces and must destroy them to stop retained language
     // servers before storage is closed.
     await Promise.allSettled([controller?.getMastra()?.shutdown(), analytics?.shutdown()]);
+    // The signals pubsub is Mastra's event bus: in-flight runs and background
+    // tasks drain through it during shutdown, so close it only afterwards. Call
+    // close() on the object; a detached method loses `this` and rejects silently.
+    const pubsubToClose = signalsPubSub as { close?: () => Promise<void> | void } | undefined;
+    await Promise.allSettled([pubsubToClose?.close?.()]);
     // Checkpoint WAL and close the local storage connection after all producers
     // and timers are quiesced. Idempotent — repeated signals (SIGINT then SIGHUP)
     // close only once. LibSQLStore.close()/LibSQLVector.close() truncate the WAL
@@ -402,12 +424,43 @@ async function main() {
     return process.exit(await runPruneCommand(process.argv.slice(3)));
   }
 
-  const initialPrompt = takeInitialPrompt(process.argv, process.env);
+  // Also checked before the headless branch, which would send the bare word as a prompt.
+  const updateArgs = getUpdateCommandArgs(process.argv);
+  if (updateArgs) {
+    const code = await runUpdateCommand({ args: updateArgs, currentVersion: getCurrentVersion() });
+    await Promise.all(
+      [process.stdout, process.stderr].map(stream => new Promise(resolve => stream.write('', resolve))),
+    );
+    return process.exit(code);
+  }
+
+  const loginIndex = process.argv.findIndex(
+    (arg, index) => index >= 2 && arg !== '--acp' && arg !== '--dangerous-auto-approve',
+  );
+  if (process.argv[loginIndex] === 'login') {
+    const { runLoginCommand } = await import('./login-command.js');
+    const code = await runLoginCommand({ args: process.argv.slice(loginIndex + 1) });
+    await new Promise(resolve => process.stdout.write('', resolve));
+    return process.exit(code);
+  }
+
+  // --pack is shared with headless mode, which re-parses it from process.argv
+  // in runMCCli. Strip it here only for the interactive path's other argv
+  // consumers (initial prompt, resume) so the pack id is never mistaken for a
+  // positional prompt.
+  const packFlag = takePackFlag(process.argv);
+  if (packFlag.error) {
+    process.stderr.write(`${packFlag.error}\n`);
+    process.exit(1);
+  }
+
+  const initialPrompt = takeInitialPrompt(packFlag.argv, process.env);
   if (initialPrompt.error) {
     process.stderr.write(`${initialPrompt.error}\n`);
     process.exit(1);
   }
   if (initialPrompt.flag) process.argv = initialPrompt.argv;
+  const tuiArgv = initialPrompt.flag ? initialPrompt.argv : packFlag.argv;
   // The flag only means something to the interactive TUI. Paths that can't run
   // it reject the flag instead of dropping the prompt; an env var prompt is
   // just ignored there.
@@ -419,7 +472,7 @@ async function main() {
 
   let resumeThreadId: string | undefined;
   try {
-    resumeThreadId = parseResumeThreadId(process.argv.slice(2));
+    resumeThreadId = parseResumeThreadId(tuiArgv.slice(2));
   } catch (error) {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     process.exitCode = 1;
@@ -439,6 +492,26 @@ async function main() {
       dangerousAutoApprove: process.argv.includes('--dangerous-auto-approve'),
       coAuthor: TUI_CO_AUTHOR,
     });
+  }
+
+  // Interactive --pack: fail fast on an unknown pack. Validation and
+  // activation (which mirrors /models → Activate and becomes the global
+  // default in settings) happen in MastraTUI.init after thread resume, once
+  // the resumed session mode is known and the pack is confirmed to have a
+  // model for it; the TUI then applies it to the session (and any resumed
+  // thread) at startup.
+  let startupPackId: string | undefined;
+  if (packFlag.value !== undefined) {
+    const settings = loadSettings();
+    const resolved = resolveModePackArg(settings, packFlag.value);
+    if ('error' in resolved) {
+      process.stderr.write(`Error: ${resolved.error}\n`);
+      process.exit(1);
+    }
+    startupPackId = resolved.packId;
+    if (process.env.MASTRACODE_MODEL_ID?.trim()) {
+      process.stderr.write('Note: --pack takes precedence over MASTRACODE_MODEL_ID for this session.\n');
+    }
   }
 
   if (shouldRejectResumeWithoutTTY(resumeThreadId, Boolean(process.stdin.isTTY))) {
@@ -471,7 +544,7 @@ async function main() {
     process.exit(1);
   }
 
-  return tuiMain(initialMessageOptions(initialPrompt, pipedInput), resumeThreadId);
+  return tuiMain(initialMessageOptions(initialPrompt, pipedInput), resumeThreadId, startupPackId);
 }
 
 main().catch(error => {

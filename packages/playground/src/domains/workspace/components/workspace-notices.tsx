@@ -17,7 +17,11 @@ export interface WorkspaceNoticesProps {
 /** Page-level notices shown above the workspace tree. */
 export function WorkspaceNotices({ workspaceId, showInitWarning, skills }: WorkspaceNoticesProps) {
   // Same query as the tree's `.agents/skills` folder, so React Query shares the request.
-  const { data: installed } = useWorkspaceDirectory(workspaceId, INSTALLED_SKILLS_PATH, { enabled: Boolean(skills) });
+  const { data: installed } = useWorkspaceDirectory({
+    workspaceId: workspaceId,
+    path: INSTALLED_SKILLS_PATH,
+    queryOptions: { enabled: Boolean(skills) },
+  });
 
   const undiscovered =
     skills && installed

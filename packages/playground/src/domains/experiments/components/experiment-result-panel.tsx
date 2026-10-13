@@ -5,18 +5,20 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DataKeysAndValues } from '@mastra/playground-ui/components/DataKeysAndValues';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
-import { useTraceFeedback } from '@mastra/playground-ui/domains/traces/hooks/use-trace-feedback';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatCompactNumber, formatCost } from '@mastra/playground-ui/utils/cost';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { useTraceFeedback } from '@mastra/react/hooks/traces';
 import { CheckCircle, ClipboardCheck, FlaskConical, FileCodeIcon, FileOutputIcon, TargetIcon, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useExperimentResultUsage } from '../hooks/use-experiment-result-usage';
+import { getResultOutputText } from '../utils/result-output';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ToolMockReportSection } from './tool-mock-report-section';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
@@ -26,7 +28,9 @@ import { ComputedTag } from '@/domains/observability/components/computed-tag';
  * items satisfy it too, so the same panel serves experiments and review flows.
  */
 export type ExperimentResultPanelResult = Pick<DatasetExperimentResult, 'id' | 'itemId' | 'input' | 'output'> &
-  Partial<Pick<DatasetExperimentResult, 'createdAt' | 'status' | 'groundTruth' | 'toolMockReport' | 'traceId'>> & {
+  Partial<
+    Pick<DatasetExperimentResult, 'targetType' | 'createdAt' | 'status' | 'groundTruth' | 'toolMockReport' | 'traceId'>
+  > & {
     error?: unknown;
     tags?: string[] | null;
   };
@@ -119,6 +123,7 @@ function ExperimentResultPanelBody({
   const hasError = Boolean(result?.error);
   const inputStr = formatValue(result?.input);
   const outputStr = formatValue(result?.output);
+  const outputText = getResultOutputText(result);
   const groundTruthStr = formatValue(result?.groundTruth);
   const canFlag = onFlagForReview && result.status !== 'needs-review' && result.status !== 'complete';
   const tags = Array.isArray(result.tags) ? result.tags : [];
@@ -127,7 +132,10 @@ function ExperimentResultPanelBody({
   const { Link } = useLinkComponent();
   const feedbackTraceId = feedbackTabSlot && result.traceId ? result.traceId : undefined;
   // Fetched as soon as the panel opens so the tab can flag feedback still needing review.
-  const { data: traceFeedback } = useTraceFeedback({ traceId: feedbackTraceId });
+  const { data: traceFeedback } = useTraceFeedback({
+    traceId: feedbackTraceId,
+    queryOptions: { enabled: !!feedbackTraceId },
+  });
   const usage = useExperimentResultUsage(result.traceId);
 
   const details = (
@@ -175,7 +183,6 @@ function ExperimentResultPanelBody({
                   ))}
                   {onTagsChange && (
                     <ExperimentResultsTagPicker
-                      appearance="inline"
                       selectedResults={selectedResults}
                       vocabulary={tagVocabulary}
                       onAddTag={tag => onTagsChange([...tags, tag])}
@@ -247,7 +254,14 @@ function ExperimentResultPanelBody({
 
       <div className="grid gap-3">
         <DataPanel.CodeSection title="Input" icon={<FileCodeIcon />} codeStr={inputStr} />
-        <DataPanel.CodeSection title="Output" icon={<FileOutputIcon />} codeStr={outputStr} />
+        {outputText ? (
+          <section className="grid gap-2">
+            <DataPanel.SectionHeading icon={<FileOutputIcon />}>Output</DataPanel.SectionHeading>
+            <MarkdownRenderer>{outputText}</MarkdownRenderer>
+          </section>
+        ) : (
+          <DataPanel.CodeSection title="Output" icon={<FileOutputIcon />} codeStr={outputStr} />
+        )}
         {result.groundTruth !== undefined && (
           <DataPanel.CodeSection title="Ground Truth" icon={<TargetIcon />} codeStr={groundTruthStr} />
         )}

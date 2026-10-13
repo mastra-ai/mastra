@@ -475,7 +475,7 @@ describe('Postgres advanced trace query', () => {
       queryTraces({ tx } as unknown as DbClient, 'public', plan({ pagination: { page: 1, perPage: 2 } }), 15_000),
     ).rejects.toMatchObject({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-      message: 'The trace query exceeded its execution timeout',
+      message: 'The query exceeded its execution timeout',
     });
     now.mockRestore();
 
@@ -674,7 +674,7 @@ describe('Postgres advanced trace query', () => {
     await expect(queryTraces({ tx } as unknown as DbClient, 'public', plan(), 15_000)).rejects.toEqual(
       expect.objectContaining<Partial<TraceQueryResourceLimitError>>({
         code: 'TRACE_QUERY_RESOURCE_LIMIT',
-        message: 'The trace query exceeded its resource limit',
+        message: 'The query exceeded its resource limit',
       }),
     );
   });
@@ -695,7 +695,7 @@ describe('Postgres advanced trace query', () => {
     await expect(queryTraces({ tx } as unknown as DbClient, 'public', plan(), 1)).rejects.toEqual(
       expect.objectContaining<Partial<TraceQueryExecutionError>>({
         code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
-        message: 'The trace query exceeded its execution timeout',
+        message: 'The query exceeded its execution timeout',
       }),
     );
   });

@@ -23,11 +23,24 @@ The `createToxicityScorer()` function accepts a single options object with the f
     description: 'Configuration for the model used to evaluate toxicity.',
   },
   {
-    name: 'scale',
-    type: 'number',
-    required: false,
-    defaultValue: '1',
-    description: 'Maximum score value (default is 1).',
+    name: 'options',
+    type: 'ToxicityMetricOptions',
+    description: 'Configuration options.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ToxicityMetricOptions',
+        parameters: [
+          {
+            name: 'scale',
+            type: 'number',
+            description: 'Maximum score value.',
+            isOptional: true,
+            defaultValue: '1',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />

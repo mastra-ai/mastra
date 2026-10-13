@@ -18,9 +18,8 @@ overrides:
   brace-expansion@>=2.0.0 <2.1.7: 2.1.7
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
   brace-expansion@>=4.0.0 <5.0.12: 5.0.12
-  nanoid@>=3.0.0 <3.3.19: 3.3.19
   jose@>=4.14.0 <6.2.12: 6.2.12
-  hono@<4.13.8: 4.13.8
+  hono@<4.13.11: 4.13.11
   better-auth: ^1.6.26
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.38
   es-toolkit@<1.52.0: 1.52.0
@@ -31,6 +30,8 @@ overrides:
   '@hono/node-server@<1.19.15': 1.19.15
   fast-uri@<3.1.8: 3.1.8
   js-yaml@>=3.0.0 <3.15.2: 3.15.2
+  nanoid@<5.1.16: 5.1.16
+  source-map-js@>=1.0.0 <1.2.2: 1.2.2
 
 importers:
 
@@ -50,7 +51,7 @@ importers:
         version: 17.4.2
       vite:
         specifier: ^8.0.0
-        version: 8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.0)
+        version: 8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.1)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -69,13 +70,13 @@ importers:
         version: 7.2.0
       mastra:
         specifier: '*'
-        version: 1.31.3(@hono/node-server@1.19.15(hono@4.13.8))(@mastra/core@..+core)(supports-color@7.2.0)(typescript@7.0.2)(zod@3.25.76)
+        version: 1.31.3(@hono/node-server@1.19.15(hono@4.13.11))(@mastra/core@..+core)(supports-color@7.2.0)(typescript@7.0.2)(zod@3.25.76)
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
       vitest:
         specifier: ^4.1.11
-        version: 4.1.11(@types/node@22.19.21)(vite@8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.0))
+        version: 4.1.11(@types/node@22.19.21)(vite@8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.1))
 
 packages:
 
@@ -425,14 +426,14 @@ packages:
     resolution: {integrity: sha512-Za2ai6TLdKjUvnur+eenO6nuYYipVAEhyCAdaV8IRvmU9kK8crOZUSYvIXn72E4f8fJqyAbpcJuTsYYmZp9Deg==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@hono/node-ws@1.3.1':
     resolution: {integrity: sha512-vo/MwCnpJAVHBkGzWjCJ28wF45fYHAfbPZcH2rodZODHtch2GHA94KtMfusmVycTUtsLAsaNsHhtY6P8X3RQsA==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       '@hono/node-server': 1.19.15
-      hono: 4.13.8
+      hono: 4.13.11
 
   '@jridgewell/gen-mapping@0.4.0-beta.0':
     resolution: {integrity: sha512-JdGNkbE4GlNPYQhM0L95fBQr7ctLZJ276QXQLTad4t1oSdnnCI3fDq9DW3BqYAWv8Wc3+HS+4Gsii1oPMCfz1w==}
@@ -1424,8 +1425,8 @@ packages:
   help-me@5.0.0:
     resolution: {integrity: sha512-7xgomUX6ADmcYzFik0HzAxh/73YlKR9bmFzf51CZwR+b6YtzU2m0u49hQCqV6SvlqIqsaxovfwdvbnsw3b/zpg==}
 
-  hono@4.13.8:
-    resolution: {integrity: sha512-/Gng7NfoykZl2pjukW5Z6+8Yxm3BPRf86GTbQnt0SbySkvax4fyL4H3HhY1cCpBGmiW9XDRFzRV+CXK2W8QudQ==}
+  hono@4.13.11:
+    resolution: {integrity: sha512-/SMX/RQNJn7oNmFwH6DtwDqcrzZU2otm1FD6OJe2cWF6cfy/F8hq0XVBv7xW3FTJshRQwuBnXHDq2kNsdZnshg==}
     engines: {node: '>=16.9.0'}
 
   human-signals@8.0.1:
@@ -1654,9 +1655,9 @@ packages:
   ms@2.1.3:
     resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
-  nanoid@3.3.19:
-    resolution: {integrity: sha512-Y2tUNy4ouw6tq5oDSKeQYGOyhkUBhNOcGV/02KC+6kd9eDGqdZd++mjMiIDilrBYvjEnCYvVtsuHCuP+okSfug==}
-    engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+  nanoid@5.1.16:
+    resolution: {integrity: sha512-kVrnsrJqMR8+oLJnGEmSWw9BivK5mt7H3FZatVRjrc5wGqFYuBxX1yG7+A7Gi5AefkX6t/oCkizcQgpu0cY1dQ==}
+    engines: {node: ^18 || >=20}
     hasBin: true
 
   node-releases@2.0.55:
@@ -1908,8 +1909,8 @@ packages:
   sonic-boom@4.2.1:
     resolution: {integrity: sha512-w6AxtubXa2wTXAUsZMMWERrsIRAdrK0Sc+FUytWvYAhBJLyuI4llrMIC1DtlNSdI99EI86KZum2MMq3EAZlF9Q==}
 
-  source-map-js@1.2.1:
-    resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
+  source-map-js@1.2.2:
+    resolution: {integrity: sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==}
     engines: {node: '>=0.10.0'}
 
   split2@4.2.0:
@@ -2165,8 +2166,8 @@ packages:
       utf-8-validate:
         optional: true
 
-  yaml@2.9.0:
-    resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
+  yaml@2.9.1:
+    resolution: {integrity: sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==}
     engines: {node: '>= 14.6'}
     hasBin: true
 
@@ -2204,7 +2205,7 @@ snapshots:
   '@ai-sdk/provider-utils@2.2.8(zod@3.25.76)':
     dependencies:
       '@ai-sdk/provider': 1.1.3
-      nanoid: 3.3.19
+      nanoid: 5.1.16
       secure-json-parse: 2.7.0
       zod: 3.25.76
 
@@ -2515,14 +2516,14 @@ snapshots:
 
   '@expo/sudo-prompt@9.3.2': {}
 
-  '@hono/node-server@1.19.15(hono@4.13.8)':
+  '@hono/node-server@1.19.15(hono@4.13.11)':
     dependencies:
-      hono: 4.13.8
+      hono: 4.13.11
 
-  '@hono/node-ws@1.3.1(@hono/node-server@1.19.15(hono@4.13.8))(hono@4.13.8)':
+  '@hono/node-ws@1.3.1(@hono/node-server@1.19.15(hono@4.13.11))(hono@4.13.11)':
     dependencies:
-      '@hono/node-server': 1.19.15(hono@4.13.8)
-      hono: 4.13.8
+      '@hono/node-server': 1.19.15(hono@4.13.11)
+      hono: 4.13.11
       ws: 8.21.1
     transitivePeerDependencies:
       - bufferutil
@@ -2561,12 +2562,12 @@ snapshots:
       json-schema: 0.4.0
       zod: 3.25.76
 
-  '@mastra/deployer@1.71.0(@hono/node-server@1.19.15(hono@4.13.8))(@mastra/core@..+core)(supports-color@7.2.0)(typescript@7.0.2)(zod@3.25.76)':
+  '@mastra/deployer@1.71.0(@hono/node-server@1.19.15(hono@4.13.11))(@mastra/core@..+core)(supports-color@7.2.0)(typescript@7.0.2)(zod@3.25.76)':
     dependencies:
       '@babel/core': 8.0.6
       '@babel/preset-typescript': 8.0.1(@babel/core@8.0.6)
       '@babel/traverse': 8.0.6
-      '@hono/node-ws': 1.3.1(@hono/node-server@1.19.15(hono@4.13.8))(hono@4.13.8)
+      '@hono/node-ws': 1.3.1(@hono/node-server@1.19.15(hono@4.13.11))(hono@4.13.11)
       '@mastra/core': link:../../core
       '@mastra/server': 1.71.0(@mastra/core@..+core)(zod@3.25.76)
       '@optimize-lodash/rollup-plugin': 5.1.0(rollup@4.62.2)
@@ -2582,7 +2583,7 @@ snapshots:
       find-workspaces: 0.3.1
       fs-extra: 11.3.6
       gray-matter: 4.0.3
-      hono: 4.13.8
+      hono: 4.13.11
       local-pkg: 1.2.1
       resolve.exports: 2.0.3
       rollup: 4.62.2
@@ -2591,7 +2592,7 @@ snapshots:
       tinyglobby: 0.2.17
       typescript-paths: 1.5.2(typescript@7.0.2)
       ws: 8.22.0
-      yaml: 2.9.0
+      yaml: 2.9.1
     transitivePeerDependencies:
       - '@hono/node-server'
       - bufferutil
@@ -2617,7 +2618,7 @@ snapshots:
   '@mastra/server@1.71.0(@mastra/core@..+core)(zod@3.25.76)':
     dependencies:
       '@mastra/core': link:../../core
-      hono: 4.13.8
+      hono: 4.13.11
       zod: 3.25.76
 
   '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)':
@@ -2961,13 +2962,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.11(vite@8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.0))':
+  '@vitest/mocker@4.1.11(vite@8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.1))':
     dependencies:
       '@vitest/spy': 4.1.11
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.0)
+      vite: 8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.1)
 
   '@vitest/pretty-format@4.1.11':
     dependencies:
@@ -3305,7 +3306,7 @@ snapshots:
     dependencies:
       fast-glob: 3.3.3
       pkg-types: 1.3.1
-      yaml: 2.9.0
+      yaml: 2.9.1
 
   flru@1.0.2: {}
 
@@ -3355,7 +3356,7 @@ snapshots:
 
   help-me@5.0.0: {}
 
-  hono@4.13.8: {}
+  hono@4.13.11: {}
 
   human-signals@8.0.1: {}
 
@@ -3489,14 +3490,14 @@ snapshots:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  mastra@1.31.3(@hono/node-server@1.19.15(hono@4.13.8))(@mastra/core@..+core)(supports-color@7.2.0)(typescript@7.0.2)(zod@3.25.76):
+  mastra@1.31.3(@hono/node-server@1.19.15(hono@4.13.11))(@mastra/core@..+core)(supports-color@7.2.0)(typescript@7.0.2)(zod@3.25.76):
     dependencies:
       '@babel/parser': 8.0.6
       '@babel/types': 8.0.6
       '@clack/prompts': 1.7.0
       '@expo/devcert': 1.2.1(supports-color@7.2.0)
       '@mastra/core': link:../../core
-      '@mastra/deployer': 1.71.0(@hono/node-server@1.19.15(hono@4.13.8))(@mastra/core@..+core)(supports-color@7.2.0)(typescript@7.0.2)(zod@3.25.76)
+      '@mastra/deployer': 1.71.0(@hono/node-server@1.19.15(hono@4.13.11))(@mastra/core@..+core)(supports-color@7.2.0)(typescript@7.0.2)(zod@3.25.76)
       '@mastra/loggers': 1.3.2(@mastra/core@..+core)
       archiver: 8.0.0
       commander: 14.0.3
@@ -3557,7 +3558,7 @@ snapshots:
 
   ms@2.1.3: {}
 
-  nanoid@3.3.19: {}
+  nanoid@5.1.16: {}
 
   node-releases@2.0.55: {}
 
@@ -3652,9 +3653,9 @@ snapshots:
 
   postcss@8.5.23:
     dependencies:
-      nanoid: 3.3.19
+      nanoid: 5.1.16
       picocolors: 1.1.1
-      source-map-js: 1.2.1
+      source-map-js: 1.2.2
 
   posthog-node@5.54.1:
     dependencies:
@@ -3849,7 +3850,7 @@ snapshots:
     dependencies:
       atomic-sleep: 1.0.0
 
-  source-map-js@1.2.1: {}
+  source-map-js@1.2.2: {}
 
   split2@4.2.0: {}
 
@@ -3997,7 +3998,7 @@ snapshots:
 
   verkit@0.3.2: {}
 
-  vite@8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.0):
+  vite@8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.1):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.5
@@ -4008,12 +4009,12 @@ snapshots:
       '@types/node': 22.19.21
       esbuild: 0.28.1
       fsevents: 2.3.3
-      yaml: 2.9.0
+      yaml: 2.9.1
 
-  vitest@4.1.11(@types/node@22.19.21)(vite@8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.0)):
+  vitest@4.1.11(@types/node@22.19.21)(vite@8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.1)):
     dependencies:
       '@vitest/expect': 4.1.11
-      '@vitest/mocker': 4.1.11(vite@8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.0))
+      '@vitest/mocker': 4.1.11(vite@8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.1))
       '@vitest/pretty-format': 4.1.11
       '@vitest/runner': 4.1.11
       '@vitest/snapshot': 4.1.11
@@ -4030,7 +4031,7 @@ snapshots:
       tinyexec: 1.2.4
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vite: 8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.0)
+      vite: 8.1.5(@types/node@22.19.21)(esbuild@0.28.1)(yaml@2.9.1)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@types/node': 22.19.21
@@ -4052,7 +4053,7 @@ snapshots:
 
   ws@8.22.0: {}
 
-  yaml@2.9.0: {}
+  yaml@2.9.1: {}
 
   yocto-spinner@1.2.2:
     dependencies:

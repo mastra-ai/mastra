@@ -23,8 +23,18 @@ export type SubAgentToolResult = {
   };
 };
 
+export type SubAgentToolCall = {
+  payload: {
+    toolName: string;
+    toolCallId: string;
+    args?: unknown;
+    providerExecuted?: boolean;
+  };
+};
+
 export type SubAgentGenerateResult = Pick<FullOutput, 'text' | 'finishReason' | 'runId'> & {
   response: { dbMessages?: MastraDBMessage[] };
+  toolCalls?: SubAgentToolCall[];
   toolResults?: SubAgentToolResult[];
   suspendPayload?: unknown;
   resumeSchema?: unknown;
@@ -39,6 +49,7 @@ export type SubAgentStreamResult = {
   /** Set once the stream has been fully consumed if the run ended in an error. */
   error?: Error;
   messageList: MessageList;
+  toolCalls?: SubAgentToolCall[] | Promise<SubAgentToolCall[]>;
   toolResults?: SubAgentToolResult[] | Promise<SubAgentToolResult[]>;
   runId: string;
 };

@@ -612,7 +612,7 @@ class EnumFormatHandler<OUTPUT = undefined> extends BaseFormatHandler<OUTPUT> {
  * @param transformedSchema - Wrapped/transformed schema used for LLM generation (arrays wrapped in {elements: []}, enums in {result: ""})
  * @returns Handler instance for the detected format type
  */
-function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: PublicSchema<OUTPUT> }) {
+export function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: PublicSchema<OUTPUT> }) {
   // Direct transformer callers can pass any PublicSchema; normalize it before
   // selecting the format-specific handler.
   const normalizedSchema = schema ? toStandardSchema(schema) : undefined;
@@ -654,12 +654,27 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   let currentRunId: string | undefined;
   let finalResult: ValidateAndTransformFinalResult<OUTPUT> | undefined;
   let finishReason: MastraFinishReason | undefined;
+  let hasPendingToolCalls = false;
 
   return new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
     async transform(chunk, controller) {
       if (chunk.runId) {
         // save runId to use in error chunks
         currentRunId = chunk.runId;
+      }
+
+      // A single transformer can span several model steps (durable agents pipe the whole run through
+      // one stream). Only the terminal step's text is the structured answer, so start each step fresh.
+      if (chunk.type === 'step-start') {
+        accumulatedText = '';
+        previousObject = undefined;
+        finalResult = undefined;
+        finishReason = undefined;
+        hasPendingToolCalls = false;
+      }
+
+      if (chunk.type === 'tool-call' && !chunk.payload?.providerExecuted) {
+        hasPendingToolCalls = true;
       }
 
       if (chunk.type === 'text-delta' && typeof chunk.payload?.text === 'string') {
@@ -701,6 +716,13 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
 
   async function finalize(controller: TransformStreamDefaultController<ChunkType<OUTPUT>>) {
     if (!accumulatedText?.trim() || finalResult) {
+      return;
+    }
+
+    // Text from a step that calls client-executed tools is narration before the tools run, not the
+    // final answer. Truncated steps still fall through so the truncation is reported; an error finish
+    // already surfaces its own error, so its narration must not become an object result.
+    if (hasPendingToolCalls && finishReason !== 'length' && finishReason !== 'content-filter') {
       return;
     }
 

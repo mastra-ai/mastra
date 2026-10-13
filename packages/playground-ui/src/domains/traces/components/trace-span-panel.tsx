@@ -1,3 +1,4 @@
+import { useSpanDetail, useThreadHasOtherTraces } from '@mastra/react/hooks/traces';
 import { MessagesSquareIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
@@ -6,8 +7,6 @@ import type { TraceDataPanelView } from '@/domains/traces/components/trace-data-
 import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-panel';
 import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
-import { useSpanDetail } from '@/domains/traces/hooks/use-span-detail';
-import { useThreadHasOtherTraces } from '@/domains/traces/hooks/use-thread-has-other-traces';
 import { useTraceSpanNavigation } from '@/domains/traces/hooks/use-trace-span-navigation';
 import { Button } from '@/ds/components/Button';
 import { useLinkComponent } from '@/lib/framework';
@@ -74,6 +73,8 @@ export interface TraceSpanPanelProps {
   depth?: TraceDataPanelViewProps['depth'];
   /** Rendered inside the drawer above the trace header (e.g. feedback context). */
   headerSlot?: ReactNode;
+  /** Integration actions displayed alongside the trace controls. */
+  headerActionsSlot?: ReactNode;
   /** Accessible drawer name; defaults to the trace id. */
   title?: string;
   showUnavailableFeaturesMsg?: TraceDataPanelViewProps['showUnavailableFeaturesMsg'];
@@ -122,6 +123,7 @@ export function TraceSpanPanel({
   size,
   depth,
   headerSlot,
+  headerActionsSlot,
   title,
   showUnavailableFeaturesMsg,
   spanView,
@@ -131,7 +133,11 @@ export function TraceSpanPanel({
   spanFeedbackTabBadge,
   spanFeedbackTabSlot,
 }: TraceSpanPanelProps) {
-  const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail(traceId, selectedSpanId ?? '');
+  const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail({
+    traceId: traceId,
+    spanId: selectedSpanId ?? '',
+    queryOptions: { enabled: !!traceId && !!selectedSpanId },
+  });
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(spans, selectedSpanId, onSpanSelect);
   const { Link, paths } = useLinkComponent();
 
@@ -143,7 +149,10 @@ export function TraceSpanPanel({
   const threadId = getTraceThreadId(rootSpan, anchorSpanId);
   const hasMessagesPanel = !!(traceId && showPartialThread && threadId);
   // A single-trace thread would show exactly what the Messages column already shows.
-  const hasOtherTraces = useThreadHasOtherTraces(hasMessagesPanel ? threadId : undefined);
+  const hasOtherTraces = useThreadHasOtherTraces({
+    threadId: hasMessagesPanel ? threadId : undefined,
+    queryOptions: { enabled: !!(hasMessagesPanel ? threadId : undefined) },
+  });
   const showFullThreadAction = hasMessagesPanel && hasOtherTraces && !!onFullThreadOpenChange;
 
   return (
@@ -168,6 +177,7 @@ export function TraceSpanPanel({
         size={size}
         depth={depth}
         headerSlot={headerSlot}
+        headerActionsSlot={headerActionsSlot}
         title={title}
         showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
         spanView={spanView}

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, assert, describe, expect, it } from 'vitest';
 import { TraceSummaryDescription } from '../trace-summary-description';

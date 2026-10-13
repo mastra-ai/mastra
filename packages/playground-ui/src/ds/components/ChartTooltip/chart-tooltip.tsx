@@ -17,7 +17,7 @@ export function ChartTooltip({ className, ...props }: ChartTooltipProps) {
   return (
     <div
       data-slot="chart-tooltip"
-      className={cn(overlaySurfaceStyle, 'rounded-md px-3 py-2 text-caption text-foreground', className)}
+      className={cn(overlaySurfaceStyle, 'rounded-lg px-3 py-2 text-caption text-foreground', className)}
       {...props}
     />
   );

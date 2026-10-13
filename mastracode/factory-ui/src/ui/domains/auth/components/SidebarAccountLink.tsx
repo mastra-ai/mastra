@@ -1,4 +1,4 @@
-import { MainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { CircleUserRound } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router';
@@ -26,7 +26,7 @@ export function SidebarAccountLink() {
   const identity = state.user?.name ?? state.user?.email ?? 'User';
 
   return (
-    <MainSidebar.NavLink
+    <Sidebar.NavLink
       asChild
       link={{
         name: 'My account',
@@ -41,8 +41,8 @@ export function SidebarAccountLink() {
         title={identity}
       >
         <CircleUserRound aria-hidden="true" />
-        <MainSidebar.NavLabel>{identity}</MainSidebar.NavLabel>
+        <Sidebar.NavLabel>{identity}</Sidebar.NavLabel>
       </Link>
-    </MainSidebar.NavLink>
+    </Sidebar.NavLink>
   );
 }

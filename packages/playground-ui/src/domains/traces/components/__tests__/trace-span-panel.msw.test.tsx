@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/jsdom-polyfills';
+import '@/test/inert-resize-observer';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
@@ -340,7 +340,7 @@ describe('TraceSpanPanel', () => {
     const { queryClient } = renderPanel({ onClose });
 
     expect(await screen.findByRole('heading', { name: `Trace ${TRACE_ID}` })).not.toBeNull();
-    fireEvent.click(screen.getByLabelText('Close Panel'));
+    fireEvent.click(screen.getByLabelText('Close trace'));
     expect(onClose).toHaveBeenCalledOnce();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
   });

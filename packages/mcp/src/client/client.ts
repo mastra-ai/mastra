@@ -4,6 +4,7 @@ import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { AnySpan, TracingContext } from '@mastra/core/observability';
 import { createTool, validateToolOutput } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
@@ -34,7 +35,7 @@ import { asyncExitHook, gracefulExit } from 'exit-hook';
 import { JSON_SCHEMA_2020_12, MAX_JSON_SCHEMA_DEPTH, MAX_JSON_SCHEMA_NODES, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
-import { traceContextToMeta } from '../shared/trace-context';
+import { takeServerTraceContext, traceContextFromSpan, traceContextToMeta } from '../shared/trace-context';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
@@ -47,6 +48,7 @@ import type {
   MastraMCPServerDefinition,
   InternalMastraMCPClientOptions,
   MCPClientProtocolVersion,
+  MCPServerImplementation,
   RequireToolApproval,
   SerializableMCPToolDefinition,
 } from './types';
@@ -423,6 +425,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private sigTermHandler?: () => void;
   private sigHupHandler?: () => void;
   private serverInstructions?: string;
+  private serverImplementation?: MCPServerImplementation;
   /** The verdict of the last successful probe, reused so reconnects skip it. */
   private priorDiscovery?: PriorDiscovery;
   private readonly requireToolApproval: RequireToolApproval | undefined;
@@ -440,7 +443,13 @@ export class InternalMastraMCPClient extends MastraBase {
   /**
    * @internal
    */
-  constructor({ name, version = '1.0.0', server, timeout = DEFAULT_REQUEST_TIMEOUT_MSEC }: InternalMastraMCPClientOptions) {
+  constructor({
+    name,
+    version = '1.0.0',
+    clientInfo,
+    server,
+    timeout = DEFAULT_REQUEST_TIMEOUT_MSEC,
+  }: InternalMastraMCPClientOptions) {
     super({ name: 'MastraMCPClient' });
     this.name = name;
     this.timeout = timeout;
@@ -469,7 +478,7 @@ export class InternalMastraMCPClient extends MastraBase {
     };
 
     this.client = new Client(
-      { name, version },
+      { name: clientInfo?.name ?? name, version: clientInfo?.version ?? version },
       {
         capabilities: clientCapabilities,
         ...(server.jsonSchemaValidator ? { jsonSchemaValidator: server.jsonSchemaValidator } : {}),
@@ -521,10 +530,13 @@ export class InternalMastraMCPClient extends MastraBase {
   /**
    * Request metadata every outgoing request carries: the per-request log-level
    * opt-in (when enabled) and the W3C trace fields resolved for this request,
-   * merged under caller-supplied keys.
+   * merged under caller-supplied keys. A configured `traceContext` provider owns
+   * the trace fields; without one they name `span`, the span making the request.
    */
-  private requestMeta(meta?: Record<string, unknown>): Record<string, unknown> | undefined {
-    const traceContext = this.serverConfig.traceContext?.();
+  private requestMeta(meta?: Record<string, unknown>, span?: AnySpan): Record<string, unknown> | undefined {
+    const traceContext = this.serverConfig.traceContext
+      ? this.serverConfig.traceContext()
+      : traceContextFromSpan(span);
     const merged = {
       ...(this.serverLogLevel ? { [LOG_LEVEL_META_KEY]: this.serverLogLevel } : {}),
       ...(traceContext ? traceContextToMeta(traceContext) : {}),
@@ -790,6 +802,7 @@ export class InternalMastraMCPClient extends MastraBase {
         }
 
         this.serverInstructions = this.client.getInstructions();
+        this.serverImplementation = this.client.getServerVersion();
         this.rememberNegotiation();
 
         if (this.hasSubscriptionInterest()) {
@@ -821,6 +834,7 @@ export class InternalMastraMCPClient extends MastraBase {
               this.isConnected = null;
             }
             this.serverInstructions = undefined;
+            this.serverImplementation = undefined;
             this.subscriptionStream = undefined;
             if (staleTransport) {
               this.severClientTransportLink(staleTransport);
@@ -915,6 +929,11 @@ export class InternalMastraMCPClient extends MastraBase {
     return this.serverInstructions;
   }
 
+  /** The identity (`serverInfo`) the server announced on connect; `undefined` until connected or if the server announced none. */
+  get serverInfo(): MCPServerImplementation | undefined {
+    return this.serverImplementation;
+  }
+
   /** The protocol revision negotiated with the server; `undefined` until connected. */
   get negotiatedProtocolVersion(): string | undefined {
     return this.client.getNegotiatedProtocolVersion();
@@ -981,6 +1000,7 @@ export class InternalMastraMCPClient extends MastraBase {
       this.transport = undefined;
       this.isConnected = null;
       this.serverInstructions = undefined;
+      this.serverImplementation = undefined;
 
       this.unregisterProcessHooks();
     }
@@ -1023,6 +1043,7 @@ export class InternalMastraMCPClient extends MastraBase {
         this.transport = undefined;
         this.isConnected = null;
         this.serverInstructions = undefined;
+        this.serverImplementation = undefined;
       }
 
       await this.connect();
@@ -1479,6 +1500,7 @@ export class InternalMastraMCPClient extends MastraBase {
             runId?: string;
             abortSignal?: AbortSignal;
             _meta?: Record<string, unknown>;
+            tracingContext?: TracingContext;
           },
         ) => {
           // A hydrated tool was rebuilt from cache without ever opening a connection, so the
@@ -1496,12 +1518,21 @@ export class InternalMastraMCPClient extends MastraBase {
               const progressMeta = this.enableProgressTracking
                 ? { progressToken: context?.runId || crypto.randomUUID() }
                 : undefined;
-              const _meta = this.requestMeta({ ...context?._meta, ...progressMeta });
-
-              const res = await this.client.callTool(
-                { name: tool.name, arguments: input, ...(_meta ? { _meta } : {}) },
-                { timeout: this.timeout, signal: context?.abortSignal },
+              const _meta = this.requestMeta(
+                { ...context?._meta, ...progressMeta },
+                context?.tracingContext?.currentSpan,
               );
+
+              const { result: res, serverSpan } = takeServerTraceContext(
+                await this.client.callTool(
+                  { name: tool.name, arguments: input, ...(_meta ? { _meta } : {}) },
+                  { timeout: this.timeout, signal: context?.abortSignal },
+                ),
+              );
+              // A Mastra server names the span that served the call. The tool call span ends
+              // after this returns, and its end export carries the link.
+              const toolCallSpan = context?.tracingContext?.currentSpan;
+              if (toolCallSpan && serverSpan) toolCallSpan.links = [...(toolCallSpan.links ?? []), serverSpan];
 
               // Per the MCP spec, tool *execution* failures are reported in-band with
               // `isError: true`. Map that onto Mastra's failed-tool-call path unless the

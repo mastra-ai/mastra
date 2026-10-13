@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Button } from '../Button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
@@ -9,11 +9,6 @@ import { DataPanel } from './data-panel';
 
 // Base UI's Select synthesizes PointerEvents on interaction, which jsdom does
 // not implement. Polyfill it with the available MouseEvent constructor.
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
-  }
-});
 
 afterEach(() => cleanup());
 

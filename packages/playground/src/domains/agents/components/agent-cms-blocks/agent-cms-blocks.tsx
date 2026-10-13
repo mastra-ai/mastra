@@ -109,9 +109,9 @@ export const AgentCMSBlocks = ({
   };
 
   // Replace a ref block with an inline block containing the current content
+  // Per-usage display conditions carry over to the inline block
   const handleDereference = (index: number, content: string) => {
-    const newBlock = createInstructionBlock(content);
-    const newItems = items.map((item, idx) => (idx === index ? newBlock : item));
+    const newItems = items.map((item, idx) => (idx === index ? createInstructionBlock(content, item.rules) : item));
     onChange(newItems);
   };
 

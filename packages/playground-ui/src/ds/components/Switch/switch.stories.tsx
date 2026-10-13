@@ -52,7 +52,7 @@ function RepositoryVisibilitySwitch() {
 
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: ReactNode }) {
   return (
-    <div className={`rounded-2xl border border-border/70 p-5 ${className}`}>
+    <div className={`rounded-2xl border border-surface-rim p-5 ${className}`}>
       <p className="mb-4 text-meta tracking-wide text-muted-foreground uppercase">{label}</p>
       {children}
     </div>

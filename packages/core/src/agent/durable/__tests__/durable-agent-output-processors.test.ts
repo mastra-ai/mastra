@@ -198,15 +198,7 @@ describe('DurableAgent output processors for tool chunks', () => {
     expect(toolResultChunks).toHaveLength(0);
   });
 
-  it('a throwing stream processor falls back to the processToolResult-gated value — the raw result never reaches the stream', async () => {
-    // Contract under test (two-hook architecture):
-    //   - processToolResult is the authoritative value gate. It runs BEFORE
-    //     the transcript commit and its mutation becomes the baseline for the
-    //     step output, finish aggregates, and the emitted chunk.
-    //   - processOutputStream is stream-view shaping. When it throws, the
-    //     shared ProcessorRunner logs and continues with the part as it stood
-    //     going INTO the stream pipeline (pre-existing policy, both engines) —
-    //     i.e. the gated value, never the raw tool output.
+  it('fails the run before emitting a tool result when a stream processor throws', async () => {
     const gatedRedactor = {
       id: 'test-gated-redactor',
       name: 'Test Gated Redactor',
@@ -255,22 +247,13 @@ describe('DurableAgent output processors for tool chunks', () => {
 
     const chunks = await drain(result.fullStream);
 
-    // The raw value appears nowhere on the stream — not in the tool-result
-    // chunk, not in step-finish/finish aggregates. The gate held.
     expect(JSON.stringify(chunks)).not.toContain('RAW-SECRET-VALUE');
+    expect(chunks.filter((c: any) => c.type === 'tool-result')).toHaveLength(0);
 
-    // The stream falls back to the GATED chunk, not to nothing and not to
-    // the raw output: the emitted tool-result carries the redacted value.
-    const toolResultChunks = chunks.filter((c: any) => c.type === 'tool-result');
-    expect(toolResultChunks.length).toBeGreaterThan(0);
-    expect(toolResultChunks[0].payload.result).toEqual({ secret: '[REDACTED]' });
-
-    // The run survives the crashing stream processor: the loop continues and
-    // the second model call still produces the final text.
-    const textDeltas = chunks.filter((c: any) => c.type === 'text-delta');
-    expect(textDeltas.length).toBeGreaterThan(0);
-    const finishChunks = chunks.filter((c: any) => c.type === 'finish');
-    expect(finishChunks.length).toBeGreaterThan(0);
+    const errorChunks = chunks.filter((c: any) => c.type === 'error');
+    expect(errorChunks).toHaveLength(1);
+    expect(errorChunks[0].payload.error.message).toContain('stream redaction processor crashed');
+    expect(chunks.filter((c: any) => c.type === 'text-delta')).toHaveLength(0);
   });
 });
 

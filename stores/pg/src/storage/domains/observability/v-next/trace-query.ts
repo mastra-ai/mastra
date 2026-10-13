@@ -154,6 +154,42 @@ function placeholders(values: readonly unknown[], offset: number): string {
   return values.map((_, index) => `$${offset + index}`).join(', ');
 }
 
+/**
+ * Unicode letters, marks, and digits as PostgreSQL bracket ranges, so `[^<ranges>]` splits words
+ * like the planner's `[^\p{L}\p{M}\p{N}]`. PostgreSQL regexes have no `\p{…}` classes, and
+ * `[[:alnum:]]` depends on the locale: it leaves out digits such as `² ½ ₂ ①`, and glibc files
+ * some marks, such as the Devanagari virama, under punct. Derived once from the runtime's own
+ * Unicode tables. A run may also absorb unassigned code points, which are never stored.
+ * Private-use code points are not absorbed: the other stores treat them as separators.
+ */
+let pgWordRanges: string | undefined;
+function getPgWordRanges(): string {
+  if (pgWordRanges !== undefined) return pgWordRanges;
+  const escape = (cp: number) =>
+    cp > 0xffff ? `\\U${cp.toString(16).padStart(8, '0')}` : `\\u${cp.toString(16).padStart(4, '0')}`;
+  // Every code point except surrogates, built in chunks to keep the peak allocation small.
+  const chunks: string[] = [];
+  for (let start = 0; start <= 0x10ffff; start += 0x2000) {
+    const codePoints: number[] = [];
+    for (let cp = start; cp < start + 0x2000 && cp <= 0x10ffff; cp++) {
+      if (cp < 0xd800 || cp > 0xdfff) codePoints.push(cp);
+    }
+    chunks.push(String.fromCodePoint(...codePoints));
+  }
+  const text = chunks.join('');
+  const ranges: string[] = [];
+  for (const match of text.matchAll(/[\p{L}\p{M}\p{N}\p{Cn}]+/gu)) {
+    const first = match[0].codePointAt(0)!;
+    const lastUnit = match.index + match[0].length - 1;
+    const last = text.codePointAt(
+      text.charCodeAt(lastUnit) >= 0xdc00 && text.charCodeAt(lastUnit) <= 0xdfff ? lastUnit - 1 : lastUnit,
+    )!;
+    ranges.push(first === last ? escape(first) : `${escape(first)}-${escape(last)}`);
+  }
+  pgWordRanges = ranges.join('');
+  return pgWordRanges;
+}
+
 function compileScalarPredicate<TField extends string>(
   predicate: TrustedTraceQueryScalarPredicate,
   registry: Partial<FieldRegistry<TField>>,
@@ -203,6 +239,18 @@ function compileScalarPredicate<TField extends string>(
       };
     }
     return { sql: `cardinality(${field}) ${predicate.operator === 'empty' ? '=' : '>'} 0`, values: fieldValues };
+  }
+
+  if (predicate.type === 'text') {
+    // Same normalization as `normalizeTraceQueryText`: NFC, lowercase, words = runs of letters,
+    // marks, and digits, listed as explicit ranges (see `getPgWordRanges`). `lower()` already folds
+    // `İ` to `i`; it follows the database locale, so a C-locale database folds ASCII only.
+    const words = `' ' || replace(lower(regexp_replace(normalize(${field}), '[^${getPgWordRanges()}]+', ' ', 'g')), 'ς', 'σ') || ' '`;
+    const found = `strpos(${words}, $${parameterOffset}) > 0`;
+    return {
+      sql: `COALESCE(${predicate.operator === 'matches' ? found : `NOT (${found})`}, false)`,
+      values: [...fieldValues, ` ${predicate.value} `],
+    };
   }
 
   if (predicate.type === 'membership') {
@@ -1092,4 +1140,9 @@ export async function queryThreads(
           : null,
     },
   });
+}
+
+/** Compile a span-row filter with exactly the same rules as trace span predicates. */
+export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate, offset: number): SqlFragment {
+  return compileScalarPredicate(predicate, SPAN_FIELDS, offset);
 }

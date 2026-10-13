@@ -1,4 +1,12 @@
+import type { ActivityOptions } from '@temporalio/workflow';
+
+export type WorkflowRuntimeOptions = {
+  startToCloseTimeout?: string;
+  retry?: ActivityOptions['retry'];
+};
+
 export interface StepExecutionResult {
+  __temporalStepResult: true;
   status: 'success';
   payload: unknown;
   output: unknown;
@@ -49,7 +57,7 @@ export type WorkflowRuntime = ((startArgs?: {
 };
 
 export class TemporalExecutionEngine {
-  constructor(params?: { options?: { startToCloseTimeout?: string } });
+  constructor(params?: { options?: WorkflowRuntimeOptions });
   execute(params: {
     workflowId: string;
     runId?: string;
@@ -60,4 +68,4 @@ export class TemporalExecutionEngine {
   }): Promise<WorkflowExecutionResult>;
 }
 
-export function createWorkflow(workflowId: string, options?: { startToCloseTimeout?: string }): WorkflowRuntime;
+export function createWorkflow(workflowId: string, options?: WorkflowRuntimeOptions): WorkflowRuntime;

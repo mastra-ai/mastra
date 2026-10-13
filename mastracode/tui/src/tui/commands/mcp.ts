@@ -1,6 +1,6 @@
+import { openUrlInBrowser } from '@mastra/code-sdk/utils/open-url';
 import { McpSelectorComponent } from '../components/mcp-selector.js';
 import { showInfo } from '../display.js';
-import { openUrlInBrowser } from '../open-url.js';
 import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
 

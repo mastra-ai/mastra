@@ -242,6 +242,19 @@ The same `client` form is accepted by `ObservabilityStorageClickhouse` and `Obse
 
 `ClickhouseStore` also accepts every option from `ClickHouseClientConfigOptions` (such as `database`, `request_timeout`, `compression`, `keep_alive`, and `max_open_connections`).
 
+`ClickhouseStore` and `ObservabilityStorageClickhouseVNext` apply `clickhouse_settings` to every query they run. On ClickHouse services that keep data in object storage, such as ClickHouse Cloud, limiting read-ahead lowers the memory each observability query uses, but queries that miss the local cache can run slower:
+
+```typescript title="src/mastra/index.ts"
+const observabilityStore = new ObservabilityStorageClickhouseVNext({
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
+  clickhouse_settings: {
+    filesystem_prefetches_limit: 8,
+  },
+})
+```
+
 ### Replicated clusters
 
 Use `replication` when Mastra writes to a multi-replica ClickHouse cluster through a load balancer.

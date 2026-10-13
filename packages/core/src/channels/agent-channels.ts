@@ -54,6 +54,7 @@ import type {
   ChannelAdapterConfig,
   ChannelConfig,
   ChannelContext,
+  ChannelHandlerConfig,
   ChannelHandlerContext,
   ChannelHandlers,
   PostableMessage,
@@ -469,13 +470,15 @@ export class AgentChannels {
       // MUST be built per message, never once at initialize() time: a custom
       // handler may write the sender's tenant onto the request context, and a
       // shared instance would leak that tenant into the next message's run.
-      // `skipped` holds earlier messages the Chat SDK batched into this dispatch
-      // under a `burst`/`debounce`/`queue` concurrency strategy (oldest first).
-      const beginMessage = (skipped: readonly Message[] = []) => {
+      // `skipped` holds the earlier messages of this sender's run (oldest first)
+      // when the Chat SDK batched the dispatch under a `burst`/`debounce`/`queue`
+      // concurrency strategy; `batchIds` covers the whole batch so a first
+      // mention never re-fetches batched messages as thread history.
+      const beginMessage = (skipped: readonly Message[] = [], batchIds?: ReadonlySet<string>) => {
         const requestContext = new RequestContext();
         const signalMetadata: Record<string, unknown> = {};
         const defaultHandler = (chatThread: Thread, message: Message) =>
-          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped);
+          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped, batchIds);
         // Context handed to custom handlers so they can reach the resolved Mastra
         // instance without being injected with an external accessor, and
         // contribute to the request context the run will dispatch with.
@@ -483,34 +486,72 @@ export class AgentChannels {
         return { defaultHandler, handlerContext };
       };
 
-      if (onDirectMessage !== false) {
-        chat.onDirectMessage((thread, message, _channel, context) => {
-          const { defaultHandler, handlerContext } = beginMessage(context?.skipped);
-          if (typeof onDirectMessage === 'function') {
-            return onDirectMessage(thread, message, defaultHandler, handlerContext);
+      // The SDK batches by conversation, not sender. Split the batch into runs of
+      // consecutive messages from one sender and give each run its own handler
+      // call and context, so a custom handler can authorize or stamp context for
+      // every sender, not just the one who sent the latest message. A message
+      // without a userId is never grouped with another.
+      const dispatchBatch = async (
+        thread: Thread,
+        message: Message,
+        skipped: readonly Message[] | undefined,
+        handler: ChannelHandlerConfig,
+      ) => {
+        const all = [...(skipped ?? []), message];
+        const batchIds = new Set(all.map(m => m.id));
+        const runs: Message[][] = [];
+        for (const m of all) {
+          const last = runs[runs.length - 1];
+          const userId = m.author?.userId;
+          if (last && userId !== undefined && last[0]!.author?.userId === userId) last.push(m);
+          else runs.push([m]);
+        }
+        let failure: { err: unknown } | undefined;
+        for (const run of runs) {
+          const runMessage = run[run.length - 1]!;
+          const { defaultHandler, handlerContext } = beginMessage(run.slice(0, -1), batchIds);
+          try {
+            if (typeof handler === 'function') await handler(thread, runMessage, defaultHandler, handlerContext);
+            else await defaultHandler(thread, runMessage);
+          } catch (err) {
+            // A host handler that throws for one sender must not silence later
+            // senders. The first error is re-thrown after the last run so the Chat
+            // SDK still sees the rejection exactly as it does for a single message.
+            const fields = {
+              platform: thread.adapter.name,
+              threadId: thread.id,
+              messageId: runMessage.id,
+              authorId: runMessage.author?.userId,
+              error: err,
+            };
+            if (failure) {
+              // Only the first error is re-thrown; every later one would vanish.
+              this.log('error', 'Custom channel handler failed for another sender in the batch', fields);
+            } else {
+              failure = { err };
+              if (runs.length > 1) {
+                this.log('error', 'Custom channel handler failed; continuing with later senders', fields);
+              }
+            }
           }
-          return defaultHandler(thread, message);
-        });
+        }
+        if (failure) throw failure.err;
+      };
+
+      if (onDirectMessage !== false) {
+        chat.onDirectMessage((thread, message, _channel, context) =>
+          dispatchBatch(thread, message, context?.skipped, onDirectMessage),
+        );
       }
 
       if (onMention !== false) {
-        chat.onNewMention((thread, message, context) => {
-          const { defaultHandler, handlerContext } = beginMessage(context?.skipped);
-          if (typeof onMention === 'function') {
-            return onMention(thread, message, defaultHandler, handlerContext);
-          }
-          return defaultHandler(thread, message);
-        });
+        chat.onNewMention((thread, message, context) => dispatchBatch(thread, message, context?.skipped, onMention));
       }
 
       if (onSubscribedMessage !== false) {
-        chat.onSubscribedMessage((thread, message, context) => {
-          const { defaultHandler, handlerContext } = beginMessage(context?.skipped);
-          if (typeof onSubscribedMessage === 'function') {
-            return onSubscribedMessage(thread, message, defaultHandler, handlerContext);
-          }
-          return defaultHandler(thread, message);
-        });
+        chat.onSubscribedMessage((thread, message, context) =>
+          dispatchBatch(thread, message, context?.skipped, onSubscribedMessage),
+        );
       }
 
       if (onSlashCommand !== false) {
@@ -1224,9 +1265,11 @@ export class AgentChannels {
   }
 
   /**
-   * Core handler wired to Chat SDK's onDirectMessage, onNewMention,
-   * and onSubscribedMessage. Streams the Mastra agent response and
-   * updates the channel message in real-time via edits.
+   * Default handler behind Chat SDK's onDirectMessage, onNewMention, and
+   * onSubscribedMessage. Dispatches one sender's run (the message plus that
+   * sender's earlier batched messages in `skipped`), streaming the Mastra agent
+   * response and updating the channel message in real-time via edits. Never
+   * throws to the host: run failures are logged or posted by `handleRunError`.
    */
   private async handleChatMessage(
     chatThread: Thread,
@@ -1235,40 +1278,12 @@ export class AgentChannels {
     requestContext: RequestContext,
     signalMetadata: Record<string, unknown>,
     skipped: readonly Message[] = [],
+    batchIds?: ReadonlySet<string>,
   ): Promise<void> {
-    // The SDK batches by conversation, not sender. Split the batch into runs of
-    // consecutive messages from one sender so each run is dispatched under its
-    // own author's identity, in the order they were sent. A message without a
-    // userId is never grouped with another.
-    const all = [...skipped, message];
-    const batchIds = new Set(all.map(m => m.id));
-    const runs: Message[][] = [];
-    for (const m of all) {
-      const last = runs[runs.length - 1];
-      const userId = m.author?.userId;
-      if (last && userId !== undefined && last[0]!.author?.userId === userId) last.push(m);
-      else runs.push([m]);
-    }
-    for (const [i, run] of runs.entries()) {
-      const runMessage = run[run.length - 1]!;
-      // The final run holds the triggering message, so it uses the context the
-      // handler saw. Earlier runs belong to other senders (or earlier turns) and
-      // get a fresh context so per-sender data never leaks between runs.
-      const isLast = i === runs.length - 1;
-      try {
-        await this.processChatMessage(
-          chatThread,
-          runMessage,
-          mastra,
-          isLast ? requestContext : new RequestContext(),
-          isLast ? signalMetadata : {},
-          run.slice(0, -1),
-          batchIds,
-        );
-      } catch (err) {
-        // One failed or refused run must not stop later senders' runs.
-        await this.handleRunError(chatThread, runMessage, err);
-      }
+    try {
+      await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped, batchIds);
+    } catch (err) {
+      await this.handleRunError(chatThread, message, err);
     }
   }
 

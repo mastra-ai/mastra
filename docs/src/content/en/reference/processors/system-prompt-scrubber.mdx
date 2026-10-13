@@ -122,18 +122,18 @@ const processor = new SystemPromptScrubber({
   {
     name: 'name',
     type: 'string',
-    description: 'Optional processor display name',
-    isOptional: true,
+    description: "Processor display name, always 'System Prompt Scrubber'",
+    isOptional: false,
   },
   {
     name: 'processOutputStream',
-    type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; tracingContext?: TracingContext }) => Promise<ChunkType | null>',
+    type: '(args: { part: ChunkType; streamParts: ChunkType[]; state: Record<string, any>; abort: (reason?: string) => never; requestContext?: RequestContext; tracingContext?: TracingContext }) => Promise<ChunkType | null>',
     description: 'Processes streaming output parts to detect and handle system prompts during streaming',
     isOptional: false,
   },
   {
     name: 'processOutputResult',
-    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never }) => Promise<MastraDBMessage[]>',
+    type: '(args: { messages: MastraDBMessage[]; abort: (reason?: string) => never; requestContext?: RequestContext; tracingContext?: TracingContext }) => Promise<MastraDBMessage[]>',
     description: 'Processes final output results to detect and handle system prompts in non-streaming scenarios',
     isOptional: false,
   },

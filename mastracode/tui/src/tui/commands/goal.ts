@@ -108,7 +108,6 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
         return;
       }
     }
-    state.planStartedGoalId = undefined;
     // Abort any in-flight turn. The cleared objective stops the core loop from
     // driving *new* goal continuations, but a turn that was already running when
     // the user cleared keeps going to completion — which reads as "it's still
@@ -387,7 +386,6 @@ async function setGoal(
     return null;
   }
 
-  state.planStartedGoalId = undefined;
   await goalManager.saveToThread(state);
   ctx.updateStatusLine();
   return goal;

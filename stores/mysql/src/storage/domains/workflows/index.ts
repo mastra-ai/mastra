@@ -169,12 +169,14 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext?: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const connection = await this.pool.getConnection();
     try {
@@ -197,6 +199,9 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       const context = { ...(currentSnapshot.context ?? {}) };
 
       context[stepId] = result;
+      if (state !== undefined) {
+        (context as Record<string, unknown>).__state = state;
+      }
 
       const updatedSnapshot: WorkflowRunState = {
         ...currentSnapshot,

@@ -28,7 +28,7 @@ export function ExamplesPager({
       >
         Previous
       </Button>
-      <Txt as="span" variant="caption" tone="muted" font="mono" className="tabular-nums">
+      <Txt as="span" variant="caption" tone="muted" className="tabular-nums">
         Page {page} of {totalPages}
       </Txt>
       <Button

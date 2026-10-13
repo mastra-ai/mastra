@@ -3,10 +3,10 @@
 import { collectToolMocks } from '@mastra/core/utils/collect-tool-mocks';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import { useMastraClient } from '@mastra/react';
+import { useSpanDetail } from '@mastra/react/hooks/traces';
 import { useQuery } from '@tanstack/react-query';
 import { EyeIcon } from 'lucide-react';
 import { SaveAsDatasetItemDialog } from '@/domains/datasets';
-import { useSpanDetail } from '@/domains/traces/hooks/use-span-detail';
 import type { SpanRecord } from '@/domains/traces/types';
 import type { SideDialogRootProps } from '@/ds/components/SideDialog';
 import { TextAndIcon, getShortId } from '@/ds/components/Text';
@@ -49,10 +49,14 @@ export function TraceAsItemDialog({
   const client = useMastraClient();
 
   // Lazy-load the root span details when dialog opens and no traceDetails provided
-  const { data: lazySpanDetail } = useSpanDetail(
-    !externalTraceDetails && isOpen ? traceId : null,
-    !externalTraceDetails && isOpen ? rootSpanId : null,
-  );
+  const { data: lazySpanDetail } = useSpanDetail({
+    traceId: !externalTraceDetails && isOpen ? traceId : null,
+    spanId: !externalTraceDetails && isOpen ? rootSpanId : null,
+    queryOptions: {
+      enabled:
+        !!(!externalTraceDetails && isOpen ? traceId : null) && !!(!externalTraceDetails && isOpen ? rootSpanId : null),
+    },
+  });
 
   const traceDetails = externalTraceDetails ?? lazySpanDetail?.span;
 

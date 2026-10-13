@@ -1,8 +1,13 @@
+import {
+  useSearchSkillsSh,
+  usePopularSkillsSh,
+  useSkillPreview,
+  parseSkillSource,
+} from '@mastra/react/hooks/workspace';
+import type { SkillsShSkill } from '@mastra/react/hooks/workspace';
 import { Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { useSearchSkillsSh, usePopularSkillsSh, useSkillPreview, parseSkillSource } from '../hooks/use-skills-sh';
-import type { SkillsShSkill } from '../hooks/use-skills-sh';
 import {
   Dialog,
   DialogAction,
@@ -99,9 +104,12 @@ export function WorkspaceAddSkillDialog({
     ? selectedMount
     : writableMounts?.[0]?.path;
 
-  const { data: popularData, isLoading: isLoadingPopular } = usePopularSkillsSh(workspaceId);
+  const { data: popularData, isLoading: isLoadingPopular } = usePopularSkillsSh({
+    workspaceId: workspaceId,
+    queryOptions: { enabled: !!workspaceId },
+  });
 
-  const searchMutation = useSearchSkillsSh(workspaceId);
+  const searchMutation = useSearchSkillsSh({ workspaceId: workspaceId });
 
   const parsedSource = useMemo(() => {
     if (!selectedSkill?.topSource) return null;
@@ -113,13 +121,13 @@ export function WorkspaceAddSkillDialog({
     return `https://skills.sh/${parsedSource.owner}/${parsedSource.repo}/${selectedSkill.name}`;
   }, [parsedSource, selectedSkill]);
 
-  const { data: previewContent, isLoading: isLoadingPreview } = useSkillPreview(
+  const { data: previewContent, isLoading: isLoadingPreview } = useSkillPreview({
     workspaceId,
-    parsedSource?.owner,
-    parsedSource?.repo,
-    selectedSkill?.name,
-    { enabled: !!parsedSource && !!selectedSkill },
-  );
+    owner: parsedSource?.owner,
+    repo: parsedSource?.repo,
+    skillPath: selectedSkill?.name,
+    queryOptions: { enabled: !!workspaceId && !!parsedSource && !!selectedSkill },
+  });
 
   const debouncedSearch = useDebouncedCallback((query: string) => {
     if (query.trim().length >= 2) {
@@ -200,9 +208,9 @@ export function WorkspaceAddSkillDialog({
 
           <div className="flex min-h-0 flex-1 gap-4">
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">
+              <Txt as="p" variant="eyebrow" tone="muted" className="mb-2">
                 {hasSearchResults ? 'Search Results' : 'Popular Skills'}
-              </div>
+              </Txt>
               <ScrollArea className="flex-1 rounded-lg border border-border">
                 <ScrollAreaViewport
                   className={
@@ -256,11 +264,15 @@ export function WorkspaceAddSkillDialog({
                                     </Txt>
                                   )}
                                 </div>
-                                <div className="truncate text-caption text-muted-foreground">{skill.topSource}</div>
+                                <Txt as="p" variant="caption" tone="muted" className="truncate">
+                                  {skill.topSource}
+                                </Txt>
                               </div>
-                              <div className="flex shrink-0 items-center gap-1 text-caption text-muted-foreground">
+                              <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
                                 <Download className="size-3" />
-                                <span>{skill.installs.toLocaleString()}</span>
+                                <Txt as="span" variant="caption">
+                                  {skill.installs.toLocaleString()}
+                                </Txt>
                               </div>
                             </div>
                           </button>
@@ -273,7 +285,9 @@ export function WorkspaceAddSkillDialog({
             </div>
 
             <div className="flex min-h-0 w-1/2 flex-col">
-              <div className="mb-2 text-column tracking-wide text-muted-foreground uppercase">Preview</div>
+              <Txt as="p" variant="eyebrow" tone="muted" className="mb-2">
+                Preview
+              </Txt>
               <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border">
                 {!selectedSkill ? (
                   <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
@@ -291,14 +305,18 @@ export function WorkspaceAddSkillDialog({
                           <Txt as="h3" variant="subheading" tone="ink" className="truncate">
                             {selectedSkill.name}
                           </Txt>
-                          <div className="mt-1 flex items-center gap-3 text-caption text-muted-foreground">
+                          <div className="mt-1 flex items-center gap-3 text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <GithubIcon className="size-3" />
-                              {selectedSkill.topSource}
+                              <Txt as="span" variant="caption" className="block">
+                                {selectedSkill.topSource}
+                              </Txt>
                             </span>
                             <span className="flex items-center gap-1">
                               <Download className="size-3" />
-                              {selectedSkill.installs.toLocaleString()} installs
+                              <Txt as="span" variant="caption" className="block">
+                                {selectedSkill.installs.toLocaleString()} installs
+                              </Txt>
                             </span>
                           </div>
                         </div>
@@ -335,9 +353,12 @@ export function WorkspaceAddSkillDialog({
                             href={skillsUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="mt-2 flex items-center gap-1 text-caption text-info-indicator hover:underline"
+                            className="mt-2 flex items-center gap-1 text-info-indicator hover:underline"
                           >
-                            View on skills.sh <ExternalLink className="size-3" />
+                            <Txt as="span" variant="caption" className="block">
+                              View on skills.sh{' '}
+                            </Txt>
+                            <ExternalLink className="size-3" />
                           </a>
                         )}
                       </div>

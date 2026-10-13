@@ -179,7 +179,7 @@ export function AuditRangePicker({
                 as="span"
                 variant="meta"
                 tone="ink"
-                className="pointer-events-none absolute top-0 -translate-x-1/2 font-semibold whitespace-nowrap tabular-nums"
+                className="pointer-events-none absolute top-0 -translate-x-1/2 whitespace-nowrap tabular-nums"
                 style={{ left: labelLeft(selection[boundary]) }}
               >
                 {dayLabel(selection[boundary])}
@@ -188,7 +188,7 @@ export function AuditRangePicker({
                 as="span"
                 variant="meta"
                 tone="ink"
-                className="pointer-events-none absolute bottom-0 -translate-x-1/2 font-semibold whitespace-nowrap tabular-nums"
+                className="pointer-events-none absolute bottom-0 -translate-x-1/2 whitespace-nowrap tabular-nums"
                 style={{ left: labelLeft(selection[boundary]) }}
               >
                 {timeLabel(selection[boundary])}

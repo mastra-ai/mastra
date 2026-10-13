@@ -45,7 +45,7 @@ export const TreeFolder = React.forwardRef<HTMLLIElement, TreeFolderProps>(
       setIsFocused(false);
     }, []);
 
-    const folderContextValue = React.useMemo(() => ({ isFocused }), [isFocused]);
+    const folderContextValue = React.useMemo(() => ({ isFocused, isOpen }), [isFocused, isOpen]);
 
     return (
       <li

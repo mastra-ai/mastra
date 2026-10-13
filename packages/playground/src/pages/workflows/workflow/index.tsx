@@ -4,7 +4,6 @@ import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/se
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { WorkflowStepDetailContent } from '@mastra/playground-ui/domains/workflows/components/workflow-step-detail';
 import { useWorkflowStepDetail } from '@mastra/playground-ui/domains/workflows/context/workflow-step-detail-context';
-import { useWorkflow } from '@mastra/playground-ui/domains/workflows/hooks/use-workflow';
 import { WorkflowGraph } from '@mastra/playground-ui/domains/workflows/workflow/workflow-graph';
 import { WorkflowSuspendedOverlay } from '@mastra/playground-ui/domains/workflows/workflow/workflow-suspended-overlay';
 import { WorkflowTimeline } from '@mastra/playground-ui/domains/workflows/workflow/workflow-timeline';
@@ -12,6 +11,7 @@ import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { Panel } from 'react-resizable-panels';
 import { useParams } from 'react-router';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
@@ -86,7 +86,11 @@ export const Workflow = () => {
     data: workflow,
     isLoading,
     error,
-  } = useWorkflow(workflowId!, useEntityRequestContext('workflow', workflowId!)[0]);
+  } = useWorkflow({
+    workflowId: workflowId!,
+    requestContext: useEntityRequestContext('workflow', workflowId!)[0],
+    queryOptions: { enabled: Boolean(workflowId) },
+  });
 
   if (error && is401UnauthorizedError(error)) {
     return <SessionExpired variant="fill" />;

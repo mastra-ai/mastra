@@ -106,7 +106,7 @@ import { Agent } from '@mastra/core/agent'
 import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 import { PineconeVector } from '@mastra/pinecone'
-import { OpenAIEmbedder } from '@mastra/openai'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 import { openai } from '@ai-sdk/openai'
 
 const agent = new Agent({
@@ -122,10 +122,7 @@ const agent = new Agent({
       id: 'memory-vector',
       apiKey: process.env.PINECONE_API_KEY!,
     }),
-    embedder: new OpenAIEmbedder({
-      model: 'text-embedding-3-small',
-      apiKey: process.env.OPENAI_API_KEY!,
-    }),
+    embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
     semanticRecall: { enabled: true }, // SemanticRecall processor automatically added
   }),
 })

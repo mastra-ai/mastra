@@ -9,11 +9,11 @@ import { controlStateColorTransition } from '@mastra/playground-ui/primitives/tr
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatElapsed } from '@mastra/playground-ui/utils/duration';
+import { useObservationalMemoryWithHistory, useMemoryWithOMStatus, useMemoryConfig } from '@mastra/react/hooks/memory';
 import { Brain, ExternalLink, Info } from 'lucide-react';
 import { useEffect } from 'react';
 import { getObservationWindowTokens } from './lib/observation-window';
 import { useMemoryTimeline, useObservationalMemoryContext } from '@/domains/agents/context';
-import { useObservationalMemory, useMemoryWithOMStatus, useMemoryConfig } from '@/domains/memory/hooks';
 
 const formatTokens = (n: number) => {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -86,7 +86,7 @@ const ProgressBar = ({
   return (
     <div className="min-w-0 flex-1">
       <div className="mb-1 flex h-4 items-center gap-1">
-        <Txt as="span" variant="meta" tone="muted" className="tracking-wider uppercase">
+        <Txt as="span" variant="meta" tone="muted" className="uppercase">
           {label}
         </Txt>
         <Tooltip>
@@ -96,38 +96,40 @@ const ProgressBar = ({
             </button>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs">
-            <div className="space-y-1.5 text-caption">
-              <div className="font-medium text-foreground">
+            <div className="space-y-1.5">
+              <Txt as="p" variant="column" tone="ink">
                 {label === 'Messages' ? 'Observer' : 'Reflector'} Settings
-              </div>
+              </Txt>
               <div className="space-y-0.5">
-                <div>
+                <Txt as="p" variant="caption">
                   <span className="text-muted-foreground">Model:</span>{' '}
                   <span className="text-foreground">{model || 'not configured'}</span>
-                </div>
+                </Txt>
                 {modelRouting?.length ? (
                   <div>
-                    <span className="text-muted-foreground">Routing:</span>
+                    <Txt as="span" variant="caption" tone="muted">
+                      Routing:
+                    </Txt>
                     <div className="mt-0.5 space-y-0.5 pl-2">
                       {modelRouting.map(route => (
-                        <div key={`${route.upTo}-${route.model}`} className="text-foreground">
+                        <Txt as="p" variant="caption" tone="ink" key={`${route.upTo}-${route.model}`}>
                           ≤{formatTokens(route.upTo)} → {route.model}
-                        </div>
+                        </Txt>
                       ))}
                     </div>
                   </div>
                 ) : (
-                  <div>
+                  <Txt as="p" variant="caption">
                     <span className="text-muted-foreground">Threshold:</span>{' '}
                     <span className="text-foreground">{formatTokens(baseThreshold ?? max)} tokens</span>
-                  </div>
+                  </Txt>
                 )}
                 {isAdaptive && totalBudget && (
-                  <div>
+                  <Txt as="p" variant="caption">
                     <span className="text-muted-foreground">Mode:</span>{' '}
                     <span className="text-badge-amber-indicator">Adaptive</span>{' '}
                     <span className="text-muted-foreground">({formatTokens(totalBudget)} shared budget)</span>
-                  </div>
+                  </Txt>
                 )}
               </div>
             </div>
@@ -138,8 +140,10 @@ const ProgressBar = ({
       <div className="flex items-stretch">
         <div className={`relative h-5 flex-1 ${containerBg} overflow-hidden rounded-l`}>
           <div className={`h-full ${fillColor} transition-all`} style={{ width: `${percentage}%` }} />
-          <span
-            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-meta ${textColor} pointer-events-none`}
+          <Txt
+            as="span"
+            variant="meta"
+            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} ${textColor} pointer-events-none`}
           >
             {isProcessing ? (
               <>
@@ -153,9 +157,11 @@ const ProgressBar = ({
             ) : (
               `${Math.round(percentage)}%`
             )}
-          </span>
-          <span
-            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} text-meta ${textColorFilled} pointer-events-none`}
+          </Txt>
+          <Txt
+            as="span"
+            variant="meta"
+            className={`absolute inset-0 flex items-center ${isProcessing ? 'justify-start pl-2' : 'justify-center'} ${textColorFilled} pointer-events-none`}
             style={{ clipPath: `inset(0 ${100 - percentage}% 0 0)` }}
           >
             {isProcessing ? (
@@ -170,27 +176,40 @@ const ProgressBar = ({
             ) : (
               `${Math.round(percentage)}%`
             )}
-          </span>
+          </Txt>
         </div>
 
         <span
-          className={`text-meta ${tokenTextColor} whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
+          className={` ${tokenTextColor} whitespace-nowrap tabular-nums ${tokenBg} -ml-px flex items-center gap-1 rounded-r px-1.5`}
         >
-          {formatTokens(value)}
-          <span className={isProcessing ? 'text-info-indicator' : 'text-muted-foreground'}>/{formatTokens(max)}</span>
+          <Txt as="span" variant="meta">
+            {formatTokens(value)}
+          </Txt>
+          <Txt
+            as="span"
+            variant="meta"
+            tone={isProcessing ? undefined : 'muted'}
+            className={isProcessing ? 'text-info-indicator' : undefined}
+          >
+            /{formatTokens(max)}
+          </Txt>
           {isAdaptive && totalBudget && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="cursor-help text-badge-amber-indicator">({formatTokens(baseThreshold)})</span>
+                <span className="cursor-help text-badge-amber-indicator">
+                  <Txt as="span" variant="meta">
+                    ({formatTokens(baseThreshold)})
+                  </Txt>
+                </span>
               </TooltipTrigger>
               <TooltipContent side="top" className="max-w-xs">
-                <div className="text-caption">
+                <Txt as="p" variant="caption">
                   <span className="text-badge-amber-indicator">{formatTokens(baseThreshold)}</span>
                   <span className="text-muted-foreground"> is the configured threshold. </span>
                   <span className="text-foreground">
                     Adaptive mode shares a {formatTokens(totalBudget)} token budget between messages and observations.
                   </span>
-                </div>
+                </Txt>
               </TooltipContent>
             </Tooltip>
           )}
@@ -227,11 +246,13 @@ const ObservationalMemoryDisabled = () => (
         target="_blank"
         rel="noopener noreferrer"
         className={cn(
-          'inline-flex items-center gap-2 text-body text-info-indicator hover:underline',
+          'inline-flex items-center gap-2 text-info-indicator hover:underline',
           controlStateColorTransition,
         )}
       >
-        Learn about Observational Memory
+        <Txt as="span" variant="body" className="block">
+          Learn about Observational Memory
+        </Txt>
         <ExternalLink className="h-3 w-3" />
       </a>
     </div>
@@ -313,12 +334,17 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   // The provider retains progress across thread switches.
   const liveProgress = streamProgress?.threadId === threadId ? streamProgress : null;
 
-  const { data: configData } = useMemoryConfig(agentId, useEntityRequestContext('agent', agentId)[0]);
+  const { data: configData } = useMemoryConfig({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
 
   const { data: statusData, isLoading: isStatusLoading } = useMemoryWithOMStatus({
     agentId,
     resourceId,
     threadId,
+    queryOptions: { enabled: Boolean(agentId) },
   });
 
   // Crashed operations can leave stale server flags.
@@ -337,12 +363,17 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
   const isReflecting = isReflectingFromStream || isReflectingFromServer;
   const isOMActive = isObserving || isReflecting;
 
-  const { data: omData, isLoading: isOMLoading } = useObservationalMemory({
-    agentId,
-    resourceId,
-    threadId,
-    enabled: Boolean(statusData?.observationalMemory?.enabled),
+  const { data: omData, isLoading: isOMLoading } = useObservationalMemoryWithHistory({
+    agentId: agentId,
+    resourceId: resourceId,
+    threadId: threadId,
     isActive: isOMActive,
+    queryOptions: {
+      enabled:
+        Boolean(statusData?.observationalMemory?.enabled) &&
+        Boolean(agentId) &&
+        (Boolean(resourceId) || Boolean(threadId)),
+    },
   });
 
   const isLoading = isStatusLoading || isOMLoading;

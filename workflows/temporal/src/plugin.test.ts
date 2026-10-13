@@ -123,6 +123,7 @@ describe('Temporal prebuild integration', () => {
         client: undefined,
         taskQueue: 'mastra',
         startToCloseTimeout: '5 minutes',
+        retry: { maximumAttempts: 5, initialInterval: '5 seconds' },
       });
 
       const step1 = createStep({
@@ -298,7 +299,11 @@ describe('Temporal prebuild integration', () => {
       },
     });
 
-    expect(proxyActivities).toHaveBeenCalledWith({ startToCloseTimeout: '5 minutes' });
+    expect(proxyActivities.mock.calls).toEqual(
+      Array.from({ length: 3 }, () => [
+        { startToCloseTimeout: '5 minutes', retry: { maximumAttempts: 5, initialInterval: '5 seconds' } },
+      ]),
+    );
     expect(executeChild).toHaveBeenCalledWith('innerWorkflow', {
       args: [{ inputData: { value: 'test-step1' }, workflowId: 'complex-workflow' }],
     });
