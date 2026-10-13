@@ -70,6 +70,14 @@ export interface KnowledgeScopeTreeNode {
   kind?: string;
   description?: string;
   parentIds: string[];
+  /** Viewer-visible direct members, capped by the route's node window. */
+  memberCount: number;
+  /** True when more direct members may exist beyond `memberCount`. */
+  memberCountTruncated: boolean;
+  /** Content nodes directly assigned to this scope. */
+  contentNodeCount: number;
+  /** Direct child scopes available for lazy expansion. */
+  childScopeCount: number;
 }
 
 export interface KnowledgeScopeTreePayload {
@@ -82,6 +90,10 @@ export interface KnowledgeScopeTreePayload {
   }>;
   defaultLevel: 'resource';
   scopeNodes?: KnowledgeScopeTreeNode[];
+  /** Cursor for the next sibling page (roots when parentId is omitted). */
+  nextCursor?: string;
+  /** Initial child-page cursors keyed by parent scope id. */
+  childCursors?: Record<string, string>;
   /** Set when the org has more scopes than the route reads. */
   truncated?: true;
 }
@@ -274,8 +286,16 @@ const ACTIVITY_PAGE_SIZE = 25;
 const ACTIVITY_BATCH = 100;
 /** Hard scan cap so a huge hidden or filtered backlog cannot spin the request. */
 const ACTIVITY_SCAN_CAP = 1000;
+/** Scope nodes returned per parent while lazily expanding the tree. */
+const SCOPE_PAGE_SIZE = 25;
+/** Bound storage pressure while calculating direct-member counts. */
+const SCOPE_COUNT_CONCURRENCY = 8;
 
 /** The thread id of a session (`resource:<project>:thread:<id>`) scope address. */
+function compareScopeNodes(a: KnowledgeScopeNodeSummary, b: KnowledgeScopeNodeSummary): number {
+  return a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
+}
+
 function sessionThreadId(address: string | undefined): string | undefined {
   return address ? SESSION_ADDRESS_RE.exec(address)?.[1] : undefined;
 }
@@ -679,6 +699,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       (
         await knowledge.materializeScope({
           address: resourceAddress,
+          name: project.name,
           parentAddresses: [orgAddress],
           contextualScopeAddress: orgAddress,
           parameters: { orgId: tenant.orgId, resourceId: projectId },
@@ -1008,21 +1029,128 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
         handler: async c => {
           const view = await this.#resolveView(loose(c));
           if ('response' in view) return view.response;
+          const parentId = loose(c).req.query('parentId');
+          const cursor = loose(c).req.query('cursor');
           let scopeNodes: KnowledgeScopeTreeNode[] | undefined;
           let scopesTruncated = false;
+          let nextCursor: string | undefined;
+          const childCursors: Record<string, string> = {};
+          let storedScopeNodes: KnowledgeScopeNodeSummary[] = [];
           try {
             const orgScopes = await listOrgScopeNodes(view.store, view.orgId, this.#limits.maxOrgScopePages);
             scopesTruncated = orgScopes.truncated;
-            const hiddenSessions = await this.#hiddenSessionIds(view, orgScopes.scopes, { probe: true });
-            orgScopes.scopes = orgScopes.scopes.filter(scope => !hiddenSessions.has(scope.id));
-            scopeNodes = orgScopes.scopes.map(scope => ({
-              id: scope.id,
-              address: scope.address,
-              name: scope.address === `resource:${view.projectId}` ? view.projectName : scope.name,
-              kind: scopeKindLabel(scope.address, scope.kind),
-              ...(scope.description ? { description: scope.description } : {}),
-              parentIds: scope.parentIds,
-            }));
+            // Cheap structural filter first (foreign sessions out); the bounded
+            // page that is actually returned gets the record probe below.
+            const foreignSessions = await this.#hiddenSessionIds(view, orgScopes.scopes, { probe: false });
+            storedScopeNodes = orgScopes.scopes.filter(scope => !foreignSessions.has(scope.id));
+            const scopeNodeById = new Map(storedScopeNodes.map(node => [node.id, node]));
+            const childScopeCountByParent = new Map<string, number>();
+            for (const node of storedScopeNodes) {
+              for (const ancestorId of node.parentIds) {
+                childScopeCountByParent.set(ancestorId, (childScopeCountByParent.get(ancestorId) ?? 0) + 1);
+              }
+            }
+            if (parentId && !scopeNodeById.has(parentId)) {
+              return loose(c).json({ error: 'scope_not_found' }, 404);
+            }
+
+            const siblings = storedScopeNodes
+              .filter(node => (parentId ? node.parentIds.includes(parentId) : node.parentIds.length === 0))
+              .sort(compareScopeNodes);
+            const cursorIndex = cursor ? siblings.findIndex(node => node.id === cursor) : -1;
+            if (cursor && cursorIndex < 0) {
+              return loose(c).json({ error: 'invalid_scope_cursor' }, 400);
+            }
+            const pageStart = cursorIndex + 1;
+            const siblingPage = siblings.slice(pageStart, pageStart + SCOPE_PAGE_SIZE);
+            if (pageStart + siblingPage.length < siblings.length) {
+              nextCursor = siblingPage.at(-1)?.id;
+            }
+
+            const returnedById = new Map(siblingPage.map(node => [node.id, node]));
+            if (!parentId) {
+              // Initial load: roots plus their first page of immediate children.
+              // Deeper levels are fetched only when that scope is expanded.
+              const addFirstChildPage = (parent: KnowledgeScopeNodeSummary): void => {
+                const children = storedScopeNodes
+                  .filter(node => node.parentIds.includes(parent.id))
+                  .sort(compareScopeNodes);
+                const returnedChildren: KnowledgeScopeNodeSummary[] = [];
+                for (const child of children.slice(0, SCOPE_PAGE_SIZE)) {
+                  if (returnedById.size >= this.#limits.maxNodes) break;
+                  returnedById.set(child.id, child);
+                  returnedChildren.push(child);
+                }
+                if (returnedChildren.length < children.length) {
+                  const lastChild = returnedChildren.at(-1);
+                  if (lastChild) childCursors[parent.id] = lastChild.id;
+                }
+              };
+              for (const root of siblingPage) addFirstChildPage(root);
+
+              // The active identity chain must stay present even when it is
+              // deeper than one level, or rung/tree dedup would regress on a
+              // thread view. Include only those matched nodes and ancestors.
+              const identityAddresses = new Set([
+                `org:${view.orgId}`,
+                `resource:${view.projectId}`,
+                ...(view.threadId ? [`resource:${view.projectId}:thread:${view.threadId}`] : []),
+              ]);
+              const includeWithParents = (node: KnowledgeScopeNodeSummary): void => {
+                if (returnedById.has(node.id) || returnedById.size >= this.#limits.maxNodes) return;
+                for (const ancestorId of node.parentIds) {
+                  const ancestor = scopeNodeById.get(ancestorId);
+                  if (ancestor) includeWithParents(ancestor);
+                }
+                returnedById.set(node.id, node);
+              };
+              for (const node of storedScopeNodes) {
+                if (identityAddresses.has(node.address)) includeWithParents(node);
+              }
+              // The viewed project's first page of children (its sessions among
+              // them) loads with the tree, so a session is listed without
+              // expanding the project first.
+              const projectNode = storedScopeNodes.find(node => node.address === `resource:${view.projectId}`);
+              if (projectNode && returnedById.has(projectNode.id)) addFirstChildPage(projectNode);
+            }
+
+            const unreadableSessions = await this.#hiddenSessionIds(view, [...returnedById.values()], {
+              probe: true,
+            });
+            for (const id of unreadableSessions) returnedById.delete(id);
+
+            const returnedNodes = [...returnedById.values()].sort(compareScopeNodes);
+            scopeNodes = [];
+            for (let index = 0; index < returnedNodes.length; index += SCOPE_COUNT_CONCURRENCY) {
+              const batch = returnedNodes.slice(index, index + SCOPE_COUNT_CONCURRENCY);
+              scopeNodes.push(
+                ...(await Promise.all(
+                  batch.map(async scope => {
+                    const members = await view.store.listNodes({
+                      scopeIds: [scope.id],
+                      isScope: false,
+                      limit: this.#limits.maxNodes + 1,
+                    });
+                    const contentNodeCount = Math.min(members.length, this.#limits.maxNodes);
+                    const childScopeCount = childScopeCountByParent.get(scope.id) ?? 0;
+                    const directMemberCount = childScopeCount + contentNodeCount;
+                    return {
+                      id: scope.id,
+                      address: scope.address,
+                      name: scope.address === `resource:${view.projectId}` ? view.projectName : scope.name,
+                      kind: scopeKindLabel(scope.address, scope.kind),
+                      ...(scope.description ? { description: scope.description } : {}),
+                      parentIds: scope.parentIds,
+                      memberCount: Math.min(directMemberCount, this.#limits.maxNodes),
+                      memberCountTruncated:
+                        directMemberCount > this.#limits.maxNodes || members.length > this.#limits.maxNodes,
+                      contentNodeCount,
+                      childScopeCount,
+                    } satisfies KnowledgeScopeTreeNode;
+                  }),
+                )),
+              );
+            }
             const sessionNames = await this.#sessionNames(scopeNodes);
             scopeNodes = scopeNodes.map(node => {
               const name = sessionNames.get(node.id);
@@ -1032,7 +1160,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             if (!(error instanceof KnowledgeUnsupportedError)) throw error;
             scopeNodes = undefined;
           }
-          const scopeNodeByAddress = new Map(scopeNodes?.map(node => [node.address, node]));
+          // Identity rungs are matched against the FULL filtered scope set, not
+          // just the returned page, so a rung merges with its scope node even
+          // when that node sorts past the current page.
+          const scopeNodeByAddress = new Map(storedScopeNodes.map(node => [node.address, node]));
           const identity = [
             { level: 'org' as const, id: view.orgId, address: `org:${view.orgId}` },
             { level: 'resource' as const, id: view.projectId, address: `resource:${view.projectId}` },
@@ -1046,18 +1177,30 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
                 ]
               : []),
           ];
+          const threadRoot = view.threadId
+            ? scopeNodeByAddress.get(`resource:${view.projectId}:thread:${view.threadId}`)
+            : undefined;
+          const threadRootName = threadRoot ? (await this.#sessionNames([threadRoot])).get(threadRoot.id) : undefined;
           return loose(c).json({
             roots: identity.map(({ level, id, address }) => {
               const scopeNode = scopeNodeByAddress.get(address);
+              const name =
+                scopeNode?.address === `resource:${view.projectId}`
+                  ? view.projectName
+                  : scopeNode && level === 'thread'
+                    ? (threadRootName ?? scopeNode.name)
+                    : scopeNode?.name;
               return {
                 level,
                 id,
                 available: true,
-                ...(scopeNode ? { scopeNodeId: scopeNode.id, name: scopeNode.name } : {}),
+                ...(scopeNode ? { scopeNodeId: scopeNode.id, name } : {}),
               };
             }),
             defaultLevel: 'resource',
             ...(scopeNodes ? { scopeNodes } : {}),
+            ...(nextCursor ? { nextCursor } : {}),
+            ...(Object.keys(childCursors).length > 0 ? { childCursors } : {}),
             ...(scopesTruncated ? { truncated: true as const } : {}),
           } satisfies KnowledgeScopeTreePayload);
         },
