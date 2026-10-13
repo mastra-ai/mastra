@@ -1039,10 +1039,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           try {
             const orgScopes = await listOrgScopeNodes(view.store, view.orgId, this.#limits.maxOrgScopePages);
             scopesTruncated = orgScopes.truncated;
-            // Cheap structural filter first (foreign sessions out); the bounded
-            // page that is actually returned gets the record probe below.
-            const foreignSessions = await this.#hiddenSessionIds(view, orgScopes.scopes, { probe: false });
-            storedScopeNodes = orgScopes.scopes.filter(scope => !foreignSessions.has(scope.id));
+            // Hidden sessions (foreign projects' sessions and own sessions without
+            // visible records) are removed BEFORE any paging or count math, so no
+            // cursor, child cursor, or count can disclose a session the drill-down
+            // would reject. The probe only runs for the viewer's own project's
+            // sessions — foreign ones fail the cheap structural check first.
+            const hiddenSessions = await this.#hiddenSessionIds(view, orgScopes.scopes, { probe: true });
+            storedScopeNodes = orgScopes.scopes.filter(scope => !hiddenSessions.has(scope.id));
             const scopeNodeById = new Map(storedScopeNodes.map(node => [node.id, node]));
             const childScopeCountByParent = new Map<string, number>();
             for (const node of storedScopeNodes) {
@@ -1069,28 +1072,10 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
 
             const returnedById = new Map(siblingPage.map(node => [node.id, node]));
             if (!parentId) {
-              // Initial load: roots plus their first page of immediate children.
-              // Deeper levels are fetched only when that scope is expanded.
-              const addFirstChildPage = (parent: KnowledgeScopeNodeSummary): void => {
-                const children = storedScopeNodes
-                  .filter(node => node.parentIds.includes(parent.id))
-                  .sort(compareScopeNodes);
-                const returnedChildren: KnowledgeScopeNodeSummary[] = [];
-                for (const child of children.slice(0, SCOPE_PAGE_SIZE)) {
-                  if (returnedById.size >= this.#limits.maxNodes) break;
-                  returnedById.set(child.id, child);
-                  returnedChildren.push(child);
-                }
-                if (returnedChildren.length < children.length) {
-                  const lastChild = returnedChildren.at(-1);
-                  if (lastChild) childCursors[parent.id] = lastChild.id;
-                }
-              };
-              for (const root of siblingPage) addFirstChildPage(root);
-
               // The active identity chain must stay present even when it is
               // deeper than one level, or rung/tree dedup would regress on a
-              // thread view. Include only those matched nodes and ancestors.
+              // thread view. It is included FIRST so the window cap can never
+              // evict it in favor of earlier-sorting structural scopes.
               const identityAddresses = new Set([
                 `org:${view.orgId}`,
                 `resource:${view.projectId}`,
@@ -1107,17 +1092,31 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               for (const node of storedScopeNodes) {
                 if (identityAddresses.has(node.address)) includeWithParents(node);
               }
+
+              // Initial load: roots plus their first page of immediate children.
+              // Deeper levels are fetched only when that scope is expanded.
+              const addFirstChildPage = (parent: KnowledgeScopeNodeSummary): void => {
+                const children = storedScopeNodes
+                  .filter(node => node.parentIds.includes(parent.id))
+                  .sort(compareScopeNodes);
+                const returnedChildren: KnowledgeScopeNodeSummary[] = [];
+                for (const child of children.slice(0, SCOPE_PAGE_SIZE)) {
+                  if (returnedById.size >= this.#limits.maxNodes && !returnedById.has(child.id)) break;
+                  returnedById.set(child.id, child);
+                  returnedChildren.push(child);
+                }
+                if (returnedChildren.length < children.length) {
+                  const lastChild = returnedChildren.at(-1);
+                  if (lastChild) childCursors[parent.id] = lastChild.id;
+                }
+              };
+              for (const root of siblingPage) addFirstChildPage(root);
               // The viewed project's first page of children (its sessions among
               // them) loads with the tree, so a session is listed without
               // expanding the project first.
               const projectNode = storedScopeNodes.find(node => node.address === `resource:${view.projectId}`);
               if (projectNode && returnedById.has(projectNode.id)) addFirstChildPage(projectNode);
             }
-
-            const unreadableSessions = await this.#hiddenSessionIds(view, [...returnedById.values()], {
-              probe: true,
-            });
-            for (const id of unreadableSessions) returnedById.delete(id);
 
             const returnedNodes = [...returnedById.values()].sort(compareScopeNodes);
             scopeNodes = [];
@@ -1766,8 +1765,16 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             events.map(async ({ event, target }) => {
               const run = event.importRunId ? await view.store.getImportRun(event.importRunId) : undefined;
               const eventScopeIds = event.contextScopeId ? [event.contextScopeId] : [selected.id];
+              // Derive the owning session ONLY from the viewed project's own
+              // session scopes — a multi-scoped node must never disclose a
+              // foreign project's thread id through enrichment.
               const nodeThreadId = target.scopeIds
-                .map(scopeId => sessionThreadId(addresses.get(scopeId)?.address))
+                .map(scopeId => {
+                  const address = addresses.get(scopeId)?.address;
+                  return address?.startsWith(`resource:${view.projectId}:thread:`)
+                    ? sessionThreadId(address)
+                    : undefined;
+                })
                 .find(threadId => threadId !== undefined);
               return {
                 id: event.id,
