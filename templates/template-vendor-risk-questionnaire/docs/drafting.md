@@ -99,6 +99,9 @@ For new terminal and web runs, `.env`'s `VRQ_MODEL` overrides the profile model.
 
 ### Ask a coding LLM to change the policy
 
+<details>
+<summary>Show optional prompt</summary>
+
 ```text
 Update the execution policy for future vendor-risk-questionnaire runs.
 
@@ -118,6 +121,8 @@ Explain whether VRQ_MODEL overrides the model I selected. Show the final
 configuration and validation result. Do not modify saved run policies,
 reset usage, start model calls or approve answers.
 ```
+
+</details>
 
 ## Retrieval details and limitations
 

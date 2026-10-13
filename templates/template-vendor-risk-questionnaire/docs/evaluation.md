@@ -114,6 +114,9 @@ These local records contain fictional source and output text. They are separate 
 
 ### Ask a coding LLM to prepare a live policy
 
+<details>
+<summary>Show optional prompt</summary>
+
 ```text
 Create .runtime/evaluation-policy.json for this template's live evaluation.
 Read src/mastra/contracts/execution-policy.ts, tests/live and
@@ -129,9 +132,11 @@ the provider. Show the file, chosen limits and command to run eval:live.
 Do not run live evaluation or invent provider prices.
 ```
 
+</details>
+
 ## Inspect a questionnaire's metrics
 
-1. Open the questionnaire in the web UI and expand **Review metrics**, or copy its run ID.
+1. Open **Review metrics** in the web UI to inspect a questionnaire, or copy its run ID for the terminal command below.
 2. From the template directory, read that run's metrics:
 
    ```bash

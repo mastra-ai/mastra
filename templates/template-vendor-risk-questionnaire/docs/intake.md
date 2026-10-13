@@ -28,7 +28,7 @@ The default limits are 10 MiB per questionnaire, 100 questions and 4,000 charact
 2. Leave the answer cells empty. Keep each question on its own row, without merged cells.
 3. Save the file as `questionnaire.xlsx`.
 4. Upload it using the steps below. These headers are recognized automatically.
-5. After review and approval, open `answered.xlsx`. Column C contains the approved answers or explicit gaps. The original file remains unchanged.
+5. After review and approval, open `answered.xlsx`. Column C contains the approved answers, with unknown or withheld answers clearly marked. The original file remains unchanged.
 
 For Word, create a regular table in the document body with the same headers and save it as `.docx`. The output is an answered DOCX file. For a supplied sample, run `npm run demo` from the template directory and use `.runtime/demo/questionnaire.xlsx` or `.runtime/demo/questionnaire.docx`.
 
@@ -39,7 +39,7 @@ For Word, create a regular table in the document body with the same headers and 
 3. Open the uploaded file under **Questionnaires**. If the system recognizes its table headers, it proceeds automatically. Otherwise, answer the mapping prompts shown in the questionnaire detail panel.
 4. For each nonempty sheet or document region, choose `map` for questions or `exclude` for non-question content. Supply the first and last question rows, then the column index for each requested field. Leave optional fields blank when absent.
 5. Explain exclusions for header rows, titles and other non-question rows. Confirm replacement of any prefilled answer destinations by entering `REPLACE` when prompted.
-6. Review drafts and citations, submit the review, and approve the complete answer set. **Download** becomes available after publication.
+6. Review drafts and citations, submit the review, and approve the complete answer set. **Download** becomes available when export finishes.
 
 ### Convert visible rows and columns to indices
 
@@ -204,6 +204,9 @@ The source hash is a fingerprint of the inspected file. If the file changes, ins
 
 ### Ask a coding LLM to generate the resume JSON
 
+<details>
+<summary>Show optional prompt</summary>
+
 The full mapping depends on the actual file, so a fixed JSON example cannot supply its hash or region IDs. Give this prompt to a coding LLM with access to the project and your inspected questionnaire:
 
 ```text
@@ -237,6 +240,8 @@ full row coverage. Do not resume the workflow or approve questionnaire answers.
 ```
 
 After checking the file, paste its contents into the paused step's resume input. This confirms the input mapping, not the answers or their export.
+
+</details>
 
 In code, `IntakeCoordinator.inspect` and `IntakeCoordinator.import` provide the same inspection and normalization behavior. The browser multipart endpoint accepts a file and uses interactive prompts; it does not accept this mapping JSON.
 

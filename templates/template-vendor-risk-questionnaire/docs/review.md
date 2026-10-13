@@ -17,7 +17,9 @@ Read each original question, draft, citation and limitation before choosing:
 
 `correct` is an interactive choice. In a JSON decision, a correction uses `disposition: "release"` plus a `correction` object matching the full draft schema. It is not a separate JSON disposition.
 
-Corrections must satisfy the original question's length and choice limits and pass fresh security and independent support checks. A gap (`unknown` or `withheld`) carries a safe reason, without factual corrections, citations or limitations.
+Corrections must satisfy the original question's length and choice limits and pass fresh security and independent support checks.
+
+An answer marked `unknown` or `withheld` includes only a safe reason, without factual corrections, citations or limitations. These answers are called **gaps** in the review records.
 
 ## Terminal review
 
@@ -160,13 +162,16 @@ When you are ready to approve:
    npm run review -- resume --run-id review-1
    ```
 
-The state must be `approved` before resume. Successful publication produces an `exported` state and one answered document.
+The state must be `approved` before resume. When export finishes, the state becomes `exported` and one answered document is available.
 
 Submit and export use the configured evidence profile. An override must provide both `--root` and `--manifest`. Status, resume and cleanup do not require a profile.
 
 Replaying an identical decision ID and payload returns the saved result without repeating checks. Reusing an ID with changed content or submitting a stale revision fails. Changed content revokes an earlier approval before validation; unsupported or protected changes leave review pending.
 
 ### Ask a coding LLM to prepare a decision file
+
+<details>
+<summary>Show optional prompt</summary>
 
 Use this prompt only with a coding LLM authorized to inspect the local review data:
 
@@ -189,13 +194,15 @@ server's source, support, security or stale-state checks. Do not submit,
 approve, resume, export, or alter source evidence.
 ```
 
+</details>
+
 ## Finish when the budget is exhausted
 
-If call, cost or elapsed-time limits prevent further checks, the template can still export a complete set of explicit gaps after your approval.
+If call, cost or elapsed-time limits prevent further checks, you can still approve and export the questionnaire with every answer marked `unknown` or `withheld`.
 
 Time spent waiting for your decision does not count toward the processing limit. Drafting and automated review checks share that allowance, including failed review attempts. `EXHAUSTED_REVIEW_REQUIRES_TRUSTED_GAPS` means the remaining allowance cannot support the submitted review; it requires the gap-only choices below. Retrying does not reset usage.
 
-1. Choose a gap for every question.
+1. Choose `unknown` or `withheld` for every question.
 2. Use these exact supported reasons:
 
    | Disposition | `safeReason`                                   |
@@ -205,7 +212,7 @@ Time spent waiting for your decision does not count toward the processing limit.
 
 3. Review the complete set and approve it through the normal flow.
 
-This path makes no provider calls and preserves the original usage record. Custom reasons, corrections and releases require checks that cannot run after the budget is exhausted. Local protected-content checks and source/policy validation still apply. Unsafe retained source content can block export even when all answers are gaps. Successful publication is marked `delivered_with_gaps`.
+This path makes no provider calls and preserves the original usage record. Custom reasons, corrections and releases require checks that cannot run after the budget is exhausted. Local protected-content checks and source/policy validation still apply. Unsafe retained source content can block export even when all answers are gaps. A successful export is marked `delivered_with_gaps`.
 
 ## Restart and retry
 
@@ -238,7 +245,7 @@ A process killed during review or export can leave a saved **claim**, indicating
 
 Claim recovery does not restore stale approval or replenish usage. If the database writer lock blocks commands, follow [local process ownership](#local-process-ownership) first.
 
-If export fails after terminal approval, `npm run respond -- --resume RUN_ID` can retry publication once the underlying problem is fixed. It checks that the saved workflow approval matches the current approved revision and exports that exact set without new model calls or another approval prompt. The original failed workflow history remains available; the review state records the successful export. A stale approval cannot use this recovery path.
+If export fails after terminal approval, `npm run respond -- --resume RUN_ID` can retry export once the underlying problem is fixed. It checks that the saved workflow approval matches the current approved revision and exports that exact set without new model calls or another approval prompt. The original failed workflow history remains available; the review state records the successful export. A stale approval cannot use this recovery path.
 
 ## Answered document
 

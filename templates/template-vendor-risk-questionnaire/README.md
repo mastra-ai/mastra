@@ -4,11 +4,9 @@ Upload an XLSX or DOCX vendor risk questionnaire, review answers drafted from yo
 
 ## Why we built this
 
-Companies rely on suppliers for products, professional services, manufacturing, logistics and software. Before starting or renewing a relationship, they use vendor risk questionnaires (VRQs) to assess the risks of working with that supplier. Depending on the relationship, questions may cover information security, privacy, regulatory compliance, business continuity, financial stability or supply chain practices.
+Each customer brings a different vendor risk questionnaire, often asking similar questions about security, compliance or business operations. Answering means finding policies and records across teams, checking that they are current, and deciding what can be shared. Copying an old answer can repeat an outdated claim or describe controls the company hasn't implemented.
 
-For the teams completing these questionnaires, each customer brings a different spreadsheet or document, often asking similar questions in different ways. Answers may require policies, records and input from several departments. Finding the right evidence, checking whether an answer is still accurate, and deciding what can be shared takes time across operations, finance, security, compliance and sales.
-
-Copying an answer from the last questionnaire can repeat an outdated claim or suggest the company has controls it hasn't implemented. This template brings approved evidence and cited drafts into one review flow, flags answers that lack support, and lets reviewers decide what can be shared. Mastra workflows coordinate intake, drafting, human approval and export; the final decision stays with your team.
+This template brings approved evidence and cited drafts into one review flow. It flags answers that lack support so reviewers can correct them, leave them unanswered or withhold them. Mastra workflows coordinate intake, drafting, approval and export; your team decides what to share.
 
 ## Prerequisites
 
@@ -26,20 +24,21 @@ Copying an answer from the last questionnaire can repeat an outdated claim or su
    - Run `npm run demo` to generate sample questionnaires, evidence and profile. Existing data and configuration are preserved.
 4. **Start the web demo**
    - Run `npm run dev` to start Mastra and the web interface together.
+   - Follow [Try it out](#try-it-out) to upload the sample and review its draft answers.
 
 ## Try it out
 
 1. **Upload a questionnaire**
-   - Open [the web demo](http://127.0.0.1:5173). In **Upload**, select `.runtime/demo/questionnaire.xlsx` and click **Submit**.
+   - Open [the web demo](http://127.0.0.1:5173). In **Upload**, select `.runtime/demo/questionnaire.xlsx`, then select **Submit**.
    - The questionnaire appears under **Questionnaires**. Answer any mapping prompts and wait for processing to finish; drafts, citations and evidence gaps will appear for review.
 2. **Review each answer**
    - Read the draft and its citations, then choose how to handle each answer: release it if the evidence supports it, make a correction based on the evidence, or mark it as `unknown` or `withheld`.
    - The sample includes missing and conflicting evidence. Keep those limitations visible, and approve sharing for any sources that require your permission.
 3. **Check all answers together**
-   - Click **Review** to validate your choices. Resolve any reported issues, then review all the proposed responses together. Your approval is still required before export.
+   - Select **Review** to validate your choices. Resolve any reported issues, then review all the proposed responses together. Your approval is still required before export.
    - To try resuming a review, reload the page after validation and reopen the questionnaire under **Questionnaires**. Your submitted choices remain available.
 4. **Approve and download**
-   - Click **APPROVE** and confirm in the dialog. When export finishes, **Download** becomes available.
+   - Select **APPROVE** and confirm in the dialog. When export finishes, **Download** becomes available.
    - Download the completed XLSX file. It preserves the questionnaire's format and includes your approved responses, with unknown or withheld answers clearly marked.
 5. **Inspect the run**
    - Open **Review metrics** for the questionnaire to see answer outcomes, model usage and review activity.
@@ -48,8 +47,20 @@ To try Word, repeat the same steps with `.runtime/demo/questionnaire.docx`. You'
 
 ## Customization
 
-- Open the project in your coding agent: “Configure our approved evidence sources and map our customer questionnaire fields. Explore the code and propose a plan before making changes.” Start with [input formats and mappings](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/intake.md) and [evidence retrieval and drafting](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/drafting.md) to configure `.runtime/profile.json` for your organization.
-- Adapt the interface or connect it to your application using the [web UI and HTTP API guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/ui.md). For terminal usage, production configuration, checks and recovery, see [local operation and development](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/local-operation.md), [review and approval](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/review.md), and [evaluation and metrics](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/evaluation.md).
+- Open the project in your coding agent: “Configure our approved evidence sources and map our customer questionnaire fields. Explore the code and propose a plan before making changes.”
+- Replace the demo evidence with your organization's approved sources using the [evidence configuration guide](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/local-operation.md#configure-your-organizations-evidence).
+
+## Guides by task
+
+| Task                                                 | Guide                                                                                                                                                                      |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Configure evidence files and `.runtime/profile.json` | [Evidence setup](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/local-operation.md#configure-your-organizations-evidence) |
+| Map your questionnaire's rows and answer fields      | [Formats and field mapping](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/intake.md)                                     |
+| Understand drafting and adjust execution limits      | [Evidence retrieval and drafting](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/drafting.md)                             |
+| Adapt the interface, integrate the API or deploy     | [Web UI and HTTP API](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/ui.md)                                               |
+| Use the terminal or run development checks           | [Local operation and development](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/local-operation.md)                      |
+| Approve answers, recover a run or clean up its data  | [Review and approval](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/review.md)                                           |
+| Run evaluations and interpret metrics                | [Evaluation and metrics](https://github.com/mastra-ai/mastra/blob/main/templates/template-vendor-risk-questionnaire/docs/evaluation.md)                                    |
 
 ## Evidence formats and integrations
 

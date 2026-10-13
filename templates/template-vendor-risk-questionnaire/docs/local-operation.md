@@ -39,7 +39,7 @@ Run the commands on this page from the template directory. For the browser walkt
 5. The sample has automatically recognized headers and empty answer destinations. For other layouts, follow any field-mapping prompts. If an answer destination already contains text, inspect it and type `REPLACE` to authorize replacement; this confirmation is case-insensitive. For each answer, read the draft and citations, then choose `release`, `correct`, `unknown` or `withheld`. See [review choices](review.md#choose-what-to-share) for examples.
 6. Read the complete revised answer set and type `APPROVE` when ready to share it.
 
-The command returns the path to one `answered.xlsx` or `answered.docx` under `.runtime/exports`. Open it and check the answers, qualifications and explicit gaps.
+The command returns the path to one `answered.xlsx` or `answered.docx` under `.runtime/exports`. Open it and check the answers and qualifications, including answers marked unknown or withheld.
 
 ### Sample fields
 
@@ -98,7 +98,12 @@ node --input-type=module -e 'import { loadEvidenceProfile } from "./src/mastra/r
 
 This is a configuration check. Intake still checks source hashes, eligibility and supported file contents when it creates the run's evidence snapshot, a saved copy of the evidence selected for that run.
 
+An eligible source must be approved, currently valid, allowed for LLM use and within the configured scope. The disclosure rule separately controls what can be shared with the customer. See [review and approval](review.md#source-sharing-rules).
+
 ### Ask a coding LLM to prepare the configuration
+
+<details>
+<summary>Show optional prompt</summary>
 
 Use this prompt with a coding LLM that can read the project and the files you authorize it to inspect. Replace the bracketed values first. The model must get approval and disclosure facts from you; it cannot infer them from a document's wording.
 
@@ -138,7 +143,7 @@ changed files and the command to start a new questionnaire. Do not start
 model calls, approve answers or export documents.
 ```
 
-An eligible source must be approved, currently valid, allowed for LLM use and within the configured scope. The disclosure rule separately controls what can be shared with the customer. See [review and approval](review.md#source-sharing-rules).
+</details>
 
 ## Inspect a run and its storage
 

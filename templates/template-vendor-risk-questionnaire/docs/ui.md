@@ -41,11 +41,11 @@ To start them separately, run `npm run dev:mastra` and `npm run dev:ui` in separ
 4. Read each question, draft, limitation and citation. Choose whether to release the answer, correct it, mark it unknown or withhold it. Explicitly select any cited sources that require sharing permission.
 5. Select **Review** to validate your choices. Resolve reported issues and inspect the complete validated answer set.
 6. Select **APPROVE** and confirm in the dialog when you are ready to authorize export.
-7. After publication, select **Download**. Open the answered file and check its responses and any explicit gaps.
+7. When export finishes, select **Download**. Open the answered file and check its responses, including answers marked unknown or withheld.
 
 For example, if a question asks for a test result but the available evidence contains only a policy, choose `unknown` instead of releasing an unsupported result. See [review choices](review.md#choose-what-to-share).
 
-The server stores the uploaded original bytes before starting the workflow. Corrections keep their citation bindings and pass support and security checks. Saved review choices survive a reload. Download validates the publication and evidence again; approval alone does not make an invalid file downloadable.
+Saved review choices survive a reload. If a correction fails validation, check its cited evidence and resolve the reported issue before approving the answers.
 
 ### Read the review cards
 
@@ -53,7 +53,7 @@ Each card separates the original question, review notes, answer and cited eviden
 
 The answer field is always visible when a draft exists. Editing it selects **Release edited answer**; choosing **Release original draft** restores the original text. **Mark as unknown** and **Withhold answer** exclude the draft from the export. Sharing a source that requires review also needs its permission checkbox. **Review** validates these choices; only the complete validated set can be approved. Any further edits require another review.
 
-`INVALID_ATTRIBUTION` means a quotation does not match the text at its cited location. For example, a citation to a JSON field containing `false` cannot quote a combination of that field, the organization and the date. Earlier versions reported this as `INVALID_MAPPING` during review. The demo cannot repair citation bindings by editing answer text, so it offers **Mark as unknown** or **Withhold answer** for these drafts. A custom review client can submit a corrected citation through the [review decision contract](review.md#inspect-and-submit-review-json); the server still validates it against the original source.
+`INVALID_ATTRIBUTION` means a quotation does not match the text at its cited location. Editing the answer cannot fix its citation in the demo. Choose **Mark as unknown** or **Withhold answer** for that draft. Custom clients can [submit a corrected citation through the API](#saved-files-and-citation-checks).
 
 ## Cancel or remove a questionnaire
 
@@ -73,7 +73,7 @@ Removal persists across restarts and disables all questionnaire HTTP routes for 
 
 Open **Review metrics** on a questionnaire. Five summary values remain visible; expand the other groups for details.
 
-The UI displays the existing `readDomainMetrics` data without generating extra metrics or sample values. `Ms` means milliseconds, token fields count tokens, USD values are estimated dollars, and ratios are fractions. `—` means unavailable, not zero. See [metric definitions](evaluation.md#inspect-a-questionnaires-metrics).
+The metrics show answer outcomes, model usage and review activity. `Ms` means milliseconds, token fields count tokens, USD values are estimated dollars, and ratios are fractions. `—` means unavailable, not zero. See [metric definitions](evaluation.md#inspect-a-questionnaires-metrics).
 
 ## Production
 
@@ -116,9 +116,12 @@ For local Vite development and preview, `/vrq` is already proxied to `http://127
 
 Open the deployed UI. It asks for the token when the API returns `401` and keeps the token only in memory. Upload a sample file and check that review is available after processing. Never put the token in a `VITE_*` variable, because those values can be exposed in client code.
 
-After a backend restart, pending intake can resume from its checkpoint. Interrupted model work requires the [operator recovery procedure](review.md#restart-and-retry); the UI does not automatically restart it or reset the budget. Approved runs can retry publication. Outdated review revisions and digests are rejected.
+After a backend restart, pending intake can resume from its checkpoint. Interrupted model work requires the [operator recovery procedure](review.md#restart-and-retry); the UI does not automatically restart it or reset the budget. Approved runs can retry export. Outdated review revisions and digests are rejected.
 
 ### Ask a coding LLM for the deployment configuration
+
+<details>
+<summary>Show optional prompt</summary>
 
 ```text
 Prepare deployment configuration for the vendor-risk-questionnaire template.
@@ -146,6 +149,8 @@ authenticated access and upload. Explain any host-specific requirements.
 Create reviewable configuration files; do not deploy or run a questionnaire.
 ```
 
+</details>
+
 ## HTTP routes
 
 All routes are registered through Mastra `apiRoutes` and inherit its production authentication. `:runId` means the ID returned when you upload a questionnaire.
@@ -158,10 +163,16 @@ All routes are registered through Mastra `apiRoutes` and inherit its production 
 | DELETE | `/vrq/questionnaires/:runId`          | Remove an inactive run from the UI and HTTP access                    |
 | POST   | `/vrq/questionnaires/:runId/cancel`   | Cancel processing or a pending intake prompt                          |
 | POST   | `/vrq/questionnaires/:runId/input`    | Answer the current prompt using its `id` and `answer`                 |
-| POST   | `/vrq/questionnaires/:runId/review`   | Validate a review decision; final approval resumes publication        |
-| POST   | `/vrq/questionnaires/:runId/resume`   | Resume intake or retry approved publication                           |
+| POST   | `/vrq/questionnaires/:runId/review`   | Validate a review decision; final approval resumes export             |
+| POST   | `/vrq/questionnaires/:runId/resume`   | Resume intake or retry approved export                                |
 | GET    | `/vrq/questionnaires/:runId/download` | Download the validated answered XLSX or DOCX                          |
 | GET    | `/vrq/questionnaires/:runId/metrics`  | Read saved domain metrics                                             |
+
+### Saved files and citation checks
+
+The server stores the uploaded original bytes before starting the workflow. Corrections keep their citation bindings and pass support and security checks. Download validates the exported file and evidence again; approval alone does not make an invalid file downloadable.
+
+Each citation must quote the text at its exact source location. For example, a citation to a JSON field containing `false` cannot quote a combination of that field, the organization and the date. A mismatch produces `INVALID_ATTRIBUTION`; earlier versions reported `INVALID_MAPPING` during review. A custom client can submit a corrected citation through the [review decision contract](review.md#inspect-and-submit-review-json). The server validates it against the original source.
 
 ### Try an upload from the terminal
 
@@ -181,7 +192,7 @@ curl --fail-with-body http://127.0.0.1:4111/vrq/questionnaires/RUN_ID
 
 Check the detail response for progress, a pending mapping prompt or a saved error. You can finish review in the web UI. Production requests also require `Authorization: Bearer YOUR_TOKEN`.
 
-`202` means work was accepted, not completed. `400` means invalid input. `409` can mean a stale review, a busy run or a state that does not allow publication. Read the current detail before retrying; do not resubmit an old approval blindly.
+`202` means work was accepted, not completed. `400` means invalid input. `409` can mean a stale review, a busy run or a state that does not allow export. Read the current detail before retrying; do not resubmit an old approval blindly.
 
 For a custom review client, use the [review decision contract](review.md#inspect-and-submit-review-json). The multipart upload endpoint accepts a file and interactive mapping answers, not a JSON mapping object.
 
