@@ -22,6 +22,19 @@ const workspacePackages = [
   { id: 'vercel', name: '@mastra/vercel', dependencies: {} },
 ];
 
+describe('version-label PR stack CI routing', () => {
+  test.each(['prebuild.yml', 'lint.yml'])('%s includes stacked PR bases', filename => {
+    const workflow = readFileSync(new URL(`../workflows/${filename}`, import.meta.url), 'utf8');
+    expect(workflow).toContain("branches: [main, 0.x, 'codex/agent-version-labels-*']");
+  });
+
+  test('runs the full suite for each version-label stack layer', () => {
+    expect(prebuildWorkflow).toContain('HEAD_REF: ${{ github.event.pull_request.head.ref }}');
+    expect(prebuildWorkflow).toContain("process.env.HEAD_REF?.startsWith('codex/agent-version-labels-')");
+    expect(prebuildWorkflow).toContain('hasChangedSource && (ratio > 0.5 || isVersionLabelStack)');
+  });
+});
+
 describe('workspace CI routing', () => {
   test('selects a directly changed workspace package', () => {
     expect(

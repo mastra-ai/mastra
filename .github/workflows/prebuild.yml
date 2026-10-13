@@ -3,7 +3,7 @@ name: Prebuild
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main, 0.x]
+    branches: [main, 0.x, 'codex/agent-version-labels-*']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -145,6 +145,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           git diff --name-only \
             "$BASE_SHA...$HEAD_SHA" \
@@ -176,7 +177,9 @@ jobs:
           const total = data.testFiles || 1;
           const ratio = count / total;
           const hasChangedSource = changedFiles.some(file => /\/src\/.*\.(ts|tsx)$/.test(file) && !/__fixtures__|\/fixtures\//.test(file));
-          const runFull = hasChangedSource && ratio > 0.5;
+          // Validate each layer independently, including contracts with unchanged consumers.
+          const isVersionLabelStack = process.env.HEAD_REF?.startsWith('codex/agent-version-labels-') ?? false;
+          const runFull = hasChangedSource && (ratio > 0.5 || isVersionLabelStack);
 
           const output = (line) => fs.appendFileSync(process.env.GITHUB_OUTPUT, line);
           const outputList = (name, files) => {
@@ -286,7 +289,7 @@ jobs:
           );
 
           if (runFull) {
-            console.error('Above 50% threshold — running full suite.');
+            console.error(isVersionLabelStack ? 'Version-label stack — running full suite.' : 'Above 50% threshold — running full suite.');
             output('run_full=true\n');
             output('test_files=\n');
             output('unit_test_files=\n');
