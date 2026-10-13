@@ -576,6 +576,29 @@ describe('evented engine - declarative entries', () => {
     expect(endResult?.output?.text).toBe('hi');
   });
 
+  it('executes a durable agent createStep through the generic workflow.step.run event', async () => {
+    const durableAgent = createDurableAgent({
+      agent: textAgent('ev-durable-agent', 'durable response'),
+      cleanupTimeoutMs: 0,
+    });
+    const wf = createWorkflow({
+      id: 'ev-durable-agent-wf',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.any(),
+    })
+      .then(createStep(durableAgent))
+      .commit();
+    const mastra = bindEvented(wf, { agents: { 'ev-durable-agent': durableAgent } });
+
+    const { seen, endResult } = await driveEvented(mastra, 'ev-durable-agent-wf', 'run-durable-agent', {
+      prompt: 'say hi',
+    });
+
+    expect(seen).toContain('workflow.step.run');
+    expect(seen).toContain('workflow.end');
+    expect(endResult?.output).toEqual({ text: 'durable response' });
+  });
+
   it('executes a .tool() step through the generic workflow.step.run event', async () => {
     const wf = createWorkflow({ id: 'ev-tool', inputSchema: z.object({ value: z.number() }), outputSchema: z.any() })
       .tool(doubleTool)
