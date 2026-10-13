@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { withMessageAuthor } from '../../agent-controller/message-author';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { PubSub } from '../../events/pubsub';
 import type { LeaseProvider } from '../../events/pubsub';
@@ -24,6 +25,7 @@ import {
   createMessageSignal,
   createSignal,
   dataPartToSignal,
+  getMessageAuthor,
   mastraDBMessageToSignal,
   resolveDeliveryAttributes,
   signalToDataPartFormat,
@@ -765,6 +767,37 @@ describe('Agent signals', () => {
     const rehydrated = mastraDBMessageToSignal(db);
     expect(rehydrated.providerOptions).toEqual(providerOptions);
     expect(rehydrated.toLLMMessage()).toMatchObject({ providerOptions });
+  });
+
+  it('round-trips message author without replacing provider metadata', () => {
+    const providerOptions = {
+      mastra: { traceId: 'trace-1' },
+      openai: { reasoningEffort: 'high' },
+    };
+    const author = { id: 'user-1', name: 'Ada', avatarUrl: 'https://example.com/ada.png' };
+    const authorProviderOptions = withMessageAuthor(providerOptions, author);
+    const signal = createSignal({
+      type: 'user-message',
+      contents: 'hello',
+      author,
+      providerOptions: authorProviderOptions,
+    });
+
+    const db = signal.toDBMessage();
+    expect(getMessageAuthor(db)).toEqual(author);
+    expect(db.content.providerMetadata).toEqual({
+      mastra: { traceId: 'trace-1', author },
+      openai: { reasoningEffort: 'high' },
+    });
+
+    const rehydrated = mastraDBMessageToSignal(db);
+    expect(rehydrated.author).toEqual(author);
+    expect(rehydrated.providerOptions).toEqual(authorProviderOptions);
+    expect(getMessageAuthor(rehydrated.toDBMessage())).toEqual(author);
+
+    delete (db.content.metadata!.signal as Record<string, unknown>).author;
+    expect(getMessageAuthor(db)).toEqual(author);
+    expect(mastraDBMessageToSignal(db).author).toEqual(author);
   });
 
   it('omits providerOptions on LLM / DB output when not provided', () => {
