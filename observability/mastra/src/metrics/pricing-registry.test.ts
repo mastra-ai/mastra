@@ -233,9 +233,14 @@ describe('gateway pricing', () => {
   it('loads a gateway added later on the first miss, and skips the built-in gateways', async () => {
     const { PricingRegistry, setPricingGateways } = await loadModule();
     const builtIn = gateway('models.dev', { 'gpt-4o': { input: 99, output: 99 } }, 'openai');
-    const gateways = [builtIn];
+    const first = gateway('first', { 'model-0': { input: 1, output: 1 } });
+    const gateways = [builtIn, first];
     setPricingGateways(() => gateways);
-    await vi.waitFor(() => expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull());
+    // The startup load is done once `first` is priced, so the gateway added next is loaded by the miss.
+    await vi.waitFor(() =>
+      expect(PricingRegistry.getGlobal()?.get({ provider: 'my-provider', model: 'model-0' })).not.toBeNull(),
+    );
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull();
 
     gateways.push(gateway('private', { 'model-1': { input: 2, output: 4 } }));
     expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull(); // the miss starts the load
