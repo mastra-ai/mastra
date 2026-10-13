@@ -50,7 +50,7 @@ export function PageLayout({
       )}
       <main
         className={cn(
-          'min-h-0 flex-1 overflow-y-auto',
+          'min-h-0 flex-1 [scrollbar-gutter:stable] overflow-y-auto',
           variant === 'container' && 'p-4',
           // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
           variant === 'fit' &&

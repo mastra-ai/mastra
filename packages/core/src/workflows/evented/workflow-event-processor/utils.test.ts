@@ -109,7 +109,7 @@ describe('getNestedWorkflow', () => {
   function createMastraStub(workflow: ReturnType<typeof createWorkflow>) {
     return {
       __hasInternalWorkflow: () => false,
-      getWorkflow: () => workflow,
+      getWorkflowById: () => workflow,
     } as any;
   }
 
