@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -31,8 +31,7 @@ describe('FactoryModelsSettings', () => {
       </MemoryRouter>,
     );
 
-    expect(await screen.findByRole('combobox', { name: 'Model scope' })).toHaveTextContent(
-      'Factory model and credentials',
-    );
+    await waitFor(() => expect(screen.queryByText('Thinking defaults')).not.toBeInTheDocument());
+    expect(screen.getByRole('combobox', { name: 'Model scope' })).toHaveTextContent('Factory model and credentials');
   });
 });
