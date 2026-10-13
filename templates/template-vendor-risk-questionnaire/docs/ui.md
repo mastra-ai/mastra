@@ -186,10 +186,11 @@ Each citation must quote the text at its exact source location. For example, a c
 
 ### Try an upload from the terminal
 
-With `npm run dev` running, open a second terminal in the template directory:
+With `npm run dev` running, open a second terminal in the template directory. Set `MASTRA_STUDIO_TOKEN` in that terminal to the same value configured in `.env`; the server does not export it to other shells.
 
 ```bash
 curl --fail-with-body \
+  -H "Authorization: Bearer $MASTRA_STUDIO_TOKEN" \
   -F "file=@$PWD/.runtime/demo/questionnaire.xlsx" \
   http://127.0.0.1:4111/vrq/questionnaires
 ```
@@ -197,10 +198,12 @@ curl --fail-with-body \
 This starts a real questionnaire run and can make provider calls. Copy the returned `runId`, then replace `RUN_ID` below:
 
 ```bash
-curl --fail-with-body http://127.0.0.1:4111/vrq/questionnaires/RUN_ID
+curl --fail-with-body \
+  -H "Authorization: Bearer $MASTRA_STUDIO_TOKEN" \
+  http://127.0.0.1:4111/vrq/questionnaires/RUN_ID
 ```
 
-Check the detail response for progress, a pending mapping prompt or a saved error. You can finish review in the web UI. Production requests also require `Authorization: Bearer YOUR_TOKEN`.
+Check the detail response for progress, a pending mapping prompt or a saved error. You can finish review in the web UI. Every request requires the bearer header in development and production.
 
 `202` means work was accepted, not completed. `400` means invalid input. `409` can mean a stale review, a busy run or a state that does not allow export. Read the current detail before retrying; do not resubmit an old approval blindly.
 
