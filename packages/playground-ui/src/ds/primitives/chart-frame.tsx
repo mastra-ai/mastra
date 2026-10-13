@@ -1,5 +1,5 @@
 import { XAxis, YAxis } from 'recharts';
-import { chartYTickCount, pickTimeTicks } from './chart-axes';
+import { chartYTickCount } from './chart-axes';
 import type { ChartSize, ChartXLabels } from './chart-axes';
 import { CHART_AXIS_FONT_SIZE, X_AXIS_HEIGHT } from './chart-layout';
 import { ChartTimeTick } from './chart-time-tick';
@@ -19,26 +19,23 @@ export function timeXAxis({
   xKey,
   timestampKey,
   xLabels,
-  plotWidth,
 }: {
   data: Record<string, unknown>[];
   xKey: string;
   timestampKey: string;
   xLabels: ChartXLabels;
-  plotWidth: number;
 }) {
   const labels = data.map(row => String(row[xKey] ?? ''));
   const timestamps = data.map(row => {
     const t = row[timestampKey];
     return typeof t === 'number' ? t : undefined;
   });
-  const picked = pickTimeTicks(timestamps, labels, plotWidth, xLabels);
   return (
     <XAxis
       dataKey={xKey}
       height={X_AXIS_HEIGHT}
-      tick={(props: Omit<ChartTimeTickProps, 'picked' | 'count' | 'plotWidth'>) => (
-        <ChartTimeTick {...props} picked={picked} count={data.length} plotWidth={plotWidth} />
+      tick={(props: Omit<ChartTimeTickProps, 'labels' | 'timestamps' | 'xLabels'>) => (
+        <ChartTimeTick {...props} labels={labels} timestamps={timestamps} xLabels={xLabels} />
       )}
       tickLine={false}
       axisLine={false}
@@ -48,12 +45,6 @@ export function timeXAxis({
     />
   );
 }
-
-/**
- * Room the y-axis labels take at most. The axis itself is as wide as its longest label, so the
- * labels line up with the card's content; this only sizes the plot for spacing the x labels.
- */
-export const Y_AXIS_WIDTH = 44;
 
 export function valueYAxis({
   id = 0,
