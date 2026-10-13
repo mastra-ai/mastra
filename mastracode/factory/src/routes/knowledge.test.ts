@@ -491,6 +491,35 @@ describe('KnowledgeRoutes', () => {
     expect(lens.body.nodes.map(graphNode => graphNode.id)).not.toContain(sessionId);
   });
 
+  it('pages activity with a cursor instead of returning one unbounded window', async () => {
+    const h = await createHarness();
+    const anchor = await node(h.knowledge, 'Busy anchor', h.projectScope);
+    for (let index = 0; index < 30; index += 1) {
+      await record(h.knowledge, anchor, `Evidence ${index}`, h.projectScope);
+    }
+
+    const first = await activity(h, '?scopeLevel=resource');
+    expect(first.status).toBe(200);
+    const firstEvents = first.body.events as Array<{ id: string }>;
+    const firstBody = first.body as { events: Array<{ id: string }>; nextCursor?: string };
+    expect(firstEvents).toHaveLength(25);
+    expect(firstBody.nextCursor).toBe(firstEvents.at(-1)!.id);
+
+    const second = await activity(h, `?scopeLevel=resource&cursor=${firstBody.nextCursor}`);
+    expect(second.status).toBe(200);
+    const secondBody = second.body as { events: Array<{ id: string }>; nextCursor?: string };
+    expect(secondBody.events.length).toBeGreaterThan(0);
+    expect(secondBody.nextCursor).toBeUndefined();
+    // Pages are disjoint and together cover every event exactly once.
+    const all = [...firstEvents, ...secondBody.events].map(event => event.id);
+    expect(new Set(all).size).toBe(all.length);
+    expect(all.length).toBe(31); // 30 record creates + the node create
+
+    // Oversized cursors are rejected rather than scanned.
+    const bad = await activity(h, `?scopeLevel=resource&cursor=${'x'.repeat(129)}`);
+    expect(bad.status).toBe(400);
+  });
+
   it('labels scope nodes by what they are: org, project, session, or the structural kind/topic', async () => {
     const h = await createHarness();
     await h.knowledge.reconcileStructure({
