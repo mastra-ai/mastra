@@ -1521,6 +1521,8 @@ export class SessionStream {
   readonly #consumerFailureWaiters = new Set<(error: unknown) => void>();
   /** Set once the live subscription's run loop has failed; cleared on attach. */
   #consumerFailure: { error: unknown } | null = null;
+  /** Runs this session resumed through the live subscription whose resumed segment has not started; cleared on attach. */
+  readonly #resumedRunIds = new Set<string>();
 
   constructor(private readonly getSessionRun: () => { sessionId: string; runId: string | null }) {}
 
@@ -1609,6 +1611,21 @@ export class SessionStream {
     this.#key = key;
     this.#binding = { resourceId, threadId };
     this.#consumerFailure = null;
+    this.#resumedRunIds.clear();
+  }
+
+  /**
+   * Record that this session sent a resume for `runId` through the live
+   * subscription. The resumed segment keeps the run id, so the consumer needs
+   * this to process it when the run was aborted earlier.
+   */
+  markResumedRun({ runId }: { runId: string }): void {
+    this.#resumedRunIds.add(runId);
+  }
+
+  /** Whether this session resumed `runId`. Clears the record, so it applies to one segment. */
+  takeResumedRun({ runId }: { runId: string }): boolean {
+    return this.#resumedRunIds.delete(runId);
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
@@ -6161,6 +6178,7 @@ export class Session<TState = unknown> {
         sharedOptions.requireToolApproval = false;
       }
       sharedOptions.onStepFinish = this.#resumeUsageRecorder(agent, suspension.runId, requestContext);
+      if (resumedSubscriptionBoundary) this.stream.markResumedRun({ runId: suspension.runId });
       await agent.sendStreamResume({
         threadId,
         resourceId,

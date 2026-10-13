@@ -1795,7 +1795,11 @@ export class SessionRunEngine {
         if (chunk.type === 'thread-history') continue;
 
         const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
-        if (runId && runId === abortedRunId) continue;
+        // A resumed segment keeps its run id and opens with `start`. When this
+        // session sent that resume, process the segment even if the run was
+        // aborted; other chunks of the aborted run stay ignored.
+        const resumedSegment = chunk.type === 'start' && !!runId && this.#session.stream.takeResumedRun({ runId });
+        if (runId && runId === abortedRunId && !resumedSegment) continue;
         if (runId && abortedRunId) abortedRunId = undefined;
 
         if (!currentRun) {
