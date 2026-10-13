@@ -9,12 +9,14 @@ export interface CSVImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
+  /** A file already picked by the user; the import starts on its preview. */
+  initialFile?: File;
 }
 
 /**
  * Dialog shell around CSVImportFlow. The flow unmounts with the dialog content on close, which resets its state.
  */
-export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CSVImportDialogProps) {
+export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess, initialFile }: CSVImportDialogProps) {
   const [isImporting, setIsImporting] = useState(false);
   const { data: dataset } = useDataset({ datasetId, queryOptions: { enabled: open && Boolean(datasetId) } });
   const { batchInsertItems } = useDatasetMutations();
@@ -36,6 +38,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
         <CSVImportFlow
           inputSchema={dataset?.inputSchema}
           groundTruthSchema={dataset?.groundTruthSchema}
+          initialFile={initialFile}
           onImport={handleImport}
           onImportingChange={setIsImporting}
           onComplete={handleComplete}

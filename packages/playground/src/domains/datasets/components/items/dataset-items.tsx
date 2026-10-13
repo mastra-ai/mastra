@@ -27,7 +27,8 @@ export interface DatasetItemsProps {
   /** Id of the item currently open in the URL-driven item panel, if any. */
   featuredItemId?: string | null;
   onAddClick: () => void;
-  onImportClick?: () => void;
+  /** Opens the CSV import, with the file already picked from the empty state. */
+  onImportClick?: (file?: File) => void;
   onImportJsonClick?: () => void;
   onBulkDeleteClick?: (itemIds: string[]) => void;
   onCreateDatasetClick?: (items: DatasetItem[]) => void;
@@ -145,7 +146,7 @@ export function DatasetItems({
     <>
       <DatasetItemsToolbar
         onAddClick={onAddClick}
-        onImportClick={onImportClick ?? (() => {})}
+        onImportClick={() => onImportClick?.()}
         onImportJsonClick={onImportJsonClick ?? (() => {})}
         hasItems={items.length > 0}
         leftSlot={leftSlot}

@@ -51,12 +51,26 @@ describe('AddItemsChoices', () => {
   });
 
   describe('when importing without changing the format', () => {
-    it('asks for a CSV import', () => {
+    it('opens the file picker instead of asking for an import', () => {
+      const pickerClick = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
       const { onImport } = renderChoices();
 
       fireEvent.click(within(importGroup()).getByRole('button', { name: 'Import' }));
 
-      expect(onImport).toHaveBeenCalledWith('csv');
+      expect(pickerClick).toHaveBeenCalledTimes(1);
+      expect(onImport).not.toHaveBeenCalled();
+      pickerClick.mockRestore();
+    });
+  });
+
+  describe('when a CSV file is picked', () => {
+    it('asks for a CSV import of that file', () => {
+      const { onImport } = renderChoices();
+      const file = new File(['input\nhello'], 'items.csv', { type: 'text/csv' });
+
+      fireEvent.change(screen.getByLabelText('CSV file'), { target: { files: [file] } });
+
+      expect(onImport).toHaveBeenCalledWith('csv', file);
     });
   });
 
@@ -68,6 +82,15 @@ describe('AddItemsChoices', () => {
       fireEvent.click(within(importGroup()).getByRole('button', { name: 'Import' }));
 
       expect(onImport).toHaveBeenCalledWith('json');
+    });
+  });
+
+  describe('when disabled', () => {
+    it('disables manual entry and the import', () => {
+      renderChoices({ disabled: true });
+
+      expect(screen.getByRole('button', { name: 'Add items manually' }).matches(':disabled')).toBe(true);
+      expect(within(importGroup()).getByRole('button', { name: 'Import' }).matches(':disabled')).toBe(true);
     });
   });
 

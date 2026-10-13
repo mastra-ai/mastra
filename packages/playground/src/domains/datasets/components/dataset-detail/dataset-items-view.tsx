@@ -44,6 +44,7 @@ export function DatasetItemsView({
     [sort],
   );
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState<File>();
   const [importJsonDialogOpen, setImportJsonDialogOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [itemsForCreate, setItemsForCreate] = useState<DatasetItem[]>([]);
@@ -139,7 +140,10 @@ export function DatasetItemsView({
           onItemClick={handleItemClick}
           featuredItemId={currentItemId}
           onAddClick={onAddItemClick ?? (() => {})}
-          onImportClick={() => setImportDialogOpen(true)}
+          onImportClick={file => {
+            setCsvFile(file);
+            setImportDialogOpen(true);
+          }}
           onImportJsonClick={() => setImportJsonDialogOpen(true)}
           onBulkDeleteClick={handleBulkDeleteClick}
           onCreateDatasetClick={handleCreateDatasetClick}
@@ -157,7 +161,12 @@ export function DatasetItemsView({
           currentDatasetVersion={dataset?.version}
         />
       </div>
-      <CSVImportDialog datasetId={datasetId} open={importDialogOpen} onOpenChange={setImportDialogOpen} />
+      <CSVImportDialog
+        datasetId={datasetId}
+        initialFile={csvFile}
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+      />
       <JSONImportDialog
         datasetId={datasetId}
         datasetName={dataset?.name}

@@ -1,11 +1,12 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { FileDropBackdrop } from '@mastra/playground-ui/components/FileDropBackdrop';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { FileJson, Upload, RefreshCw } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useRef } from 'react';
 
 import { MAX_IMPORT_LABEL } from '../../utils/json-validation';
 import type { JSONImportValidation, JSONPreviewRow } from '../../utils/json-validation';
@@ -79,82 +80,46 @@ export function JSONSourcePanel({
   );
 }
 
+/** Picks a JSON file from the file picker, or from a file dropped anywhere on the window. */
 function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => void; disabled: boolean }) {
-  const [isDragOver, setIsDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const selected = e.target.files?.[0];
-      if (selected) {
-        onFileSelect(selected);
-      }
-      // Reset input so the same file can be selected again
-      e.target.value = '';
-    },
-    [onFileSelect],
-  );
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-  }, []);
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setIsDragOver(false);
-      if (disabled) return;
-
-      const dropped = e.dataTransfer.files?.[0];
-      if (dropped) {
-        onFileSelect(dropped);
-      }
-    },
-    [disabled, onFileSelect],
-  );
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    if (selected) onFileSelect(selected);
+    // Reset so the same file can be picked again.
+    e.target.value = '';
+  };
 
   return (
-    <div
-      data-testid="json-dropzone"
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      className={cn(
-        'relative flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-card px-4 py-6 text-center',
-        'hover:border-success-edge hover:bg-success-subtle',
-        isDragOver && 'border-success-edge bg-success-subtle',
-        disabled && 'cursor-wait opacity-60',
-      )}
+    <FileDropBackdrop
+      disabled={disabled}
+      accept=".json,application/json"
+      label="Drop JSON to import"
+      description="The file opens in the JSON import"
+      onFilesDrop={([dropped]) => onFileSelect(dropped)}
     >
       <input
+        ref={inputRef}
         type="file"
         accept=".json,application/json"
         aria-label="Choose a JSON file"
         onChange={handleFileChange}
         disabled={disabled}
-        className="absolute inset-0 cursor-pointer opacity-0"
+        className="hidden"
       />
-      <div className="flex size-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
-        <Upload className="size-4" />
-      </div>
-      <div className="flex flex-col gap-1">
-        <Txt tone="ink">Drop a JSON file here</Txt>
-        <Txt variant="caption" tone="muted">
-          or <span className="underline">choose a file</span> from your computer
-        </Txt>
-      </div>
-      <Txt variant="meta" tone="muted">
-        .json · an array of items · up to {MAX_IMPORT_LABEL}
-      </Txt>
-    </div>
+      <EmptyState
+        iconSlot={<FileJson />}
+        titleSlot="Drop a JSON file anywhere on this window"
+        descriptionSlot={`Or choose one from your computer. An array of items, up to ${MAX_IMPORT_LABEL}.`}
+        actionSlot={
+          <Button onClick={() => inputRef.current?.click()} disabled={disabled}>
+            <Upload />
+            Choose a file
+          </Button>
+        }
+      />
+    </FileDropBackdrop>
   );
 }
 

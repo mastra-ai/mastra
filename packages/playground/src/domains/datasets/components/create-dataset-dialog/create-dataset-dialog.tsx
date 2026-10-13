@@ -81,7 +81,8 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} pending={pending}>
-      <DialogContent size="lg">
+      {/* A step marked data-wide (the two-column JSON import) widens the dialog to the xl size. */}
+      <DialogContent size="lg" className="has-data-wide:max-w-4xl">
         {/* Unmounted once the dialog has closed, so every opening starts from an empty draft. */}
         <CreateDatasetWizard pending={pending} save={save} onClose={() => handleOpenChange(false)} />
       </DialogContent>
@@ -105,7 +106,7 @@ function CreateDatasetWizard({ pending, save, onClose }: CreateDatasetWizardProp
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [schemas, setSchemas] = useState<DatasetSchemas>(EMPTY_SCHEMAS);
-  const [droppedFile, setDroppedFile] = useState<File>();
+  const [importFile, setImportFile] = useState<File>();
   const draft: DatasetDraft = { name, description, schemas };
 
   const create = async (items: NewItem[]) => {
@@ -119,7 +120,7 @@ function CreateDatasetWizard({ pending, save, onClose }: CreateDatasetWizardProp
   };
 
   const backToItems = () => {
-    setDroppedFile(undefined);
+    setImportFile(undefined);
     setStep('items');
   };
 
@@ -150,7 +151,7 @@ function CreateDatasetWizard({ pending, save, onClose }: CreateDatasetWizardProp
       <CSVImportFlow
         inputSchema={schemas.inputSchema}
         groundTruthSchema={schemas.outputSchema}
-        initialFile={droppedFile}
+        initialFile={importFile}
         onImport={items => save(draft, items)}
         importLabel={count => `Create dataset with ${itemCount(count)}`}
         onComplete={onClose}
@@ -160,15 +161,17 @@ function CreateDatasetWizard({ pending, save, onClose }: CreateDatasetWizardProp
     );
   } else if (step === 'json') {
     content = (
-      <JSONImportFlow
-        title="Import JSON"
-        description="Upload a JSON file or paste the items. They are added when the dataset is created."
-        initialFile={droppedFile}
-        onImport={create}
-        importLabel={count => `Create dataset with ${itemCount(count)}`}
-        onCancel={backToItems}
-        cancelLabel="Back"
-      />
+      <div data-wide className="contents">
+        <JSONImportFlow
+          title="Import JSON"
+          description="Upload a JSON file or paste the items. They are added when the dataset is created."
+          initialFile={importFile}
+          onImport={create}
+          importLabel={count => `Create dataset with ${itemCount(count)}`}
+          onCancel={backToItems}
+          cancelLabel="Back"
+        />
+      </div>
     );
   } else {
     content = (
@@ -176,7 +179,7 @@ function CreateDatasetWizard({ pending, save, onClose }: CreateDatasetWizardProp
         pending={pending}
         onAddManually={() => setStep('manual')}
         onImport={(format, file) => {
-          setDroppedFile(file);
+          setImportFile(file);
           setStep(format);
         }}
         onBack={() => setStep('schema')}

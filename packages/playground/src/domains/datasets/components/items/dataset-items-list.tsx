@@ -42,7 +42,7 @@ export interface DatasetItemsListProps {
   onClearSelection: () => void;
   // Empty state props
   onAddClick: () => void;
-  onImportClick?: () => void;
+  onImportClick?: (file?: File) => void;
   onImportJsonClick?: () => void;
 }
 
@@ -240,7 +240,7 @@ export function DatasetItemsList({
 
 interface EmptyDatasetItemListProps {
   onAddClick: () => void;
-  onImportClick?: () => void;
+  onImportClick?: (file?: File) => void;
   onImportJsonClick?: () => void;
 }
 
@@ -255,7 +255,7 @@ function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: 
         <div className="flex w-full max-w-2xl flex-col items-center gap-4">
           <AddItemsChoices
             onAddManually={onAddClick}
-            onImport={format => (format === 'csv' ? onImportClick : onImportJsonClick)?.()}
+            onImport={(format, file) => (format === 'csv' ? onImportClick?.(file) : onImportJsonClick?.())}
           />
           <Button
             variant="ghost"

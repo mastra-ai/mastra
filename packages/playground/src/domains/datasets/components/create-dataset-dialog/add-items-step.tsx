@@ -39,7 +39,7 @@ export function AddItemsStep({ onAddManually, onImport, onBack, onCreate, pendin
       <DialogBody>
         <AddItemsChoices
           onAddManually={onAddManually}
-          onImport={format => onImport(format)}
+          onImport={onImport}
           importHint="Or drop it anywhere on this window."
           disabled={pending}
         />

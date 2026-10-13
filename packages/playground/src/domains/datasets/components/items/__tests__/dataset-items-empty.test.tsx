@@ -64,14 +64,15 @@ describe('DatasetItems empty state', () => {
     expect(onAddClick).toHaveBeenCalledTimes(1);
   });
 
-  it('opens the CSV import by default', () => {
+  it('opens the CSV import with the file picked from the import card', () => {
     const onImportClick = vi.fn();
     const onImportJsonClick = vi.fn();
     renderEmpty({ onImportClick, onImportJsonClick });
+    const file = new File(['input\nhello'], 'items.csv', { type: 'text/csv' });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    fireEvent.change(screen.getByLabelText('CSV file'), { target: { files: [file] } });
 
-    expect(onImportClick).toHaveBeenCalledTimes(1);
+    expect(onImportClick).toHaveBeenCalledWith(file);
     expect(onImportJsonClick).not.toHaveBeenCalled();
   });
 

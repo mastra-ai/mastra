@@ -5,13 +5,14 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowRight, FileUp, PenLine } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 
 export type ImportFormat = 'csv' | 'json';
 
 export interface AddItemsChoicesProps {
   onAddManually: () => void;
-  onImport: (format: ImportFormat) => void;
+  /** CSV is called with the file picked from the native picker; JSON without one (it can also be pasted). */
+  onImport: (format: ImportFormat, file?: File) => void;
   /** Extra line describing the import, e.g. that a file can be dropped. */
   importHint?: string;
   disabled?: boolean;
@@ -27,16 +28,17 @@ const iconClassName =
 
 /** The two ways to add items to a dataset: write them by hand, or import a CSV / JSON file. */
 export function AddItemsChoices({ onAddManually, onImport, importHint, disabled }: AddItemsChoicesProps) {
+  // A disabled fieldset disables every control inside, including the Card button, which has no `disabled` prop.
   return (
-    <div className="grid w-full gap-3 sm:grid-cols-[1fr_auto_1fr]">
-      <ManualChoice onClick={onAddManually} disabled={disabled} />
+    <fieldset disabled={disabled} className="grid w-full min-w-0 gap-3 sm:grid-cols-[1fr_auto_1fr]">
+      <ManualChoice onClick={onAddManually} />
       <OrDivider />
       <ImportChoice onImport={onImport} hint={importHint} disabled={disabled} />
-    </div>
+    </fieldset>
   );
 }
 
-function ManualChoice({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+function ManualChoice({ onClick }: { onClick: () => void }) {
   const titleId = useId();
   const descriptionId = useId();
 
@@ -44,7 +46,6 @@ function ManualChoice({ onClick, disabled }: { onClick: () => void; disabled?: b
     <Card
       interactive
       onClick={onClick}
-      disabled={disabled}
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
       className={cn(cardClassName, 'group hover:bg-field active:bg-field')}
@@ -71,13 +72,29 @@ function ImportChoice({
   hint,
   disabled,
 }: {
-  onImport: (format: ImportFormat) => void;
+  onImport: (format: ImportFormat, file?: File) => void;
   hint?: string;
   disabled?: boolean;
 }) {
   const [format, setFormat] = useState<ImportFormat>('csv');
+  const csvInputRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const descriptionId = useId();
+
+  const handleImportClick = () => {
+    if (format === 'csv') {
+      csvInputRef.current?.click();
+    } else {
+      onImport('json');
+    }
+  };
+
+  const handleCsvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset so the same file can be picked again.
+    e.target.value = '';
+    if (file) onImport('csv', file);
+  };
 
   // Not a button itself: it holds the format select and its own Import action.
   return (
@@ -106,9 +123,18 @@ function ImportChoice({
             <SelectItem value="json">JSON</SelectItem>
           </SelectContent>
         </Select>
-        <Button size="sm" onClick={() => onImport(format)} disabled={disabled}>
+        <Button size="sm" onClick={handleImportClick} disabled={disabled}>
           Import
         </Button>
+        <input
+          ref={csvInputRef}
+          type="file"
+          accept=".csv,text/csv"
+          aria-label="CSV file"
+          onChange={handleCsvChange}
+          disabled={disabled}
+          hidden
+        />
       </div>
     </Card>
   );

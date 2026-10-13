@@ -93,10 +93,14 @@ function pickOption(combobox: string, name: string) {
 
 const pickSource = (name: string) => pickOption('From', name);
 
-function chooseImport(format: 'CSV' | 'JSON') {
-  if (format === 'JSON') pickOption('File format', 'JSON');
+function chooseJsonImport() {
+  pickOption('File format', 'JSON');
   click('Import');
 }
+
+// Import with CSV opens the native picker; picking a file is the hidden input's change.
+const pickCsv = (file = buildFile()) =>
+  fireEvent.change(screen.getByLabelText('CSV file'), { target: { files: [file] } });
 
 function expectDisabled(name: string | RegExp) {
   const target = button(name);
@@ -132,9 +136,7 @@ function dropOnWindow(file: File) {
 }
 
 async function uploadAndMapCsv() {
-  chooseImport('CSV');
-  await heading('Import CSV');
-  fireEvent.change(screen.getByLabelText('CSV file'), { target: { files: [buildFile()] } });
+  pickCsv();
   await heading('Preview Data');
   click('Next');
   await heading('Map Columns');
@@ -719,28 +721,46 @@ describe('CreateDatasetDialog', () => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
     });
 
-    it('shows Next on the upload step, disabled until a file is chosen', async () => {
+    it('skips the empty upload step and previews the file', async () => {
       givenServer();
       renderDialog();
 
       await goToItems();
-      chooseImport('CSV');
-      await heading('Import CSV');
+      pickCsv();
 
+      expect(await heading('Preview Data')).toBeDefined();
       expect(screen.getByText('Step 3 of 3')).toBeDefined();
-      expectDisabled('Next');
+      expect(screen.getByText('What is the capital of France?')).toBeDefined();
     });
 
-    it('goes back to the "Add items" step from the upload step', async () => {
+    it('can go back to the upload step to pick another file, then to "Add items"', async () => {
       givenServer();
       renderDialog();
 
       await goToItems();
-      chooseImport('CSV');
+      pickCsv();
+      await heading('Preview Data');
+      click('Back');
       await heading('Import CSV');
+      expectDisabled('Next');
       click('Back');
 
       expect(await heading('Add items')).toBeDefined();
+    });
+  });
+
+  describe('when Import is clicked with CSV selected', () => {
+    it('opens the file picker and stays on "Add items"', async () => {
+      givenServer();
+      renderDialog();
+      const pickerClick = vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(() => {});
+
+      await goToItems();
+      click('Import');
+
+      expect(pickerClick).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('heading', { name: 'Add items' })).toBeDefined();
+      pickerClick.mockRestore();
     });
   });
 
@@ -790,7 +810,7 @@ describe('CreateDatasetDialog', () => {
       const { onSuccess } = renderDialog();
 
       await goToItems();
-      chooseImport('JSON');
+      chooseJsonImport();
       await heading('Import JSON');
       expect(screen.getByText('Step 3 of 3')).toBeDefined();
       fireEvent.click(screen.getByRole('tab', { name: 'Paste JSON' }));
@@ -807,7 +827,7 @@ describe('CreateDatasetDialog', () => {
       renderDialog();
 
       await goToItems();
-      chooseImport('JSON');
+      chooseJsonImport();
       await heading('Import JSON');
       click('Back');
 

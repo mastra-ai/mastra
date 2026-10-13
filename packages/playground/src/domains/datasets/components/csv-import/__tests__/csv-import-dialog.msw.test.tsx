@@ -37,11 +37,17 @@ function givenDataset(dataset: DatasetRecord) {
   return { batchBodies };
 }
 
-function renderDialog() {
+function renderDialog(initialFile?: File) {
   const onOpenChange = vi.fn();
   const onSuccess = vi.fn();
   const result = renderWithProviders(
-    <CSVImportDialog datasetId={CSV_DATASET_ID} open onOpenChange={onOpenChange} onSuccess={onSuccess} />,
+    <CSVImportDialog
+      datasetId={CSV_DATASET_ID}
+      initialFile={initialFile}
+      open
+      onOpenChange={onOpenChange}
+      onSuccess={onSuccess}
+    />,
   );
   return { ...result, onOpenChange, onSuccess };
 }
@@ -80,6 +86,16 @@ async function uploadAndMapColumns(file = buildCsvFile()) {
 }
 
 describe('CSVImportDialog', () => {
+  describe('when it opens with a file already picked', () => {
+    it('starts on the preview of that file', async () => {
+      givenDataset(buildCsvDataset());
+      renderDialog(buildCsvFile());
+
+      expect(await heading('Preview Data')).toBeDefined();
+      expect(screen.queryByRole('heading', { name: 'Import CSV' })).toBeNull();
+    });
+  });
+
   describe('when the dataset has no schema', () => {
     it('imports every mapped row in a single batch request', async () => {
       const { batchBodies } = givenDataset(buildCsvDataset());

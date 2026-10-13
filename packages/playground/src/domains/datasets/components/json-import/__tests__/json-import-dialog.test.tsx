@@ -1,6 +1,6 @@
 import type { RouteResponse } from '@mastra/client-js';
 import type { CodeEditorProps } from '@mastra/playground-ui/components/CodeEditor';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -55,6 +55,17 @@ const uploadFile = async (name: string, content: string) => {
   const file = new File([content], name, { type: 'application/json' });
   fireEvent.change(screen.getByLabelText('Choose a JSON file'), { target: { files: [file] } });
   await screen.findByTestId('json-file-card');
+};
+
+// The OS drag-and-drop is the only browser boundary.
+const dropOnWindow = (file: File) => {
+  for (const type of ['dragenter', 'drop']) {
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, 'dataTransfer', { value: { types: ['Files'], files: [file] } });
+    act(() => {
+      fireEvent(window, event);
+    });
+  }
 };
 
 const VALID_ITEMS = JSON.stringify([
@@ -126,7 +137,7 @@ describe('JSONImportDialog', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Replace' }));
     expect(screen.queryByTestId('json-file-card')).toBeNull();
-    expect(screen.getByTestId('json-dropzone')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Choose a file' })).not.toBeNull();
     expect(screen.getByRole('status').textContent).toBe('No items yet');
   });
 
@@ -229,6 +240,30 @@ describe('JSONImportDialog', () => {
 
     release();
     await waitForMutationsIdle(queryClient);
+  });
+
+  describe('when a JSON file is dropped anywhere on the window', () => {
+    it('loads it like a picked file', async () => {
+      renderDialog();
+
+      dropOnWindow(new File([VALID_ITEMS], 'dropped.json', { type: 'application/json' }));
+
+      await screen.findByTestId('json-file-card');
+      expect(screen.getByText('dropped.json')).not.toBeNull();
+      expect(screen.getByRole('status').textContent).toBe('3 items ready · 1 without groundTruth');
+    });
+  });
+
+  describe('when the paste tab is open', () => {
+    it('ignores a JSON file dropped on the window', () => {
+      renderDialog();
+      fireEvent.click(screen.getByRole('tab', { name: 'Paste JSON' }));
+
+      dropOnWindow(new File([VALID_ITEMS], 'dropped.json', { type: 'application/json' }));
+
+      expect(screen.queryByText('dropped.json')).toBeNull();
+      expect(screen.getByRole('status').textContent).toBe('No items yet');
+    });
   });
 
   it('copies the example JSON and flips the button label', async () => {
