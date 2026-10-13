@@ -860,21 +860,38 @@ describe('DurableAgent.recover(runId)', () => {
     }
   });
 
-  it('releases the claim when workflow construction throws synchronously', async () => {
+  it('publishes a terminal error and releases the claim when workflow construction throws synchronously', async () => {
     const runId = 'run-workflow-construction-fail';
     const failureStore = new InMemoryStore();
     const failurePubsub = new EventEmitterPubSub();
+    const publish = vi.spyOn(failurePubsub, 'publish');
     const workflows = (await failureStore.getStore('workflows'))!;
     const { agent: failureAgent } = createDurableWithStore('agent-workflow-fail', failureStore, failurePubsub);
     await seed(failureStore, runId, 'running', 'agent-workflow-fail');
+    const observed = await failureAgent.observe(runId, { offset: 0 });
+    const observedChunks = (async () => {
+      const chunks = [];
+      for await (const chunk of observed.fullStream) chunks.push(chunk);
+      return chunks;
+    })();
     const getWorkflow = vi.spyOn(failureAgent, 'getWorkflow').mockImplementation(() => {
       throw new Error('workflow construction failed');
     });
 
     await expect(failureAgent.recover(runId)).rejects.toThrow('workflow construction failed');
+    const chunks = await observedChunks;
+    const errors = chunks.filter(chunk => chunk.type === 'error');
+    expect(errors).toHaveLength(1);
+    expect((errors[0]?.payload as any).error.message).toBe('workflow construction failed');
+    expect(
+      publish.mock.calls.filter(
+        ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+      ),
+    ).toHaveLength(1);
     expect(globalRunRegistry.get(runId)).toBeUndefined();
     expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
     expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false);
+    observed.cleanup();
 
     // Both the run claim and this process's recovery claim are free again.
     getWorkflow.mockRestore();
@@ -883,6 +900,33 @@ describe('DurableAgent.recover(runId)', () => {
     await globalRunRegistry.get(runId)?.workflowExecution;
     expect(createRun).toHaveBeenCalledTimes(1);
     recovered.cleanup();
+  });
+
+  it('publishes a terminal error when the post-claim snapshot reload fails', async () => {
+    const runId = 'run-snapshot-reload-fail';
+    const failureStore = new InMemoryStore();
+    const failurePubsub = new EventEmitterPubSub();
+    const publish = vi.spyOn(failurePubsub, 'publish');
+    const workflows = (await failureStore.getStore('workflows'))!;
+    const { agent: failureAgent } = createDurableWithStore('agent-snapshot-fail', failureStore, failurePubsub);
+    await seed(failureStore, runId, 'running', 'agent-snapshot-fail');
+    const getWorkflowRunById = workflows.getWorkflowRunById.bind(workflows);
+    let snapshotReads = 0;
+    vi.spyOn(workflows, 'getWorkflowRunById').mockImplementation(async args => {
+      snapshotReads++;
+      if (snapshotReads === 2) throw new Error('snapshot reload failed');
+      return getWorkflowRunById(args);
+    });
+
+    await expect(failureAgent.recover(runId)).rejects.toThrow('snapshot reload failed');
+
+    const errorEvents = publish.mock.calls.filter(
+      ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+    );
+    expect(errorEvents).toHaveLength(1);
+    expect((errorEvents[0]?.[1] as any).data.error.message).toBe('snapshot reload failed');
+    expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
+    expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false);
   });
 
   it('deletes both AGENTIC_LOOP and AGENTIC_EXECUTION snapshot rows on success', async () => {

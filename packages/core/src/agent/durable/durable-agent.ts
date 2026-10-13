@@ -3729,7 +3729,10 @@ export class DurableAgent<
       // Memory is resolved from the rehydrated context; rehydration does not write to it.
       await this.#coverMemory(executionFence, recoveryState.requestContext, true);
     } catch (error) {
-      await executionFence?.settle(async () => {});
+      const settlement = await executionFence?.settle(async () => {});
+      if (executionFence && settlement !== 'superseded') {
+        await this.#reportRecoveryFailure(runId, error, executionFence.generation);
+      }
       releaseLocalRecovery();
       throw error;
     }
@@ -3791,7 +3794,10 @@ export class DurableAgent<
     try {
       workflow = this.getWorkflow();
     } catch (error) {
-      await executionFence.settle(async () => {});
+      const settlement = await executionFence.settle(async () => {});
+      if (settlement !== 'superseded') {
+        await this.#reportRecoveryFailure(runId, error, executionFence.generation);
+      }
       releaseLocalRecovery();
       throw error;
     }
