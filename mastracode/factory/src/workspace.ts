@@ -1310,7 +1310,11 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
         return sessionWorkdir(checkout) ?? checkout;
       },
     });
-    const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'];
+    // Relative to the filesystem root. An environment session's root is the
+    // workspace root, so its project skills live under the primary checkout.
+    const projectSkillPaths = [path.join(configDir, 'skills'), '.claude/skills', '.agents/skills'].map(skillPath =>
+      environment ? path.posix.join(repositoryDirectoryName(repoFullName), skillPath) : skillPath,
+    );
     const guardedSkillFallback = new UnmaterializedAwareSkillSource(
       filesystem,
       () => sessionEntry.sandbox.status === 'running',
