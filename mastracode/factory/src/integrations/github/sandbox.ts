@@ -950,12 +950,17 @@ async function pushAuthenticatedBranch(
   if (push.exitCode !== 0) throw classifyGitFailure(push, 'push-failed');
 }
 
-/** The branch the checkout is on, or `null` when `HEAD` is detached. */
-export async function checkedOutBranch(sandbox: ExecutableSandbox, workdir: string): Promise<string | null> {
-  const head = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--abbrev-ref', 'HEAD']);
-  if (head.exitCode !== 0) throw classifyGitFailure(head, 'push-failed');
-  const name = head.stdout.trim();
-  return name && name !== 'HEAD' ? name : null;
+/** Whether the checkout has a local `refs/heads/<branch>`. */
+export async function hasLocalBranch(sandbox: ExecutableSandbox, workdir: string, branch: string): Promise<boolean> {
+  const ref = await execute(sandbox, 'git', ['-C', workdir, 'show-ref', '--verify', '--quiet', `refs/heads/${branch}`]);
+  if (ref.exitCode === 0) return true;
+  if (ref.exitCode === 1) return false;
+  throw classifyGitFailure(ref, 'push-failed');
+}
+
+/** Whether `workdir` is a checkout of the repository at `cloneUrl`. */
+export async function isCheckoutOf(sandbox: ExecutableSandbox, workdir: string, cloneUrl: string): Promise<boolean> {
+  return (await existingCheckoutRemote(sandbox, workdir, cloneUrl)) !== null;
 }
 
 /**

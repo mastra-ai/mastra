@@ -217,8 +217,10 @@ export async function subscribeCurrentSessionToPullRequest(
   const headRef = await verifyPullRequest(resolved, github);
   await subscribeToPullRequest({ ...subscriptionInput(target, resolved), source }, github.integrationStorage);
   // The session-repository row is the per-repository record of what this
-  // session opened; an existing row keeps the branch its push wrote.
-  if (target.session) {
+  // session opened, so only a pull request from the session's own branch
+  // lands there; subscribing to someone else's pull request leaves it alone.
+  // An existing row keeps the branch its push wrote.
+  if (target.session && headRef === target.session.branch) {
     await github.sourceControlStorage.sessionRepositories.upsert({
       sessionId: target.session.sessionId,
       projectRepositoryId: resolved.link.id,
