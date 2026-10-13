@@ -102,7 +102,6 @@ function stubThreadRoute(initialMessages: MastraDBMessage[]) {
       const limit = Number(new URL(request.url).searchParams.get('limit'));
       return HttpResponse.json({ messages: messages.slice(Math.max(0, messages.length - limit)) });
     }),
-    http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),

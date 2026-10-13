@@ -1358,10 +1358,7 @@ describe('custom provider routes', () => {
 
 describe('thinking defaults routes', () => {
   let settingsPath: string;
-  const controller = {
-    ...makeAgentController([{ provider: 'anthropic', hasApiKey: true }]),
-    listModes: () => [{ id: 'build' }, { id: 'plan' }, { id: 'fast' }],
-  };
+  const controller = makeAgentController([{ provider: 'anthropic', hasApiKey: true }]);
 
   function buildApp(
     user: { workosId: string; organizationId?: string } | null,
@@ -1413,8 +1410,6 @@ describe('thinking defaults routes', () => {
     expect(await res.json()).toEqual({
       levels: ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
       globalDefault: 'off',
-      modeDefaults: {},
-      modes: ['build', 'plan', 'fast'],
       editable: true,
     });
   });
@@ -1432,42 +1427,41 @@ describe('thinking defaults routes', () => {
     expect(await signedOut.json()).toMatchObject({ editable: false });
   });
 
-  it('round-trips global and per-mode defaults through the settings file', async () => {
+  it('round-trips the global default through the settings file', async () => {
     const app = buildApp(null, { authEnabled: false });
-    const put = await putThinking(app, { globalDefault: 'high', modeDefaults: { plan: 'max' } });
+    const put = await putThinking(app, { globalDefault: 'high' });
     expect(put.status).toBe(200);
-    expect(await put.json()).toEqual({ ok: true, globalDefault: 'high', modeDefaults: { plan: 'max' } });
+    expect(await put.json()).toEqual({ ok: true, globalDefault: 'high' });
 
     const read = await app.request('/web/config/thinking');
-    expect(await read.json()).toMatchObject({ globalDefault: 'high', modeDefaults: { plan: 'max' } });
+    expect(await read.json()).toMatchObject({ globalDefault: 'high' });
   });
 
-  it('clears a per-mode default with null without touching others', async () => {
-    const app = buildApp(null, { authEnabled: false });
-    await putThinking(app, { modeDefaults: { plan: 'max', build: 'high' } });
+  it('given per-mode defaults written by the terminal app, when Factory saves its default, then they are kept in the shared settings file', async () => {
+    await fs.writeFile(settingsPath, JSON.stringify({ models: { modeThinkingDefaults: { plan: 'max' } } }));
 
-    const cleared = await putThinking(app, { modeDefaults: { plan: null } });
-    expect(await cleared.json()).toEqual({ ok: true, globalDefault: 'off', modeDefaults: { build: 'high' } });
+    await putThinking(buildApp(null, { authEnabled: false }), { globalDefault: 'high' });
+
+    const stored = JSON.parse(await fs.readFile(settingsPath, 'utf8'));
+    expect(stored.models.modeThinkingDefaults).toEqual({ plan: 'max' });
   });
 
-  it('rejects invalid levels, unknown modes, and non-object bodies', async () => {
+  it('rejects invalid levels, per-mode defaults, and non-object bodies', async () => {
     const app = buildApp(null, { authEnabled: false });
     expect((await putThinking(app, {})).status).toBe(400);
     expect((await putThinking(app, null)).status).toBe(400);
     expect((await putThinking(app, [])).status).toBe(400);
     expect((await putThinking(app, { globalDefault: 'ultra' })).status).toBe(400);
-    expect((await putThinking(app, { modeDefaults: { build: 'ultra' } })).status).toBe(400);
-    expect((await putThinking(app, { modeDefaults: { plna: 'high' } })).status).toBe(400);
-    expect((await putThinking(app, { modeDefaults: ['high'] })).status).toBe(400);
+    expect((await putThinking(app, { modeDefaults: { build: 'high' } })).status).toBe(400);
   });
 
   it('lets organization admins write deployment defaults when authentication is enabled', async () => {
     const admin = buildApp(userA, { isOrganizationAdmin: async () => true });
-    const put = await putThinking(admin, { globalDefault: 'high', modeDefaults: { plan: 'max' } });
+    const put = await putThinking(admin, { globalDefault: 'high' });
     expect(put.status).toBe(200);
 
     const read = await buildApp(null, { authEnabled: false }).request('/web/config/thinking');
-    expect(await read.json()).toMatchObject({ globalDefault: 'high', modeDefaults: { plan: 'max' } });
+    expect(await read.json()).toMatchObject({ globalDefault: 'high' });
   });
 
   it('rejects deployment writes from non-admins and signed-out callers when authentication is enabled', async () => {

@@ -140,7 +140,7 @@ describe('AuditDomain', () => {
     });
   });
 
-  it('records the active agent name and model on agent events when available', async () => {
+  it('given a Factory agent event, when it is recorded, then it carries the model and no mode-derived agent name', async () => {
     const seed = await createFactoryStorageForTests();
     const domain = auditDomain(seed, {
       agentTenant: () => ({ orgId: 'org-1', userId: 'user-1' }),
@@ -164,12 +164,9 @@ describe('AuditDomain', () => {
     expect(event).toMatchObject({
       actorId: 'agent:thread-1',
       actorType: 'agent',
-      metadata: {
-        startedBy: 'user-1',
-        agentName: 'review agent',
-        modelId: 'anthropic/claude-sonnet-4-5',
-      },
+      metadata: { startedBy: 'user-1', modelId: 'anthropic/claude-sonnet-4-5' },
     });
+    expect(event!.metadata).not.toHaveProperty('agentName');
   });
 
   it('serves exactly the project audit route', async () => {

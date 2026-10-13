@@ -5,9 +5,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useAvailableModelsQuery, useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
 import type { ChatThinkingApi } from '../../context/ChatThinkingContext';
-import { useChatModes } from '../../context/useChatModes';
 import { useChatThinking } from '../../context/useChatThinking';
-import { thinkingLevelOptionsForModel, thinkingSourceLabel } from '../../services/thinkingLevels';
+import { thinkingLevelOptionsForModel } from '../../services/thinkingLevels';
 import type { EffectiveThinkingLevel, ThinkingLevelOrigin } from '../../services/thinkingLevels';
 
 interface SessionThinkingControlProps {
@@ -37,13 +36,12 @@ function showFailure(fallback: string) {
   return (cause: unknown) => toast.error(cause instanceof Error ? cause.message : fallback);
 }
 
-function originLabel(origin: ThinkingLevelOrigin, modeId: string | undefined) {
-  return origin === 'session' ? 'this session' : thinkingSourceLabel(origin, modeId);
+function originLabel(origin: ThinkingLevelOrigin) {
+  return origin === 'session' ? 'this session' : 'global default';
 }
 
 export function SessionThinkingControl({ modelId, switchingModel }: SessionThinkingControlProps) {
   const thinking = useChatThinking();
-  const { activeModeId } = useChatModes();
   const catalog = useAvailableModelsQuery();
   const reasoningOptions = useModelReasoningOptions(modelId);
   const options = thinkingLevelOptionsForModel(modelId, reasoningOptions);
@@ -54,7 +52,7 @@ export function SessionThinkingControl({ modelId, switchingModel }: SessionThink
   }
 
   const { level, origin } = state.effective;
-  const source = originLabel(origin, activeModeId);
+  const source = originLabel(origin);
 
   return (
     <ThinkingLevelPicker

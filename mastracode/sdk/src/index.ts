@@ -59,6 +59,7 @@ import { hasCredentialStoreProvider } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
+import type { ThinkingResolutionOptions } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
 import { planMode } from './agents/modes/plan.js';
@@ -313,6 +314,8 @@ export interface MastraCodeConfig {
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
   settingsPath?: string;
+  /** How request-time thinking defaults resolve. Hosts that hide modes pass `{ applyModeDefaults: false }`. */
+  thinkingResolution?: ThinkingResolutionOptions;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Partial<MastraCodeState>;
   /** Create a thread during local boot when no existing thread matches. Default: true */
@@ -1180,7 +1183,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: ctx => getDynamicModel(ctx, config?.settingsPath),
+    model: ctx => getDynamicModel(ctx, config?.settingsPath, config?.thinkingResolution),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time
@@ -1332,6 +1335,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // discards retry:true, so the processor no-ops instead of rotating.
         maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
         settingsPath: config?.settingsPath,
+        thinkingResolution: config?.thinkingResolution,
       }),
     ],
     // Individual processors have tighter limits; this remains a defensive

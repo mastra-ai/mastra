@@ -94,7 +94,6 @@ function stubThreadRoute(messages: MastraDBMessage[]) {
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads/:threadId/messages`, () =>
       HttpResponse.json({ messages }),
     ),
-    http.get(`${AGENT_CONTROLLER_API}/modes`, () => HttpResponse.json({ modes: [] })),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/workspace/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),

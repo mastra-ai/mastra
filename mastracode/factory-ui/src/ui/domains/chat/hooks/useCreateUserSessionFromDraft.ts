@@ -6,7 +6,6 @@ import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
 import { addCachedSession } from '../../../../hooks/useWorkspaces';
 import { createUserSession } from '../../workspaces/services/user-sessions';
 import { useChatModels } from '../context/useChatModels';
-import { useChatModes } from '../context/useChatModes';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatThinking } from '../context/useChatThinking';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -14,7 +13,6 @@ import { promptHandoffState } from './useHandoffPrompt';
 
 export function useCreateUserSessionFromDraft() {
   const { baseUrl, factorySessionState } = useChatSessionContext();
-  const { activeModeId } = useChatModes();
   const { activeModelId, defaultModelId } = useChatModels();
   const { override: thinkingLevelOverride } = useChatThinking();
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
@@ -27,7 +25,7 @@ export function useCreateUserSessionFromDraft() {
       if (!draftSessionId || !factoryId || !projectRepositoryId) {
         throw new Error('Could not create the session. Reload the page and try again.');
       }
-      if (!activeModeId || !activeModelId) {
+      if (!activeModelId) {
         throw new Error('Session configuration is not ready. Try again.');
       }
 
@@ -39,21 +37,13 @@ export function useCreateUserSessionFromDraft() {
           sessionId: draftSessionId,
           title: prompt,
         });
-        return { session, prompt, factoryId, projectRepositoryId, activeModeId, handoffModelId, thinkingLevelOverride };
+        return { session, prompt, factoryId, projectRepositoryId, handoffModelId, thinkingLevelOverride };
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Session creation failed';
         throw new Error(`Could not create the session: ${message}. Try again.`, { cause: error });
       }
     },
-    onSuccess: ({
-      session,
-      prompt,
-      factoryId,
-      projectRepositoryId,
-      activeModeId,
-      handoffModelId,
-      thinkingLevelOverride,
-    }) => {
+    onSuccess: ({ session, prompt, factoryId, projectRepositoryId, handoffModelId, thinkingLevelOverride }) => {
       queryClient.setQueryData(queryKeys.userSession(session.sessionId), session);
       addCachedSession(queryClient, projectRepositoryId, session);
       queryClient.setQueryData<MastraDBMessage[]>(
@@ -68,7 +58,6 @@ export function useCreateUserSessionFromDraft() {
       void navigate(`/factories/${factoryId}/user/threads/${session.sessionId}`, {
         replace: true,
         state: promptHandoffState(prompt, {
-          modeId: activeModeId,
           modelId: handoffModelId,
           thinkingLevel: thinkingLevelOverride,
         }),

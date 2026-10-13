@@ -1,4 +1,5 @@
 import { resolveRequestThinkingLevel } from '@mastra/code-sdk/agents/model';
+import type { ThinkingResolutionOptions } from '@mastra/code-sdk/agents/model';
 import type { ThinkingLevel } from '@mastra/code-sdk/providers/openai-codex';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent/message-list';
@@ -94,6 +95,8 @@ type ActivePhaseSnapshotValue = ActivePhaseSnapshotBase & {
 
 type PhaseSnapshotValue = ActivePhaseSnapshotValue | { bindingId?: string; status: 'none' };
 
+export const FACTORY_THINKING_RESOLUTION = { applyModeDefaults: false } satisfies ThinkingResolutionOptions;
+
 function reviewRuntimeFromRequestContext(requestContext: ComputeStateSignalArgs['requestContext']): RuntimeSnapshot {
   if (!requestContext || typeof requestContext.get !== 'function') {
     throw new Error('Factory review phase requires a controller request context.');
@@ -103,7 +106,7 @@ function reviewRuntimeFromRequestContext(requestContext: ComputeStateSignalArgs[
   if (!modelId) {
     throw new Error('Factory review phase requires a selected session model.');
   }
-  return { modelId, thinkingLevel: resolveRequestThinkingLevel(context) };
+  return { modelId, thinkingLevel: resolveRequestThinkingLevel(context, undefined, FACTORY_THINKING_RESOLUTION) };
 }
 
 function workItemSourceKey(item: WorkItemRow): string | null {

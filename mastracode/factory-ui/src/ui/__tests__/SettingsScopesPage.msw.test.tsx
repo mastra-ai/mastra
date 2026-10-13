@@ -65,7 +65,7 @@ describe('Settings ownership', () => {
     expect(screen.queryByText('Factory defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Chat defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Custom providers')).not.toBeInTheDocument();
-    expect(screen.getByText('The model new chats start on. Applies to every mode.')).toBeInTheDocument();
+    expect(screen.getByText('The model new chats start on.')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
     expect(await screen.findByText('Covered by org')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add API key for OpenAI' }));

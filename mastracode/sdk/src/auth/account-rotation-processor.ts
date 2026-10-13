@@ -24,6 +24,7 @@ import type { ProcessAPIErrorArgs, ProcessInputArgs, ProcessInputResult, Process
 
 import { resolveCredentialStore } from '../agents/credential-resolver.js';
 import { resolveModel, resolveRequestThinkingLevel } from '../agents/model.js';
+import type { ThinkingResolutionOptions } from '../agents/model.js';
 import {
   getRequestAccountSelection,
   isRequestAccountRoutingExhausted,
@@ -587,6 +588,7 @@ export class AccountRotationProcessor implements Processor {
       credentialStore: RotationCredentialStore;
       maxProcessorRetries: number;
       settingsPath?: string;
+      thinkingResolution?: ThinkingResolutionOptions;
     },
   ) {}
 
@@ -762,6 +764,7 @@ export class AccountRotationProcessor implements Processor {
         session: { modeId: typeof controller?.session?.modeId === 'string' ? controller.session.modeId : 'build' },
       },
       this.options.settingsPath,
+      this.options.thinkingResolution,
     );
     const entries: ModelRouteCascade['entries'] = [];
     for (const entry of route.slice(startIndex)) {

@@ -2,7 +2,6 @@ import type { AgentControllerSessionSettings, ToolCategory } from '@mastra/clien
 import {
   getAvailableThinkingLevelsForModel,
   parseThinkCommand,
-  resolveDefaultThinkingLevel,
   runThinkingLevel,
   THINK_COMMAND_DESCRIPTOR,
 } from '@mastra/code-sdk/thinking';
@@ -29,9 +28,8 @@ import { settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { THINKING_LEVEL_LABELS, thinkingSourceLabel } from '../services/thinkingLevels';
+import { THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
-import { useChatModes } from './useChatModes';
 import { useChatPermissions } from './useChatPermissions';
 import { useChatSessionContext } from './useChatSessionContext';
 import { useChatRuntime } from './useChatRuntime';
@@ -47,7 +45,6 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
-  const { activeModeId } = useChatModes();
   const { activeModelId, setModel } = useChatModels();
   const activeModelReasoningOptions = useModelReasoningOptions(activeModelId);
   const availableThinkingLevels = getAvailableThinkingLevelsForModel(activeModelId ?? '', activeModelReasoningOptions);
@@ -77,7 +74,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     {
       value: 'default',
       label: 'Default',
-      description: 'Mode or global default',
+      description: 'Global default',
       active: settingsQuery.data !== undefined && currentThinkingLevel === undefined,
     },
     ...availableThinkingLevels.map(level => ({
@@ -209,22 +206,18 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
             await ensureSettings();
             await updateSettingsMutation.mutateAsync({ thinkingLevel: null });
             try {
-              const defaults = await ensureThinkingConfig();
-              const fallback = resolveDefaultThinkingLevel(defaults, activeModeId);
-              const source = thinkingSourceLabel(fallback.source, activeModeId);
-              pushNotice(`Thinking level set to default: ${fallback.level} (${source}).`);
+              const { globalDefault } = await ensureThinkingConfig();
+              pushNotice(`Thinking level set to default: ${globalDefault} (global default).`);
             } catch {
               pushNotice('Thinking level set to default. Current default is unavailable.');
             }
             return;
           }
-          const [settings, defaults] = await Promise.all([ensureSettings(), ensureThinkingConfig()]);
-          const fallback = resolveDefaultThinkingLevel(defaults, activeModeId);
-          const source = thinkingSourceLabel(fallback.source, activeModeId);
+          const [settings, { globalDefault }] = await Promise.all([ensureSettings(), ensureThinkingConfig()]);
           pushNotice(
             settings.thinkingLevel
-              ? `Thinking level: ${settings.thinkingLevel} (session override). Default: ${fallback.level} (${source}).`
-              : `Thinking level: ${fallback.level} (${source}).`,
+              ? `Thinking level: ${settings.thinkingLevel} (session override). Default: ${globalDefault} (global default).`
+              : `Thinking level: ${globalDefault} (global default).`,
           );
         } catch (error) {
           prefillComposer(originalText);
@@ -247,7 +240,6 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
           [
             `Factory: ${factoryQuery.data?.name ?? '(none)'}`,
             `Path: ${projectPath ?? '(no workspace selected)'}`,
-            `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
             `Running: ${busy}`,

@@ -35,7 +35,6 @@ function makeSession() {
         settings[key] = value;
       },
     },
-    mode: { get: () => 'work' },
     subscribe: listener => {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -63,15 +62,32 @@ async function setup() {
 describe('Factory run lifecycle audit', () => {
   it('exposes the validated open runs used by dispatch admission', async () => {
     const { session, settings } = makeSession();
-    const stored = { ...OPEN_RUN, agentName: 'build' };
-    settings[FACTORY_OPEN_RUNS_SETTING] = [stored];
+    settings[FACTORY_OPEN_RUNS_SETTING] = [OPEN_RUN];
 
-    await expect(listSessionOpenRuns(session)).resolves.toEqual([stored]);
+    await expect(listSessionOpenRuns(session)).resolves.toEqual([OPEN_RUN]);
+  });
+
+  it('given a run opened before modes were removed, when the ledger is read, then the entry still parses', async () => {
+    const { session, settings } = makeSession();
+    settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...OPEN_RUN, agentName: 'plan agent' }];
+
+    await expect(listSessionOpenRuns(session)).resolves.toEqual([OPEN_RUN]);
+  });
+
+  it('given a started run, when its start and end are audited, then neither names the agent after a mode', async () => {
+    const { start, emit, events } = await setup();
+    await start();
+    emit('complete');
+
+    await vi.waitFor(async () => expect(await events()).toHaveLength(2));
+    const recorded = await events();
+    expect(recorded.map(event => event.action).sort()).toEqual(['factory.run.ended', 'factory.run.started']);
+    for (const event of recorded) expect(event.metadata).not.toHaveProperty('agentName');
   });
 
   it('accepts ledger entries written before ownership was recorded', async () => {
     const { session, settings } = makeSession();
-    settings[FACTORY_OPEN_RUNS_SETTING] = [{ ...OPEN_RUN, agentName: 'build' }];
+    settings[FACTORY_OPEN_RUNS_SETTING] = [OPEN_RUN];
 
     const [entry] = await listSessionOpenRuns(session);
     expect(isOpenRunLiveElsewhere(entry!, 'worker-2')).toBe(false);
@@ -79,7 +95,7 @@ describe('Factory run lifecycle audit', () => {
 
   it('treats only a fresh heartbeat from a different owner as live elsewhere', () => {
     const now = 1_000_000;
-    const entry = { ...OPEN_RUN, agentName: 'build', ownerId: 'worker-1', heartbeatAt: now };
+    const entry = { ...OPEN_RUN, ownerId: 'worker-1', heartbeatAt: now };
     expect(isOpenRunLiveElsewhere(entry, 'worker-2', now)).toBe(true);
     expect(isOpenRunLiveElsewhere(entry, 'worker-1', now)).toBe(false);
     expect(isOpenRunLiveElsewhere(entry, 'worker-2', now + FACTORY_OPEN_RUN_STALE_MS)).toBe(false);

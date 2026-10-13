@@ -289,6 +289,13 @@ describe('MastraFactory constructor', () => {
 });
 
 describe('MastraFactory.prepare', () => {
+  it('given a Factory deployment, when the controller mounts, then sessions run in build mode with only the global thinking default', async () => {
+    const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+
+    expect((config.modes as Array<{ id: string }>).map(mode => mode.id)).toEqual(['build']);
+    expect(config.thinkingResolution).toEqual({ applyModeDefaults: false });
+  });
+
   it('loads authoritative memory settings before dynamic memory resolves for each invocation', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage, auth: null });

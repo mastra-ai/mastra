@@ -13,7 +13,6 @@ import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
-import { ChatModesProvider } from './ChatModesProvider';
 import { ChatThinkingProvider } from './ChatThinkingProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
@@ -213,13 +212,11 @@ export function ChatSessionBoundary({
         isLoadingMoreHistory={messagesQuery.isLoadingMore}
         loadMoreHistory={messagesQuery.loadMore}
       >
-        <ChatModesProvider>
-          <ChatModelsProvider>
-            <ChatThinkingProvider>
-              <ChatCommandsProvider>{children}</ChatCommandsProvider>
-            </ChatThinkingProvider>
-          </ChatModelsProvider>
-        </ChatModesProvider>
+        <ChatModelsProvider>
+          <ChatThinkingProvider>
+            <ChatCommandsProvider>{children}</ChatCommandsProvider>
+          </ChatThinkingProvider>
+        </ChatModelsProvider>
       </ChatTranscriptProvider>
     </ChatThreadMessagesContext.Provider>
   );

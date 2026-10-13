@@ -21,6 +21,7 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { buildMode } from '@mastra/code-sdk/agents/modes/build';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
@@ -80,7 +81,11 @@ import {
 import { readFactorySessionScope, resolveFactorySessionAddress } from './rules/binding-context.js';
 import { FactoryDecisionDispatcher } from './rules/dispatcher.js';
 import type { FactoryRuleActor } from './rules/index.js';
-import { FactoryPhaseStateProcessor, reportMemorySettingsUnavailable } from './rules/processor.js';
+import {
+  FACTORY_THINKING_RESOLUTION,
+  FactoryPhaseStateProcessor,
+  reportMemorySettingsUnavailable,
+} from './rules/processor.js';
 import { createReviewSourceTool, resolveReviewSourceUiOrigin } from './rules/review-source-tool.js';
 import { createTerminalStageCleanup } from './rules/terminal-cleanup.js';
 import { createFactoryTransitionTools } from './rules/tools.js';
@@ -984,14 +989,17 @@ export class MastraFactory {
         : [],
     );
 
-    // Build the real production controller (agents, modes, tools, memory, OM,
-    // MCP, providers) — identical to the terminal app. Agent state lives in
+    // Build the real production controller (agents, tools, memory, OM, MCP,
+    // providers) — the terminal app's, minus modes: Factory sessions only run
+    // Build, so threads left in Plan or Fast fall back to it. Agent state lives in
     // the storage backend's Mastra store alongside the Factory app tables —
     // one shared database for all users, separated by `resourceId` scoping.
     const prepared = await timedPhase('prepare.controllerMount', () =>
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
         coAuthor: { name: 'mastra-platform[bot]' },
+        modes: [buildMode],
+        thinkingResolution: FACTORY_THINKING_RESOLUTION,
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),

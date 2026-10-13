@@ -1298,6 +1298,18 @@ describe('resolveRequestThinkingLevel', () => {
     expect(level).toBe('medium');
   });
 
+  it('given mode defaults are turned off, when the session mode has a default, then the global default applies', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    const level = resolveRequestThinkingLevel({ state: {}, session: { modeId: 'build' } }, undefined, {
+      applyModeDefaults: false,
+    });
+
+    expect(level).toBe('low');
+  });
+
   it('treats a null session value as a cleared override', () => {
     mockLoadSettings.mockImplementation(() =>
       settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'medium' }),

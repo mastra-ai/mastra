@@ -170,7 +170,6 @@ export function stubPreparingSession({
       if (failWorkspace) return HttpResponse.json({ message: 'Clone failed' }, { status: 500 });
       return HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: SESSION_ID });
     }),
-    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () =>
       HttpResponse.json({
         models: [
