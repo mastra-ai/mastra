@@ -58,6 +58,7 @@ export function useRequestEnvironmentBuildMutation() {
     mutationFn: ({ factoryId }: { factoryId: string }) => requestEnvironmentBuild(baseUrl, factoryId),
     onSuccess: (_started, { factoryId }) => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.factoryEnvironment(factoryId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.factoryEnvironmentBuilds(factoryId) });
     },
   });
 }

@@ -277,6 +277,31 @@ describe('Environment builds', () => {
     expect(failed).toHaveAttribute('aria-expanded', 'true');
   });
 
+  it('refreshes the build history after Build now so the new build is listed', async () => {
+    const holder = { environment: e2bEnvironment() };
+    useFactory();
+    useEnvironment(holder);
+    const builds = buildHistory();
+    server.use(
+      http.get(`${ENVIRONMENT_URL}/builds`, () => HttpResponse.json({ builds })),
+      http.get(`${ENVIRONMENT_URL}/builds/:buildId`, ({ params }) =>
+        HttpResponse.json({ build: { buildId: params.buildId, status: 'building', templateId: 'tpl-1' } }),
+      ),
+      http.post(`${ENVIRONMENT_URL}/build`, () => {
+        builds.unshift({ buildId: 'tpl-1:bld-3', status: 'building', templateId: 'tpl-1' });
+        return HttpResponse.json({ outcome: 'started', buildId: 'tpl-1:bld-3', templateId: 'tpl-1' });
+      }),
+    );
+
+    renderEnvironmentSettings();
+    const user = userEvent.setup();
+
+    await screen.findByRole('button', { name: 'Build tpl-1:bld-2' });
+    expect(screen.queryByRole('button', { name: 'Build tpl-1:bld-3' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Build now' }));
+    expect(await screen.findByRole('button', { name: 'Build tpl-1:bld-3' })).toBeInTheDocument();
+  });
+
   it('saves a setting without starting a build', async () => {
     const holder = { environment: environmentPayload() };
     useFactory();

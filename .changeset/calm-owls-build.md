@@ -2,4 +2,26 @@
 '@mastra/factory': minor
 ---
 
-Environment builds through the FactorySandbox `builds` capability: `POST /web/factory/projects/:id/environment/build` builds the template now, `GET …/environment/builds` and `GET …/environment/builds/:buildId` read the provider's history and live status, and the environment payload carries `buildTriggers` (a cron schedule kept in core `Schedules` and a push trigger with a leading-edge debounce) plus the last build id. Saving settings never builds; a build starts from Build now, the schedule or a push, and no trigger starts one while the last build is still running. A `factory-environment-build` workflow is registered through `prepare()`; hosts that spread `prepare()`'s result into `new Mastra` pick it up. After a session's own setup, each repository link records `configured` or `failed` with the redacted error. The CLI gains `environment build`, `environment builds list` and `environment builds get`.
+Added environment builds. When the Factory sandbox implements the `builds` capability, Factory builds the environment template ahead of sessions instead of on the first session boot.
+
+- `POST /web/factory/projects/:id/environment/build` starts a build now (the Environment page's **Build now** button, or `mastra api factory project environment build <project-id>`).
+- `GET /web/factory/projects/:id/environment/builds` and `GET /web/factory/projects/:id/environment/builds/:buildId` read the provider's build history and live status.
+- The environment payload carries `buildTriggers`: a cron schedule and a push trigger with a debounce window.
+- Scheduled and push builds skip when the last build is ready and nothing it was built from changed. No trigger starts a build while the last one is still running. Saving settings never starts a build.
+- Hosts that spread `prepare()`'s result into `new Mastra` pick up the `factory-environment-build` workflow.
+- After a session's own setup, each repository link records `configured` or `failed` with the redacted error.
+
+Turn on a nightly rebuild and push builds for a project:
+
+```ts
+await fetch(`${baseUrl}/web/factory/projects/${projectId}/environment`, {
+  method: 'PATCH',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    buildTriggers: {
+      schedule: { enabled: true, cron: '0 3 * * *', timezone: 'UTC' },
+      push: { enabled: true, debounceMinutes: 10 },
+    },
+  }),
+})
+```

@@ -15,7 +15,7 @@ const DEFAULT_CRON = '0 3 * * *';
  * When the template is rebuilt on its own: on a cron schedule and after a
  * push to a repository's default branch. Each trigger is a switch row; turning
  * one on reveals its own settings as ordinary rows under it. Rendered inside
- * the caller's container. Changing a setting always starts a build regardless.
+ * the caller's container. Saving a setting never starts a build; Build now does.
  */
 export function BuildTriggersRows({
   triggers,
