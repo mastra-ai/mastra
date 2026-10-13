@@ -691,6 +691,18 @@ function toSession(row: SessionDbRow): SourceControlSession {
   };
 }
 
+function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<string, unknown> {
+  const patch: Record<string, unknown> = { updated_at: new Date() };
+  if (input.branch !== undefined) patch.branch = input.branch;
+  if (input.sandboxProvider !== undefined) patch.sandbox_provider = input.sandboxProvider;
+  if (input.sandboxWorkdir !== undefined) patch.sandbox_workdir = input.sandboxWorkdir;
+  if (input.setupCommand !== undefined) patch.setup_command = input.setupCommand;
+  if (input.teardownCommand !== undefined) patch.teardown_command = input.teardownCommand;
+  if (input.position !== undefined) patch.position = input.position;
+  if (input.inEnvironment !== undefined) patch.in_environment = input.inEnvironment;
+  return patch;
+}
+
 export class SourceControlStorage extends FactoryStorageDomain {
   constructor() {
     super('source-control');
@@ -844,6 +856,46 @@ export class SourceControlStorage extends FactoryStorageDomain {
         `[factory] environment backfill: ${missingRepositories} links point at a missing repository row, ${failedProjects.length} projects could not be updated${failedProjects.length > 0 ? ` (${failedProjects.join(', ')})` : ''}`,
       );
     }
+  }
+
+  /**
+   * Applies environment patches to a project's repository links through `ops`,
+   * normally a transaction that also holds the project row. Validates against
+   * the links as they are inside that transaction: every id must belong to the
+   * project, and a reorder must list every link so no two share a position.
+   * Nothing is written when validation fails.
+   */
+  async updateEnvironmentRepositories(
+    ops: FactoryStorageOps,
+    args: {
+      factoryProjectId: string;
+      integrationIds: string[];
+      patches: Array<UpdateProjectRepositoryInput & { projectRepositoryId: string }>;
+    },
+  ): Promise<'updated' | 'not_found' | 'incomplete_reorder'> {
+    const connections =
+      args.integrationIds.length === 0
+        ? []
+        : await ops.findMany<ConnectionDbRow>(CONNECTIONS, {
+            factory_project_id: args.factoryProjectId,
+            integration_id: { in: args.integrationIds },
+          });
+    const links =
+      connections.length === 0
+        ? []
+        : await ops.findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
+            connection_id: { in: connections.map(connection => connection.id) },
+          });
+    const linkIds = new Set(links.map(link => link.id));
+    if (args.patches.some(patch => !linkIds.has(patch.projectRepositoryId))) return 'not_found';
+    if (args.patches.some(patch => patch.position !== undefined) && args.patches.length !== linkIds.size) {
+      return 'incomplete_reorder';
+    }
+    for (const { projectRepositoryId, ...input } of args.patches) {
+      if (Object.keys(input).length === 0) continue;
+      await ops.updateMany(PROJECT_REPOSITORIES, { id: projectRepositoryId }, projectRepositoryPatch(input));
+    }
+    return 'updated';
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -1241,15 +1293,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
         update: async ({ orgId, id, input }) => {
           const existing = await getProjectRepository({ orgId, id });
           if (!existing) return null;
-          const patch: Record<string, unknown> = { updated_at: new Date() };
-          if (input.branch !== undefined) patch.branch = input.branch;
-          if (input.sandboxProvider !== undefined) patch.sandbox_provider = input.sandboxProvider;
-          if (input.sandboxWorkdir !== undefined) patch.sandbox_workdir = input.sandboxWorkdir;
-          if (input.setupCommand !== undefined) patch.setup_command = input.setupCommand;
-          if (input.teardownCommand !== undefined) patch.teardown_command = input.teardownCommand;
-          if (input.position !== undefined) patch.position = input.position;
-          if (input.inEnvironment !== undefined) patch.in_environment = input.inEnvironment;
-          await db().updateMany(PROJECT_REPOSITORIES, { id }, patch);
+          await db().updateMany(PROJECT_REPOSITORIES, { id }, projectRepositoryPatch(input));
           return getProjectRepository({ orgId, id });
         },
         setBuildStatus: async ({ orgId, id, status, error, builtAt }) => {

@@ -721,42 +721,41 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const { repositories: repositoryPatches, settings: settingsPatch, ...projectInput } = parsed.data;
           if (settingsPatch !== undefined && !this.deps.sandbox) return context.json({ error: 'no_sandbox' }, 400);
 
-          // Resolve every listed link before writing anything, so a foreign id leaves the project untouched.
-          const links = new Map(
-            (await this.#environmentLinks(tenant.orgId, projectId)).map(link => [link.projectRepository.id, link]),
-          );
-          for (const patch of repositoryPatches ?? []) {
-            if (!links.has(patch.projectRepositoryId))
-              return context.json({ error: 'Project repository not found' }, 404);
-          }
-          // A reorder must cover every link, or two links would share a position.
-          if (
-            repositoryPatches?.some(patch => patch.position !== undefined) &&
-            repositoryPatches.length !== links.size
-          ) {
-            return context.json({ error: 'invalid_environment' }, 400);
-          }
-
           let updated = project;
-          if (Object.keys(projectInput).length > 0 || settingsPatch !== undefined) {
+          if (Object.keys(projectInput).length > 0 || settingsPatch !== undefined || repositoryPatches !== undefined) {
             let issues: ReadonlyArray<{ message: string; path?: unknown }> | undefined;
+            let repositoryOutcome: 'updated' | 'not_found' | 'incomplete_reorder' | undefined;
+            const sourceControl = await this.#sourceControl();
+            // One transaction holds the project row, so the settings merge and the link
+            // writes either all land or none do, and concurrent patches apply in turn.
             const result = await (
               await this.#projects()
             ).update({
               orgId: tenant.orgId,
               id: projectId,
-              input:
-                settingsPatch === undefined
-                  ? projectInput
-                  : async current => {
-                      const settings = await this.#mergeSettings(current.sandboxSettings ?? {}, settingsPatch);
-                      if ('issues' in settings) {
-                        issues = settings.issues;
-                        return null;
-                      }
-                      return { ...projectInput, sandboxSettings: settings.merged };
-                    },
+              input: async (current, ops) => {
+                let sandboxSettings: Record<string, unknown> | null | undefined;
+                if (settingsPatch !== undefined) {
+                  const settings = await this.#mergeSettings(current.sandboxSettings ?? {}, settingsPatch);
+                  if ('issues' in settings) {
+                    issues = settings.issues;
+                    return null;
+                  }
+                  sandboxSettings = settings.merged;
+                }
+                if (repositoryPatches !== undefined) {
+                  repositoryOutcome = await sourceControl.updateEnvironmentRepositories(ops, {
+                    factoryProjectId: current.id,
+                    integrationIds: [...this.#versionControlIntegrationIds],
+                    patches: repositoryPatches,
+                  });
+                  if (repositoryOutcome !== 'updated') return null;
+                }
+                return { ...projectInput, ...(sandboxSettings !== undefined ? { sandboxSettings } : {}) };
+              },
             });
+            if (repositoryOutcome === 'not_found') return context.json({ error: 'Project repository not found' }, 404);
+            if (repositoryOutcome === 'incomplete_reorder') return context.json({ error: 'invalid_environment' }, 400);
             if (issues) {
               return context.json(
                 {
@@ -775,14 +774,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             }
             if (!result) return context.json({ error: 'Project not found' }, 404);
             updated = result;
-          }
-          for (const { projectRepositoryId, ...input } of repositoryPatches ?? []) {
-            if (Object.keys(input).length === 0) continue;
-            await links.get(projectRepositoryId)!.handle.projectRepositories.update({
-              orgId: tenant.orgId,
-              id: projectRepositoryId,
-              input,
-            });
           }
           return context.json(await this.#environmentPayload(tenant.orgId, updated));
         },
