@@ -1455,6 +1455,16 @@ describe('thinking defaults routes', () => {
     expect((await putThinking(app, { modeDefaults: { build: 'high' } })).status).toBe(400);
   });
 
+  it('given a legacy body mixing globalDefault and modeDefaults, when it is saved, then nothing is written', async () => {
+    const app = buildApp(null, { authEnabled: false });
+    await putThinking(app, { globalDefault: 'low' });
+
+    const put = await putThinking(app, { globalDefault: 'high', modeDefaults: { plan: 'max' } });
+
+    expect(put.status).toBe(400);
+    expect(await (await app.request('/web/config/thinking')).json()).toMatchObject({ globalDefault: 'low' });
+  });
+
   it('lets organization admins write deployment defaults when authentication is enabled', async () => {
     const admin = buildApp(userA, { isOrganizationAdmin: async () => true });
     const put = await putThinking(admin, { globalDefault: 'high' });

@@ -1128,7 +1128,10 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
               return c.json({ error: 'Request body must be a JSON object' }, 400);
             }
-            globalDefault = (parsed as { globalDefault?: unknown }).globalDefault;
+            if ('modeDefaults' in parsed) {
+              return c.json({ error: 'modeDefaults is no longer supported; send only globalDefault' }, 400);
+            }
+            globalDefault = 'globalDefault' in parsed ? parsed.globalDefault : undefined;
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
