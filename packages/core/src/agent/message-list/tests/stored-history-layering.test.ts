@@ -222,6 +222,50 @@ describe('a client-sent assistant message only contributes tool outcomes', () =>
     expect(part?.type === 'tool-invocation' && part.providerMetadata).toEqual({ openai: { itemId: 'fc_1' } });
   });
 
+  // Regression test for GitHub issue #25744: applyClientToolModelOutput caches the
+  // server-computed toModelOutput projection at providerMetadata.mastra.modelOutput on the
+  // live client result, but reconciliation rebuilt the outcome part with only type and
+  // toolInvocation, so the prompt fell back to the raw result after memory recall.
+  it('keeps the server-computed toModelOutput mapping when the client sends an outcome', async () => {
+    const live = withToolState('assistant', 2, {
+      state: 'result',
+      args: { color: 'green' },
+      result: { images: [{ mediaType: 'image/png', data: 'c25hcHNob3Q=' }] },
+    });
+    const livePart = live.content.parts[0]!;
+    if (livePart.type === 'tool-invocation') {
+      // The shape applyClientToolModelOutput writes in place before memory reconciles,
+      // plus client-supplied metadata that must NOT survive.
+      livePart.providerMetadata = {
+        client: { edited: true },
+        mastra: {
+          modelOutputComputed: true,
+          modelOutput: { type: 'content', value: [{ type: 'text', text: 'MAPPED SNAPSHOT' }] },
+        },
+      };
+    }
+
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(live, 'input');
+    list.add(withToolState('assistant', 1, { state: 'call', args: { color: 'green' } }), 'memory');
+
+    const [part] = list.get.all.db()[0]!.content.parts;
+    expect(part?.type === 'tool-invocation' && part.providerMetadata).toEqual({
+      mastra: {
+        modelOutputComputed: true,
+        modelOutput: { type: 'content', value: [{ type: 'text', text: 'MAPPED SNAPSHOT' }] },
+      },
+    });
+
+    const prompt = await list.get.all.aiV5.llmPrompt();
+    const toolMessage = prompt.find(message => message.role === 'tool');
+    const output =
+      Array.isArray(toolMessage?.content) && toolMessage.content[0]?.type === 'tool-result'
+        ? toolMessage.content[0].output
+        : undefined;
+    expect(output).toEqual({ type: 'content', value: [{ type: 'text', text: 'MAPPED SNAPSHOT' }] });
+  });
+
   it('does not let a client complete a provider-executed call', () => {
     const stored = withToolState('assistant', 1, { state: 'call' });
     const storedPart = stored.content.parts[0]!;
