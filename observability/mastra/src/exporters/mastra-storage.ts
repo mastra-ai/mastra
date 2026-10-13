@@ -626,22 +626,21 @@ export class MastraStorageExporter extends BaseExporter {
    */
   async flush(): Promise<void> {
     // A timer or size trigger may have taken a batch out of the buffer and still be
-    // writing it, so an empty buffer doesn't mean the data reached storage. Join those
-    // writes first: they can also defer span updates back into the buffer. Writes that
-    // start while we wait get a few more rounds, then we stop so flush() stays bounded
-    // under non-stop traffic (same cap as ObservabilityBus).
+    // writing it, so an empty buffer doesn't mean the data reached storage. Each round
+    // joins those writes first (they can defer span updates back into the buffer), then
+    // writes whatever the buffer holds. Writes that start while we work get a few more
+    // rounds, then we stop so flush() stays bounded under non-stop traffic (same cap as
+    // ObservabilityBus). A batch that failed is left to its retry timer, as before.
     for (let round = 0; round < MAX_FLUSH_ROUNDS; round++) {
       if (this.#inFlightFlushes.size > 0) {
         await Promise.allSettled([...this.#inFlightFlushes]);
-        continue;
       }
-      if (this.#eventBuffer.totalSize === 0) {
-        return;
+      if (this.#eventBuffer.totalSize > 0) {
+        this.logger.debug('Flushing buffered events', {
+          bufferedEvents: this.#eventBuffer.totalSize,
+        });
+        await this.trackFlushBuffer();
       }
-      this.logger.debug('Flushing buffered events', {
-        bufferedEvents: this.#eventBuffer.totalSize,
-      });
-      await this.trackFlushBuffer();
       if (this.#inFlightFlushes.size === 0) {
         return;
       }
