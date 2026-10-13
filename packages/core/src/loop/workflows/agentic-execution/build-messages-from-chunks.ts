@@ -92,6 +92,19 @@ export function buildMessagesFromChunks({
       // ── Source ──────────────────────────────────────────────────
       case 'source': {
         const p = chunk.payload as SourcePayload;
+        if (p.sourceType === 'document') {
+          // Document sources (e.g. Anthropic PDF citations) have no url;
+          // storing them as source-url would permanently lose the citation.
+          parts.push({
+            type: 'source-document',
+            sourceId: p.id,
+            mediaType: p.mimeType ?? '',
+            title: p.title,
+            ...(p.filename ? { filename: p.filename } : {}),
+            ...(p.providerMetadata ? { providerMetadata: p.providerMetadata } : {}),
+          } as MastraMessagePart);
+          break;
+        }
         parts.push({
           type: 'source',
           source: {

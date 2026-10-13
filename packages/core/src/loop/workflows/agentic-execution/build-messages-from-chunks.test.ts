@@ -698,6 +698,29 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('should preserve a document source as a source-document part', () => {
+    const result = parts([
+      {
+        type: 'source',
+        payload: {
+          id: 's2',
+          sourceType: 'document',
+          title: 'Q3 Report',
+          mimeType: 'application/pdf',
+          filename: 'q3.pdf',
+        },
+      },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'source-document',
+      sourceId: 's2',
+      mediaType: 'application/pdf',
+      title: 'Q3 Report',
+      filename: 'q3.pdf',
+    });
+  });
+
   it('should produce a file part', () => {
     const result = parts([
       {
