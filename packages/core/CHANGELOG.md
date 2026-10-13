@@ -1,5 +1,54 @@
 # @mastra/core
 
+## 1.77.0-alpha.3
+
+### Minor Changes
+
+- Added authenticated message authors to AgentController sessions. Pass `author` to `sendMessage`, `queueMessage`, or `steer`, and read it back with `getMessageAuthor`. ([#26549](https://github.com/mastra-ai/mastra/pull/26549))
+
+  ```ts
+  await session.sendMessage({ content: 'Hi', author: { id: 'user-123' } });
+  const messages = await session.thread.listMessages({ threadId: session.thread.requireId() });
+  const message = messages.findLast(message => message.role === 'signal')!;
+  const author = getMessageAuthor(message);
+  ```
+
+- Added transferable AgentController thread ownership and a per-run owner snapshot in request context. New threads record their owner and creator, while ownership changes to the active thread become visible on the next run. ([#26549](https://github.com/mastra-ai/mastra/pull/26549))
+
+  ```ts
+  await session.thread.transferOwnership({ toOwnerId: 'owner-b' });
+  ```
+
+### Patch Changes
+
+- Fixed aborted agent streams reporting empty token usage. When a stream is aborted, `onFinish` now receives the usage of steps that completed before the abort: `totalUsage` is the sum across those steps and `usage` is the last completed step. Observability and cost tracking for cancelled runs now include that completed-step usage. Usage from the step that was still running when the abort happened is not reported. If no step completed before the abort, `usage` and `totalUsage` still have undefined token counts. ([#26629](https://github.com/mastra-ai/mastra/pull/26629))
+
+- Fixed a tool running twice when the same suspended tool call is approved, declined, or resumed concurrently (for example a double click, a client retry, or two open tabs). `approveToolCall`, `declineToolCall`, `resumeStream`, and their generate variants now claim the suspended run before resuming it. Only one caller resumes; the others fail with `AGENT_RESUME_ALREADY_CLAIMED`. ([#26688](https://github.com/mastra-ai/mastra/pull/26688))
+
+  ```ts
+  const results = await Promise.allSettled([
+    agent.approveToolCall({ runId, toolCallId }),
+    agent.approveToolCall({ runId, toolCallId }),
+  ]);
+  // One fulfilled, one rejected with AGENT_RESUME_ALREADY_CLAIMED. The tool runs once.
+  ```
+
+  Durable agents report the losing resume the same way, as an error chunk in its stream with the `AGENT_RESUME_ALREADY_CLAIMED` id.
+
+  What each resume error means:
+
+  - `AGENT_RESUME_ALREADY_CLAIMED`: another approval or resume of this run is running or just finished. Stop retrying.
+  - `AGENT_RESUME_RUN_NOT_SUSPENDED` (durable agents): the run exists but isn't waiting for approval, for example because it already finished or failed. `details.status` gives its state.
+  - `AGENT_RESUME_NO_SNAPSHOT_FOUND`: there is no record of a suspended run. Check the `runId`. Agents delete a run's record when it finishes, so an approval sent after that also gets this error.
+
+  Resuming a workflow run that isn't suspended now throws an error with the id `WORKFLOW_RUN_NOT_SUSPENDED`. The message is unchanged.
+
+  Storage adapters that support atomic updates (for example PostgreSQL, LibSQL, MongoDB, and the in-memory store) protect against duplicates across processes. Other adapters protect against duplicates within a single process.
+
+- Fixed tools returned by an input processor's `processInputStep` (such as `ToolSearchProcessor`'s loaded tools) running with an empty `context.agent.agentId`. They now receive the agent's id, the same as tools assigned to the agent directly, in both regular and durable agents. ([#26816](https://github.com/mastra-ai/mastra/pull/26816))
+
+- Fixed untilIdle streams dropping background tasks started by the run they replaced: a new stream({ untilIdle: true }) on the same thread aborts the earlier idle wrapper, and the new wrapper only tracked tasks whose events it saw itself — so an in-flight task's completion woke nobody and the agent never reported its result. The idle loop now adopts still-running and pending background tasks for its agent, thread, and resource when it starts, so their completions trigger a continuation turn as usual. Fixes #26841 ([#26848](https://github.com/mastra-ai/mastra/pull/26848))
+
 ## 1.77.0-alpha.2
 
 ### Patch Changes
