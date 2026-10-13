@@ -323,7 +323,7 @@ function CreditHistoryTitle({ id }: { id: string }) {
       <Txt as="h2" id={id} variant="subheading">
         Credit history
       </Txt>
-      <Button variant="ghost" size="sm" icon={<ArrowUpRight />} render={<a href="#billing-portal" />}>
+      <Button variant="link" size="sm" iconEnd={<ArrowUpRight />} render={<a href="#billing-portal" />}>
         Open billing portal
       </Button>
     </div>
