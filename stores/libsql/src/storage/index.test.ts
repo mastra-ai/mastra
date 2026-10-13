@@ -33,7 +33,7 @@ const mastra = new Mastra({
   storage: libsql,
 });
 
-createTestSuite(mastra.getStorage()!, { workflowResultsNoopWhenRunMissing: true });
+createTestSuite(mastra.getStorage()!);
 
 // Configuration validation tests
 createConfigValidationTests({

@@ -47,7 +47,11 @@ export type TestCapabilities = {
   datasetItemIdentity?: boolean;
   /** Whether permanent dataset item purge is supported by the test topology (defaults to true). */
   datasetItemPurge?: boolean;
-  /** Whether late workflow-result writes preserve a deleted run (defaults to false during adapter rollout). */
+  /**
+   * Whether late workflow-result writes preserve a deleted run. Concurrent adapters default to true;
+   * adapters pending alignment under COR-1448 set this to false. Pending adapters are Convex, DSQL,
+   * DynamoDB, Elasticsearch, MongoDB, MSSQL, MySQL, OracleDB, Redis, Spanner, Upstash, and Valkey.
+   */
   workflowResultsNoopWhenRunMissing?: boolean;
   /**
    * Whether batchDeleteTraces supports tenant-scoped deletion via

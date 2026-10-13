@@ -91,8 +91,9 @@ export abstract class WorkflowsStorage extends StorageDomain {
   }
 
   /**
-   * Returns an empty object without writing when the workflow run does not exist.
-   * A stale step-result write must not recreate an intentionally deleted run snapshot.
+   * In-memory, LibSQL, and PostgreSQL storage return an empty object without writing when the workflow run does not
+   * exist. Remaining adapters are being aligned under COR-1448; callers must not rely on this method to create the
+   * initial run snapshot.
    */
   abstract updateWorkflowResults({
     workflowName,

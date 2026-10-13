@@ -851,7 +851,7 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
     });
 
     it('should not recreate a deleted workflow run from a late result update', async ctx => {
-      if (!workflowResultsNoopWhenRunMissing) return ctx.skip();
+      if (!supportsConcurrentUpdates || workflowResultsNoopWhenRunMissing === false) return ctx.skip();
 
       const workflowName = 'test-workflow';
       const runId = `run-${randomUUID()}`;
