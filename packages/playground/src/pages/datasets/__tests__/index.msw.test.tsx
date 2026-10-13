@@ -155,10 +155,11 @@ describe('Datasets page', () => {
   describe('when there are no datasets', () => {
     beforeEach(() => useDatasets([]));
 
-    it('still shows the New dataset button in the header slot', async () => {
+    it('leaves creation to the empty state, without a New dataset button in the header', async () => {
       renderPage();
 
-      expect(await screen.findByRole('button', { name: 'New dataset' })).not.toBeNull();
+      await screen.findByRole('button', { name: 'Create Dataset' });
+      expect(screen.queryByRole('button', { name: 'New dataset' })).toBeNull();
     });
 
     it('opens the create dataset dialog from the empty state', async () => {

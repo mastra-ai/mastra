@@ -63,17 +63,12 @@ export default function Datasets() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const openCreateDialog = () => setIsCreateOpen(true);
 
-  const headerCreateAction = (
-    <>
-      <CreateButton tooltip="Create a dataset" variant="ghost" size="sm" onClick={openCreateDialog}>
-        New dataset
-      </CreateButton>
-      <CreateDatasetDialog
-        open={isCreateOpen}
-        onOpenChange={setIsCreateOpen}
-        onSuccess={datasetId => void navigate(`/datasets/${datasetId}`)}
-      />
-    </>
+  const createDatasetDialog = (
+    <CreateDatasetDialog
+      open={isCreateOpen}
+      onOpenChange={setIsCreateOpen}
+      onSuccess={datasetId => void navigate(`/datasets/${datasetId}`)}
+    />
   );
 
   if (error && is401UnauthorizedError(error)) {
@@ -106,9 +101,10 @@ export default function Datasets() {
   // With a target filter active, keep the toolbar so the user can reset it.
   if (datasets.length === 0 && !isLoading && !targetType) {
     return (
-      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={headerCreateAction}>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">Datasets</h1>
         <NoDatasetsInfo onCreateClick={openCreateDialog} />
+        {createDatasetDialog}
       </PageLayout>
     );
   }
@@ -125,7 +121,14 @@ export default function Datasets() {
   return (
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      headerActions={headerCreateAction}
+      headerActions={
+        <>
+          <CreateButton tooltip="Create a dataset" variant="ghost" size="sm" onClick={openCreateDialog}>
+            New dataset
+          </CreateButton>
+          {createDatasetDialog}
+        </>
+      }
       actionRow={
         <DatasetsToolbar
           search={search}
