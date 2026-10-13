@@ -109,12 +109,7 @@ export function ExperimentResultPanel({
               <DataPanel.CopyId id={itemId} />
             </DataPanel.Heading>
             <DataPanel.HeaderActions>
-              <DataPanel.CloseButton
-                icon="x"
-                onClick={onClose}
-                label="Close result panel"
-                tooltip="Close result panel"
-              />
+              <DataPanel.CloseButton icon="x" onClick={onClose} />
             </DataPanel.HeaderActions>
           </DataPanel.Header>
           {fallback}
@@ -321,7 +316,7 @@ function ExperimentResultPanelBody({
             previousLabel="Go to previous result"
             nextLabel="Go to next result"
           />
-          <DataPanel.CloseButton icon="x" onClick={onClose} label="Close result panel" tooltip="Close result panel" />
+          <DataPanel.CloseButton icon="x" onClick={onClose} />
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 

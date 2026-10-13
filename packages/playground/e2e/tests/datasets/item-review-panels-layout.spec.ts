@@ -136,6 +136,8 @@ test.describe('Item and review panel layout', () => {
         const panel = page.getByRole('dialog', { name: label });
         const close = panel.getByRole('button', { name: 'Close Panel', exact: true });
         await expect(close).toBeVisible();
+        // Payloads are clipped until expanded, so open one to overflow the card.
+        await panel.getByRole('region', { name: 'Input' }).getByRole('button', { name: 'Expand' }).click();
         const contentScrollTop = await scrollCardContent(page, panel);
         await expect.poll(contentScrollTop).toBeGreaterThan(0);
         expect(await panel.evaluate(element => element.scrollTop)).toBe(0);
