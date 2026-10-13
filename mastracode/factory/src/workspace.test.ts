@@ -138,7 +138,11 @@ import {
   hasFailedSetupCommand,
   recordFailedSetupCommand,
 } from './sandbox/session-sandbox.js';
-import { __clearSessionEnvironmentsForTests, peekSessionEnvironment } from './session/environment-state-processor.js';
+import {
+  __clearSessionEnvironmentsForTests,
+  peekSessionEnvironment,
+  peekSessionEnvironmentTeardown,
+} from './session/environment-state-processor.js';
 import {
   createWorkspaceFactory,
   FactorySkillSource,
@@ -3204,8 +3208,10 @@ describe('factory environment sandbox context', () => {
       position: number;
       inEnvironment: boolean;
       setupCommand?: string;
+      teardownCommand?: string;
     }>;
     project?: Record<string, unknown>;
+    workspaceRegistry?: FactoryWorkspaceRegistry;
   }) {
     const github = fakeGithubIntegration();
     const repositories = new Map(
@@ -3223,7 +3229,7 @@ describe('factory environment sandbox context', () => {
         position: link.position,
         inEnvironment: link.inEnvironment,
         setupCommand: link.setupCommand ?? null,
-        teardownCommand: null,
+        teardownCommand: link.teardownCommand ?? null,
         createdAt: new Date(0),
       })),
     );
@@ -3240,6 +3246,7 @@ describe('factory environment sandbox context', () => {
       sandbox,
       github: github as any,
       projects: projects as any,
+      workspaceRegistry: options.workspaceRegistry,
     });
     return { resolver, projects, sandbox, github };
   }
@@ -3256,6 +3263,49 @@ describe('factory environment sandbox context', () => {
     { id: 'link-2', repositoryId: 'repository-2', slug: 'octocat/docs', position: 2, inEnvironment: true },
     { id: 'link-3', repositoryId: 'repository-3', slug: 'octocat/legacy', position: 3, inEnvironment: false },
   ];
+
+  it.each([false, true])('does not publish a retired boot over a replacement: %s', async reopen => {
+    const workspaceRegistry = new FactoryWorkspaceRegistry();
+    const { resolver } = environmentFixture({
+      links: twoLinks.map(link => ({ ...link, teardownCommand: 'echo old-teardown' })),
+      workspaceRegistry,
+    });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+    let release!: () => void;
+    let entered!: () => void;
+    const blocked = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const started = new Promise<void>(resolve => {
+      entered = resolve;
+    });
+    mocks.materializeRepo.mockImplementationOnce(async () => {
+      entered();
+      await blocked;
+    });
+    const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const boot = workspace!.sandbox!.getInfo!();
+    const rejected = expect(boot).rejects.toThrow('retired during workspace materialization');
+    await started;
+    await workspaceRegistry.invalidateSession('session-a');
+    expect(peekSessionEnvironment('session-a')).toBeUndefined();
+    if (reopen) {
+      const replacement = environmentFixture({
+        links: [{ ...twoLinks[0]!, teardownCommand: 'echo new-teardown' }],
+        workspaceRegistry,
+      });
+      const next = await replacement.resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      await next!.sandbox!.getInfo!();
+    }
+    const state = peekSessionEnvironment('session-a');
+    const teardown = peekSessionEnvironmentTeardown('session-a');
+    release();
+    await rejected;
+    expect(peekSessionEnvironment('session-a')).toBe(state);
+    expect(peekSessionEnvironmentTeardown('session-a')).toEqual(teardown);
+    if (reopen) expect(state?.repositories.map(repo => repo.slug)).toEqual(['octocat/hello']);
+  });
 
   it('builds the list-form context from every inEnvironment link in position order', async () => {
     const { resolver, sandbox } = environmentFixture({
