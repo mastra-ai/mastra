@@ -701,6 +701,36 @@ const sidebars = {
       label: 'Overview',
     },
     {
+      type: 'category',
+      label: 'Connect',
+      collapsed: true,
+      link: {
+        type: 'doc',
+        id: 'mastra-platform/connect/overview',
+      },
+      customProps: {
+        contextualSidebar: true,
+        tags: ['new'],
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-platform/connect/providers',
+          label: 'Providers',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/connect/tools',
+          label: 'Tools',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/connect/channels',
+          label: 'Channels',
+        },
+      ],
+    },
+    {
       type: 'doc',
       id: 'mastra-platform/deploy',
       label: 'Deploy',
@@ -762,36 +792,6 @@ const sidebars = {
       type: 'doc',
       id: 'mastra-platform/workspaces',
       label: 'Workspaces',
-    },
-    {
-      type: 'category',
-      label: 'Connect',
-      collapsed: true,
-      link: {
-        type: 'doc',
-        id: 'mastra-platform/connect/overview',
-      },
-      customProps: {
-        contextualSidebar: true,
-        tags: ['new'],
-      },
-      items: [
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/tools',
-          label: 'Tools',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/channels',
-          label: 'Channels',
-        },
-        {
-          type: 'doc',
-          id: 'mastra-platform/connect/providers',
-          label: 'Providers',
-        },
-      ],
     },
     {
       type: 'doc',
