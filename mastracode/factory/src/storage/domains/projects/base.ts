@@ -233,11 +233,14 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
   }: {
     orgId: string;
     id: string;
-    input: UpdateFactoryProjectInput | ((current: FactoryProject) => Promise<UpdateFactoryProjectInput | null>);
+    /** A function input runs in a transaction; writes through its `ops` commit or roll back with the project. */
+    input:
+      | UpdateFactoryProjectInput
+      | ((current: FactoryProject, ops: FactoryStorageOps) => Promise<UpdateFactoryProjectInput | null>);
   }): Promise<FactoryProject | null> {
     const update = (ops: FactoryStorageOps) =>
       ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id }, async current => {
-        const changes = typeof input === 'function' ? await input(toFactoryProject(current)) : input;
+        const changes = typeof input === 'function' ? await input(toFactoryProject(current), ops) : input;
         if (changes === null) return null;
         return {
           ...(changes.name !== undefined ? { name: changes.name } : {}),
