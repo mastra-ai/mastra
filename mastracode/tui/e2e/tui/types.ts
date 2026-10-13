@@ -97,6 +97,7 @@ export type ScenarioName =
   | 'initial-prompt-resume'
   | 'tui-prompt-resume'
   | 'openai-strict-schema'
+  | 'pack-flag-startup'
   | 'plan-approval-goal-handoff'
   | 'plan-approval-goal-replaces-active'
   | 'plan-approval-handoff'
@@ -284,6 +285,7 @@ export type McE2eStartMastraCodeAppOptions = {
       MastraTUIOptions,
       | 'appName'
       | 'initialMessage'
+      | 'initialPackId'
       | 'resumeSkipNotice'
       | 'inlineQuestions'
       | 'processMemoryDiagnostics'

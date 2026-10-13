@@ -31,6 +31,7 @@ import type {
 import {
   validateStepInput,
   createDeprecationProxy,
+  defineLazyWriter,
   omitPriorCompletionFields,
   runCountDeprecationMessage,
   validateStepResumeData,
@@ -393,7 +394,7 @@ export async function executeStep(
         };
       }
 
-      const output = await runStep({
+      const stepParams = {
         runId: nestedRunId ?? runId,
         resourceId,
         workflowId,
@@ -491,21 +492,27 @@ export async function executeStep(
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
-        writer: new ToolStream(
-          {
-            prefix: 'workflow-step',
-            callId: stepCallId,
-            name: step.id,
-            runId,
-          },
-          outputWriter,
-        ),
         outputWriter,
         // Disable scorers must be explicitly set to false they are on by default
         scorers: disableScorers === false ? undefined : step.scorers,
         validateInputs: engine.options?.validateInputs,
         perStep,
-      });
+      };
+      const output = await runStep(
+        defineLazyWriter(
+          stepParams,
+          () =>
+            new ToolStream(
+              {
+                prefix: 'workflow-step',
+                callId: stepCallId,
+                name: step.id,
+                runId,
+              },
+              outputWriter,
+            ),
+        ),
+      );
 
       // Capture requestContext state after step execution (only for engines that need it)
       if (engine.requiresDurableContextSerialization()) {

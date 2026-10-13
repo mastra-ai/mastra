@@ -815,8 +815,8 @@ function createStepFromProcessor<TProcessorId extends string>(
     outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<
       z.infer<typeof ProcessorStepOutputSchema>
     >,
-    execute: async ({ inputData, requestContext, outputWriter, ...obsFields }) => {
-      const observabilityContext = resolveObservabilityContext(obsFields);
+    execute: async ({ inputData, requestContext, outputWriter, tracing, tracingContext, loggerVNext, metrics }) => {
+      const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties

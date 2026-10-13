@@ -822,6 +822,46 @@ describe('HttpTransport', () => {
 
       consoleSpy.mockRestore();
     });
+
+    it('should normalize page 0 to page 1 for listLogs', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(await transport.listLogs({ page: 0 })).toEqual({
+        logs: [],
+        total: 0,
+        page: 1,
+        perPage: 100,
+        hasMore: false,
+      });
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should normalize page 0 to page 1 for listLogsByRunId', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(await transport.listLogsByRunId({ runId: 'test-run-id', page: 0 })).toEqual({
+        logs: [],
+        total: 0,
+        page: 1,
+        perPage: 100,
+        hasMore: false,
+      });
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should preserve positive page and perPage values', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(await transport.listLogs({ page: 3, perPage: 10 })).toMatchObject({ page: 3, perPage: 10 });
+      expect(await transport.listLogsByRunId({ runId: 'test-run-id', page: 3, perPage: 10 })).toMatchObject({
+        page: 3,
+        perPage: 10,
+      });
+
+      consoleSpy.mockRestore();
+    });
   });
 
   describe('_transform error handling', () => {
@@ -844,6 +884,44 @@ describe('HttpTransport', () => {
         ...testLog,
         time: expect.any(Number),
       });
+    });
+  });
+
+  describe('timestamp handling', () => {
+    const now = 1_700_000_000_000;
+
+    const getSentLog = () => JSON.parse(fetchMock.mock.calls[0][1].body).logs[0];
+
+    beforeEach(() => {
+      vi.setSystemTime(now);
+    });
+
+    it('should preserve a zero timestamp from object input', async () => {
+      transport.write({ msg: 'epoch record', time: 0 } as any);
+      await transport._flush();
+
+      expect(getSentLog().time).toBe(0);
+    });
+
+    it('should preserve a zero timestamp from JSON string input', async () => {
+      transport.write(JSON.stringify({ msg: 'epoch record', time: 0 }));
+      await transport._flush();
+
+      expect(getSentLog().time).toBe(0);
+    });
+
+    it('should add the current time when time is null', async () => {
+      transport.write(JSON.stringify({ msg: 'null time', time: null }));
+      await transport._flush();
+
+      expect(getSentLog().time).toBe(now);
+    });
+
+    it('should add the current time when time is missing', async () => {
+      transport.write(JSON.stringify({ msg: 'no time' }));
+      await transport._flush();
+
+      expect(getSentLog().time).toBe(now);
     });
   });
 });

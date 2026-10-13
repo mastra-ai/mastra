@@ -3067,7 +3067,10 @@ export class Workflow<
     actor,
     engine: _engine,
     bail: _bail,
-    ...rest
+    tracing,
+    tracingContext,
+    loggerVNext,
+    metrics,
   }: {
     runId?: string;
     resourceId?: string;
@@ -3104,7 +3107,7 @@ export class Workflow<
     perStep?: boolean;
     actor?: ActorSignal;
   } & Partial<ObservabilityContext>): Promise<TOutput | undefined> {
-    const observabilityContext = resolveObservabilityContext(rest);
+    const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
     this.__registerMastra(mastra);
 
     // FGA authorization check

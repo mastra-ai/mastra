@@ -54,7 +54,13 @@ import type { UntrackedRunLiveness } from './execution-fence';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationResult } from './preparation';
 import { recordRunSavedMessages } from './run-message-refs';
-import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
+import {
+  deleteRunRegistryEntry,
+  endRunSpansWithError,
+  ExtendedRunRegistry,
+  getRunRegistryEntry,
+  globalRunRegistry,
+} from './run-registry';
 import {
   createDurableAgentStream,
   createRunGenerationFilter,
@@ -1178,7 +1184,7 @@ export class DurableAgent<
       if (this.#runRegistry.get(runId) === registryEntry) {
         this.#runRegistry.cleanup(runId);
       }
-      if (globalRunRegistry.get(runId) === registryEntry) {
+      if (getRunRegistryEntry(runId, this.#mastra) === registryEntry) {
         globalRunRegistry.delete(runId);
       }
       if (settlement !== 'superseded') {
@@ -2076,7 +2082,7 @@ export class DurableAgent<
     workflowInput: DurableAgenticWorkflowInput,
   ): Promise<{ status?: string } | void> {
     const workflow = this.getWorkflow();
-    const entry = globalRunRegistry.get(runId);
+    const entry = getRunRegistryEntry(runId, this.#mastra);
     const requestContext = entry?.requestContext;
     // Captured now: a later resume() replaces the registry's fence.
     const executionFence = entry?.executionFence;
@@ -2120,7 +2126,7 @@ export class DurableAgent<
    * leaves a run that `resume()` rejects (#26435).
    */
   private async withSuspensionAfterPersist<T>(runId: string, execute: () => Promise<T>): Promise<T> {
-    const entry = this.suspendPersistedOnReturn ? globalRunRegistry.get(runId) : undefined;
+    const entry = this.suspendPersistedOnReturn ? getRunRegistryEntry(runId, this.#mastra) : undefined;
     if (!entry) return execute();
     const pending: Array<() => Promise<void>> = [];
     entry.pendingSuspensionEvents = pending;
@@ -2433,7 +2439,7 @@ export class DurableAgent<
   #isRunExecuting(runId: string): boolean {
     return (
       this.#runRegistry.get(runId) !== undefined ||
-      (globalRunRegistry.has(runId) && globalRunRegistry.get(runId) !== undefined) ||
+      getRunRegistryEntry(runId, this.#mastra) !== undefined ||
       agentThreadStreamRuntime.hasThreadRun(runId, this.getPubSub())
     );
   }
@@ -2446,9 +2452,7 @@ export class DurableAgent<
    * happens to know about the run.
    */
   #abortDurableRun(runId: string): void {
-    const controller = (
-      this.#runRegistry.get(runId) ?? (globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined)
-    )?.abortController;
+    const controller = (this.#runRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))?.abortController;
     if (controller && !controller.signal.aborted) {
       controller.abort(new Error('Aborted'));
     }
@@ -2697,7 +2701,7 @@ export class DurableAgent<
         if (this.#runRegistry.get(runId) === registryEntry) {
           this.#runRegistry.cleanup(runId);
         }
-        if (globalRunRegistry.has(runId) && globalRunRegistry.get(runId) === globalRegistryEntry) {
+        if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
           globalRunRegistry.delete(runId);
           if (!globalRegistryEntry.executionFence?.isLost()) this.#clearPubsubTopic(runId);
         }
@@ -2791,7 +2795,7 @@ export class DurableAgent<
               agentId: workflowInput.agentId,
               threadId,
               runId,
-              requestContext: globalRunRegistry.get(runId)?.requestContext,
+              requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
             });
           }
           let result: { status?: string } | void;
@@ -2810,7 +2814,7 @@ export class DurableAgent<
         })
         .catch(error => this.settleExecution(runId, executionFence, { error })),
     );
-    const trackedEntry = globalRunRegistry.get(runId);
+    const trackedEntry = getRunRegistryEntry(runId, this.#mastra);
     if (trackedEntry) {
       trackedEntry.workflowExecution = workflowExecution;
     }
@@ -3026,7 +3030,7 @@ export class DurableAgent<
     // engine would restore the previous segment's claim from the snapshot.
     resumeRequestContext ??= new RequestContext();
     entry.requestContext = resumeRequestContext;
-    const globalEntryForContext = globalRunRegistry.get(runId);
+    const globalEntryForContext = getRunRegistryEntry(runId, this.#mastra);
     if (globalEntryForContext) {
       globalEntryForContext.requestContext = resumeRequestContext;
     }
@@ -3076,10 +3080,51 @@ export class DurableAgent<
     // and event offset. The suspension chunk can arrive before the suspended
     // snapshot is persisted, and a late suspension event replayed into the new
     // segment would close it early.
-    const priorExecution = globalRunRegistry.get(runId)?.workflowExecution;
+    const priorExecution = getRunRegistryEntry(runId, this.#mastra)?.workflowExecution;
     await priorExecution?.catch(() => {
       /* errors already handled by the prior segment */
     });
+    // A warm resume reuses the tools built for the first request, which close
+    // over its request context and delegation hooks (#25960). Rebuild them for
+    // this call and swap in only entries still holding a request-built tool, so
+    // tools a processor added or replaced are kept. Cold resumes already
+    // rebuilt everything in prepare() above.
+    if (!coldSnapshot && (options?.requestContext || options?.delegation)) {
+      try {
+        const requestTools = await this.#wrappedAgent.getToolsForExecution({
+          toolsets: resolvedOptions.toolsets,
+          clientTools: resolvedOptions.clientTools,
+          threadId: memoryInfo?.threadId,
+          resourceId: memoryInfo?.resourceId,
+          runId,
+          requestContext: resumeRequestContext,
+          memoryConfig: resolvedOptions.memory?.options,
+          autoResumeSuspendedTools: resolvedOptions.autoResumeSuspendedTools,
+          delegation: resolvedOptions.delegation,
+          methodType: resolvedOptions.closeOnSuspend ? 'generate' : 'stream',
+          backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
+          backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
+          model: entry.model,
+        });
+        const refresh = (current: Record<string, CoreTool>, previous: Record<string, CoreTool> | undefined) => {
+          const next = { ...current };
+          for (const [name, tool] of Object.entries(requestTools)) {
+            // A name missing from current but present in previous was withheld by a processor.
+            const configured = name in current ? current[name] === previous?.[name] : !previous || !(name in previous);
+            if (configured) next[name] = tool;
+          }
+          return next;
+        };
+        for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
+          if (!reg) continue;
+          reg.tools = refresh(reg.tools ?? {}, reg.requestTools);
+          if (reg.baseTools) reg.baseTools = refresh(reg.baseTools, reg.requestTools);
+          reg.requestTools = requestTools;
+        }
+      } catch (error) {
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] resume(${runId}) tool resolution failed: ${error}`);
+      }
+    }
     // Claimed before the abort controller and timeout are replaced, so a
     // conflicting resume leaves the executing segment's state untouched.
     const executionFence = await this.#claimExecution(runId, 'acquire', resumeRequestContext);
@@ -3098,7 +3143,7 @@ export class DurableAgent<
       throw error;
     }
     setExecutionClaim(resumeRequestContext, runId, executionFence.claim);
-    for (const reg of [entry, globalRunRegistry.get(runId)]) {
+    for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {
       if (reg) reg.executionFence = executionFence;
     }
 
@@ -3131,7 +3176,7 @@ export class DurableAgent<
       entry.timeoutTotalMs = resumeTotalMs;
     }
     this.#installAbortWithTotalTimeout(entry, abortController);
-    const globalEntryForAbort = globalRunRegistry.get(runId);
+    const globalEntryForAbort = getRunRegistryEntry(runId, this.#mastra);
     if (globalEntryForAbort) {
       globalEntryForAbort.abortController = abortController;
       globalEntryForAbort.abortSignal = entry.abortSignal;
@@ -3169,7 +3214,7 @@ export class DurableAgent<
         if (this.#runRegistry.get(runId) === entry) {
           this.#runRegistry.cleanup(runId);
         }
-        if (globalRunRegistry.has(runId) && globalRunRegistry.get(runId) === globalEntryForAbort) {
+        if (getRunRegistryEntry(runId, this.#mastra) === globalEntryForAbort) {
           globalRunRegistry.delete(runId);
           if (!(globalEntryForAbort?.executionFence ?? executionFence).isLost()) this.#clearPubsubTopic(runId);
         }
@@ -3182,7 +3227,7 @@ export class DurableAgent<
       autoCleanupTimer = setTimeout(performCleanup, this.#cleanupTimeoutMs);
     };
 
-    const globalEntry = globalRunRegistry.get(runId);
+    const globalEntry = getRunRegistryEntry(runId, this.#mastra);
     const resumeModel = globalEntry?.model as any;
 
     // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
@@ -3225,7 +3270,7 @@ export class DurableAgent<
           metadata: { runId, resumed: true },
           requestContext: resolvedOptions.requestContext,
         });
-        for (const reg of [entry, globalRunRegistry.get(runId)]) {
+        for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {
           if (!reg) continue;
           reg.resumeAgentSpan = resumeAgentSpan;
           reg.resumeModelSpan = resumeModelSpan;
@@ -3360,7 +3405,7 @@ export class DurableAgent<
         })
         .catch(error => this.settleExecution(runId, executionFence, { error })),
     );
-    const trackedResumeEntry = globalRunRegistry.get(runId);
+    const trackedResumeEntry = getRunRegistryEntry(runId, this.#mastra);
     if (trackedResumeEntry) {
       trackedResumeEntry.workflowExecution = workflowExecution;
     }
@@ -3636,7 +3681,7 @@ export class DurableAgent<
       if (this.#runRegistry.get(runId) === registryEntry) {
         this.#runRegistry.cleanup(runId);
       }
-      if (globalRunRegistry.get(runId) === registryEntry) {
+      if (getRunRegistryEntry(runId, this.#mastra) === registryEntry) {
         globalRunRegistry.delete(runId);
         // The topic stays when the run's latest execution here (this one or a
         // later resume()) lost the run: whoever took it over writes to it.
@@ -3768,7 +3813,7 @@ export class DurableAgent<
         })
         .finally(releaseLocalRecovery),
     );
-    const trackedRecoverEntry = globalRunRegistry.get(runId);
+    const trackedRecoverEntry = getRunRegistryEntry(runId, this.#mastra);
     if (trackedRecoverEntry) {
       trackedRecoverEntry.workflowExecution = workflowExecution;
     }
@@ -3984,7 +4029,7 @@ export class DurableAgent<
       if (this.#runRegistry.get(runId) === registryEntry) {
         this.#runRegistry.cleanup(runId);
       }
-      if (globalRunRegistry.has(runId) && globalRunRegistry.get(runId) === globalRegistryEntry) {
+      if (getRunRegistryEntry(runId, this.#mastra) === globalRegistryEntry) {
         globalRunRegistry.delete(runId);
         if (!globalRegistryEntry.executionFence?.isLost()) this.#clearPubsubTopic(runId);
       }
@@ -4068,7 +4113,7 @@ export class DurableAgent<
               agentId: workflowInput.agentId,
               threadId,
               runId,
-              requestContext: globalRunRegistry.get(runId)?.requestContext,
+              requestContext: getRunRegistryEntry(runId, this.#mastra)?.requestContext,
             });
           }
           try {
@@ -4079,7 +4124,7 @@ export class DurableAgent<
         })
         .catch(error => this.settleExecution(runId, executionFence, { error })),
     );
-    const trackedEntry = globalRunRegistry.get(runId);
+    const trackedEntry = getRunRegistryEntry(runId, this.#mastra);
     if (trackedEntry) {
       trackedEntry.workflowExecution = workflowExecution;
     }
@@ -4114,7 +4159,7 @@ export class DurableAgent<
       // own persistence guarantee here; their `executeWorkflow` promise may
       // resolve before the snapshot lands.
       if (suspended) {
-        await globalRunRegistry.get(runId)?.workflowExecution;
+        await getRunRegistryEntry(runId, this.#mastra)?.workflowExecution;
       }
       // Fall back to the stream-level runId if MastraModelOutput.runId wasn't
       // populated (no chunk surfaced before suspend).
@@ -4159,7 +4204,7 @@ export class DurableAgent<
       }
       suspended = fullOutput.finishReason === 'suspended';
       if (suspended) {
-        await globalRunRegistry.get(result.runId)?.workflowExecution;
+        await getRunRegistryEntry(result.runId, this.#mastra)?.workflowExecution;
       }
       if (!fullOutput.runId) {
         (fullOutput as { runId?: string }).runId = result.runId;
@@ -4402,7 +4447,7 @@ export class DurableAgent<
         started = true;
         releaseAfterTerminal = cleanup;
         try {
-          const workflowExecution = globalRunRegistry.get(targetRunId)?.workflowExecution;
+          const workflowExecution = getRunRegistryEntry(targetRunId, this.#mastra)?.workflowExecution;
           if (workflowExecution) {
             await workflowExecution;
           }
@@ -4595,7 +4640,7 @@ export class DurableAgent<
 
       streamCleanup?.();
       this.#runRegistry.cleanup(runId);
-      globalRunRegistry.delete(runId);
+      deleteRunRegistryEntry(runId, this.#mastra);
       this.#clearPubsubTopic(runId);
       cleanedUp = true;
     };
@@ -4615,7 +4660,7 @@ export class DurableAgent<
       }
     };
 
-    const observedEntry = globalRunRegistry.get(runId) ?? this.#runRegistry.get(runId);
+    const observedEntry = getRunRegistryEntry(runId, this.#mastra) ?? this.#runRegistry.get(runId);
     const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
     let structuredOutput = observedEntry?.structuredOutput;
 
@@ -4699,7 +4744,7 @@ export class DurableAgent<
       processorStates: this.#runRegistry.get(runId)?.processorStates,
       returnScorerData: this.#runRegistry.get(runId)?.returnScorerData,
       tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
-      messageList: globalRunRegistry.get(runId)?.messageList ?? this.#runRegistry.getMessageList(runId),
+      messageList: getRunRegistryEntry(runId, this.#mastra)?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
     const { output, ready, detach } = stream;
     streamCleanup = stream.cleanup;
@@ -4757,7 +4802,7 @@ export class DurableAgent<
     // exists precisely to watch runs this process did not start.
     const abort = async (reason?: unknown) => {
       abortPending = !terminalCompleted;
-      const controller = (globalRunRegistry.get(runId) ?? this.#runRegistry.get(runId))?.abortController;
+      const controller = (getRunRegistryEntry(runId, this.#mastra) ?? this.#runRegistry.get(runId))?.abortController;
       if (controller && !controller.signal.aborted) {
         controller.abort(reason);
       }

@@ -12,6 +12,7 @@ import {
   checkRouteFGA,
   getFGAProvider,
   getCustomHTTPExceptionResponse,
+  isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -347,6 +348,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const result: Record<string, unknown> = {};
 
     for (const [key, value] of formData.entries()) {
+      if (!isSafeObjectKey(key)) {
+        continue;
+      }
       if (value instanceof File) {
         const arrayBuffer = await value.arrayBuffer();
         result[key] = Buffer.from(arrayBuffer);
