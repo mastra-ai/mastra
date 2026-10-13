@@ -1,4 +1,5 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
+import type { StoredAgent } from '@mastra/react/hooks/agents';
 import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { ConversationPanelProvider } from '../components/agent-edit/conversation-panel';
@@ -7,7 +8,6 @@ import type { useBuilderAgentFeatures } from '../hooks/use-builder-agent-feature
 import { useBuilderAgentFeatures as useFeatures } from '../hooks/use-builder-agent-features';
 import type { AgentTool } from '../types/agent-tool';
 import { useAgentPrimitives } from './agent-primitives-context';
-import type { StoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 
 type Features = ReturnType<typeof useBuilderAgentFeatures>;
 

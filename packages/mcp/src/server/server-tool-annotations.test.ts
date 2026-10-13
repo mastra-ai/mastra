@@ -44,6 +44,13 @@ describe('MCPServer Tool Annotations (Issue #9859)', () => {
           mcp: { annotations, _meta: { ui: { resourceUri: 'ui://widget' } } },
           execute: async () => 'ok',
         }),
+        titledTool: createTool({
+          id: 'titled-tool',
+          title: 'Weather Lookup',
+          description: 'A tool with a display title',
+          inputSchema: z.object({ city: z.string() }),
+          execute: async ({ city }) => ({ city }),
+        }),
       },
     });
     served = await serveHTTP(server);
@@ -72,5 +79,12 @@ describe('MCPServer Tool Annotations (Issue #9859)', () => {
       ui: { resourceUri: 'ui://widget' },
       'ui/resourceUri': 'ui://widget',
     });
+  });
+
+  it('publishes the tool title and leaves annotation-only tools without one', () => {
+    expect(tools.find(t => t.name === 'titledTool')?.title).toBe('Weather Lookup');
+    const annotatedTool = tools.find(t => t.name === 'annotatedTool')!;
+    expect(annotatedTool.title).toBeUndefined();
+    expect(annotatedTool.annotations?.title).toBe('Annotated Query Tool');
   });
 });

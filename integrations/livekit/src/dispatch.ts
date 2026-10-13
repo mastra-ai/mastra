@@ -2,13 +2,20 @@ import { AgentDispatchClient } from 'livekit-server-sdk';
 import { DEFAULT_LIVEKIT_AGENT_NAME } from './constants';
 import { serializeSessionMetadata } from './metadata';
 import type { LiveKitSessionMetadata } from './metadata';
+import { createRecordingRoom } from './recording';
+import type { LiveKitRecordingOptions } from './recording';
 
 export interface DispatchVoiceSessionOptions {
-  /** Room to dispatch the agent into (created on demand). */
+  /**
+   * Room to dispatch the agent into (created on demand). With recording enabled, use a unique
+   * name for each call. An existing room throws LiveKitRecordingRoomConflictError.
+   */
   roomName: string;
   /** Must match the worker's `agentName`. Defaults to `'mastra-voice'`. */
   agentName?: string;
   metadata?: LiveKitSessionMetadata;
+  /** Create a fresh room with automatic recording before dispatch. Omit to keep dispatch-only behavior. */
+  recording?: LiveKitRecordingOptions;
   /** Defaults to `LIVEKIT_URL`. */
   serverUrl?: string;
   /** Defaults to `LIVEKIT_API_KEY`. */
@@ -37,8 +44,18 @@ export async function dispatchVoiceSession(options: DispatchVoiceSessionOptions)
       '@mastra/livekit: set LIVEKIT_API_KEY and LIVEKIT_API_SECRET or pass apiKey/apiSecret to dispatchVoiceSession.',
     );
   }
+  const metadata = serializeSessionMetadata(options.metadata ?? {});
+  if (options.recording !== undefined) {
+    await createRecordingRoom({
+      roomName: options.roomName,
+      serverUrl,
+      apiKey,
+      apiSecret,
+      recording: options.recording,
+    });
+  }
   const client = new AgentDispatchClient(toHttpUrl(serverUrl), apiKey, apiSecret);
   return client.createDispatch(options.roomName, options.agentName ?? DEFAULT_LIVEKIT_AGENT_NAME, {
-    metadata: serializeSessionMetadata(options.metadata ?? {}),
+    metadata,
   });
 }

@@ -281,6 +281,28 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('should copy the tool title from the tools map onto a call part', () => {
+    const result = parts(
+      [{ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'search', args: { q: 'test' } } }],
+      { search: { title: 'Search the web' } },
+    );
+    expect(result[0]).toMatchObject({ type: 'tool-invocation', title: 'Search the web' });
+  });
+
+  it('should keep the tool title on a merged call + result part', () => {
+    const result = parts(
+      [
+        { type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'search', args: { q: 'test' } } },
+        {
+          type: 'tool-result',
+          payload: { toolCallId: 'tc1', toolName: 'search', args: { q: 'test' }, result: { hits: 1 } },
+        },
+      ],
+      { search: { title: 'Search the web' } },
+    );
+    expect(result[0]).toMatchObject({ title: 'Search the web', toolInvocation: { state: 'result' } });
+  });
+
   it('should preserve both call and result itemIds when a Responses provider assigns each side its own id', () => {
     // OpenAI hosted tool_search (Responses API) emits a tool-call chunk carrying
     // the call item id (tsc_…) and a tool-result chunk carrying the output item
@@ -362,6 +384,86 @@ describe('buildMessagesFromChunks', () => {
     ]);
     expect(result).toHaveLength(1);
     expect((result[0] as any).providerMetadata).toBeUndefined();
+  });
+
+  it('should keep providerExecuted from the tool-call chunk when the result chunk omits it (Google server tool shape)', () => {
+    const providerMetadata = {
+      google: { serverToolCallId: 'call_962734', serverToolType: 'GOOGLE_SEARCH_WEB' },
+    };
+    const result = parts(
+      [
+        {
+          type: 'tool-call',
+          payload: {
+            toolCallId: 'call_962734',
+            toolName: 'server:GOOGLE_SEARCH_WEB',
+            args: { queries: ['test'] },
+            providerExecuted: true,
+            providerMetadata,
+          },
+        },
+        {
+          type: 'tool-result',
+          payload: {
+            toolCallId: 'call_962734',
+            toolName: 'server:GOOGLE_SEARCH_WEB',
+            result: { searchResults: [] },
+            providerMetadata,
+          },
+        },
+      ],
+      { google_search: { type: 'provider-defined', id: 'google.google_search', name: 'google_search' } },
+    );
+    expect(result).toHaveLength(1);
+    expect((result[0] as any).toolInvocation.state).toBe('result');
+    expect((result[0] as any).providerExecuted).toBe(true);
+  });
+
+  describe('provider-executed tool-result with isError (#26526)', () => {
+    const toolSearchError = { type: 'tool_search_tool_result_error', errorCode: 'invalid_tool_input' };
+    const chunks = (isError?: boolean): CollectedChunk[] => [
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'srvtoolu_1',
+          toolName: 'tool_search_tool_regex',
+          args: { pattern: '(' },
+          providerExecuted: true,
+        },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'srvtoolu_1',
+          toolName: 'tool_search_tool_regex',
+          result: toolSearchError,
+          providerExecuted: true,
+          ...(isError === undefined ? {} : { isError }),
+        },
+      },
+    ];
+
+    it('should merge into an output-error part keeping the structured error', () => {
+      const result = parts(chunks(true));
+      expect(result).toHaveLength(1);
+      expect(result[0]).toMatchObject({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'output-error',
+          toolCallId: 'srvtoolu_1',
+          toolName: 'tool_search_tool_regex',
+          result: toolSearchError,
+          errorText: JSON.stringify(toolSearchError),
+        },
+        providerExecuted: true,
+      });
+    });
+
+    it('should keep state result when isError is not set', () => {
+      const result = parts(chunks());
+      expect((result[0] as any).toolInvocation.state).toBe('result');
+      expect((result[0] as any).toolInvocation.errorText).toBeUndefined();
+    });
   });
 
   it('should merge tool-call + tool-error into a single output-error part', () => {

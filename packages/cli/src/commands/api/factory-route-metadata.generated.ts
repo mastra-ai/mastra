@@ -206,6 +206,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "autoRunEnabled",
       "defaultModelId",
       "description",
+      "modelScope",
       "name",
       "slackWorkItemsEnabled"
     ],
@@ -252,6 +253,22 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "hasQuery": false,
     "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /web/factory/projects/:id/apply-default-model": {
+    "contractKey": "projectApplyDefaultModel",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/apply-default-model",
+    "description": "Apply the Factory default model to running work and review threads",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }
@@ -1085,14 +1102,17 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "defaultModelId": {
           "$ref": "#/$defs/__schema2"
         },
-        "slackWorkItemsEnabled": {
+        "modelScope": {
           "$ref": "#/$defs/__schema3"
         },
-        "autoRunEnabled": {
+        "slackWorkItemsEnabled": {
           "$ref": "#/$defs/__schema4"
         },
-        "autoApprovePlans": {
+        "autoRunEnabled": {
           "$ref": "#/$defs/__schema5"
+        },
+        "autoApprovePlans": {
+          "$ref": "#/$defs/__schema6"
         }
       },
       "$defs": {
@@ -1124,12 +1144,19 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema3": {
-          "type": "boolean"
+          "type": "string",
+          "enum": [
+            "factory",
+            "user"
+          ]
         },
         "__schema4": {
           "type": "boolean"
         },
         "__schema5": {
+          "type": "boolean"
+        },
+        "__schema6": {
           "type": "boolean"
         }
       }
@@ -1341,6 +1368,67 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "project"
+      ]
+    }
+  },
+  "POST /web/factory/projects/:id/apply-default-model": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "modelId": {
+          "type": "string"
+        },
+        "applied": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "skipped": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "threadId": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "enum": [
+                  "not-running",
+                  "work-item-missing",
+                  "stage-inactive",
+                  "thread-missing",
+                  "mode-unknown",
+                  "apply-failed"
+                ]
+              }
+            },
+            "required": [
+              "threadId",
+              "reason"
+            ]
+          }
+        }
+      },
+      "required": [
+        "modelId",
+        "applied",
+        "skipped"
       ]
     }
   },
@@ -2272,6 +2360,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "projectUpdate": "PATCH /web/factory/projects/:id",
   "workItemUpdate": "PATCH /web/factory/work-items/:id",
   "projectCreate": "POST /web/factory/projects",
+  "projectApplyDefaultModel": "POST /web/factory/projects/:id/apply-default-model",
   "attentionArchive": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/archive",
   "attentionRead": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/read",
   "attentionRestore": "POST /web/factory/projects/:id/attention/:kind/:sourceId/:occurrence/restore",

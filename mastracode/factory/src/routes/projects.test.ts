@@ -11,6 +11,7 @@ const projectRoutes = (
   versionControlIntegrationIds?: string[],
   sessionRetirement?: ConstructorParameters<typeof ProjectRoutes>[0]['sessionRetirement'],
   resolveRepository?: ConstructorParameters<typeof ProjectRoutes>[0]['resolveRepository'],
+  overrides?: Partial<ConstructorParameters<typeof ProjectRoutes>[0]>,
 ) =>
   new ProjectRoutes({
     auth: fakeRouteAuth(),
@@ -19,6 +20,7 @@ const projectRoutes = (
     versionControlIntegrationIds,
     sessionRetirement,
     resolveRepository,
+    ...overrides,
   }).routes();
 
 describe('ProjectRoutes', () => {
@@ -38,11 +40,12 @@ describe('ProjectRoutes', () => {
     });
     expect(createdResponse.status).toBe(201);
     const created = (await createdResponse.json()) as {
-      project: { id: string; name: string; description: string; slackWorkItemsEnabled: boolean };
+      project: { id: string; name: string; description: string; modelScope: string; slackWorkItemsEnabled: boolean };
     };
     expect(created.project).toMatchObject({
       name: 'Platform',
       description: 'Core services',
+      modelScope: 'factory',
       slackWorkItemsEnabled: false,
     });
 
@@ -53,11 +56,16 @@ describe('ProjectRoutes', () => {
     const updatedResponse = await app.request(`/web/factory/projects/${created.project.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'Platform engineering', description: null, slackWorkItemsEnabled: true }),
+      body: JSON.stringify({
+        name: 'Platform engineering',
+        description: null,
+        modelScope: 'user',
+        slackWorkItemsEnabled: true,
+      }),
     });
     expect(updatedResponse.status).toBe(200);
     expect((await updatedResponse.json()) as unknown).toMatchObject({
-      project: { name: 'Platform engineering', description: null, slackWorkItemsEnabled: true },
+      project: { name: 'Platform engineering', description: null, modelScope: 'user', slackWorkItemsEnabled: true },
     });
 
     expect((await app.request(`/web/factory/projects/${created.project.id}`, { method: 'DELETE' })).status).toBe(204);
@@ -79,10 +87,171 @@ describe('ProjectRoutes', () => {
 
     expect((await buildApp().request('/web/factory/projects')).status).toBe(401);
     expect((await buildApp({ workosId: 'user-1' }).request('/web/factory/projects')).status).toBe(403);
+    const otherOrg = buildApp({ workosId: 'user-2', organizationId: 'org-2' });
+    expect((await otherOrg.request(`/web/factory/projects/${project.id}`)).status).toBe(404);
     expect(
-      (await buildApp({ workosId: 'user-2', organizationId: 'org-2' }).request(`/web/factory/projects/${project.id}`))
-        .status,
+      (
+        await otherOrg.request(`/web/factory/projects/${project.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ modelScope: 'factory' }),
+        })
+      ).status,
     ).toBe(404);
+  });
+
+  describe('apply default model', () => {
+    const mount = (
+      seed: FactoryStorageTestSeed,
+      overrides?: Partial<ConstructorParameters<typeof ProjectRoutes>[0]>,
+      user: { workosId: string; organizationId?: string } | null = {
+        workosId: 'user-1',
+        organizationId: 'org-1',
+      },
+    ) => {
+      const app = new Hono();
+      app.use('*', async (context, next) => {
+        if (user) context.set('factoryAuthUser' as never, user as never);
+        await next();
+      });
+      mountApiRoutes(app as never, projectRoutes(seed, undefined, undefined, undefined, overrides));
+      return app;
+    };
+
+    it('requires project access and a configured default model', async () => {
+      const seed = await createFactoryStorageForTests();
+      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+      const path = `/web/factory/projects/${project.id}/apply-default-model`;
+
+      expect((await mount(seed, undefined, null).request(path, { method: 'POST' })).status).toBe(401);
+      expect(
+        (
+          await mount(seed, undefined, { workosId: 'user-2', organizationId: 'org-2' }).request(path, {
+            method: 'POST',
+          })
+        ).status,
+      ).toBe(404);
+
+      const forbidden = await mount(seed, {
+        auth: fakeRouteAuth({ isOrganizationAdmin: async () => false }),
+      }).request(path, { method: 'POST' });
+      expect(forbidden.status).toBe(403);
+      expect(await forbidden.json()).toEqual({
+        error: 'forbidden',
+        message: 'Organization administrator access is required to update running sessions.',
+      });
+
+      const response = await mount(seed).request(path, { method: 'POST' });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({
+        error: 'default_model_not_set',
+        message: 'Set a default model on the project first.',
+      });
+    });
+
+    it('applies the default to running bound threads and reports precise skip reasons', async () => {
+      const seed = await createFactoryStorageForTests();
+      const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+      await seed.projects.update({
+        orgId: 'org-1',
+        id: project.id,
+        input: { defaultModelId: 'anthropic/claude-opus-4-6' },
+      });
+      const now = new Date();
+      const binding = (threadId: string, workItemId: string, resourceId: string) => ({
+        id: `binding-${threadId}`,
+        orgId: 'org-1',
+        factoryProjectId: project.id,
+        workItemId,
+        role: 'work',
+        threadId,
+        resourceId,
+        sessionId: `session-${threadId}`,
+        branch: `factory/${threadId}`,
+        status: 'active' as const,
+        createdAt: now,
+        revokedAt: null,
+      });
+      const bindings = [
+        binding('thread-applied', 'item-applied', 'resource-applied'),
+        binding('thread-applied', 'item-applied', 'resource-applied'),
+        binding('thread-no-item', 'item-missing', 'resource-no-item'),
+        binding('thread-inactive', 'item-inactive', 'resource-inactive'),
+        binding('thread-not-running', 'item-not-running', 'resource-not-running'),
+        binding('thread-missing', 'item-thread-missing', 'resource-thread-missing'),
+        binding('thread-mode-unknown', 'item-mode-unknown', 'resource-mode-unknown'),
+        binding('thread-apply-failed', 'item-apply-failed', 'resource-apply-failed'),
+      ];
+      const item = (id: string, stages = ['execute']) => ({ id, factoryProjectId: project.id, stages });
+      const items = new Map([
+        ['item-applied', item('item-applied')],
+        ['item-inactive', item('item-inactive', ['done'])],
+        ['item-not-running', item('item-not-running')],
+        ['item-thread-missing', item('item-thread-missing')],
+        ['item-mode-unknown', item('item-mode-unknown')],
+        ['item-apply-failed', item('item-apply-failed')],
+      ]);
+      const setSettingOn = vi.fn().mockResolvedValue(undefined);
+      const failingSetSettingOn = vi.fn().mockRejectedValue(new Error('write failed'));
+      const sessions = new Map([
+        [
+          'resource-applied',
+          {
+            thread: {
+              getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
+              setSettingOn,
+            },
+          },
+        ],
+        ['resource-thread-missing', { thread: { getById: vi.fn().mockResolvedValue(null), setSettingOn } }],
+        ['resource-mode-unknown', { thread: { getById: vi.fn().mockResolvedValue({ metadata: {} }), setSettingOn } }],
+        [
+          'resource-apply-failed',
+          {
+            thread: {
+              getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
+              setSettingOn: failingSetSettingOn,
+            },
+          },
+        ],
+      ]);
+      const workItems = {
+        listRunBindings: vi.fn().mockResolvedValue(bindings),
+        get: vi.fn(async ({ id }: { id: string }) => items.get(id) ?? null),
+      } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
+      const controller = {
+        getSessionByResource: vi.fn(async (resourceId: string) => sessions.get(resourceId) ?? null),
+      } as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
+
+      const response = await mount(seed, { workItems, controller }).request(
+        `/web/factory/projects/${project.id}/apply-default-model`,
+        { method: 'POST' },
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({
+        modelId: 'anthropic/claude-opus-4-6',
+        applied: ['thread-applied', 'thread-mode-unknown'],
+        skipped: [
+          { threadId: 'thread-no-item', reason: 'work-item-missing' },
+          { threadId: 'thread-inactive', reason: 'stage-inactive' },
+          { threadId: 'thread-not-running', reason: 'not-running' },
+          { threadId: 'thread-missing', reason: 'thread-missing' },
+          { threadId: 'thread-apply-failed', reason: 'apply-failed' },
+        ],
+      });
+      expect(setSettingOn).toHaveBeenCalledTimes(2);
+      expect(setSettingOn).toHaveBeenNthCalledWith(1, {
+        threadId: 'thread-applied',
+        key: 'currentModelId',
+        value: 'anthropic/claude-opus-4-6',
+      });
+      expect(setSettingOn).toHaveBeenNthCalledWith(2, {
+        threadId: 'thread-mode-unknown',
+        key: 'currentModelId',
+        value: 'anthropic/claude-opus-4-6',
+      });
+    });
   });
 
   it('retires active repository sessions before destructive project deletion', async () => {
@@ -303,6 +472,7 @@ describe('ProjectRoutes', () => {
     expect(resolveRepository).toHaveBeenCalledWith({
       integrationId: 'github',
       orgId: 'org-1',
+      userId: 'user-1',
       installationId: githubInstallation.id,
       externalId: 'repo-1',
       slug: 'acme/api',
@@ -422,6 +592,66 @@ describe('ProjectRoutes', () => {
   // because projects.ts iterates connections.list (which does not filter by
   // installation existence) and then calls projectRepositories.list, which
   // calls requireConnection, which throws when the installation is gone.
+  it.each([
+    ['notifies the repository-linked hook', () => undefined],
+    [
+      'still links when the repository-linked hook throws',
+      () => {
+        throw new Error('backlog import unavailable');
+      },
+    ],
+  ])('%s', async (_name, behavior) => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const github = seed.sourceControl.forIntegration('github');
+    const installation = await github.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: 'gh-1',
+      accountName: 'acme',
+    });
+    const repository = await github.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: 'repo-1', slug: 'acme/api', defaultBranch: 'main' },
+    });
+    const onProjectRepositoryLinked = vi.fn(behavior);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed, ['github'], undefined, undefined, { onProjectRepositoryLinked }));
+    const connectResponse = await app.request(`/web/factory/projects/${project.id}/source-control-connections`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ integrationId: 'github', installationId: installation.id }),
+    });
+    const { connection } = (await connectResponse.json()) as { connection: { id: string } };
+
+    const linkResponse = await app.request(
+      `/web/factory/projects/${project.id}/source-control-connections/${connection.id}/repositories`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          repositoryId: repository.id,
+          branch: 'main',
+          sandboxProvider: 'local',
+          sandboxWorkdir: '/workspace/acme/api',
+        }),
+      },
+    );
+
+    expect(linkResponse.status).toBe(201);
+    expect(onProjectRepositoryLinked).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      projectRepository: expect.objectContaining({ repositoryId: repository.id, connectionId: connection.id }),
+    });
+    warn.mockRestore();
+  });
+
   it('does not 500 when a linked GitHub installation was pruned (uninstalled)', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
@@ -528,5 +758,13 @@ describe('ProjectRoutes', () => {
         })
       ).status,
     ).toBe(400);
+
+    const invalidScope = await app.request(`/web/factory/projects/${project.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ modelScope: 'org' }),
+    });
+    expect(invalidScope.status).toBe(400);
+    expect(await invalidScope.json()).toEqual({ error: 'invalid_project' });
   });
 });

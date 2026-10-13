@@ -1,3 +1,8 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+import { getMaintenanceLockOwner, getMaintenanceLockPath } from '@mastra/code-sdk/utils/maintenance-lock';
 import type { StorageMaintenance } from '@mastra/code-sdk/utils/storage-maintenance';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -30,8 +35,12 @@ function createCtx(maintenance?: Partial<StorageMaintenance> | null) {
 describe('handlePruneCommand', () => {
   let exitSpy: ReturnType<typeof vi.spyOn>;
   let logSpy: ReturnType<typeof vi.spyOn>;
+  let appDir: string;
+  const savedAppDir = process.env.MASTRA_APP_DATA_DIR;
 
   beforeEach(() => {
+    appDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-tui-prune-'));
+    process.env.MASTRA_APP_DATA_DIR = appDir;
     exitSpy = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
     logSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
   });
@@ -39,6 +48,51 @@ describe('handlePruneCommand', () => {
   afterEach(() => {
     exitSpy.mockRestore();
     logSpy.mockRestore();
+    if (savedAppDir === undefined) delete process.env.MASTRA_APP_DATA_DIR;
+    else process.env.MASTRA_APP_DATA_DIR = savedAppDir;
+    fs.rmSync(appDir, { recursive: true, force: true });
+  });
+
+  it('refuses while another session is live and stays in the TUI', async () => {
+    // The parent process (the test runner) stands in for another open session.
+    const sessions = path.join(appDir, 'locks', 'sessions');
+    fs.mkdirSync(sessions, { recursive: true });
+    fs.writeFileSync(path.join(sessions, `${process.ppid}.pid`), String(process.ppid));
+    const ctx = createCtx();
+
+    await handlePruneCommand(ctx, ['vacuum']);
+
+    expect(ctx.showError).toHaveBeenCalledWith(expect.stringContaining(String(process.ppid)));
+    expect(ctx.state.options.storageMaintenance.prune).not.toHaveBeenCalled();
+    expect(ctx.stop).not.toHaveBeenCalled();
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(fs.existsSync(getMaintenanceLockPath())).toBe(false);
+  });
+
+  it('holds the maintenance lock while maintenance runs and releases it after', async () => {
+    let ownerDuringPrune: number | null = null;
+    const ctx = createCtx({
+      prune: vi.fn(async () => {
+        ownerDuringPrune = getMaintenanceLockOwner();
+        return [];
+      }),
+    });
+
+    await handlePruneCommand(ctx);
+
+    expect(ownerDuringPrune).toBe(process.pid);
+    expect(fs.existsSync(getMaintenanceLockPath())).toBe(false);
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('releases the maintenance lock when maintenance throws', async () => {
+    const ctx = createCtx({ prune: vi.fn().mockRejectedValue(new Error('boom')) });
+
+    await handlePruneCommand(ctx);
+
+    expect(loggedOutput()).toContain('Storage maintenance failed: boom');
+    expect(fs.existsSync(getMaintenanceLockPath())).toBe(false);
+    expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
   function loggedOutput(): string {

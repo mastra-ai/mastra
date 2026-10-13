@@ -335,3 +335,30 @@ describe('generateTableSQL REPLICA IDENTITY', () => {
     expect(sql).toContain('custom_schema');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Schema names that are only valid when quoted (e.g. "my-tenant")
+// ---------------------------------------------------------------------------
+describe('generateTableSQL with a schema name that needs quoting', () => {
+  it('quotes the schema and builds constraint names from a sanitized prefix', () => {
+    const sql = generateTableSQL({
+      tableName: TABLE_WORKFLOW_SNAPSHOT,
+      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+      schemaName: 'my-tenant',
+    });
+    expect(sql).toContain('"my-tenant"."mastra_workflow_snapshot"');
+    expect(sql).toContain("nspname = 'my-tenant'");
+    expect(sql).toContain('ADD CONSTRAINT my_tenant_mastra_workflow_snapshot_workflow_name_run_id_key');
+    expect(sql).not.toMatch(/ADD CONSTRAINT my-tenant/);
+  });
+
+  it('rejects a schema name containing a quote', () => {
+    expect(() =>
+      generateTableSQL({
+        tableName: TABLE_WORKFLOW_SNAPSHOT,
+        schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
+        schemaName: 'bad"name',
+      }),
+    ).toThrow(/Invalid schema name/);
+  });
+});

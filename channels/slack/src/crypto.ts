@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual, createCipheriv, createDecipheriv, randomBytes, hkdfSync } from 'node:crypto';
+import { createHmac, timingSafeEqual, createCipheriv, createDecipheriv, hkdfSync } from 'node:crypto';
 
 /**
  * Verify a Slack request signature.
@@ -61,9 +61,9 @@ const ALGO_PREFIX = 'aes-256-gcm-hkdf';
  * Returns: `aes-256-gcm-hkdf:base64(salt):base64(iv):base64(authTag):base64(ciphertext)`
  */
 export function encrypt(plaintext: string, key: string): string {
-  const salt = randomBytes(16);
+  const salt = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(16)));
   const derived = Buffer.from(hkdfSync('sha256', key, salt, 'mastra-slack-encryption', 32));
-  const iv = randomBytes(12);
+  const iv = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(12)));
   const cipher = createCipheriv('aes-256-gcm', derived, iv);
 
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);

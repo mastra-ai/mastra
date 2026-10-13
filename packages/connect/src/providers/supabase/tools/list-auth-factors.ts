@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 56c9369bd7c6 — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -17,8 +17,8 @@ const ProviderFactorSchema = z.object({
   id: z.string(),
   user_id: z.string(),
   friendly_name: z.string().nullable().optional(),
-  factor_type: z.enum(['totp', 'phone']).optional(),
-  status: z.enum(['verified', 'unverified']).optional(),
+  factor_type: z.enum(['totp', 'phone']).or(z.string()).optional(),
+  status: z.enum(['verified', 'unverified']).or(z.string()).optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
 });
@@ -27,8 +27,8 @@ const FactorSchema = z.object({
   id: z.string(),
   user_id: z.string(),
   friendly_name: z.string().optional(),
-  factor_type: z.enum(['totp', 'phone']).optional(),
-  status: z.enum(['verified', 'unverified']).optional(),
+  factor_type: z.enum(['totp', 'phone']).or(z.string()).optional(),
+  status: z.enum(['verified', 'unverified']).or(z.string()).optional(),
   created_at: z.string().optional(),
   updated_at: z.string().optional(),
 });

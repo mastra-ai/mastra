@@ -27,7 +27,45 @@ export const TEMPLATE_SHA = 'bb789a55bfcf744b3c83aa9132e4ffa562106aa3';
  * Remove an entry once its templates land in NangoHQ/integration-templates
  * and regenerate the provider from the upstream pin.
  */
+/**
+ * NangoHQ/integration-templates#677 adds agent-focused actions across eight
+ * integrations (posthog run-query, attio list-attributes, stripe reads,
+ * github tags/tree, slack invite-shared, twitter-v2 search/following,
+ * hubspot submit-form). The pinned commit is that PR's head — upstream main
+ * plus the change — which GitHub serves directly from the upstream
+ * repository, so providers that only need upstream templates share the same
+ * pin for a consistent generation source. Move these providers back to
+ * `TEMPLATE_SHA` once #677 merges.
+ */
+const PIN_677: TemplatePin = {
+  repo: 'NangoHQ/integration-templates',
+  sha: 'c3091db1e8a623113d581197a8ee0d5b1aa87136',
+};
+
+/**
+ * NangoHQ/integration-templates#708 (merged) fixes linear attachment tools
+ * rejecting null creator emails, surfaces GraphQL errors[] in linear
+ * cycle/project actions (including partial `data: { field: null }` responses),
+ * and accepts fireflies action_items as either an array or a newline-joined
+ * string. Pinned to upstream main at the merge commit; fold back into
+ * TEMPLATE_SHA on the next workspace-wide refresh.
+ */
+const PIN_708: TemplatePin = {
+  repo: 'NangoHQ/integration-templates',
+  sha: '4e61bff484f0ab28810e3f252be8bff1f49928a9',
+};
+
 export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
+  // NangoHQ/integration-templates#670 fixed clerk_list_users and
+  // clerk_list_sessions, which previously parsed Clerk's bare-array
+  // responses with an envelope schema and 500'd on every call. Pinned to
+  // upstream main at the merge commit so we pick up the fix without
+  // regenerating every other provider. Fold back into TEMPLATE_SHA on the
+  // next workspace-wide refresh.
+  clerk: {
+    repo: 'NangoHQ/integration-templates',
+    sha: '23df553a789b6e30ba1640d4605cf5bfa7ca7cae',
+  },
   // NangoHQ/integration-templates#667
   resend: {
     repo: 'rhysbalevicius/integration-templates',
@@ -38,6 +76,25 @@ export const TEMPLATE_PIN_OVERRIDES: Readonly<Record<string, TemplatePin>> = {
     repo: 'rhysbalevicius/integration-templates',
     sha: 'c4fb0d5d5b2c677f794d836a470013da46c347a2',
   },
+  // NangoHQ/integration-templates#708 — linear: nullable attachment creator
+  // emails and GraphQL errors[] surfaced in cycle/project actions; fireflies:
+  // action_items accepted as array or newline-joined string. The pinned
+  // commit is that PR's head (upstream main plus the fix), served directly by
+  // the upstream repository. Linear also picks up the #704 create-cycle and
+  // archive-cycle fixes by moving off TEMPLATE_SHA. Fold both back into
+  // TEMPLATE_SHA once #708 merges.
+  linear: PIN_708,
+  fireflies: PIN_708,
+  // NangoHQ/integration-templates#677
+  slack: PIN_677,
+  github: PIN_677,
+  posthog: PIN_677,
+  stripe: PIN_677,
+  'twitter-v2': PIN_677,
+  hubspot: PIN_677,
+  discord: PIN_677,
+  'google-mail': PIN_677,
+  'google-calendar': PIN_677,
 };
 
 /** Resolves the template pin for a provider, falling back to the shared upstream pin. */

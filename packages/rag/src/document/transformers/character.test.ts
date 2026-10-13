@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { Language } from '../types';
+
 import { CharacterTransformer, RecursiveCharacterTransformer } from './character';
 
 const utf8Length = (text: string) => new TextEncoder().encode(text).length;
@@ -163,5 +165,88 @@ describe('separatorPosition: start', () => {
     });
 
     expect(transformer.splitText({ text: 'hello,,world,' })).toEqual(['hello,', ',', 'world,']);
+  });
+});
+
+describe('regex separators are rejoined with the matched text', () => {
+  it('keeps markdown headers intact when merging', async () => {
+    const { MarkdownTransformer } = await import('./markdown');
+    const text = '# Title\n\nIntro.\n\n## Install\n\nRun it.\n\n### Notes\n\nSome notes.';
+    const chunks = new MarkdownTransformer({ maxSize: 1000, overlap: 0 }).splitText({ text });
+    expect(chunks).toEqual([text]);
+  });
+
+  it('keeps LaTeX section commands intact', async () => {
+    const { LatexTransformer } = await import('./latex');
+    const text = 'Intro text.\n\\section{One}\nBody one.\n\\section*{Two}\nBody two.';
+    const chunks = new LatexTransformer({ maxSize: 1000, overlap: 0 }).splitText({ text });
+    expect(chunks).toEqual([text]);
+  });
+
+  it('writes real newlines for PHP separators', () => {
+    const text = '<?php\nfunction a() {}';
+    const chunks = RecursiveCharacterTransformer.fromLanguage(Language.PHP, { maxSize: 1000, overlap: 0 }).splitText({
+      text,
+    });
+    expect(chunks).toEqual([text]);
+  });
+
+  it('keeps RST underlines intact', () => {
+    const text = 'Title\n=====\nBody text';
+    const chunks = RecursiveCharacterTransformer.fromLanguage(Language.RST, { maxSize: 1000, overlap: 0 }).splitText({
+      text,
+    });
+    expect(chunks).toEqual([text]);
+  });
+
+  it('uses matched text across chunk boundaries and overlap', () => {
+    const transformer = new RecursiveCharacterTransformer({
+      separators: ['\\n#{1,6} '],
+      isSeparatorRegex: true,
+      maxSize: 20,
+      overlap: 10,
+    });
+    const chunks = transformer.splitText({ text: 'aaaa\n## bbbb\n### cccc\n# dddd\n## eeee' });
+    for (const chunk of chunks) {
+      expect(chunk).not.toContain('{1,6}');
+    }
+    expect(chunks.join('\n')).toContain('bbbb\n### cccc');
+  });
+
+  it('keeps overlap within the limit including matched separators', () => {
+    const transformer = new RecursiveCharacterTransformer({
+      separators: ['\n#{1,6} '],
+      isSeparatorRegex: true,
+      maxSize: 20,
+      overlap: 10,
+    });
+    const chunks = transformer.splitText({ text: 'aaaa\n## bbbb\n### cccc\n# dddd\n## eeee' });
+    for (let i = 1; i < chunks.length; i++) {
+      const prev = chunks[i - 1]!;
+      const curr = chunks[i]!;
+      let shared = 0;
+      for (let n = Math.min(prev.length, curr.length); n > 0; n--) {
+        if (prev.endsWith(curr.slice(0, n))) {
+          shared = n;
+          break;
+        }
+      }
+      expect(shared).toBeLessThanOrEqual(10);
+    }
+  });
+
+  it('preserves numbered backreferences in regex separators', () => {
+    const transformer = new RecursiveCharacterTransformer({
+      separators: ['(ab)\\1'],
+      isSeparatorRegex: true,
+      maxSize: 1000,
+      overlap: 0,
+    });
+    expect(transformer.splitText({ text: 'abxxababyy' })).toEqual(['abxxababyy']);
+  });
+
+  it('leaves literal separators unchanged', () => {
+    const transformer = new RecursiveCharacterTransformer({ separators: ['|'], maxSize: 1000, overlap: 0 });
+    expect(transformer.splitText({ text: 'a|b|c' })).toEqual(['a|b|c']);
   });
 });

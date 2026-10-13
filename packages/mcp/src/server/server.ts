@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import type * as http from 'node:http';
 import type { Agent, ToolsInput } from '@mastra/core/agent';
@@ -12,7 +11,7 @@ import type {
   ServerInfo,
 } from '@mastra/core/mcp';
 import { EntityType, SpanType, getOrCreateSpan } from '@mastra/core/observability';
-import type { TracingContext } from '@mastra/core/observability';
+import type { Span, TracingContext } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema';
 import type { StandardSchemaWithJSON } from '@mastra/core/schema';
@@ -25,6 +24,8 @@ import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol
 import { hostHeaderValidation, originValidation, toNodeHandler } from '@modelcontextprotocol/node';
 import type { NodeMcpRequestHandler } from '@modelcontextprotocol/node';
 import {
+  CLIENT_INFO_META_KEY,
+  PROTOCOL_VERSION_META_KEY,
   Server,
   ProtocolError,
   ProtocolErrorCode,
@@ -36,9 +37,13 @@ import {
 import type {
   BlobResourceContents,
   CallToolResult,
+  HandlerResultTypeMap,
+  Implementation,
   InputRequiredResult,
   McpHttpHandler,
+  RequestMethod,
   RequestStateCodec,
+  RequestTypeMap,
   Resource,
   ServerCapabilities,
   ServerContext,
@@ -50,10 +55,14 @@ import type {
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 
+import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
+import { withServerTraceContext, withoutTraceContext } from '../shared/trace-context';
+import type { CallerTraceContext } from '../shared/trace-context';
 import { ServerPromptActions, ServerResourceActions, ServerToolActions } from './actions';
 import {
   INPUT_KEY,
+  callerTrace,
   hashArguments,
   principalOf,
   readContinuation,
@@ -194,7 +203,7 @@ export class MCPServer extends MCPServerBase {
   private createRequestStateCodec(options: MCPServerRequestStateOptions | undefined) {
     let key = options?.key;
     if (key === undefined) {
-      key = randomBytes(32);
+      key = globalThis.crypto.getRandomValues(new Uint8Array(32));
       this.logger.warn(
         'No requestState.key configured: continuation state is signed with a per-process key, so a suspended request can only be resumed on this process. Set requestState.key in multi-instance and serverless deployments.',
       );
@@ -346,13 +355,20 @@ export class MCPServer extends MCPServerBase {
   /**
    * Converts a tool schema to JSON Schema 2020-12, the dialect MCP 2026-07-28
    * assumes when none is declared. The dialect declaration is kept so validators
-   * that dispatch on `$schema` pick the same draft on both sides.
+   * that dispatch on `$schema` pick the same draft on both sides. Some vendors
+   * (e.g. zod v3) emit 2019-09 for this target, so it is rewritten to 2020-12.
    */
   private jsonSchema(schema: unknown, options?: { io: 'input' | 'output' }): Record<string, unknown> | undefined {
     if (!schema) return undefined;
-    return isStandardSchemaWithJSON(schema)
-      ? (standardSchemaToJSONSchema(schema, { ...options, target: 'draft-2020-12' }) as Record<string, unknown>)
-      : ((schema as { jsonSchema?: Record<string, unknown> }).jsonSchema ?? (schema as Record<string, unknown>));
+    if (!isStandardSchemaWithJSON(schema)) {
+      return (schema as { jsonSchema?: Record<string, unknown> }).jsonSchema ?? (schema as Record<string, unknown>);
+    }
+    const converted = standardSchemaToJSONSchema(schema, { ...options, target: 'draft-2020-12' }) as Record<
+      string,
+      unknown
+    >;
+    if (!converted.$schema || converted.$schema === JSON_SCHEMA_2020_12) return converted;
+    return toJsonSchema2020(converted) ?? converted;
   }
 
   private addTools(tools: ToolsInput): void {
@@ -439,6 +455,7 @@ export class MCPServer extends MCPServerBase {
     const info = this.toolInfo(name, tool);
     const validation = specTypeSchemas.Tool['~standard'].validate({
       name,
+      title: tool.title,
       description: info.description,
       inputSchema: info.inputSchema,
       outputSchema: info.outputSchema,
@@ -452,10 +469,7 @@ export class MCPServer extends MCPServerBase {
   }
 
   private hasUiMetadata(): boolean {
-    return Object.values(this.convertedTools).some(tool => {
-      const meta = tool.mcp?._meta as { ui?: { resourceUri?: string } } | undefined;
-      return Boolean(meta?.ui?.resourceUri);
-    });
+    return Object.values(this.convertedTools).some(tool => Boolean(uiResourceUri(tool.mcp?._meta)));
   }
 
   // ---------------------------------------------------------------------------
@@ -480,7 +494,14 @@ export class MCPServer extends MCPServerBase {
 
   private createServerInstance(): Server {
     const server = new Server(
-      { name: this.name, version: this.version },
+      {
+        name: this.name,
+        version: this.version,
+        title: this.title,
+        description: this.description,
+        websiteUrl: this.websiteUrl,
+        icons: this.icons,
+      },
       {
         capabilities: this.capabilities(),
         instructions: this.instructions,
@@ -497,6 +518,147 @@ export class MCPServer extends MCPServerBase {
     this.registerResourceHandlers(server);
     this.registerPromptHandlers(server);
     return server;
+  }
+
+  /**
+   * Registers `method` under an `MCP_SERVER_REQUEST` span, so every request the
+   * server answers is recorded — including the list and read methods that never
+   * reach a tool, and requests that fail before any work is done.
+   */
+  private setTracedHandler<M extends RequestMethod>(
+    server: Server,
+    method: M,
+    handler: (
+      request: RequestTypeMap[M],
+      ctx: ServerContext,
+      trace: {
+        requestSpan: Span<SpanType.MCP_SERVER_REQUEST> | undefined;
+        /** Resolved once per request, before the span, and shared with the handler. */
+        requestContext: RequestContext;
+        /**
+         * Records the error behind an `isError` result. A handler that turns a
+         * caught error into an error result reports it here so the span carries
+         * the original error rather than its serialized text.
+         */
+        reportError: (error: Error) => void;
+      },
+    ) => Promise<HandlerResultTypeMap[M]>,
+  ): void {
+    server.setRequestHandler(method, async (request, ctx) => {
+      const params = request.params as Record<string, unknown> | undefined;
+      const caller = callerTrace(ctx);
+      // A span can only be given its request context when it is created, so auth is
+      // resolved first. A mapper that throws still leaves a failed span behind.
+      let requestContext: RequestContext;
+      try {
+        requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
+      } catch (error) {
+        this.startRequestSpan(method, params, { server, ctx, caller })?.error({ error: error as Error });
+        throw error;
+      }
+      const requestSpan = this.startRequestSpan(method, params, { server, ctx, caller, requestContext });
+      let reportedError: Error | undefined;
+      const result = await this.traceRequest(
+        requestSpan,
+        () =>
+          handler(request, ctx, {
+            requestSpan,
+            requestContext,
+            reportError: error => {
+              reportedError = error;
+            },
+          }),
+        () => reportedError,
+      );
+      // Only `tools/call` replies name the serving span: the client reads and removes
+      // the key on that path. Added after the span recorded the result, so the span
+      // output stays the handler's own.
+      return method === 'tools/call' ? withServerTraceContext(result, requestSpan, caller !== undefined) : result;
+    });
+  }
+
+  /**
+   * Opens the span for one served request. `connection` is absent for
+   * {@link executeTool}, which is called in-process and negotiates nothing.
+   */
+  private startRequestSpan(
+    method: string,
+    params: Record<string, unknown> | undefined,
+    connection?: { server?: Server; ctx?: ServerContext; caller?: CallerTraceContext; requestContext?: RequestContext },
+  ): Span<SpanType.MCP_SERVER_REQUEST> | undefined {
+    // A stateless HTTP request carries its own envelope; a stdio connection
+    // negotiates once and the instance holds what it agreed to.
+    const envelope = connection?.ctx?.mcpReq.envelope as Record<string, unknown> | undefined;
+    const protocolVersion = envelope?.[PROTOCOL_VERSION_META_KEY] ?? connection?.server?.getNegotiatedProtocolVersion();
+    const client = (envelope?.[CLIENT_INFO_META_KEY] ?? connection?.server?.getClientVersion()) as
+      | Implementation
+      | undefined;
+    const target = params?.name ?? params?.uri;
+    const targetName = typeof target === 'string' ? target : undefined;
+    const caller = connection?.caller;
+
+    return getOrCreateSpan({
+      type: SpanType.MCP_SERVER_REQUEST,
+      name: targetName ? `${method} ${targetName}` : method,
+      entityType: EntityType.MCP_SERVER,
+      entityId: this.id,
+      entityName: this.name,
+      input: withoutTraceContext(params),
+      attributes: {
+        mcpMethod: method,
+        targetName,
+        mcpServer: this.name,
+        serverVersion: this.version,
+        mcpProtocolVersion: typeof protocolVersion === 'string' ? protocolVersion : undefined,
+        clientName: client?.name,
+        clientVersion: client?.version,
+        callerTraceparent: caller?.traceparent,
+        callerTracestate: caller?.tracestate,
+      },
+      tracingContext: {},
+      // The request keeps its own trace and links to the caller's span, so each
+      // side keeps its own root and trace summary in every exporter.
+      links: caller && [caller.link],
+      requestContext: connection?.requestContext,
+      mastra: this.mastra,
+    });
+  }
+
+  /**
+   * Runs `fn` under a request span. Only the protocol's own `isError` marks a
+   * failure; the rest of a result is opaque handler output that may legitimately
+   * carry any field. A thrown error ends the whole span tree and is rethrown.
+   */
+  private async traceRequest<T>(
+    requestSpan: Span<SpanType.MCP_SERVER_REQUEST> | undefined,
+    fn: () => Promise<T>,
+    getReportedError?: () => Error | undefined,
+  ): Promise<T> {
+    try {
+      const result = await fn();
+      const errorResult = result as { isError?: boolean; content?: Array<{ text?: string }> } | undefined;
+      if (errorResult?.isError) {
+        requestSpan?.error({
+          error:
+            getReportedError?.() ??
+            new MastraError({
+              id: 'MCP_SERVER_REQUEST_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.USER,
+              text: errorResult.content
+                ?.map(c => c.text)
+                .filter(Boolean)
+                .join('\n'),
+            }),
+        });
+      } else {
+        requestSpan?.end({ output: result });
+      }
+      return result;
+    } catch (error) {
+      requestSpan?.error({ error: error as Error, endTree: true });
+      throw error;
+    }
   }
 
   /** Answers a suspended round: one keyed form derived from the handler's `resumeSchema`. */
@@ -534,6 +696,7 @@ export class MCPServer extends MCPServerBase {
 
   private async serverRequest(
     ctx: ServerContext,
+    requestContext: RequestContext,
     method: ContinuationEnvelope['method'],
     name: string,
     args: unknown,
@@ -545,7 +708,6 @@ export class MCPServer extends MCPServerBase {
     argsHash: string;
   }> {
     const argsHash = hashArguments(args);
-    const requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
     const continuation = readContinuation(ctx, requestContext, { method, name, argsHash });
     if (continuation?.outcome === 'accept' && resumeSchema) {
       const validation = await resumeSchema['~standard'].validate(continuation.resumeData);
@@ -569,13 +731,12 @@ export class MCPServer extends MCPServerBase {
   }
 
   private registerToolHandlers(server: Server): void {
-    server.setRequestHandler('tools/list', async (_request, ctx) => {
-      const requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
-      const entries = await this.authorizedToolEntries(requestContext);
+    this.setTracedHandler(server, 'tools/list', async (_request, _ctx, trace) => {
+      const entries = await this.authorizedToolEntries(trace.requestContext);
       return { tools: entries.map(([name, tool]) => this.toMCPTool(name, tool)) };
     });
 
-    server.setRequestHandler('tools/call', async (request, ctx) => {
+    this.setTracedHandler(server, 'tools/call', async (request, ctx, trace) => {
       const name = request.params.name;
       const tool = this.convertedTools[name];
       if (!tool) {
@@ -584,37 +745,24 @@ export class MCPServer extends MCPServerBase {
       }
       const args = request.params.arguments ?? {};
       const argsHash = hashArguments(args);
-      const requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
+      const requestContext = trace.requestContext;
       const continuation = readContinuation(ctx, requestContext, { method: 'tools/call', name, argsHash });
       const mcp = toToolExecutionContext(ctx, this.name);
-      const span = getOrCreateSpan({
-        type: SpanType.TOOL_CALL,
-        name: `tool: '${name}'`,
-        input: args,
-        entityType: EntityType.TOOL,
-        entityId: name,
-        entityName: name,
-        attributes: { toolType: 'tool', toolDescription: tool.description },
-        requestContext,
-        mastra: this.mastra,
-      });
       const startedAt = Date.now();
       try {
         // Every round is authorized on its own; nothing is trusted from the envelope.
         await this.enforceToolExecutionFGA(name, requestContext);
         if (continuation && continuation.outcome !== 'accept') {
-          span?.end({ attributes: { success: false } });
           return errorResult(`Tool '${name}' was ${continuation.outcome === 'decline' ? 'declined' : 'cancelled'}`);
         }
         const execution = await this.runTool(name, tool, args, {
           requestContext,
           mcp,
-          tracingContext: { currentSpan: span },
+          tracingContext: { currentSpan: trace.requestSpan },
           resumeData: continuation?.resumeData,
           suspendPayload: continuation?.suspendPayload,
         });
         if (execution.status === 'suspended') {
-          span?.end({ attributes: { success: true } });
           this.logger.debug(`Tool '${name}' requires client input.`);
           return this.inputRequired(ctx, requestContext, {
             method: 'tools/call',
@@ -626,11 +774,9 @@ export class MCPServer extends MCPServerBase {
           });
         }
         const result = this.toCallToolResult(name, tool, execution.output);
-        span?.end({ output: execution.output, attributes: { success: !result.isError } });
         this.logger.info(`Tool '${name}' finished in ${Date.now() - startedAt}ms.`);
         return result;
       } catch (error) {
-        span?.error({ error: error as Error, attributes: { success: false } });
         if (error instanceof ProtocolError) throw error;
         this.logger.error('Tool execution failed', { tool: name, error });
         const mastraError =
@@ -645,6 +791,9 @@ export class MCPServer extends MCPServerBase {
                 },
                 error,
               );
+        // The client still receives the serialized error, but the span keeps the
+        // original so its id and message survive instead of a JSON blob.
+        trace.reportError(mastraError);
         return errorResult(JSON.stringify(mastraError.toJSON()));
       }
     });
@@ -673,6 +822,8 @@ export class MCPServer extends MCPServerBase {
       // The 1.x idiom: an empty toolCallId keeps CoreToolBuilder on the MCP path.
       toolCallId: '',
       messages: [],
+      // The request span already records this call; a builder tool span would double it.
+      skipToolSpan: true,
       requestContext: options.requestContext,
       tracingContext: options.tracingContext,
       abortSignal: options.mcp?.extra.signal,
@@ -701,15 +852,24 @@ export class MCPServer extends MCPServerBase {
       this.logger.warn(`Tool '${name}' rejected its input.`, { error: value.message });
       return errorResult(value.message);
     }
+    // Hosts may detect an MCP App from the call result, so mirror the tool's declared app link onto it.
+    const resourceUri = uiResourceUri(tool.mcp?._meta);
+    const meta = resourceUri ? { _meta: { ui: { resourceUri }, [RESOURCE_URI_META_KEY]: resourceUri } } : {};
     if (!tool.outputSchema) {
       return {
         isError: false,
         content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
+        ...meta,
       };
     }
     // Tools with an output schema already validated `value` against it.
     const structuredContent = value as Record<string, unknown>;
-    return { isError: false, structuredContent, content: [{ type: 'text', text: JSON.stringify(structuredContent) }] };
+    return {
+      isError: false,
+      structuredContent,
+      content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
+      ...meta,
+    };
   }
 
   private registerResourceHandlers(server: Server): void {
@@ -717,21 +877,23 @@ export class MCPServer extends MCPServerBase {
     const hasAppResources = this.appResourceList.length > 0;
     if (!options && !hasAppResources) return;
 
-    const listResources = async (ctx: ServerContext): Promise<Resource[]> => [
+    const listResources = async (ctx: ServerContext, requestContext: RequestContext): Promise<Resource[]> => [
       ...this.appResourceList,
       ...((await options?.listResources({
         extra: toToolExecutionContext(ctx, this.name).extra,
-        requestContext: await toRequestContext(ctx, this.mapAuthInfoToUser),
+        requestContext,
       })) ?? []),
     ];
 
     // Providers are re-evaluated with the current request every time; resource
     // lists are scoped per caller and never cached on the shared server.
-    server.setRequestHandler('resources/list', async (_request, ctx) => ({ resources: await listResources(ctx) }));
+    this.setTracedHandler(server, 'resources/list', async (_request, ctx, trace) => ({
+      resources: await listResources(ctx, trace.requestContext),
+    }));
 
-    server.setRequestHandler('resources/read', async (request, ctx) => {
+    this.setTracedHandler(server, 'resources/read', async (request, ctx, trace) => {
       const uri = request.params.uri;
-      const resource = (await listResources(ctx)).find(r => r.uri === uri);
+      const resource = (await listResources(ctx, trace.requestContext)).find(r => r.uri === uri);
       if (!resource) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
 
       const html = this.appResourceHtml.get(uri);
@@ -743,7 +905,7 @@ export class MCPServer extends MCPServerBase {
         continuation,
         suspended,
         argsHash,
-      } = await this.serverRequest(ctx, 'resources/read', uri, {}, options.resumeSchema);
+      } = await this.serverRequest(ctx, trace.requestContext, 'resources/read', uri, {}, options.resumeSchema);
       if (continuation && continuation.outcome !== 'accept') {
         throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Reading '${uri}' was ${continuation.outcome}ed`);
       }
@@ -767,10 +929,10 @@ export class MCPServer extends MCPServerBase {
     });
 
     if (options?.resourceTemplates) {
-      server.setRequestHandler('resources/templates/list', async (_request, ctx) => ({
+      this.setTracedHandler(server, 'resources/templates/list', async (_request, ctx, trace) => ({
         resourceTemplates: await options.resourceTemplates!({
           extra: toToolExecutionContext(ctx, this.name).extra,
-          requestContext: await toRequestContext(ctx, this.mapAuthInfoToUser),
+          requestContext: trace.requestContext,
         }),
       }));
     }
@@ -795,21 +957,23 @@ export class MCPServer extends MCPServerBase {
     const options = this.promptOptions;
     if (!options) return;
 
-    const listPrompts = async (ctx: ServerContext) => {
+    const listPrompts = async (ctx: ServerContext, requestContext: RequestContext) => {
       const prompts = await options.listPrompts({
         extra: toToolExecutionContext(ctx, this.name).extra,
-        requestContext: await toRequestContext(ctx, this.mapAuthInfoToUser),
+        requestContext,
       });
       for (const prompt of prompts) PromptSchema.parse(prompt);
       return prompts;
     };
 
-    server.setRequestHandler('prompts/list', async (_request, ctx) => ({ prompts: await listPrompts(ctx) }));
+    this.setTracedHandler(server, 'prompts/list', async (_request, ctx, trace) => ({
+      prompts: await listPrompts(ctx, trace.requestContext),
+    }));
 
     if (!options.getPromptMessages) return;
-    server.setRequestHandler('prompts/get', async (request, ctx) => {
+    this.setTracedHandler(server, 'prompts/get', async (request, ctx, trace) => {
       const { name, arguments: args } = request.params;
-      const prompt = (await listPrompts(ctx)).find(p => p.name === name);
+      const prompt = (await listPrompts(ctx, trace.requestContext)).find(p => p.name === name);
       if (!prompt) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Prompt "${name}" not found`);
       for (const arg of prompt.arguments ?? []) {
         if (arg.required && (args?.[arg.name] === undefined || args?.[arg.name] === null)) {
@@ -821,7 +985,7 @@ export class MCPServer extends MCPServerBase {
         continuation,
         suspended,
         argsHash,
-      } = await this.serverRequest(ctx, 'prompts/get', name, args ?? {}, options.resumeSchema);
+      } = await this.serverRequest(ctx, trace.requestContext, 'prompts/get', name, args ?? {}, options.resumeSchema);
       if (continuation && continuation.outcome !== 'accept') {
         throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Prompt "${name}" was ${continuation.outcome}ed`);
       }
@@ -1061,59 +1225,68 @@ export class MCPServer extends MCPServerBase {
     args: unknown,
     executionContext: Parameters<MCPServerBase['executeTool']>[2] = {},
   ): Promise<MCPToolExecutionResultV2> {
-    const tool = this.convertedTools[toolId];
-    if (!tool) {
-      this.logger.warn('Unknown tool requested', { tool: toolId, server: this.name });
-      throw new MastraError({
-        id: 'MCP_SERVER_TOOL_EXECUTE_PREPARATION_FAILED',
-        domain: ErrorDomain.MCP,
-        category: ErrorCategory.USER,
-        text: `Unknown tool: ${toolId}`,
-        details: { toolId },
-      });
-    }
     const requestContext = executionContext.requestContext ?? new RequestContext();
-    // A denial is reported as such, not as a failed execution.
-    await this.enforceToolExecutionFGA(toolId, requestContext);
-    try {
-      const execution = await this.runTool(toolId, tool, args, {
-        requestContext,
-        tracingContext: { currentSpan: undefined },
-        resumeData: executionContext.resumeData,
-        suspendPayload: executionContext.suspendPayload,
-      });
-      // Invalid input or resume data is the caller's error, not a completed call.
-      if (execution.status === 'completed' && isValidationError(execution.output)) {
+    // The in-process caller gets the same request span a wire `tools/call` opens.
+    // It is opened before the tool lookup and the authorization check so an
+    // unknown tool or a denial is recorded as a failed request, not lost.
+    const requestSpan = this.startRequestSpan('tools/call', { name: toolId, arguments: args }, { requestContext });
+    return this.traceRequest(requestSpan, async () => {
+      const tool = this.convertedTools[toolId];
+      if (!tool) {
+        this.logger.warn('Unknown tool requested', { tool: toolId, server: this.name });
         throw new MastraError({
-          id: 'MCP_SERVER_TOOL_INVALID_INPUT',
+          id: 'MCP_SERVER_TOOL_EXECUTE_PREPARATION_FAILED',
           domain: ErrorDomain.MCP,
           category: ErrorCategory.USER,
-          text: execution.output.message,
+          text: `Unknown tool: ${toolId}`,
           details: { toolId },
         });
       }
-      this.logger.info('Tool executed successfully', { tool: toolId });
-      return execution;
-    } catch (error) {
-      if (error instanceof MastraError && error.id === 'MCP_SERVER_TOOL_INVALID_INPUT') throw error;
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_TOOL_EXECUTE_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.USER,
-          details: { toolId, args: JSON.stringify(args) },
-        },
-        error,
-      );
-      this.logger.trackException(mastraError);
-      throw mastraError;
-    }
+      // A denial is reported as such, not as a failed execution.
+      await this.enforceToolExecutionFGA(toolId, requestContext);
+      try {
+        const execution = await this.runTool(toolId, tool, args, {
+          requestContext,
+          tracingContext: { currentSpan: requestSpan },
+          resumeData: executionContext.resumeData,
+          suspendPayload: executionContext.suspendPayload,
+        });
+        // Invalid input or resume data is the caller's error, not a completed call.
+        if (execution.status === 'completed' && isValidationError(execution.output)) {
+          throw new MastraError({
+            id: 'MCP_SERVER_TOOL_INVALID_INPUT',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.USER,
+            text: execution.output.message,
+            details: { toolId },
+          });
+        }
+        this.logger.info('Tool executed successfully', { tool: toolId });
+        return execution;
+      } catch (error) {
+        if (error instanceof MastraError && error.id === 'MCP_SERVER_TOOL_INVALID_INPUT') throw error;
+        const mastraError = new MastraError(
+          {
+            id: 'MCP_SERVER_TOOL_EXECUTE_FAILED',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.USER,
+            details: { toolId, args: JSON.stringify(args) },
+          },
+          error,
+        );
+        this.logger.trackException(mastraError);
+        throw mastraError;
+      }
+    });
   }
 
   /** Reads an `ui://` app resource; application resources require a protocol request. */
-  async readResource(uri: string): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+  async readResource(uri: string): Promise<{
+    contents: Array<{ uri: string; text?: string; blob?: string; mimeType?: string; _meta?: Record<string, unknown> }>;
+  }> {
     const html = this.appResourceHtml.get(uri);
-    if (html === undefined) {
+    const resource = this.appResourceList.find(r => r.uri === uri);
+    if (html === undefined || !resource) {
       throw new MastraError({
         id: 'MCP_SERVER_RESOURCE_NOT_FOUND',
         domain: ErrorDomain.MCP,
@@ -1122,7 +1295,7 @@ export class MCPServer extends MCPServerBase {
         details: { uri },
       });
     }
-    return { contents: [{ uri, text: html }] };
+    return { contents: [this.resourceContents(resource, { text: html })] };
   }
 
   /** Lists `ui://` app resources; application resources require a protocol request. */
@@ -1140,14 +1313,18 @@ function errorResult(text: string): CallToolResult {
   return { content: [{ type: 'text', text }], isError: true };
 }
 
-/** Keeps `_meta.ui.resourceUri` and the flat MCP Apps key in sync for older hosts. */
+/** The tool's MCP App URI; the nested key wins over the flat one, as in ext-apps' `getToolUiResourceUri`. */
+function uiResourceUri(meta: Record<string, unknown> | undefined): string | undefined {
+  const ui = meta?.ui as { resourceUri?: string } | undefined;
+  return ui?.resourceUri || (meta?.[RESOURCE_URI_META_KEY] as string | undefined) || undefined;
+}
+
+/** Writes the tool's MCP App URI to both the nested and the flat key, so every host opens the same app. */
 function normalizeUiMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
-  if (!meta) return undefined;
-  const ui = meta.ui as { resourceUri?: string } | undefined;
-  const flat = meta[RESOURCE_URI_META_KEY] as string | undefined;
-  if (ui?.resourceUri && !flat) return { ...meta, [RESOURCE_URI_META_KEY]: ui.resourceUri };
-  if (flat && !ui?.resourceUri) return { ...meta, ui: { ...(ui ?? {}), resourceUri: flat } };
-  return meta;
+  const resourceUri = uiResourceUri(meta);
+  if (!meta || !resourceUri) return meta;
+  const ui = meta.ui as Record<string, unknown> | undefined;
+  return { ...meta, ui: { ...ui, resourceUri }, [RESOURCE_URI_META_KEY]: resourceUri };
 }
 
 export { ServerPromptActions, ServerResourceActions, ServerToolActions };

@@ -9,6 +9,7 @@ import type {
   StreamEvent,
   WorkflowStateField,
   WorkflowRunStatus,
+  WorkflowRunState,
 } from '@mastra/core/workflows';
 import { z } from 'zod/v4';
 import { MastraFGAPermissions } from '../fga-permissions';
@@ -360,6 +361,7 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
     offset,
     resourceId,
     status,
+    summary,
     requestContext,
   }) => {
     try {
@@ -402,16 +404,43 @@ export const LIST_WORKFLOW_RUNS_ROUTE = createRoute({
         page: finalPage,
         resourceId: effectiveResourceId,
         status,
+        ...(summary ? { summary: true } : {}),
       })) || {
         runs: [],
         total: 0,
       };
+      if (summary) {
+        // Adapters may ignore `summary`, so always trim here to keep the response small.
+        return {
+          ...workflowRuns,
+          runs: workflowRuns.runs.map(run => ({ ...run, snapshot: toSummarySnapshot(run.snapshot) })),
+        };
+      }
       return workflowRuns;
     } catch (error) {
       return handleError(error, 'Error getting workflow runs');
     }
   },
 });
+
+function toSummarySnapshot(
+  snapshot: WorkflowRunState | string,
+): Pick<WorkflowRunState, 'status' | 'timestamp'> | string {
+  let parsed: unknown;
+  if (typeof snapshot === 'string') {
+    try {
+      parsed = JSON.parse(snapshot);
+    } catch {
+      // Never echo an unparseable (possibly huge) snapshot back in summary mode.
+      return '';
+    }
+  } else {
+    parsed = snapshot;
+  }
+  if (!parsed || typeof parsed !== 'object') return '';
+  const { status, timestamp } = parsed as WorkflowRunState;
+  return { status, timestamp };
+}
 
 export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   method: 'GET',
@@ -1451,11 +1480,30 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
 // Used by standalone OrchestrationWorker instances with HttpRemoteStrategy.
 // ============================================================================
 
+// Identifies the workflow a nested step runs under, up to the top-level run.
+// Nested workflows are usually reachable only from their parent's step graph.
+export type StepExecutionParentWorkflow = {
+  workflowId: string;
+  runId: string;
+  executionPath: number[];
+  parentWorkflow?: StepExecutionParentWorkflow;
+};
+
+const stepExecutionParentWorkflowSchema: z.ZodType<StepExecutionParentWorkflow> = z.lazy(() =>
+  z.object({
+    workflowId: z.string(),
+    runId: z.string(),
+    executionPath: z.array(z.number().int().nonnegative()),
+    parentWorkflow: stepExecutionParentWorkflowSchema.optional(),
+  }),
+);
+
 // `workflowId` and `runId` are taken from path params (single source of
 // truth); they are intentionally omitted from the request body schema.
 const stepExecutionBodySchema = z.object({
   stepId: z.string(),
   executionPath: z.array(z.number().int().nonnegative()),
+  parentWorkflow: stepExecutionParentWorkflowSchema.optional(),
   stepResults: z.record(z.string(), z.unknown()),
   state: z.record(z.string(), z.unknown()),
   requestContext: z.record(z.string(), z.unknown()),
@@ -1527,6 +1575,7 @@ export const EXECUTE_WORKFLOW_STEP_ROUTE = createRoute({
         runId,
         stepId: body.stepId,
         executionPath: body.executionPath,
+        parentWorkflow: body.parentWorkflow,
         stepResults: body.stepResults,
         state: body.state,
         requestContext: body.requestContext,

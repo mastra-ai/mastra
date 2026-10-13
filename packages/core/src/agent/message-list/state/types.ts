@@ -71,6 +71,8 @@ export type MastraToolInvocationPart = Omit<LegacyToolInvocationPart, 'toolInvoc
   title?: string;
   preliminary?: boolean;
   createdAt?: number;
+  /** Epoch ms of the latest state change (approval response, result, error). */
+  updatedAt?: number;
 };
 
 export type MastraSourceDocumentPart = {

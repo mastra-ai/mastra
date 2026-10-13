@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
 
@@ -55,6 +56,7 @@ export const updateProjectBodySchema = z
     name: nonEmptyTrimmed(200).optional(),
     description: nullableTrimmed(2_000).optional(),
     defaultModelId: nullableTrimmed(200).optional(),
+    modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     slackWorkItemsEnabled: z.boolean().optional(),
     autoRunEnabled: z.boolean().optional(),
     autoApprovePlans: z.boolean().optional(),
@@ -102,6 +104,7 @@ const metadataSchema = z
     const {
       factoryRuleMaterializationKey: _materialization,
       factoryPullRequestReconciliation: _reconciliation,
+      externalSourceMissingAt: _externalSourceMissingAt,
       ...metadata
     } = value;
     return metadata;
@@ -348,6 +351,29 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     bodySchema: updateProjectBodySchema,
     responseSchema: projectResponseSchema,
+  },
+  projectApplyDefaultModel: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/apply-default-model',
+    description: 'Apply the Factory default model to running work and review threads',
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({
+      modelId: z.string(),
+      applied: z.array(z.string()),
+      skipped: z.array(
+        z.object({
+          threadId: z.string(),
+          reason: z.enum([
+            'not-running',
+            'work-item-missing',
+            'stage-inactive',
+            'thread-missing',
+            'mode-unknown',
+            'apply-failed',
+          ]),
+        }),
+      ),
+    }),
   },
   projectDelete: {
     method: 'DELETE',

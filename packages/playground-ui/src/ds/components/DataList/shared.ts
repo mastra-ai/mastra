@@ -1,3 +1,5 @@
+import { focusRingInset } from '@/ds/primitives/transitions';
+
 /**
  * Row-level styling for the element that participates in the row sibling
  * chain — applied to `DataList.RowButton` / `DataList.RowLink` when used
@@ -10,8 +12,7 @@ export const dataListRowOuterStyles = [
   // The row surface is a `before` pseudo at `-z-2` so the root's fluid hover
   // highlight (`-z-1`) can glide *between* the surface and the row content,
   // exactly like menu items. The row element itself stays transparent.
-  "before:absolute before:inset-0 before:-z-2 before:rounded-[inherit] before:bg-surface2 before:content-['']",
-  'transition-colors duration-200 before:transition-colors before:duration-200',
+  "before:absolute before:inset-0 before:-z-2 before:rounded-[inherit] before:bg-background before:content-['']",
 ] as const;
 
 /**
@@ -19,16 +20,20 @@ export const dataListRowOuterStyles = [
  * `RowButton` / `RowLink` and to `RowWrapper`. The `has-*` forms let a wrapper
  * mirror the tone of the interactive row nested inside it.
  *
- * Hover is not painted per row: the root renders one fluid `surface3`
- * highlight under the row content. Resting tones (featured/selected) live on
- * the `before` surface, under the highlight; pressed and error fills sit on
- * the row element itself so they read on top of it.
+ * Hover is not painted per row: the root renders one fluid `fill-subtle`
+ * highlight under the row content. Rows are sunken wells (`--background`) inside
+ * the card panel, whose material also shows through the 1px gaps between them,
+ * so a resting tone steps to `--surface-panel` — the opaque twin of a `--fill`
+ * rung over the well — rather than to `--card`, which would make a selected row
+ * the exact colour of the separators around it. Pressed rises a full `--fill`
+ * rung, the same rung a resting control carries, and error sits on the row
+ * element itself so it reads on top of the highlight.
  */
 export const dataListRowStateStyles = [
-  'active:bg-surface4',
-  'focus-visible:bg-surface3 has-focus-visible:bg-surface3',
-  'data-featured:before:bg-surface3 has-data-featured:before:bg-surface3 has-data-selected:before:bg-surface3',
-  'data-[variant=error]:bg-notice-destructive/10 has-data-[variant=error]:bg-notice-destructive/10',
+  'active:bg-fill',
+  'focus-visible:bg-surface-panel has-focus-visible:bg-surface-panel',
+  'data-featured:before:bg-surface-panel has-data-featured:before:bg-surface-panel has-data-selected:before:bg-surface-panel',
+  'data-[variant=error]:bg-destructive-subtle has-data-[variant=error]:bg-destructive-subtle data-[variant=error]:active:bg-destructive-subtle-active has-data-[variant=error]:active:bg-destructive-subtle-active',
 ] as const;
 
 /**
@@ -37,7 +42,7 @@ export const dataListRowStateStyles = [
  */
 export const dataListRowInteractiveStyles = [
   'grid grid-cols-subgrid gap-4 px-3 cursor-pointer',
-  'outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
+  focusRingInset,
 ] as const;
 
 export const dataListRowStyles = [

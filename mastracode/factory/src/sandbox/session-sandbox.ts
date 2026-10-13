@@ -14,6 +14,15 @@ import { deriveLocalWorkdir, deriveRemoteRepoDir, repoDirUnder } from './workdir
 export interface FactorySandboxContext {
   /** Stable session id — the sandbox identity. */
   sessionId: string;
+  /**
+   * The provider's physical sandbox id persisted from a prior start, when the
+   * session has been started before. Providers that reattach by physical id
+   * (e.g. Railway) MUST forward it to the sandbox constructor so resume
+   * reattaches the original VM instead of provisioning a replacement. E2B and
+   * Platform accept it as a deterministic-reattach optimization. Undefined on
+   * a session's first ever start.
+   */
+  sandboxId?: string;
   /** owner/name of the repository, when the session is repo-backed. */
   repoFullName?: string;
   /**
@@ -45,6 +54,9 @@ export interface FactorySandboxContext {
  * `workingDirectory` at a per-session directory (e.g.
  * `join(root, ctx.sessionId)`); the repo checks out as a subdirectory of it.
  *
+ * Forward `ctx.sandboxId` to providers that reattach by physical id so resume
+ * reattaches the original VM instead of provisioning a replacement.
+ *
  * Returns a `MastraSandbox`, not the bare `WorkspaceSandbox` interface:
  * factory relies on the base class for the start lifecycle and the runtime
  * env, so providers extend it rather than reimplementing the contract.
@@ -55,7 +67,7 @@ export interface FactorySandboxContext {
  *
  * @example
  * ```typescript
- * sandbox: ({ sessionId }) => new E2BSandbox({ id: sessionId })
+ * sandbox: ({ sessionId, sandboxId }) => new E2BSandbox({ id: sessionId, sandboxId })
  * ```
  */
 export type MastraFactorySandboxConfig = (ctx: FactorySandboxContext) => MastraSandbox;

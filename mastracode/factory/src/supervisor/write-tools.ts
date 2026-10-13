@@ -2,18 +2,23 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import { boardForWorkItem } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { overtakenDecisionIds } from '../rules/decision-applicability.js';
+import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import type { AuditAction } from '../storage/domains/audit/actions.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { SupervisorScope } from './read-tools.js';
+import type { WorkerMessageResult } from './session-messaging.js';
 
 interface SupervisorWriteDependencies {
   scope: SupervisorScope;
   userId: string;
   workItems: WorkItemsStorage;
+  boards: BoardRegistry;
   audit: AuditRecorder;
   transitionService: FactoryTransitionService;
   reconcileAcceptanceLabels?: (input: { orgId: string; factoryProjectId: string; item: WorkItemRow }) => Promise<void>;
@@ -22,7 +27,7 @@ interface SupervisorWriteDependencies {
     message: string;
     userId: string;
     delivery: 'send' | 'queue';
-  }) => Promise<unknown>;
+  }) => Promise<WorkerMessageResult>;
   now?: () => Date;
 }
 
@@ -51,6 +56,23 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
       inputSchema: z.object({ decisionId: z.string().min(1) }),
       requireApproval: true,
       execute: async ({ decisionId }) => {
+        const current = await deps.workItems.getDeferredDecision(
+          deps.scope.orgId,
+          deps.scope.factoryProjectId,
+          decisionId,
+        );
+        if (!current || current.status !== 'failed') {
+          throw new Error('The decision is not failed, no longer exists, or belongs to another factory.');
+        }
+        const failure = factoryDispatchFailureMetadata(current.failureCode);
+        if (!failure.canRetry) {
+          throw new Error(
+            `This failure (${failure.label}) cannot be fixed by a retry; repair the cause and start a new run instead.`,
+          );
+        }
+        if ((await overtakenDecisionIds(deps.workItems, deps.boards, deps.scope, [current])).size > 0) {
+          throw new Error('The work item has moved on from the phase this run was decided for; it cannot be retried.');
+        }
         const decision = await deps.workItems.retryDeferredDecision(
           deps.scope.orgId,
           deps.scope.factoryProjectId,
@@ -206,7 +228,17 @@ export function createFactorySupervisorWriteTools(deps: SupervisorWriteDependenc
         const bindings = await deps.workItems.listRunBindings(deps.scope.orgId, deps.scope.factoryProjectId);
         const binding = bindings.find(row => row.sessionId === sessionId);
         if (!binding) throw new Error('The session does not belong to this factory.');
-        await deps.messageSession({ sessionId, message, userId: deps.userId, delivery });
+        const result = await deps.messageSession({ sessionId, message, userId: deps.userId, delivery });
+        if (result?.status === 'interrupted') {
+          return {
+            sessionId,
+            delivered: false,
+            status: 'interrupted',
+            delivery,
+            workItemId: binding.workItemId,
+            role: binding.role,
+          };
+        }
         await audit(
           'factory.agent.signaled',
           { type: 'factory_session', id: sessionId },

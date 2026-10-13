@@ -12,6 +12,7 @@ import type { RetentionConfig, VNextObservabilityOptions } from './domains/obser
 export {
   applyClickHouseRetention,
   TABLE_DELETION_REQUESTS,
+  markDeletionRequestApplied,
   recordDeletionRequest,
 } from './domains/observability/v-next';
 export type {

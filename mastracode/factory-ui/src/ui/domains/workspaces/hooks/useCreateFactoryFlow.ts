@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../api/keys';
-import type { FactoryProject, FactoryProjectPayload, GithubRepo } from '../services/github';
+import type { FactoryProject, FactoryProjectPayload, SourceControlRepository } from '../services/github';
 
 // Separate sessionStorage keys from onboarding so the two flows never collide.
 const STEP_KEY = 'mastracode.factory-create.step';
@@ -21,23 +21,31 @@ function isResumableStep(value: string | null): value is Exclude<CreateFactoryFl
   return value !== null && value !== 'name' && CREATE_FACTORY_STEPS.some(step => step === value);
 }
 
+function isKnownStep(value: string | null): value is CreateFactoryFlowStep {
+  return value !== null && CREATE_FACTORY_STEPS.some(step => step === value);
+}
+
 /** A stored step is only honoured while the picks it was reached through are still there. */
 function canResume(step: Exclude<CreateFactoryFlowStep, 'name'>, draft: Omit<CreateFactoryDraft, 'step'>): boolean {
   return step === 'vcs' ? Boolean(draft.name) : Boolean(draft.name && draft.repository);
 }
 
-function isGithubRepo(value: unknown): value is GithubRepo {
+function isSourceControlRepository(value: unknown): value is SourceControlRepository {
   if (typeof value !== 'object' || value === null) return false;
-  const candidate: Partial<Record<keyof GithubRepo, unknown>> = value;
+  const candidate = value as Record<string, unknown>;
   return (
-    typeof candidate.id === 'number' &&
+    (typeof candidate.id === 'number' || typeof candidate.id === 'string') &&
     typeof candidate.fullName === 'string' &&
     typeof candidate.defaultBranch === 'string' &&
-    typeof candidate.installationStorageId === 'string'
+    ((candidate.provider === undefined && typeof candidate.installationStorageId === 'string') ||
+      (candidate.provider === 'gitlab' &&
+        typeof candidate.externalId === 'string' &&
+        typeof candidate.sandboxProvider === 'string' &&
+        typeof candidate.sandboxWorkdir === 'string'))
   );
 }
 
-function readRepository(): GithubRepo | undefined {
+function readRepository(): SourceControlRepository | undefined {
   const stored = sessionStorage.getItem(REPO_KEY);
   if (!stored) return undefined;
 
@@ -47,7 +55,7 @@ function readRepository(): GithubRepo | undefined {
   } catch {
     parsed = undefined;
   }
-  if (isGithubRepo(parsed)) return parsed;
+  if (isSourceControlRepository(parsed)) return parsed;
 
   sessionStorage.removeItem(REPO_KEY);
   return undefined;
@@ -62,7 +70,7 @@ function readRepository(): GithubRepo | undefined {
 export interface CreateFactoryDraft {
   step: CreateFactoryFlowStep;
   name?: string;
-  repository?: GithubRepo;
+  repository?: SourceControlRepository;
   /** The Linear project whose issues feed the new board, when the user picked one. */
   linearProjectId?: string;
   /** The Jira project whose issues feed the new board, when the user picked one. */
@@ -84,9 +92,12 @@ function readDraft(): CreateFactoryDraft {
     hostFactoryId: sessionStorage.getItem(HOST_KEY) ?? undefined,
   };
   const step = sessionStorage.getItem(STEP_KEY);
-  if (!isResumableStep(step) || !canResume(step, picks))
-    return { step: 'name', name: picks.name, hostFactoryId: picks.hostFactoryId };
-  return { ...picks, step };
+  // Rewinding to `name` is a legitimate step (via Back), so keep the picks
+  // intact — a follow-up patchDraft merges against them. Only strip picks
+  // when the stored value is unknown or its resume gate fails.
+  if (isKnownStep(step) && (step === 'name' || (isResumableStep(step) && canResume(step, picks))))
+    return { ...picks, step };
+  return { step: 'name', name: picks.name, hostFactoryId: picks.hostFactoryId };
 }
 
 function writeDraft({
@@ -164,19 +175,25 @@ export function useCreateFactoryFlow() {
   return {
     draft: draftQuery.data,
     startVcs: (name: string) => patchDraft.mutateAsync({ step: 'vcs', name }),
-    chooseRepository: (repository: GithubRepo) => patchDraft.mutateAsync({ step: 'project-management', repository }),
+    chooseRepository: (repository: SourceControlRepository) =>
+      patchDraft.mutateAsync({ step: 'project-management', repository }),
     chooseLinearProject: (linearProjectId: string) =>
       patchDraft.mutateAsync({ step: 'model-provider', linearProjectId, jiraProjectId: undefined }),
     chooseJiraProject: (jiraProjectId: string) =>
       patchDraft.mutateAsync({ step: 'model-provider', jiraProjectId, linearProjectId: undefined }),
     skipProjectManagement: () =>
       patchDraft.mutateAsync({ step: 'model-provider', linearProjectId: undefined, jiraProjectId: undefined }),
+    /** Step backwards to the previous wizard step, preserving already-collected picks. */
+    back: () => {
+      const currentIndex = CREATE_FACTORY_STEPS.indexOf(step);
+      if (currentIndex <= 0) return Promise.resolve(null);
+      const previous = CREATE_FACTORY_STEPS[currentIndex - 1];
+      return patchDraft.mutateAsync({ step: previous });
+    },
     /** Keep what the final commit already achieved, so a retry resumes instead of duplicating. */
     rememberFactory: (factory: FactoryProject | FactoryProjectPayload) =>
       patchDraft.mutateAsync({ factoryId: factory.id }),
     rememberLinkedRepository: (linkedRepositoryId: string) => patchDraft.mutateAsync({ linkedRepositoryId }),
-    back: () =>
-      patchDraft.mutateAsync({ step: CREATE_FACTORY_STEPS[CREATE_FACTORY_STEPS.indexOf(step) - 1] ?? 'name' }),
     /** Re-persist the current draft, with its host, right before a full-page OAuth redirect. */
     persistBeforeRedirect: (hostFactoryId: string | undefined) => writeDraft({ ...readDraft(), hostFactoryId }),
     clear: clear.mutateAsync,

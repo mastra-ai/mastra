@@ -2,8 +2,8 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { Txt } from '../Txt';
-import { formatDateCell } from './utils';
 import { cn } from '@/lib/utils';
+import { formatDate } from '@/utils/date-format';
 
 export interface CellProps extends React.TdHTMLAttributes<HTMLTableCellElement> {
   className?: string;
@@ -21,7 +21,7 @@ export const Cell = ({ className, children, ...props }: CellProps) => {
 export const TxtCell = ({ className, children }: CellProps) => {
   return (
     <Cell className={className}>
-      <Txt as="span" variant="ui-smd" className="w-full truncate">
+      <Txt as="span" variant="body-sm" className="w-full truncate">
         {children}
       </Txt>
     </Cell>
@@ -33,18 +33,11 @@ export interface DateTimeCellProps extends Omit<CellProps, 'children'> {
 }
 
 export const DateTimeCell = ({ dateTime, ...props }: DateTimeCellProps) => {
-  const { day, time } = formatDateCell(dateTime);
-
   return (
     <Cell {...props}>
-      <div className="shrink-0">
-        <Txt as="span" variant="ui-sm" className="text-muted-foreground">
-          {day}
-        </Txt>{' '}
-        <Txt as="span" variant="ui-md">
-          {time}
-        </Txt>
-      </div>
+      <Txt as="span" variant="body" className="shrink-0">
+        {formatDate(dateTime, 'date-time-seconds')}
+      </Txt>
     </Cell>
   );
 };
@@ -67,15 +60,11 @@ export const EntryCell = ({ name, description, icon, meta, ...props }: EntryCell
         )}
 
         <div className="flex flex-col gap-0">
-          <Txt as="span" variant="ui-md" className="text-foreground">
+          <Txt as="span" variant="body" tone="ink">
             {name}
           </Txt>
           {description && (
-            <Txt
-              as="span"
-              variant="ui-xs"
-              className="max-w-dropdown-max-height text-muted-foreground w-full truncate pt-1"
-            >
+            <Txt as="span" variant="meta" tone="muted" className="w-full max-w-75 truncate pt-1">
               {description}
             </Txt>
           )}

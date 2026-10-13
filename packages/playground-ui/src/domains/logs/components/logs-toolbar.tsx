@@ -29,7 +29,7 @@ export function LogsToolbar({
   const hasActiveFilters = filterTokens.length > 0;
   const hasNonDefaultFilter = filterTokens.some(token => isNonDefaultFilter(token, filterFields));
 
-  // No filters → no empty grid row (and its gap) in `PageLayout.TopArea`.
+  // No filters → no empty grid row (and its gap) in the page action row.
   if (!hasActiveFilters) return null;
 
   return (

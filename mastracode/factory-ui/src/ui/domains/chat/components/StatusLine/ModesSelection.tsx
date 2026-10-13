@@ -57,7 +57,7 @@ export function ModesSelection() {
     >
       <SelectTrigger
         variant="ghost"
-        size="xs"
+        size="sm"
         aria-label="Session mode"
         aria-busy={Boolean(pendingModeId)}
         className="w-auto"

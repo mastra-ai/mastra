@@ -2,6 +2,7 @@ import { X } from 'lucide-react';
 import { createElement, type ElementType, type MouseEvent, type ReactNode } from 'react';
 
 import { cn } from '../../../lib/utils';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
 import { Button, type ButtonProps } from '../Button';
 import { Txt } from '../Txt';
 
@@ -22,7 +23,7 @@ export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads', embe
         aria-label={ariaLabel}
         className={cn(
           'flex h-full flex-col gap-1 overflow-y-auto p-1',
-          !embedded && 'rounded-studio-panel border border-border1/50 bg-surface3',
+          !embedded && cn(raisedSurfaceStyle, 'rounded-studio-panel'),
         )}
       >
         {children}
@@ -45,7 +46,7 @@ export const ThreadListNewItem = ({ render, children }: ThreadListNewItemProps) 
 };
 
 export const ThreadListSeparator = () => (
-  <div role="separator" aria-orientation="horizontal" className="bg-border1/40 -mx-1 my-1 h-px" />
+  <div role="separator" aria-orientation="horizontal" className="-mx-1 h-px shrink-0 bg-border/40" />
 );
 
 export interface ThreadListItemsProps {
@@ -66,6 +67,8 @@ export interface ThreadListItemProps {
   onClick?: (event: MouseEvent<HTMLButtonElement>) => void;
   onDelete?: () => void;
   deleteLabel?: string;
+  /** Trailing controls (e.g. a menu trigger) shown on hover/focus, and kept visible while a popup they own is open. */
+  actions?: ReactNode;
   className?: string;
   children: ReactNode;
 }
@@ -78,6 +81,7 @@ export const ThreadListItem = ({
   onClick,
   onDelete,
   deleteLabel = 'delete',
+  actions,
   className,
   children,
 }: ThreadListItemProps) => {
@@ -89,8 +93,8 @@ export const ThreadListItem = ({
         variant="ghost"
         className={cn(
           'w-full min-w-0 justify-start rounded-xl px-3 text-left',
-          onDelete && 'pr-9',
-          isActive && 'bg-surface4 text-foreground',
+          (onDelete || actions) && 'pr-9',
+          isActive && 'bg-fill-hover text-foreground',
           className,
         )}
       >
@@ -108,6 +112,12 @@ export const ThreadListItem = ({
           <X />
         </Button>
       )}
+
+      {actions && (
+        <div className="absolute top-1/2 right-px flex -translate-y-1/2 items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-data-popup-open:opacity-100">
+          {actions}
+        </div>
+      )}
     </li>
   );
 };
@@ -118,7 +128,7 @@ export interface ThreadListEmptyProps {
 
 export const ThreadListEmpty = ({ children }: ThreadListEmptyProps) => {
   return (
-    <Txt as="p" variant="ui-sm" className="text-muted-foreground px-3 py-2">
+    <Txt as="p" variant="caption" tone="muted" className="px-3 py-2">
       {children}
     </Txt>
   );

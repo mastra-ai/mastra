@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
 import type { PropertyFilterField, PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
@@ -12,7 +13,9 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
+import { metricsCrumbs } from '../metrics-crumbs';
 import { MetricsToolbar } from './metrics-toolbar';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 
 type MetricsPageLayoutProps = {
   children: ReactNode;
@@ -54,33 +57,38 @@ export function MetricsPageLayout({ children, filterFields, isLoading = false }:
   };
 
   return (
-    <PageLayout width="wide" height="full">
-      <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">
-            <DateRangeSelector />
-            <PropertyFilterCreator
-              fields={filterFields}
-              tokens={filterTokens}
-              onTokensChange={setFilterTokens}
-              disabled={isLoading}
-              onStartTextFilter={setAutoFocusFilterFieldId}
-            />
-          </PageLayout.Column>
-        </PageLayout.Row>
+    <PageLayout
+      breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}
+      actionRow={
+        <>
+          <ActionRow>
+            <ActionRow.Start>
+              <DateRangeSelector />
+              <PropertyFilterCreator
+                fields={filterFields}
+                tokens={filterTokens}
+                onTokensChange={setFilterTokens}
+                disabled={isLoading}
+                onStartTextFilter={setAutoFocusFilterFieldId}
+              />
+            </ActionRow.Start>
+          </ActionRow>
 
-        <MetricsToolbar
-          isLoading={isLoading}
-          filterFields={filterFields}
-          filterTokens={filterTokens}
-          onFilterTokensChange={setFilterTokens}
-          onClear={handleClear}
-          onRemoveAll={() => setFilterTokens([])}
-          onSave={handleSave}
-          onRemoveSaved={hasSavedFilters ? handleRemoveSaved : undefined}
-          autoFocusFilterFieldId={autoFocusFilterFieldId}
-        />
-      </PageLayout.TopArea>
+          <MetricsToolbar
+            isLoading={isLoading}
+            filterFields={filterFields}
+            filterTokens={filterTokens}
+            onFilterTokensChange={setFilterTokens}
+            onClear={handleClear}
+            onRemoveAll={() => setFilterTokens([])}
+            onSave={handleSave}
+            onRemoveSaved={hasSavedFilters ? handleRemoveSaved : undefined}
+            autoFocusFilterFieldId={autoFocusFilterFieldId}
+          />
+        </>
+      }
+    >
+      <h1 className="sr-only">Metrics</h1>
       {children}
     </PageLayout>
   );

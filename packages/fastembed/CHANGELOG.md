@@ -1,5 +1,23 @@
 # @mastra/fastembed
 
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Fixed embeddings failing with "Config file not found" when the model cache folder is removed, or the home directory changes, while a process is running. The cache folder is now looked up each time a model loads instead of once per process. ([#22078](https://github.com/mastra-ai/mastra/pull/22078))
+
+## 1.3.2
+
+### Patch Changes
+
+- Built-in FastEmbed models now download from Hugging Face (Qdrant organization) instead of the legacy Qdrant Google Cloud Storage bucket, which is being shut down. Existing local model caches keep working. ([#25026](https://github.com/mastra-ai/mastra/pull/25026))
+
+## 1.3.2-alpha.0
+
+### Patch Changes
+
+- Built-in FastEmbed models now download from Hugging Face (Qdrant organization) instead of the legacy Qdrant Google Cloud Storage bucket, which is being shut down. Existing local model caches keep working. ([#25026](https://github.com/mastra-ai/mastra/pull/25026))
+
 ## 1.3.1
 
 ### Patch Changes

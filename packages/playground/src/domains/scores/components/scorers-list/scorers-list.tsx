@@ -1,22 +1,33 @@
 import type { GetScorerResponse, RouteResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import {
-  DataList as EntityList,
-  DataListSkeleton as EntityListSkeleton,
-  useDataListKeyboard,
-} from '@mastra/playground-ui/components/DataList';
+import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
+import type { DataListSort } from '@mastra/playground-ui/components/DataList';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { sortBy } from '@mastra/playground-ui/sort/sort-by';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { WorkflowIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { useLinkComponent } from '@/lib/framework';
 
 export type ScorersListItem = GetScorerResponse & { id: string };
+
+export type ScorersSortKey = 'name' | 'source' | 'agents' | 'workflows';
+export type ScorersSort = ListSort<ScorersSortKey>;
+
+const sortAccessors = {
+  name: (scorer: ScorersListItem) => scorer.scorer.config?.name || scorer.id,
+  source: (scorer: ScorersListItem) => scorer.source,
+  agents: (scorer: ScorersListItem) => scorer.agentIds?.length ?? 0,
+  workflows: (scorer: ScorersListItem) => scorer.workflowIds?.length ?? 0,
+};
 
 export interface ScorersListProps {
   scorers: RouteResponse<'GET /scores/scorers'>;
   isLoading: boolean;
   search?: string;
   sourceFilter?: string;
+  sort?: ScorersSort;
+  onSortChange?: (direction: DataListSort, key: ScorersSortKey) => void;
   /** When provided, rows become buttons that call this instead of navigating to the scorer page. */
   onSelectScorer?: (scorer: ScorersListItem) => void;
   /** Highlights the row for the given scorer id (used with `onSelectScorer`). */
@@ -32,6 +43,8 @@ export function ScorersList({
   isLoading,
   search = '',
   sourceFilter = 'all',
+  sort,
+  onSortChange,
   onSelectScorer,
   selectedScorerId,
   keyboardGlobal = true,
@@ -49,7 +62,7 @@ export function ScorersList({
 
   const filteredData = useMemo(() => {
     const term = search.toLowerCase();
-    return scorerData.filter(s => {
+    const filtered = scorerData.filter(s => {
       const matchesSearch =
         !term ||
         s.scorer.config?.id?.toLowerCase().includes(term) ||
@@ -57,33 +70,61 @@ export function ScorersList({
       const matchesSource = sourceFilter === 'all' || s.source === sourceFilter;
       return matchesSearch && matchesSource;
     });
-  }, [scorerData, search, sourceFilter]);
+    return sortBy(filtered, sort, sortAccessors);
+  }, [scorerData, search, sourceFilter, sort]);
 
   const { containerRef, getRowProps } = useDataListKeyboard({ count: filteredData.length, global: keyboardGlobal });
 
   if (isLoading) {
-    return <EntityListSkeleton columns={COLUMNS} />;
+    return <DataListSkeleton columns={COLUMNS} />;
   }
 
+  const sortFor = (key: ScorersSortKey) => (sort?.key === key ? sort.direction : undefined);
+
   return (
-    <EntityList columns={COLUMNS} scrollRef={containerRef}>
-      <EntityList.Top>
-        <EntityList.TopCell>Name</EntityList.TopCell>
-        <EntityList.TopCell>Description</EntityList.TopCell>
-        <EntityList.TopCell>Source</EntityList.TopCell>
-        <EntityList.TopCellSmart
-          long="Agents"
-          short={<AgentIcon />}
-          tooltip="Number of attached Agents"
-          className="text-center"
-        />
-        <EntityList.TopCellSmart
-          long="Workflows"
-          short={<WorkflowIcon />}
-          tooltip="Number of attached Workflows"
-          className="text-center"
-        />
-      </EntityList.Top>
+    <DataList columns={COLUMNS} scrollRef={containerRef}>
+      <DataList.Top>
+        {onSortChange ? (
+          <>
+            <DataList.SortableTopCell sortKey="name" sort={sortFor('name')} onSortChange={onSortChange}>
+              Name
+            </DataList.SortableTopCell>
+            <DataList.TopCell>Description</DataList.TopCell>
+            <DataList.SortableTopCell sortKey="source" sort={sortFor('source')} onSortChange={onSortChange}>
+              Source
+            </DataList.SortableTopCell>
+            <DataList.SortableTopCell sortKey="agents" sort={sortFor('agents')} onSortChange={onSortChange} align="end">
+              Agents
+            </DataList.SortableTopCell>
+            <DataList.SortableTopCell
+              sortKey="workflows"
+              sort={sortFor('workflows')}
+              onSortChange={onSortChange}
+              align="end"
+            >
+              Workflows
+            </DataList.SortableTopCell>
+          </>
+        ) : (
+          <>
+            <DataList.TopCell>Name</DataList.TopCell>
+            <DataList.TopCell>Description</DataList.TopCell>
+            <DataList.TopCell>Source</DataList.TopCell>
+            <DataList.TopCellSmart
+              long="Agents"
+              short={<AgentIcon />}
+              tooltip="Number of attached Agents"
+              className="text-center"
+            />
+            <DataList.TopCellSmart
+              long="Workflows"
+              short={<WorkflowIcon />}
+              tooltip="Number of attached Workflows"
+              className="text-center"
+            />
+          </>
+        )}
+      </DataList.Top>
 
       {filteredData.map((scorer, index) => {
         const name = scorer.scorer.config?.name || scorer.id;
@@ -94,7 +135,7 @@ export function ScorersList({
 
         const cells = (
           <>
-            <EntityList.NameCell>
+            <DataList.NameCell>
               <span className="flex max-w-full min-w-0 items-center gap-1.5">
                 <span className="min-w-0 truncate">{name}</span>
                 {isTrajectory && (
@@ -103,42 +144,42 @@ export function ScorersList({
                   </Badge>
                 )}
               </span>
-            </EntityList.NameCell>
-            <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
-            <EntityList.Cell>
+            </DataList.NameCell>
+            <DataList.DescriptionCell>{description}</DataList.DescriptionCell>
+            <DataList.Cell>
               <Badge size="xs" variant={scorer.source === 'code' ? 'blue' : 'neutral'}>
                 {scorer.source}
               </Badge>
-            </EntityList.Cell>
-            <EntityList.TextCell className="text-center">{agentCount || ''}</EntityList.TextCell>
-            <EntityList.TextCell className="text-center">{workflowCount || ''}</EntityList.TextCell>
+            </DataList.Cell>
+            <DataList.TextCell className="text-center">{agentCount || ''}</DataList.TextCell>
+            <DataList.TextCell className="text-center">{workflowCount || ''}</DataList.TextCell>
           </>
         );
 
         if (onSelectScorer) {
           return (
-            <EntityList.RowButton
+            <DataList.RowButton
               key={scorer.id}
               featured={selectedScorerId === scorer.id}
               onClick={() => onSelectScorer(scorer)}
               {...getRowProps(index)}
             >
               {cells}
-            </EntityList.RowButton>
+            </DataList.RowButton>
           );
         }
 
         return (
-          <EntityList.RowLink
+          <DataList.RowLink
             key={scorer.id}
             to={paths.scorerLink(scorer.id)}
             LinkComponent={Link}
             {...getRowProps(index)}
           >
             {cells}
-          </EntityList.RowLink>
+          </DataList.RowLink>
         );
       })}
-    </EntityList>
+    </DataList>
   );
 }

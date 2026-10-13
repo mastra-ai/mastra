@@ -4,13 +4,15 @@ import type {
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
   GetTraceQueryValuesResponse,
-  TraceQueryGroupResponse,
-  TraceQueryPaginatedTraceResponse,
-  TraceQueryTraceResponse,
 } from '@mastra/core/storage';
 import { describe, expect, expectTypeOf, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import type { QueryTraceThreadsResult, QueryTracesInput } from './observability';
+import type {
+  QuerySpansResult,
+  QueryTraceThreadsResult,
+  QueryTracesGroupedInput,
+  QueryTracesInput,
+} from './observability';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -26,7 +28,7 @@ describe('Observability Methods', () => {
   };
 
   // Helper to mock successful API responses
-  const mockSuccessfulResponse = () => {
+  const mockSuccessfulResponse = (body: unknown = {}) => {
     const response = new Response(undefined, {
       status: 200,
       statusText: 'OK',
@@ -34,7 +36,7 @@ describe('Observability Methods', () => {
         'Content-Type': 'application/json',
       }),
     });
-    response.json = () => Promise.resolve({});
+    response.json = () => Promise.resolve(body);
     (global.fetch as any).mockResolvedValueOnce(response);
   };
 
@@ -495,6 +497,48 @@ describe('Observability Methods', () => {
         page: { limit: number };
         pagination: { page: number; perPage: number };
       }>().not.toMatchTypeOf<QueryTracesInput>();
+      expectTypeOf<{
+        timeRange: { from: string; to: string };
+        group: { by: ['threadId'] };
+        pagination: { page: number; perPage: number };
+      }>().not.toMatchTypeOf<QueryTracesInput>();
+    });
+
+    it('should continue to post deprecated grouped queries with group result types', async () => {
+      mockSuccessfulResponse();
+      const request: QueryTracesGroupedInput = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        group: { by: ['threadId'] },
+        page: { limit: 25 },
+      };
+
+      const result = await client.queryTraces(request);
+
+      expectTypeOf(result).toEqualTypeOf<TraceQueryGroupResponse>();
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
+          body: JSON.stringify(request),
+        }),
+      );
+    });
+
+    it('posts delta cursor and limit unchanged and exposes delta metadata directly', async () => {
+      mockSuccessfulResponse({ traces: [], delta: { limit: 5, hasMore: false }, deltaCursor: 'next' });
+      const request = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        mode: 'delta' as const,
+        after: 'previous',
+        limit: 5,
+      };
+      const result = await client.queryTraces(request);
+      expect(result.deltaCursor).toBe('next');
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/traces/query`,
+        expect.objectContaining({ method: 'POST', body: JSON.stringify(request) }),
+      );
     });
 
     it('should post the advanced query body unchanged with trace result types', async () => {
@@ -515,10 +559,7 @@ describe('Observability Methods', () => {
         page: { limit: 25 },
       };
 
-      const result = await client.queryTraces(request);
-
-      expectTypeOf(result).toEqualTypeOf<TraceQueryTraceResponse | TraceQueryPaginatedTraceResponse>();
-      expectTypeOf(result).not.toEqualTypeOf<TraceQueryGroupResponse>();
+      await client.queryTraces(request);
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/traces/query`,
         expect.objectContaining({
@@ -536,12 +577,8 @@ describe('Observability Methods', () => {
         pagination: { page: 0, perPage: 25 },
       };
 
-      const result = await client.queryTraces(request);
+      await client.queryTraces(request);
 
-      expectTypeOf(result).toEqualTypeOf<TraceQueryTraceResponse | TraceQueryPaginatedTraceResponse>();
-      if ('pagination' in result) {
-        expectTypeOf(result.pagination).toEqualTypeOf<TraceQueryPaginatedTraceResponse['pagination']>();
-      }
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/traces/query`,
         expect.objectContaining({
@@ -644,6 +681,36 @@ describe('Observability Methods', () => {
       expectTypeOf<QueryTraceThreadsResult['threads'][number]>().not.toHaveProperty('traceId');
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/threads/query`,
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
+          body: JSON.stringify(request),
+        }),
+      );
+    });
+  });
+
+  describe('querySpans()', () => {
+    it('should post the span query body unchanged with a span-row result type', async () => {
+      mockSuccessfulResponse();
+      const request = {
+        timeRange: { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' },
+        where: {
+          op: 'eq' as const,
+          left: { path: 'status' },
+          right: { literal: 'error' },
+        },
+        orderBy: [{ field: 'startedAt' as const, direction: 'desc' as const }],
+        page: { limit: 25 },
+      };
+
+      const result = await client.querySpans(request);
+
+      expectTypeOf(result).toEqualTypeOf<QuerySpansResult>();
+      expectTypeOf<QuerySpansResult['spans'][number]>().toHaveProperty('spanId');
+      expectTypeOf<QuerySpansResult['page']['next']>().toEqualTypeOf<string | null>();
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/spans/query`,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({ ...clientOptions.headers, 'content-type': 'application/json' }),
@@ -2035,6 +2102,21 @@ describe('Observability Methods', () => {
       (global.fetch as any).mockResolvedValueOnce(errorResponse);
 
       await expect(client.getTags()).rejects.toThrow();
+    });
+  });
+
+  describe('getObservabilityCapabilities()', () => {
+    it('should fetch the observability capabilities endpoint', async () => {
+      mockSuccessfulResponse();
+
+      await client.getObservabilityCapabilities();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/capabilities`,
+        expect.objectContaining({
+          headers: expect.objectContaining(clientOptions.headers),
+        }),
+      );
     });
   });
 });

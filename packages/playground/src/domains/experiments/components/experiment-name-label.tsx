@@ -7,7 +7,7 @@ const LONG_DESCRIPTION = 60;
 /** Single truncated line with the experiment display name. Caller supplies the cell. */
 export function ExperimentNameLabel({ experiment }: { experiment: DatasetExperiment }) {
   return (
-    <span className="text-muted-foreground block min-w-0 truncate text-left">
+    <span className="block min-w-0 truncate text-left text-muted-foreground">
       {getExperimentDisplayName(experiment)}
     </span>
   );
@@ -23,7 +23,7 @@ export function ExperimentDescriptionLabel({ experiment }: { experiment: Dataset
     return <span className="text-placeholder">—</span>;
   }
 
-  const label = <span className="text-muted-foreground block min-w-0 truncate text-left">{description}</span>;
+  const label = <span className="block min-w-0 truncate text-left text-muted-foreground">{description}</span>;
 
   if (description.length <= LONG_DESCRIPTION) {
     return label;

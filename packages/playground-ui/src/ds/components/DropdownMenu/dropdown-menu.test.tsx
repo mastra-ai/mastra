@@ -25,7 +25,7 @@ describe('DropdownMenu.Trigger', () => {
   it('forwards variant and size to the Button', () => {
     render(
       <DropdownMenu>
-        <DropdownMenu.Trigger variant="ghost" size="xs" className="tabular-nums">
+        <DropdownMenu.Trigger variant="ghost" size="sm" className="tabular-nums">
           Open
         </DropdownMenu.Trigger>
       </DropdownMenu>,
@@ -39,25 +39,25 @@ describe('DropdownMenu.Trigger', () => {
   it('lets a custom render element own the look', () => {
     render(
       <DropdownMenu>
-        <DropdownMenu.Trigger variant="ghost" render={<Button variant="outline">Open</Button>} />
+        <DropdownMenu.Trigger variant="ghost" render={<Button variant="primary">Open</Button>} />
       </DropdownMenu>,
     );
 
     expect(screen.getAllByRole('button')).toHaveLength(1);
-    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('outline');
+    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('primary');
   });
 
   it('still supports the legacy asChild prop', () => {
     render(
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
-          <Button variant="outline">Open</Button>
+          <Button variant="primary">Open</Button>
         </DropdownMenu.Trigger>
       </DropdownMenu>,
     );
 
     expect(screen.getAllByRole('button')).toHaveLength(1);
-    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('outline');
+    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('primary');
   });
 
   it('uses tooltip as the accessible name of an icon-only trigger', () => {

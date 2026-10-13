@@ -20,7 +20,10 @@ export function DateRangeTrackGrid({ markers }: DateRangeTrackGridProps) {
       {interiorMarkers.map(marker => (
         <span
           key={marker.index}
-          className={cn('absolute top-1/2 w-px -translate-1/2 bg-neutral3/15', getMarkerHeight(marker.emphasis))}
+          className={cn(
+            'absolute top-1/2 w-px -translate-1/2 bg-muted-foreground/15',
+            getMarkerHeight(marker.emphasis),
+          )}
           style={{ left: `${marker.position}%` }}
         />
       ))}

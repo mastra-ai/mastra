@@ -10,9 +10,11 @@ import { ProcessorRunner } from '../../processors/runner';
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
+import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import type { ChunkType } from '../../stream/types';
-import { ChunkFrom } from '../../stream/types';
+import { ChunkFrom, isDataChunk } from '../../stream/types';
 import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
+import { REQUEST_TOOLS_KEY, STEP_TOOLS_KEY } from '../run-scope-keys';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '../timeout';
 import type { LoopRun } from '../types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID } from './agentic-execution';
@@ -36,7 +38,19 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
   ...rest
 }: LoopRun<Tools, OUTPUT>) {
   return new ReadableStream<ChunkType<OUTPUT>>({
-    start: async controller => {
+    start: async streamController => {
+      // Stamp chunks when the loop produces them; consumers may read them much later.
+      const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
+        enqueue: chunk => {
+          if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
+          streamController.enqueue(chunk);
+        },
+        close: () => streamController.close(),
+        error: reason => streamController.error(reason),
+        get desiredSize() {
+          return streamController.desiredSize;
+        },
+      };
       // Normalize requestContext so data-chunk processors and the agentic loop share the same instance
       const requestContext = rest.requestContext ?? new RequestContext();
 
@@ -66,7 +80,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             writerOptions?: { messageId?: string },
           ) => {
             const emittedMessageId = writerOptions?.messageId ?? responseMessageId;
-            if (data.type.startsWith('data-') && emittedMessageId && !data.transient) {
+            if (isDataChunk(data) && emittedMessageId && !data.transient) {
               // Persistence failures must not drop the frame from the stream —
               // delivery to the client takes priority over saving to memory.
               try {
@@ -95,12 +109,58 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           },
         };
 
+        const enqueueTripwire = (
+          reason: string | undefined,
+          tripwireOptions: { retry?: unknown; metadata?: unknown } | undefined,
+          processorId: string | undefined,
+        ) => {
+          safeEnqueue(controller, {
+            type: 'tripwire',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
+              reason: reason || 'Output processor blocked content',
+              retry: tripwireOptions?.retry,
+              metadata: tripwireOptions?.metadata,
+              processorId,
+            },
+          } as ChunkType<OUTPUT>);
+        };
+
+        // Emit parts a processor stashed for reprocessing (e.g. the non-text part
+        // that triggered a BatchPartsProcessor flush). Leaving them stashed lets
+        // them leak into the next step — after a retried mid-stream error that
+        // surfaces a stray step-finish on an already-consumed step output.
+        const drainReprocessed = async () => {
+          const reprocessed = await dataChunkProcessorRunner!.drainReprocessParts(
+            dataChunkProcessorStates! as Map<string, ProcessorState<OUTPUT>>,
+            undefined,
+            requestContext,
+            messageList,
+            0,
+            dataChunkStreamWriter,
+          );
+          for (const r of reprocessed) {
+            if (r.blocked) {
+              enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);
+              return;
+            }
+            if (r.part == null) continue;
+            const part = r.part as ChunkType<OUTPUT>;
+            if (isDataChunk(part)) {
+              await dataChunkStreamWriter.custom(part as { type: string; data?: unknown; transient?: boolean });
+            } else {
+              safeEnqueue(controller, part);
+            }
+          }
+        };
+
         // Handle data-* chunks (custom data chunks from writer.custom())
         // These need to be persisted to storage, not just streamed
         // Transient chunks are streamed to the client but not saved to the DB
-        if (chunk.type.startsWith('data-')) {
+        if (isDataChunk(chunk)) {
           // Run data-* chunks through output processors before persisting
-          let processedChunk = chunk;
+          let processedChunk: ChunkType<OUTPUT> = chunk;
           if (dataChunkProcessorRunner) {
             const {
               part: processed,
@@ -119,31 +179,21 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             );
 
             if (blocked) {
-              safeEnqueue(controller, {
-                type: 'tripwire',
-                runId,
-                from: ChunkFrom.AGENT,
-                payload: {
-                  reason: reason || 'Output processor blocked content',
-                  retry: tripwireOptions?.retry,
-                  metadata: tripwireOptions?.metadata,
-                  processorId,
-                },
-              } as ChunkType<OUTPUT>);
+              enqueueTripwire(reason, tripwireOptions, processorId);
               return;
             }
 
             if (processed) {
               processedChunk = processed as ChunkType<OUTPUT>;
             } else {
+              await drainReprocessed();
               return;
             }
           }
 
           // If a processor rewrote the chunk to a non-data type, skip persistence
           if (
-            typeof processedChunk.type === 'string' &&
-            processedChunk.type.startsWith('data-') &&
+            isDataChunk(processedChunk) &&
             responseMessageId &&
             !('transient' in processedChunk && processedChunk.transient)
           ) {
@@ -175,6 +225,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           }
 
           safeEnqueue(controller, processedChunk);
+          if (dataChunkProcessorRunner) await drainReprocessed();
           return;
         }
 
@@ -201,22 +252,12 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           );
 
           if (blocked) {
-            safeEnqueue(controller, {
-              type: 'tripwire',
-              runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                reason: reason || 'Output processor blocked content',
-                retry: tripwireOptions?.retry,
-                metadata: tripwireOptions?.metadata,
-                processorId,
-              },
-            } as ChunkType<OUTPUT>);
+            enqueueTripwire(reason, tripwireOptions, processorId);
             return;
           }
 
-          if (!processed) return;
-          safeEnqueue(controller, processed as ChunkType<OUTPUT>);
+          if (processed) safeEnqueue(controller, processed as ChunkType<OUTPUT>);
+          await drainReprocessed();
           return;
         }
 
@@ -237,9 +278,23 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         timeoutType: 'total',
       });
 
-      const restWithTimeoutSignal = totalTimeoutPromise
-        ? { ...rest, options: { ...rest.options, abortSignal: totalTimeoutSignal } }
-        : rest;
+      // A run-owned signal linked to the caller's. Callers often reuse one long-lived signal
+      // across many runs, so run internals listen here rather than on the caller's signal;
+      // the single link back is removed in the `finally` below. Tools and sub-agents still
+      // receive the caller's signal unchanged through `options.abortSignal`.
+      const upstreamAbortSignal = totalTimeoutPromise ? totalTimeoutSignal : rest.options?.abortSignal;
+      const runAbortController = upstreamAbortSignal ? new AbortController() : undefined;
+      const onUpstreamAbort = () => runAbortController?.abort(upstreamAbortSignal?.reason);
+      if (upstreamAbortSignal?.aborted) {
+        onUpstreamAbort();
+      } else {
+        upstreamAbortSignal?.addEventListener('abort', onUpstreamAbort, { once: true });
+      }
+
+      const restWithTimeoutSignal = {
+        ...(totalTimeoutPromise ? { ...rest, options: { ...rest.options, abortSignal: totalTimeoutSignal } } : rest),
+        runAbortSignal: runAbortController?.signal,
+      };
 
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
@@ -274,6 +329,29 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // refcount is owned by the internal-workflow registration above —
         // no separate release needed here.
         hydrateRunScopeFromInternal(rest.mastra, runId, _internal);
+        // A scope kept alive across suspension still holds the previous request's step tools,
+        // which close over that request's requestContext. Let the tools built for this call
+        // replace the ones the previous request configured, but keep the ones a processor added
+        // or swapped in, since the suspended call may be one of them and the processors do not
+        // run again before it resumes.
+        const runScope = rest.mastra.__getRunScope(runId);
+        const previousStepTools = resumeContext ? runScope?.get(STEP_TOOLS_KEY) : undefined;
+        if (previousStepTools) {
+          const previousRequestTools = runScope!.get(REQUEST_TOOLS_KEY);
+          const stepTools = { ...previousStepTools };
+          for (const [name, tool] of Object.entries(rest.tools ?? {})) {
+            // A name the previous request configured but the step tools lack was withheld by a processor.
+            const refresh =
+              name in previousStepTools
+                ? previousStepTools[name] === previousRequestTools?.[name]
+                : !previousRequestTools || !(name in previousRequestTools);
+            if (refresh) {
+              stepTools[name] = tool;
+            }
+          }
+          runScope!.set(STEP_TOOLS_KEY, stepTools);
+        }
+        if (rest.tools) runScope?.set(REQUEST_TOOLS_KEY, rest.tools);
       }
 
       // Once the run reaches a terminal state its snapshot rows are no longer
@@ -447,7 +525,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             ...executionResult.result,
             stepResult: {
               ...executionResult.result.stepResult,
-              // @ts-expect-error - runtime reason can be 'tripwire' | 'retry' from processors, but zod schema infers as string
+              // runtime reason can be 'tripwire' | 'retry' from processors
               reason: executionResult.result.stepResult.reason,
             },
           },
@@ -455,6 +533,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         safeClose(controller);
       } finally {
+        upstreamAbortSignal?.removeEventListener('abort', onUpstreamAbort);
         cleanupTotalTimeout();
         await stopGoalActivity({ agentId, runId, now: _internal?.now });
         if (!keepRegisteredForResume) {

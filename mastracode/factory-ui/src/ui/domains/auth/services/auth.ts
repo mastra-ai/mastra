@@ -26,6 +26,8 @@ export interface FactoryAuthState {
   provider?: string;
   /** True when the provider hosts credential forms and sign-up is disabled. */
   signUpDisabled?: boolean;
+  /** True when Mastra Platform auth cannot redirect back to this deployment's domain. */
+  customDomainUnsupported?: boolean;
 }
 
 /** The resourceId under which a user's personal (non-factory) sessions live. */
@@ -134,6 +136,7 @@ export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState>
     user?: { userId?: string; email?: string; name?: string; organizationId?: string } | null;
     provider?: string;
     signUpDisabled?: boolean;
+    customDomainUnsupported?: boolean;
   };
   return {
     authEnabled: true,
@@ -142,5 +145,6 @@ export async function fetchAuthState(baseUrl: string): Promise<FactoryAuthState>
     user: data.user ?? undefined,
     provider: data.provider,
     signUpDisabled: data.signUpDisabled,
+    customDomainUnsupported: data.customDomainUnsupported,
   };
 }

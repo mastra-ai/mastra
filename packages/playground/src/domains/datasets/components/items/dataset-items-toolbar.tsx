@@ -1,8 +1,13 @@
 'use client';
+
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
 
 export type DatasetItemsToolbarProps = {
@@ -55,15 +60,19 @@ export function DatasetItemsToolbar({
   onReturnToLatestVersion,
 }: DatasetItemsToolbarProps) {
   const oldVersionNotice = isViewingOldVersion && activeDatasetVersion != null && (
-    <div className="text-accent6 text-ui-sm flex min-w-0 items-center gap-3">
-      <span className="truncate">You are seeing v{activeDatasetVersion}, which is an older version of the dataset</span>
+    <div className="flex min-w-0 items-center gap-3 text-warning-foreground">
+      <Txt as="span" variant="caption" className="truncate">
+        You are seeing v{activeDatasetVersion}, which is an older version of the dataset
+      </Txt>
       {onReturnToLatestVersion && (
         <button
           type="button"
           onClick={onReturnToLatestVersion}
-          className="text-ui-sm text-icon3 hover:text-icon6 shrink-0 underline underline-offset-2 transition-colors"
+          className={cn(quietTextHover, controlStateColorTransition, 'shrink-0 underline underline-offset-2')}
         >
-          Return to latest
+          <Txt as="span" variant="caption" className="block">
+            Return to latest
+          </Txt>
         </button>
       )}
     </div>
@@ -74,7 +83,7 @@ export function DatasetItemsToolbar({
   const showItemActions = hasItems || Boolean(searchQuery);
 
   const searchField = showItemActions && (
-    <div className="max-w-120 min-w-64 flex-1">
+    <div className="max-w-120 flex-1">
       <ListSearch
         label="Search items"
         placeholder="Search items..."
@@ -117,7 +126,7 @@ export function DatasetItemsToolbar({
         {onDeleteClick && (
           <>
             <DropdownMenu.Separator />
-            <DropdownMenu.Item onSelect={onDeleteClick} className="text-red-500 focus:text-red-400">
+            <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
               <Trash2 /> Delete Items
             </DropdownMenu.Item>
           </>
@@ -138,11 +147,11 @@ export function DatasetItemsToolbar({
         {oldVersionNotice}
       </div>
 
-      <ButtonsGroup className="ml-auto flex-wrap justify-end">
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
         {leftSlot}
         {selectionDropdown}
         {showItemActions && !isItemPanelOpen && !isViewingOldVersion && (
-          <ButtonsGroup spacing="close">
+          <ButtonsGroup>
             <CreateButton onClick={onAddClick} tooltip="Add an item">
               New item
             </CreateButton>
@@ -164,7 +173,7 @@ export function DatasetItemsToolbar({
           </ButtonsGroup>
         )}
         {rightSlot}
-      </ButtonsGroup>
+      </div>
     </div>
   );
 }

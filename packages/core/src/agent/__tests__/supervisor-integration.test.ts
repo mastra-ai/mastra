@@ -352,6 +352,344 @@ describe('Supervisor Pattern Integration Tests', () => {
           result: { temperature: 20, city: 'Paris' },
         }),
       ]);
+      // Every tool call was resolved, so nothing is reported as pending
+      expect(capturedContext!.result.subAgentPendingToolCalls).toBeUndefined();
+    });
+
+    it('should not report a sub-agent tool call that errored as pending (generate)', async () => {
+      let capturedContext: DelegationCompleteContext | undefined;
+      const lookupTool = createTool({
+        id: 'lookup',
+        description: 'Look something up',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async () => {
+          throw new Error('lookup failed');
+        },
+      });
+
+      const subAgent = new Agent({
+        id: 'erroring-tool-sub-agent',
+        name: 'erroring-tool-sub-agent',
+        description: 'Sub-agent whose tool throws',
+        instructions: 'You look things up.',
+        model: makeSubAgentModelWithTool('lookup', { query: 'x' }),
+        tools: { lookup: lookupTool },
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: makeSupervisorModel('erroringToolSubAgent', 'look up x'),
+        agents: { erroringToolSubAgent: subAgent },
+        memory: new MockMemory(),
+      });
+      const warnSpy = vi.spyOn(supervisorAgent['logger'], 'warn');
+
+      await supervisorAgent.generate('Look up x', {
+        maxSteps: 3,
+        delegation: {
+          onDelegationComplete: ctx => {
+            capturedContext = ctx;
+          },
+        },
+      });
+
+      expect(capturedContext).toBeDefined();
+      // The sub-agent saw the tool error and recovered on its next step
+      expect(capturedContext!.result.finishReason).toBe('stop');
+      expect(capturedContext!.result.subAgentPendingToolCalls).toBeUndefined();
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('no server-side execute'), expect.anything());
+    });
+
+    it('should not report a sub-agent tool call that errored as pending (stream)', async () => {
+      let capturedContext: DelegationCompleteContext | undefined;
+      const lookupTool = createTool({
+        id: 'lookup',
+        description: 'Look something up',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async () => {
+          throw new Error('lookup failed');
+        },
+      });
+
+      let subAgentCallCount = 0;
+      const subAgent = new Agent({
+        id: 'stream-erroring-tool-sub-agent',
+        name: 'stream-erroring-tool-sub-agent',
+        description: 'Sub-agent whose tool throws',
+        instructions: 'You look things up.',
+        model: new MockLanguageModelV2({
+          doStream: async () => {
+            subAgentCallCount++;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream(
+                subAgentCallCount === 1
+                  ? [
+                      { type: 'stream-start', warnings: [] },
+                      { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                      {
+                        type: 'tool-call',
+                        toolCallId: 'sub-call-1',
+                        toolName: 'lookup',
+                        input: JSON.stringify({ query: 'x' }),
+                      },
+                      {
+                        type: 'finish',
+                        finishReason: 'tool-calls',
+                        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                      },
+                    ]
+                  : [
+                      { type: 'stream-start', warnings: [] },
+                      { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                      { type: 'text-start', id: 'text-1' },
+                      { type: 'text-delta', id: 'text-1', delta: 'Recovered answer' },
+                      { type: 'text-end', id: 'text-1' },
+                      {
+                        type: 'finish',
+                        finishReason: 'stop',
+                        usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+                      },
+                    ],
+              ),
+            };
+          },
+        }),
+        tools: { lookup: lookupTool },
+      });
+
+      let supervisorCallCount = 0;
+      const supervisorModel = new MockLanguageModelV2({
+        doStream: async () => {
+          supervisorCallCount++;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream(
+              supervisorCallCount === 1
+                ? [
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    {
+                      type: 'tool-call',
+                      toolCallId: 'supervisor-call-1',
+                      toolName: 'agent-streamErroringToolSubAgent',
+                      input: JSON.stringify({ prompt: 'look up x' }),
+                    },
+                    {
+                      type: 'finish',
+                      finishReason: 'tool-calls',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    },
+                  ]
+                : [
+                    { type: 'stream-start', warnings: [] },
+                    { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Done' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                    },
+                  ],
+            ),
+          };
+        },
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'stream-supervisor',
+        name: 'stream-supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: supervisorModel,
+        agents: { streamErroringToolSubAgent: subAgent },
+        memory: new MockMemory(),
+      });
+      const warnSpy = vi.spyOn(supervisorAgent['logger'], 'warn');
+
+      const stream = await supervisorAgent.stream('Look up x', {
+        maxSteps: 3,
+        delegation: {
+          onDelegationComplete: ctx => {
+            capturedContext = ctx;
+          },
+        },
+      });
+      await stream.consumeStream();
+
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext!.result.text).toBe('Recovered answer');
+      expect(capturedContext!.result.finishReason).toBe('stop');
+      expect(capturedContext!.result.subAgentPendingToolCalls).toBeUndefined();
+      expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('no server-side execute'), expect.anything());
+      expect(JSON.stringify(supervisorModel.doStreamCalls[1]!.prompt)).not.toContain('were never run');
+    });
+
+    it('should report sub-agent tool calls without execute as pending (generate)', async () => {
+      let capturedContext: DelegationCompleteContext | undefined;
+      const addToCartTool = createTool({
+        id: 'add-to-cart',
+        description: 'Add a product to the cart in the browser',
+        inputSchema: z.object({ productId: z.string() }),
+      });
+
+      const subAgentModel = makeSubAgentModelWithTool('add-to-cart', { productId: 'sku-1' });
+      const subAgent = new Agent({
+        id: 'client-tool-sub-agent',
+        name: 'client-tool-sub-agent',
+        description: 'Sub-agent with a client tool',
+        instructions: 'You add products to the cart.',
+        model: subAgentModel,
+        tools: { 'add-to-cart': addToCartTool },
+      });
+
+      const supervisorModel = makeSupervisorModel('clientToolSubAgent', 'add sku-1 to the cart');
+      const supervisorAgent = new Agent({
+        id: 'supervisor',
+        name: 'supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: supervisorModel,
+        agents: { clientToolSubAgent: subAgent },
+        memory: new MockMemory(),
+      });
+      const warnSpy = vi.spyOn(supervisorAgent['logger'], 'warn');
+
+      await supervisorAgent.generate('Add sku-1 to the cart', {
+        maxSteps: 3,
+        delegation: {
+          onDelegationComplete: ctx => {
+            capturedContext = ctx;
+          },
+        },
+      });
+
+      expect(capturedContext).toBeDefined();
+      // The sub-agent stops at the tool-calls step because nothing can run the client tool
+      expect(capturedContext!.result.finishReason).toBe('tool-calls');
+      expect(capturedContext!.result.subAgentToolResults).toEqual([]);
+      expect(capturedContext!.result.subAgentPendingToolCalls).toEqual([
+        { toolName: 'add-to-cart', toolCallId: 'sub-call-1', args: { productId: 'sku-1' } },
+      ]);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Sub-agent "clientToolSubAgent"'), {
+        tools: ['add-to-cart'],
+      });
+
+      // The supervisor model sees the pending call in the delegation tool result
+      const secondSupervisorPrompt = JSON.stringify(supervisorModel.doGenerateCalls[1]!.prompt);
+      expect(secondSupervisorPrompt).toContain(
+        'it called tools that have no server-side execute and were never run: add-to-cart({\\"productId\\":\\"sku-1\\"})',
+      );
+    });
+
+    it('should report sub-agent tool calls without execute as pending (stream)', async () => {
+      let capturedContext: DelegationCompleteContext | undefined;
+      const addToCartTool = createTool({
+        id: 'add-to-cart',
+        description: 'Add a product to the cart in the browser',
+        inputSchema: z.object({ productId: z.string() }),
+      });
+
+      const subAgent = new Agent({
+        id: 'stream-client-tool-sub-agent',
+        name: 'stream-client-tool-sub-agent',
+        description: 'Sub-agent with a client tool',
+        instructions: 'You add products to the cart.',
+        model: new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'sub-call-1',
+                toolName: 'add-to-cart',
+                input: JSON.stringify({ productId: 'sku-1' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+              },
+            ]),
+          }),
+        }),
+        tools: { 'add-to-cart': addToCartTool },
+      });
+
+      let supervisorCallCount = 0;
+      const supervisorModel = new MockLanguageModelV2({
+        doStream: async () => {
+          supervisorCallCount++;
+          if (supervisorCallCount === 1) {
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'supervisor-call-1',
+                  toolName: 'agent-streamClientToolSubAgent',
+                  input: JSON.stringify({ prompt: 'add sku-1 to the cart' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          }
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Done' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+            ]),
+          };
+        },
+      });
+
+      const supervisorAgent = new Agent({
+        id: 'stream-supervisor',
+        name: 'stream-supervisor',
+        instructions: 'You orchestrate sub-agents.',
+        model: supervisorModel,
+        agents: { streamClientToolSubAgent: subAgent },
+        memory: new MockMemory(),
+      });
+
+      const stream = await supervisorAgent.stream('Add sku-1 to the cart', {
+        maxSteps: 3,
+        delegation: {
+          onDelegationComplete: ctx => {
+            capturedContext = ctx;
+          },
+        },
+      });
+      await stream.consumeStream();
+
+      expect(capturedContext).toBeDefined();
+      expect(capturedContext!.result.finishReason).toBe('tool-calls');
+      expect(capturedContext!.result.subAgentToolResults).toEqual([]);
+      expect(capturedContext!.result.subAgentPendingToolCalls).toEqual([
+        { toolName: 'add-to-cart', toolCallId: 'sub-call-1', args: { productId: 'sku-1' } },
+      ]);
+      const secondSupervisorPrompt = JSON.stringify(supervisorModel.doStreamCalls[1]!.prompt);
+      expect(secondSupervisorPrompt).toContain('were never run: add-to-cart');
     });
 
     it('should fail the delegation when the sub-agent stream finishes with an error reason', async () => {
@@ -930,6 +1268,16 @@ describe('Supervisor Pattern Integration Tests', () => {
           parentAgentId: 'supervisor',
         }),
       );
+
+      // The filter receives the model messages the parent LLM saw, not persisted DB messages
+      const { messages } = messageFilterSpy.mock.calls[0]![0];
+      expect(messages).toContainEqual(
+        expect.objectContaining({ role: 'system', content: 'You orchestrate sub-agents.' }),
+      );
+      expect(messages.some(m => m.role === 'tool')).toBe(false);
+      for (const message of messages) {
+        expect(typeof message.content === 'string' || Array.isArray(message.content)).toBe(true);
+      }
     });
 
     it('should call both onDelegationStart and onDelegationComplete in order', async () => {
@@ -2550,7 +2898,7 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
     expect(callCount).toBe(2);
   });
 
-  it('should add feedback to conversation when provided', async () => {
+  it('should run one more iteration with feedback when the model stops', async () => {
     const feedbackMessages: string[] = [];
     let callCount = 0;
 
@@ -2562,13 +2910,16 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
         doGenerate: async ({ prompt }) => {
           callCount++;
 
-          // Check if feedback was added to messages
           const messages = Array.isArray(prompt) ? prompt : [prompt];
-          const feedbackMsg = messages.find(
-            (m: any) => typeof m.content === 'string' && m.content.includes('Please improve'),
-          );
-          if (feedbackMsg) {
-            feedbackMessages.push((feedbackMsg as any).content);
+          const feedbackText = messages
+            .flatMap((m: any) =>
+              Array.isArray(m.content)
+                ? m.content.flatMap((part: any) => (part.type === 'text' ? [part.text] : []))
+                : [m.content],
+            )
+            .find((content: unknown) => typeof content === 'string' && content.includes('Please improve'));
+          if (feedbackText) {
+            feedbackMessages.push(feedbackText);
           }
 
           if (callCount === 1) {
@@ -2594,13 +2945,16 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
         doStream: async ({ prompt }) => {
           callCount++;
 
-          // Check if feedback was added to messages
           const messages = Array.isArray(prompt) ? prompt : [prompt];
-          const feedbackMsg = messages.find(
-            (m: any) => typeof m.content === 'string' && m.content.includes('Please improve'),
-          );
-          if (feedbackMsg) {
-            feedbackMessages.push((feedbackMsg as any).content);
+          const feedbackText = messages
+            .flatMap((m: any) =>
+              Array.isArray(m.content)
+                ? m.content.flatMap((part: any) => (part.type === 'text' ? [part.text] : []))
+                : [m.content],
+            )
+            .find((content: unknown) => typeof content === 'string' && content.includes('Please improve'));
+          if (feedbackText) {
+            feedbackMessages.push(feedbackText);
           }
 
           if (callCount === 1) {
@@ -2658,17 +3012,15 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
       onIterationComplete: () => {
         iterationCount++;
         if (iterationCount === 1) {
-          // Add feedback after first iteration
-          return {
-            continue: true,
-            feedback: 'Please improve your response with more details.',
-          };
+          return { continue: true, feedback: 'Please improve your response with more details.' };
         }
-        return { continue: false }; // Stop after second iteration
+        return { continue: false };
       },
     });
 
     expect(iterationCount).toBe(2);
+    expect(callCount).toBe(2);
+    expect(feedbackMessages).toEqual(['Please improve your response with more details.']);
   });
 
   it('should allow onIterationComplete continue:true to override final stop in stream (issue #14134)', async () => {
@@ -2835,9 +3187,25 @@ describe('Supervisor Pattern - onIterationComplete Hook Integration', () => {
  * - `suppressFeedback` stores a flag in the is-task-complete chunk payload and in the
  *   feedback message's metadata; it does NOT prevent the message from being added to
  *   the messageList or from being sent to the model in the next iteration.
- * - maxSteps does NOT terminate the loop when an isTaskComplete scorer keeps failing
- *   (unlike the network flow).  Always ensure a scorer eventually passes to avoid
- *   an infinite loop.
+ * - A positive maxSteps value caps scorer-driven continuation: once the accumulated
+ *   step count reaches it, a failing isTaskComplete scorer can no longer buy
+ *   another turn; its feedback is still injected for that final iteration.
+ *   One hook path looks like it should escape the budget but does not: `maxSteps`
+ *   is sugar for the stop condition `stepCountIs(maxSteps)`, which the model layer
+ *   composes in alongside any caller-supplied `stopWhen`
+ *   (`llm/model/model.loop.ts:156-162`). That condition has already matched at the
+ *   boundary, so an `onIterationComplete` hook returning
+ *   `{ feedback, continue: false }` cannot clear `isFinal`: the feedback is
+ *   injected, the run halts, and the feedback goes unused
+ *   (`loop/shared/continuation-core.ts:288-296`, pinned by
+ *   `loop/shared/continuation-core.test.ts:186-200`).
+ *   An unset or zero maxSteps disables only the ceiling; `stopWhen` still
+ *   applies, and with no custom condition the model layer defaults it to
+ *   `stepCountIs(5)`. The durable loop resolves unset to
+ *   DurableAgentDefaults.MAX_STEPS and keeps `maxSteps: 0` as a zero budget, so
+ *   its budget is always finite. The plain loop gained the ceiling in the #24569
+ *   loop extraction and keeps it deliberately; the durable ladder enforces the
+ *   same one.
  */
 describe('Supervisor Pattern - IsTaskComplete feedback', () => {
   it('should require all scorers to pass with "all" strategy', async () => {
@@ -4861,12 +5229,17 @@ describe('Supervisor Pattern - AbortSignal forwarding', () => {
 
   it('should forward the parent abortSignal to a delegated sub-agent (stream)', async () => {
     let capturedSignal: AbortSignal | undefined;
+    let releaseProbe!: () => void;
+    const probeReleased = new Promise<void>(resolve => {
+      releaseProbe = resolve;
+    });
     const probe = createTool({
       id: 'probe',
       description: 'Records the abortSignal it receives from the execution context.',
       inputSchema: z.object({}),
       execute: async (_input: unknown, ctx: any) => {
         capturedSignal = ctx?.abortSignal;
+        await probeReleased;
         return { ok: true };
       },
     });
@@ -4891,17 +5264,22 @@ describe('Supervisor Pattern - AbortSignal forwarding', () => {
 
     const controller = new AbortController();
     const stream = await supervisor.stream('go', { abortSignal: controller.signal, maxSteps: 5 });
-    for await (const _chunk of stream.fullStream) {
-      // drain
+    const drainPromise = (async () => {
+      for await (const _chunk of stream.fullStream) {
+        // drain
+      }
+    })();
+
+    try {
+      await vi.waitFor(() => expect(capturedSignal).toBeDefined());
+      expect(capturedSignal!.aborted).toBe(false);
+
+      controller.abort();
+      expect(capturedSignal!.aborted).toBe(true);
+    } finally {
+      releaseProbe();
     }
-
-    // The sub-agent's tool must have received a signal linked to the parent controller.
-    expect(capturedSignal).toBeDefined();
-    expect(capturedSignal!.aborted).toBe(false);
-
-    // Aborting the parent must propagate to the forwarded signal observed by the sub-agent.
-    controller.abort();
-    expect(capturedSignal!.aborted).toBe(true);
+    await drainPromise;
   });
 
   it('should forward the parent abortSignal to a delegated sub-agent (generate)', async () => {

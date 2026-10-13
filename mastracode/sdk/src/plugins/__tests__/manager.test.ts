@@ -491,6 +491,72 @@ describe('PluginManager', () => {
     expect(updateListener).toHaveBeenCalledWith(['Acme New']);
   });
 
+  it('reloads renamed plugin source even when mtime and size are unchanged', async () => {
+    // Linux's coarse-clock file timestamps (1ms ticks) can hand an update
+    // rewrite the exact mtime of the file it replaces. Pinning both versions
+    // to one mtime reproduces that deterministically; with equal-length names
+    // the entry's metadata is then identical and only its content differs.
+    const pinnedMtime = new Date(1700000000000);
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
+    const entryPath = path.join(checkoutDir, 'src/index.ts');
+    writePluginSource(entryPath, 'acme.github', 'Acme Old', 'github_tool');
+    fs.utimesSync(entryPath, pinnedMtime, pinnedMtime);
+    fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'acme.github': {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/plugin',
+            path: 'sources/github/acme-plugin',
+            entry: 'src/index.ts',
+          },
+        },
+      }),
+    );
+    const statBefore = fs.statSync(entryPath, { bigint: true });
+    execaMock.mockImplementation(async (_cmd: string, args: string[]) => {
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') {
+        return {
+          stdout:
+            execaMock.mock.calls.filter(call => call[1][0] === 'rev-parse' && call[1][1] === 'HEAD').length === 1
+              ? 'old'
+              : 'new',
+        };
+      }
+      if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
+      if (args[0] === 'rev-list') return { stdout: '0\t1' };
+      if (args[0] === 'status') return { stdout: '' };
+      if (args[0] === 'reset') {
+        writePluginSource(entryPath, 'acme.github', 'Acme New', 'github_tool');
+        fs.utimesSync(entryPath, pinnedMtime, pinnedMtime);
+      }
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    const updateListener = vi.fn();
+    manager.onGithubPluginsUpdated(updateListener);
+    await manager.reload();
+
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
+
+    // Collision preconditions: the rewrite changed the content but not the metadata.
+    const statAfter = fs.statSync(entryPath, { bigint: true });
+    expect(statAfter.mtimeNs).toBe(statBefore.mtimeNs);
+    expect(statAfter.size).toBe(statBefore.size);
+    expect(fs.readFileSync(entryPath, 'utf8')).toContain('Acme New');
+
+    expect(updateListener).toHaveBeenCalledTimes(1);
+    expect(updateListener).toHaveBeenCalledWith(['Acme New']);
+  });
+
   it('reports every plugin sharing an updated checkout', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');

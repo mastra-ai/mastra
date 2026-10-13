@@ -37,6 +37,7 @@ import { createAbortError, normalizeAbortError, throwIfAborted, waitForAbortable
 import { DockerSandbox, type DockerSandboxOptions } from '../sandbox';
 import { openBuildSession, type BuildSession } from './build-session';
 import {
+  assertValidOwner,
   type AptInstallOptions,
   type DockerTemplateDefinition,
   type DockerTemplateOperation,
@@ -120,6 +121,7 @@ interface InFlightBuild {
  * Operation methods return a new instance (like the platform `Template()`
  * builder); `build`/`createSandbox`/`dispose` operate against the daemon.
  */
+
 export class DockerTemplate {
   readonly #baseImage: string;
   readonly #operations: readonly DockerTemplateOperation[];
@@ -205,9 +207,17 @@ export class DockerTemplate {
     });
     const output = validateString(options.output, 'output');
     if (!output.startsWith('/')) throw new TypeError('output must be an absolute path');
+    let owner: string | undefined;
+    if (options.owner !== undefined) {
+      owner = validateString(options.owner, 'owner');
+      assertValidOwner(owner);
+    }
     return this.#append({
       method: 'runWithSecrets',
-      args: [validateStringOrStrings(command, 'command'), { secrets, output }],
+      args: [
+        validateStringOrStrings(command, 'command'),
+        { secrets, output, ...(owner !== undefined ? { owner } : {}) },
+      ],
     });
   }
 
@@ -357,7 +367,7 @@ export class DockerTemplate {
           session.close();
         }
       } else {
-        const build = docker.buildImage(context, { t: tag, nocache }).then(stream => {
+        const build = docker.buildImage(context, { t: tag, nocache, forcerm: true }).then(stream => {
           if (abortSignal?.aborted) {
             (stream as NodeJS.ReadableStream & { destroy?(error?: Error): void }).destroy?.();
             throw createAbortError(abortSignal, 'build Docker template');

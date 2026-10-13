@@ -108,7 +108,7 @@ describe('Experiments page — Run Experiment', () => {
     const dialog = await screen.findByRole('dialog', { name: /run experiment/i });
     expect(dialog).toBeDefined();
 
-    fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'My experiment' } });
+    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'My experiment' } });
 
     // Select dataset, version, and target
     await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());

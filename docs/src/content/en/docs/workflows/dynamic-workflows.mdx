@@ -107,7 +107,7 @@ await mastra.addDynamicWorkflow(definition)
 
 ### Register dependencies first
 
-Register referenced components on the same `Mastra` instance before adding the dynamic workflow. Agent and nested workflow entries use their intrinsic IDs. A tool entry uses its key from the `Mastra` `tools` object, so the quickstart registers the tool under `create-greeting` before referencing that key with `toolId`.
+Register referenced components on the same `Mastra` instance before adding the dynamic workflow. Agent and nested workflow entries use their intrinsic IDs. A tool entry uses its key from the `Mastra` `tools` object. The quickstart registers the tool under `create-greeting` before referencing that key with `toolId`.
 
 Use a `mapping` entry when one step's output doesn't match the next step's input. Mapping entries can read data from the workflow input and previous step results, along with workflow state and request context. The [definition reference](/reference/workflows/dynamic-workflow-definition#mapping-steps) lists the supported mapping descriptors.
 

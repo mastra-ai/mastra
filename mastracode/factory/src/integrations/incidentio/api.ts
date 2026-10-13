@@ -109,15 +109,7 @@ export interface IncidentioAlert {
 export interface IncidentioEscalation {
   id: string;
   status:
-    | 'pending'
-    | 'triggered'
-    | 'acked'
-    | 'resolved'
-    | 'expired'
-    | 'cancelled'
-    | 'snoozed'
-    | 'delayed'
-    | 'pending_repeat';
+    'pending' | 'triggered' | 'acked' | 'resolved' | 'expired' | 'cancelled' | 'snoozed' | 'delayed' | 'pending_repeat';
   title: string;
   description: string;
   priority: { name: string };
@@ -402,7 +394,10 @@ export class IncidentioApiClient {
     return result.follow_up;
   }
 
-  async updateFollowUp(followUp: IncidentioFollowUp, status: IncidentioFollowUp['status']): Promise<IncidentioFollowUp> {
+  async updateFollowUp(
+    followUp: IncidentioFollowUp,
+    status: IncidentioFollowUp['status'],
+  ): Promise<IncidentioFollowUp> {
     const result = await this.#request<{ follow_up: IncidentioFollowUp }>(
       'PUT',
       `/v3/follow_ups/${encodeURIComponent(followUp.id)}`,

@@ -1,6 +1,7 @@
 import { Drawer, DrawerContent } from '@mastra/playground-ui/components/Drawer';
 import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
@@ -34,7 +35,7 @@ export function CardDetailsPanel({
         <DrawerContent aria-labelledby={labelledBy} showCloseButton={false}>
           <div className="flex max-h-[85dvh] flex-col pb-[env(safe-area-inset-bottom)]">
             <div className="relative flex shrink-0 flex-col gap-3 p-3">{header}</div>
-            <div className="border-border1 flex min-h-0 flex-col border-t">{children}</div>
+            <div className="border-border flex min-h-0 flex-col border-t">{children}</div>
           </div>
         </DrawerContent>
       </Drawer>
@@ -52,7 +53,7 @@ export function CardDetailsPanel({
           aria-hidden
           onPointerDown={() => morph.closeDetails()}
           className={cn(
-            'bg-surface1/60 fixed inset-0 z-40 transition-opacity duration-200',
+            'bg-sidebar/60 fixed inset-0 z-40 transition-opacity duration-200',
             morph.open ? 'opacity-100' : 'pointer-events-none opacity-0',
           )}
         />,
@@ -78,10 +79,12 @@ export function CardDetailsPanel({
           ref={morph.panelRef}
           className="board-card-details flex flex-col p-0"
         >
-          <div className="board-card-copy group border-border1 bg-surface3 shadow-dialog rounded-card relative z-10 flex min-h-36 shrink-0 flex-col gap-3 border p-2">
+          <div
+            className={`board-card-copy group ${raisedSurfaceStyle} rounded-card relative z-10 flex min-h-36 shrink-0 flex-col gap-3 p-2`}
+          >
             {header}
           </div>
-          <div className="board-card-tray border-border1 bg-surface3 shadow-dialog relative flex flex-col overflow-hidden rounded-xl border">
+          <div className={`board-card-tray ${raisedSurfaceStyle} relative flex flex-col overflow-hidden rounded-xl`}>
             {children}
           </div>
         </PopoverContent>

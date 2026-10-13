@@ -76,6 +76,15 @@ describe('BaseResource', () => {
     });
   });
 
+  it('should NOT retry 501 Not Implemented errors', async () => {
+    await runRetryTest({
+      statusCode: 501,
+      contentType: 'application/json',
+      responseBody: { error: 'Not Implemented' },
+      expectedRequestCount: 1, // The server lacks the capability; retrying cannot succeed
+    });
+  });
+
   it('should retry 5xx server errors and eventually reject', async () => {
     await runRetryTest({
       statusCode: 500,

@@ -12,9 +12,11 @@ import { TabContent } from '@/ds/components/Tabs/tabs-content';
 import { TabsContext } from '@/ds/components/Tabs/tabs-context';
 import { TabList } from '@/ds/components/Tabs/tabs-list';
 import { Tabs } from '@/ds/components/Tabs/tabs-root';
+import type { TabsRootProps } from '@/ds/components/Tabs/tabs-root';
 import { Tab } from '@/ds/components/Tabs/tabs-tab';
 import type { TabProps } from '@/ds/components/Tabs/tabs-tab';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export type TabbedContainerSearchProps = Pick<
@@ -85,9 +87,9 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
                   <div data-slot="tabbed-container-filter" data-active={filterCount > 0 || undefined}>
                     <ListFilterIcon aria-hidden="true" />
                     {filterCount > 0 ? (
-                      <span aria-hidden="true" data-slot="tabbed-container-filter-count" className="text-ui-xs">
+                      <Txt as="span" variant="meta" aria-hidden="true" data-slot="tabbed-container-filter-count">
                         {filterCount}
-                      </span>
+                      </Txt>
                     ) : null}
                     {filter.multiple ? (
                       <Combobox {...filter} clearLabel="Clear" size="md" variant="default" />
@@ -113,7 +115,7 @@ export type TabbedContainerProps<T extends string> = {
   defaultTab: T;
   value?: T;
   onValueChange?: (value: T) => void;
-  frame?: 'stroke' | 'inset';
+  frame?: TabsRootProps<T>['frame'];
   className?: string;
 };
 
@@ -157,7 +159,7 @@ export function TabbedContainerRoot<T extends string>({
                 disabledTooltip={panel.props.disabledTooltip}
                 onClick={panel.props.onClick}
                 onClose={panel.props.onClose}
-                className={cn('font-medium', panel.props.tabClassName)}
+                className={panel.props.tabClassName}
               >
                 {panel.props.label}
               </Tab>

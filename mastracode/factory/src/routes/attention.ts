@@ -6,6 +6,7 @@
 
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import type { BoardRegistry } from '../boards/index.js';
 
 import type { LiveSessions } from '../session/live-sessions.js';
 import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
@@ -36,6 +37,7 @@ export { factoryDecisionType } from './attention-providers.js';
 
 interface AttentionRouteDependencies {
   workItems: WorkItemsStorage;
+  boards: BoardRegistry;
   comments: WorkItemCommentsStorage;
   liveSessions: Pick<LiveSessions, 'parked' | 'parkedIn'>;
   resolveProject(context: unknown): Promise<AttentionScope | { response: Response }>;
@@ -162,10 +164,10 @@ function receiptRoute(
 }
 
 export function buildAttentionRoutes(dependencies: AttentionRouteDependencies): ApiRoute[] {
-  const { workItems, comments, liveSessions } = dependencies;
+  const { workItems, boards, comments, liveSessions } = dependencies;
   const providers: AttentionProvider[] = [
-    new DecisionAttentionProvider({ workItems }, failedDecisionAttentionSpec),
-    new DecisionAttentionProvider({ workItems }, proposedDecisionAttentionSpec),
+    new DecisionAttentionProvider({ workItems, boards }, failedDecisionAttentionSpec),
+    new DecisionAttentionProvider({ workItems, boards }, proposedDecisionAttentionSpec),
     new SupervisorFindingAttentionProvider({ workItems }),
     new MentionAttentionProvider({ workItems, comments }),
     new ActivityAttentionProvider({ workItems, comments }),

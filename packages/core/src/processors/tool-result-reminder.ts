@@ -56,6 +56,14 @@ export interface ToolResultReminderOptions {
    * undefined keeps the instance defaults.
    */
   getReader?: (args: ProcessInputStepArgs) => ReminderFileReader | undefined;
+  /**
+   * Per-request project root. When it returns a path, relative tool paths are
+   * resolved against it instead of `process.cwd()`, and instruction files are
+   * only discovered inside it — paths outside the root and ancestor
+   * directories above it are never searched. Returning undefined keeps the
+   * default `process.cwd()` resolution with no boundary.
+   */
+  getBasePath?: (args: ProcessInputStepArgs) => string | undefined;
 }
 
 /** Filesystem-shaped read access used to locate and read instruction files. */
@@ -109,12 +117,17 @@ function usesWindowsPathSemantics(candidatePath: string): boolean {
   return normalizedPath.startsWith('//') || (/^[a-zA-Z]:\//.test(normalizedPath) && win32.isAbsolute(normalizedPath));
 }
 
-function toAbsolutePath(candidatePath: string): string {
+function toAbsolutePath(candidatePath: string, basePath?: string): string {
   if (usesWindowsPathSemantics(candidatePath)) {
     return toPosixPath(win32.normalize(candidatePath));
   }
+  if (basePath && !isAbsolute(candidatePath) && usesWindowsPathSemantics(basePath)) {
+    return toPosixPath(win32.resolve(basePath, candidatePath));
+  }
 
-  const absolutePath = normalize(isAbsolute(candidatePath) ? candidatePath : resolve(process.cwd(), candidatePath));
+  const absolutePath = normalize(
+    isAbsolute(candidatePath) ? candidatePath : resolve(basePath ?? process.cwd(), candidatePath),
+  );
   return toPosixPath(absolutePath);
 }
 
@@ -130,12 +143,25 @@ function joinPreservingWindowsRoot(basePath: string, childPath: string): string 
     : posix.join(basePath, childPath);
 }
 
+function isWithinRoot(candidatePath: string, rootPath: string): boolean {
+  const windows = usesWindowsPathSemantics(rootPath);
+  const normalize = (path: string) => (windows ? path.toLowerCase() : path).replace(/\/+$/, '');
+  const candidate = normalize(candidatePath);
+  const root = normalize(rootPath);
+  return candidate === root || candidate.startsWith(`${root}/`) || root === '';
+}
+
 function findInstructionFileForPath(
   candidatePath: string,
   pathExists: (path: string) => boolean,
   isDirectory: (path: string) => boolean,
+  basePath?: string,
 ): string | undefined {
-  const absoluteCandidatePath = toAbsolutePath(candidatePath);
+  const absoluteCandidatePath = toAbsolutePath(candidatePath, basePath);
+  const rootPath = basePath ? toAbsolutePath(basePath) : undefined;
+  if (rootPath && !isWithinRoot(absoluteCandidatePath, rootPath)) {
+    return undefined;
+  }
   const candidateName = posix.basename(absoluteCandidatePath);
 
   if (isInstructionFileName(candidateName)) {
@@ -159,6 +185,9 @@ function findInstructionFileForPath(
       }
     }
 
+    if (rootPath && !isWithinRoot(dirnamePreservingWindowsRoot(currentDir), rootPath)) {
+      break;
+    }
     previousDir = currentDir;
     currentDir = dirnamePreservingWindowsRoot(currentDir);
   }
@@ -319,6 +348,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
   private readonly getIgnoredInstructionPaths?: (args: ProcessInputStepArgs) => string[];
   private readonly isEnabled?: (args: ProcessInputStepArgs) => boolean;
   private readonly getReader?: (args: ProcessInputStepArgs) => ReminderFileReader | undefined;
+  private readonly getBasePath?: (args: ProcessInputStepArgs) => string | undefined;
 
   constructor(options: ToolResultReminderOptions) {
     this.reminderText = options.reminderText;
@@ -339,6 +369,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     this.getIgnoredInstructionPaths = options.getIgnoredInstructionPaths;
     this.isEnabled = options.isEnabled;
     this.getReader = options.getReader;
+    this.getBasePath = options.getBasePath;
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
@@ -352,6 +383,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
       readFile: this.readFile,
       getPathIdentity: this.getPathIdentity,
     };
+    const basePath = this.getBasePath?.(args);
     const pathIdentities = new Map<string, string>();
     const resolvePathIdentity = (path: string) => {
       const cached = pathIdentities.get(path);
@@ -366,13 +398,19 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     // Memory processors can reclassify completed responses before this hook runs.
     const completedToolCalls = getCompletedToolCalls(messages);
     const checkedPaths = new Set<string>();
+    // Compare resolved identities so a symlinked instruction file cannot escape the base path.
+    const rootIdentity = basePath ? resolvePathIdentity(toAbsolutePath(basePath)) : undefined;
     for (const toolCall of completedToolCalls) {
-      for (const instructionPath of this.findInstructionPathsInInvocation(toolCall, reader)) {
+      for (const instructionPath of this.findInstructionPathsInInvocation(toolCall, reader, basePath)) {
         const identity = resolvePathIdentity(instructionPath);
         if (checkedPaths.has(identity)) {
           continue;
         }
         checkedPaths.add(identity);
+
+        if (rootIdentity && !isWithinRoot(identity, rootIdentity)) {
+          continue;
+        }
 
         if (this.isIgnoredInstructionPath(args, identity, resolvePathIdentity)) {
           continue;
@@ -424,7 +462,11 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
     return ignoredPaths.some(path => resolvePathIdentity(path) === identity);
   }
 
-  private *findInstructionPathsInInvocation(invocation: unknown, reader: ReminderFileReader): Generator<string> {
+  private *findInstructionPathsInInvocation(
+    invocation: unknown,
+    reader: ReminderFileReader,
+    basePath: string | undefined,
+  ): Generator<string> {
     if (!isRecord(invocation)) {
       return;
     }
@@ -440,7 +482,7 @@ export class AgentsMDInjector implements Processor<'agents-md-injector'> {
         continue;
       }
 
-      const instructionPath = findInstructionFileForPath(value, reader.pathExists, reader.isDirectory);
+      const instructionPath = findInstructionFileForPath(value, reader.pathExists, reader.isDirectory, basePath);
       if (instructionPath) {
         yield instructionPath;
       }

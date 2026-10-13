@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import { WorkspaceFilesProvider } from '../../workspace-viewer/context/WorkspaceFilesProvider';
-import { FactorySessionHeader } from '../components/RelatedFactorySessions';
+import { FactorySessionPage } from '../components/RelatedFactorySessions';
 
 const FACTORY_ID = 'factory-1';
 const REPOSITORY_ID = 'repository-1';
@@ -78,7 +78,7 @@ function stubHeader(item: ReturnType<typeof workItem> | ReturnType<typeof linear
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
       HttpResponse.json({ session: workspaceSession }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPOSITORY_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [workspaceSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
@@ -90,23 +90,23 @@ function stubHeader(item: ReturnType<typeof workItem> | ReturnType<typeof linear
 function renderHeader() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`]}>
-      <MainSidebarProvider storageKey="related-factory-sessions-test">
+      <SidebarProvider storageKey="related-factory-sessions-test">
         <Routes>
           <Route
             path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
             element={
               <WorkspaceFilesProvider>
-                <FactorySessionHeader />
+                <FactorySessionPage>{null}</FactorySessionPage>
               </WorkspaceFilesProvider>
             }
           />
         </Routes>
-      </MainSidebarProvider>
+      </SidebarProvider>
     </MemoryRouter>,
   );
 }
 
-describe('FactorySessionHeader', () => {
+describe('FactorySessionPage', () => {
   describe('when the active work item has an external issue URL', () => {
     it('renders an issue pill that opens the external issue in a new tab', async () => {
       const issueUrl = 'https://github.com/acme/app/issues/7';

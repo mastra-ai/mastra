@@ -141,8 +141,12 @@ function validateWorkspacePackages(packages, workspacePackages) {
   );
 }
 
-function qualityAssuranceInputs(changedFiles, packageReadmePaths = []) {
-  if (!Array.isArray(changedFiles) || changedFiles.some(file => typeof file !== 'string')) {
+function qualityAssuranceInputs(changedFiles, packageReadmePaths = [], missingPackageDocs = []) {
+  if (
+    !Array.isArray(changedFiles) ||
+    changedFiles.some(file => typeof file !== 'string') ||
+    !Array.isArray(missingPackageDocs)
+  ) {
     return {
       hasAgentsInputs: true,
       hasPeerdepsInputs: true,
@@ -150,6 +154,7 @@ function qualityAssuranceInputs(changedFiles, packageReadmePaths = []) {
       readmeReasons: ['invalid-input'],
       agentsReasons: ['invalid-input'],
       peerdepsReasons: ['invalid-input'],
+      missingPackageDocs: [],
     };
   }
 
@@ -191,10 +196,11 @@ function qualityAssuranceInputs(changedFiles, packageReadmePaths = []) {
   return {
     hasAgentsInputs: agentsReasons.length > 0,
     hasPeerdepsInputs: peerdepsReasons.length > 0,
-    hasReadmeInputs: readmeReasons.length > 0,
+    hasReadmeInputs: readmeReasons.length > 0 || missingPackageDocs.length > 0,
     agentsReasons,
     peerdepsReasons,
     readmeReasons,
+    missingPackageDocs,
   };
 }
 

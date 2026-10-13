@@ -599,6 +599,37 @@ describe('MessageList.updateToolInvocation', () => {
     expect(part.providerExecuted).toBe(true);
   });
 
+  it('should preserve the tool title from the original call when the result does not include it', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-1',
+          toolName: 'web_search',
+          args: { query: 'test' },
+        },
+        title: 'Web Search',
+      },
+    ]);
+    messageList.add(msg, 'response');
+
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-1',
+        toolName: 'web_search',
+        args: {},
+        result: { data: 'search' },
+      },
+    });
+
+    expect(msg.content.parts[0]).toMatchObject({ title: 'Web Search', toolInvocation: { state: 'result' } });
+  });
+
   it('should preserve providerMetadata from original call when result does not include it', () => {
     const messageList = new MessageList();
 

@@ -130,17 +130,8 @@ async function mergeBranchOutputs({ inputData }: { inputData: Record<string, any
   for (const key of keys) {
     const val = inputData[key];
     if (val && typeof val === 'object' && 'phase' in val) {
-      return {
-        phase: val.phase,
-        messages: val.messages,
-        messageList: val.messageList,
-        ...(val.systemMessages ? { systemMessages: val.systemMessages } : {}),
-        ...(val.part !== undefined ? { part: val.part } : {}),
-        ...(val.streamParts ? { streamParts: val.streamParts } : {}),
-        ...(val.state ? { state: val.state } : {}),
-        ...(val.text !== undefined ? { text: val.text } : {}),
-        ...(val.retryCount !== undefined ? { retryCount: val.retryCount } : {}),
-      };
+      // Copy every field so tool/model settings and future step fields survive the join.
+      return { ...val };
     }
   }
   // Fallback: return inputData as-is (shouldn't happen with valid processor graphs)

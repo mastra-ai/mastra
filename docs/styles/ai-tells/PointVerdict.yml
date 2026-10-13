@@ -1,0 +1,57 @@
+---
+extends: existence
+message: "AI point verdict: '%s'. Say what the thing does or what it is for instead of grading it as the point."
+level: error
+nonword: true
+# "The point" as a verdict: a copula with "the point" as its complement,
+# grading whatever came before as the purpose of the design ("Speed is
+# the point"; "That's the whole point"; "This is exactly the point";
+# "Determinism was the point"; "The retry is the whole point of the
+# wrapper"), and the intensified purpose statement that fronts the same
+# noun ("The whole point of the cache is to avoid the read"). The reader
+# has just read what the thing does; the sentence tells them that this
+# was the intent, and says nothing about what the intent bought. The
+# plain form says what the thing does or what it is for: "The cache
+# avoids the second read."
+#
+# The copula token takes any subject, so a demonstrative ("That is the
+# point"), a pronoun, and a full noun all fire, and the modifier slot
+# admits the intensifiers agent prose reaches for ("whole," "entire,"
+# "very," "real," "key"). Related rules keep their own spellings:
+# SummativeAppositive owns the comma relative (", which is the whole
+# point"), so a "which" ahead of the copula stays out here;
+# ContrastiveFormulas owns "X isn't the point; Y is"; ShellNounCopula
+# owns "The point is that"; Metacommentary owns "The point here is."
+# Metacommentary's "This is the point" and MicDrop's "And that's the
+# point." moved here (2026-09), since a token in each rule would have
+# reported the same span twice.
+#
+# Costs across the seven pre-LLM corpora: the copula shape matches five
+# times. Two are the construction itself, a Go blog post ("and this is
+# the key point") and a Rust RFC ("On the one hand, that's the whole
+# point"); one is the comma relative SummativeAppositive already reads
+# (Pro Git's "which is exactly the point"); one is the question a PEP
+# quotes ("what is the point?"), which a lookbehind on "what" keeps
+# out; and one is a literal position in a Rust RFC ("`P` is the point
+# following the borrow"), which the lookahead keeps out along with the
+# other locative and possessive continuations ("the point at which,"
+# "the point where," "the point of the cursor"). "The whole point of"
+# matches eleven times, eight in the Rust RFCs and three in the Go
+# sources ("the whole point of this RFC is to get rid of the embedded
+# flag," "the whole point of this exercise is to have a blanket impl"),
+# each the construction in argument prose, so it stays and is flagged.
+# "The whole point is" matches nowhere.
+tokens:
+  # --- The copula verdict ("Speed is the point," "That's the whole
+  # point," "This is exactly the point," "Determinism was the point,"
+  # "That is the point here"). The lookbehind keeps out the question and
+  # SummativeAppositive's relative; the lookahead keeps out the literal
+  # position and the possessive purpose ("the point of the cache"),
+  # which the second token reads when it carries an intensifier.
+  - "(?<!\\b(?:[Ww]hat|[Ww]hich|[Ww]hy) )\\b(?:is|was|are|were|isn't|wasn't|is not|was not|'s) (?:exactly |precisely |really |very much )?(?:the|its|their) (?:whole |entire |very |real |only |actual |main |central |key |larger |bigger |broader |deeper )?point\\b(?! (?:at|where|when|in|on|from|to|of|that|which|after|before|between|beyond|past|behind|just|immediately|about|around|for|following|preceding|size|type|value|count|number|cloud|light|source|release|version|being|made|raised|I|we|you|they|he|she)\\b)"
+
+  # --- The intensified purpose statement ("The whole point of the cache
+  # is to avoid the read," "the entire point of the wrapper," "The whole
+  # point is to keep the writer simple"). The bare "the point of" stays
+  # out as ordinary English.
+  - "\\b(?:[Tt]he|its|their) (?:whole|entire) point (?:of|is|was|isn't|wasn't)\\b"

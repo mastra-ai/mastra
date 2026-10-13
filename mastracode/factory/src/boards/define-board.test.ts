@@ -243,7 +243,8 @@ describe('defineBoard', () => {
     expect(reviewBoard.allowsTransition('review', 'intake')).toBe(true);
     expect(reviewBoard.allowsTransition('done', 'review')).toBe(true);
     expect(reviewBoard.allowsTransition('canceled', 'review')).toBe(true);
-    expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeTypeOf('function');
+    expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
+    expect(reviewBoard.rules.intake?.gitlabPullRequest?.onEnter).toBeUndefined();
     expect(reviewBoard.rules.review?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(reviewBoard.phaseKind('intake')).toBe('resting');
     expect(reviewBoard.roleForPhase('review')).toBe('review');
@@ -259,7 +260,9 @@ describe('defineBoard', () => {
         expect(workBoard.allowsTransition(from, to), `${from} -> ${to}`).toBe(true);
       }
     }
-    expect(workBoard.rules.intake?.issue?.onEnter).toBeTypeOf('function');
+    expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();
+    expect(workBoard.rules.intake?.gitlabIssue?.onEnter).toBeUndefined();
+    expect(workBoard.rules.triage?.issue?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.triage?.linearIssue?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.planning?.manual?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.execute?.issue?.onEnter).toBeTypeOf('function');
@@ -333,5 +336,46 @@ describe('defineBoard tool-result rules', () => {
   it('declares Work’s submit_plan rule and nothing on Review', () => {
     expect(workBoard.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(Object.keys(reviewBoard.tools)).toEqual([]);
+  });
+});
+
+describe('defineBoard sourceClosed', () => {
+  const phases = {
+    queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
+    building: { title: 'Building', kind: 'working', role: 'work', next: 'shipped' },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+    dropped: { title: 'Dropped', kind: 'terminal' },
+  } as const;
+  const define = (sourceClosed: unknown) =>
+    defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases,
+      sourceClosed: sourceClosed as never,
+    });
+
+  it('exposes a frozen terminal-phase mapping and omits it when undeclared', () => {
+    const board = define({ completed: 'shipped', canceled: 'dropped' });
+    expect(board.sourceClosed).toEqual({ completed: 'shipped', canceled: 'dropped' });
+    expect(Object.isFrozen(board.sourceClosed)).toBe(true);
+    expect(define(undefined).sourceClosed).toBeUndefined();
+    expect('sourceClosed' in define(undefined)).toBe(false);
+  });
+
+  it('rejects mappings to undefined or non-terminal phases and malformed shapes', () => {
+    expect(() => define({ completed: 'missing', canceled: 'dropped' })).toThrow(/sourceClosed.completed "missing"/);
+    expect(() => define({ completed: 'shipped', canceled: 'building' })).toThrow(/sourceClosed.canceled "building"/);
+    expect(() => define({ completed: 'shipped', canceled: 'toString' })).toThrow(BoardDefinitionError);
+    expect(() => define({ completed: 'shipped' })).toThrow(/exactly completed and canceled/);
+    expect(() => define({ completed: 'shipped', canceled: 'dropped', extra: 'x' })).toThrow(
+      /exactly completed and canceled/,
+    );
+    expect(() => define('shipped')).toThrow(/plain object/);
+  });
+
+  it('maps Work closures to its Done and Canceled phases and leaves Review undeclared', () => {
+    expect(workBoard.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
+    expect(reviewBoard.sourceClosed).toBeUndefined();
   });
 });

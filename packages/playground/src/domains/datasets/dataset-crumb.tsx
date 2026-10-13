@@ -1,12 +1,8 @@
-import { CrumbSkeleton } from '@mastra/playground-ui/components/Breadcrumb';
+import { CrumbSkeleton, crumbSwitcherTriggerProps } from '@mastra/playground-ui/components/Breadcrumb';
+import { useDatasets } from '@mastra/react/hooks/datasets';
 import { useParams } from 'react-router';
 import { DatasetCombobox } from './components/dataset-combobox';
-import { useDatasets } from './hooks/use-datasets';
 
-/**
- * Dataset breadcrumb label. The route `to` makes it a link on nested routes;
- * the switcher lives in `DatasetSwitcherAction` (crumb `action` slot).
- */
 export function DatasetCrumb() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const { data, isLoading } = useDatasets();
@@ -17,9 +13,9 @@ export function DatasetCrumb() {
   return data?.datasets?.find(d => d.id === datasetId)?.name ?? datasetId;
 }
 
-export function DatasetSwitcherAction() {
+export function DatasetSwitcher() {
   const { datasetId } = useParams<{ datasetId: string }>();
   if (!datasetId) return null;
 
-  return <DatasetCombobox value={datasetId} variant="ghost" size="icon-sm" align="end" aria-label="Switch dataset" />;
+  return <DatasetCombobox value={datasetId} {...crumbSwitcherTriggerProps} aria-label="Switch dataset" />;
 }

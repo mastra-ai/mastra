@@ -11,6 +11,7 @@ import type {
 } from '@mastra/core/processors';
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { omDebug } from './debug';
 import type { ObservationTurn } from './observation-turn/index';
@@ -209,8 +210,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const runState = memoryContext?.runState?.();
     const readOnly = memoryContext?.memoryConfig?.readOnly;
 
-    const actorModelContext = model?.modelId
-      ? { provider: model.provider, modelId: model.modelId, providerOptions: args.providerOptions }
+    const actorModelContext = model
+      ? {
+          provider: model.provider,
+          modelId: model.modelId,
+          providerOptions: args.providerOptions,
+          model,
+        }
       : undefined;
     state.__omActorModelContext = actorModelContext;
 
@@ -236,17 +242,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           resourceId,
           runState,
         });
-        // Pass the record through even without observations — resource-scoped
-        // retrieval still injects recall guidance so the actor can browse and
-        // search other threads.
-        const systemMessages = ctx.omRecord
-          ? await this.engine.buildContextSystemMessages({
-              threadId,
-              resourceId,
-              record: ctx.omRecord,
-              unobservedContextBlocks: ctx.otherThreadsContext,
-            })
-          : undefined;
+        // Recall guidance is useful even with no record; null preserves read-only behavior.
+        const systemMessages = await this.engine.buildContextSystemMessages({
+          threadId,
+          resourceId,
+          record: ctx.omRecord,
+          unobservedContextBlocks: ctx.otherThreadsContext,
+        });
 
         injectObservationContextMessages({
           messageList,
@@ -338,6 +340,14 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           const abortMessage = abortSignal?.aborted
             ? 'Agent execution was aborted'
             : `Encountered error during memory observation: ${err.message}`;
+          // A tripwire skips output processors, so end the turn here to save the user message and
+          // finished steps. The step that failed never reached the model, so nothing blocked is saved.
+          const failedTurn = this.turn;
+          await failedTurn.end().catch(() => {});
+          if (this.turn === failedTurn) {
+            this.turn = undefined;
+          }
+          state.__omTurn = undefined;
           if (typeof abort === 'function') {
             abort(abortMessage);
           }
@@ -371,7 +381,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // prepare() already counted the current unobserved window and resource context.
         const finalTotalPending = ctx.status.pendingTokens;
         try {
-          await this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending);
+          await runOMCommit(this.engine.buffering.getLockKey(threadId, resourceId), () =>
+            this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+          );
           this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
         } catch {
           // Token persistence is intentionally non-fatal for streaming UX.
@@ -434,7 +446,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         const liveTurn = turn && !turn.ended ? turn : undefined;
 
         if (liveTurn) {
-          await liveTurn.end();
+          // Use the pipeline's accepted terminal list as the persistence authority,
+          // rather than relying on the list captured when the turn began.
+          await liveTurn.end(messageList);
         }
         this.turn = undefined;
         state.__omTurn = undefined;

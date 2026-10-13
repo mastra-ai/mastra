@@ -1,7 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { workItemMeta } from './boardItems';
-import type { WorkItem } from './services/workItems';
+import {
+  externalLinkLabel,
+  isPersistedCandidate,
+  itemThreadSession,
+  metadataLabelColors,
+  persistedSourceKeys,
+  workItemMeta,
+} from './boardItems';
+import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
 function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
@@ -69,5 +76,82 @@ describe('workItemMeta', () => {
       metadata: { identifier: 'INC-42', author: 'Ada Lovelace', assignee: 'Grace Hopper' },
     });
     expect(workItemMeta(item)).toBe('INC-42 · Grace Hopper · just now');
+  });
+
+  it('names a GitLab merge request by its IID and links to GitLab', () => {
+    expect(
+      workItemMeta(workItem({ source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 5, author: 'Rhys' } })),
+    ).toBe('!5 · Rhys · just now');
+    expect(externalLinkLabel('gitlab-pr')).toBe('Open in GitLab');
+  });
+});
+
+describe('metadataLabelColors', () => {
+  it('keeps safe provider colors and rejects arbitrary CSS values', () => {
+    expect(
+      metadataLabelColors({
+        labelColors: {
+          bug: '#d73a4a',
+          documentation: 'rebeccapurple',
+          unsafe: 'url(https://example.com/tracker)',
+          malformed: '#12345',
+        },
+      }),
+    ).toEqual({ bug: '#d73a4a', documentation: 'rebeccapurple' });
+  });
+});
+
+describe('itemThreadSession', () => {
+  const session = (id: string): WorkItemSessionRef => ({
+    sessionId: id,
+    threadId: id,
+    branch: 'factory/issue-24244',
+    startedBy: 'user-1',
+  });
+
+  it('keeps the original triage conversation when session keys arrive in different orders', () => {
+    const triage = session('triage-session');
+    const work = session('work-session');
+
+    expect(itemThreadSession({ triage, plan: work, work })).toBe(triage);
+    expect(itemThreadSession({ work, plan: work, triage })).toBe(triage);
+  });
+
+  it('falls back to a custom role session', () => {
+    const custom = session('custom-session');
+
+    expect(itemThreadSession({ release: custom })).toBe(custom);
+  });
+});
+
+describe('persistedSourceKeys', () => {
+  it('keeps a same-numbered candidate from another linked repository visible', () => {
+    const keys = persistedSourceKeys([
+      workItem({ metadata: { githubPullRequestNumber: 22765, githubRepositoryId: 10 } }),
+    ]);
+
+    expect(
+      isPersistedCandidate(keys, {
+        sourceKey: 'github:10:pull-request:22765',
+        url: 'https://github.com/acme/repo/pull/22765',
+      }),
+    ).toBe(true);
+    expect(
+      isPersistedCandidate(keys, {
+        sourceKey: 'github:20:pull-request:22765',
+        url: 'https://github.com/other/repo/pull/22765',
+      }),
+    ).toBe(false);
+  });
+
+  it('matches an unstamped legacy card to its candidate by URL', () => {
+    const keys = persistedSourceKeys([workItem()]);
+
+    expect(
+      isPersistedCandidate(keys, {
+        sourceKey: 'github:10:pull-request:22765',
+        url: 'https://github.com/acme/repo/pull/22765',
+      }),
+    ).toBe(true);
   });
 });

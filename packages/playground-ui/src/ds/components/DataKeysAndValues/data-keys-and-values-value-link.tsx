@@ -1,5 +1,6 @@
 import { ExternalLinkIcon, Link2Icon } from 'lucide-react';
 import { dataKeysAndValuesValueStyles } from './shared';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export interface DataKeysAndValuesValueLinkProps {
@@ -21,7 +22,8 @@ export function DataKeysAndValuesValueLink({ className, children, href, as }: Da
   const navigationProps = as ? { href, to: href } : { href };
 
   const linkClassName = cn(
-    'flex items-center gap-2 truncate transition-colors hover:text-muted-foreground',
+    'flex items-center gap-2 truncate hover:text-foreground',
+    controlStateColorTransition,
     '[&:hover>svg]:opacity-100 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:opacity-70',
   );
 

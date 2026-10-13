@@ -9,8 +9,6 @@ import { workItemHumanActorIds } from './workItemActivity';
 export const BOARD_RELEVANCE_TYPES = ['worked', 'authored', 'assigned', 'review-requested'] as const;
 export type BoardRelevanceType = (typeof BOARD_RELEVANCE_TYPES)[number];
 
-const NO_RELEVANCE = 'none';
-
 function isBoardRelevanceType(value: string): value is BoardRelevanceType {
   return BOARD_RELEVANCE_TYPES.some(type => type === value);
 }
@@ -18,7 +16,6 @@ function isBoardRelevanceType(value: string): value is BoardRelevanceType {
 export function boardRelevanceFromQuery(value: string | null, kind: BoardKind): ReadonlySet<BoardRelevanceType> {
   const available = boardRelevanceOptions(kind).map(option => option.id);
   if (value === null) return new Set(available);
-  if (value === NO_RELEVANCE) return new Set();
   const selected = value
     .split(',')
     .filter(isBoardRelevanceType)
@@ -32,12 +29,11 @@ export function boardRelevanceQueryValue(
 ): string | undefined {
   const available = boardRelevanceOptions(kind).map(option => option.id);
   const selected = available.filter(type => selectedTypes.has(type));
-  if (selected.length === available.length) return undefined;
-  return selected.length > 0 ? selected.join(',') : NO_RELEVANCE;
+  return selected.length > 0 && selected.length < available.length ? selected.join(',') : undefined;
 }
 
 export interface BoardParticipant extends AuditActorProfile {
-  source: 'factory' | 'github' | 'linear' | 'jira' | 'incidentio';
+  source: 'factory' | 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio';
 }
 
 interface RelevanceTarget {
@@ -58,6 +54,7 @@ function metadataStrings(metadata: Record<string, unknown>, key: string): string
 
 function externalId(source: RelevanceTarget['source'], name: string): string | undefined {
   if (source === 'github-issue' || source === 'github-pr') return `github:${name.toLowerCase()}`;
+  if (source === 'gitlab-issue' || source === 'gitlab-pr') return `gitlab:${name.toLowerCase()}`;
   if (source === 'linear-issue') return `linear:${name.toLowerCase()}`;
   if (source === 'jira-issue') return `jira:${name.toLowerCase()}`;
   if (source === 'incidentio-follow-up') return `incidentio:${name.toLowerCase()}`;
@@ -75,15 +72,19 @@ function externalProfile(source: RelevanceTarget['source'], name: string): Board
       source: 'github',
     };
   }
-  return {
-    id,
-    name,
-    source: source === 'jira-issue' ? 'jira' : source === 'incidentio-follow-up' ? 'incidentio' : 'linear',
-  };
+  if (source === 'gitlab-issue' || source === 'gitlab-pr') return { id, name, source: 'gitlab' };
+  if (source === 'jira-issue') return { id, name, source: 'jira' };
+  if (source === 'incidentio-follow-up') return { id, name, source: 'incidentio' };
+  return { id, name, source: 'linear' };
 }
 
 function externalCreator(target: RelevanceTarget): string | undefined {
-  if (target.source === 'github-issue' || target.source === 'github-pr') {
+  if (
+    target.source === 'github-issue' ||
+    target.source === 'github-pr' ||
+    target.source === 'gitlab-issue' ||
+    target.source === 'gitlab-pr'
+  ) {
     return metadataString(target.metadata, 'author');
   }
   if (target.source === 'linear-issue' || target.source === 'jira-issue' || target.source === 'incidentio-follow-up') {
@@ -97,7 +98,12 @@ function externalCreator(target: RelevanceTarget): string | undefined {
 }
 
 function externalAssignees(target: RelevanceTarget): string[] {
-  if (target.source === 'github-issue' || target.source === 'github-pr') {
+  if (
+    target.source === 'github-issue' ||
+    target.source === 'github-pr' ||
+    target.source === 'gitlab-issue' ||
+    target.source === 'gitlab-pr'
+  ) {
     const assignees = metadataStrings(target.metadata, 'assignees');
     const assignee = metadataString(target.metadata, 'assignee');
     return [...new Set([...assignees, ...(assignee ? [assignee] : [])])];
@@ -110,14 +116,15 @@ function externalAssignees(target: RelevanceTarget): string[] {
 }
 
 function requestedReviewers(target: RelevanceTarget): string[] {
-  if (target.source !== 'github-pr') return [];
+  if (target.source !== 'github-pr' && target.source !== 'gitlab-pr') return [];
   return metadataStrings(target.metadata, 'requestedReviewers');
 }
 
 function targetRelations(target: RelevanceTarget): Record<Exclude<BoardRelevanceType, 'worked'>, Set<string>> {
   const creator = externalCreator(target);
+  const authorId = creator && externalId(target.source, creator);
   return {
-    authored: new Set(creator ? [externalId(target.source, creator)].filter((id): id is string => Boolean(id)) : []),
+    authored: new Set(authorId ? [authorId] : []),
     assigned: new Set(
       externalAssignees(target).flatMap(name => {
         const id = externalId(target.source, name);
@@ -165,31 +172,31 @@ export function candidateRelevance(candidate: BoardCandidate): Record<BoardRelev
 
 function matchesRelations(
   relations: Record<BoardRelevanceType, Set<string>>,
-  participantId: string,
+  participantIds: ReadonlySet<string>,
   selectedTypes: ReadonlySet<BoardRelevanceType>,
 ): boolean {
-  return [...selectedTypes].some(type => relations[type].has(participantId));
+  return [...selectedTypes].some(type => [...participantIds].some(participantId => relations[type].has(participantId)));
 }
 
 export function workItemMatchesRelevance(
   item: WorkItem,
   activityPage: AuditEventPage | undefined,
-  participantId: string | undefined,
+  participantIds: ReadonlySet<string>,
   selectedTypes: ReadonlySet<BoardRelevanceType>,
   liveCandidate?: BoardCandidate,
 ): boolean {
-  if (!participantId) return true;
-  if (matchesRelations(workItemRelevance(item, activityPage), participantId, selectedTypes)) return true;
-  return liveCandidate ? matchesRelations(candidateRelevance(liveCandidate), participantId, selectedTypes) : false;
+  if (participantIds.size === 0) return true;
+  if (matchesRelations(workItemRelevance(item, activityPage), participantIds, selectedTypes)) return true;
+  return liveCandidate ? matchesRelations(candidateRelevance(liveCandidate), participantIds, selectedTypes) : false;
 }
 
 export function candidateMatchesRelevance(
   candidate: BoardCandidate,
-  participantId: string | undefined,
+  participantIds: ReadonlySet<string>,
   selectedTypes: ReadonlySet<BoardRelevanceType>,
 ): boolean {
-  if (!participantId) return true;
-  return matchesRelations(candidateRelevance(candidate), participantId, selectedTypes);
+  if (participantIds.size === 0) return true;
+  return matchesRelations(candidateRelevance(candidate), participantIds, selectedTypes);
 }
 
 export function boardParticipants({
@@ -207,22 +214,22 @@ export function boardParticipants({
   const add = (participant: BoardParticipant | undefined) => {
     if (!participant) return;
     const existing = participants.get(participant.id);
-    participants.set(
-      participant.id,
-      existing
-        ? {
-            ...participant,
-            name: existing.name,
-            avatarUrl: existing.avatarUrl ?? participant.avatarUrl,
-          }
-        : participant,
-    );
+    if (!existing) {
+      participants.set(participant.id, participant);
+      return;
+    }
+    participants.set(participant.id, {
+      ...participant,
+      name: existing.name,
+      avatarUrl: existing.avatarUrl ?? participant.avatarUrl,
+    });
   };
 
-  if (currentUser?.userId && (currentUser.name || currentUser.email)) {
+  const currentUserName = currentUser?.name || currentUser?.email;
+  if (currentUser?.userId && currentUserName) {
     add({
       id: `factory:${currentUser.userId}`,
-      name: currentUser.name ?? currentUser.email!,
+      name: currentUserName,
       source: 'factory',
     });
   }

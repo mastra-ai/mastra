@@ -33,9 +33,10 @@ import type {
   TableRetentionPolicy,
   TABLE_NAMES,
 } from '@mastra/core/storage';
-import { parseSqlIdentifier } from '@mastra/core/utils';
+import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL, generateTimestampTriggerSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { toPgJson } from '../../db/sanitize-json';
 import { runPrune, resolveTargets } from '../../retention';
 import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
@@ -89,7 +90,7 @@ export class ObservabilityPG extends ObservabilityStorage {
    * so its supporting index is not part of the default index set.
    */
   private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
-    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const prefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     for (const [key, entry] of Object.entries(ObservabilityPG.retentionTables)) {
       if (!entry.indexed || !policies[key]) continue;
       try {
@@ -177,7 +178,7 @@ export class ObservabilityPG extends ObservabilityStorage {
    */
   static getExportDDL(schemaName?: string): string[] {
     const statements: string[] = [];
-    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const parsedSchema = schemaName ? schemaNamePrefix(schemaName) : '';
     const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
 
     // Table
@@ -205,7 +206,7 @@ export class ObservabilityPG extends ObservabilityStorage {
    * Returns default index definitions for this instance's schema.
    */
   getDefaultIndexDefinitions(): CreateIndexOptions[] {
-    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    const schemaPrefix = this.#schema !== 'public' ? `${schemaNamePrefix(this.#schema)}_` : '';
     return ObservabilityPG.getDefaultIndexDefs(schemaPrefix);
   }
 
@@ -672,19 +673,19 @@ export class ObservabilityPG extends ObservabilityStorage {
         // Scope filter (JSONB containment)
         if (filters.scope != null) {
           conditions.push(`r."scope" @> $${paramIndex++}`);
-          params.push(JSON.stringify(filters.scope));
+          params.push(toPgJson(filters.scope));
         }
 
         // Metadata filter (JSONB containment)
         if (filters.metadata != null) {
           conditions.push(`r."metadata" @> $${paramIndex++}`);
-          params.push(JSON.stringify(filters.metadata));
+          params.push(toPgJson(filters.metadata));
         }
 
         // Tags filter (all tags must be present)
         if (filters.tags != null && filters.tags.length > 0) {
           conditions.push(`r."tags" @> $${paramIndex++}`);
-          params.push(JSON.stringify(filters.tags));
+          params.push(toPgJson(filters.tags));
         }
 
         // Status filter (derived from error and endedAt)

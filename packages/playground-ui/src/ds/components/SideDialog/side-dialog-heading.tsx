@@ -12,12 +12,9 @@ export function SideDialogHeading({ children, className, as = 'h1' }: SideDialog
   return (
     <HeadingTag
       className={cn(
-        'flex items-start gap-2 text-header-sm font-semibold text-muted-foreground',
+        'flex items-start gap-2',
+        as === 'h1' ? 'text-heading text-foreground' : 'text-subheading text-foreground',
         '[&>svg]:mt-0.5 [&>svg]:size-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-70',
-        {
-          'text-header-sm': as === 'h1',
-          'text-ui-md': as === 'h2',
-        },
         className,
       )}
     >

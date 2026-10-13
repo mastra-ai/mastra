@@ -17,9 +17,13 @@
  */
 
 import type { CredentialTenant as SdkCredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
-import { setCredentialStoreProvider } from '@mastra/code-sdk/agents/credential-resolver';
+import {
+  resolveTenantFromRequestContext,
+  setCredentialStoreProvider,
+} from '@mastra/code-sdk/agents/credential-resolver';
 import { getOAuthProvider } from '@mastra/code-sdk/auth/storage';
 import type { AuthCredential, CredentialStore } from '@mastra/code-sdk/auth/types';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MiddlewareHandler } from 'hono';
 
 import { isOAuthCredentialExpired } from '../storage/domains/credentials/base.js';
@@ -39,15 +43,28 @@ export class TenantCredentialStore implements CredentialStore {
   readonly #userId: string;
   readonly #orgFirst: boolean;
   readonly #credentials: ModelCredentialsStorage | undefined;
+  readonly #deploymentProviders: ReadonlySet<string>;
   #snapshot = new Map<string, AuthCredential>();
   #fetchedAt = 0;
   #hydrating: Promise<void> | undefined;
 
-  constructor(orgId: string, userId: string, credentials: ModelCredentialsStorage | undefined, orgFirst = false) {
+  constructor(
+    orgId: string,
+    userId: string,
+    credentials: ModelCredentialsStorage | undefined,
+    orgFirst = false,
+    deploymentProviders: ReadonlySet<string> = new Set(),
+  ) {
     this.#orgId = orgId;
     this.#userId = userId;
     this.#credentials = credentials;
     this.#orgFirst = orgFirst;
+    this.#deploymentProviders = deploymentProviders;
+  }
+
+  /** Providers the operator opted in to run on the server process's own credentials. */
+  allowsDeploymentCredentials(provider: string): boolean {
+    return this.#deploymentProviders.has(provider);
   }
 
   /** Hydrate the snapshot when stale; coalesces concurrent callers. */
@@ -154,6 +171,8 @@ export class TenantCredentialStore implements CredentialStore {
 }
 
 const tenantStores = new Map<string, TenantCredentialStore>();
+let registeredCredentials: ModelCredentialsStorage | undefined;
+let registeredDeploymentProviders: ReadonlySet<string> = new Set();
 
 function storeFor(tenant: SdkCredentialTenant, credentials: ModelCredentialsStorage): TenantCredentialStore {
   const orgId = tenantOrgId(tenant);
@@ -165,7 +184,7 @@ function storeFor(tenant: SdkCredentialTenant, credentials: ModelCredentialsStor
       const oldest = tenantStores.keys().next().value;
       if (oldest !== undefined) tenantStores.delete(oldest);
     }
-    store = new TenantCredentialStore(orgId, tenant.userId, credentials, orgFirst);
+    store = new TenantCredentialStore(orgId, tenant.userId, credentials, orgFirst, registeredDeploymentProviders);
     tenantStores.set(key, store);
   }
   return store;
@@ -175,15 +194,37 @@ function storeFor(tenant: SdkCredentialTenant, credentials: ModelCredentialsStor
  * Register the web tenant credential store provider with the SDK. Called by
  * the factory after storage init with the `model-credentials` domain handle;
  * from then on `resolveModel` uses per-tenant credentials and the SDK skips
- * the `loadStoredApiKeysIntoEnv` env side-channel.
+ * the `loadStoredApiKeysIntoEnv` env side-channel. `deploymentProviders` are
+ * the providers the operator opted in to authenticate with the server
+ * process's own credentials (see `MastraFactoryConfig.deploymentModelProviders`).
  */
-export function registerTenantCredentialResolver(credentials: ModelCredentialsStorage): void {
+export function registerTenantCredentialResolver(
+  credentials: ModelCredentialsStorage,
+  deploymentProviders: ReadonlySet<string> = new Set(),
+): void {
+  registeredCredentials = credentials;
+  registeredDeploymentProviders = deploymentProviders;
+  tenantStores.clear();
   setCredentialStoreProvider(tenant => storeFor(tenant, credentials));
+}
+
+/**
+ * Prime the tenant stores for a request context built outside the web layer,
+ * such as a webhook-triggered session run. The auth middleware does this for
+ * HTTP requests; a run that starts without one would otherwise resolve its
+ * model against an empty snapshot and fail closed. No-op before registration.
+ */
+export async function primeTenantCredentialsForRequestContext(requestContext: RequestContext): Promise<void> {
+  const tenant = resolveTenantFromRequestContext(requestContext);
+  if (!tenant || !registeredCredentials) return;
+  await primeTenantCredentials({ tenant, credentials: registeredCredentials });
 }
 
 /** Test hook: clear registration and cached tenant snapshots. */
 export function resetTenantCredentialResolverForTests(): void {
   setCredentialStoreProvider(undefined);
+  registeredCredentials = undefined;
+  registeredDeploymentProviders = new Set();
   tenantStores.clear();
 }
 

@@ -14,6 +14,14 @@ const VisibilitySchema = z
   })
   .optional();
 
+const VisibilitySchemaWidened = z
+  .object({
+    type: z.enum(['role', 'group']).or(z.string()),
+    value: z.string().optional(),
+    identifier: z.string().optional(),
+  })
+  .optional();
+
 export const updateCommentInputSchema = z.object({
   issueIdOrKey: z.string().describe('Issue ID or key. Example: "10001" or "PROJ-123"'),
   commentId: z.string().describe('Comment ID. Example: "10000"'),
@@ -38,7 +46,7 @@ const CommentSchema = z.object({
   created: z.string().optional(),
   updated: z.string().optional(),
   updateAuthor: UserSchema.optional(),
-  visibility: VisibilitySchema,
+  visibility: VisibilitySchemaWidened,
 });
 
 export const updateCommentOutputSchema = z.object({
@@ -49,7 +57,7 @@ export const updateCommentOutputSchema = z.object({
   created: z.string().optional(),
   updated: z.string().optional(),
   updateAuthor: UserSchema.optional(),
-  visibility: VisibilitySchema,
+  visibility: VisibilitySchemaWidened,
 });
 
 const MetadataSchema = z.object({

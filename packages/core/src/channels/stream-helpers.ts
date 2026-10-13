@@ -25,6 +25,8 @@ export interface PendingApprovalRecord {
   runId?: string;
   toolName?: string;
   args?: Record<string, unknown>;
+  /** Platform user id of the person whose message triggered the tool call. */
+  requesterId?: string;
 }
 
 /**
@@ -159,10 +161,12 @@ export class ToolTracker {
 
   enrichApproval(call: { toolCallId: string; toolName: string; args: unknown }): ToolEnrichment {
     const tracked = this.tools.get(call.toolCallId);
-    const displayName = tracked?.displayName ?? stripToolPrefix(call.toolName);
-    const argsSummary =
-      tracked?.argsSummary ?? formatArgsSummary(typeof call.args === 'object' && call.args != null ? call.args : {});
-    const args = tracked?.args ?? call.args;
+    // A supervisor re-emits a sub-agent's approval under its own delegation
+    // call's toolCallId; only reuse tracked details when they describe the same tool.
+    const same = tracked?.toolName === call.toolName ? tracked : undefined;
+    const displayName = same?.displayName ?? stripToolPrefix(call.toolName);
+    const argsSummary = same?.argsSummary ?? formatArgsSummary(call.args);
+    const args = same ? same.args : call.args;
     const startedAt = tracked?.startedAt ?? Date.now();
     return {
       toolCallId: call.toolCallId,

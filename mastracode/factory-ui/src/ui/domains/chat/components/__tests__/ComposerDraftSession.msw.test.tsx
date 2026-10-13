@@ -13,6 +13,7 @@ import {
   SESSION_ID,
   createdDraftSession,
   renderDraft,
+  renderThread,
   stubPreparingSession,
 } from './composer-session-test-fixture';
 
@@ -25,11 +26,14 @@ describe('Composer on a lazy user-session draft', () => {
     });
     const createBodies: unknown[] = [];
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, async ({ request }) => {
-        createBodies.push(await request.json());
-        await createFinished;
-        return HttpResponse.json({ session: createdDraftSession('fix the login bug') });
-      }),
+      http.post(
+        `${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`,
+        async ({ request }) => {
+          createBodies.push(await request.json());
+          await createFinished;
+          return HttpResponse.json({ session: createdDraftSession('fix the login bug') });
+        },
+      ),
     );
     const user = userEvent.setup();
     const { client, container } = renderDraft();
@@ -73,25 +77,52 @@ describe('Composer on a lazy user-session draft', () => {
     expect(screen.getAllByText('fix the login bug')).toHaveLength(1);
   });
 
-  it('applies a draft-selected pack before dispatching the first prompt', async () => {
-    const preparation = stubPreparingSession({ createdSessionTitle: 'use my pack' });
+  it('restores an interrupted first prompt as a draft without sending it twice', async () => {
+    const preparation = stubPreparingSession({ createdSessionTitle: 'recover this prompt' });
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
-        HttpResponse.json({ session: createdDraftSession('use my pack') }),
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+        HttpResponse.json({ session: createdDraftSession('recover this prompt') }),
+      ),
+    );
+    const user = userEvent.setup();
+    const firstPage = renderDraft();
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.type(message, 'recover this prompt');
+    await user.keyboard('{Enter}');
+    await waitFor(() => expect(preparation.posted).toEqual(['recover this prompt']));
+
+    // The server accepted the request but is still preparing the workspace.
+    // A page reload must not automatically send it a second time.
+    firstPage.unmount();
+    const recoveredPage = renderThread();
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('recover this prompt'));
+    expect(await screen.findByText(/Check the transcript before retrying/)).toBeInTheDocument();
+    recoveredPage.unmount();
+    renderThread();
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('recover this prompt'));
+    expect(preparation.posted).toEqual(['recover this prompt']);
+  });
+
+  it('applies a draft-selected model before dispatching the first prompt', async () => {
+    const preparation = stubPreparingSession({ createdSessionTitle: 'use my model' });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+        HttpResponse.json({ session: createdDraftSession('use my model') }),
       ),
     );
     const user = userEvent.setup();
     const { client } = renderDraft();
 
     const modelPicker = await screen.findByLabelText('Session model');
-    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('Balanced')));
+    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
     await user.click(modelPicker);
-    await user.click(await screen.findByRole('option', { name: /Model pack Mine/ }));
-    expect(modelPicker).toHaveAttribute('title', expect.stringContaining('Mine'));
+    await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
+    expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-5.4-mini'));
     expect(preparation.operations).toEqual([]);
 
     const message = screen.getByRole('textbox', { name: 'Message' });
-    await user.type(message, 'use my pack');
+    await user.type(message, 'use my model');
     await user.keyboard('{Enter}');
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
@@ -99,20 +130,18 @@ describe('Composer on a lazy user-session draft', () => {
 
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
-    await waitFor(() => expect(preparation.delivered).toEqual(['use my pack']));
-    // Activation applies the pack's models server-side, so no separate model
-    // switch is sent for the pack-derived model.
-    expect(preparation.operations).toEqual(['mode:build', 'pack:mine', 'message']);
+    await waitFor(() => expect(preparation.delivered).toEqual(['use my model']));
+    expect(preparation.operations).toEqual(['mode:build', 'model:openai/gpt-5.4-mini', 'message']);
   });
 
-  it('still dispatches the first prompt when draft pack activation fails', async () => {
+  it('still dispatches the first prompt when the draft model switch fails', async () => {
     const preparation = stubPreparingSession({ createdSessionTitle: 'keep my prompt' });
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
         HttpResponse.json({ session: createdDraftSession('keep my prompt') }),
       ),
-      http.post(`${TEST_BASE_URL}/web/config/model-packs/mine/activate`, () =>
-        HttpResponse.json({ error: 'Pack unavailable' }, { status: 500 }),
+      http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${SESSION_ID}/model`, () =>
+        HttpResponse.json({ error: 'Model unavailable' }, { status: 500 }),
       ),
     );
     const user = userEvent.setup();
@@ -120,7 +149,7 @@ describe('Composer on a lazy user-session draft', () => {
 
     const modelPicker = await screen.findByLabelText('Session model');
     await user.click(modelPicker);
-    await user.click(await screen.findByRole('option', { name: /Model pack Mine/ }));
+    await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
     const message = screen.getByRole('textbox', { name: 'Message' });
     await user.type(message, 'keep my prompt');
     await user.keyboard('{Enter}');
@@ -131,10 +160,6 @@ describe('Composer on a lazy user-session draft', () => {
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
     await waitFor(() => expect(preparation.delivered).toEqual(['keep my prompt']));
-    // The user must learn the pack was not applied.
-    expect(await screen.findByText('Pack unavailable')).toBeInTheDocument();
-    // The pack failed, so its build model must not be half-applied either —
-    // the session keeps its own defaults.
     expect(preparation.operations).toEqual(['mode:build', 'message']);
   });
 
@@ -143,12 +168,15 @@ describe('Composer on a lazy user-session draft', () => {
     const createBodies: unknown[] = [];
     let attempts = 0;
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, async ({ request }) => {
-        createBodies.push(await request.json());
-        attempts += 1;
-        if (attempts === 1) return HttpResponse.json({ message: 'Database unavailable' }, { status: 500 });
-        return HttpResponse.json({ session: createdDraftSession('retry this prompt') });
-      }),
+      http.post(
+        `${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`,
+        async ({ request }) => {
+          createBodies.push(await request.json());
+          attempts += 1;
+          if (attempts === 1) return HttpResponse.json({ message: 'Database unavailable' }, { status: 500 });
+          return HttpResponse.json({ session: createdDraftSession('retry this prompt') });
+        },
+      ),
     );
     const user = userEvent.setup();
     const { client } = renderDraft();
@@ -183,7 +211,7 @@ describe('Composer on a lazy user-session draft', () => {
     const preparation = stubPreparingSession();
     let sessionPosts = 0;
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${PROJECT_REPOSITORY_ID}/sessions`, () => {
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () => {
         sessionPosts += 1;
         return HttpResponse.json({ session: createdDraftSession('unused') });
       }),

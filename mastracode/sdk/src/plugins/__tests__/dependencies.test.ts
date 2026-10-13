@@ -63,6 +63,21 @@ describe('installPluginDependencies', () => {
     );
   });
 
+  it('accepts and forwards a Corepack integrity hash suffix', async () => {
+    const packageManager =
+      'pnpm@12.6.0+sha512.3ef68f951cb111ac204b4a5a16f0b2ddf0da56a96e0413e81d855d9f0b55ef926714709028e1cd00c405c2c5fb7b9e8ec4dc46777c805d0373c2f2ff00fd20ec';
+    const pluginRoot = makePluginRoot();
+    writePackageJson(pluginRoot, { packageManager });
+
+    await expect(installPluginDependencies(pluginRoot)).resolves.toBe(true);
+
+    expect(execaMock).toHaveBeenCalledWith(
+      'corepack',
+      expectedCorepackArgs(packageManager.slice('pnpm@'.length)),
+      expect.objectContaining({ cwd: pluginRoot }),
+    );
+  });
+
   it.each([
     ['absent', undefined],
     ['non-string', 10],
@@ -78,6 +93,9 @@ describe('installPluginDependencies', () => {
     ['tag', 'pnpm@latest'],
     ['prerelease', 'pnpm@10.0.0-rc.1'],
     ['build metadata', 'pnpm@10.0.0+build.1'],
+    ['unsupported hash algorithm', 'pnpm@10.0.0+md5.abc123'],
+    ['empty hash', 'pnpm@10.0.0+sha512.'],
+    ['non-hex hash', 'pnpm@10.0.0+sha512.xyz'],
     ['malformed version', 'pnpm@10.x.0'],
   ])('rejects an %s packageManager declaration', async (_label, packageManager) => {
     const pluginRoot = makePluginRoot();

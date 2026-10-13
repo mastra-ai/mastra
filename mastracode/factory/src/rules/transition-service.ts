@@ -1,5 +1,3 @@
-import { randomUUID } from 'node:crypto';
-
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
@@ -61,6 +59,8 @@ export interface FactoryTransitionRequest {
   reenter?: boolean;
   /** Structured verdict required from a bound triage-agent terminal request. */
   triageType?: FactoryTriageType;
+  /** Internal proof that this move consumes an approved `submit_plan` result. */
+  planApproved?: true;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -103,10 +103,8 @@ export interface FactoryTransitionServiceOptions {
     item: WorkItemRow;
   }) => Promise<void> | void;
   /**
-   * Resolves whether a project auto-approves produced plans. Mirrors the
-   * dispatcher's resolver so the two share a single authoritative predicate
-   * (`plansPreapprovedAt` on the item, or this per-project setting). Unset means
-   * off: a plan nobody armed for auto-advance is a plan a person must review.
+   * Resolves whether a project auto-approves produced plans. Unset means off:
+   * a plan without explicit approval is a plan a person must review.
    */
   autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
 }
@@ -129,6 +127,8 @@ function actorId(actor: FactoryRuleActor): string {
       return `agent:${actor.bindingId}`;
     case 'github':
       return `github:${actor.login}`;
+    case 'gitlab':
+      return `gitlab:${actor.username}`;
   }
 }
 
@@ -137,6 +137,7 @@ export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorT
   const id = actorId(actor);
   switch (actor.type) {
     case 'github':
+    case 'gitlab':
       return { actorId: id, actorType: 'human' };
     case 'human':
       return { actorId: id, actorType: isAgentActor(id) ? 'agent' : 'human' };
@@ -257,7 +258,7 @@ export class FactoryTransitionService {
     );
     if (replay) return replay as unknown as FactoryTransitionResult;
 
-    const transitionId = request.ingress.transitionId ?? randomUUID();
+    const transitionId = request.ingress.transitionId ?? globalThis.crypto.randomUUID();
     const item = await this.#storage.get({ orgId: request.orgId, id: request.workItemId });
     if (!item) {
       const rejection = await this.#commitRejection(
@@ -333,7 +334,8 @@ export class FactoryTransitionService {
     }
     const itemSource = workItemSource(item.externalSource);
     const source = factoryRuleSourceForWorkItem(itemSource);
-    const legacyBoard = source === 'pullRequest' ? 'review' : 'work';
+    const isPullRequest = source === 'pullRequest' || source === 'gitlabPullRequest';
+    const legacyBoard = isPullRequest ? 'review' : 'work';
     if (item.board === null && !this.#boards.has(legacyBoard)) {
       return this.#commitRejection(
         request,
@@ -351,7 +353,7 @@ export class FactoryTransitionService {
         `The work item belongs to board "${itemBoard}", not "${request.board}".`,
       );
     }
-    if ((itemBoard === 'review' && source !== 'pullRequest') || (itemBoard === 'work' && source === 'pullRequest')) {
+    if ((itemBoard === 'review' && !isPullRequest) || (itemBoard === 'work' && isPullRequest)) {
       return this.#commitRejection(
         request,
         transitionId,
@@ -381,11 +383,16 @@ export class FactoryTransitionService {
       !Object.prototype.hasOwnProperty.call(board.phases, request.stage) ||
       !board.allowsTransition(fromStage, request.stage)
     ) {
+      const nextStages = [...new Set((board.transitions[fromStage] ?? []).map(transition => transition.to))];
+      const nextStagesReason =
+        nextStages.length > 0
+          ? `Next stages declared from ${fromStage}: ${nextStages.join(', ')}.`
+          : `No next stage is declared from ${fromStage}.`;
       return this.#commitRejection(
         request,
         transitionId,
         'invalid_transition',
-        `The ${board.title} board does not allow moving from ${fromStage} to ${request.stage}.`,
+        `The ${board.title} board does not allow moving from ${fromStage} to ${request.stage}. ${nextStagesReason}`,
       );
     }
 
@@ -428,15 +435,11 @@ export class FactoryTransitionService {
     try {
       evaluation = await withRuleTimeout(
         (async () => {
-          // Single authoritative plan-approval predicate, shared with the dispatcher's
-          // `#plansAreAutoApproved`: a per-item preapproval, or the project setting.
-          // Resolved inside the timed block so a resolver rejection surfaces as a
-          // committed rule_error and a slow lookup is bounded by RULE_TIMEOUT_MS.
-          const plansAutoApproved =
-            item.plansPreapprovedAt != null ||
-            (this.#autoApprovePlans
-              ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
-              : false);
+          // Resolve the project switch inside the timed block so a resolver rejection
+          // surfaces as a committed rule_error and a slow lookup is bounded.
+          const plansAutoApproved = this.#autoApprovePlans
+            ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
+            : false;
           const policy = boardTransitionPolicyResultSchema.parse(
             await board.transitionPolicy?.(
               immutablePolicySnapshot({
@@ -446,6 +449,7 @@ export class FactoryTransitionService {
                 reenter: request.reenter ?? false,
                 isHumanTransition: isHumanTransition(request),
                 plansAutoApproved,
+                planApproved: request.planApproved === true,
                 requestedTriageType: request.triageType,
               }),
             ),
@@ -551,7 +555,11 @@ export class FactoryTransitionService {
     code: FactoryRuleRejectionCode,
     reason: string,
   ): Promise<FactoryTransitionResult> {
-    return this.#commit(request, transitionId, { outcome: 'rejected', code, reason });
+    return this.#commit(request, transitionId, {
+      outcome: 'rejected',
+      code,
+      reason: reason.slice(0, MAX_REJECTION_REASON),
+    });
   }
 
   async #commit(

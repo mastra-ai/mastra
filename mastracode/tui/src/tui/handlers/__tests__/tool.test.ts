@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from 'node:util';
 import { Container } from '@earendil-works/pi-tui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -116,12 +117,14 @@ describe('tool event handlers', () => {
 
   it('keeps a deferred background tool row pending until its authoritative result arrives', () => {
     const { ctx, updateResult } = createShellOutputContext();
+    ctx.state.options = { backgroundToolsEnabled: true };
 
     handleToolEnd(
       ctx,
       'call-1',
       'Background task started. Task ID: task-1. The tool "view" is running in the background.',
       false,
+      { mastra: { backgroundTask: { taskId: 'task-1', status: 'running' } } },
     );
 
     expect(updateResult).toHaveBeenCalledWith(
@@ -274,7 +277,7 @@ describe('tool event handlers', () => {
     const ctx = {
       addChildBeforeFollowUps: vi.fn(child => ctx.state.chatContainer.children.push(child)),
       state: {
-        quietMode: false,
+        options: { backgroundToolsEnabled: true },
         pluginManager: {
           getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
         },
@@ -329,11 +332,14 @@ describe('tool event handlers', () => {
       'call-1',
       'Background task started. Task ID: task-1. The tool "mastra_expert" is running in the background.',
       false,
+      { mastra: { backgroundTask: { taskId: 'task-1', status: 'running' } } },
     );
 
     expect(ctx.state.pendingSubagents.has('call-1')).toBe(true);
     expect(
-      ctx.state.chatContainer.children.map((child: any) => child.render?.(120)?.join('\n') ?? '').join('\n'),
+      stripVTControlCharacters(
+        ctx.state.chatContainer.children.map((child: any) => child.render?.(120)?.join('\n') ?? '').join('\n'),
+      ),
     ).toContain('background · task-1');
 
     handleToolEnd(ctx, 'call-1', 'Authoritative Alexandria result', false);
@@ -355,13 +361,39 @@ describe('handleToolApprovalRequired', () => {
           terminal: { columns: 120, rows: 40 },
         },
         hookManager: undefined,
+        pendingTools: new Map(),
       },
+      addChildBeforeFollowUps: vi.fn(),
       notify: vi.fn(),
     } as any;
 
     handleToolApprovalRequired(ctx, 'call-approve', 'execute_command', { command: 'ls' });
 
-    expect(ctx.state.ui.showOverlay).toHaveBeenCalledTimes(1);
+    // The prompt is shown inline in the chat, not as an overlay
+    expect(ctx.addChildBeforeFollowUps).toHaveBeenCalledTimes(1);
+    expect(ctx.state.ui.showOverlay).not.toHaveBeenCalled();
     expect(ctx.notify).not.toHaveBeenCalled();
+  });
+
+  it('fills the ask_user question preview and keeps the arguments out of the approval card', () => {
+    const preview = { updateArgs: vi.fn() };
+    const ctx = {
+      state: {
+        ui: { requestRender: vi.fn(), terminal: { columns: 120, rows: 40 } },
+        hookManager: undefined,
+        pendingTools: new Map(),
+        pendingAskUserComponents: new Map([['call-ask', preview]]),
+      },
+      addChildBeforeFollowUps: vi.fn(),
+      notify: vi.fn(),
+    } as any;
+    const args = { question: 'Where should the tests run?', options: [{ label: 'Vitest' }] };
+
+    handleToolApprovalRequired(ctx, 'call-ask', 'ask_user', args);
+
+    expect(preview.updateArgs).toHaveBeenCalledWith(args);
+    const card = ctx.addChildBeforeFollowUps.mock.calls[0][0].render(120).join('\n');
+    expect(card).toContain('Allow?');
+    expect(card).not.toContain('Where should the tests run?');
   });
 });

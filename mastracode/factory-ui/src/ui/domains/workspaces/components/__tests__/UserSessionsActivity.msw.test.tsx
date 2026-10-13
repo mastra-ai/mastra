@@ -62,7 +62,7 @@ function stubProjectAndSessions(sessions: FactoryUserSession[]) {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
       HttpResponse.json({ sessions }),
     ),
   );
@@ -121,7 +121,7 @@ describe('User sessions sidebar activity', () => {
     // stamped `materializedAt` (registered after the base stub — the most
     // recent handler wins).
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
         HttpResponse.json({
           sessions: [
             makeSession({

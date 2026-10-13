@@ -1,6 +1,7 @@
 import { TTLCache } from '@isaacs/ttlcache';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Mastra } from '../../mastra';
+import { unwrapMastraTracingProxy } from '../../observability/context';
 import type { CoreTool } from '../../tools/types';
 import type { MessageList } from '../message-list';
 import type { SaveQueueManager } from '../save-queue';
@@ -41,6 +42,44 @@ export const globalRunRegistry = new TTLCache<string, RunRegistryEntry>({
   },
   noDisposeOnSet: true,
 });
+
+/**
+ * Read a run's registry entry as seen from a workflow step running under `mastra`.
+ *
+ * Entries are keyed only by runId, so when another Mastra instance in this
+ * process reuses the runId, a still-running workflow from the earlier run
+ * would otherwise read (and write its transcript into) the new run's entry.
+ * An entry owned by a different Mastra instance is treated as absent. An
+ * ownerless entry (a placeholder or rehydrated entry) is claimed by the first
+ * scoped reader, so a later instance reusing the runId cannot adopt it.
+ */
+export function getRunRegistryEntry(runId: string, mastra: Mastra | undefined): RunRegistryEntry | undefined {
+  const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
+  if (!entry || !mastra) return entry;
+  if (!entry.mastra) {
+    entry.mastra = mastra;
+    return entry;
+  }
+  return unwrapMastraTracingProxy(entry.mastra) === unwrapMastraTracingProxy(mastra) ? entry : undefined;
+}
+
+/**
+ * Publish an entry for `runId`, owned by `mastra`, unless the slot holds
+ * another Mastra instance's live run. Returns whether the entry was stored.
+ */
+export function setRunRegistryEntry(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined): boolean {
+  const current = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
+  if (current?.mastra && mastra && unwrapMastraTracingProxy(current.mastra) !== unwrapMastraTracingProxy(mastra))
+    return false;
+  if (mastra) entry.mastra ??= mastra;
+  globalRunRegistry.set(runId, entry);
+  return true;
+}
+
+/** Remove `runId`'s entry only if it belongs to `mastra` (or has no owner). */
+export function deleteRunRegistryEntry(runId: string, mastra: Mastra | undefined): void {
+  if (getRunRegistryEntry(runId, mastra)) globalRunRegistry.delete(runId);
+}
 
 /** runId -> number of in-flight operations holding the entry alive. */
 const activeRuns = new Map<string, number>();
@@ -109,10 +148,28 @@ export function __resetRunRegistryActivityForTests(): void {
   }
 }
 
+// `values()` can yield undefined: with `updateAgeOnGet`, `get()` on a missing
+// runId schedules an expiration for a key that has no value.
+function registryEntries(): RunRegistryEntry[] {
+  return Array.from(globalRunRegistry.values()).filter(entry => entry !== undefined);
+}
+
 export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise<unknown>[] {
-  return Array.from(globalRunRegistry.values()).flatMap(entry =>
+  return registryEntries().flatMap(entry =>
     entry.mastra === mastra && entry.workflowExecution ? [entry.workflowExecution] : [],
   );
+}
+
+/**
+ * Abandon the durable-agent executions `mastra` is still running: each stops
+ * without writing and releases its run, so recovery can take it right away.
+ * Executions that already settled are left alone.
+ */
+export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<void> {
+  const fences = registryEntries().flatMap(entry =>
+    entry.mastra === mastra && entry.executionFence ? [entry.executionFence] : [],
+  );
+  await Promise.allSettled(fences.map(fence => fence.abandon()));
 }
 
 /**
@@ -123,7 +180,7 @@ export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise
  */
 export function endRunSpansWithError(runId: string, error: Error): void {
   try {
-    const entry = globalRunRegistry.get(runId);
+    const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
     (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({ error, endSpan: true });
     (entry?.resumeAgentSpan ?? entry?.agentSpan)?.error({ error, endSpan: true });
   } catch {

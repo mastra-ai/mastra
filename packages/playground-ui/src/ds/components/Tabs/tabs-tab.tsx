@@ -3,8 +3,8 @@ import { useContext, useEffect, useRef } from 'react';
 import { buttonVariants } from '../Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
-import { controlSizeClasses } from '@/ds/primitives/control-size';
-import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
 export type TabProps = {
@@ -15,6 +15,8 @@ export type TabProps = {
   disabled?: boolean;
   attention?: boolean;
   disabledTooltip?: React.ReactNode;
+  /** Tooltip shown on hover and keyboard focus of an enabled tab (e.g. when its label is collapsed to an icon). */
+  tooltip?: React.ReactNode;
   className?: string;
 };
 
@@ -25,6 +27,7 @@ export const Tab = ({
   onClose,
   disabled,
   disabledTooltip,
+  tooltip,
   attention = false,
   className,
 }: TabProps) => {
@@ -59,6 +62,7 @@ export const Tab = ({
   const tabClassName =
     list?.variant === 'pill-ghost'
       ? cn(
+          // A ghost tab is the control itself: the button box at the list's rung.
           buttonVariants({ variant: 'ghost', size }),
           'relative z-10 whitespace-nowrap',
           'data-[active]:text-foreground',
@@ -67,14 +71,12 @@ export const Tab = ({
           className,
         )
       : cn(
-          // `sm` mirrors the `sm` button box so tabs sit level with sibling `size="sm"` controls.
-          size === 'sm' ? controlSizeClasses.sm : 'text-ui-smd',
-          'font-normal text-muted-foreground',
+          'text-label',
+          quietTextHover,
           attention && 'relative',
           'flex cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap outline-none',
-          transitions.colors,
-          focusRing.visible,
-          'hover:text-muted-foreground',
+          controlStateColorTransition,
+          focusRing,
           'data-[active]:text-foreground',
           'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-muted-foreground',
           'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-muted-foreground',
@@ -109,6 +111,15 @@ export const Tab = ({
       <Tooltip>
         <TooltipTrigger render={<span tabIndex={0} className="inline-flex" />}>{tab}</TooltipTrigger>
         <TooltipContent>{disabledTooltip}</TooltipContent>
+      </Tooltip>
+    );
+  }
+
+  if (tooltip && !disabled) {
+    return (
+      <Tooltip>
+        <TooltipTrigger render={tab} />
+        <TooltipContent>{tooltip}</TooltipContent>
       </Tooltip>
     );
   }

@@ -46,7 +46,7 @@ export const Default: Story = {
         <DataPanel.Heading>Span Details</DataPanel.Heading>
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-muted-foreground">Panel content goes here.</p>
+        <p className="text-caption text-muted-foreground">Panel content goes here.</p>
       </DataPanel.Content>
     </DataPanel>
   ),
@@ -65,7 +65,7 @@ export const WithNavigation: Story = {
         </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-muted-foreground">Navigate between items with the arrows.</p>
+        <p className="text-caption text-muted-foreground">Navigate between items with the arrows.</p>
       </DataPanel.Content>
     </DataPanel>
   ),
@@ -100,7 +100,7 @@ export const WithMetadata: Story = {
         </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-muted-foreground">Metadata renders inline next to the heading and truncates.</p>
+        <p className="text-caption text-muted-foreground">Metadata renders inline next to the heading and truncates.</p>
       </DataPanel.Content>
     </DataPanel>
   ),
@@ -138,7 +138,7 @@ export const Wide: Story = {
         <DataPanel.Heading>Wide Panel</DataPanel.Heading>
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-muted-foreground">
+        <p className="text-caption text-muted-foreground">
           <code>size=&quot;wide&quot;</code> takes 80% of the viewport for multi-column content;{' '}
           <code>size=&quot;full&quot;</code> covers it entirely.
         </p>
@@ -160,7 +160,9 @@ export const DisabledNav: Story = {
         </DataPanel.HeaderActions>
       </DataPanel.Header>
       <DataPanel.Content>
-        <p className="text-ui-sm text-muted-foreground">Previous button is disabled because onPrevious is undefined.</p>
+        <p className="text-caption text-muted-foreground">
+          Previous button is disabled because onPrevious is undefined.
+        </p>
       </DataPanel.Content>
     </DataPanel>
   ),
@@ -182,7 +184,7 @@ const StackedDemo = () => {
           </DataPanel.Heading>
         </DataPanel.Header>
         <DataPanel.Content>
-          <p className="text-ui-sm text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             Escape, backdrop click or the close button dismiss this panel. Open a nested panel to stack a second one on
             top.
           </p>
@@ -201,7 +203,7 @@ const StackedDemo = () => {
               </DataPanel.Heading>
             </DataPanel.Header>
             <DataPanel.Content>
-              <p className="text-ui-sm text-muted-foreground">
+              <p className="text-caption text-muted-foreground">
                 Escape only closes this top-most panel; the parent stays open underneath.
               </p>
             </DataPanel.Content>
@@ -237,7 +239,7 @@ const SiblingsWithDepthDemo = () => {
           </DataPanel.Heading>
         </DataPanel.Header>
         <DataPanel.Content>
-          <p className="text-ui-sm text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             The score panel is a <b>sibling</b> drawer (not nested in the DOM) rendered after this one with a higher{' '}
             <code>depth</code>, so it is narrower and this panel peeks out on the left.
           </p>
@@ -253,7 +255,7 @@ const SiblingsWithDepthDemo = () => {
           </DataPanel.Heading>
         </DataPanel.Header>
         <DataPanel.Content>
-          <p className="text-ui-sm text-muted-foreground">
+          <p className="text-caption text-muted-foreground">
             Escape closes this panel first; the result stays open beneath.
           </p>
         </DataPanel.Content>

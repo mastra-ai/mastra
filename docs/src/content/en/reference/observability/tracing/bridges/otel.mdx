@@ -22,9 +22,28 @@ Enables bidirectional integration between Mastra tracing and OpenTelemetry infra
 
 ## Constructor
 
-```typescript
-new OtelBridge()
+```typescript oxfmt:false
+new OtelBridge(config?: OtelBridgeConfig)
 ```
+
+<PropertiesTable
+  props={[
+  {
+    name: 'tracerProvider',
+    type: 'TracerProvider',
+    description:
+      "OpenTelemetry tracer provider used to create spans. Pass it when your provider isn't registered globally, for example when a framework creates the provider without calling `trace.setGlobalTracerProvider()`. Defaults to the globally registered provider.",
+    isOptional: true,
+  },
+  {
+    name: 'loggerProvider',
+    type: 'LoggerProvider',
+    description:
+      'OpenTelemetry logger provider used to forward Mastra log events. Defaults to the globally registered provider.',
+    isOptional: true,
+  },
+]}
+/>
 
 ## Methods
 
@@ -175,9 +194,18 @@ const mastra = new Mastra({
 })
 ```
 
-## `OpenTelemetry` setup requirements
+## Setup requirements
 
-The OtelBridge requires an active OpenTelemetry SDK to function. The bridge reads from OTEL's ambient context.
+The bridge creates spans through an OpenTelemetry tracer provider. For Mastra spans to be exported:
+
+- **A tracer provider must be available.** Register one globally before Mastra runs, for example by calling `sdk.start()` on `NodeSDK` from `@opentelemetry/sdk-node`, or by calling `trace.setGlobalTracerProvider(provider)`. If the provider isn't registered globally, pass it with `new OtelBridge({ tracerProvider })`.
+- **A context manager must be installed for Mastra spans to nest under outer spans.** `NodeSDK` installs one automatically. Without a context manager, spans are still exported, but Mastra root spans can't read the active span, so they start new traces instead of joining the outer trace.
+
+When no tracer provider is available, agents and workflows still run, but no Mastra spans are exported through OpenTelemetry. The bridge logs this warning once:
+
+```text
+[OtelBridge] No OpenTelemetry tracer provider is registered globally, so Mastra spans will not be exported through OpenTelemetry. ...
+```
 
 See the [OtelBridge Guide](/integrations/observability/opentelemetry#bridge) for complete setup instructions, including how to configure OTEL instrumentation and run your application.
 

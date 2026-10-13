@@ -258,7 +258,6 @@ describe('SearchFieldBlock — minimizing', () => {
 
 describe('SearchFieldBlock — sizing', () => {
   it.each([
-    ['xs', 'px-7', 'size-3'],
     ['sm', 'px-8', 'size-3.5'],
     ['md', 'px-9', 'size-4'],
     ['lg', 'px-10', 'size-[1.125rem]'],
@@ -278,10 +277,9 @@ describe('SearchFieldBlock — sizing', () => {
 
   // The buttons carry the field's own height, so the row keeps one line.
   it.each([
-    ['xs', 'h-form-xs'],
-    ['sm', 'h-form-sm'],
-    ['md', 'h-form-md'],
-    ['lg', 'h-form-lg'],
+    ['sm', 'h-control-sm'],
+    ['md', 'h-control-md'],
+    ['lg', 'h-control-lg'],
   ] as const)('sizes the minimized button to a %s field', (size, height) => {
     render(<SearchFieldBlock name="search" isMinimized size={size} />);
 
@@ -291,18 +289,18 @@ describe('SearchFieldBlock — sizing', () => {
   it('keeps the minimized button compact when the field has no size', () => {
     render(<SearchFieldBlock name="search" isMinimized />);
 
-    expect(screen.getByRole('button', { name: 'Search' }).classList.contains('h-form-sm')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Search' }).classList.contains('h-control-sm')).toBe(true);
   });
 
   it('sizes the clear button to the field it sits in', () => {
     render(<SearchFieldBlock name="search" value="weather" onReset={vi.fn()} size="md" />);
 
-    expect(screen.getByRole('button', { name: 'Clear search' }).classList.contains('h-form-md')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Clear search' }).classList.contains('h-control-md')).toBe(true);
   });
 
   it('gives the clear button the medium size when the field has none', () => {
     render(<SearchFieldBlock name="search" value="weather" onReset={vi.fn()} />);
 
-    expect(screen.getByRole('button', { name: 'Clear search' }).classList.contains('h-form-md')).toBe(true);
+    expect(screen.getByRole('button', { name: 'Clear search' }).classList.contains('h-control-md')).toBe(true);
   });
 });

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MessageList } from '../message-list';
+import { createSignal } from '../signals';
 import type { MastraDBMessage } from '../types';
 import { SaveQueueManager } from './index';
 
@@ -7,7 +8,7 @@ function makeTestMessage(id: string, threadId: string, role: 'user' | 'assistant
   return {
     id,
     role,
-    content: { content, parts: [], format: 2 },
+    content: { content, parts: [{ type: 'text', text: content }], format: 2 },
     createdAt: new Date(),
     threadId,
   };
@@ -119,5 +120,114 @@ describe('SaveQueueManager', () => {
 
     expect(savedMessages.length).toBe(3);
     expect(list.drainUnsavedMessages().length).toBe(0);
+  });
+
+  it('filters internal working-memory and transient signal messages before saving', async () => {
+    const threadId = 'thread-filter';
+    const list = new MessageList({ threadId });
+    const transientSignal = createSignal({
+      id: 'signal-transient',
+      type: 'reactive',
+      contents: 'Delivery only',
+      transient: true,
+    }).toDBMessage({ threadId });
+    const workingMemoryMessage: MastraDBMessage = {
+      id: 'wm-message',
+      role: 'assistant',
+      createdAt: new Date(),
+      threadId,
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'wm-call',
+              toolName: 'updateWorkingMemory',
+              args: { memory: '# Profile\n- Name: Ada' },
+              result: { success: true },
+            },
+          },
+        ],
+      },
+    };
+
+    list.add(transientSignal, 'response');
+    list.add(workingMemoryMessage, 'response');
+    list.add(makeTestMessage('visible-message', threadId, 'assistant', 'Saved your profile.'), 'response');
+
+    await manager.flushMessages(list, threadId);
+
+    expect(mockMemory.saveMessages).toHaveBeenCalledOnce();
+    expect(saved).toHaveLength(1);
+    expect(saved[0].role).toBe('assistant');
+    expect(saved[0].content.parts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Saved your profile.' })]),
+    );
+    expect(saved[0].content.parts).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'tool-invocation' })]),
+    );
+  });
+
+  describe('beforePersist', () => {
+    it('runs before the save and persists when it resolves', async () => {
+      const order: string[] = [];
+      mockMemory.saveMessages = vi.fn(async () => {
+        order.push('save');
+      });
+      const list = new MessageList({ threadId: 'thread-guard' });
+      list.add(makeTestMessage('m1', 'thread-guard', 'user', 'Hello'), 'user');
+
+      await manager.flushMessages(list, 'thread-guard', undefined, {
+        beforePersist: async () => {
+          order.push('guard');
+        },
+      });
+
+      expect(order).toEqual(['guard', 'save']);
+    });
+
+    it('skips the save, keeps the messages unsaved, and rejects when it rejects', async () => {
+      const list = new MessageList({ threadId: 'thread-guard' });
+      list.add(makeTestMessage('m1', 'thread-guard', 'user', 'Hello'), 'user');
+      const guardError = new Error('superseded');
+
+      await expect(
+        manager.flushMessages(list, 'thread-guard', undefined, { beforePersist: () => Promise.reject(guardError) }),
+      ).rejects.toBe(guardError);
+
+      expect(saveCalls).toBe(0);
+      expect(list.drainUnsavedMessages().map(m => m.id)).toEqual(['m1']);
+    });
+
+    it('does not poison later saves on the same thread', async () => {
+      const list = new MessageList({ threadId: 'thread-guard' });
+      list.add(makeTestMessage('m1', 'thread-guard', 'user', 'Hello'), 'user');
+
+      const rejected = manager.flushMessages(list, 'thread-guard', undefined, {
+        beforePersist: () => Promise.reject(new Error('superseded')),
+      });
+      const later = manager.flushMessages(list, 'thread-guard');
+
+      await expect(rejected).rejects.toThrow('superseded');
+      await expect(later).resolves.toBeUndefined();
+      expect(saved.map(m => m.id)).toEqual(['m1']);
+    });
+
+    it('still logs storage errors instead of rejecting', async () => {
+      const logger = { error: vi.fn() } as any;
+      mockMemory.saveMessages = vi.fn(async () => {
+        throw new Error('db down');
+      });
+      const manager = new SaveQueueManager({ memory: mockMemory, logger });
+      const list = new MessageList({ threadId: 'thread-guard' });
+      list.add(makeTestMessage('m1', 'thread-guard', 'user', 'Hello'), 'user');
+
+      await expect(
+        manager.flushMessages(list, 'thread-guard', undefined, { beforePersist: async () => {} }),
+      ).resolves.toBeUndefined();
+      expect(logger.error).toHaveBeenCalledWith('Error in enqueueSave', expect.anything());
+    });
   });
 });

@@ -4,12 +4,19 @@
  * so they carry across threads and restarts.
  */
 
-import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import type { OMModel } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
-import { AuthStorage } from '../auth/storage.js';
+import { AuthStorage, PROVIDER_DEFAULT_MODELS } from '../auth/storage.js';
+import {
+  ANTHROPIC_PREFIX,
+  normalizeAnthropicModelId,
+  OPENAI_PREFIX,
+  remapOpenAIModelForCodexOAuth,
+  stripMastraGatewayPrefix,
+} from '../providers/model-ids.js';
 import { buildCodexStagehandFetch, createCodexMiddleware } from '../providers/openai-codex.js';
 import {
   isThinkingLevelSetting,
@@ -40,6 +47,22 @@ export interface CustomProviderSetting {
 
 /** Storage backend type. */
 export type StorageBackend = 'libsql' | 'pg';
+
+/** Experimental agent implementation used by MastraCode. */
+export type ExperimentalAgent = 'durable' | 'evented';
+
+export class ExperimentalAgentSettingsError extends Error {
+  readonly value: unknown;
+
+  constructor(value: unknown, settingsPath?: string) {
+    super(
+      `Invalid "experimentalAgent" setting${settingsPath ? ` in ${settingsPath}` : ''}: ${JSON.stringify(value)}. ` +
+        `Remove the "experimentalAgent" key or set it to "durable", "evented", or null.`,
+    );
+    this.name = 'ExperimentalAgentSettingsError';
+    this.value = value;
+  }
+}
 
 /** LibSQL-specific storage settings. */
 export interface LibSQLStorageSettings {
@@ -223,7 +246,6 @@ export interface GlobalSettings {
     version: number;
     modePackId: string | null;
     omPackId: string | null;
-    quietModePreferenceSelected: boolean;
   };
   // Global model preferences (applied to new threads)
   models: {
@@ -274,11 +296,15 @@ export interface GlobalSettings {
      * when set. Written by `/om` when the observer model is changed independently.
      */
     observerModelOverride: string | null;
+    /** Persisted Observer model intent. Missing values use legacy-field compatibility. */
+    observerModelSelection: OMModel | null;
     /**
      * Explicit Reflector model override — takes precedence over `omModelOverride`
      * when set. Written by `/om` when the reflector model is changed independently.
      */
     reflectorModelOverride: string | null;
+    /** Persisted Reflector model intent. Missing values use legacy-field compatibility. */
+    reflectorModelSelection: OMModel | null;
     /** Default OM observation threshold used for new threads unless overridden per-thread. */
     omObservationThreshold: number | null;
     /** Default OM reflection threshold used for new threads unless overridden per-thread. */
@@ -311,10 +337,8 @@ export interface GlobalSettings {
     thinkingLevel: ThinkingLevelSetting;
     /** Whether native subagents are enabled for Mastra Code TUI sessions. */
     subagentsEnabled: boolean;
-    /** When true, components like subagent output collapse to compact summaries on completion. */
-    quietMode: boolean;
-    /** Maximum quiet-mode detail preview lines for compact tool calls. Set to 0 to hide previews. */
-    quietModeMaxToolPreviewLines: number;
+    /** Maximum detail preview lines shown under compact tool calls (0-8). Set to 0 to hide previews. */
+    previewLines: number;
     /**
      * Default web search/extract provider. `auto` picks the first configured
      * provider key (Tavily, then Parallel). An explicit provider is only
@@ -343,6 +367,10 @@ export interface GlobalSettings {
   shellPassthrough: ShellPassthroughSettings;
   // Hold-space voice input configuration
   voice: VoiceSettings;
+  // Raw persisted experimental agent value. Resolve through resolveExperimentalAgent() before use.
+  experimentalAgent: unknown;
+  // Internal load diagnostic retained on clones until the user repairs the setting.
+  _experimentalAgentSettingsPath?: string;
   // Native background execution for eligible Mastra Code tools
   backgroundTools: BackgroundToolSettings;
   // Signal routing configuration
@@ -372,6 +400,8 @@ export interface SignalSettings {
   experimentalGithubSignals: boolean;
   /** Experimental: enable cross-agent communication (thread ownership advertisement, peer discovery, and agent connection tools). */
   experimentalCrossAgentSignals: boolean;
+  /** Experimental: give the agent tools to create and manage `/schedules` schedules on its thread. */
+  experimentalScheduleTools: boolean;
   /** Poll interval for GitHub PR subscriptions. */
   githubPollIntervalMs: number;
 }
@@ -415,7 +445,6 @@ const DEFAULTS: GlobalSettings = {
     version: 0,
     modePackId: null,
     omPackId: null,
-    quietModePreferenceSelected: true,
   },
   models: {
     activeModelPackId: null,
@@ -427,7 +456,9 @@ const DEFAULTS: GlobalSettings = {
     activeOmPackId: null,
     omModelOverride: null,
     observerModelOverride: null,
+    observerModelSelection: null,
     reflectorModelOverride: null,
+    reflectorModelSelection: null,
     omObservationThreshold: null,
     omReflectionThreshold: null,
     omCavemanObservations: null,
@@ -441,8 +472,7 @@ const DEFAULTS: GlobalSettings = {
     theme: 'auto',
     thinkingLevel: 'off',
     subagentsEnabled: false,
-    quietMode: false,
-    quietModeMaxToolPreviewLines: 2,
+    previewLines: 2,
     webSearchProvider: 'auto',
   },
   storage: { ...STORAGE_DEFAULTS },
@@ -461,11 +491,13 @@ const DEFAULTS: GlobalSettings = {
   },
   shellPassthrough: { mode: 'default' },
   voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
+  experimentalAgent: null,
   backgroundTools: { enabled: false },
   signals: {
     unixSocketPubSub: false,
     experimentalGithubSignals: false,
     experimentalCrossAgentSignals: false,
+    experimentalScheduleTools: false,
     githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,
   },
   mcp: { claudeCodeGlobal: false, codexGlobal: false },
@@ -473,7 +505,7 @@ const DEFAULTS: GlobalSettings = {
 };
 
 export const WEB_SEARCH_PROVIDER_VALUES: WebSearchProviderSetting[] = ['auto', 'tavily', 'parallel'];
-const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
+const PREVIEW_LINES_MAX = 8;
 const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
 
 function cloneSignalSettings(signals: SignalSettings): SignalSettings {
@@ -490,6 +522,7 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
     left.unixSocketPubSub === right.unixSocketPubSub &&
     left.experimentalGithubSignals === right.experimentalGithubSignals &&
     left.experimentalCrossAgentSignals === right.experimentalCrossAgentSignals &&
+    left.experimentalScheduleTools === right.experimentalScheduleTools &&
     left.githubPollIntervalMs === right.githubPollIntervalMs
   );
 }
@@ -597,10 +630,21 @@ export function pruneRemovedAccountPreferences(settings: GlobalSettings, removed
   settings.models.packAccountPreferences = next;
 }
 
-function parseQuietModeMaxToolPreviewLines(value: unknown): number {
-  const rawValue =
-    typeof value === 'number' && Number.isFinite(value) ? value : DEFAULTS.preferences.quietModeMaxToolPreviewLines;
-  return Math.min(QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX, Math.max(0, Math.floor(rawValue)));
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/**
+ * Resolves the preview line limit. `previewLines` wins when valid; otherwise the legacy
+ * `quietModeMaxToolPreviewLines` key (still written by older Mastra Code versions) is used.
+ */
+function parsePreviewLines(raw: Record<string, unknown>): number {
+  const value = isFiniteNumber(raw.previewLines)
+    ? raw.previewLines
+    : isFiniteNumber(raw.quietModeMaxToolPreviewLines)
+      ? raw.quietModeMaxToolPreviewLines
+      : DEFAULTS.preferences.previewLines;
+  return Math.min(PREVIEW_LINES_MAX, Math.max(0, Math.floor(value)));
 }
 
 function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'] {
@@ -612,7 +656,7 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
     subagentsEnabled:
       typeof raw.subagentsEnabled === 'boolean' ? raw.subagentsEnabled : DEFAULTS.preferences.subagentsEnabled,
-    quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
+    previewLines: parsePreviewLines(raw),
     webSearchProvider: parseWebSearchProvider(raw.webSearchProvider),
   };
 }
@@ -622,6 +666,26 @@ function parseGithubPollIntervalMs(value: unknown): number {
   const intervalMs = Math.floor(value);
   if (intervalMs < GITHUB_POLL_INTERVAL_MIN_MS) return DEFAULTS.signals.githubPollIntervalMs;
   return Math.min(intervalMs, GITHUB_POLL_INTERVAL_MAX_MS);
+}
+
+export function parseExperimentalAgentSetting(value: unknown, settingsPath?: string): ExperimentalAgent | null {
+  if (value === undefined || value === null) return null;
+  if (value === 'durable' || value === 'evented') return value;
+  throw new ExperimentalAgentSettingsError(value, settingsPath);
+}
+
+function loadExperimentalAgentSetting(
+  value: unknown,
+  settingsPath: string,
+): { selection: unknown; settingsPath?: string } {
+  try {
+    return { selection: parseExperimentalAgentSetting(value, settingsPath) };
+  } catch (error) {
+    if (error instanceof ExperimentalAgentSettingsError) {
+      return { selection: error.value, settingsPath };
+    }
+    throw error;
+  }
 }
 
 function parseBackgroundToolSettings(rawBackgroundTools: unknown): BackgroundToolSettings {
@@ -645,6 +709,10 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalCrossAgentSignals === 'boolean'
         ? raw.experimentalCrossAgentSignals
         : DEFAULTS.signals.experimentalCrossAgentSignals,
+    experimentalScheduleTools:
+      typeof raw.experimentalScheduleTools === 'boolean'
+        ? raw.experimentalScheduleTools
+        : DEFAULTS.signals.experimentalScheduleTools,
     githubPollIntervalMs: parseGithubPollIntervalMs(raw.githubPollIntervalMs),
   };
 }
@@ -655,26 +723,6 @@ function parseMcpDiscoverySettings(rawMcp: unknown): McpDiscoverySettings {
     claudeCodeGlobal: typeof raw.claudeCodeGlobal === 'boolean' ? raw.claudeCodeGlobal : DEFAULTS.mcp.claudeCodeGlobal,
     codexGlobal: typeof raw.codexGlobal === 'boolean' ? raw.codexGlobal : DEFAULTS.mcp.codexGlobal,
   };
-}
-
-function hasQuietModePreferenceSelected(rawOnboarding: unknown): boolean {
-  return Boolean(
-    rawOnboarding &&
-    typeof rawOnboarding === 'object' &&
-    Object.prototype.hasOwnProperty.call(rawOnboarding, 'quietModePreferenceSelected'),
-  );
-}
-
-function applyQuietModePreferenceRollout(settings: GlobalSettings, rawOnboarding: unknown): void {
-  if (hasQuietModePreferenceSelected(rawOnboarding)) return;
-  settings.onboarding.quietModePreferenceSelected = settings.preferences.quietMode === true;
-}
-
-function getNewInstallDefaults(): GlobalSettings {
-  const settings = structuredClone(DEFAULTS);
-  settings.preferences.quietMode = true;
-  settings.onboarding.quietModePreferenceSelected = true;
-  return settings;
 }
 
 export function getSettingsPath(): string {
@@ -960,6 +1008,7 @@ function migrateFromAuth(settingsPath: string): boolean {
       const raw = JSON.parse(readFileSync(settingsPath, 'utf-8'));
       const rawCustomPacks: CustomPack[] = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
       const modePackOverrides = parseModePackOverrides(raw.models?.modePackOverrides);
+      const experimentalAgentSetting = loadExperimentalAgentSetting(raw.experimentalAgent, settingsPath);
       settings = {
         onboarding: { ...DEFAULTS.onboarding, ...raw.onboarding },
         models: {
@@ -990,12 +1039,13 @@ function migrateFromAuth(settingsPath: string): boolean {
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
         voice: parseVoiceSettings(raw.voice),
+        experimentalAgent: experimentalAgentSetting.selection,
+        _experimentalAgentSettingsPath: experimentalAgentSetting.settingsPath,
         backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
         signals: parseSignalSettings(raw.signals),
         mcp: parseMcpDiscoverySettings(raw.mcp),
         observability: parseObservabilitySettings(raw.observability),
       };
-      applyQuietModePreferenceRollout(settings, raw.onboarding);
     } catch {
       settings = structuredClone(DEFAULTS);
     }
@@ -1090,11 +1140,12 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   // One-time migration: move model data from auth.json into settings.json
   migrateFromAuth(filePath);
 
-  if (!existsSync(filePath)) return rememberLoadedSettings(getNewInstallDefaults());
+  if (!existsSync(filePath)) return rememberLoadedSettings(structuredClone(DEFAULTS));
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
     const rawCustomPacks: CustomPack[] = Array.isArray(raw.customModelPacks) ? raw.customModelPacks : [];
     const modePackOverrides = parseModePackOverrides(raw.models?.modePackOverrides);
+    const experimentalAgentSetting = loadExperimentalAgentSetting(raw.experimentalAgent, filePath);
     // Spread raw first to preserve unknown top-level keys (forward-compatibility),
     // then overlay with parsed/typed fields so known keys are always correct.
     const settings: GlobalSettings = {
@@ -1128,18 +1179,21 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
       voice: parseVoiceSettings(raw.voice),
+      experimentalAgent: experimentalAgentSetting.selection,
+      _experimentalAgentSettingsPath: experimentalAgentSetting.settingsPath,
       backgroundTools: parseBackgroundToolSettings(raw.backgroundTools),
       signals: parseSignalSettings(raw.signals),
       mcp: parseMcpDiscoverySettings(raw.mcp),
       observability: parseObservabilitySettings(raw.observability),
     };
 
-    // Migrate legacy omModelId → omModelOverride
     let settingsChanged = false;
-    if (!hasQuietModePreferenceSelected(raw.onboarding)) {
-      applyQuietModePreferenceRollout(settings, raw.onboarding);
+    // Persist the resolved preview line limit under its current key. Legacy quiet-mode keys are
+    // left untouched so older Mastra Code instances that are still running keep working.
+    if (!isFiniteNumber(raw.preferences?.previewLines)) {
       settingsChanged = true;
     }
+    // Migrate legacy omModelId → omModelOverride
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
       settingsChanged = true;
@@ -1333,7 +1387,18 @@ export function resolveOmRoleModel(
   role: 'observer' | 'reflector',
   builtinOmPacks: Array<{ id: string; modelId: string }>,
 ): string | null {
-  const { activeOmPackId, omModelOverride, observerModelOverride, reflectorModelOverride } = settings.models;
+  const {
+    activeOmPackId,
+    omModelOverride,
+    observerModelOverride,
+    observerModelSelection,
+    reflectorModelOverride,
+    reflectorModelSelection,
+  } = settings.models;
+  const model = role === 'observer' ? observerModelSelection : reflectorModelSelection;
+  if (model === 'auto') return null;
+  if (model) return model;
+
   const roleOverride = role === 'observer' ? observerModelOverride : reflectorModelOverride;
   if (roleOverride) return roleOverride;
 
@@ -1378,7 +1443,7 @@ function getSignalSettingsForSave(settings: GlobalSettings, filePath: string): S
 }
 
 function writeFileAtomically(filePath: string, content: string): void {
-  const tempPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  const tempPath = `${filePath}.${process.pid}.${globalThis.crypto.randomUUID()}.tmp`;
   try {
     // Preserve the target's mode across the rename (auth.json keeps its 0600);
     // new files default to owner-only since these are local app-data files.
@@ -1398,7 +1463,9 @@ export function saveSettings(settings: GlobalSettings, filePath: string = getSet
   const signals = getSignalSettingsForSave(settings, filePath);
   settings.signals = signals;
   loadedSignalSettings.set(settings, cloneSignalSettings(signals));
-  writeFileAtomically(filePath, JSON.stringify(settings, null, 2));
+  const settingsToSave: Record<string, unknown> = { ...settings };
+  delete settingsToSave._experimentalAgentSettingsPath;
+  writeFileAtomically(filePath, JSON.stringify(settingsToSave, null, 2));
 }
 
 /** Marker file name to track which provider last used a profile. */
@@ -1459,11 +1526,139 @@ function browserRecordingOptions() {
 }
 
 /**
+ * Snapshot of browser settings safe to store in session state (which session clients can read).
+ * Strips credentials; keeps everything `/browser status` needs for drift detection.
+ */
+export function toActiveBrowserSettings(settings: BrowserSettings): BrowserSettings {
+  if (!settings.stagehand) return { ...settings };
+  const { apiKey: _apiKey, ...stagehand } = settings.stagehand;
+  return { ...settings, stagehand };
+}
+
+export type StagehandModelSource =
+  /** `browser.stagehand.model` in settings. */
+  | 'settings'
+  /** No model configured; reusing the chat model that was active when the browser launched. */
+  | 'chat-model'
+  /** No usable model otherwise; the default model for the user's OpenAI Codex (ChatGPT) login. */
+  | 'codex-oauth'
+  /** Nothing else applies; Stagehand picks its own default from env API keys. */
+  | 'stagehand-default';
+
+export interface ResolvedStagehandModel {
+  /** `provider/model` id, or undefined when Stagehand's own default applies. */
+  modelName: string | undefined;
+  source: StagehandModelSource;
+  /** True when requests go through the user's OpenAI Codex OAuth login instead of an API key. */
+  viaCodexOAuth: boolean;
+}
+
+export interface ResolveStagehandModelOptions {
+  /**
+   * Chat model id at the moment the browser launches (`session.model.get()`).
+   * The Stagehand instance is fixed once created and shared across threads, so
+   * later chat-model switches do not affect it.
+   */
+  chatModelId?: string;
+  authStorage?: AuthStorage;
+}
+
+/**
+ * Env vars Stagehand reads for each provider it can route (mirrors
+ * `STAGEHAND_MODEL_PROVIDERS` in `@mastra/stagehand` and Stagehand's own
+ * `providerEnvVarMap`). `null` means the provider needs no API key.
+ * Kept here instead of importing `@mastra/stagehand`, which would eagerly
+ * load the browser stack into every settings consumer.
+ */
+export const STAGEHAND_PROVIDER_ENV_VARS: Record<string, readonly string[] | null> = {
+  openai: ['OPENAI_API_KEY'],
+  anthropic: ['ANTHROPIC_API_KEY'],
+  google: ['GEMINI_API_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GOOGLE_API_KEY'],
+  vertex: ['GOOGLE_VERTEX_AI_API_KEY'],
+  groq: ['GROQ_API_KEY'],
+  cerebras: ['CEREBRAS_API_KEY'],
+  togetherai: ['TOGETHER_AI_API_KEY'],
+  mistral: ['MISTRAL_API_KEY'],
+  deepseek: ['DEEPSEEK_API_KEY'],
+  perplexity: ['PERPLEXITY_API_KEY'],
+  azure: ['AZURE_API_KEY'],
+  xai: ['XAI_API_KEY'],
+  gateway: ['AI_GATEWAY_API_KEY'],
+  bedrock: null,
+  ollama: null,
+};
+
+function hasCodexOAuthLogin(authStorage: AuthStorage): boolean {
+  return authStorage.get('openai-codex')?.type === 'oauth';
+}
+
+function isOpenAIModel(modelId: string): boolean {
+  return modelId.startsWith(OPENAI_PREFIX);
+}
+
+/**
+ * Stagehand hands the segment after `provider/` straight to the AI SDK provider,
+ * so apply the same id normalization the chat gateway does before it does.
+ */
+function normalizeForStagehand(modelId: string): string {
+  const bare = stripMastraGatewayPrefix(modelId.trim());
+  return bare.startsWith(ANTHROPIC_PREFIX) ? normalizeAnthropicModelId(bare) : bare;
+}
+
+/** Whether Stagehand could run `provider/model` with the credentials available right now. */
+function stagehandCanRoute(modelId: string, codexOAuth: boolean): boolean {
+  const provider = modelId.split('/', 1)[0];
+  if (!provider || provider === modelId) return false;
+  if (provider === 'openai' && codexOAuth) return true;
+  const envVars = STAGEHAND_PROVIDER_ENV_VARS[provider];
+  if (envVars === undefined) return false;
+  if (envVars === null) return true;
+  return envVars.some(name => Boolean(process.env[name]?.trim()));
+}
+
+/**
+ * Resolve which model Stagehand will use and why, without creating a browser.
+ * Order: configured `browser.stagehand.model` → the launch-time chat model when
+ * Stagehand can route it → the Codex login's default model → Stagehand's own
+ * default. Mirrors the selection in `createBrowserFromSettings` so the UI can
+ * show it.
+ */
+export function resolveStagehandModel(
+  settings: Pick<BrowserSettings, 'provider' | 'stagehand'>,
+  { chatModelId, authStorage = new AuthStorage() }: ResolveStagehandModelOptions = {},
+): ResolvedStagehandModel {
+  if (settings.provider !== 'stagehand') {
+    return { modelName: undefined, source: 'stagehand-default', viaCodexOAuth: false };
+  }
+  const codexOAuth = hasCodexOAuthLogin(authStorage);
+  const configured = settings.stagehand?.model ? normalizeForStagehand(settings.stagehand.model) : undefined;
+  if (configured) {
+    return { modelName: configured, source: 'settings', viaCodexOAuth: codexOAuth && isOpenAIModel(configured) };
+  }
+  const chatModel = chatModelId ? normalizeForStagehand(chatModelId) : undefined;
+  if (chatModel && stagehandCanRoute(chatModel, codexOAuth)) {
+    return { modelName: chatModel, source: 'chat-model', viaCodexOAuth: codexOAuth && isOpenAIModel(chatModel) };
+  }
+  if (codexOAuth) {
+    return { modelName: PROVIDER_DEFAULT_MODELS['openai-codex'], source: 'codex-oauth', viaCodexOAuth: true };
+  }
+  return { modelName: undefined, source: 'stagehand-default', viaCodexOAuth: false };
+}
+
+export interface CreateBrowserOptions {
+  /** Chat model id at launch; see `ResolveStagehandModelOptions.chatModelId`. */
+  chatModelId?: string;
+}
+
+/**
  * Create a browser instance from settings.
  * Shared by startup (main.ts) and live reconfiguration (/browser command).
  * Returns undefined if browser is disabled.
  */
-export async function createBrowserFromSettings(settings: BrowserSettings): Promise<MastraBrowser | undefined> {
+export async function createBrowserFromSettings(
+  settings: BrowserSettings,
+  { chatModelId }: CreateBrowserOptions = {},
+): Promise<MastraBrowser | undefined> {
   if (!settings.enabled) {
     return undefined;
   }
@@ -1487,31 +1682,26 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
       recording: browserRecordingOptions(),
     };
 
-    // When the user has an active OpenAI Codex (ChatGPT) subscription, route
-    // Stagehand through the Codex endpoint. We use the AI SDK provider's
-    // standard hooks (baseURL, headers, fetch, and middleware) instead of a
-    // URL-rewriting fetch:
+    // See resolveStagehandModel() for which model is picked. How it is reached
+    // depends on the user's OpenAI auth, not on where the model came from:
+    // any `openai/*` model goes through the Codex (ChatGPT) endpoint when the
+    // user signed in with Codex OAuth, matching the chat agents. Everything
+    // else is passed as a plain `provider/model` string and Stagehand resolves
+    // the provider's API key from the environment.
+    //
+    // The Codex route uses the AI SDK provider's standard hooks:
     //   - baseURL: target Codex's Responses API directly (no URL rewriting).
     //   - headers: static Codex identifiers (originator, UA, account id).
     //   - fetch: a tiny refresher that injects the live OAuth bearer per call,
     //     since AI SDK takes `apiKey` as a static string.
     //   - middleware: createCodexMiddleware() sets `store: false`, which Codex
     //     requires on every request.
-    // Model is `gpt-5.4-mini`, the current ChatGPT-sign-in Codex whitelist
-    // pick suited to Stagehand's vision + structured-output workload.
-    //
-    // An explicitly configured model wins: Codex is a fallback for users who
-    // have no model of their own, not an override of one they chose. Stagehand
-    // resolves the provider's API key from the environment for plain
-    // `provider/model` strings, so no key plumbing is needed here.
     const authStorage = new AuthStorage();
-    const cred = authStorage.get('openai-codex');
-    if (stagehand?.model) {
-      stagehandOpts.model = stagehand.model;
-    } else if (cred?.type === 'oauth') {
-      const accountId = (cred as any).accountId as string | undefined;
+    const resolved = resolveStagehandModel(settings, { chatModelId, authStorage });
+    if (resolved.modelName && resolved.viaCodexOAuth) {
+      const accountId = (authStorage.get('openai-codex') as any)?.accountId as string | undefined;
       stagehandOpts.model = {
-        modelName: 'openai/gpt-5.4-mini',
+        modelName: remapOpenAIModelForCodexOAuth(resolved.modelName),
         apiKey: 'codex-oauth',
         baseURL: 'https://chatgpt.com/backend-api/codex',
         headers: {
@@ -1522,6 +1712,8 @@ export async function createBrowserFromSettings(settings: BrowserSettings): Prom
         fetch: buildCodexStagehandFetch(authStorage),
         middleware: createCodexMiddleware(),
       } as any;
+    } else if (resolved.modelName) {
+      stagehandOpts.model = resolved.modelName;
     }
 
     return cdpUrl

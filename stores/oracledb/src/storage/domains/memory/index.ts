@@ -1,5 +1,8 @@
-import { randomUUID } from 'node:crypto';
-
+import {
+  assertActiveObservationsApplied,
+  type UpdateActiveObservationsResult,
+  type UpdateBufferedObservationsResult,
+} from '@internal/core/memory';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -69,7 +72,7 @@ import {
   updateBufferedReflection,
 } from './observational-buffering';
 import { getResourceById, saveResource, updateResource } from './resources';
-import { clearAllMemoryTables, initMemorySchema } from './schema';
+import { backfillObservationalMemorySupersededBy, clearAllMemoryTables, initMemorySchema } from './schema';
 import {
   deleteThread,
   getThreadById,
@@ -93,6 +96,7 @@ const DEFAULT_VECTOR_REGISTRY_TABLE = 'MASTRA_VECTOR_INDEXES';
 export class MemoryOracle extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
+  readonly supportsObservationalMemoryHistorySearch = true;
   // Memory owns all tables needed for normal message history plus observational memory state.
   static readonly MANAGED_TABLES = [
     TABLE_THREADS,
@@ -148,6 +152,16 @@ export class MemoryOracle extends MemoryStorage {
 
   async init(): Promise<void> {
     await initMemorySchema(this.ctx);
+  }
+
+  /**
+   * Mark observational memory rows that are not their key's canonical head as superseded.
+   * Runs as part of `init()`; `OracleStore` also runs it on every start when the memory schema
+   * migration is unchanged and skipped.
+   * @internal
+   */
+  async backfillObservationalMemorySupersededBy(): Promise<void> {
+    await this.ctx.db.withConnection(connection => backfillObservationalMemorySupersededBy(this.ctx, connection));
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -240,7 +254,7 @@ export class MemoryOracle extends MemoryStorage {
     }
 
     const sourceMessages = await this.messagesForClone(args);
-    const newThreadId = args.newThreadId ?? randomUUID();
+    const newThreadId = args.newThreadId ?? globalThis.crypto.randomUUID();
     const existingDestination = await this.getThreadById({ threadId: newThreadId });
     if (existingDestination) {
       throw storageError(
@@ -270,7 +284,7 @@ export class MemoryOracle extends MemoryStorage {
     // Preserve a source-to-clone id map so callers can reconnect tool calls,
     // UI selections, or traces to the cloned message ids.
     const clonedMessages = sourceMessages.map(message => {
-      const newMessageId = randomUUID();
+      const newMessageId = globalThis.crypto.randomUUID();
       messageIdMap[message.id] = newMessageId;
       return {
         ...message,
@@ -367,6 +381,10 @@ export class MemoryOracle extends MemoryStorage {
   }
 
   async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    assertActiveObservationsApplied(await this.commitActiveObservations(input), input.id);
+  }
+
+  async commitActiveObservations(input: UpdateActiveObservationsInput): Promise<UpdateActiveObservationsResult> {
     return updateActiveObservations(this.ctx, input);
   }
 
@@ -403,6 +421,10 @@ export class MemoryOracle extends MemoryStorage {
   }
 
   async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    await this.appendBufferedObservations(input);
+  }
+
+  async appendBufferedObservations(input: UpdateBufferedObservationsInput): Promise<UpdateBufferedObservationsResult> {
     return updateBufferedObservations(this.ctx, input);
   }
 

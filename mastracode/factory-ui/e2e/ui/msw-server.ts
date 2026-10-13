@@ -35,6 +35,8 @@ export const server = setupServer(
   http.get('*/web/jira/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/jira/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/jira/issues', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
+  // incident.io intake is optional; feature tests override this ambient 404.
+  http.get('*/web/incidentio/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   // A server without Platform machine credentials mounts no platform connect
   // routes; the ambient 404 hides the provider sections. Provider connection
   // tests override these with `server.use(...)`.
@@ -44,6 +46,9 @@ export const server = setupServer(
   // Ambient GitHub label routing (read by every board's intake feed); label-routing
   // tests override it with `server.use(...)`.
   http.get('*/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),
+  // GitLab intake is optional; feature tests override these ambient 404s.
+  http.get('*/web/gitlab/status', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
+  http.get('*/web/gitlab/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/attention', () =>

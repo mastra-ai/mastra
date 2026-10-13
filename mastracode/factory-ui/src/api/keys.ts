@@ -3,7 +3,7 @@
  *
  * Resource-scoped lists such as OM include the `resourceId` so switching
  * factories yields a distinct cache entry instead of leaking another factory's
- * data. Personal settings such as model packs use one user-scoped key. Keeping
+ * data. Personal settings such as the default model use one user-scoped key. Keeping
  * every key in one place makes mutation invalidation unambiguous.
  */
 /**
@@ -26,17 +26,32 @@ export const queryKeys = {
   githubStatus: () => ['github', 'status'] as const,
   githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
-  githubIssues: (githubProjectId: string | undefined, label?: string) =>
-    ['github', 'issues', githubProjectId ?? null, label ?? null] as const,
+  githubIssues: (projectRepositoryIds: readonly string[], label?: string) =>
+    ['github', 'issues', projectRepositoryIds, label ?? null] as const,
   githubIssue: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'issue', githubProjectId ?? null, number ?? null] as const,
-  githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
+  githubPulls: (projectRepositoryIds: readonly string[]) => ['github', 'prs', projectRepositoryIds] as const,
   githubPull: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
-  githubRepositorySettings: (githubProjectId: string | undefined) =>
-    ['github', 'repository-settings', githubProjectId ?? null] as const,
+  repositorySettings: (projectRepositoryId: string | undefined) =>
+    ['source-control', 'repository-settings', projectRepositoryId ?? null] as const,
   githubCommits: (projectRepositoryId: string | undefined, limit: number) =>
     ['github', 'commits', projectRepositoryId ?? null, limit] as const,
+  gitlabStatus: (baseUrl: string) => ['gitlab', 'status', baseUrl] as const,
+  gitlabProjects: (baseUrl: string) => ['gitlab', 'projects', baseUrl] as const,
+  gitlabIssuesAll: (baseUrl: string) => ['gitlab', 'issues', baseUrl] as const,
+  gitlabIssues: (baseUrl: string, factoryProjectId: string | undefined, board: string | undefined) =>
+    [...queryKeys.gitlabIssuesAll(baseUrl), factoryProjectId ?? null, board ?? null] as const,
+  gitlabIssue: (baseUrl: string, factoryProjectId: string | undefined, issueId: string | undefined) =>
+    ['gitlab', 'issue', baseUrl, factoryProjectId ?? null, issueId ?? null] as const,
+  gitlabPulls: (baseUrl: string, factoryProjectId: string | undefined, projectRepositoryId: string | undefined) =>
+    ['gitlab', 'prs', baseUrl, factoryProjectId ?? null, projectRepositoryId ?? null] as const,
+  gitlabPull: (
+    baseUrl: string,
+    factoryProjectId: string | undefined,
+    projectRepositoryId: string | undefined,
+    number: number | undefined,
+  ) => ['gitlab', 'pr', baseUrl, factoryProjectId ?? null, projectRepositoryId ?? null, number ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearTeams: () => ['linear', 'teams'] as const,
@@ -77,10 +92,20 @@ export const queryKeys = {
     [...queryKeys.workItemCommentsRoot(workItemId), 'list', aroundCommentId ?? null] as const,
   factoryMembers: (factoryProjectId: string | undefined) =>
     ['factory', 'mention-roster', factoryProjectId ?? null] as const,
-  knowledgeGraph: (factoryProjectId: string | undefined, threadId?: string) =>
-    ['factory', 'knowledge-graph', factoryProjectId ?? null, threadId ?? null] as const,
-  knowledgeNode: (factoryProjectId: string | undefined, nodeId: string | undefined, threadId?: string) =>
-    ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, threadId ?? null] as const,
+  knowledgeScopes: (factoryProjectId: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-scopes', factoryProjectId ?? null, threadId ?? null] as const,
+  knowledgeSearch: (factoryProjectId: string | undefined, query: string, threadId?: string) =>
+    ['factory', 'knowledge-search', factoryProjectId ?? null, query, threadId ?? null] as const,
+  knowledgeGraph: (factoryProjectId: string | undefined, scopeLevel: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-subgraph', factoryProjectId ?? null, scopeLevel ?? null, threadId ?? null] as const,
+  knowledgeActivity: (factoryProjectId: string | undefined, scopeLevel: string | undefined, threadId?: string) =>
+    ['factory', 'knowledge-activity', factoryProjectId ?? null, scopeLevel ?? null, threadId ?? null] as const,
+  knowledgeNode: (
+    factoryProjectId: string | undefined,
+    nodeId: string | undefined,
+    scopeLevel: string | undefined,
+    threadId?: string,
+  ) => ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, scopeLevel, threadId ?? null] as const,
   /** Every decision list for a project, whatever status filter it was fetched with. */
   factoryDecisionsRoot: (githubProjectId: string | undefined) =>
     ['factory', 'decisions', githubProjectId ?? null] as const,
@@ -101,10 +126,9 @@ export const queryKeys = {
   providers: () => ['providers'] as const,
   availableModels: () => ['available-models'] as const,
   customProviders: () => ['custom-providers'] as const,
-  modelPacksAll: () => ['model-packs'] as const,
-  modelPacks: (resourceId: string | undefined, scope: string | undefined) =>
-    [...queryKeys.modelPacksAll(), resourceId ?? null, scope ?? null] as const,
-  om: (resourceId: string | undefined, factoryId?: string) => ['om', resourceId ?? null, factoryId ?? null] as const,
+  defaultModel: () => ['default-model'] as const,
+  om: (resourceId: string | undefined, scope?: string, factoryId?: string) =>
+    ['om', resourceId ?? null, scope ?? null, factoryId ?? null] as const,
   thinkingConfig: () => ['thinking-config'] as const,
   factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,

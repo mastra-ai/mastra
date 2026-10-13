@@ -3,7 +3,12 @@ import type { AgentConnectionContext } from './thread-state.js';
 import { readAgentConnections } from './thread-state.js';
 import type { AgentPeerIdentity, AgentPeerView, ConnectedAgentPeer } from './types.js';
 
-type NormalizedAgentPeerIdentity = Omit<AgentPeerIdentity, 'id' | 'agentId'> & { id: string; agentId: string };
+type NormalizedAgentPeerIdentity = Omit<AgentPeerIdentity, 'id' | 'agentId'> & {
+  id: string;
+  agentId: string;
+  /** Carried through normalization so {@link isSelf} can drop our own advertisements. */
+  selfAdvertised?: boolean;
+};
 
 export const AGENT_CONNECTIONS_DISCOVERY_CONTEXT_KEY = 'mastracode.agentConnectionPeers';
 
@@ -108,12 +113,14 @@ function normalizePeerIdentity(peer: unknown, now: number): NormalizedAgentPeerI
     mode: candidate.mode,
     pid: candidate.pid,
     lastSeenAt: typeof candidate.lastSeenAt === 'number' ? candidate.lastSeenAt : now,
+    ...((peer as { selfAdvertised?: unknown }).selfAdvertised === true ? { selfAdvertised: true } : {}),
   };
 }
 
 function discoveredPeerToView(peer: NormalizedAgentPeerIdentity): AgentPeerView {
+  const { selfAdvertised: _selfAdvertised, ...identity } = peer;
   return {
-    ...peer,
+    ...identity,
     relationship: 'none',
     presence: 'advertised',
     displayStatus: 'discovered',
@@ -194,7 +201,12 @@ function isPeerLike(value: unknown): boolean {
   );
 }
 
-function isSelf(peer: AgentPeerIdentity, context: AgentConnectionContext): boolean {
+function isSelf(peer: NormalizedAgentPeerIdentity, context: AgentConnectionContext): boolean {
+  // A session keeps every thread it has loaded advertised, so a thread of ours
+  // that is no longer current still comes back from discovery — tagged as our own
+  // by the agent that published it. Comparing only the current thread would
+  // surface the others as peers a user could "connect" to.
+  if (peer.selfAdvertised) return true;
   return (
     (peer.agentId ?? 'code-agent') === (context.agent?.agentId ?? 'code-agent') &&
     peer.resourceId === context.agent?.resourceId &&

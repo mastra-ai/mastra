@@ -50,8 +50,8 @@ export type StreamIsTaskCompleteConfig = IsTaskCompleteConfig;
  * Contains everything needed to decide which parent messages to share with the sub-agent.
  */
 export interface MessageFilterContext {
-  /** Full unfiltered messages from the parent agent's conversation history */
-  messages: MastraDBMessage[];
+  /** Model messages the parent LLM saw (processor-adjusted, including system messages), with tool calls/results removed */
+  messages: ModelMessage[];
   /** The ID of the primitive being delegated to */
   primitiveId: string;
   /** The type of primitive being delegated to */
@@ -106,8 +106,8 @@ export interface DelegationStartContext {
   parentAgentName: string;
   /** Tool call ID from the LLM */
   toolCallId: string;
-  /** Messages accumulated so far */
-  messages: MastraDBMessage[];
+  /** Model messages the parent LLM saw, with tool calls/results removed */
+  messages: ModelMessage[];
   /**
    * The request context the delegated run will receive. Entries are shallowly
    * copied from the parent run's context, excluding `MastraMemory` and the
@@ -132,6 +132,11 @@ export interface DelegationStartResult {
   modifiedInstructions?: string;
   /** Modified maxSteps for the sub-agent (optional) */
   modifiedMaxSteps?: number;
+  /**
+   * Metadata to attach to the sub-agent thread when it is created for this delegation (optional).
+   * Not applied when resuming an existing sub-agent thread.
+   */
+  threadMetadata?: Record<string, unknown>;
 }
 
 /**
@@ -174,6 +179,16 @@ export interface DelegationCompleteContext {
       result?: unknown;
       args?: unknown;
       isError?: boolean;
+    }>;
+    /**
+     * Tool calls the sub-agent made that never got a result, because the tool has
+     * no server-side `execute` (a client tool). A sub-agent cannot resolve these, so
+     * its run ends at the tool-calls step. Only present when there is at least one.
+     */
+    subAgentPendingToolCalls?: Array<{
+      toolName: string;
+      toolCallId: string;
+      args?: unknown;
     }>;
     /** Aggregate token usage from the sub-agent's execution */
     usage?: {
@@ -375,22 +390,21 @@ export interface DelegationConfig {
 
   /**
    * Callback that controls which parent messages are passed to each subagent as conversation
-   * context. Receives the full parent message history along with delegation metadata, and
-   * returns the messages that should be forwarded.
+   * context. Receives the AI SDK model messages the parent LLM saw (processor-adjusted, so they can
+   * include system messages and string content) with tool calls/results removed, along with
+   * delegation metadata, and returns the model messages that should be forwarded.
    *
    * Runs after `onDelegationStart` so the `prompt` reflects any modifications made there.
    *
    * @example
    * ```typescript
    * messageFilter: ({ messages, primitiveId, prompt }) => {
-   *   // Pass only the last 5 messages, excluding tool calls
-   *   return messages
-   *     .filter(m => !m.content?.parts?.some(p => p.type === 'tool-invocation'))
-   *     .slice(-5);
+   *   // Pass only the last 5 non-system messages
+   *   return messages.filter(m => m.role !== 'system').slice(-5);
    * }
    * ```
    */
-  messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
+  messageFilter?: (context: MessageFilterContext) => ModelMessage[] | Promise<ModelMessage[]>;
 
   /**
    * How a throwing delegation hook is handled.
@@ -557,6 +571,22 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * Does not affect generated results, model context, or storage.
    */
   hideSignals?: boolean | AgentSignalType[];
+
+  /**
+   * Durable agents only: close this caller's stream when the run suspends
+   * (for example for tool approval) so `fullStream` ends at the suspension
+   * boundary. Defaults to `false`. Ignored by non-durable agents, whose streams
+   * already end on suspension.
+   */
+  closeOnSuspend?: boolean;
+
+  /**
+   * Start eligible server-side tools as soon as their complete tool-call part is streamed.
+   * Enabled by default for `Agent.stream()`; set it to `false` to restore the previous
+   * scheduling, where a tool waited for the whole model step to finish. Only `Agent.stream()`
+   * supports it, and durable agents reject it.
+   */
+  eagerToolExecution?: boolean;
 
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;

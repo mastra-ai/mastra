@@ -1,3 +1,4 @@
+import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type {
   FactoryIncidentioEventName,
   FactoryIncidentioRuleContext,
@@ -18,14 +19,14 @@ function incidentioFollowUpObserved(context: FactoryIncidentioRuleContext) {
     type: 'upsertLinkedWorkItem',
     idempotencyKey: `${context.ingress.id}:follow-up-triage`,
     // A source bound to a custom board lands on that board's initial phase;
-    // otherwise Work auto-triages the new follow-up.
+    // otherwise the follow-up waits in Work Intake.
     board: context.intake?.board ?? 'work',
     source: 'incidentio-follow-up',
     sourceKey: context.issue.id,
     claimKey: incidentioClaimKey(context.issue.id),
     title: context.issue.title,
     url: context.issue.url,
-    stage: context.intake?.initialPhase ?? 'triage',
+    stage: context.intake?.initialPhase ?? 'intake',
     metadata: {
       identifier: context.issue.identifier,
       issueRef: context.issue.id,
@@ -47,20 +48,22 @@ function incidentioFollowUpObserved(context: FactoryIncidentioRuleContext) {
 
 function incidentioFollowUpClosed(context: FactoryIncidentioRuleContext) {
   if (!context.item || context.item.source !== 'incidentio-follow-up') return;
-  if (context.board !== 'work') return;
-  // Already off the board: nothing to reconcile.
-  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  // The card's board decides where a closed source sends it; boards that declare no
+  // `sourceClosed` mapping keep the card where it is, as do cards already finished.
+  const closure = context.boardClosure;
+  if (!context.board || !closure || closure.itemTerminal) return;
   // Only terminal state types trigger close.
   const stateType = context.issue.stateType;
   if (stateType !== 'completed' && stateType !== 'canceled') return;
   const canceled = stateType === 'canceled';
+  const target = canceled ? closure.canceled : closure.completed;
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:follow-up-closed`,
-    board: 'work',
-    stage: canceled ? 'canceled' : 'done',
+    board: context.board,
+    stage: target.phase,
     message: {
-      text: `incident.io follow-up ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
+      text: `incident.io follow-up ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this ${closure.boardTitle} card was moved to ${target.title}.`,
     },
   } as const;
 }
@@ -93,5 +96,5 @@ export function resolveIncidentioRules(overrides?: IncidentioRuleOverrides): Inc
     }
     if (handler !== undefined) rules[key] = handler;
   }
-  return Object.freeze(rules) as IncidentioEventRules;
+  return recordExplicitRuleOverrides(Object.freeze(rules) as IncidentioEventRules, overrides);
 }

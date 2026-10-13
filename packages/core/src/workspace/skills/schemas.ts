@@ -6,6 +6,8 @@
  * version compatibility issues between Zod 3 and Zod 4.
  */
 
+import matter from 'gray-matter';
+
 // =============================================================================
 // Constants
 // =============================================================================
@@ -246,18 +248,18 @@ function countLines(text: string): number {
 /**
  * Validate skill metadata with optional content warnings.
  *
- * @param metadata - The skill metadata to validate
- * @param dirName - The directory name (must match skill name)
- * @param instructions - Optional instructions content for token/line warnings
+ * @param options.metadata - The skill metadata to validate
+ * @param options.directoryName - The directory name (must match skill name)
+ * @param options.instructions - Optional instructions content for token/line warnings
  * @returns Validation result with errors and warnings
  *
  * @example
  * ```typescript
- * const result = validateSkillMetadata(
- *   { name: 'my-skill', description: 'A helpful skill' },
- *   'my-skill',
- *   '# Instructions\n...'
- * );
+ * const result = validateSkillMetadata({
+ *   metadata: { name: 'my-skill', description: 'A helpful skill' },
+ *   directoryName: 'my-skill',
+ *   instructions: '# Instructions\n...',
+ * });
  *
  * if (!result.valid) {
  *   console.error('Validation errors:', result.errors);
@@ -267,11 +269,15 @@ function countLines(text: string): number {
  * }
  * ```
  */
-export function validateSkillMetadata(
-  metadata: unknown,
-  dirName?: string,
-  instructions?: string,
-): SkillValidationResult {
+export function validateSkillMetadata({
+  metadata,
+  directoryName,
+  instructions,
+}: {
+  metadata: unknown;
+  directoryName?: string;
+  instructions?: string;
+}): SkillValidationResult {
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -294,8 +300,8 @@ export function validateSkillMetadata(
   errors.push(...validateSkillMetadataField(data.metadata));
 
   // Check directory name match (only if no name errors and name is valid)
-  if (dirName && typeof data.name === 'string' && data.name !== dirName) {
-    errors.push(`Skill name "${data.name}" must match directory name "${dirName}"`);
+  if (directoryName && typeof data.name === 'string' && data.name !== directoryName) {
+    errors.push(`Skill name "${data.name}" must match directory name "${directoryName}"`);
   }
 
   // Check instruction limits (warnings only)
@@ -320,5 +326,90 @@ export function validateSkillMetadata(
     valid: errors.length === 0,
     errors,
     warnings,
+  };
+}
+
+/**
+ * Result of validating raw SKILL.md content
+ */
+export interface SkillContentValidationResult extends SkillValidationResult {
+  /** Raw parsed frontmatter fields (present when frontmatter could be parsed; may be invalid) */
+  metadata?: Record<string, unknown>;
+  /** Markdown body after the frontmatter, trimmed */
+  instructions?: string;
+}
+
+// Passing options disables gray-matter's process-wide cache (which also caches failed parses),
+// and JavaScript frontmatter (`---js`) is rejected instead of evaluated.
+const MATTER_OPTIONS = {
+  engines: {
+    js: () => {
+      throw new Error('JavaScript frontmatter is not supported');
+    },
+    javascript: () => {
+      throw new Error('JavaScript frontmatter is not supported');
+    },
+  },
+};
+
+/**
+ * Parse SKILL.md content into frontmatter fields and body.
+ * Throws if the frontmatter is not valid YAML.
+ * @internal
+ */
+export function extractSkillFrontmatter(content: string): { metadata: SkillMetadataInput; instructions: string } {
+  const parsed = matter(content, MATTER_OPTIONS);
+  const data = parsed.data;
+  return {
+    metadata: {
+      name: data.name,
+      description: data.description,
+      license: data.license,
+      compatibility: data.compatibility,
+      'user-invocable': data['user-invocable'],
+      metadata: data.metadata,
+    },
+    instructions: parsed.content.trim(),
+  };
+}
+
+/**
+ * Validate raw SKILL.md content (frontmatter + body) using the same rules
+ * applied when skills are loaded. Pure: no filesystem access or logging.
+ *
+ * @param options.content - Full SKILL.md file content
+ * @param options.directoryName - Name of the directory the skill will live in (name must match)
+ *
+ * @example
+ * ```typescript
+ * const result = validateSkillContent({ content: skillMd, directoryName: 'my-skill' });
+ * if (!result.valid) throw new Error(result.errors.join('\n'));
+ * ```
+ */
+export function validateSkillContent({
+  content,
+  directoryName,
+}: {
+  content: string;
+  directoryName?: string;
+}): SkillContentValidationResult {
+  let extracted: ReturnType<typeof extractSkillFrontmatter>;
+  try {
+    extracted = extractSkillFrontmatter(content);
+  } catch (error) {
+    return {
+      valid: false,
+      errors: [`Invalid frontmatter: ${error instanceof Error ? error.message : String(error)}`],
+      warnings: [],
+    };
+  }
+  return {
+    ...validateSkillMetadata({
+      metadata: extracted.metadata,
+      directoryName,
+      instructions: extracted.instructions,
+    }),
+    metadata: { ...extracted.metadata },
+    instructions: extracted.instructions,
   };
 }

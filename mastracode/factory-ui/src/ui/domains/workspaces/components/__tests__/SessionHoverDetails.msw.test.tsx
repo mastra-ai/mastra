@@ -3,7 +3,7 @@
  * and agent-controller reads are driven through MSW so the card exercises the
  * same joins used by the live sidebar without adding a hover-time request.
  */
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -38,7 +38,7 @@ function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, sl
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/source-control-connections`, () =>
       HttpResponse.json(fixtures.connectionsResponse),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
       HttpResponse.json(fixtures.sessionsResponse),
     ),
     http.get(`${TEST_BASE_URL}/web/user-sessions/${workSessionId}`, () =>
@@ -188,7 +188,7 @@ describe('Workspace session hover details', () => {
       stubSessionDetails(new Date().toISOString());
       const user = userEvent.setup();
       const { client } = renderSection(section => (
-        <MainSidebarProvider storageKey="session-hover-test">{section}</MainSidebarProvider>
+        <SidebarProvider storageKey="session-hover-test">{section}</SidebarProvider>
       ));
 
       const workRow = await screen.findByRole('button', { name: workName });

@@ -65,7 +65,6 @@ const donePrWorkItem = {
 /** Stubs the review board's data endpoints and captures what a Re-review writes. */
 function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
   const transitions: Array<Record<string, unknown>> = [];
-  const patches: Array<Record<string, unknown>> = [];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -110,13 +109,9 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [reviewSession] }),
     ),
-    http.patch(`${TEST_BASE_URL}/web/factory/work-items/:itemId`, async ({ params, request }) => {
-      patches.push((await request.json()) as Record<string, unknown>);
-      return HttpResponse.json({ workItem: { ...donePrWorkItem, id: String(params.itemId), revision: 4 } });
-    }),
     http.post(
       `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/:itemId/transition`,
       async ({ params, request }) => {
@@ -136,7 +131,7 @@ function stubReviewBoard({ workItems = [donePrWorkItem] as object[] } = {}) {
     ),
   );
 
-  return { transitions, patches };
+  return { transitions };
 }
 
 function renderReviewBoard() {
@@ -157,21 +152,6 @@ describe('Re-review action for open PRs in Done', () => {
     expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/review`);
     expect(transitions).toEqual([
       expect.objectContaining({ board: 'review', stage: 'review', cause: 'card_action', expectedRevision: 1 }),
-    ]);
-  });
-
-  it('re-reviews hands-off, stamping the card before the move that queues the run', async () => {
-    const { transitions, patches } = stubReviewBoard();
-    const user = userEvent.setup();
-    const { client } = renderReviewBoard();
-
-    await user.click(await screen.findByRole('button', { name: 'Actions for Add rate limiting' }));
-    await user.click(await screen.findByRole('menuitem', { name: 'Re-review hands-off' }));
-
-    await waitForMutationsIdle(client);
-    expect(patches).toEqual([{ plansPreapproved: true }]);
-    expect(transitions).toEqual([
-      expect.objectContaining({ board: 'review', stage: 'review', cause: 'card_action', expectedRevision: 4 }),
     ]);
   });
 

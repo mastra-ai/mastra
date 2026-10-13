@@ -196,7 +196,12 @@ export const packWorkspaceDependencies = async ({
           const sanitizedName = slugify(pkgName);
           if (!dep) return;
 
-          await depsService.pack({ dir: dep.location, destination: workspaceDirPath, sanitizedName: sanitizedName });
+          await depsService.pack({
+            dir: dep.location,
+            destination: workspaceDirPath,
+            sanitizedName,
+            version: dep.version!,
+          });
         }),
       );
     }

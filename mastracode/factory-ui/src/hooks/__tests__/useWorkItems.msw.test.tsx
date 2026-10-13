@@ -39,6 +39,48 @@ function item(revision: number, stage: string): WorkItem {
 }
 
 describe('useTransitionWorkItemMutation', () => {
+  it('optimistically records the Factory stage entry used to order the destination column', async () => {
+    let releaseResponse!: () => void;
+    const responseGate = new Promise<void>(resolve => {
+      releaseResponse = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items/${ITEM_ID}/transition`, async () => {
+        await responseGate;
+        return HttpResponse.json({
+          result: {
+            status: 'accepted',
+            transitionId: 'transition-1',
+            itemId: ITEM_ID,
+            revision: 2,
+            stage: 'planning',
+            decisions: [],
+          },
+        });
+      }),
+    );
+
+    const original = {
+      ...item(1, 'triage'),
+      stageHistory: [{ stage: 'triage', enteredAt: '2026-07-18T00:00:00.000Z', by: 'user-2' }],
+    };
+    const { result, client } = renderHookWithProviders(() => useTransitionWorkItemMutation(PROJECT_ID, 'user-1'));
+    client.setQueryData(queryKeys.workItems(PROJECT_ID), board([original]));
+
+    act(() => {
+      result.current.mutate({ item: original, board: 'work', stage: 'planning' });
+    });
+    await waitFor(() => expect(result.current.isPending).toBe(true));
+
+    const optimistic = client.getQueryData<BoardSnapshot>(queryKeys.workItems(PROJECT_ID))?.workItems[0];
+    expect(optimistic?.stages).toEqual(['planning']);
+    expect(optimistic?.stageHistory[0]).toMatchObject({ stage: 'triage', exitedBy: 'user-1' });
+    expect(optimistic?.stageHistory[1]).toMatchObject({ stage: 'planning', by: 'user-1' });
+
+    releaseResponse();
+    await waitForMutationsIdle(client);
+  });
+
   it('does not let an older accepted response overwrite a newer canonical revision', async () => {
     let releaseResponse!: () => void;
     const responseGate = new Promise<void>(resolve => {

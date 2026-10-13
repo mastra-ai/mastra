@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import type { ModelReasoningOption } from '@mastra/core/llm';
+import { queryOptions, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -9,16 +10,16 @@ export interface AvailableModelOption {
   provider: string;
   modelName: string;
   hasApiKey: boolean;
+  reasoningOptions?: ModelReasoningOption[];
 }
 
 /**
- * Session-independent model catalog for settings pickers (Factory default
- * model, pack editors, OM models). Server-filtered to providers with a
+ * Session-independent model catalog for settings pickers (Factory default,
+ * personal default, OM models). Server-filtered to providers with a
  * credential, so pickers never offer models that cannot run.
  */
-export function useAvailableModelsQuery() {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
+export function availableModelsQueryOptions(baseUrl: string) {
+  return queryOptions({
     queryKey: queryKeys.availableModels(),
     queryFn: async () => {
       const res = await fetch(`${baseUrl}/web/config/models`, {
@@ -30,4 +31,14 @@ export function useAvailableModelsQuery() {
       return data.models;
     },
   });
+}
+
+export function useAvailableModelsQuery() {
+  const { baseUrl } = useApiConfig();
+  return useQuery(availableModelsQueryOptions(baseUrl));
+}
+
+export function useModelReasoningOptions(modelId: string | undefined): ModelReasoningOption[] | undefined {
+  const { data: models } = useAvailableModelsQuery();
+  return models?.find(model => model.id === modelId)?.reasoningOptions;
 }

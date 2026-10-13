@@ -29,8 +29,10 @@ test.describe('Dataset items list', () => {
       // can't accidentally match a datetime elsewhere on the page.
       const itemMetadata = page.locator('dl').filter({ hasText: 'Dataset Id' });
       await expect(itemMetadata).toBeVisible({ timeout: 5000 });
-      // The "Created" timestamp renders as "MMM d, yyyy h:mm aaa", e.g. "May 29, 2026 1:08 pm".
-      await expect(itemMetadata.getByText(/[A-Z][a-z]{2} \d{1,2}, \d{4} \d{1,2}:\d{2} (am|pm)/).first()).toBeVisible();
+      // The shared dateTime preset includes the date, year, and time, e.g. "May 29, 2026, 1:08 PM".
+      await expect(
+        itemMetadata.getByText(/[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}\s(AM|PM)/).first(),
+      ).toBeVisible();
     });
   });
 

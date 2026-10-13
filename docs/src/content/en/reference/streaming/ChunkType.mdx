@@ -28,6 +28,13 @@ All chunks include these base properties:
     description: 'Unique identifier for this execution run',
   },
   {
+    name: 'traceId',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Trace ID of the run that produced this chunk, when tracing is enabled. Not set on custom data-* chunks.',
+  },
+  {
     name: 'from',
     type: 'ChunkFrom',
     description: 'Source of the chunk',
@@ -385,6 +392,12 @@ A tool is being called.
             description: 'Name of the tool being called',
           },
           {
+            name: 'title',
+            type: 'string',
+            isOptional: true,
+            description: 'Human-readable display name for the tool, when the tool defines one',
+          },
+          {
             name: 'args',
             type: 'Record<string, any>',
             isOptional: true,
@@ -508,6 +521,12 @@ Signals the start of streaming tool call arguments.
             name: 'toolName',
             type: 'string',
             description: 'Name of the tool being called',
+          },
+          {
+            name: 'title',
+            type: 'string',
+            isOptional: true,
+            description: 'Human-readable display name for the tool, when the tool defines one',
           },
           {
             name: 'providerExecuted',

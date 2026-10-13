@@ -3,6 +3,7 @@ import { forwardRef } from 'react';
 
 import { ScrollArea } from '../ScrollArea';
 import { useComposerPointer } from './use-composer-pointer';
+import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
 import { cn } from '@/lib/utils';
 
 import './composer.css';
@@ -33,7 +34,7 @@ export const ComposerBox = forwardRef<HTMLDivElement, ComposerBoxProps>(
       ref={ref}
       data-slot="composer-box"
       className={cn(
-        'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border2/40 transition-colors duration-normal focus-within:border-border2',
+        'composer-box @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border transition-colors duration-normal focus-within:border-border-strong',
         className,
       )}
       {...props}
@@ -98,17 +99,18 @@ export const ComposerAttachments = forwardRef<HTMLDivElement, ComponentPropsWith
 ComposerAttachments.displayName = 'ComposerAttachments';
 
 export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>(
-  ({ className, variant = 'inline', maxHeight, ...props }, ref) => (
+  ({ className, variant = 'inline', maxHeight, autoComplete, ...props }, ref) => (
     <ScrollArea maxHeight={maxHeight ?? (variant === 'textarea' ? '16rem' : '13rem')}>
       <textarea
         ref={ref}
         data-slot="composer-input"
         className={cn(
-          'field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-ui-md leading-ui-md font-[450] text-muted-foreground outline-hidden placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
+          'field-sizing-content w-full resize-none overflow-hidden bg-transparent px-3 pt-2.5 pb-2 text-body text-muted-foreground outline-hidden placeholder:text-placeholder focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50',
           variant === 'textarea' ? 'min-h-28' : 'min-h-10',
           className,
         )}
         {...props}
+        {...textFieldAutofillProps(autoComplete)}
       />
     </ScrollArea>
   ),
@@ -130,10 +132,10 @@ ComposerActions.displayName = 'ComposerActions';
 
 const ComposerGradientColumn = ({ className }: { className?: string }) => (
   <div className={cn('flex size-full flex-col -space-y-3', className)}>
-    <div className="bg-accent1 w-full flex-1 blur-xl" />
-    <div className="bg-accent1Dark w-full flex-1 blur-xl" />
-    <div className="bg-accent1 w-full flex-1 blur-xl" />
-    <div className="bg-accent1Darker w-full flex-1 blur-xl" />
+    <div className="w-full flex-1 bg-brand-green blur-xl" />
+    <div className="w-full flex-1 bg-product-observability blur-xl" />
+    <div className="w-full flex-1 bg-brand-green blur-xl" />
+    <div className="w-full flex-1 bg-product-observability blur-xl" />
   </div>
 );
 

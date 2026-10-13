@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
+import type { AnySpan } from '@mastra/core/observability';
 import { toStandardSchema } from '@mastra/schema-compat';
 import { Client, SdkErrorCode, SdkHttpError, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 import { toNodeHandler } from '@modelcontextprotocol/node';
@@ -16,6 +17,29 @@ import { z } from 'zod';
 
 import type { MCPTraceContext } from '../shared/trace-context.js';
 import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
+import type { MastraMCPServerDefinition } from './types.js';
+
+// exit-hook keeps its callbacks in a module-level Set and installs its own process
+// listeners exactly once behind an internal flag, so process.listenerCount('exit') is
+// identical whether one client holds an exit hook or none do. Counting registrations
+// here is the only way to observe that a client actually released its exit hook. The
+// wrapper delegates to the real implementation, so behaviour is unchanged.
+const exitHooks = vi.hoisted(() => ({ live: 0 }));
+
+vi.mock('exit-hook', async importOriginal => {
+  const actual = await importOriginal<typeof import('exit-hook')>();
+  return {
+    ...actual,
+    asyncExitHook: (...args: Parameters<typeof actual.asyncExitHook>) => {
+      const unsubscribe = actual.asyncExitHook(...args);
+      exitHooks.live++;
+      return () => {
+        exitHooks.live--;
+        unsubscribe();
+      };
+    },
+  };
+});
 
 describe('InternalMastraMCPClient - server instructions', () => {
   afterEach(() => {
@@ -706,6 +730,46 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
     expect(result).toMatchObject({ error: true });
     expect((result as any).message).toContain('Tool output validation failed for calculate');
     expect((result as any).validationErrors).toBeDefined();
+  });
+
+  it('validates schemas that declare an unsupported dialect such as 2019-09 as 2020-12', async () => {
+    const sdkClient = (client as any).client as Client;
+    const $schema = 'https://json-schema.org/draft/2019-09/schema#';
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calculate',
+          description: 'Calculates a math expression',
+          inputSchema: { $schema, type: 'object' as const, properties: { expression: { type: 'string' } } },
+          outputSchema: {
+            $schema,
+            type: 'object' as const,
+            properties: { result: { type: 'number' } },
+            required: ['result'],
+          },
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const calculateTool = tools['calculate'];
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValueOnce({
+      content: [{ type: 'text', text: JSON.stringify({ result: 2 }) }],
+      structuredContent: { result: 2 },
+      isError: false,
+    });
+    await expect(calculateTool.execute?.({ expression: '1 + 1' })).resolves.toEqual({ result: 2 });
+
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValueOnce({
+      content: [{ type: 'text', text: 'nope' }],
+      structuredContent: { result: 'not-a-number' },
+      isError: false,
+    });
+    const invalid = await calculateTool.execute?.({ expression: '1 + 1' });
+    expect(invalid).toMatchObject({ error: true });
+    expect((invalid as any).message).toContain('Tool output validation failed for calculate');
   });
 
   it('passes valid structuredContent through unchanged with content metadata intact', async () => {
@@ -2072,6 +2136,121 @@ describe('MastraMCPClient - Custom _meta', () => {
     });
   });
 
+  describe('trace context from the calling span', () => {
+    const TRACE_ID = '0af7651916cd43dd8448eb211c80319c';
+    const SPAN_ID = 'b7ad6b7169203331';
+    const callingSpan = (overrides: Record<string, unknown> = {}) =>
+      ({ isValid: true, traceId: TRACE_ID, id: SPAN_ID, ...overrides }) as unknown as AnySpan;
+
+    const sentCallMeta = async (
+      server: Partial<MastraMCPServerDefinition>,
+      context: { tracingContext?: { currentSpan?: AnySpan }; _meta?: Record<string, unknown> },
+    ) => {
+      client = new InternalMastraMCPClient({
+        name: 'span-trace-client',
+        server: { url: testServer.baseUrl, enableServerLogs: false, ...server } as MastraMCPServerDefinition,
+      });
+      await client.connect();
+      const tools = await client.tools();
+      const sendSpy = vi.spyOn(((client as any).client as any).transport, 'send');
+      await tools['echo']?.execute?.({ msg: 'hi' }, context);
+      const call = sendSpy.mock.calls
+        .map(args => args[0] as { method?: string; params?: { _meta?: Record<string, unknown> } })
+        .find(message => message.method === 'tools/call');
+      return call?.params?._meta ?? {};
+    };
+
+    it('names the calling span as the parent of the request', async () => {
+      const meta = await sentCallMeta({}, { tracingContext: { currentSpan: callingSpan() } });
+
+      expect(meta.traceparent).toBe(`00-${TRACE_ID}-${SPAN_ID}-01`);
+      expect(meta).not.toHaveProperty('tracestate');
+    });
+
+    it('names the closest exported ancestor when the calling span is hidden from exporters', async () => {
+      const meta = await sentCallMeta(
+        {},
+        { tracingContext: { currentSpan: callingSpan({ getExportedSpanId: () => '1111111111111111' }) } },
+      );
+
+      expect(meta.traceparent).toBe(`00-${TRACE_ID}-1111111111111111-01`);
+    });
+
+    it('keeps a `traceparent` the caller set in `_meta`', async () => {
+      const explicit = '00-33333333333333333333333333333333-3333333333333333-01';
+      const meta = await sentCallMeta(
+        {},
+        { tracingContext: { currentSpan: callingSpan() }, _meta: { traceparent: explicit } },
+      );
+
+      expect(meta.traceparent).toBe(explicit);
+    });
+
+    it('leaves the trace fields to a configured `traceContext` provider', async () => {
+      const meta = await sentCallMeta(
+        { traceContext: () => undefined },
+        { tracingContext: { currentSpan: callingSpan() } },
+      );
+
+      expect(meta).not.toHaveProperty('traceparent');
+    });
+
+    it('links the calling span to the server span named in the reply and drops that key', async () => {
+      client = new InternalMastraMCPClient({
+        name: 'reply-trace-client',
+        server: { url: testServer.baseUrl, enableServerLogs: false },
+      });
+      await client.connect();
+      vi.spyOn((client as any).client as Client, 'callTool').mockResolvedValue({
+        content: [{ type: 'text', text: 'ok' }],
+        _meta: {
+          mastra: { traceparent: '00-11111111111111111111111111111111-2222222222222222-01', other: 1 },
+          vendor: true,
+        },
+      });
+      const existingLink = { traceId: '33333333333333333333333333333333', spanId: '4444444444444444' };
+      const span = callingSpan({ links: [existingLink] });
+      const tools = await client.tools();
+
+      const output = await tools['echo']?.execute?.({ msg: 'hi' }, { tracingContext: { currentSpan: span } });
+
+      expect(span.links).toEqual([
+        existingLink,
+        { traceId: '11111111111111111111111111111111', spanId: '2222222222222222' },
+      ]);
+      expect((output as any)._meta).toEqual({ mastra: { other: 1 }, vendor: true });
+    });
+
+    it('adds no link when the reply names no server span', async () => {
+      client = new InternalMastraMCPClient({
+        name: 'reply-no-trace-client',
+        server: { url: testServer.baseUrl, enableServerLogs: false },
+      });
+      await client.connect();
+      vi.spyOn((client as any).client as Client, 'callTool').mockResolvedValue({
+        content: [{ type: 'text', text: 'ok' }],
+        _meta: { mastra: { traceparent: 'garbage' } },
+      });
+      const span = callingSpan();
+      const tools = await client.tools();
+
+      await tools['echo']?.execute?.({ msg: 'hi' }, { tracingContext: { currentSpan: span } });
+
+      expect(span.links).toBeUndefined();
+    });
+
+    it.each([
+      ['there is no calling span', undefined],
+      ['the calling span is not recorded', callingSpan({ isValid: false, traceId: 'no-op-trace', id: 'no-op' })],
+      ['the trace id is not W3C-sized', callingSpan({ traceId: 'abc123' })],
+      ['no ancestor of the calling span is exported', callingSpan({ getExportedSpanId: () => undefined })],
+    ])('sends no `traceparent` when %s', async (_label, currentSpan) => {
+      const meta = await sentCallMeta({}, { tracingContext: { currentSpan } });
+
+      expect(meta).not.toHaveProperty('traceparent');
+    });
+  });
+
   it('should merge custom _meta with progressToken when progress tracking is enabled', async () => {
     client = new InternalMastraMCPClient({
       name: 'meta-progress-client',
@@ -2425,6 +2604,111 @@ describe('MastraMCPClient - Resource Cleanup Tests', () => {
 
     const afterDisconnectCount = process.listenerCount('SIGHUP');
     expect(afterDisconnectCount).toBe(initialListenerCount);
+  });
+
+  describe('failed connect()', () => {
+    let unresponsiveServer: HttpServer;
+    let unreachableUrl: URL;
+
+    beforeEach(async () => {
+      // Accepts the request and never replies, so connect() fails via connectTimeout
+      // rather than a transport-level refusal.
+      unresponsiveServer = createServer(() => {});
+      await new Promise<void>(resolve => unresponsiveServer.listen(0, '127.0.0.1', resolve));
+      const { port } = unresponsiveServer.address() as AddressInfo;
+      unreachableUrl = new URL(`http://127.0.0.1:${port}/mcp`);
+    });
+
+    afterEach(() => {
+      unresponsiveServer?.close();
+    });
+
+    const makeFailingClient = (name: string) =>
+      new InternalMastraMCPClient({
+        name,
+        server: { url: unreachableUrl, connectTimeout: 100 },
+      });
+
+    it('should not leak SIGTERM/SIGHUP listeners or the exit hook when connect() fails', async () => {
+      const initialSigTerm = process.listenerCount('SIGTERM');
+      const initialSigHup = process.listenerCount('SIGHUP');
+      const initialExitHooks = exitHooks.live;
+
+      const client = makeFailingClient('failed-connect-client');
+      await expect(client.connect()).rejects.toThrow();
+
+      expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+      expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
+      expect(exitHooks.live).toBe(initialExitHooks);
+    });
+
+    it('should not accumulate listeners across repeated failed connects', async () => {
+      const initialSigTerm = process.listenerCount('SIGTERM');
+      const initialSigHup = process.listenerCount('SIGHUP');
+      const initialExitHooks = exitHooks.live;
+
+      // Above Node's default max of 10, so a leak also trips MaxListenersExceededWarning.
+      for (let i = 0; i < 12; i++) {
+        const client = makeFailingClient(`failed-connect-loop-${i}`);
+        await client.connect().catch(() => {});
+        await client.disconnect();
+      }
+
+      expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+      expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
+      expect(exitHooks.live).toBe(initialExitHooks);
+    });
+
+    it('should release listeners and the exit hook on disconnect() after a failed connect', async () => {
+      const initialSigTerm = process.listenerCount('SIGTERM');
+      const initialExitHooks = exitHooks.live;
+
+      const client = makeFailingClient('failed-connect-then-disconnect');
+      await client.connect().catch(() => {});
+      await client.disconnect();
+
+      expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+      expect(exitHooks.live).toBe(initialExitHooks);
+    });
+
+    describe('stdio transport', () => {
+      // Exits before speaking MCP, so client.connect() fails after the child is spawned.
+      // That is the path where a transport is already live when the attempt collapses.
+      const makeFailingStdioClient = (name: string) =>
+        new InternalMastraMCPClient({
+          name,
+          server: { command: process.execPath, args: ['-e', 'process.exit(1)'], timeout: 5000 },
+        });
+
+      it('should not leak listeners or the exit hook when a stdio connect() fails', async () => {
+        const initialSigTerm = process.listenerCount('SIGTERM');
+        const initialSigHup = process.listenerCount('SIGHUP');
+        const initialExitHooks = exitHooks.live;
+
+        const client = makeFailingStdioClient('failed-stdio-connect');
+        await expect(client.connect()).rejects.toThrow();
+
+        expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+        expect(process.listenerCount('SIGHUP')).toBe(initialSigHup);
+        expect(exitHooks.live).toBe(initialExitHooks);
+      });
+
+      it('should not accumulate listeners across repeated failed stdio connects', async () => {
+        const initialSigTerm = process.listenerCount('SIGTERM');
+        const initialExitHooks = exitHooks.live;
+
+        // Above Node's default max of 10, and with no disconnect() to paper over the
+        // failure path: a failed connect must clean up on its own.
+        for (let i = 0; i < 12; i++) {
+          await makeFailingStdioClient(`failed-stdio-loop-${i}`)
+            .connect()
+            .catch(() => {});
+        }
+
+        expect(process.listenerCount('SIGTERM')).toBe(initialSigTerm);
+        expect(exitHooks.live).toBe(initialExitHooks);
+      });
+    });
   });
 
   it('should not create duplicate connections when connect is called concurrently', async () => {
@@ -2949,6 +3233,40 @@ describe('MastraMCPClient - requireToolApproval', () => {
     // Tool without annotations should not have `annotations` populated
     const greetTool = tools.greet as any;
     expect(greetTool.mcp?.annotations).toBeUndefined();
+  });
+
+  it('should expose the MCP tool title and fall back to annotations.title', async () => {
+    testServer = await setupTestServer(false);
+    testServer.mcpServer.registerTool(
+      'titled_tool',
+      {
+        title: 'Titled Tool',
+        description: 'Has a title and an annotation title',
+        inputSchema: z.object({}),
+        annotations: { title: 'Annotation Title' },
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+    testServer.mcpServer.registerTool(
+      'annotated_only',
+      {
+        description: 'Has only an annotation title',
+        inputSchema: z.object({}),
+        annotations: { title: 'Annotation Only' },
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+
+    client = new InternalMastraMCPClient({
+      name: 'title-precedence-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+    const tools = await client.tools();
+
+    expect(tools.titled_tool.title).toBe('Titled Tool');
+    expect(tools.annotated_only.title).toBe('Annotation Only');
+    expect(tools.greet.title).toBeUndefined();
   });
 
   it('should support async approval functions', async () => {

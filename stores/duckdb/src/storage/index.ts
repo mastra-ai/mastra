@@ -8,6 +8,7 @@ import type {
   ObservabilityDuckDBConfig,
   ObservabilityStorageDuckDB as ObservabilityStorageDuckDBImpl,
 } from './domains/observability/index';
+import { spanQueryFeatures } from './features';
 
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
@@ -15,17 +16,41 @@ const OBSERVABILITY_DELTA_POLLING_FEATURE = 'observability-delta-polling';
 const DUCKDB_OBSERVABILITY_FEATURES = [
   'metrics',
   'logs',
+  'entity-type-discovery',
+  'entity-name-discovery',
+  'service-name-discovery',
+  'environment-discovery',
+  'tag-discovery',
+  'metric-discovery',
   'trace-query',
+  'trace-aggregate',
+  ...spanQueryFeatures,
+  'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
+  'trace-query-tenant-scope',
+  'feedback',
+  'trace-query-context-ids',
 ] as const;
 const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'metrics',
   'logs',
+  'entity-type-discovery',
+  'entity-name-discovery',
+  'service-name-discovery',
+  'environment-discovery',
+  'tag-discovery',
+  'metric-discovery',
   'delta-polling',
   'trace-query',
+  'trace-aggregate',
+  ...spanQueryFeatures,
+  'trace-query-root-duration',
   'trace-query-discovery',
   'thread-query',
+  'trace-query-tenant-scope',
+  'feedback',
+  'trace-query-context-ids',
 ] as const;
 
 function isObservabilityCompatibilityError(error: unknown): boolean {
@@ -226,6 +251,20 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
   ): ReturnType<ObservabilityStoreImpl['queryTraces']> {
     const delegate = await this.requireDelegate();
     return delegate.queryTraces(...args);
+  }
+
+  async aggregateTraces(
+    ...args: Parameters<ObservabilityStoreImpl['aggregateTraces']>
+  ): ReturnType<ObservabilityStoreImpl['aggregateTraces']> {
+    const delegate = await this.requireDelegate();
+    return delegate.aggregateTraces(...args);
+  }
+
+  async querySpans(
+    ...args: Parameters<ObservabilityStoreImpl['querySpans']>
+  ): ReturnType<ObservabilityStoreImpl['querySpans']> {
+    const delegate = await this.requireDelegate();
+    return delegate.querySpans(...args);
   }
 
   async getTraceQueryObservedFields(

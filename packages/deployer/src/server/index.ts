@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { Server as HttpServer } from 'node:http';
 import * as https from 'node:https';
@@ -410,7 +409,7 @@ export async function createHonoServer(
   const serverOptions = mastra.getServer();
   const studioBasePath = normalizeStudioBase(serverOptions?.studioBase ?? '/');
   // Production replicas must not be mistaken for dev-server restarts.
-  const devServerInstanceId = options?.isDev ? randomUUID() : undefined;
+  const devServerInstanceId = options?.isDev ? globalThis.crypto.randomUUID() : undefined;
 
   if (options?.studio) {
     const studioControlRoutes: ServerRoute[] = [

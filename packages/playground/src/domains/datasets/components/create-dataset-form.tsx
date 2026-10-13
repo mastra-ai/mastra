@@ -1,11 +1,20 @@
 'use client';
+
 import { Button } from '@mastra/playground-ui/components/Button';
-import { TextFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { Form } from '@mastra/playground-ui/components/Form';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { DatasetsIcon } from '@mastra/playground-ui/icons/DatasetsIcon';
+import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { X } from 'lucide-react';
 import { useState } from 'react';
-import { useDatasetMutations } from '../hooks/use-dataset-mutations';
+import { useForm } from 'react-hook-form';
+import { createNameSuffix } from '../utils/default-names';
 import { DEFAULT_SCORERS_HELPER_TEXT, DEFAULT_SCORERS_LABEL } from './default-scorers-copy';
 import { ScorerSelector } from './experiment-trigger/scorer-selector';
 import { SchemaConfigSection } from './schema-config-section';
@@ -18,13 +27,26 @@ export interface CreateDatasetFormProps {
   targetIds?: string[];
 }
 
+interface CreateDatasetFormValues {
+  name: string;
+  description: string;
+  scorerIds: string[];
+  inputSchema?: Record<string, unknown>;
+  groundTruthSchema?: Record<string, unknown>;
+  requestContextSchema?: Record<string, unknown>;
+}
+
 export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }: CreateDatasetFormProps) {
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(null);
-  const [groundTruthSchema, setGroundTruthSchema] = useState<Record<string, unknown> | null>(null);
-  const [requestContextSchema, setRequestContextSchema] = useState<Record<string, unknown> | null>(null);
-  const [scorerIds, setScorerIds] = useState<string[]>([]);
+  const { register, handleSubmit, setValue, watch } = useForm<CreateDatasetFormValues>({
+    defaultValues: { name: `Dataset ${createNameSuffix()}`, description: '', scorerIds: [] },
+  });
+  const [name, scorerIds, inputSchema, groundTruthSchema, requestContextSchema] = watch([
+    'name',
+    'scorerIds',
+    'inputSchema',
+    'groundTruthSchema',
+    'requestContextSchema',
+  ]);
   const [showCustomSchema, setShowCustomSchema] = useState(!targetType);
   const { createDataset } = useDatasetMutations();
 
@@ -33,29 +55,27 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
     outputSchema: Record<string, unknown> | null;
     requestContextSchema: Record<string, unknown> | null;
   }) => {
-    setInputSchema(schemas.inputSchema);
-    setGroundTruthSchema(schemas.outputSchema);
-    setRequestContextSchema(schemas.requestContextSchema);
+    setValue('inputSchema', schemas.inputSchema ?? undefined);
+    setValue('groundTruthSchema', schemas.outputSchema ?? undefined);
+    setValue('requestContextSchema', schemas.requestContextSchema ?? undefined);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!name.trim()) {
+  const onSubmit = handleSubmit(async values => {
+    if (!values.name.trim()) {
       toast.error('Dataset name is required');
       return;
     }
 
     try {
       const result = await createDataset.mutateAsync({
-        name: name.trim(),
-        description: description.trim() || undefined,
-        inputSchema,
-        groundTruthSchema,
-        requestContextSchema,
+        name: values.name.trim(),
+        description: values.description.trim() || undefined,
+        inputSchema: values.inputSchema,
+        groundTruthSchema: values.groundTruthSchema,
+        requestContextSchema: values.requestContextSchema,
         targetType,
         targetIds,
-        scorerIds: scorerIds.length > 0 ? scorerIds : undefined,
+        scorerIds: values.scorerIds.length > 0 ? values.scorerIds : undefined,
       });
 
       toast.success('Dataset created successfully');
@@ -64,31 +84,23 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
     } catch (error) {
       toast.error(`Failed to create dataset: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
-  };
+  });
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <TextFieldBlock
-        name="dataset-name"
-        label="Name"
-        required
-        value={name}
-        onChange={e => setName(e.target.value)}
-        placeholder="Enter dataset name"
-        autoFocus
-      />
+    <Form onSubmit={onSubmit}>
+      <Field>
+        <FieldLabel required>Name</FieldLabel>
+        <Input required {...register('name')} placeholder="Enter dataset name" autoFocus />
+      </Field>
 
-      <TextFieldBlock
-        name="dataset-description"
-        label="Description"
-        value={description}
-        onChange={e => setDescription(e.target.value)}
-        placeholder="Enter dataset description (optional)"
-      />
+      <Field>
+        <FieldLabel>Description</FieldLabel>
+        <Input {...register('description')} placeholder="Enter dataset description (optional)" />
+      </Field>
 
       <ScorerSelector
         selectedScorers={scorerIds}
-        setSelectedScorers={setScorerIds}
+        setSelectedScorers={nextScorerIds => setValue('scorerIds', nextScorerIds)}
         disabled={createDataset.isPending}
         label={DEFAULT_SCORERS_LABEL}
         helperText={DEFAULT_SCORERS_HELPER_TEXT}
@@ -97,10 +109,12 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
       {targetType && !showCustomSchema ? (
         <button
           type="button"
-          className="text-muted-foreground hover:text-accent1 text-ui-sm transition-colors"
+          className={cn('self-start', quietTextHover, controlStateColorTransition)}
           onClick={() => setShowCustomSchema(true)}
         >
-          + Custom schema
+          <Txt as="span" variant="caption" className="block">
+            + Custom schema
+          </Txt>
         </button>
       ) : (
         <SchemaConfigSection
@@ -125,6 +139,6 @@ export function CreateDatasetForm({ onSuccess, onCancel, targetType, targetIds }
           {createDataset.isPending ? 'Creating...' : 'Create Dataset'}
         </Button>
       </div>
-    </form>
+    </Form>
   );
 }

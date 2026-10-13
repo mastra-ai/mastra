@@ -118,6 +118,7 @@ describe('api command descriptors', () => {
       factoryProjectGet: ['projectGet', ['id'], false, false, false],
       factoryProjectCreate: ['projectCreate', [], true, true, false],
       factoryProjectUpdate: ['projectUpdate', ['id'], true, true, false],
+      'factoryProjectApply-default-model': ['projectApplyDefaultModel', ['id'], false, false, false],
       factoryProjectDelete: ['projectDelete', ['id'], false, false, false],
       'factoryWork-itemList': ['workItemList', ['id'], false, false, false],
       'factoryWork-itemCreate': ['workItemCreate', ['id'], true, true, false],

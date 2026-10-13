@@ -1,4 +1,4 @@
-import { Container } from '@earendil-works/pi-tui';
+import { Container, visibleWidth } from '@earendil-works/pi-tui';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
@@ -10,6 +10,7 @@ import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { NotificationSummaryComponent } from '../components/notification-summary.js';
 import { NotificationComponent } from '../components/notification.js';
 import { ReactiveSignalComponent } from '../components/reactive-signal.js';
+import { ScheduleFireComponent } from '../components/schedule-fire.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import { StateSignalComponent } from '../components/state-signal.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
@@ -18,6 +19,11 @@ import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
 import { addPendingUserMessage, addUserMessage, renderExistingMessages } from '../render-messages.js';
 import type { TUIState } from '../state.js';
+
+function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\u001b\[[0-9;]*m/g, '');
+}
 
 function createState(): TUIState {
   return {
@@ -169,6 +175,7 @@ interface ToolPair {
   args: unknown;
   result?: unknown;
   isError?: boolean;
+  providerMetadata?: Record<string, unknown>;
 }
 
 function assistantToolMessage(id: string, tools: ToolPair[]): MastraDBMessage {
@@ -180,6 +187,7 @@ function assistantToolMessage(id: string, tools: ToolPair[]): MastraDBMessage {
       format: 2,
       parts: tools.map(tool => ({
         type: 'tool-invocation',
+        ...(tool.providerMetadata ? { providerMetadata: tool.providerMetadata } : {}),
         toolInvocation: {
           toolCallId: tool.id,
           toolName: tool.name,
@@ -412,6 +420,79 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
   });
 
+  it('truncates notifications to the tool preview line limit', () => {
+    const state = createState();
+    state.previewLines = 2;
+    const longMessage = Array.from({ length: 6 }, (_, i) => `detail line ${i + 1}`).join('\n');
+
+    addUserMessage(
+      state,
+      createNotificationMessage(
+        { message: longMessage, source: 'github', kind: 'ci-status', priority: 'high', status: 'delivered' },
+        'notification-compact',
+      ),
+    );
+    addUserMessage(
+      state,
+      createNotificationSummaryMessage(
+        {
+          message: '3 pending notifications',
+          pending: 3,
+          bySource: { github: 2, 'goal-judge': 1 },
+          byPriority: { high: 3 },
+          notificationIds: ['a', 'b', 'c'],
+        },
+        'notification-summary-compact',
+      ),
+    );
+
+    const notification = state.messageComponentsById.get('notification-compact') as NotificationComponent;
+    const rendered = notification.render(100).map(line => stripAnsi(line));
+    // Same left-bar card: title and 2 message lines, no details row.
+    expect(rendered).toHaveLength(3);
+    expect(rendered.every(line => line.startsWith('▎'))).toBe(true);
+    expect(rendered[0]).toContain('notification from github');
+    expect(rendered.join('\n')).not.toContain('high · ci-status');
+    expect(rendered[1]).toContain('detail line 1');
+    expect(rendered[2]).toContain('detail line 2…');
+    expect(rendered.join('\n')).not.toContain('detail line 3');
+
+    const summary = state.messageComponentsById.get('notification-summary-compact') as NotificationSummaryComponent;
+    const summaryLines = summary.render(100).map(line => stripAnsi(line));
+    expect(summaryLines).toHaveLength(2);
+    expect(summaryLines[0]).toContain('Notification summary: 3 pending');
+    expect(summaryLines[1]).toContain('github: 2, goal-judge: 1');
+    expect(summaryLines.join('\n')).not.toContain('notification_inbox');
+  });
+
+  it('keeps the compact notification ellipsis inside the terminal width', () => {
+    const state = createState();
+    state.previewLines = 1;
+    // A single long word wraps into lines that fill the content width exactly.
+    const longMessage = 'x'.repeat(200);
+
+    addUserMessage(
+      state,
+      createNotificationMessage(
+        { message: longMessage, source: 'github', kind: 'ci-status', priority: 'high', status: 'delivered' },
+        'notification-narrow',
+      ),
+    );
+
+    const width = 60;
+    const notification = state.messageComponentsById.get('notification-narrow') as NotificationComponent;
+    const rendered = notification.render(width).map(line => stripAnsi(line));
+    // Title row and one message row on the left-bar card.
+    expect(rendered).toHaveLength(2);
+    expect(rendered[1]).toMatch(/^▎ x+…$/);
+    // Content width is width - 2 (bar + space), so the ellipsis replaces the last column.
+    expect(rendered[1]).toContain('x'.repeat(width - 3));
+    expect(rendered[1]).not.toContain('x'.repeat(width - 2));
+    for (const line of rendered) {
+      expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+    }
+  });
+
   it('renders one latest-position completion card for a stable background event id', () => {
     const state = createState();
     const createCompletionMessage = (id: string) =>
@@ -455,6 +536,49 @@ describe('addUserMessage', () => {
     );
     expect(completionComponents).toHaveLength(1);
     expect(state.chatContainer.children.at(-1)).toBe(completionComponents[0]);
+  });
+
+  it('keeps background completions to one line and expands them in full', () => {
+    const state = createState();
+    state.previewLines = 1;
+    const longMessage = Array.from({ length: 4 }, (_, i) => `result line ${i + 1}`).join('\n');
+
+    addUserMessage(
+      state,
+      createSignal({
+        id: 'completion-compact',
+        type: 'notification',
+        tagName: 'notification',
+        contents: longMessage,
+        attributes: { source: 'background-work', kind: 'background-task-completed', priority: 'low', status: 'failed' },
+        metadata: {
+          backgroundCompletion: {
+            eventId: 'background-task:task-q:failed',
+            taskId: 'task-q',
+            originRunId: 'run-q',
+            originToolCallId: 'call-q',
+            toolName: 'mastra_expert',
+            status: 'failed',
+            argsSummary: 'question: why',
+            errorSummary: 'boom',
+          },
+        },
+      }).toDBMessage(),
+    );
+
+    const component = state.messageComponentsById.get('completion-compact') as NotificationComponent;
+    const collapsed = component.render(100).map(line => stripAnsi(line));
+    expect(collapsed).toHaveLength(1);
+    expect(collapsed[0]).toContain('mastra_expert failed in background');
+
+    // Expanding is a request to see everything: the full message and the detail rows, untrimmed.
+    component.setExpanded(true);
+    const expanded = stripAnsi(component.render(100).join('\n'));
+    expect(expanded).toContain('low · background-task-completed · failed');
+    expect(expanded).toContain('result line 4');
+    expect(expanded).toContain('invocation · question: why');
+    expect(expanded).toContain('failure · boom');
+    expect(expanded).not.toContain('…');
   });
 
   it.each(['work-deferred', 'work-awaited'] as const)(
@@ -894,7 +1018,69 @@ describe('addUserMessage', () => {
       .render(80)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('╭ steer ');
+    expect(rendered).toContain('steer · ');
+  });
+
+  it('renders schedule fires as a system entry with a compact header, even when delivered while active', () => {
+    const state = createState();
+    const output = ['Output of ./check.sh (exit 3):', 'line 1', 'line 2', 'line 3', 'line 4', 'line 5'].join('\n');
+
+    addUserMessage(
+      state,
+      createUserMessage(output, 'signal-1', {
+        source: 'schedule',
+        scheduleId: '0f75d166-0763-4c11-9fdc-9280aa16535c',
+        scheduleCadence: '5m',
+        scheduleSource: 'run ./check.sh',
+        scheduleOutcome: 'exit 3',
+        scheduleCreatedBy: 'agent',
+        delivery: 'while-active',
+      }),
+    );
+
+    const component = state.chatContainer.children[0];
+    expect(component).toBeInstanceOf(ScheduleFireComponent);
+    expect(component).not.toBeInstanceOf(UserMessageComponent);
+    expect(state.messageComponentsById.get('signal-1')).toBe(component);
+    expect(state.allToolComponents).toContain(component);
+
+    const collapsed = stripAnsi((component as ScheduleFireComponent).render(100).join('\n'));
+    expect(collapsed).toContain('⏱ schedule 0f75d166 · every 5m · run ./check.sh · exit 3 · created by agent');
+    expect(collapsed).toContain('line 1');
+    expect(collapsed).not.toContain('line 2');
+    expect(collapsed).toContain('… 4 more lines (ctrl+e to expand)');
+    expect(collapsed).not.toContain('steer');
+
+    (component as ScheduleFireComponent).setExpanded(true);
+    const expanded = stripAnsi((component as ScheduleFireComponent).render(100).join('\n'));
+    expect(expanded).toContain('line 5');
+    expect(expanded).not.toContain('more line');
+  });
+
+  it('trims schedule fire prompts to the compact preview limit', () => {
+    const state = createState();
+    state.previewLines = 1;
+    addUserMessage(
+      state,
+      createUserMessage('first\nsecond\nthird', 'signal-q', { source: 'schedule', scheduleId: 'abcdef1234' }),
+    );
+    const rendered = stripAnsi((state.chatContainer.children[0] as ScheduleFireComponent).render(80).join('\n'));
+    expect(rendered).toContain('⏱ schedule abcdef12');
+    expect(rendered).toContain('first');
+    expect(rendered).not.toContain('second');
+    expect(rendered).toContain('… 2 more lines');
+  });
+
+  it('shows a schedule fire line instead of hiding it behind a one-line hint', () => {
+    const state = createState();
+    state.previewLines = 0;
+    addUserMessage(
+      state,
+      createUserMessage('test test', 'signal-one', { source: 'schedule', scheduleId: 'abcdef1234' }),
+    );
+    const rendered = stripAnsi((state.chatContainer.children[0] as ScheduleFireComponent).render(80).join('\n'));
+    expect(rendered).toContain('test test');
+    expect(rendered).not.toContain('more line');
   });
 
   it('confirms pending active signals with the steer label', () => {
@@ -907,7 +1093,7 @@ describe('addUserMessage', () => {
       .render(80)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('╭ steer ');
+    expect(rendered).toContain('steer · ');
   });
 
   it('replaces a pending signal with the echoed user message once the stream is settled', () => {
@@ -940,6 +1126,33 @@ describe('addUserMessage', () => {
 });
 
 describe('renderExistingMessages history bounds', () => {
+  it('does not replace the active transcript when its owner becomes stale during history loading', async () => {
+    const state = createState();
+    addUserMessage(state, createUserMessage('current transcript', 'current-user'));
+    const currentChildren = [...state.chatContainer.children];
+    let resolveMessages!: (messages: MastraDBMessage[]) => void;
+    state.session = {
+      ...state.session,
+      thread: {
+        listActiveMessages: vi.fn().mockReturnValue(
+          new Promise(resolve => {
+            resolveMessages = resolve;
+          }),
+        ),
+      },
+    } as unknown as TUIState['session'];
+    let isCurrent = true;
+
+    const rendering = renderExistingMessages(state, () => isCurrent);
+    isCurrent = false;
+    resolveMessages([createUserMessage('stale transcript', 'stale-user')]);
+    await rendering;
+
+    expect(state.chatContainer.children).toEqual(currentChildren);
+    expect(state.messageComponentsById.has('current-user')).toBe(true);
+    expect(state.messageComponentsById.has('stale-user')).toBe(false);
+  });
+
   it('prunes oversized startup history before the first render', async () => {
     const state = createState();
     const messages = Array.from({ length: 300 }, (_, index) => createUserMessage(`message-${index}`, `user-${index}`));
@@ -990,9 +1203,39 @@ describe('renderExistingMessages signals', () => {
       .render(80)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('╭ steer ');
+    expect(rendered).toContain('steer · ');
     expect(rendered).toContain('continue from history');
     expect(rendered).not.toContain('stale preview');
+  });
+});
+
+describe('renderExistingMessages schedule fires', () => {
+  it('renders reloaded schedule fires from their signal attributes alone', async () => {
+    const state = createState();
+    state.session = {
+      ...state.session,
+      thread: {
+        listActiveMessages: vi.fn().mockResolvedValue([
+          createUserMessage('ping', 'schedule-history-1', {
+            source: 'schedule',
+            scheduleId: '0f75d166-0763-4c11-9fdc-9280aa16535c',
+            scheduleCadence: '1h',
+            scheduleSource: '"ping"',
+          }),
+        ]),
+      },
+    } as unknown as TUIState['session'];
+    state.controller = {
+      session: { displayState: { get: () => ({ isRunning: false }) } },
+    } as unknown as TUIState['controller'];
+
+    await renderExistingMessages(state);
+
+    const component = state.chatContainer.children.find(child => child instanceof ScheduleFireComponent);
+    expect(component).toBeDefined();
+    const rendered = stripAnsi((component as ScheduleFireComponent).render(80).join('\n'));
+    expect(rendered).toContain('⏱ schedule 0f75d166 · every 1h · "ping"');
+    expect(rendered).toContain('ping');
   });
 });
 
@@ -1125,13 +1368,42 @@ describe('renderExistingMessages tools', () => {
       .render(120)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('backgroundCompletion');
-    expect(rendered).toContain('render-messages.ts:534');
+    // The compact search row counts the authoritative result rather than a placeholder.
+    expect(rendered).toContain('backgroundCompletion (1 results)');
     expect(rendered).toContain('✓ background · task-result-1');
     expect(rendered).toContain('search_content completed in background');
     expect(state.pendingTools.has('tool-background-result-1')).toBe(false);
     expect(state.chatContainer.children.filter(child => child instanceof NotificationComponent)).toHaveLength(1);
   });
+
+  it.each([undefined, false, true])(
+    'replays completed task metadata without a completion signal (%s)',
+    async enabled => {
+      const message = assistantToolMessage('completed-metadata', [
+        {
+          id: 'completed-call',
+          name: 'view',
+          args: {},
+          result: 'Background task started. Task ID: misleading-text',
+          providerMetadata: { mastra: { backgroundTask: { taskId: 'real-task', status: 'completed' } } },
+        },
+      ]);
+      const state = createState();
+      state.options.backgroundToolsEnabled = enabled;
+      state.session = {
+        ...state.session,
+        thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+      } as unknown as TUIState['session'];
+      await renderExistingMessages(state);
+      const rendered = state.chatContainer
+        .render(120)
+        .join('\n')
+        .replace(/\x1b\[[0-9;]*m/g, '');
+      expect(rendered).toContain('✓ background · real-task');
+      expect(rendered).not.toContain('background · misleading-text');
+      expect(state.pendingTools.has('completed-call')).toBe(false);
+    },
+  );
 
   it.each([undefined, false, true])(
     'reconstructs pending background rows only when enabled is true (%s)',
@@ -1142,6 +1414,7 @@ describe('renderExistingMessages tools', () => {
           name: 'view',
           args: { path: 'package.json' },
           result: 'Background task started. Task ID: task-1',
+          providerMetadata: { mastra: { backgroundTask: { taskId: 'task-1', status: 'running' } } },
         },
       ]);
       const state = createState();
@@ -1159,7 +1432,8 @@ describe('renderExistingMessages tools', () => {
         .join('\n')
         .replace(/\x1b\[[0-9;]*m/g, '');
       expect(rendered.includes('◌ background · task-1')).toBe(enabled === true);
-      expect(rendered.includes('Background task started')).toBe(enabled !== true);
+      // The compact view row names the file either way; only the opted-in row is a background row.
+      expect(rendered).toContain('▐view▌package.json▌');
     },
   );
 });
@@ -1169,13 +1443,11 @@ describe('renderExistingMessages subagents', () => {
     const message = legacyAssistantToolMessage('assistant-legacy-tool', {
       id: 'tool-legacy-1',
       name: 'view',
-      args: { path: 'src/quiet-mode-e2e.ts', offset: 1, limit: 3 },
-      result:
-        'src/quiet-mode-e2e.ts:1-3\n     1→export const QUIET_MODE_LOADED_PREVIEW = "loaded quiet compact preview";',
+      args: { path: 'src/compact-e2e.ts', offset: 1, limit: 3 },
+      result: 'src/compact-e2e.ts:1-3\n     1→export const LOADED_PREVIEW = "loaded compact preview";',
       isError: false,
     });
     const state = createState();
-    state.quietMode = true;
     state.session = {
       ...state.session,
       thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
@@ -1187,8 +1459,8 @@ describe('renderExistingMessages subagents', () => {
       .render(100)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('▐view▌src/quiet-mode-e2e.ts');
-    expect(rendered).toContain('QUIET_MODE_LOADED_PREVIEW');
+    expect(rendered).toContain('▐view▌src/compact-e2e.ts');
+    expect(rendered).toContain('LOADED_PREVIEW');
   });
 
   it.each([undefined, false, true])('gates pending plugin placeholder replay when enabled is %s', async enabled => {
@@ -1199,7 +1471,8 @@ describe('renderExistingMessages subagents', () => {
         id: 'plugin-call',
         name: 'mastra_expert',
         args: { question: 'demo' },
-        result: 'Background task started. Task ID: visible-demo-123',
+        result: 'Background task resumed. Task ID: visible-demo-123',
+        providerMetadata: { mastra: { backgroundTask: { taskId: 'visible-demo-123', status: 'running' } } },
         isError: false,
       },
     ]);
@@ -1212,7 +1485,9 @@ describe('renderExistingMessages subagents', () => {
     } as unknown as TUIState['session'];
     await renderExistingMessages(state);
     expect(state.pendingSubagents.has('plugin-call')).toBe(enabled === true);
-    expect(state.chatContainer.render(120).join('\n').includes('background · visible-demo-123')).toBe(enabled === true);
+    expect(stripAnsi(state.chatContainer.render(120).join('\n')).includes('background · visible-demo-123')).toBe(
+      enabled === true,
+    );
   });
 
   it('uses static plugin renderer config when replaying persisted plugin tool calls', async () => {
@@ -1226,7 +1501,6 @@ describe('renderExistingMessages subagents', () => {
       },
     ]);
     const state = createState();
-    state.quietMode = true;
     state.pluginManager = {
       getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria', modelId: 'openai/gpt-5.5' })),
     } as unknown as TUIState['pluginManager'];
@@ -1299,7 +1573,8 @@ describe('renderExistingMessages subagents', () => {
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
     expect(collapsed).toContain('background · task-plugin-1');
-    expect(collapsed).not.toContain('Authoritative Alexandria audit');
+    // Completed subagents replay expanded, so the authoritative result is visible.
+    expect(collapsed).toContain('Authoritative Alexandria audit');
 
     subagent.setExpanded(true);
     const expanded = subagent
@@ -1309,6 +1584,53 @@ describe('renderExistingMessages subagents', () => {
     expect(expanded).toContain('Authoritative Alexandria audit');
     expect(state.pendingSubagents.has('tool-background-plugin-1')).toBe(false);
   });
+
+  it.each([undefined, false, true])(
+    'replays cancelled ordinary tool text with background enabled %s',
+    async enabled => {
+      const state = createState();
+      state.options.backgroundToolsEnabled = enabled;
+      const message = assistantToolMessage('cancelled-tool-message', [
+        {
+          id: 'cancelled-call',
+          name: 'view',
+          args: {},
+          result: 'Background task started. Task ID: cancelled-task',
+          isError: false,
+        },
+      ]);
+      const cancellation = createSignal({
+        type: 'notification',
+        tagName: 'notification',
+        contents: 'view cancelled in background',
+        attributes: { source: 'background-work', status: 'cancelled' },
+        metadata: {
+          backgroundCompletion: {
+            eventId: 'background-task:cancelled-task:cancelled',
+            taskId: 'cancelled-task',
+            originRunId: 'cancelled-run',
+            originToolCallId: 'cancelled-call',
+            toolName: 'view',
+            status: 'cancelled',
+          },
+        },
+      }).toDBMessage();
+      state.session = {
+        ...state.session,
+        thread: { listActiveMessages: vi.fn().mockResolvedValue([message, cancellation]) },
+      } as unknown as TUIState['session'];
+      state.controller = { session: state.session } as unknown as TUIState['controller'];
+      await renderExistingMessages(state);
+      const rendered = state.chatContainer
+        .render(120)
+        .join('\n')
+        .replace(/\x1b\[[0-9;]*m/g, '');
+      expect(rendered).toContain('Background execution cancelled.');
+      expect(rendered).toContain('■ background · cancelled-task');
+      expect(rendered).not.toContain('Running in background');
+      expect(state.pendingTools.has('cancelled-call')).toBe(false);
+    },
+  );
 
   it('replays a cancelled background plugin subagent as terminal', async () => {
     const toolMessage = assistantToolMessage('assistant-plugin-background-cancelled', [
@@ -1373,7 +1695,6 @@ describe('renderExistingMessages subagents', () => {
       },
     ]);
     const state = createState();
-    state.quietMode = true;
     state.session = {
       ...state.session,
       thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },

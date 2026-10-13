@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 
 import { Button } from '@/ds/components/Button';
+import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 export interface CommentQuoteProps {
@@ -17,19 +18,23 @@ export function CommentQuote({ authorName, quote, onDismiss, className }: Commen
     <blockquote
       data-slot="comment-quote"
       className={cn(
-        'm-0 flex min-w-0 gap-2 border-l-2 border-border2 pl-2 text-ui-xs text-muted-foreground',
+        'm-0 flex min-w-0 gap-2 border-l-2 border-border-strong pl-2 text-caption text-muted-foreground',
         className,
       )}
     >
       <span className="min-w-0 flex-1">
-        {authorName ? <span className="text-muted-foreground font-medium">{authorName} </span> : null}
+        {authorName ? (
+          <Txt as="span" variant="column">
+            {authorName}{' '}
+          </Txt>
+        ) : null}
         <span className="line-clamp-2 wrap-anywhere whitespace-pre-line">{quote}</span>
       </span>
       {onDismiss ? (
         <Button
           type="button"
           variant="ghost"
-          size="icon-xs"
+          size="icon-sm"
           aria-label="Remove quote"
           onClick={onDismiss}
           className="shrink-0"

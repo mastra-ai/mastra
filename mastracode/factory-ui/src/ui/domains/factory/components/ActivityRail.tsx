@@ -1,3 +1,4 @@
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { isAuditAction, parseAuditAction } from '@mastra/factory/storage/domains/audit/actions';
 import type { AuditAction, AuditNamespace } from '@mastra/factory/storage/domains/audit/actions';
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
@@ -28,7 +29,7 @@ import type { ActivityBlock, ActivityEntry } from '../activity';
 import { activityBlocks, clockTime, dayHeading, groupByDay } from '../activity';
 import { auditActionLabel, auditCategory } from '../auditPresentation';
 import { boardItemPath } from '../overview';
-import { PANEL, PANEL_ROW, PANEL_ROW_LINK, TIMESTAMP } from './panel';
+import { PANEL, PANEL_ROW, PANEL_ROW_LINK } from './panel';
 import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE } from './Timeline';
 import type { FactoryMentionMember } from '../services/members';
 import { stageTone } from '../stages';
@@ -68,11 +69,11 @@ const DEED_GLYPHS: Record<AuditNamespace, LucideIcon> = {
 const DEED_PHRASES: Record<AuditAction, string> = {
   'factory.run.started': 'started a run on',
   'factory.run.ended': 'ended a run on',
+  'factory.run.queued': 'queued a run on',
+  'factory.run.rejected': 'rejected the run on',
   'factory.run.approved': 'approved the run on',
   'factory.run.dismissed': 'dismissed the run on',
   'factory.run.retry': 'retried the run on',
-  'factory.run.rejected': 'rejected a run on',
-  'factory.run.queued': 'queued a run on',
   'factory.git.commit': 'committed to',
   'factory.git.push': 'pushed to',
   'factory.git.pr_opened': 'opened a pull request for',
@@ -131,7 +132,7 @@ function Actor({ by, avatarUrl, name }: { by: string | undefined; avatarUrl?: st
   const Glyph = ACTOR_GLYPHS.find(([prefix]) => by?.startsWith(prefix))?.[1] ?? User;
 
   return (
-    <span className="border-border1 bg-surface3 text-icon3 h-avatar-sm w-avatar-sm grid shrink-0 place-items-center rounded-full border">
+    <span className="border-border bg-card text-muted-foreground h-avatar-sm w-avatar-sm grid shrink-0 place-items-center rounded-full border">
       <Glyph className="size-[13px]" aria-hidden />
     </span>
   );
@@ -143,10 +144,16 @@ function StageChain({ stages }: { stages: string[] }) {
 
   return (
     <span className="flex shrink-0 items-center gap-1">
-      {folded > 0 ? <span className="text-ui-xs text-icon3 tabular-nums">+{folded}</span> : null}
+      {folded > 0 ? (
+        <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
+          +{folded}
+        </Txt>
+      ) : null}
       {shown.map((stage, index) => (
         <span key={`${stage}-${index}`} className="flex items-center gap-1">
-          {index > 0 || folded > 0 ? <ChevronRight size={11} className="text-icon2 shrink-0" aria-hidden /> : null}
+          {index > 0 || folded > 0 ? (
+            <ChevronRight size={11} className="text-placeholder shrink-0" aria-hidden />
+          ) : null}
           <StageBadge stage={stage} />
         </span>
       ))}
@@ -161,22 +168,36 @@ function entryTarget(entry: ActivityEntry): { id: string; board: string } | unde
 /** Only a card the board still holds opens. */
 function EntryTitle({ entry, factoryProjectId }: { entry: ActivityEntry; factoryProjectId: string | undefined }) {
   const target = entryTarget(entry);
-  const shape = 'text-icon6 min-w-0 truncate font-medium';
+  const shape = ' min-w-0 truncate ';
 
-  if (target === undefined) return <span className={shape}>{entry.title}</span>;
+  if (target === undefined)
+    return (
+      <Txt as="span" variant="column" tone="ink" className={shape}>
+        {entry.title}
+      </Txt>
+    );
 
   return (
-    <Link to={boardItemPath(factoryProjectId, target)} className={`${shape} hover:underline`}>
-      {entry.title}
+    <Link to={boardItemPath(factoryProjectId, target)} className={cn('text-foreground', `${shape} hover:underline`)}>
+      <Txt as="span" variant="column" className="block">
+        {entry.title}
+      </Txt>
     </Link>
   );
 }
 
 function Time({ at, className }: { at: number; className?: string }) {
   return (
-    <time dateTime={new Date(at).toISOString()} className={`${TIMESTAMP} shrink-0 ${className ?? ''}`}>
+    <Txt
+      as="time"
+      variant="meta"
+      tone="muted"
+      font="mono"
+      dateTime={new Date(at).toISOString()}
+      className={`shrink-0 ${className ?? ''}`}
+    >
       {clockTime(at)}
-    </time>
+    </Txt>
   );
 }
 
@@ -187,8 +208,8 @@ function EntryPanel({ entries, factoryProjectId }: { entries: ActivityEntry[]; f
         const target = entryTarget(entry);
         const body = (
           <>
-            <Txt as="span" variant="ui-sm" className="text-icon4 min-w-0 flex-1 truncate">
-              {entry.title === '' ? <span className="text-icon2">—</span> : entry.title}
+            <Txt tone="muted" as="span" variant="caption" className="min-w-0 flex-1 truncate">
+              {entry.title === '' ? <span className="text-placeholder">—</span> : entry.title}
             </Txt>
             <Time at={entry.at} />
           </>
@@ -227,30 +248,38 @@ function Block({
 
   return (
     <RailRow mark={<Node entry={first} />} connected={connected}>
-      <Txt as="div" variant="ui-sm" className="flex min-h-7 min-w-0 items-center gap-x-2 pr-4">
+      <div className="flex min-h-7 min-w-0 items-center gap-x-2 pr-4">
         <Actor by={first.by} avatarUrl={roster.get(first.by ?? '')?.avatarUrl} name={name} />
-        <span className="text-icon6 shrink-0 font-medium">{name}</span>
-        <span className="text-icon3 shrink-0">
+        <Txt as="span" variant="column" tone="ink" className="shrink-0">
+          {name}
+        </Txt>
+        <Txt as="span" variant="caption" tone="muted" className="shrink-0">
           {first.kind === 'move' ? 'moved' : deedPhrase(first.action, first.title !== '')}
-        </span>
+        </Txt>
         {grouped && first.kind === 'move' ? (
-          <span className="text-icon6 shrink-0 font-medium">{block.entries.length} cards</span>
+          <Txt as="span" variant="column" tone="ink" className="shrink-0">
+            {block.entries.length} cards
+          </Txt>
         ) : (
           <>
             {first.title === '' ? null : <EntryTitle entry={first} factoryProjectId={factoryProjectId} />}
             {grouped ? (
-              <span className="text-ui-xs text-icon3 shrink-0 tabular-nums">+{block.entries.length - 1}</span>
+              <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
+                +{block.entries.length - 1}
+              </Txt>
             ) : null}
           </>
         )}
         {first.kind === 'move' ? (
           <>
-            <span className="text-icon3 shrink-0">to</span>
+            <Txt as="span" variant="caption" tone="muted" className="shrink-0">
+              to
+            </Txt>
             <StageChain stages={first.stages} />
           </>
         ) : null}
         <Time at={first.at} className="ml-auto pl-2" />
-      </Txt>
+      </div>
       {grouped ? <EntryPanel entries={block.entries} factoryProjectId={factoryProjectId} /> : null}
     </RailRow>
   );

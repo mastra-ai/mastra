@@ -109,18 +109,49 @@ describe('Command', () => {
     );
 
     expect(screen.getByPlaceholderText('Search commands')).toBeDefined();
-    expect(document.querySelector('.dialog-overlay-anim')).toBeNull();
+    expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
   });
 
-  it('renders a custom CommandDialog overlay when requested', () => {
+  it('renders the inset CommandDialog content inside a panel with the footer below it', () => {
     render(
-      <CommandDialog open onOpenChange={() => {}} showOverlay overlayClassName="bg-surface1/40 backdrop-blur-none">
+      <CommandDialog open onOpenChange={() => {}} variant="inset" footer={<button type="button">Send feedback</button>}>
         <CommandInput placeholder="Search commands" />
       </CommandDialog>,
     );
 
-    const overlay = document.querySelector('.dialog-overlay-anim');
-    expect(overlay?.className).toContain('bg-surface1/40');
+    const panel = document.querySelector('[data-slot="command-dialog-panel"]');
+    const footer = document.querySelector('[data-slot="command-dialog-footer"]');
+    assert(panel && footer);
+    expect(panel.contains(screen.getByPlaceholderText('Search commands'))).toBe(true);
+    expect(footer.contains(screen.getByRole('button', { name: 'Send feedback' }))).toBe(true);
+    expect(panel.compareDocumentPosition(footer) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('drops the close button from the inset CommandDialog and keeps it on the default one', () => {
+    const { rerender } = render(
+      <CommandDialog open onOpenChange={() => {}}>
+        <CommandInput placeholder="Search commands" />
+      </CommandDialog>,
+    );
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDefined();
+
+    rerender(
+      <CommandDialog open onOpenChange={() => {}} variant="inset">
+        <CommandInput placeholder="Search commands" />
+      </CommandDialog>,
+    );
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
+  });
+
+  it('renders a custom CommandDialog overlay when requested', () => {
+    render(
+      <CommandDialog open onOpenChange={() => {}} showOverlay overlayClassName="bg-sidebar/40 backdrop-blur-none">
+        <CommandInput placeholder="Search commands" />
+      </CommandDialog>,
+    );
+
+    const overlay = document.querySelector('[data-slot="dialog-overlay"]');
+    expect(overlay?.className).toContain('bg-sidebar/40');
     expect(overlay?.className).toContain('backdrop-blur-none');
     expect(overlay?.className).not.toContain('backdrop-blur-xs');
   });

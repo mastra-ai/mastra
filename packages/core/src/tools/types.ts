@@ -9,8 +9,9 @@ import type {
 } from '@internal/external-types';
 import type { MastraPrimitives, MastraUnion } from '../action';
 export type { MastraPrimitives, MastraUnion };
+import type { MastraDBMessage } from '../agent/message-list';
 import type { ActorSignal } from '../auth/ee';
-import type { ToolBackgroundConfig } from '../background-tasks';
+import type { BackgroundTaskAdoptionContext, ToolBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
 import type { ObservabilityContext } from '../observability';
@@ -209,6 +210,12 @@ export interface AgentToolExecutionContext<TSuspend, TResume> {
   agentId: string;
   toolCallId: string;
   messages: any[];
+  /**
+   * Reads the current in-memory conversation, including remembered messages and this run's responses.
+   * Reflects message-list removals, but not transient provider-prompt transforms. Treat messages as read-only.
+   * Not available outside a supported agent loop.
+   */
+  getMessages?: () => readonly MastraDBMessage[];
   suspend: (suspendPayload: TSuspend, suspendOptions?: SuspendOptions) => Promise<void>;
 
   // Optional - memory identifiers
@@ -340,6 +347,12 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      */
     mcp?: MCPToolExecutionContext;
     /**
+     * Skip the TOOL_CALL span for this execution. Set by the MCP server, which
+     * already wraps the call in an MCP_SERVER_REQUEST span. Nested agent and
+     * workflow runs still attach to `tracingContext.currentSpan`.
+     */
+    skipToolSpan?: boolean;
+    /**
      * Workspace for tool execution. When provided at execution time, this overrides
      * any workspace configured at tool build time. Allows dynamic workspace selection
      * per-step via prepareStep.
@@ -366,10 +379,14 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      * stream is not memory-backed.
      */
     flushMessages?: () => Promise<void>;
+    /** Live conversation reader supplied by the agent loop. Never serialized in workflow state. */
+    getMessages?: AgentToolExecutionContext<unknown, unknown>['getMessages'];
     /** Observability helper to expose on the final tool execution context. */
     observe?: ToolObserve;
     /** Set by the agent tool-call step when the tool runs as a background task. */
     isBackgroundTask?: boolean;
+    /** Process-local lifecycle bridge for an operation adopted by the background task. */
+    background?: BackgroundTaskAdoptionContext;
   };
 
 /**
@@ -472,6 +489,7 @@ export interface MCPToolProperties {
  * - Supports FlexibleSchema | Schema for broader AI SDK compatibility
  */
 export type CoreTool = {
+  title?: string;
   description?: string;
   parameters: FlexibleSchema<any> | Schema;
   outputSchema?: FlexibleSchema<any> | Schema;
@@ -530,6 +548,7 @@ export type CoreTool = {
  * The only difference: parameters must be Schema (not FlexibleSchema | Schema)
  */
 export type InternalCoreTool = {
+  title?: string;
   description?: string;
   parameters: Schema;
   outputSchema?: Schema;
@@ -626,6 +645,13 @@ export interface ToolExecutionContext<
   // MCP (Model Context Protocol) specific context
   mcp?: MCPToolExecutionContext;
 
+  /**
+   * Process-local lifecycle bridge exposed only during native background
+   * execution. Acknowledgement-returning tools can adopt their existing
+   * operation so the native task remains running until it settles.
+   */
+  background?: BackgroundTaskAdoptionContext;
+
   // ============ Suspend/resume for direct and MCP 2.x execution ============
   // Agents and workflows nest these under `agent` / `workflow` until the next core major.
 
@@ -685,6 +711,8 @@ export interface ToolAction<
   TRequestContext extends Record<string, any> | unknown = unknown,
 > {
   id: TId;
+  /** Display name for UIs and MCP clients. Never sent to the model. */
+  title?: string;
   description: string;
   inputSchema?: PublicSchema<TSchemaIn>;
   outputSchema?: PublicSchema<TSchemaOut>;
@@ -746,6 +774,15 @@ export interface ToolAction<
    * that exactly match the tool schema.
    */
   strict?: boolean;
+  /**
+   * How a result that fails `outputSchema` validation is handled.
+   * - `'strict'` (default): the result is replaced with a validation error object, so the
+   *   model is told the call failed.
+   * - `'warn'`: the failure is logged and the tool's actual result is returned unchanged.
+   *   Use this for tools whose side effects have already happened when the result is
+   *   produced (an order was placed, a message was sent), so the model does not retry them.
+   */
+  outputValidation?: 'strict' | 'warn';
   /**
    * Provider-specific options passed to the model when this tool is used.
    * Keys are provider names (e.g., 'anthropic', 'openai'), values are provider-specific configs.

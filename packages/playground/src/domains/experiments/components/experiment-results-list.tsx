@@ -1,35 +1,42 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
-import { AlertCircleIcon, GaugeIcon } from 'lucide-react';
+import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
+import { GaugeIcon } from 'lucide-react';
+import { getResultErrorMessage, getResultOutputPreview } from '../utils/result-output';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
-import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
-import { useLinkComponent } from '@/lib/framework';
 
 /**
  * Minimal shape shared by every surface that lists dataset items
- * (experiment results, review queue, inbox). `DatasetExperimentResult`
+ * (experiment results, review queue). `DatasetExperimentResult`
  * and the review `ReviewItem` both satisfy it.
  */
 export type ExperimentResultsListItem = {
   id: string;
   itemId: string;
   input?: unknown;
+  output?: unknown;
+  targetType?: DatasetExperimentResult['targetType'];
   error?: unknown;
   status?: DatasetExperimentResult['status'] | null;
   tags?: string[] | null;
   /** Inline scores, used by the summary `scores` column. */
   scores?: Record<string, number> | Array<{ score: number | null }> | null;
+  /** When the run started; drives the `startedAt` column. */
+  startedAt?: string | Date | null;
 };
 
-const BUILT_IN_COLUMNS = new Set(['itemId', 'id', 'status', 'input', 'tags', 'scores']);
+const BUILT_IN_COLUMNS = new Set(['itemId', 'id', 'status', 'input', 'output', 'error', 'tags', 'scores', 'startedAt']);
+
+export type ExperimentResultsSortKey = 'startedAt';
 
 export type ExperimentResultsListColumn = {
-  /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | a scorer id */
+  /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | `startedAt` | a scorer id */
   name: string;
   label: string;
   size: string;
@@ -51,6 +58,9 @@ export type ExperimentResultsListProps<T extends ExperimentResultsListItem> = {
   onToggleSelect?: (resultId: string) => void;
   /** When provided with selection, renders a select-all checkbox in the header. */
   onToggleSelectAll?: () => void;
+  /** Server-side sort; the `startedAt` header is only sortable when `onSortChange` is provided. */
+  sort?: ListSort<ExperimentResultsSortKey>;
+  onSortChange?: (direction: 'asc' | 'desc', key: ExperimentResultsSortKey) => void;
 };
 
 /**
@@ -71,6 +81,8 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
+  sort,
+  onSortChange,
 }: ExperimentResultsListProps<T>) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const hasSelection = Boolean(selectedIds && onToggleSelect);
@@ -82,8 +94,11 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   const hasItemIdColumn = hasColumn('itemId') || hasColumn('id');
   const hasStatusColumn = hasColumn('status');
   const hasInputColumn = hasColumn('input');
+  const hasOutputColumn = hasColumn('output');
+  const hasErrorColumn = hasColumn('error');
   const hasTagsColumn = hasColumn('tags');
   const hasScoresColumn = hasColumn('scores');
+  const hasStartedAtColumn = hasColumn('startedAt');
   const selectedVisibleCount = selectedIds ? results.filter(r => selectedIds.has(r.id)).length : 0;
   const isAllSelected = results.length > 0 && selectedVisibleCount === results.length;
 
@@ -103,6 +118,15 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
           <span className="min-w-0 truncate">{col.label}</span>
         </LinkComponent>
       </DataList.TopCell>
+    ) : col.name === 'startedAt' && onSortChange ? (
+      <DataList.SortableTopCell
+        key={col.name}
+        sortKey="startedAt"
+        sort={sort?.key === 'startedAt' ? sort.direction : undefined}
+        onSortChange={onSortChange}
+      >
+        {col.label}
+      </DataList.SortableTopCell>
     ) : (
       <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>
     );
@@ -142,17 +166,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
             const rowCells = (
               <>
                 {hasItemIdColumn && (
-                  <DataList.Cell className="text-ui-smd text-muted-foreground flex items-center gap-1.5 tracking-wide">
-                    <span>{result.itemId?.slice(0, 8) ?? ''}</span>
-                    {hasError && (
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={<AlertCircleIcon role="img" aria-label="Error" className="text-error size-3.5" />}
-                        />
-                        <TooltipContent>{errorMessage(result.error)}</TooltipContent>
-                      </Tooltip>
-                    )}
-                  </DataList.Cell>
+                  <DataList.Cell className="text-muted-foreground">{result.itemId?.slice(0, 8) ?? ''}</DataList.Cell>
                 )}
 
                 {hasStatusColumn && (
@@ -167,6 +181,21 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
 
                 {hasInputColumn && (
                   <DataList.TextCell font="mono">{truncate(formatValue(result.input), 200)}</DataList.TextCell>
+                )}
+
+                {hasOutputColumn && (
+                  <DataList.Cell className="truncate font-mono" data-testid={`result-output-${result.id}`}>
+                    {getResultOutputPreview(result) ?? ''}
+                  </DataList.Cell>
+                )}
+
+                {hasErrorColumn && (
+                  <DataList.Cell
+                    className="truncate text-destructive-foreground"
+                    data-testid={`result-error-${result.id}`}
+                  >
+                    {getResultErrorMessage(result) ?? ''}
+                  </DataList.Cell>
                 )}
 
                 {hasTagsColumn && (
@@ -186,11 +215,18 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                   </DataList.Cell>
                 )}
 
+                {hasStartedAtColumn &&
+                  (result.startedAt ? (
+                    <DataList.CreatedCell timestamp={result.startedAt} />
+                  ) : (
+                    <DataList.Cell className="text-placeholder">—</DataList.Cell>
+                  ))}
+
                 {scorerIds?.map(scorerId => {
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
                   return (
-                    <DataList.Cell key={scorerId} className="text-muted-foreground text-ui-smd font-mono">
+                    <DataList.Cell key={scorerId} className="text-muted-foreground tabular-nums">
                       {score != null ? score.score.toFixed(3) : '-'}
                     </DataList.Cell>
                   );
@@ -203,6 +239,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                 <DataList.RowButton
                   key={result.id}
                   featured={isFeatured}
+                  variant={hasError ? 'error' : 'default'}
                   data-selected={isFeatured || undefined}
                   onClick={() => onResultClick(result.id)}
                   {...getRowProps(index)}
@@ -222,6 +259,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                 <DataList.RowButton
                   colStart={2}
                   featured={isFeatured}
+                  variant={hasError ? 'error' : 'default'}
                   data-selected={isFeatured || undefined}
                   onClick={() => onResultClick(result.id)}
                   {...getRowProps(index)}
@@ -249,29 +287,22 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
     : Object.values(scores ?? {});
   if (values.length === 0) {
     return (
-      <Txt variant="ui-xs" className="text-placeholder">
+      <Txt variant="meta" tone="faint">
         —
       </Txt>
     );
   }
   return (
     <div className="flex items-center gap-1">
-      <Icon size="sm" className="text-muted-foreground">
+      <Icon size="xs" className="text-muted-foreground">
         <GaugeIcon />
       </Icon>
-      <Txt variant="ui-xs" className="text-muted-foreground font-mono">
+      <Txt variant="meta" tone="muted" font="mono">
         {values[0].toFixed(2)}
       </Txt>
       {values.length > 1 && <Badge>+{values.length - 1}</Badge>}
     </div>
   );
-}
-
-function errorMessage(error: unknown): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message || 'Error';
-  }
-  return typeof error === 'string' && error ? error : 'Error';
 }
 
 /** Format unknown value for display */

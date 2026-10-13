@@ -11,7 +11,11 @@ class MockRawReply extends EventEmitter {
   destroyed = false;
   writableEnded = false;
 
-  writeHead(): void {}
+  statusCode?: number;
+
+  writeHead(statusCode: number): void {
+    this.statusCode = statusCode;
+  }
 
   write(): boolean {
     this.writes += 1;
@@ -316,8 +320,8 @@ describe('stream disconnect handling', () => {
     const rawReply = new MockRawReply();
     const requestRaw = new MockRawRequest();
     const reply = {
-      header: vi.fn(),
-      status: vi.fn(),
+      getHeaders: vi.fn(() => ({})),
+      hijack: vi.fn(),
       raw: rawReply,
     } as unknown as FastifyReply;
     const request = {
@@ -359,7 +363,8 @@ describe('stream disconnect handling', () => {
 
     expect(canceledByRequestClose).toBe(true);
     await expect(canceled).resolves.toBe('request aborted');
-    expect(reply.status).toHaveBeenCalledWith(200);
+    expect(reply.hijack).toHaveBeenCalled();
+    expect(rawReply.statusCode).toBe(200);
     expect(rawReply.ended).toBe(true);
   });
 
@@ -372,8 +377,8 @@ describe('stream disconnect handling', () => {
     requestRaw.aborted = false;
     requestRaw.readableAborted = false;
     const reply = {
-      header: vi.fn(),
-      status: vi.fn(),
+      getHeaders: vi.fn(() => ({})),
+      hijack: vi.fn(),
       raw: rawReply,
     } as unknown as FastifyReply;
     const request = {

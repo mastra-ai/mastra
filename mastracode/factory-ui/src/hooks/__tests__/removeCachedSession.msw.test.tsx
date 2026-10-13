@@ -45,7 +45,7 @@ describe('removeCachedSession', () => {
     const gate = deferred();
     let requests = 0;
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, async () => {
+      http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, async () => {
         requests += 1;
         // The second read is the one racing the delete: it resolves after the
         // removal and still reports the session as present.

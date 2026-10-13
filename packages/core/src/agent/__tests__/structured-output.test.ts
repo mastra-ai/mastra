@@ -1015,7 +1015,11 @@ describe('separate-model structured output logging', () => {
         expect.objectContaining({
           model,
           toolChoice: 'none',
-          memory: { thread: 'structured-thread', resource: 'structured-resource', options: { readOnly: true } },
+          memory: {
+            thread: 'structured-thread',
+            resource: 'structured-resource',
+            options: { readOnly: true, retainFullInput: true },
+          },
         }),
       );
       expect(logger.warn).toHaveBeenCalledTimes(errorStrategy === 'warn' ? 1 : 0);

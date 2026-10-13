@@ -1,0 +1,42 @@
+@theme {
+  /* One multiplier, every step: `--spacing-<n>` was enumerated up to 96, which
+     silently dropped every larger utility in the codebase (`max-w-120` on the
+     list filters, `max-w-140` on page descriptions, `w-150`…). The enumeration
+     was exactly this multiplier, so nothing moves — the missing rungs just
+     start resolving. Named rungs (`--spacing-control-*`) are declared below. */
+  --spacing: 0.25rem;
+
+  --breakpoint-2xl: 1536px;
+  --breakpoint-3xl: 1700px;
+  --breakpoint-4xl: 2000px;
+
+  --radius-none: 0px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  /* One rung, one declaration. Every size utility in Tailwind v4 reads the
+     `--spacing-*` namespace, so `h-icon-md`, `w-icon-md` and `size-icon-md`
+     all resolve from this one line. Each rung used to be repeated across
+     `--height-*`, `--max-height-*`, `--width-*` and `--container-*`, which is
+     how `icon-smd` came to exist in three of them and `--container-icon-smd`
+     in none. */
+  --spacing-icon-xs: 12px;
+  --spacing-icon-sm: 14px;
+  --spacing-icon-md: 16px;
+  --spacing-icon-lg: 20px;
+
+  --spacing-control-sm: 1.75rem; /* 28px */
+  --spacing-control-md: 1.875rem; /* 30px — the default control height */
+  --spacing-control-lg: 2rem; /* 32px */
+
+  --spacing-header-default: 40px;
+  --spacing-table-header: 28px;
+  --spacing-table-row: 40px;
+  --spacing-table-row-small: 32px;
+  --spacing-avatar-sm: 24px;
+  --spacing-avatar-md: 32px;
+  --spacing-avatar-lg: 40px;
+  --spacing-dropdown: 300px;
+}

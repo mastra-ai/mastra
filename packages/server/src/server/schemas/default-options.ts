@@ -70,6 +70,9 @@ export const defaultOptionsSchema = z
     /** Automatically resume suspended tools */
     autoResumeSuspendedTools: z.boolean().optional(),
 
+    /** Start eligible server-side tools during model streaming */
+    eagerToolExecution: z.boolean().optional(),
+
     /** Tool-call concurrency limit and strategy */
     toolCallConcurrency: z
       .union([

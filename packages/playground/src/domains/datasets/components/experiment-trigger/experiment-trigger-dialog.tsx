@@ -1,36 +1,37 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import {
   Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
-  DialogBody,
-  DialogFooter,
 } from '@mastra/playground-ui/components/Dialog';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
+import { Field, FieldLabel, Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
-import { Label } from '@mastra/playground-ui/components/Label';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
+import { jsonSchemaToZodRuntime } from '@mastra/playground-ui/lib/form/json-schema-to-zod-runtime';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronRight, X } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useDatasetMutations, useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
+import { useMemo, useRef } from 'react';
 import { toast } from 'sonner';
-import { useDatasetItems } from '../../hooks/use-dataset-items';
-import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
-import { useDataset } from '../../hooks/use-datasets';
 import { DatasetCombobox } from '../dataset-combobox';
 import { DatasetVersions } from '../dataset-versions';
 import { ScorerSelector } from './scorer-selector';
-import type { TargetType } from './target-selector';
 import { TargetSelector } from './target-selector';
-import { DynamicForm } from '@/lib/form';
-import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
+import type { TargetType } from './target-selector';
+import { useExperimentTriggerForm } from './use-experiment-trigger-form';
 
 export interface ExperimentTriggerDialogProps {
   initialDatasetId?: string;
@@ -76,10 +77,10 @@ function RequestContextForm({
   }
 
   return (
-    <div className="space-y-2">
-      <Label>Request Context</Label>
+    <Fieldset>
+      <FieldsetLegend>Request Context</FieldsetLegend>
       <DynamicForm schema={zodSchema} onValuesChange={onChange} className="[&_button[type=submit]]:hidden" />
-    </div>
+    </Fieldset>
   );
 }
 
@@ -97,16 +98,19 @@ function PipelineStep({
   return (
     <li className="flex gap-4">
       <div className="flex flex-col items-center">
-        <span
+        <Txt
+          as="span"
+          variant="meta"
+          tone="muted"
           aria-hidden="true"
           className={cn(
-            'flex size-6 shrink-0 items-center justify-center rounded-full border text-ui-xs font-medium',
-            done ? 'border-accent1 bg-accent1 text-white' : 'border-border1 text-muted-foreground',
+            'flex size-6 shrink-0 items-center justify-center rounded-full border',
+            done ? 'border-success-edge bg-success-subtle text-success-subtle-foreground' : 'border-border',
           )}
         >
           {index}
-        </span>
-        {!isLast && <span aria-hidden="true" className="bg-border1 mt-2 w-px flex-1" />}
+        </Txt>
+        {!isLast && <span aria-hidden="true" className="mt-2 w-px flex-1 bg-border" />}
       </div>
       <div className={cn('min-w-0 flex-1 space-y-3', !isLast && 'pb-4')}>{children}</div>
     </li>
@@ -126,52 +130,58 @@ export function ExperimentTriggerDialog({
   onSuccess,
 }: ExperimentTriggerDialogProps) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const [name, setName] = useState(initialName ?? '');
-  const [description, setDescription] = useState(initialDescription ?? '');
-  const [datasetId, setDatasetId] = useState(initialDatasetId ?? '');
-  const [version, setVersion] = useState<number | null>(initialDatasetVersion ?? null);
-  const [targetType, setTargetType] = useState<TargetType | ''>(initialTargetType ?? '');
-  const [targetId, setTargetId] = useState<string>(initialTargetId ?? '');
-  // `null` means the user has not made an explicit choice yet, so the dataset defaults apply.
-  const [selectedScorers, setSelectedScorers] = useState<string[] | null>(initialScorerIds ?? null);
-  const [requestContextValues, setRequestContextValues] = useState<Record<string, unknown>>({});
-  const [requestContextRaw, setRequestContextRaw] = useState('');
+  const { form, changeTargetName, resetForm } = useExperimentTriggerForm({
+    name: initialName,
+    description: initialDescription,
+    datasetId: initialDatasetId,
+    version: initialDatasetVersion,
+    targetType: initialTargetType,
+    targetId: initialTargetId,
+    scorerIds: initialScorerIds,
+  });
+  const { register, setValue, watch } = form;
+  const [name, datasetId, version, targetType, targetId, selectedScorers, requestContextValues, requestContextRaw] =
+    watch([
+      'name',
+      'datasetId',
+      'version',
+      'targetType',
+      'targetId',
+      'scorerIds',
+      'requestContextValues',
+      'requestContextRaw',
+    ]);
 
   const { triggerExperiment } = useDatasetMutations();
-  const { data: dataset } = useDataset(datasetId);
-  const { total: itemCount } = useDatasetItems(datasetId, undefined, version);
+  const { data: dataset } = useDataset({ datasetId: datasetId, queryOptions: { enabled: Boolean(datasetId) } });
+  const { total: itemCount } = useDatasetItems({
+    datasetId: datasetId,
+    search: undefined,
+    version,
+    queryOptions: { enabled: Boolean(datasetId) },
+  });
   const requestContextSchema = dataset?.requestContextSchema as Record<string, unknown> | undefined;
   const datasetDefaultScorers = dataset?.scorerIds ?? [];
-  const usesDatasetDefaults = selectedScorers === null && datasetDefaultScorers.length > 0;
+  const usesDatasetDefaults = selectedScorers === undefined && datasetDefaultScorers.length > 0;
   const effectiveScorers = selectedScorers ?? datasetDefaultScorers;
 
   const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
 
-  const canRun = Boolean(datasetId && targetType && targetId && name.trim());
+  const runName = name.trim();
+  const canRun = Boolean(datasetId && targetType && targetId && runName);
   const isRunning = triggerExperiment.isPending;
 
-  const missing = [!name.trim() && 'name', !datasetId && 'dataset', !targetId && 'target'].filter(Boolean);
+  // The name fills in with the target, so it only counts as missing once the user clears it.
+  const missing = [!datasetId && 'dataset', !targetId && 'target', targetId && !runName && 'name'].filter(Boolean);
   const hasRequestContext = hasSchema
     ? Object.values(requestContextValues).some(v => v !== undefined && v !== '')
     : requestContextRaw.trim().length > 0;
 
   const handleDatasetChange = (nextDatasetId: string) => {
-    setDatasetId(nextDatasetId);
-    setVersion(null);
-    setSelectedScorers(initialScorerIds ?? null);
-    setRequestContextValues({});
-  };
-
-  const resetState = () => {
-    setName(initialName ?? '');
-    setDescription(initialDescription ?? '');
-    setDatasetId(initialDatasetId ?? '');
-    setVersion(initialDatasetVersion ?? null);
-    setTargetType(initialTargetType ?? '');
-    setTargetId(initialTargetId ?? '');
-    setSelectedScorers(initialScorerIds ?? null);
-    setRequestContextValues({});
-    setRequestContextRaw('');
+    setValue('datasetId', nextDatasetId);
+    setValue('version', undefined);
+    setValue('scorerIds', initialScorerIds);
+    setValue('requestContextValues', {});
   };
 
   const resolveRequestContext = (): Record<string, unknown> | undefined => {
@@ -194,9 +204,8 @@ export function ExperimentTriggerDialog({
     return undefined;
   };
 
-  const handleRun = async () => {
-    // Explicit guards (rather than `canRun`) so TypeScript narrows `targetType` for the request.
-    if (!datasetId || !targetType || !targetId || !name.trim()) return;
+  const handleRun = form.handleSubmit(async ({ description }) => {
+    if (!datasetId || !targetType || !targetId || !runName) return;
 
     let requestContext: Record<string, unknown> | undefined;
     try {
@@ -210,12 +219,12 @@ export function ExperimentTriggerDialog({
     try {
       const result = await triggerExperiment.mutateAsync({
         datasetId,
-        name: name.trim(),
+        name: runName,
         description: description.trim() || undefined,
         targetType,
         targetId,
         scorerIds: effectiveScorers.length > 0 ? effectiveScorers : undefined,
-        version: version ?? undefined,
+        version,
         requestContext,
       });
 
@@ -223,18 +232,16 @@ export function ExperimentTriggerDialog({
       onOpenChange(false);
       onSuccess?.(result.experimentId);
 
-      resetState();
+      resetForm();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to trigger experiment';
       toast.error(message);
     }
-  };
+  });
 
   const handleClose = () => {
-    if (!isRunning) {
-      onOpenChange(false);
-      resetState();
-    }
+    onOpenChange(false);
+    resetForm();
   };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -245,91 +252,79 @@ export function ExperimentTriggerDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent
-        ref={contentRef}
-        className="w-[640px] max-w-[calc(100vw-2rem)] gap-0 p-0"
-        onKeyDown={handleKeyDown}
-      >
-        <DialogHeader className="border-border1 border-b px-4 py-4">
+    <Dialog open={open} onOpenChange={handleClose} pending={isRunning}>
+      <DialogContent ref={contentRef} size="lg" onKeyDown={handleKeyDown}>
+        <DialogHeader>
           <DialogTitle>Run experiment</DialogTitle>
-          <DialogDescription className="text-ui-sm text-muted-foreground not-sr-only">
+          <DialogDescription>
             Pick a dataset, choose what to run it against, and optionally score the results.
           </DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="max-h-[70vh] space-y-6 overflow-y-auto px-4 py-5">
+        <DialogBody>
           <div className="space-y-4">
-            <div className="grid gap-2">
-              <Label htmlFor="experiment-name">Name *</Label>
-              <Input
-                id="experiment-name"
-                value={name}
-                onChange={e => setName(e.target.value)}
-                placeholder="Enter experiment name"
-                autoFocus
-                disabled={isRunning}
-              />
-            </div>
+            <Field>
+              <FieldLabel>Name</FieldLabel>
+              <Input {...register('name')} placeholder="Enter experiment name" autoFocus disabled={isRunning} />
+            </Field>
 
-            <div className="grid gap-2">
-              <Label htmlFor="experiment-description">Description</Label>
+            <Field>
+              <FieldLabel>Description</FieldLabel>
               <Textarea
-                id="experiment-description"
-                value={description}
-                onChange={e => setDescription(e.target.value)}
+                {...register('description')}
                 placeholder="Enter experiment description (optional)"
                 disabled={isRunning}
                 rows={2}
               />
-            </div>
+            </Field>
           </div>
 
           <ol className="list-none">
             <PipelineStep index={1} done={Boolean(datasetId)}>
               <div className="grid grid-cols-[1fr_140px] gap-3">
-                <div className="grid gap-2">
-                  <Label>Dataset</Label>
+                <Field>
+                  <FieldLabel>Dataset</FieldLabel>
                   <DatasetCombobox value={datasetId} onValueChange={handleDatasetChange} container={contentRef} />
-                </div>
+                </Field>
                 {datasetId && (
-                  <div className="grid gap-2">
-                    <Label>Version</Label>
+                  <Field>
+                    <FieldLabel>Version</FieldLabel>
                     <DatasetVersions
                       datasetId={datasetId}
-                      value={version}
-                      onValueChange={setVersion}
+                      value={version ?? null}
+                      onValueChange={nextVersion => setValue('version', nextVersion ?? undefined)}
                       container={contentRef}
                     />
-                  </div>
+                  </Field>
                 )}
               </div>
               {datasetId && itemCount !== undefined && (
-                <p className="text-ui-xs text-muted-foreground">
+                <Txt variant="meta" tone="muted">
                   {itemCount} {itemCount === 1 ? 'item' : 'items'}
-                </p>
+                </Txt>
               )}
             </PipelineStep>
 
             <PipelineStep index={2} done={Boolean(targetId)}>
               <TargetSelector
                 targetType={targetType}
-                setTargetType={setTargetType}
+                setTargetType={nextTargetType => setValue('targetType', nextTargetType)}
                 targetId={targetId}
-                setTargetId={setTargetId}
+                setTargetId={nextTargetId => setValue('targetId', nextTargetId)}
+                onTargetNameChange={changeTargetName}
                 container={contentRef}
               />
               {targetType && !targetId && (
-                <p className="text-ui-xs text-muted-foreground">
+                <Txt variant="meta" tone="muted">
                   Choose {targetType === 'agent' ? 'an' : 'a'} {targetType} to run
-                </p>
+                </Txt>
               )}
             </PipelineStep>
 
             <PipelineStep index={3} done={effectiveScorers.length > 0} isLast>
               <ScorerSelector
                 selectedScorers={effectiveScorers}
-                setSelectedScorers={setSelectedScorers}
+                setSelectedScorers={scorerIds => setValue('scorerIds', scorerIds)}
                 disabled={isRunning}
                 container={contentRef}
                 helperText={
@@ -342,8 +337,8 @@ export function ExperimentTriggerDialog({
           </ol>
 
           <Collapsible>
-            <CollapsibleTrigger className="text-ui-sm flex items-center gap-2">
-              <ChevronRight className="size-4" />
+            <CollapsibleTrigger className="flex items-center gap-2 text-caption">
+              <DisclosureChevron direction="right" className="size-4" />
               Request Context (JSON, optional)
               {hasRequestContext && (
                 <Badge size="xs" variant="blue">
@@ -353,11 +348,14 @@ export function ExperimentTriggerDialog({
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-3">
               {hasSchema ? (
-                <RequestContextForm requestContextSchema={requestContextSchema!} onChange={setRequestContextValues} />
+                <RequestContextForm
+                  requestContextSchema={requestContextSchema!}
+                  onChange={values => setValue('requestContextValues', values)}
+                />
               ) : (
                 <CodeEditor
                   value={requestContextRaw}
-                  onChange={setRequestContextRaw}
+                  onChange={raw => setValue('requestContextRaw', raw)}
                   showCopyButton={false}
                   aria-label="Request context JSON"
                   className="min-h-[160px]"
@@ -367,16 +365,16 @@ export function ExperimentTriggerDialog({
           </Collapsible>
         </DialogBody>
 
-        <DialogFooter className="border-border1 items-center border-t px-4 py-4 sm:justify-between">
-          <p data-testid="experiment-run-status" aria-live="polite" className="flex items-center gap-2">
+        <DialogFooter>
+          <p data-testid="experiment-run-status" aria-live="polite" className="mr-auto flex items-center gap-2">
             {missing.length === 0 ? (
               <>
-                <Badge variant="green" indicator="dot">
+                <Badge variant="success" indicator="dot">
                   Ready
                 </Badge>
-                <span className="text-ui-xs text-muted-foreground">
+                <Txt as="span" variant="meta" tone="muted">
                   {itemCount ?? 0} items · {targetType} · {effectiveScorers.length} scorers
-                </span>
+                </Txt>
               </>
             ) : (
               <Badge variant="neutral" indicator="dot">
@@ -384,27 +382,23 @@ export function ExperimentTriggerDialog({
               </Badge>
             )}
           </p>
-          <div className="flex items-center gap-2">
-            <Button icon={<X />} onClick={handleClose} disabled={isRunning}>
-              Cancel
-            </Button>
-            <Button variant="primary" onClick={handleRun} disabled={!canRun || isRunning}>
-              {isRunning ? (
-                <>
-                  <Spinner className="h-4 w-4" />
-                  Running...
-                </>
-              ) : (
-                <>
-                  Run
-                  <span className="ml-1 inline-flex gap-0.5" aria-hidden="true">
-                    <Kbd size="xs">{isMac ? '⌘' : 'Ctrl'}</Kbd>
-                    <Kbd size="xs">↵</Kbd>
-                  </span>
-                </>
-              )}
-            </Button>
-          </div>
+          <DialogCancel>Cancel</DialogCancel>
+          <DialogAction onConfirm={handleRun} disabled={!canRun}>
+            {isRunning ? (
+              <>
+                <Spinner className="h-4 w-4" />
+                Running...
+              </>
+            ) : (
+              <>
+                Run
+                <span className="ml-1 inline-flex gap-0.5" aria-hidden="true">
+                  <Kbd size="xs">{isMac ? '⌘' : 'Ctrl'}</Kbd>
+                  <Kbd size="xs">↵</Kbd>
+                </span>
+              </>
+            )}
+          </DialogAction>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -111,8 +111,7 @@ export function createIncidentioIntake(config: {
       if (!reference) return Promise.resolve(null);
       return Promise.resolve({
         connection: config.connection,
-        sourceId:
-          reference.type === 'incident' ? INCIDENTIO_INCIDENTS_SOURCE_ID : INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
+        sourceId: reference.type === 'incident' ? INCIDENTIO_INCIDENTS_SOURCE_ID : INCIDENTIO_FOLLOW_UPS_SOURCE_ID,
         issueId: input.externalSource.externalId,
       });
     },
@@ -198,8 +197,8 @@ function incidentToIntakeIssue(incident: IncidentioIncident): IntakeIssue {
 }
 
 function followUpToIntakeIssue(followUp: IncidentioFollowUp): IntakeIssue {
-  const assignees = [followUp.assignee?.name, followUp.assignee_team?.name].filter(
-    (assignee): assignee is string => Boolean(assignee),
+  const assignees = [followUp.assignee?.name, followUp.assignee_team?.name].filter((assignee): assignee is string =>
+    Boolean(assignee),
   );
   return {
     id: `${FOLLOW_UP_PREFIX}${followUp.id}`,

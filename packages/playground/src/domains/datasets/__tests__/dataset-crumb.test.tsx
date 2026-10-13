@@ -7,7 +7,7 @@ import { http, HttpResponse } from 'msw';
 import { Link, MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { DatasetCrumb, DatasetSwitcherAction } from '../dataset-crumb';
+import { DatasetCrumb, DatasetSwitcher } from '../dataset-crumb';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 
@@ -26,7 +26,6 @@ beforeEach(() => {
 
 afterEach(() => cleanup());
 
-// Mirrors how RouteHeader mounts the crumb: label as span/link, switcher in `action`.
 const renderCrumb = ({ isCurrent }: { isCurrent: boolean }) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -37,7 +36,7 @@ const renderCrumb = ({ isCurrent }: { isCurrent: boolean }) => {
         as={isCurrent ? 'span' : Link}
         to={isCurrent ? undefined : '/datasets/ds-1'}
         isCurrent={isCurrent}
-        action={<DatasetSwitcherAction />}
+        switcher={<DatasetSwitcher />}
       >
         <DatasetCrumb />
       </Crumb>

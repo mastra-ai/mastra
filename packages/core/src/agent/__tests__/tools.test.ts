@@ -12,6 +12,7 @@ import { TestIntegration } from '../../integration/openapi-toolset.mock';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
+import { resolveToolOutputValidationSchema } from '../../tools/validation';
 import { Agent } from '../agent';
 
 const mockFindUser = vi.fn().mockImplementation(async data => {
@@ -186,6 +187,32 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
       const message = toolCall?.result?.message;
 
       expect(message).toBe('Executed successfully');
+    });
+
+    it('preserves output validation schemas when agent hooks wrap tools', async () => {
+      const outputSchema = z.object({ summary: z.number() });
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'Test tool',
+        inputSchema: z.object({}),
+        outputSchema,
+        execute: async () => ({ summary: 42 }),
+      });
+      const testAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test agent',
+        instructions: 'You are an agent that calls testTool',
+        model: mockModel,
+        tools: { testTool },
+        hooks: {
+          beforeToolCall: () => undefined,
+          afterToolCall: () => undefined,
+        },
+      });
+
+      const tools = await testAgent.getToolsForExecution({});
+
+      expect(resolveToolOutputValidationSchema(tools.testTool!)).toBe(outputSchema);
     });
 
     it('runs agent hooks through the public generate path', async () => {
@@ -1774,4 +1801,52 @@ describe('sub-agent prompt input normalization (GitHub #14154)', () => {
     expect(secondSchemas.inputSchema).toBe(firstSchemas.inputSchema);
     expect(secondSchemas.outputSchema).toBe(firstSchemas.outputSchema);
   });
+
+  // Regression for #26160: under zod@3.25.x's `zod/v4` shim the global registry is a
+  // strong Map, so any schema registered per conversion is retained forever.
+  it.each([
+    { name: 'sub-agent tools', options: {} },
+    { name: 'sub-agent background derivation', options: { backgroundTaskEnabled: true } },
+    { name: 'autoResumeSuspendedTools', options: { autoResumeSuspendedTools: true } },
+  ])(
+    'does not register new schemas in the Zod global registry on repeated conversions ($name)',
+    async ({ options }) => {
+      const mockModel = new MockLanguageModelV2();
+      const work = createTool({
+        id: 'work',
+        description: 'Does work',
+        inputSchema: z.object({ task: z.string() }),
+        execute: async () => 'done',
+      });
+      const subAgents = Object.fromEntries(
+        ['alpha', 'beta'].map(name => [
+          name,
+          new Agent({ id: name, name, instructions: `Desk ${name}`, model: mockModel, tools: { work } }),
+        ]),
+      );
+      const parentAgent = new Agent({
+        id: 'parent-agent',
+        name: 'Parent Agent',
+        instructions: 'You are a parent agent',
+        model: mockModel,
+        agents: subAgents,
+        tools: { work },
+      });
+
+      const convert = () =>
+        parentAgent['convertTools']({ requestContext: new RequestContext(), methodType: 'generate', ...options });
+
+      await convert();
+
+      const addSpy = vi.spyOn(z.globalRegistry, 'add');
+      try {
+        for (let i = 0; i < 3; i++) {
+          await convert();
+        }
+        expect(addSpy).not.toHaveBeenCalled();
+      } finally {
+        addSpy.mockRestore();
+      }
+    },
+  );
 });

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mysql",
-  "version": "0.10.0-alpha.1",
+  "version": "0.13.1-alpha.0",
   "description": "MySQL provider for Mastra - db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -35,6 +35,7 @@
     "mysql2": "^3.24.4"
   },
   "devDependencies": {
+    "@internal/core": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",

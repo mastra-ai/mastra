@@ -1,5 +1,5 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageList } from '../message-list';
@@ -15,9 +15,9 @@ const buildAssistantMessage = (parts: MastraMessagePart[]): MastraDBMessage =>
     },
   }) as unknown as MastraDBMessage;
 
-const buildUserMessage = (text: string): MastraDBMessage =>
+const buildUserMessage = (text: string, id = 'user-1'): MastraDBMessage =>
   ({
-    id: 'user-1',
+    id,
     role: 'user',
     createdAt: new Date(),
     content: {
@@ -168,5 +168,156 @@ describe('MessageList deferred skeleton', () => {
       vi.advanceTimersByTime(500);
     });
     expect(queryByTestId('msg-skeleton')).toBeNull();
+  });
+});
+
+describe('MessageList history pagination', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const mockViewport = (el: HTMLElement, scrollHeight: number) => {
+    Object.defineProperty(el, 'scrollHeight', { configurable: true, value: scrollHeight });
+    el.scrollTo = vi.fn();
+  };
+
+  describe('when the list settles at the top on mount without the reader scrolling up', () => {
+    it('does not request the older page', () => {
+      const onLoadPrevious = vi.fn();
+      const { getByTestId } = render(
+        <MessageList messages={[buildUserMessage('a', 'a')]} onLoadPrevious={onLoadPrevious} />,
+      );
+      const list = getByTestId('agent-builder-message-list');
+      mockViewport(list, 1000);
+
+      list.scrollTop = 0;
+      fireEvent.scroll(list);
+      list.scrollTop = 20;
+      fireEvent.scroll(list);
+
+      expect(onLoadPrevious).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the older page request settles without changing the first message', () => {
+    it('resumes following the tail on the next appended message', () => {
+      const onLoadPrevious = vi.fn();
+      const { getByTestId, rerender } = render(
+        <MessageList
+          messages={[buildUserMessage('a', 'a')]}
+          onLoadPrevious={onLoadPrevious}
+          isLoadingPrevious={false}
+        />,
+      );
+      const list = getByTestId('agent-builder-message-list');
+      mockViewport(list, 1000);
+
+      list.scrollTop = 300;
+      fireEvent.scroll(list);
+      list.scrollTop = 0;
+      fireEvent.scroll(list);
+      expect(onLoadPrevious).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <MessageList
+          messages={[buildUserMessage('a', 'a')]}
+          onLoadPrevious={onLoadPrevious}
+          isLoadingPrevious={true}
+        />,
+      );
+      rerender(
+        <MessageList
+          messages={[buildUserMessage('a', 'a')]}
+          onLoadPrevious={onLoadPrevious}
+          isLoadingPrevious={false}
+        />,
+      );
+      (list.scrollTo as ReturnType<typeof vi.fn>).mockClear();
+
+      rerender(
+        <MessageList
+          messages={[buildUserMessage('a', 'a'), buildUserMessage('b', 'b')]}
+          onLoadPrevious={onLoadPrevious}
+          isLoadingPrevious={false}
+        />,
+      );
+
+      expect(list.scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: 'smooth' });
+    });
+  });
+
+  describe('when the reader scrolls to the top', () => {
+    it('calls onLoadPrevious once per trip to the top', () => {
+      const onLoadPrevious = vi.fn();
+      const { getByTestId } = render(
+        <MessageList messages={[buildUserMessage('a', 'a')]} onLoadPrevious={onLoadPrevious} />,
+      );
+      const list = getByTestId('agent-builder-message-list');
+      mockViewport(list, 1000);
+
+      list.scrollTop = 300;
+      fireEvent.scroll(list);
+      list.scrollTop = 0;
+      fireEvent.scroll(list);
+      list.scrollTop = 10;
+      fireEvent.scroll(list);
+
+      expect(onLoadPrevious).toHaveBeenCalledTimes(1);
+
+      list.scrollTop = 300;
+      fireEvent.scroll(list);
+      list.scrollTop = 0;
+      fireEvent.scroll(list);
+
+      expect(onLoadPrevious).toHaveBeenCalledTimes(2);
+    });
+
+    it('renders the loading indicator above the messages while the older page is in flight', () => {
+      const { getByTestId } = render(
+        <MessageList messages={[buildUserMessage('a', 'a')]} onLoadPrevious={vi.fn()} isLoadingPrevious={true} />,
+      );
+      expect(getByTestId('agent-builder-chat-loading-previous')).toBeTruthy();
+    });
+  });
+
+  describe('when an older page is prepended after scrolling to the top', () => {
+    it('keeps the reader anchored on the previously visible message instead of jumping to the bottom', () => {
+      const onLoadPrevious = vi.fn();
+      const { getByTestId, rerender } = render(
+        <MessageList messages={[buildUserMessage('b', 'b')]} onLoadPrevious={onLoadPrevious} />,
+      );
+      const list = getByTestId('agent-builder-message-list');
+      mockViewport(list, 1000);
+      (list.scrollTo as ReturnType<typeof vi.fn>).mockClear();
+
+      list.scrollTop = 300;
+      fireEvent.scroll(list);
+      list.scrollTop = 0;
+      fireEvent.scroll(list);
+      expect(onLoadPrevious).toHaveBeenCalledTimes(1);
+
+      mockViewport(list, 1600);
+      rerender(
+        <MessageList
+          messages={[buildUserMessage('a', 'a'), buildUserMessage('b', 'b')]}
+          onLoadPrevious={onLoadPrevious}
+        />,
+      );
+
+      expect(list.scrollTop).toBe(600);
+      expect(list.scrollTo).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a new message is appended at the tail', () => {
+    it('scrolls to the bottom', () => {
+      const { getByTestId, rerender } = render(<MessageList messages={[buildUserMessage('a', 'a')]} />);
+      const list = getByTestId('agent-builder-message-list');
+      mockViewport(list, 1000);
+
+      rerender(<MessageList messages={[buildUserMessage('a', 'a'), buildUserMessage('b', 'b')]} />);
+
+      expect(list.scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: 'smooth' });
+    });
   });
 });

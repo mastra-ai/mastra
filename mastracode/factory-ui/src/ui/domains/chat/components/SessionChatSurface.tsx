@@ -14,7 +14,7 @@ import { useChatMessagePreparation } from '../context/useChatMessagePreparation'
 import { useChatTranscript } from '../context/useChatTranscript';
 
 interface SessionChatSurfaceProps {
-  header: ReactNode;
+  header?: ReactNode;
   secondaryBar?: ReactNode;
   emptyState: ReactNode;
   composerLabel: string;
@@ -48,7 +48,7 @@ export function SessionChatSurface({
         onReachStart: canLoadMore ? loadMore.load : undefined,
       }}
     >
-      <ChatShell.Bar>{header}</ChatShell.Bar>
+      {header && <ChatShell.Bar>{header}</ChatShell.Bar>}
       {secondaryBar && <ChatShell.Bar>{secondaryBar}</ChatShell.Bar>}
       <ChatShell.Stage>
         <ChatShell.Viewport>

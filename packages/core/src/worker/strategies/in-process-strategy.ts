@@ -1,9 +1,10 @@
 import { RequestContext } from '../../di';
 import type { Mastra } from '../../mastra';
 import { StepExecutor } from '../../workflows/evented/step-executor';
-import { getStepEntry } from '../../workflows/evented/workflow-event-processor/utils';
+import { getNestedWorkflow, getStepEntry } from '../../workflows/evented/workflow-event-processor/utils';
 import type { StepResult } from '../../workflows/types';
-import type { StepExecutionParams, StepExecutionStrategy } from '../types';
+import type { Workflow } from '../../workflows/workflow';
+import type { StepExecutionParams, StepExecutionParentWorkflow, StepExecutionStrategy } from '../types';
 
 /**
  * Executes workflow steps in the same process by delegating to StepExecutor.
@@ -25,10 +26,8 @@ export class InProcessStrategy implements StepExecutionStrategy {
       throw new Error('InProcessStrategy requires Mastra instance. Call __registerMastra() first.');
     }
 
-    // Use getWorkflowById — events carry the workflow's `id` property
-    // (e.g. "scheduled-workflow"), not the config key ("scheduledWorkflow").
-    const workflow = this.#mastra.getWorkflowById(params.workflowId);
-    const entry = getStepEntry(workflow, params.executionPath);
+    const workflow = this.#resolveWorkflow(params);
+    const entry = workflow ? getStepEntry(workflow, params.executionPath) : null;
 
     if (!entry) {
       throw new Error(
@@ -73,4 +72,44 @@ export class InProcessStrategy implements StepExecutionStrategy {
       perStep: params.perStep,
     });
   }
+
+  /**
+   * Resolves the workflow in the same order the dispatching
+   * `WorkflowEventProcessor` does: internal registrations first, then descent
+   * from the parent chain for nested workflows (which may be registered
+   * nowhere), then the public registry. Public lookups go through
+   * `getWorkflowById` because events carry the workflow's `id` property
+   * (e.g. "scheduled-workflow"), not the config key ("scheduledWorkflow").
+   */
+  #resolveWorkflow(params: StepExecutionParams): Workflow | null {
+    const mastra = this.#mastra!;
+    if (mastra.__hasInternalWorkflow(params.workflowId, params.runId)) {
+      return mastra.__getInternalWorkflow(params.workflowId, params.runId) as Workflow;
+    }
+    if (params.parentWorkflow) {
+      return resolveNestedWorkflow(mastra, params.workflowId, params.parentWorkflow);
+    }
+    return mastra.getWorkflowById(params.workflowId) as Workflow;
+  }
+}
+
+/**
+ * Descends from `parentWorkflow` and returns the nested workflow only when it,
+ * and every workflow passed on the way, has the id the request names. The
+ * parent chain addresses workflows by position, so a worker and server running
+ * different builds could otherwise land on a different workflow and run it.
+ */
+function resolveNestedWorkflow(
+  mastra: Mastra,
+  workflowId: string,
+  parentWorkflow: StepExecutionParentWorkflow,
+): Workflow | null {
+  if (
+    parentWorkflow.parentWorkflow &&
+    !resolveNestedWorkflow(mastra, parentWorkflow.workflowId, parentWorkflow.parentWorkflow)
+  ) {
+    return null;
+  }
+  const workflow = getNestedWorkflow(mastra, parentWorkflow);
+  return workflow?.id === workflowId ? workflow : null;
 }

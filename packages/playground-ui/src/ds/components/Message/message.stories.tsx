@@ -93,7 +93,7 @@ function StudioConversation() {
           <MessageActions visibility="always">
             <MessageMetadata>openai/gpt-5-mini</MessageMetadata>
             <Button
-              size="icon-xs"
+              size="icon-sm"
               variant="ghost"
               aria-label={speaking ? 'Stop' : 'Read aloud'}
               tooltip={speaking ? 'Stop' : 'Read aloud'}
@@ -104,7 +104,7 @@ function StudioConversation() {
             <MessageCopyButton text={answer} />
             <MessageActions>
               <Button
-                size="icon-xs"
+                size="icon-sm"
                 variant="ghost"
                 aria-label="Highlight spans"
                 aria-pressed={highlighted}

@@ -15,21 +15,22 @@ import {
   SpanPayloadMarkdown,
   SpanPayloadToolCalls,
 } from './span-payload-primitives';
-import { asCoreSpan, pickRenderer } from './span-payload-registry';
+import { SpanPayloadProcessor } from './span-payload-processor';
+import { asCoreSpan, hasItems, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
-import { Reasoning } from '@/domains/chat/messages/reasoning';
+import { ReasoningActivity } from '@/ds/components/ai/activity';
 import { Card, CardContent } from '@/ds/components/Card';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
+import { InlineCode } from '@/ds/components/InlineCode/inline-code';
 import { Notice } from '@/ds/components/Notice';
-
-const hasItems = (value: unknown): value is unknown[] => Array.isArray(value) && value.length > 0;
+import { Txt } from '@/ds/components/Txt';
 
 function SpanTextRenderer({ value }: { value: string }) {
   return <SpanPayloadMarkdown>{value}</SpanPayloadMarkdown>;
 }
 
 function SpanInterruptedRenderer({ value }: { value: InterruptedSpanOutput }) {
-  const title = value.status === 'suspended' ? 'Suspended' : 'Aborted';
+  const title = { suspended: 'Suspended', aborted: 'Aborted', interrupted: 'Interrupted' }[value.status];
   const hasTarget = value.toolName !== undefined || value.toolCallId !== undefined;
   return (
     <div data-slot="span-interrupted" data-status={value.status} className="flex flex-col gap-3">
@@ -65,9 +66,9 @@ function SpanAgentRunResultRenderer({ value }: { value: AgentRunResult }) {
         <Notice variant="destructive" title="Tripwire">
           {value.tripwire.reason && <Notice.Message>{value.tripwire.reason}</Notice.Message>}
           {value.tripwire.processorId && (
-            <div className="text-ui-sm">
-              Processor <code className="font-mono">{value.tripwire.processorId}</code>
-            </div>
+            <Txt as="p" variant="caption">
+              Processor <InlineCode>{value.tripwire.processorId}</InlineCode>
+            </Txt>
           )}
         </Notice>
       )}
@@ -96,7 +97,7 @@ function SpanModelGenerationResultRenderer({ value }: { value: ModelGenerationRe
       {typeof value.text === 'string' && value.text.length > 0 && (
         <SpanPayloadMarkdown>{value.text}</SpanPayloadMarkdown>
       )}
-      {typeof value.reasoningText === 'string' && <Reasoning text={value.reasoningText} />}
+      {typeof value.reasoningText === 'string' && <ReasoningActivity text={value.reasoningText} />}
       {value.reasoning !== undefined && (
         <SpanPayloadCollapsible label="Reasoning details">
           <SpanPayloadJson value={value.reasoning} />
@@ -164,6 +165,7 @@ const SPAN_OUTPUT_RENDERERS = {
   'agent-run-result': SpanAgentRunResultRenderer,
   'model-generation-result': SpanModelGenerationResultRenderer,
   'model-step-result': SpanModelStepResultRenderer,
+  processor: SpanPayloadProcessor,
   text: SpanTextRenderer,
   json: SpanPayloadJson,
 } satisfies PayloadRegistry<SpanOutputDescription>;
@@ -179,12 +181,7 @@ export function SpanOutputRenderer({ span }: SpanOutputRendererProps) {
   if (description.type === 'json') return <SpanPayloadJson value={description.value} />;
   const Renderer = pickRenderer(SPAN_OUTPUT_RENDERERS, description);
   return (
-    <Card
-      data-slot="span-output-card"
-      appearance="surface"
-      elevation="raised"
-      className="border-border1 min-w-0 border"
-    >
+    <Card data-slot="span-output-card" className="min-w-0">
       <CardContent>
         <Renderer value={description.value} />
       </CardContent>

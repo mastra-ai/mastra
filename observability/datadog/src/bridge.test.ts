@@ -68,6 +68,7 @@ const {
       _options: options,
       finish: vi.fn(),
       setTag: vi.fn(),
+      addLinks: vi.fn(),
       context: vi.fn(() => ({
         toSpanId: (hex?: boolean) => (hex ? spanHex : BigInt(`0x${spanHex}`).toString(10)),
         toTraceId: (hex?: boolean) => (hex ? traceHex : BigInt(`0x${traceHex.slice(-16)}`).toString(10)),
@@ -123,6 +124,7 @@ vi.mock('dd-trace', () => {
           flush: mockExporterFlush,
         },
       },
+      extract: (_format: string, carrier: { traceparent: string }) => ({ fromTraceparent: carrier.traceparent }),
       scope: () => ({
         activate: mockScopeActivate,
         active: mockScopeActive,
@@ -327,6 +329,89 @@ describe('DatadogBridge', () => {
       await bridge.shutdown();
     });
 
+    it('does not start a dd span for types dropped by excludeSpanTypes, so the trace still finishes', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'exclude-chunks',
+        name: 'exclude-chunks-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        bridge,
+        excludeSpanTypes: [SpanType.MODEL_CHUNK],
+      });
+
+      const agentRun = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run' })!;
+      const generation = agentRun.createChildSpan({ type: SpanType.MODEL_GENERATION, name: 'llm' });
+      for (let i = 0; i < 3; i++) {
+        generation.createChildSpan({ type: SpanType.MODEL_CHUNK, name: 'chunk' }).end();
+      }
+      generation.end();
+      agentRun.end();
+      await tracing.flush();
+
+      // dd-trace only exports a trace once every started span has finished.
+      expect(capturedApmSpans.map(span => span._name)).toEqual(['agent run', 'llm']);
+      for (const apmSpan of capturedApmSpans) {
+        expect(apmSpan.finish).toHaveBeenCalledTimes(1);
+      }
+      expect(bridge['ddSpanMap'].size).toBe(0);
+      await bridge.shutdown();
+    });
+
+    it('parents children of an excluded span to the nearest exported dd span', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'exclude-middle',
+        name: 'exclude-middle-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        bridge,
+        excludeSpanTypes: [SpanType.MODEL_GENERATION],
+      });
+
+      const agentRun = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run' })!;
+      const generation = agentRun.createChildSpan({ type: SpanType.MODEL_GENERATION, name: 'llm' });
+      const tool = generation.createChildSpan({ type: SpanType.TOOL_CALL, name: 'tool' });
+
+      expect(generation.traceId).toBe(agentRun.traceId);
+      expect(tool.traceId).toBe(agentRun.traceId);
+      expect(tool.exportSpan().parentSpanId).toBe(agentRun.id);
+      expect(capturedApmSpans.map(span => span._name)).toEqual(['agent run', 'tool']);
+      expect(capturedApmSpans[1]._options).toEqual({ childOf: capturedApmSpans[0] });
+
+      tool.end();
+      generation.end();
+      agentRun.end();
+      await tracing.flush();
+      await bridge.shutdown();
+    });
+
+    it('runs code inside an excluded span in the nearest exported dd span', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'exclude-tool',
+        name: 'exclude-tool-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        bridge,
+        excludeSpanTypes: [SpanType.TOOL_CALL],
+      });
+
+      const agentRun = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run' })!;
+      const tool = agentRun.createChildSpan({ type: SpanType.TOOL_CALL, name: 'tool' });
+      const agentRunApmSpan = capturedApmSpans[0];
+
+      await tool.executeInContext(async () => {});
+      tool.executeInContextSync(() => {});
+
+      expect(capturedApmSpans).toHaveLength(1);
+      expect(mockScopeActivate).toHaveBeenCalledTimes(2);
+      expect(mockScopeActivate).toHaveBeenNthCalledWith(1, agentRunApmSpan, expect.any(Function));
+      expect(mockScopeActivate).toHaveBeenNthCalledWith(2, agentRunApmSpan, expect.any(Function));
+
+      tool.end();
+      agentRun.end();
+      await tracing.flush();
+      await bridge.shutdown();
+    });
+
     it('registers the eager span with the LLMObs tagger', () => {
       const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
 
@@ -526,6 +611,40 @@ describe('DatadogBridge', () => {
         modelName: 'gpt-5.4',
         modelProvider: 'openai',
       });
+    });
+  });
+
+  describe('span links', () => {
+    const startLink = { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' };
+    const lateLink = { traceId: '1af7651916cd43dd8448eb211c80319c', spanId: 'c7ad6b7169203331' };
+
+    it('starts the APM span with links resolved from W3C traceparents', () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+
+      bridge.createSpan(createMockSpanOptions({ links: [startLink, { traceId: 'xyz', spanId: 'xyz' }] }));
+
+      expect(capturedApmSpans[0]._options.links).toEqual([
+        { context: { fromTraceparent: `00-${startLink.traceId}-${startLink.spanId}-01` } },
+      ]);
+    });
+
+    it('adds links set after the span started before it finishes', async () => {
+      const bridge = new DatadogBridge({ mlApp: 'test', agentless: false });
+      const spanResult = bridge.createSpan(createMockSpanOptions({ links: [startLink] }))!;
+      const apmSpan = capturedApmSpans[0];
+
+      await bridge.exportTracingEvent(
+        createTracingEvent(
+          TracingEventType.SPAN_ENDED,
+          createMockSpan({ id: spanResult.spanId, traceId: spanResult.traceId, links: [startLink, lateLink] } as any),
+        ),
+      );
+
+      expect(apmSpan.addLinks).toHaveBeenCalledTimes(1);
+      expect(apmSpan.addLinks).toHaveBeenCalledWith([
+        { context: { fromTraceparent: `00-${lateLink.traceId}-${lateLink.spanId}-01` } },
+      ]);
+      expect(apmSpan.finish).toHaveBeenCalled();
     });
   });
 

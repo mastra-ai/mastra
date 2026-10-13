@@ -1,10 +1,12 @@
 import { z } from 'zod/v4';
+import type { ActorSignal, MastraFGAPermissionInput } from '../../../auth/ee';
 import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
 import type { ToolCallConcurrency } from '../../../loop/types';
 import { createRunScope } from '../../../mastra/run-scope';
 import type { MastraMemory } from '../../../memory/memory';
+import { checkThreadFGA } from '../../../memory/thread-fga';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { InternalSpans } from '../../../observability';
@@ -41,11 +43,13 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   saveQueueManager?: SaveQueueManager;
   requireToolApproval?: RequireToolApproval;
   toolCallConcurrency?: ToolCallConcurrency;
+  eagerToolExecution?: boolean;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
   };
   agentId: string;
+  actor?: ActorSignal;
   agentVersionId?: string;
   agentName?: string;
   toolCallId?: string;
@@ -60,6 +64,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
    */
   skipBgTaskWait?: boolean;
   drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  subscribePendingSignals?: (runId: string, listener: () => void) => () => void;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -79,8 +84,10 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   saveQueueManager,
   requireToolApproval,
   toolCallConcurrency,
+  eagerToolExecution,
   resumeContext,
   agentId,
+  actor,
   agentVersionId,
   agentName,
   toolCallId,
@@ -90,6 +97,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   toolPayloadTransform,
   skipBgTaskWait,
   drainPendingSignals,
+  subscribePendingSignals,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   // Per-run scope shared between prepare-stream steps. Class instances
   // (MessageList, Tools), Maps, and closures live here instead of step
@@ -104,6 +112,27 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   // workflow registers. Prepare-stream and the agentic loop deliberately do
   // not share runtime state — each owns its own per-run scratch space.
   const runScope = createRunScope();
+  const memoryAuthorizationChecks = new Map<MastraFGAPermissionInput, Promise<void>>();
+  const authorizeMemory = (permission: MastraFGAPermissionInput, threadId: string) => {
+    const existingCheck = memoryAuthorizationChecks.get(permission);
+    if (existingCheck) return existingCheck;
+
+    const check = checkThreadFGA({
+      mastra: capabilities.mastra,
+      user: requestContext.get('user'),
+      threadId,
+      resourceId,
+      agentId,
+      requestContext,
+      permission,
+      actor,
+    }).catch(error => {
+      memoryAuthorizationChecks.delete(permission);
+      throw error;
+    });
+    memoryAuthorizationChecks.set(permission, check);
+    return check;
+  };
 
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -132,6 +161,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     memoryConfig,
     memory,
     isResume: !!resumeContext,
+    authorizeMemory,
     runScope,
   });
 
@@ -141,6 +171,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     returnScorerData,
     requireToolApproval,
     toolCallConcurrency,
+    eagerToolExecution,
     resumeContext,
     agentId,
     agentVersionId,
@@ -158,6 +189,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     toolPayloadTransform,
     skipBgTaskWait,
     drainPendingSignals,
+    subscribePendingSignals,
     runScope,
   });
 
@@ -175,6 +207,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentVersionId,
     methodType,
     saveQueueManager,
+    authorizeMemory,
     runScope,
   });
 

@@ -179,6 +179,12 @@ describe('workspaceDependencies', () => {
       });
 
       expect(mockDepsServiceMethods.pack).toHaveBeenCalledTimes(3);
+      expect(mockDepsServiceMethods.pack).toHaveBeenCalledWith({
+        dir: '/pkg-a',
+        destination: expect.stringContaining('workspace-module'),
+        sanitizedName: 'pkg-a',
+        version: '1.0.0',
+      });
       expect(mockLogger.info).toHaveBeenCalledWith('Successfully packaged workspace dependencies', { count: 3 });
     });
 

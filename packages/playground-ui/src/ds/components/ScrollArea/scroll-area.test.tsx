@@ -4,20 +4,22 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
-import { ScrollArea } from './scroll-area';
+import { ScrollArea, ScrollAreaViewport } from './scroll-area';
 
 afterEach(() => {
   cleanup();
 });
 
-const VIEWPORT_MARKER = 'test-viewport-marker';
-
+const getContent = () => {
+  const content = screen.getByTestId('child').parentElement;
+  assert(content, 'Expected scroll content');
+  return content;
+};
 const getViewport = () => {
-  const viewport = document.querySelector<HTMLElement>(`.${VIEWPORT_MARKER}`);
+  const viewport = getContent().parentElement;
   assert(viewport, 'Expected scroll viewport');
   return viewport;
 };
-const getContent = (viewport: HTMLElement) => viewport.firstElementChild as HTMLElement;
 
 /** jsdom has no layout, so the viewport never really scrolls; watch the call instead. */
 const stubScrollBy = () => {
@@ -28,8 +30,8 @@ const stubScrollBy = () => {
 
 const renderArea = (props: Partial<React.ComponentProps<typeof ScrollArea>> = {}) =>
   render(
-    <ScrollArea viewPortClassName={VIEWPORT_MARKER} {...props}>
-      <div>content</div>
+    <ScrollArea {...props}>
+      <div data-testid="child">content</div>
     </ScrollArea>,
   );
 
@@ -44,7 +46,7 @@ describe('ScrollArea', () => {
 
     it('lets the content shrink below its intrinsic width by overriding base-ui min-width: fit-content', () => {
       renderArea();
-      const content = getContent(getViewport());
+      const content = getContent();
       expect(content.style.minWidth).toBe('0px');
     });
   });
@@ -59,7 +61,7 @@ describe('ScrollArea', () => {
 
     it('lets the content shrink below its intrinsic height', () => {
       renderArea({ orientation: 'horizontal' });
-      const content = getContent(getViewport());
+      const content = getContent();
       expect(content.style.minHeight).toBe('0px');
     });
   });
@@ -74,7 +76,7 @@ describe('ScrollArea', () => {
 
     it('keeps base-ui default content min-width: fit-content so the content can grow on both axes', () => {
       renderArea({ orientation: 'both' });
-      const content = getContent(getViewport());
+      const content = getContent();
       expect(content.style.minWidth).toBe('fit-content');
       expect(content.style.minHeight).toBe('');
     });
@@ -103,45 +105,69 @@ describe('ScrollArea', () => {
     });
   });
 
-  describe('viewportRef', () => {
+  describe('ScrollAreaViewport', () => {
+    const renderWithViewport = (viewportProps: React.ComponentProps<typeof ScrollAreaViewport> = {}) =>
+      render(
+        <ScrollArea maxHeight="400px">
+          <ScrollAreaViewport {...viewportProps}>
+            <div data-testid="child">content</div>
+          </ScrollAreaViewport>
+        </ScrollArea>,
+      );
+
+    it('styles the single viewport the area scrolls instead of nesting a second one', () => {
+      renderWithViewport({ className: 'caller-viewport' });
+
+      const viewport = getViewport();
+      expect(viewport.classList.contains('caller-viewport')).toBe(true);
+      expect(viewport.style.maxHeight).toBe('400px');
+      expect(viewport.className).toContain('mask-b-from');
+    });
+
     it('hands the viewport to a callback ref', () => {
       const seen: Array<HTMLDivElement | null> = [];
-      renderArea({
-        viewportRef: node => {
-          seen.push(node);
-        },
-      });
+      renderWithViewport({ ref: node => void seen.push(node) });
 
       expect(seen[0]).toBe(getViewport());
     });
 
     it('fills an object ref with the viewport', () => {
       const ref = React.createRef<HTMLDivElement>();
-      renderArea({ viewportRef: ref });
+      renderWithViewport({ ref });
 
       expect(ref.current).toBe(getViewport());
     });
-  });
 
-  describe('children rendering', () => {
-    it('renders children inside the viewport content wrapper', () => {
-      render(
-        <ScrollArea viewPortClassName={VIEWPORT_MARKER}>
-          <div data-testid="child">hello</div>
-        </ScrollArea>,
+    it('throws instead of nesting a second scroll container when the viewport is not a direct child', () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const WrappedViewport = ({ children }: { children: React.ReactNode }) => (
+        <ScrollAreaViewport>{children}</ScrollAreaViewport>
       );
-      const viewport = getViewport();
-      expect(viewport.querySelector('[data-testid="child"]')?.textContent).toBe('hello');
+
+      expect(() =>
+        render(
+          <ScrollArea>
+            <WrappedViewport>
+              <div data-testid="child">content</div>
+            </WrappedViewport>
+          </ScrollArea>,
+        ),
+      ).toThrow('ScrollAreaViewport must be a direct child of ScrollArea');
+      consoleError.mockRestore();
     });
 
-    it('keeps children inside the content wrapper even when content gets a min-width override', () => {
-      render(
-        <ScrollArea viewPortClassName={VIEWPORT_MARKER} orientation="vertical">
-          <div data-testid="child">hello</div>
-        </ScrollArea>,
-      );
-      const content = getContent(getViewport());
-      expect(content.querySelector('[data-testid="child"]')?.textContent).toBe('hello');
+    it('throws when given two viewports, since autoscroll and scroll buttons drive only one', () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      expect(() =>
+        render(
+          <ScrollArea>
+            <ScrollAreaViewport>first</ScrollAreaViewport>
+            <ScrollAreaViewport>second</ScrollAreaViewport>
+          </ScrollArea>,
+        ),
+      ).toThrow('ScrollArea takes at most one ScrollAreaViewport');
+      consoleError.mockRestore();
     });
   });
 
@@ -346,13 +372,11 @@ describe('ScrollArea', () => {
 describe('ScrollArea — fade masks', () => {
   const maskSides = (props: Partial<React.ComponentProps<typeof ScrollArea>> = {}) => {
     renderArea(props);
-    const className = getViewport().className;
-    return {
-      top: className.includes('data-[overflow-y-start]:mask-t-from'),
-      bottom: className.includes('data-[overflow-y-end]:mask-b-from'),
-      left: className.includes('data-[overflow-x-start]:mask-l-from'),
-      right: className.includes('data-[overflow-x-end]:mask-r-from'),
-    };
+    const viewport = getViewport();
+    const fades = (side: string) =>
+      viewport.className.includes('mask-t-from') &&
+      viewport.style.getPropertyValue(`--scroll-area-fade-${side}`) !== '0px';
+    return { top: fades('top'), bottom: fades('bottom'), left: fades('left'), right: fades('right') };
   };
 
   it('fades both ends of the axis it scrolls', () => {
@@ -366,6 +390,16 @@ describe('ScrollArea — fade masks', () => {
       left: true,
       right: true,
     });
+  });
+
+  it('fades 2rem deep unless a side asks for its own depth, which beats its axis shorthand', () => {
+    renderArea({ mask: { y: '3rem', bottom: '5rem', x: true } });
+    const viewport = getViewport();
+
+    expect(viewport.style.getPropertyValue('--scroll-area-fade-top')).toBe('3rem');
+    expect(viewport.style.getPropertyValue('--scroll-area-fade-bottom')).toBe('5rem');
+    expect(viewport.style.getPropertyValue('--scroll-area-fade-left')).toBe('2rem');
+    expect(viewport.style.getPropertyValue('--scroll-area-fade-right')).toBe('2rem');
   });
 
   it('fades all four ends when it scrolls both ways', () => {
@@ -419,10 +453,6 @@ describe('ScrollArea — fade masks', () => {
     ['right', { right: false }, { top: true, bottom: true, left: true, right: false }],
   ])('turns off the %s end on its own', (_, mask, expected) => {
     expect(maskSides({ orientation: 'both', mask })).toEqual(expected);
-  });
-
-  it('still answers to the older showMask prop', () => {
-    expect(maskSides({ showMask: false })).toEqual({ top: false, bottom: false, left: false, right: false });
   });
 
   it('lets a single end override the axis it belongs to', () => {

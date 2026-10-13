@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { FilePart } from '@mastra/react';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { UserFilePartRenderer } from '../user-file-part-renderer';
@@ -78,7 +78,7 @@ describe('UserFilePartRenderer', () => {
     expect(container.querySelector('img')).not.toBeNull();
   });
 
-  it('renders a PDF document preview by mimeType (url link)', () => {
+  it('opens a PDF preview by mimeType for a remote URL', () => {
     const part = {
       type: 'file',
       mimeType: 'application/pdf',
@@ -87,11 +87,11 @@ describe('UserFilePartRenderer', () => {
 
     const { container } = render(<UserFilePartRenderer part={part} />);
 
-    // A URL-backed PDF renders an anchor to view the document, not an <img>.
     expect(container.querySelector('img')).toBeNull();
-    const link = container.querySelector('a');
-    expect(link).not.toBeNull();
-    expect(link?.getAttribute('href')).toBe('https://example.com/doc.pdf');
+    fireEvent.click(screen.getByRole('button', { name: 'Preview doc.pdf' }));
+    expect(within(screen.getByRole('dialog')).getByTitle('doc.pdf').getAttribute('src')).toBe(
+      'https://example.com/doc.pdf',
+    );
   });
 
   it('falls back to a text document preview for other content', () => {
@@ -132,9 +132,7 @@ describe('UserFilePartRenderer', () => {
     expect(container.querySelector('img')).toBeNull();
     // No outbound link either, since gs:// is not browser-fetchable.
     expect(container.querySelector('a')).toBeNull();
-    // The chip icon reflects the media type, not a hardcoded video icon.
-    expect(container.querySelector('[aria-label="File"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="Video file"]')).toBeNull();
+    expect(screen.getByText('PNG')).toBeTruthy();
   });
 
   it('renders a chip for a gs:// video and does not link out', () => {
@@ -148,7 +146,7 @@ describe('UserFilePartRenderer', () => {
 
     expect(container.querySelector('img')).toBeNull();
     expect(container.querySelector('a')).toBeNull();
-    expect(container.querySelector('[aria-label="Video file"]')).not.toBeNull();
+    expect(container.textContent).toMatch(/MP4|Video/);
   });
 
   it('renders an audio icon for a gs:// audio URI', () => {
@@ -160,8 +158,7 @@ describe('UserFilePartRenderer', () => {
 
     const { container } = render(<UserFilePartRenderer part={part} />);
 
-    expect(container.querySelector('[aria-label="Audio file"]')).not.toBeNull();
-    expect(container.querySelector('[aria-label="Video file"]')).toBeNull();
+    expect(container.textContent).toContain('MP3');
   });
 
   it('renders a chip that links out for an https:// video', () => {
@@ -177,7 +174,7 @@ describe('UserFilePartRenderer', () => {
     const link = container.querySelector('a');
     expect(link).not.toBeNull();
     expect(link?.getAttribute('href')).toBe('https://example.com/clip.mp4');
-    expect(container.querySelector('[aria-label="Video file"]')).not.toBeNull();
+    expect(container.textContent).toMatch(/MP4|Video/);
   });
 
   it('renders an audio chip that links out for an https:// audio URL', () => {
@@ -193,7 +190,7 @@ describe('UserFilePartRenderer', () => {
     const link = container.querySelector('a');
     expect(link).not.toBeNull();
     expect(link?.getAttribute('href')).toBe('https://example.com/song.mp3');
-    expect(container.querySelector('[aria-label="Audio file"]')).not.toBeNull();
+    expect(container.textContent).toContain('MP3');
   });
 
   it('does not use a local data: payload as the chip label', () => {
@@ -210,7 +207,7 @@ describe('UserFilePartRenderer', () => {
     // payload into a title/tooltip attribute.
     expect(container.querySelector('img')).toBeNull();
     expect(container.querySelector('a')).toBeNull();
-    expect(container.querySelector('[aria-label="Video file"]')).not.toBeNull();
+    expect(container.textContent).toMatch(/MP4|Video/);
     expect(container.querySelector(`[title*="base64"]`)).toBeNull();
     expect(container.innerHTML).not.toContain(dataUri);
   });

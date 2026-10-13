@@ -444,7 +444,28 @@ export type SemanticRecall = {
  */
 export type ObservationalMemoryModelSettings = AgentExecutionOptions['modelSettings'];
 
-export type ObservationalMemoryActivationTTL = number | string | 'auto' | false;
+/**
+ * A single idle activation TTL: milliseconds, a duration string like `"5m"` or `"1hr"`,
+ * `"auto"` for a provider-aware TTL, or `false` to disable idle activation.
+ */
+export type ObservationalMemoryActivationTTLValue = number | string | 'auto' | false;
+
+/**
+ * Per-provider idle activation TTLs. Keys are provider names (e.g. `anthropic`, `openai`),
+ * matched case-insensitively against the part of the actor model's provider before the
+ * first `.` (so `anthropic` matches `anthropic.messages`). `default` applies to every
+ * provider without its own key; without `default`, unmatched providers don't idle-activate.
+ *
+ * @example { default: 'auto', anthropic: '1h' }
+ */
+export type ObservationalMemoryActivationTTLByProvider = {
+  default?: ObservationalMemoryActivationTTLValue;
+  [provider: string]: ObservationalMemoryActivationTTLValue | undefined;
+};
+
+export type ObservationalMemoryActivationTTL =
+  | ObservationalMemoryActivationTTLValue
+  | ObservationalMemoryActivationTTLByProvider;
 
 /**
  * Configuration for the observation step in Observational Memory.
@@ -461,6 +482,12 @@ export interface ObservationalMemoryObservationConfig {
    * @default 'google/gemini-2.5-flash'
    */
   model?: AgentConfig['model'];
+
+  /** Number of retries after the initial Observer model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Observer model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
 
   /**
    * Manage working memory through Observational Memory extraction.
@@ -581,20 +608,22 @@ export interface ObservationalMemoryObservationConfig {
   activateOnProviderChange?: boolean;
 
   /**
-   * Token threshold above which buffered activation is allowed to overshoot the
-   * retention target. Above `blockAfter`, activation uses the smallest set of buffered
-   * chunks that reaches the retention target, even when that overshoots the target by
-   * more than the usual safeguard allows. It never activates more chunks than are needed
-   * to reach the retention target, and it changes the result only when the retention
-   * floor is above roughly 20,000 tokens — with the default settings it has no
-   * observable effect.
+   * Token threshold at which a synchronous (blocking) observation is allowed.
+   * Between `messageTokens` and `blockAfter`, only async buffering and activation run:
+   * reaching `messageTokens` without a buffered chunk to activate starts background
+   * buffering, and the resulting chunk activates on a later step. A synchronous
+   * observation runs if pending tokens still reach `blockAfter` after buffered activation.
+   * Unobserved messages can therefore grow up to `blockAfter` before an agent step blocks
+   * on the Observer. Set `blockAfter: 1` to observe synchronously at `messageTokens`.
    *
-   * Crossing `blockAfter` does not trigger a blocking observation. A synchronous
-   * (blocking) observation runs when the `messageTokens` threshold is reached and
-   * buffered activation did not happen.
+   * Above `blockAfter`, activation may also overshoot the retention target: it uses the
+   * smallest set of buffered chunks that reaches the target, even when that overshoots it
+   * by more than the usual safeguard allows. This changes the result only when the
+   * retention floor is above roughly 20,000 tokens.
    *
    * Accepts either:
-   * - A **multiplier** (1 ≤ value < 100): multiplied by `messageTokens`.
+   * - A **multiplier** (1 ≤ value < 100): multiplied by `messageTokens` (including a
+   *   per-thread `messageTokens` override).
    *   e.g. `blockAfter: 1.5` with `messageTokens: 20_000` → resolves to 30,000 tokens.
    * - An **absolute token count** (≥ 100): must be greater than `messageTokens`.
    *   e.g. `blockAfter: 80_000` → resolves to 80,000 tokens.
@@ -629,7 +658,7 @@ export interface ObservationalMemoryObservationConfig {
    * buffered reflections replace the raw observations they summarized.
    * Set to `0` for full truncation (omit previous observations entirely), or `false` to disable.
    *
-   * @default undefined (disabled)
+   * @default false (previous observations are sent in full)
    */
   previousObserverTokens?: number | false;
 
@@ -680,6 +709,12 @@ export interface ObservationalMemoryReflectionConfig {
    * @default 'google/gemini-2.5-flash'
    */
   model?: AgentConfig['model'];
+
+  /** Number of retries after the initial Reflector model call. @default 8 */
+  maxRetries?: number;
+
+  /** Terminal policy after Reflector model retries are exhausted. @default 'abort' */
+  failurePolicy?: 'abort' | 'continue';
 
   /**
    * Token count of observations that triggers reflection.
@@ -798,7 +833,6 @@ export interface ObservationalMemoryReflectionConfig {
  *
  * // Custom configuration
  * observationalMemory: {
- *   scope: 'resource',
  *   model: 'google/gemini-2.5-flash',
  *   observation: {
  *     messageTokens: 20_000,
@@ -844,6 +878,11 @@ export interface ObservationalMemoryOptions {
    * - 'thread': Observations are per-thread (default)
    *
    * @default 'thread'
+   * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release because it
+   * works much worse than thread scope for prompt caching and agent understanding, leaving `'thread'` (already
+   * the default) as the only scope. Omit this option to use thread scope. For cross-thread recall, enable
+   * `retrieval`; for durable facts across threads, use resource-scoped working memory. A new knowledge and
+   * subconscious memory primitive will replace resource scope.
    */
   scope?: 'resource' | 'thread';
 
@@ -855,6 +894,10 @@ export interface ObservationalMemoryOptions {
    * exceeds this value, buffered observations activate regardless of whether the
    * token threshold has been reached. Useful to align with prompt cache TTLs.
    *
+   * Pass an object to set a TTL per provider, with `default` for every other provider.
+   * Use this when your requests set a prompt cache TTL that Mastra can't detect, such as
+   * Anthropic's per-message `cacheControl: { ttl: '1h' }`.
+   *
    * Reflections do not inherit this setting. Use `reflection.activateAfterIdle` to
    * opt reflections into idle activation.
    *
@@ -862,6 +905,7 @@ export interface ObservationalMemoryOptions {
    * @example "5m"
    * @example "1hr"
    * @example "auto"
+   * @example { default: 'auto', anthropic: '1h' }
    */
   activateAfterIdle?: ObservationalMemoryActivationTTL;
 
@@ -1131,6 +1175,30 @@ type BaseMemoryConfig = {
   filterIncompleteToolCalls?: boolean;
 
   /**
+   * Whether the request input is processed in full instead of being trimmed to the part
+   * stored history does not already cover.
+   *
+   * By default, when memory loads thread history, only the new messages in the input are
+   * used: the input is trimmed back to the last assistant message (or, when the input ends
+   * with an assistant message, to that message's trailing tool results), and the stored
+   * history is layered underneath. Set this to true when the caller assembled the input
+   * itself and needs the exact message sequence preserved — for example a nested
+   * `useAgent` structuring pass that deliberately replays the parent request so its prompt
+   * keeps the parent's message prefix.
+   *
+   * This controls trimming only. When a memory-sourced message and an input message share
+   * an id, the stored copy stays authoritative: only tool outcomes for calls it still has
+   * pending are taken from the input. Input text, reasoning, and metadata are ignored.
+   *
+   * @default false
+   * @example
+   * ```typescript
+   * retainFullInput: true // Process the request input exactly as supplied
+   * ```
+   */
+  retainFullInput?: boolean;
+
+  /**
    * Thread management configuration.
    * @deprecated The `threads` object is deprecated. Use top-level `generateTitle` instead of `threads.generateTitle`.
    */
@@ -1381,7 +1449,11 @@ export type SerializedObservationalMemoryConfig = {
   /** Model ID for both Observer and Reflector (e.g., "google/gemini-2.5-flash") */
   model?: string;
 
-  /** Memory scope: 'resource' or 'thread' */
+  /**
+   * Memory scope: 'resource' or 'thread'
+   * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release, leaving
+   * `'thread'` (already the default) as the only scope. Omit this option to use thread scope.
+   */
   scope?: 'resource' | 'thread';
 
   /** Inactivity TTL before forcing buffered observation activation */
@@ -1412,6 +1484,10 @@ export type SerializedObservationalMemoryConfig = {
 export type SerializedObservationalMemoryObservationConfig = {
   /** Observer model ID */
   model?: string;
+  /** Number of retries after the initial Observer model call */
+  maxRetries?: number;
+  /** Terminal policy after Observer model retries are exhausted */
+  failurePolicy?: 'abort' | 'continue';
   /** Manage working memory through Observational Memory extraction. */
   manageWorkingMemory?: boolean;
 
@@ -1445,6 +1521,10 @@ export type SerializedObservationalMemoryObservationConfig = {
 export type SerializedObservationalMemoryReflectionConfig = {
   /** Reflector model ID */
   model?: string;
+  /** Number of retries after the initial Reflector model call */
+  maxRetries?: number;
+  /** Terminal policy after Reflector model retries are exhausted */
+  failurePolicy?: 'abort' | 'continue';
   /** Token count threshold that triggers reflection */
   observationTokens?: number;
   /** Model settings (temperature, maxOutputTokens, etc.) */

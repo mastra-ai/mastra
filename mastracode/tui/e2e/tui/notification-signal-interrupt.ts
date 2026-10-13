@@ -153,11 +153,10 @@ export const notificationSignalInterruptScenario = {
             const request = await (hostTools.agent_signal_send as any).execute(
               {
                 targetId: peerId,
-                summary: requestSummary,
+                message: requestSummary,
                 priority: 'medium',
                 expectsReply: true,
                 messageId: requestMessageId,
-                payload: { scenario: 'notification-signal-interrupt' },
               },
               hostContext,
             );
@@ -168,12 +167,11 @@ export const notificationSignalInterruptScenario = {
             const reply = await (peerTools.agent_signal_send as any).execute(
               {
                 targetId: hostPeerId,
-                summary: replySummary,
+                message: replySummary,
                 priority: 'high',
                 expectsReply: false,
                 messageId: replyMessageId,
                 replyTo: requestMessageId,
-                payload: { scenario: 'notification-signal-interrupt' },
               },
               peerContext,
             );
@@ -227,8 +225,8 @@ export const notificationSignalInterruptScenario = {
     await runtime.sleep(500);
 
     await runtime.waitForScreenText(/notification from agent-connection/i, terminal, 10_000);
-    await runtime.waitForScreenText(/high · peer-signal · delivered/i, terminal, 10_000);
     await runtime.waitForScreenText(new RegExp(replySummary, 'i'), terminal, 10_000);
+    expect(terminal.serialize().view).not.toMatch(/peer-signal · delivered/i);
     runtime.printScreen('after peer reply during originating-run abort', terminal);
   },
   verifyAimockRequests(requests) {

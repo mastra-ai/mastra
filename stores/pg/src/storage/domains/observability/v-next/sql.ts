@@ -7,7 +7,7 @@
  */
 
 import { parseSqlIdentifier } from '@mastra/core/utils';
-import { sanitizeJsonForPg } from '../../../db/sanitize-json';
+import { toPgJson } from '../../../db/sanitize-json';
 import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
 import {
   buildNamedSelectColumns,
@@ -35,7 +35,7 @@ import {
  */
 function encodeJsonb(value: unknown): string | null {
   if (value === null || value === undefined) return null;
-  return sanitizeJsonForPg(JSON.stringify(value));
+  return toPgJson(value);
 }
 
 /**

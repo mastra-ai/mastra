@@ -4,6 +4,7 @@ import type { MCPServerBase, ServerInfo, ServerDetailInfo } from '@mastra/core/m
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
+import { readResourceResponseSchema } from '../schemas/mcp';
 import { checkRouteFGA } from '../server-adapter';
 import {
   LIST_MCP_SERVERS_ROUTE,
@@ -13,6 +14,8 @@ import {
   EXECUTE_MCP_SERVER_TOOL_ROUTE,
   LIST_MCP_SERVER_RESOURCES_ROUTE,
   READ_MCP_SERVER_RESOURCE_ROUTE,
+  MCP_HTTP_TRANSPORT_ROUTE,
+  MCP_SSE_TRANSPORT_ROUTE,
 } from './mcp';
 import { createTestServerContext } from './test-utils';
 
@@ -132,8 +135,8 @@ describe('MCP Registry Handlers', () => {
       expect(result.servers).toHaveLength(2);
       expect(result.total_count).toBe(2);
       expect(result.next).toBeNull();
-      expect(result.servers[0]).toEqual(server1Info);
-      expect(result.servers[1]).toEqual(server2Info);
+      expect(result.servers[0]).toEqual({ ...server1Info, transports: ['streamable-http', 'sse'] });
+      expect(result.servers[1]).toEqual({ ...server2Info, transports: ['streamable-http', 'sse'] });
     });
 
     it('should paginate servers when perPage is provided', async () => {
@@ -147,7 +150,7 @@ describe('MCP Registry Handlers', () => {
       expect(result.total_count).toBe(2);
       expect(result.next).toContain('perPage=1');
       expect(result.next).toContain('page=1');
-      expect(result.servers[0]).toEqual(server1Info);
+      expect(result.servers[0]).toEqual({ ...server1Info, transports: ['streamable-http', 'sse'] });
     });
 
     it('should paginate servers when legacy limit/offset is provided', async () => {
@@ -162,7 +165,7 @@ describe('MCP Registry Handlers', () => {
       // Next URL mirrors request format (legacy limit/offset)
       expect(result.next).toContain('limit=1');
       expect(result.next).toContain('offset=1');
-      expect(result.servers[0]).toEqual(server1Info);
+      expect(result.servers[0]).toEqual({ ...server1Info, transports: ['streamable-http', 'sse'] });
     });
 
     it('should calculate next URL correctly', async () => {
@@ -193,7 +196,7 @@ describe('MCP Registry Handlers', () => {
       });
 
       expect(result.servers).toHaveLength(1);
-      expect(result.servers[0]).toEqual(server2Info);
+      expect(result.servers[0]).toEqual({ ...server2Info, transports: ['streamable-http', 'sse'] });
       expect(result.next).toBeNull(); // No more results
     });
 
@@ -205,7 +208,7 @@ describe('MCP Registry Handlers', () => {
       });
 
       expect(result.servers).toHaveLength(1);
-      expect(result.servers[0]).toEqual(server2Info);
+      expect(result.servers[0]).toEqual({ ...server2Info, transports: ['streamable-http', 'sse'] });
       expect(result.next).toBeNull(); // No more results
     });
 
@@ -243,7 +246,7 @@ describe('MCP Registry Handlers', () => {
         id: 'server1',
       });
 
-      expect(result).toEqual(serverDetail);
+      expect(result).toEqual({ ...serverDetail, transports: ['streamable-http', 'sse'] });
       expect(mockMCPServer.getServerDetail).toHaveBeenCalledTimes(1);
     });
 
@@ -254,7 +257,7 @@ describe('MCP Registry Handlers', () => {
         version: '1.0.0',
       });
 
-      expect(result).toEqual(serverDetail);
+      expect(result).toEqual({ ...serverDetail, transports: ['streamable-http', 'sse'] });
     });
 
     it('should throw 404 when version does not match', async () => {
@@ -683,6 +686,34 @@ describe('MCP Registry Handlers', () => {
   });
 
   describe('READ_MCP_SERVER_RESOURCE_ROUTE', () => {
+    it('preserves per-item mimeType and _meta through the handler and response schema', async () => {
+      const response = {
+        contents: [
+          {
+            uri: 'ui://test/app',
+            text: '<html>App</html>',
+            mimeType: 'text/html;profile=mcp-app',
+            _meta: { ui: { csp: { connectDomains: ['https://api.example.com'] } } },
+          },
+          { uri: 'asset://image', blob: 'aGVsbG8=', mimeType: 'image/png', _meta: {} },
+          { uri: 'plain://text', text: '' },
+        ],
+      };
+      mockMCPServer.readResource = vi.fn().mockResolvedValue(response);
+      const mastra = {
+        getMCPServerById: vi.fn(() => mockMCPServer as MCPServerBase),
+      } as unknown as Mastra;
+
+      const result = await READ_MCP_SERVER_RESOURCE_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        serverId: 'server1',
+        uri: 'ui://test/app',
+      });
+
+      expect(result).toEqual(response);
+      expect(readResourceResponseSchema.parse(result)).toStrictEqual(response);
+    });
+
     it('should return resource content for a valid URI', async () => {
       const mastra = {
         getMCPServerById: vi.fn(() => mockMCPServer as MCPServerBase),
@@ -745,6 +776,71 @@ describe('MCP Registry Handlers', () => {
           uri: 'ui://nonexistent/resource',
         }),
       ).rejects.toThrow(HTTPException);
+    });
+  });
+
+  describe('MCP v2 servers', () => {
+    const v2Info: ServerInfo = {
+      id: 'v2',
+      name: 'V2 Server',
+      version_detail: { version: '2.0.0', release_date: '2026-07-28T00:00:00Z', is_latest: true },
+    };
+
+    let v2Server: Partial<MCPServerBase>;
+    let v2Mastra: Mastra;
+
+    beforeEach(() => {
+      v2Server = {
+        id: 'v2',
+        name: 'V2 Server',
+        mcpVersion: 2,
+        getServerInfo: vi.fn(() => v2Info),
+        getServerDetail: vi.fn(() => ({ ...v2Info, packages: [], remotes: [] })),
+      };
+      v2Mastra = {
+        listMCPServers: vi.fn(() => ({ v2: v2Server as MCPServerBase, server1: mockMCPServer as MCPServerBase })),
+        getMCPServerById: vi.fn((id: string) => {
+          if (id === 'v2') return v2Server as MCPServerBase;
+          if (id === 'server1') return mockMCPServer as MCPServerBase;
+          return undefined;
+        }),
+      } as unknown as Mastra;
+    });
+
+    it('lists coexisting v1 and v2 servers with their transports', async () => {
+      const result = await LIST_MCP_SERVERS_ROUTE.handler({ ...createTestServerContext({ mastra: v2Mastra }) });
+
+      expect(result.servers).toEqual([
+        { ...v2Info, transports: ['streamable-http'] },
+        { ...server1Info, transports: ['streamable-http', 'sse'] },
+      ]);
+    });
+
+    it('reports Streamable HTTP as the only transport on the v2 detail', async () => {
+      const result = await GET_MCP_SERVER_DETAIL_ROUTE.handler({
+        ...createTestServerContext({ mastra: v2Mastra }),
+        id: 'v2',
+      });
+
+      expect(result.transports).toEqual(['streamable-http']);
+    });
+
+    it('routes v2 servers to the Streamable HTTP transport but never to SSE', async () => {
+      const http = await MCP_HTTP_TRANSPORT_ROUTE.handler({
+        ...createTestServerContext({ mastra: v2Mastra }),
+        serverId: 'v2',
+      });
+      expect(http).toEqual({ server: v2Server, httpPath: '/mcp/v2/mcp' });
+
+      await expect(
+        MCP_SSE_TRANSPORT_ROUTE.handler({ ...createTestServerContext({ mastra: v2Mastra }), serverId: 'v2' }),
+      ).rejects.toMatchObject({ status: 404 });
+
+      const legacySse = await MCP_SSE_TRANSPORT_ROUTE.handler({
+        ...createTestServerContext({ mastra: v2Mastra }),
+        serverId: 'server1',
+      });
+      expect(legacySse).toMatchObject({ ssePath: '/mcp/server1/sse', messagePath: '/mcp/server1/messages' });
     });
   });
 });

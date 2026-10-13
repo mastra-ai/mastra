@@ -13,6 +13,8 @@ import type {
 } from '../../../stream/types';
 import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../tools/provider-tool-utils';
+import { getToolTitle } from '../../../tools/tool-title';
+import { getToolResultInvocationState } from './provider-tool-result-state';
 
 /**
  * A raw chunk collected during the stream.
@@ -56,13 +58,21 @@ export function buildMessagesFromChunks({
   // Collect tool results so we can match them to tool calls
   const toolResults = new Map<
     string,
-    { result: any; args: any; providerMetadata: any; providerExecuted: boolean | undefined; toolName: string }
+    {
+      result: any;
+      isError: boolean | undefined;
+      args: any;
+      providerMetadata: any;
+      providerExecuted: boolean | undefined;
+      toolName: string;
+    }
   >();
   for (const chunk of chunks) {
     if (chunk.type === 'tool-result' && chunk.payload.result != null) {
       const p = chunk.payload as ToolResultPayload;
       toolResults.set(p.toolCallId, {
         result: p.result,
+        isError: p.isError,
         args: p.args,
         providerMetadata: withToolPayloadTransformProviderMetadata(p.providerMetadata, chunk.metadata),
         providerExecuted: p.providerExecuted,
@@ -113,21 +123,21 @@ export function buildMessagesFromChunks({
         const toolDef = tools?.[p.toolName] || findProviderToolByName(tools, p.toolName);
         const providerExecuted = inferProviderExecuted(p.providerExecuted, toolDef);
         const providerMetadata = withToolPayloadTransformProviderMetadata(p.providerMetadata, chunk.metadata);
+        const title = p.title ?? getToolTitle(toolDef);
 
         // Check if we have a matching result from a provider-executed tool
         const result = toolResults.get(p.toolCallId);
 
         if (result) {
-          // Merge call + result into a single 'result' state part
-          const resultProviderExecuted = inferProviderExecuted(result.providerExecuted, toolDef);
+          // Merge call + result into a single part ('output-error' when the provider flagged the result as an error)
+          const resultProviderExecuted = inferProviderExecuted(result.providerExecuted ?? p.providerExecuted, toolDef);
           parts.push({
             type: 'tool-invocation' as const,
             toolInvocation: {
-              state: 'result' as const,
               toolCallId: p.toolCallId,
               toolName: p.toolName,
               args: p.args,
-              result: result.result,
+              ...getToolResultInvocationState(result),
             },
             providerMetadata: preserveResponseItemIdsOnMerge(
               providerMetadata,
@@ -135,6 +145,7 @@ export function buildMessagesFromChunks({
               result.providerMetadata ?? providerMetadata,
             ),
             providerExecuted: resultProviderExecuted,
+            title,
           } as MastraMessagePart);
         } else {
           // No result yet — emit as 'call' state
@@ -148,6 +159,7 @@ export function buildMessagesFromChunks({
             },
             providerMetadata,
             providerExecuted,
+            title,
           } as MastraMessagePart);
         }
         break;

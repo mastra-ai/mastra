@@ -9,7 +9,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/ren
 import type { FactoryProject, RepositorySettings } from '../../../workspaces/services/github';
 import { FactorySetupSection } from '../FactorySetupSection';
 
-const SETTINGS_URL = `${TEST_BASE_URL}/web/github/projects/ghp-1/settings`;
+const SETTINGS_URL = `${TEST_BASE_URL}/web/source-control/projects/ghp-1/settings`;
 const FIELD = 'Setup command for mastra';
 const TEARDOWN_FIELD = 'Teardown command for mastra';
 
@@ -43,7 +43,7 @@ function renderSection(factoryProject: FactoryProject = emptyFactory) {
 }
 
 describe('FactorySetupSection', () => {
-  it('given no github projects, when rendered, then the section is hidden', () => {
+  it('given no linked repositories, when rendered, then the section is hidden', () => {
     renderSection();
     expect(screen.queryByText('Sandbox')).not.toBeInTheDocument();
   });

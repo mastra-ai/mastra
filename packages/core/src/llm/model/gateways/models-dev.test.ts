@@ -43,7 +43,7 @@ const {
 vi.mock('@ai-sdk/anthropic-v6', () => ({ createAnthropic: createAnthropicMock }));
 vi.mock('@ai-sdk/cerebras-v6', () => ({ createCerebras: createCerebrasMock }));
 vi.mock('@ai-sdk/deepinfra-v6', () => ({ createDeepInfra: createDeepInfraMock }));
-vi.mock('@ai-sdk/deepseek-v6', () => ({ createDeepSeek: createDeepSeekMock }));
+vi.mock('@ai-sdk/deepseek-v7', () => ({ createDeepSeek: createDeepSeekMock }));
 vi.mock('@ai-sdk/google-v6', () => ({ createGoogleGenerativeAI: createGoogleGenerativeAIMock }));
 vi.mock('@ai-sdk/groq-v6', () => ({ createGroq: createGroqMock }));
 vi.mock('@ai-sdk/mistral-v6', () => ({ createMistral: createMistralMock }));
@@ -358,6 +358,58 @@ describe('ModelsDevGateway', () => {
       expect(gateway.getStructuredOutputCapabilities().groq).toContain('legacy-model');
     });
 
+    it('keeps each model reasoning options and drops entries it cannot read', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          anthropic: {
+            id: 'anthropic',
+            name: 'Anthropic',
+            models: {
+              'claude-opus-4-6': {
+                reasoning: true,
+                reasoning_options: [
+                  { type: 'effort', values: ['low', 'medium', 'high', 'max'] },
+                  { type: 'budget_tokens', min: 1024 },
+                ],
+              },
+              'claude-sonnet-5': {
+                reasoning: true,
+                reasoning_options: [
+                  { type: 'toggle' },
+                  { type: 'adaptive_v2', values: ['auto'] },
+                  { type: 'effort', values: [] },
+                  { type: 'effort', values: [null] },
+                  { type: 'budget_tokens', min: '1024' },
+                ],
+              },
+              'claude-opus-4-7': {
+                reasoning: true,
+                reasoning_options: [{ type: 'effort', values: [null, 'low', 'medium', 'high'] }],
+              },
+              'claude-haiku-4-5': { reasoning: true, reasoning_options: [] },
+              'claude-3-haiku': { reasoning: false },
+            },
+            env: ['ANTHROPIC_API_KEY'],
+            npm: '@ai-sdk/anthropic',
+          },
+        }),
+      });
+
+      await gateway.fetchProviders();
+
+      expect(gateway.getReasoningCapabilities()).toEqual({
+        anthropic: {
+          'claude-opus-4-6': [
+            { type: 'effort', values: ['low', 'medium', 'high', 'max'] },
+            { type: 'budget_tokens', min: 1024 },
+          ],
+          'claude-sonnet-5': [{ type: 'toggle' }],
+          'claude-opus-4-7': [{ type: 'effort', values: ['low', 'medium', 'high'] }],
+        },
+      });
+    });
+
     it('should extract model IDs from each provider', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -476,6 +528,50 @@ describe('ModelsDevGateway', () => {
 
     it('should return false for invalid model ID format', () => {
       expect(() => gateway.buildUrl('invalid-format', { OPENAI_API_KEY: 'sk-test' })).toThrow();
+    });
+  });
+
+  describe('buildUrl without a registry url template', () => {
+    const makeGateway = () =>
+      new ModelsDevGateway({
+        google: {
+          apiKeyEnvVar: 'GOOGLE_GENERATIVE_AI_API_KEY',
+          name: 'Google',
+          models: ['gemini-2.5-flash'],
+          gateway: 'models.dev',
+        },
+        'my-provider': {
+          apiKeyEnvVar: 'MY_PROVIDER_API_KEY',
+          name: 'My Provider',
+          models: ['m'],
+          gateway: 'models.dev',
+        },
+      });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+    });
+
+    it('returns undefined when no override is set', () => {
+      vi.stubEnv('GOOGLE_BASE_URL', '');
+      expect(makeGateway().buildUrl('google/gemini-2.5-flash', {})).toBeUndefined();
+    });
+
+    it('honors <PROVIDER>_BASE_URL passed via envVars', () => {
+      expect(
+        makeGateway().buildUrl('google/gemini-2.5-flash', { GOOGLE_BASE_URL: 'https://proxy.example/google' }),
+      ).toBe('https://proxy.example/google');
+    });
+
+    it('honors <PROVIDER>_BASE_URL from process.env', () => {
+      vi.stubEnv('GOOGLE_BASE_URL', 'https://proxy.example/google');
+      expect(makeGateway().buildUrl('google/gemini-2.5-flash')).toBe('https://proxy.example/google');
+    });
+
+    it('maps hyphenated provider ids to underscore env var names', () => {
+      expect(makeGateway().buildUrl('my-provider/m', { MY_PROVIDER_BASE_URL: 'https://proxy.example/mine' })).toBe(
+        'https://proxy.example/mine',
+      );
     });
   });
 
@@ -645,6 +741,24 @@ describe('ModelsDevGateway', () => {
       });
       expect(xAIResponsesMock).toHaveBeenCalledWith('grok-4.3');
       expect(callableModelMock).not.toHaveBeenCalledWith('grok-4.3');
+    });
+
+    it('passes XAI_BASE_URL as baseURL when the provider has no registry url template', async () => {
+      gateway = new ModelsDevGateway({
+        xai: {
+          apiKeyEnvVar: 'XAI_API_KEY',
+          name: 'xAI',
+          models: ['grok-4'],
+          gateway: 'models.dev',
+        },
+      });
+      vi.stubEnv('XAI_BASE_URL', 'https://proxy.example/xai');
+
+      await gateway.resolveLanguageModel({ providerId: 'xai', modelId: 'grok-4', apiKey: 'xai-test' });
+
+      expect(createXaiMock).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'xai-test', baseURL: 'https://proxy.example/xai' }),
+      );
     });
   });
 

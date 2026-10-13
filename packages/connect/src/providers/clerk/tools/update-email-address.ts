@@ -1,11 +1,11 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
 export const updateEmailAddressInputSchema = z.object({
-  email_address_id: z.string(),
+  email_address_id: z.string().min(1),
   verified: z.boolean().optional(),
   primary: z.boolean().optional(),
   notify_primary_email_address_changed: z.boolean().optional(),

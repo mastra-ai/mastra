@@ -369,6 +369,7 @@ export class ModelSpanTracker {
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
   #completionStartTime?: Date;
+  #inferenceCompletionStartTime?: Date;
   #currentStepInputIsFinal: boolean = false;
   /** When true, step-finish chunks don't auto-close the step span (for durable execution) */
   #deferStepClose: boolean = false;
@@ -393,10 +394,9 @@ export class ModelSpanTracker {
    * Capture the completion start time (time to first token) when the first content chunk arrives.
    */
   #captureCompletionStartTime(): void {
-    if (this.#completionStartTime) {
-      return;
-    }
-    this.#completionStartTime = new Date();
+    const now = new Date();
+    this.#completionStartTime ??= now;
+    this.#inferenceCompletionStartTime ??= now;
   }
 
   /**
@@ -555,7 +555,7 @@ export class ModelSpanTracker {
         usage,
         finishReason: payload.stepResult.reason,
         warnings: payload.stepResult.warnings,
-        completionStartTime: this.#completionStartTime,
+        completionStartTime: this.#inferenceCompletionStartTime,
         ...(responseModel?.trim() ? { responseModel } : {}),
       },
     });
@@ -585,6 +585,7 @@ export class ModelSpanTracker {
       return;
     }
 
+    this.#inferenceCompletionStartTime = undefined;
     const input = extractStepInput(payload);
     const generationAttrs = this.#modelSpan?.attributes;
     const ctx = this.#inferenceContext;
@@ -599,12 +600,24 @@ export class ModelSpanTracker {
         ...(ctx?.parameters !== undefined ? { parameters: ctx.parameters } : {}),
         ...(ctx?.providerOptions !== undefined ? { providerOptions: ctx.providerOptions } : {}),
         ...(ctx?.availableTools !== undefined ? { availableTools: ctx.availableTools } : {}),
+        ...(ctx?.tools !== undefined ? { tools: ctx.tools } : {}),
         ...(ctx?.toolChoice !== undefined ? { toolChoice: ctx.toolChoice } : {}),
         ...(ctx?.responseFormat !== undefined ? { responseFormat: ctx.responseFormat } : {}),
       },
       input,
       tracingPolicy: this.#modelSpan?.tracingPolicy,
     });
+  }
+
+  /**
+   * End the open MODEL_INFERENCE span as interrupted while keeping MODEL_STEP open,
+   * so a replacement request for the same step gets its own inference span.
+   */
+  interruptInference(): void {
+    this.#endChunkSpan();
+    if (!this.#currentInferenceSpan) return;
+    this.#currentInferenceSpan.end({ attributes: { finishReason: 'interrupted' } });
+    this.#currentInferenceSpan = undefined;
   }
 
   /**
@@ -653,11 +666,14 @@ export class ModelSpanTracker {
 
     // Remove verbose/redundant fields from metadata:
     // - request: too verbose
+    // - body: raw provider HTTP response body; duplicates output/usage and can be very large.
+    //   `headers` is intentionally kept: it carries provider request IDs and rate-limit info
+    //   that are useful when debugging with the provider.
     // - id/timestamp: chunk-level data, not step-related
     // - modelId/modelVersion/modelProvider: duplicates of modelMetadata
     const cleanMetadata = metadata ? { ...metadata } : undefined;
     if (cleanMetadata) {
-      for (const key of ['request', 'id', 'timestamp', 'modelId', 'modelVersion', 'modelProvider']) {
+      for (const key of ['request', 'body', 'id', 'timestamp', 'modelId', 'modelVersion', 'modelProvider']) {
         delete cleanMetadata[key];
       }
     }

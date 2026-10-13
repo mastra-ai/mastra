@@ -1,8 +1,6 @@
-import type { MastraClient } from '@mastra/client-js';
+import type { TraceQueryKeysetTraceResponse } from '@mastra/client-js';
 
-type TraceQueryResponse = Awaited<ReturnType<MastraClient['queryTraces']>>;
-
-export const firstTraceQueryPage: TraceQueryResponse = {
+export const firstTraceQueryPage: TraceQueryKeysetTraceResponse = {
   traces: [
     {
       traceId: 'trace-a',
@@ -26,7 +24,7 @@ export const firstTraceQueryPage: TraceQueryResponse = {
   page: { next: 'cursor-a' },
 };
 
-export const lastTraceQueryPage: TraceQueryResponse = {
+export const lastTraceQueryPage: TraceQueryKeysetTraceResponse = {
   traces: firstTraceQueryPage.traces.map(trace => ({ ...trace, traceId: 'trace-b', rootSpanId: 'span-b' })),
   page: { next: null },
 };

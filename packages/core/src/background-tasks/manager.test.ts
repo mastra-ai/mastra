@@ -5,6 +5,7 @@ import { MockStore } from '../storage';
 import { createBackgroundTask } from './create';
 import { BackgroundTaskManager } from './manager';
 import type { BackgroundTaskManagerConfig, TaskContext } from './types';
+import { slimProgressChunk } from './workflow';
 
 /** Create a per-task context with the given execute function */
 function ctx(executeFn: (args: any, opts?: any) => Promise<any>): TaskContext {
@@ -338,6 +339,109 @@ describe('BackgroundTaskManager', () => {
       const completed = await bgTask.waitForCompletion({ timeoutMs: 2000 });
       expect(completed.status).toBe('completed');
       expect(completed.result).toBe('from-handle');
+    });
+
+    it('adopts the exact persisted terminal task for a replayed invocation', async () => {
+      const executeFn = vi.fn().mockResolvedValue('persisted-result');
+      const identity = {
+        toolName: 'tool',
+        toolCallId: 'call-terminal',
+        agentId: 'a1',
+        runId: 'run-terminal',
+      };
+      const original = createBackgroundTask(manager, {
+        ...identity,
+        args: {},
+        context: ctx(executeFn),
+      });
+      const { task } = await original.dispatch();
+      await expect(original.waitForCompletion({ timeoutMs: 2000 })).resolves.toMatchObject({
+        id: task.id,
+        status: 'completed',
+        result: 'persisted-result',
+      });
+
+      const replay = createBackgroundTask(manager, {
+        ...identity,
+        args: {},
+        context: ctx(vi.fn()),
+      });
+      const terminalTask = await replay.checkIfExisting(identity);
+
+      expect(terminalTask).toMatchObject({ id: task.id, status: 'completed', result: 'persisted-result' });
+      await expect(replay.waitForCompletion()).resolves.toMatchObject({ id: task.id, status: 'completed' });
+      expect(executeFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('re-dispatches an adopted pending task without creating a duplicate', async () => {
+      const identity = {
+        toolName: 'tool',
+        toolCallId: 'call-pending',
+        agentId: 'a1',
+        runId: 'run-pending',
+      };
+      const backgroundTasksStore = await testStorage.getStore('backgroundTasks');
+      await backgroundTasksStore!.createTask({
+        id: 'pending-replay',
+        status: 'pending',
+        ...identity,
+        args: {},
+        retryCount: 0,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+      });
+      const executeFn = vi.fn().mockResolvedValue('recovered-result');
+      const replay = createBackgroundTask(manager, {
+        ...identity,
+        args: {},
+        context: ctx(executeFn),
+      });
+
+      await expect(replay.checkIfExisting(identity)).resolves.toMatchObject({
+        id: 'pending-replay',
+        status: 'pending',
+      });
+      await expect(replay.restart()).resolves.toMatchObject({ id: 'pending-replay', status: 'pending' });
+      await expect(replay.waitForCompletion({ timeoutMs: 2000 })).resolves.toMatchObject({
+        id: 'pending-replay',
+        status: 'completed',
+        result: 'recovered-result',
+      });
+      await expect(manager.listTasks(identity)).resolves.toMatchObject({ total: 1 });
+      expect(executeFn).toHaveBeenCalledTimes(1);
+    });
+
+    it('fails closed when multiple tasks match one replayed invocation', async () => {
+      const identity = {
+        toolName: 'tool',
+        toolCallId: 'call-ambiguous',
+        agentId: 'a1',
+        runId: 'run-ambiguous',
+      };
+
+      for (const result of ['first', 'second']) {
+        const handle = createBackgroundTask(manager, {
+          ...identity,
+          args: {},
+          context: ctx(vi.fn().mockResolvedValue(result)),
+        });
+        await handle.dispatch();
+        await expect(handle.waitForCompletion({ timeoutMs: 2000 })).resolves.toMatchObject({
+          status: 'completed',
+          result,
+        });
+      }
+
+      const replay = createBackgroundTask(manager, {
+        ...identity,
+        args: {},
+        context: ctx(vi.fn()),
+      });
+
+      await expect(replay.checkIfExisting(identity)).rejects.toThrow(
+        'Multiple background tasks found for run "run-ambiguous" and tool call "call-ambiguous"',
+      );
     });
 
     it('can cancel via handle', async () => {
@@ -1480,6 +1584,335 @@ describe('BackgroundTaskManager', () => {
         await m2.stopWorkers();
       }
     });
+
+    it('does not reclaim a running task whose lease is still valid', async () => {
+      // The previous process is still alive and renewing its lease, so its
+      // ownership is durable and startup recovery must leave the task alone.
+      const seedStorage = new MockStore();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
+
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'leased-elsewhere',
+        status: 'running',
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+        ownerId: 'other-worker',
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      });
+      // This process can run the task if it is (wrongly) reclaimed.
+      local.backgroundTaskManager!.registerTaskContext(
+        'leased-elsewhere',
+        ctx(async () => 'stolen'),
+      );
+      await local.startWorkers();
+
+      try {
+        await tick(200);
+
+        const task = await local.backgroundTaskManager!.getTask('leased-elsewhere');
+        expect(task).toMatchObject({ status: 'running', ownerId: 'other-worker' });
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('reclaims a running task once its lease has expired', async () => {
+      const seedStorage = new MockStore();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true },
+      });
+
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id: 'expired-lease',
+        status: 'running',
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 1,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+        ownerId: 'dead-worker',
+        leaseExpiresAt: new Date(Date.now() - 1_000),
+      });
+      local.backgroundTaskManager!.registerTaskContext(
+        'expired-lease',
+        ctx(async () => 'reclaimed'),
+      );
+      await local.startWorkers();
+
+      try {
+        const mgr = local.backgroundTaskManager!;
+
+        await tick(200);
+
+        const task = await mgr.getTask('expired-lease');
+        expect(task).toMatchObject({ status: 'completed', result: 'reclaimed' });
+        // Terminal writes release the lease so the row carries no stale owner.
+        expect(task!.ownerId).toBeUndefined();
+        expect(task!.leaseExpiresAt).toBeUndefined();
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('stamps an execution lease on dispatch and clears it when the task finishes', async () => {
+      const local = await makeLocalManager({
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        leaseDurationMs: 60_000,
+        recoverStaleTasksOnStart: false,
+      });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+
+      try {
+        const { task } = await local.mgr.enqueue(
+          { toolName: 't', toolCallId: 'lease', args: {}, agentId: 'a1', runId: 'r-lease' },
+          ctx(async () => {
+            await gate;
+            return 'leased';
+          }),
+        );
+        await vi.waitFor(async () => expect((await local.mgr.getTask(task.id))?.status).toBe('running'));
+
+        const running = await local.mgr.getTask(task.id);
+        expect(running!.ownerId).toBe(local.mgr.ownerId);
+        expect(running!.leaseExpiresAt!.getTime()).toBeGreaterThan(Date.now() + 30_000);
+
+        release();
+        await vi.waitFor(async () => expect((await local.mgr.getTask(task.id))?.status).toBe('completed'));
+
+        const completed = await local.mgr.getTask(task.id);
+        expect(completed!.ownerId).toBeUndefined();
+        expect(completed!.leaseExpiresAt).toBeUndefined();
+      } finally {
+        release();
+        await local.cleanup();
+      }
+    });
+
+    it('keeps renewing the lease of a task it is still running', async () => {
+      const local = await makeLocalManager({
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        leaseDurationMs: 3_000,
+        recoverStaleTasksOnStart: false,
+      });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+
+      try {
+        const { task } = await local.mgr.enqueue(
+          { toolName: 't', toolCallId: 'heartbeat', args: {}, agentId: 'a1', runId: 'r-heartbeat' },
+          ctx(async () => {
+            await gate;
+            return 'ok';
+          }),
+        );
+        await vi.waitFor(async () => expect((await local.mgr.getTask(task.id))?.status).toBe('running'));
+        const initialExpiry = (await local.mgr.getTask(task.id))!.leaseExpiresAt!.getTime();
+
+        // The heartbeat renews every leaseDurationMs / 3 (1s with a 3s lease).
+        await vi.waitFor(
+          async () => {
+            const renewed = (await local.mgr.getTask(task.id))!.leaseExpiresAt!.getTime();
+            expect(renewed).toBeGreaterThan(initialExpiry);
+          },
+          { timeout: 5_000, interval: 100 },
+        );
+      } finally {
+        release();
+        await local.cleanup();
+      }
+    });
+
+    it('does not let a superseded owner commit results', async () => {
+      const local = await makeLocalManager({
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        leaseDurationMs: 60_000,
+        recoverStaleTasksOnStart: false,
+      });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const onChunk = vi.fn();
+      const onResult = vi.fn();
+      const onComplete = vi.fn();
+      const published: string[] = [];
+      const onPublished = (event: { type: string }) => {
+        published.push(event.type);
+      };
+      await local.isolatedPubsub.subscribe('background-tasks-result', onPublished);
+
+      try {
+        const { task } = await local.mgr.enqueue(
+          { toolName: 't', toolCallId: 'superseded', args: {}, agentId: 'a1', runId: 'r-superseded' },
+          {
+            executor: {
+              execute: async () => {
+                await gate;
+                return 'late result';
+              },
+            },
+            onChunk,
+            onResult,
+            onComplete,
+          },
+        );
+        await vi.waitFor(async () => expect((await local.mgr.getTask(task.id))?.status).toBe('running'));
+
+        // Another worker takes the task over, as it would once this owner's
+        // lease lapsed, and becomes the recorded owner.
+        const bgStore = await testStorage.getStore('backgroundTasks');
+        await bgStore!.updateTask(task.id, {
+          ownerId: 'other-worker',
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        });
+
+        release();
+        // Give the original owner's workflow time to try — and fail — to
+        // commit its result.
+        await tick(300);
+
+        const afterTakeover = await local.mgr.getTask(task.id);
+        expect(afterTakeover).toMatchObject({ status: 'running', ownerId: 'other-worker' });
+        expect(afterTakeover!.result).toBeUndefined();
+
+        // Losing ownership must not leak the stale result to local observers:
+        // no completion hook fires and no `task.completed` event is published.
+        // The observer is proven live by the `task.running` event from the
+        // original claim, so the negative assertion is not vacuous.
+        expect(published).toContain('task.running');
+        expect(onChunk).not.toHaveBeenCalled();
+        expect(onResult).not.toHaveBeenCalled();
+        expect(onComplete).not.toHaveBeenCalled();
+        expect(published).not.toContain('task.completed');
+      } finally {
+        release();
+        await local.isolatedPubsub.unsubscribe('background-tasks-result', onPublished);
+        await local.cleanup();
+      }
+    });
+
+    it('aborts a superseded run once its lease renewal is rejected', async () => {
+      const local = await makeLocalManager({
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        leaseDurationMs: 3_000,
+        recoverStaleTasksOnStart: false,
+      });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let executorSignal: AbortSignal | undefined;
+
+      try {
+        const { task } = await local.mgr.enqueue(
+          { toolName: 't', toolCallId: 'superseded-abort', args: {}, agentId: 'a1', runId: 'r-superseded-abort' },
+          ctx(async (_args: unknown, opts: { abortSignal?: AbortSignal }) => {
+            executorSignal = opts.abortSignal;
+            await gate;
+            return 'late result';
+          }),
+        );
+        await vi.waitFor(async () => expect((await local.mgr.getTask(task.id))?.status).toBe('running'));
+        await vi.waitFor(() => expect(executorSignal).toBeDefined());
+        expect(executorSignal!.aborted).toBe(false);
+
+        // Another worker takes the task over, as it would once this owner's
+        // lease lapsed, and becomes the recorded owner.
+        const bgStore = await testStorage.getStore('backgroundTasks');
+        await bgStore!.updateTask(task.id, {
+          ownerId: 'other-worker',
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        });
+
+        // The heartbeat (1s with a 3s lease) is now fenced out by the owner, so
+        // the local run is aborted instead of executing alongside the new owner.
+        await vi.waitFor(() => expect(executorSignal!.aborted).toBe(true), { timeout: 5_000, interval: 50 });
+      } finally {
+        release();
+        await local.cleanup();
+      }
+    });
+
+    it('does not abort when a rejected renewal finds the task no longer running', async () => {
+      const local = await makeLocalManager({
+        enabled: true,
+        globalConcurrency: 1,
+        perAgentConcurrency: 1,
+        leaseDurationMs: 3_000,
+        recoverStaleTasksOnStart: false,
+      });
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      let executorSignal: AbortSignal | undefined;
+
+      try {
+        const { task } = await local.mgr.enqueue(
+          { toolName: 't', toolCallId: 'settled-renewal', args: {}, agentId: 'a1', runId: 'r-settled-renewal' },
+          ctx(async (_args: unknown, opts: { abortSignal?: AbortSignal }) => {
+            executorSignal = opts.abortSignal;
+            await gate;
+            return 'ok';
+          }),
+        );
+        await vi.waitFor(async () => expect((await local.mgr.getTask(task.id))?.status).toBe('running'));
+        await vi.waitFor(() => expect(executorSignal).toBeDefined());
+
+        // The task leaves `running` under another owner — it suspended rather
+        // than being taken over — so renewal is rejected but nothing is aborted.
+        const bgStore = await testStorage.getStore('backgroundTasks');
+        await bgStore!.updateTask(task.id, {
+          status: 'suspended',
+          ownerId: 'other-worker',
+          leaseExpiresAt: new Date(Date.now() + 60_000),
+        });
+
+        // Wait past the 1s heartbeat so the rejected renewal has definitely run.
+        await tick(2_200);
+
+        expect(executorSignal!.aborted).toBe(false);
+      } finally {
+        release();
+        await local.cleanup();
+      }
+    });
   });
 
   describe('stream', () => {
@@ -1592,6 +2025,113 @@ describe('BackgroundTaskManager', () => {
       });
 
       abortController.abort();
+    });
+
+    it('drops nested output past the wrapper depth limit instead of publishing it unslimmed', () => {
+      const leaf = {
+        type: 'step-start',
+        from: 'AGENT',
+        payload: { messageId: 'm', request: { body: 'x'.repeat(100_000) } },
+      };
+      let chunk: unknown = leaf;
+      for (let i = 0; i < 30; i++) chunk = { type: 'tool-output', payload: { output: chunk } };
+      expect(JSON.stringify(slimProgressChunk(chunk)).length).toBeLessThan(5_000);
+    });
+
+    it('publishes data a tool writes itself unchanged, even when it looks like an agent chunk', () => {
+      const userData = {
+        type: 'finish',
+        payload: { messages: { all: ['keep'] }, output: { steps: ['keep'] }, metadata: { request: { body: 'keep' } } },
+      };
+      const chunk = {
+        type: 'tool-output',
+        from: 'USER',
+        runId: 'r1',
+        payload: { output: userData, toolCallId: 'c1', toolName: 'tool' },
+      };
+      expect(slimProgressChunk(chunk)).toBe(chunk);
+      const wrapped = { type: 'workflow-step-output', from: 'WORKFLOW', payload: { output: chunk } };
+      expect(slimProgressChunk(wrapped)).toBe(wrapped);
+    });
+
+    it('publishes nested agent step/finish chunks without request snapshots or repeated args', async () => {
+      const published: any[] = [];
+      const originalPublish = pubsub.publish.bind(pubsub);
+      vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {
+        if ((event as any).type === 'task.output') published.push(event);
+        return originalPublish(topic, event);
+      });
+
+      const bigFile = 'x'.repeat(100_000);
+      const wrap = (inner: unknown) => ({
+        type: 'workflow-step-output',
+        runId: 'wf-1',
+        from: 'WORKFLOW',
+        payload: { output: inner },
+      });
+      const executeFn = vi.fn().mockImplementation(async (_args: any, opts: { onProgress?: (chunk: any) => void }) => {
+        await opts.onProgress?.(
+          wrap({
+            type: 'step-start',
+            from: 'AGENT',
+            payload: { messageId: 'm1', request: { body: bigFile }, inputMessages: [bigFile] },
+          }),
+        );
+        await opts.onProgress?.(
+          wrap({
+            type: 'step-finish',
+            from: 'AGENT',
+            payload: {
+              messageId: 'm1',
+              stepResult: { reason: 'stop' },
+              output: { text: 'hi', usage: { totalTokens: 3 }, steps: [bigFile] },
+              metadata: { request: { body: bigFile }, modelId: 'gpt-5' },
+              messages: { all: [bigFile], user: [], nonUser: [] },
+            },
+          }),
+        );
+        await opts.onProgress?.(
+          wrap({
+            type: 'finish',
+            from: 'AGENT',
+            payload: {
+              stepResult: { reason: 'stop' },
+              output: { usage: { totalTokens: 3 }, steps: [bigFile] },
+              metadata: { request: { body: bigFile } },
+              messages: { all: [bigFile], user: [], nonUser: [] },
+              response: { id: 'resp-1', modelId: 'gpt-5' },
+            },
+          }),
+        );
+        await opts.onProgress?.(wrap({ type: 'workflow-step-progress', payload: { id: 'step', completedCount: 1 } }));
+        return 'done';
+      });
+
+      await manager.enqueue(
+        { toolName: 'tool', toolCallId: 'c1', args: { file: bigFile }, agentId: 'a1', runId: 'run-1' },
+        ctx(executeFn),
+      );
+      await vi.waitFor(() => expect(published).toHaveLength(4));
+
+      for (const event of published) {
+        expect(event.data.args).toBeUndefined();
+        expect(JSON.stringify(event).length).toBeLessThan(2_000);
+      }
+      const [start, stepFinish, finish, progress] = published.map(e => e.data.chunk.payload.output);
+      expect(start).toEqual({ type: 'step-start', from: 'AGENT', payload: { messageId: 'm1' } });
+      expect(stepFinish.payload).toEqual({
+        messageId: 'm1',
+        stepResult: { reason: 'stop' },
+        output: { text: 'hi', usage: { totalTokens: 3 } },
+        metadata: { modelId: 'gpt-5' },
+      });
+      expect(finish.payload).toEqual({
+        stepResult: { reason: 'stop' },
+        output: { usage: { totalTokens: 3 } },
+        metadata: {},
+        response: { id: 'resp-1', modelId: 'gpt-5' },
+      });
+      expect(progress).toEqual({ type: 'workflow-step-progress', payload: { id: 'step', completedCount: 1 } });
     });
 
     it('throttles progress output chunks while still emitting completion', async () => {

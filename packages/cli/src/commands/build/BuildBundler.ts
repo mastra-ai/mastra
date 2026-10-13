@@ -8,6 +8,7 @@ import { shouldSkipDotenvLoading } from '../utils.js';
 import { getWorkerEntry } from '../worker/WorkerBundler.js';
 
 export class BuildBundler extends Bundler {
+  protected defaultExternalsPreset = true;
   private studio: boolean;
 
   constructor({ studio }: { studio?: boolean } = {}) {
@@ -22,15 +23,11 @@ export class BuildBundler extends Bundler {
     outputDirectory: string,
   ): Promise<NonNullable<Config['bundler']>> {
     const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
-
-    if (!bundlerOptions[IS_DEFAULT] && bundlerOptions.externals !== undefined) {
+    if (bundlerOptions.externals !== undefined && !(IS_DEFAULT in bundlerOptions)) {
       return bundlerOptions;
     }
 
-    return {
-      ...bundlerOptions,
-      externals: true,
-    };
+    return { ...bundlerOptions, externals: true };
   }
 
   getEnvFiles(): Promise<string[]> {
@@ -84,10 +81,29 @@ export class BuildBundler extends Bundler {
     const storage = mastra.getStorage();
     if (storage) {
       if (!storage.disableInit) {
-        storage.init();
+        await storage.init();
       }
       mastra.__registerInternalWorkflow(scoreTracesWorkflow);
     }
+
+    // Workflow restarts and durable-agent recovery work on different runs, so
+    // neither waits for the other; a long-running workflow can't hold up recovery.
+    const recoveries = [];
+    if (mastra.recoveryConfig?.workflows !== 'off') {
+      recoveries.push(
+        mastra.restartAllActiveWorkflowRuns().catch(error => {
+          mastra.getLogger().error('Failed to restart active workflow runs during server startup', { error });
+        }),
+      );
+    }
+    if (mastra.recoveryConfig?.durableAgents === 'auto') {
+      recoveries.push(
+        mastra.recoverAllDurableAgents().catch(error => {
+          mastra.getLogger().error('Failed to recover durable agent runs during server startup', { error });
+        }),
+      );
+    }
+    await Promise.all(recoveries);
     `;
   }
 

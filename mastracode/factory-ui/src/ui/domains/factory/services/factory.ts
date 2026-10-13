@@ -8,11 +8,14 @@
  */
 
 export interface GithubIssue {
+  /** GitHub repository id; numbers repeat across a project's repositories. */
+  repositoryId?: number;
   number: number;
   title: string;
   url: string;
   author: string | null;
   assignee?: string | null;
+  assignees?: string[];
   labels: string[];
   comments: number;
   createdAt: string;
@@ -20,12 +23,15 @@ export interface GithubIssue {
 }
 
 export interface GithubPullRequest {
+  /** GitHub repository id; numbers repeat across a project's repositories. */
+  repositoryId?: number;
   number: number;
   title: string;
   url: string;
   author: string | null;
   assignees?: string[];
   requestedReviewers?: string[];
+  labels?: string[];
   baseBranch: string;
   headBranch: string;
   createdAt: string;

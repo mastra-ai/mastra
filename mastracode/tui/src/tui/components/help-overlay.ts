@@ -26,10 +26,13 @@ interface HelpEntry {
 function getCommands(modes: number): HelpEntry[] {
   const cmds: HelpEntry[] = [
     { key: '/new', description: 'Start a new thread' },
+    { key: '/clone', description: 'Clone the current thread' },
     { key: '/threads', description: 'Switch between threads' },
+    { key: '/resume', description: 'Alias for /threads' },
     { key: '/thread', description: 'Show current thread info' },
     { key: '/thread:tag-dir', description: 'Tag thread with current directory' },
     { key: '/name', description: 'Rename current thread' },
+    { key: '/rename', description: 'Alias for /name' },
     { key: '/resource', description: 'Show/switch resource ID' },
     { key: '/skills', description: 'List available skills' },
     { key: '/skill/<name>', description: 'Activate a skill' },

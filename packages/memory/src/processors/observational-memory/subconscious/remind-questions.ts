@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-
 import type { Agent, MastraDBMessage } from '@mastra/core/agent';
 import type { ProcessorStreamWriter } from '@mastra/core/processors';
 import type { ToolAction } from '@mastra/core/tools';
@@ -305,7 +303,11 @@ export function createReplyToMemoryQuestionTool(options: {
 
       const trimmedAnswer = answer.trim();
       const suffix = moreComing
-        ? `partial:${crypto.createHash('sha256').update(trimmedAnswer).digest('hex').slice(0, 12)}`
+        ? `partial:${Buffer.from(
+            await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(trimmedAnswer)),
+          )
+            .toString('hex')
+            .slice(0, 12)}`
         : 'terminal';
       const signalId = `${replyId}:${suffix}:signal`;
       if (deliveredSignalIds.has(signalId)) return { delivered: true, replyId, moreComing, outcome };

@@ -52,9 +52,9 @@ export const Default: Story = {
 export const Variants: Story = {
   render: () => (
     <div className="grid gap-4">
-      {(['default', 'outline', 'ghost', 'primary'] as const).map(variant => (
+      {(['default', 'ghost', 'primary'] as const).map(variant => (
         <div key={variant} className="flex items-center gap-2">
-          {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
+          {(['sm', 'md', 'lg'] as const).map(size => (
             <DropdownMenu key={size}>
               <DropdownMenu.Trigger variant={variant} size={size}>
                 {variant} / {size}
@@ -78,13 +78,7 @@ export const Variants: Story = {
 export const CustomRender: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger
-        render={
-          <Button variant="outline" size="md">
-            Open Menu
-          </Button>
-        }
-      />
+      <DropdownMenu.Trigger render={<Button size="md">Open Menu</Button>} />
       {menuItems}
     </DropdownMenu>
   ),
@@ -93,7 +87,7 @@ export const CustomRender: Story = {
 export const Compact: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger render={<Button size="xs">Open menu</Button>} />
+      <DropdownMenu.Trigger render={<Button size="sm">Open menu</Button>} />
       <DropdownMenu.Content size="sm" className="w-max min-w-0">
         <DropdownMenu.Item size="sm">
           <User />
@@ -111,9 +105,7 @@ export const Compact: Story = {
 export const WithIcons: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button variant="outline">Open Menu</Button>
-      </DropdownMenu.Trigger>
+      <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
       <DropdownMenu.Content className="w-56">
         <DropdownMenu.Item>
           <User />
@@ -144,9 +136,7 @@ export const WithIcons: Story = {
 export const WithLabelsAndGroups: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button variant="outline">Open Menu</Button>
-      </DropdownMenu.Trigger>
+      <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
       <DropdownMenu.Content className="w-56">
         <DropdownMenu.Label>My Account</DropdownMenu.Label>
         <DropdownMenu.Separator />
@@ -202,9 +192,7 @@ export const WithCheckboxItems: Story = {
 
     return (
       <DropdownMenu>
-        <DropdownMenu.Trigger asChild>
-          <Button variant="outline">View Options</Button>
-        </DropdownMenu.Trigger>
+        <DropdownMenu.Trigger>View Options</DropdownMenu.Trigger>
         <DropdownMenu.Content className="w-56">
           <DropdownMenu.Label>Appearance</DropdownMenu.Label>
           <DropdownMenu.Separator />
@@ -229,9 +217,7 @@ export const WithRadioItems: Story = {
 
     return (
       <DropdownMenu>
-        <DropdownMenu.Trigger asChild>
-          <Button variant="outline">Panel Position</Button>
-        </DropdownMenu.Trigger>
+        <DropdownMenu.Trigger>Panel Position</DropdownMenu.Trigger>
         <DropdownMenu.Content className="w-56">
           <DropdownMenu.Label>Panel Position</DropdownMenu.Label>
           <DropdownMenu.Separator />
@@ -249,9 +235,7 @@ export const WithRadioItems: Story = {
 export const WithSubMenu: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button variant="outline">Open Menu</Button>
-      </DropdownMenu.Trigger>
+      <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
       <DropdownMenu.Content className="w-56">
         <DropdownMenu.Item>
           <Mail />
@@ -304,9 +288,7 @@ export const WithManyItems: Story = {
 
     return (
       <DropdownMenu>
-        <DropdownMenu.Trigger asChild>
-          <Button variant="outline">Open long menu</Button>
-        </DropdownMenu.Trigger>
+        <DropdownMenu.Trigger>Open long menu</DropdownMenu.Trigger>
         <DropdownMenu.Content className="w-56">
           <DropdownMenu.Label>Many items</DropdownMenu.Label>
           <DropdownMenu.Separator />
@@ -334,9 +316,7 @@ export const WithManyItems: Story = {
 export const WithDisabledItems: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger asChild>
-        <Button variant="outline">Open Menu</Button>
-      </DropdownMenu.Trigger>
+      <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
       <DropdownMenu.Content className="w-56">
         <DropdownMenu.Item>
           <GithubIcon />
@@ -363,9 +343,7 @@ export const KitchenSink: Story = {
     const [radio, setRadio] = useState('medium');
     return (
       <DropdownMenu defaultOpen>
-        <DropdownMenu.Trigger asChild>
-          <Button variant="outline">Open Menu</Button>
-        </DropdownMenu.Trigger>
+        <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
         <DropdownMenu.Content className="w-56">
           <DropdownMenu.Label>Account</DropdownMenu.Label>
           <DropdownMenu.Item>Plain item</DropdownMenu.Item>

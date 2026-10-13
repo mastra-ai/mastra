@@ -6,10 +6,13 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 export type ScenarioName =
   | 'startup'
   | 'abort-followup'
+  | 'abort-queued-followup'
+  | 'startup-interrupted'
   | 'account-rotation'
   | 'account-routing-targeted'
   | 'branch-context-long-name'
   | 'active-signal-followup'
+  | 'agent-connections-cross-project'
   | 'agent-connections-expected-reply-watchdog'
   | 'agent-connections-tool-flow'
   | 'agent-connections-notification-signal'
@@ -23,6 +26,11 @@ export type ScenarioName =
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
   | 'automated-chat-unix-pubsub'
+  | 'background-adoption-deferred'
+  | 'background-adoption-awaited'
+  | 'background-adoption-cancel'
+  | 'background-adoption-failure'
+  | 'background-placeholder-opt-in'
   | 'background-placeholder-opt-out'
   | 'background-subagents'
   | 'background-tools-settings'
@@ -32,6 +40,8 @@ export type ScenarioName =
   | 'browser-profile-provider-mismatch'
   | 'browser-settings-persistence'
   | 'browser-startup-restore'
+  | 'browser-status-model'
+  | 'browser-status-chat-model'
   | 'browser-tool-unavailable'
   | 'browserbase-startup-restore'
   | 'browser-toggle-attach'
@@ -54,11 +64,15 @@ export type ScenarioName =
   | 'ctrlf-queued-custom-slash'
   | 'ctrlf-queued-image-followup'
   | 'debug-logging'
+  | 'experimental-agent-durable'
+  | 'experimental-agent-evented'
+  | 'experimental-agent-settings'
   | 'file-attachment-blocked-retry'
   | 'file-attachment-history-reload'
   | 'file-autocomplete'
   | 'first-run-onboarding'
   | 'github-signals-command'
+  | 'schedules-command'
   | 'github-signals-multi-subscribe'
   | 'github-signals-legacy-upgrade'
   | 'github-signals-tool-multi-subscribe'
@@ -71,12 +85,21 @@ export type ScenarioName =
   | 'goal-fresh-thread-persistence'
   | 'goal-judge-om-model-isolation'
   | 'goal-judge-single-render'
+  | 'goal-judge-esc-loaded'
+  | 'goal-judge-esc-unloaded'
   | 'goal-max-runs-ends-goal'
   | 'goal-resume-single-render'
+  | 'goal-survives-new-thread'
   | 'controller-api-config'
   | 'headless-mcp-tool-availability'
+  | 'initial-prompt'
+  | 'initial-prompt-skill'
+  | 'initial-prompt-resume'
+  | 'tui-prompt-resume'
   | 'openai-strict-schema'
+  | 'pack-flag-startup'
   | 'plan-approval-goal-handoff'
+  | 'plan-approval-goal-replaces-active'
   | 'plan-approval-handoff'
   | 'plan-approval-request-changes'
   | 'permission-request-hook'
@@ -109,8 +132,8 @@ export type ScenarioName =
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
+  | 'login-keeps-om-auto'
   | 'login-preserves-model-pack'
-  | 'login-seeds-om-default'
   | 'modal-and-shell'
   | 'mcp-disable-enable'
   | 'mcp-http-tool-call'
@@ -124,7 +147,9 @@ export type ScenarioName =
   | 'model-search'
   | 'model-selection-api-key-prompt'
   | 'model-selection-cancel-env'
+  | 'mode-switch-applies-pack-model'
   | 'models-pack-activation-persistence'
+  | 'models-pack-memory-auto'
   | 'notification-inbox-crud-flow'
   | 'notification-inbox-reload'
   | 'notification-inbox-tool-flow'
@@ -132,6 +157,7 @@ export type ScenarioName =
   | 'notification-signal-rendering'
   | 'notify-input-request-hook'
   | 'om-settings'
+  | 'om-auto-selection'
   | 'om-attachment-observation'
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'
@@ -140,10 +166,12 @@ export type ScenarioName =
   | 'om-status-indicator'
   | 'om-threshold-persistence'
   | 'onboarding-om-follows-login'
-  | 'quiet-settings'
+  | 'legacy-settings-no-prompt'
+  | 'legacy-settings-upgrade'
+  | 'preview-lines-settings'
   | 'web-search-provider-settings'
-  | 'quiet-streaming-preview-height'
-  | 'quiet-tool-history-parity'
+  | 'streaming-preview-height'
+  | 'tool-history-parity'
   | 'report-issue-command'
   | 'request-access-modal'
   | 'state-commands'
@@ -157,6 +185,8 @@ export type ScenarioName =
   | 'setup-nested-model-selector'
   | 'settings-api-keys-navigation'
   | 'settings-startup-model-restore'
+  | 'legacy-thread-model-restore'
+  | 'saved-thread-model-restore'
   | 'shell-passthrough-during-run'
   | 'shell-passthrough-configured-settings'
   | 'shell-passthrough-env-override'
@@ -165,6 +195,7 @@ export type ScenarioName =
   | 'skill-tab-autocomplete'
   | 'skills-command-activation'
   | 'skills-symlink-dedupe'
+  | 'status-footer-inline-start'
   | 'storage-fallback-history-reload'
   | 'storage-settings'
   | 'storage-startup-pg-fallback'
@@ -179,7 +210,10 @@ export type ScenarioName =
   | 'task-patch-tools'
   | 'task-progress-events'
   | 'terminal-resize-reflow'
+  | 'think-picker-per-model'
   | 'task-prompt-context-next-turn'
+  | 'resume-locked-thread'
+  | 'resume-missing-thread'
   | 'thread-history'
   | 'tool-history-reload'
   | 'plugins-streaming-tool-output'
@@ -247,7 +281,17 @@ export type McE2eStartMastraCodeAppOptions = {
   setupDebugLogging?: boolean;
   startupWarnings?: string[];
   tui?: Partial<
-    Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'processMemoryDiagnostics' | 'verbose'>
+    Pick<
+      MastraTUIOptions,
+      | 'appName'
+      | 'initialMessage'
+      | 'initialPackId'
+      | 'resumeSkipNotice'
+      | 'inlineQuestions'
+      | 'processMemoryDiagnostics'
+      | 'resumeThreadId'
+      | 'verbose'
+    >
   >;
 };
 
@@ -268,6 +312,10 @@ export type McE2eScenario = {
   projectFixture?: 'long-branch' | 'manual';
   useOpenAIModel?: boolean;
   disableMemory?: boolean;
+  /** Opt into OM model work, which deterministic TUI scenarios suppress by default. */
+  enableObservationalMemory?: boolean;
+  /** Opt into title model work, which deterministic TUI scenarios suppress by default. */
+  enableTitleGeneration?: boolean;
   aimockFixture?: string;
   env?: (context: McE2ePrepareContext) => Record<string, string | null>;
   entrypoint?: (context: McE2ePrepareContext) => string;

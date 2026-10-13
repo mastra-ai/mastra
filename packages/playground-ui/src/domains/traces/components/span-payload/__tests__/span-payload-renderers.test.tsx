@@ -10,6 +10,7 @@ import { SpanOutputRenderer } from '../span-output-renderers';
 import { SpanPayloadSection } from '../span-payload-section';
 import {
   agentRunAbortedSpan,
+  agentRunInterruptedSpan,
   agentRunMessagesSpan,
   agentRunResumeSpan,
   agentRunSuspendedSpan,
@@ -102,6 +103,10 @@ describe('SpanOutputRenderer', () => {
     render(<SpanOutputRenderer span={agentRunAbortedSpan} />);
     expect(screen.getByText('Aborted')).toBeTruthy();
     expect(screen.getByText('Client disconnected')).toBeTruthy();
+    cleanup();
+    render(<SpanOutputRenderer span={agentRunInterruptedSpan} />);
+    expect(slot('span-interrupted')?.getAttribute('data-status')).toBe('interrupted');
+    expect(screen.getByText('Interrupted')).toBeTruthy();
   });
 
   it('renders agent run results as markdown text and surfaces tripwires', () => {
@@ -118,7 +123,7 @@ describe('SpanOutputRenderer', () => {
     render(<SpanOutputRenderer span={modelGenerationSpan} />);
     expect(slot('span-model-generation-result')).not.toBeNull();
     expect(slot('span-payload-tool-calls')).not.toBeNull();
-    expect(screen.getByRole('button', { name: /hide reasoning/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reasoning' })).toBeTruthy();
   });
 
   it('falls back to JSON for TOOL_CALL', () => {

@@ -3,7 +3,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { Event } from '../../events/types';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemorySchedulesStorage } from '../../storage/domains/schedules/inmemory';
-import { Scheduler } from './scheduler';
+import { Scheduler, TOPIC_AGENT_SCHEDULES } from './scheduler';
 
 function makeStore(): { store: InMemorySchedulesStorage; db: InMemoryDB } {
   const db = new InMemoryDB();
@@ -14,6 +14,14 @@ function makeStore(): { store: InMemorySchedulesStorage; db: InMemoryDB } {
 function captureWorkflowsTopic(pubsub: EventEmitterPubSub): { events: Event[] } {
   const events: Event[] = [];
   void pubsub.subscribe('workflows', async event => {
+    events.push(event);
+  });
+  return { events };
+}
+
+function captureAgentSchedulesTopic(pubsub: EventEmitterPubSub): { events: Event[] } {
+  const events: Event[] = [];
+  void pubsub.subscribe(TOPIC_AGENT_SCHEDULES, async event => {
     events.push(event);
   });
   return { events };
@@ -87,6 +95,186 @@ describe('Scheduler', () => {
 
     expect(events).toHaveLength(1);
     expect(events[0]!.data).toMatchObject({ workflowId: 'wf-test', resourceId: 'tenant-1' });
+  });
+
+  it('fires the final occurrence of a year-pinned cron once and marks it completed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-23T10:00:01Z'));
+
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub });
+    const nextFireAt = new Date('2026-09-23T10:00:00Z').getTime();
+
+    await store.createSchedule({
+      id: 'sched-year-pinned',
+      target: { type: 'workflow', workflowId: 'wf-test' },
+      cron: '0 0 10 23 9 * 2026',
+      timezone: 'UTC',
+      status: 'active',
+      nextFireAt,
+      createdAt: nextFireAt,
+      updatedAt: nextFireAt,
+    });
+
+    await scheduler.tick();
+    await scheduler.tick();
+
+    expect(events).toHaveLength(1);
+    const row = await store.getSchedule('sched-year-pinned');
+    expect(row).toMatchObject({ status: 'completed', nextFireAt, lastRunId: events[0]!.runId });
+    expect(await store.listTriggers('sched-year-pinned')).toHaveLength(1);
+    expect(await store.listDueSchedules(Date.now())).toHaveLength(0);
+  });
+
+  it('does not claim a terminal year-pinned occurrence before it is due and fires at the exact boundary', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-23T09:59:59Z'));
+
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub });
+    const nextFireAt = new Date('2026-09-23T10:00:00Z').getTime();
+
+    await store.createSchedule({
+      id: 'sched-year-pinned-boundary',
+      target: { type: 'workflow', workflowId: 'wf-test' },
+      cron: '0 0 10 23 9 * 2026',
+      timezone: 'UTC',
+      status: 'active',
+      nextFireAt,
+      createdAt: nextFireAt,
+      updatedAt: nextFireAt,
+    });
+
+    await scheduler.tick();
+
+    expect(events).toHaveLength(0);
+    expect(await store.getSchedule('sched-year-pinned-boundary')).toMatchObject({
+      status: 'active',
+      nextFireAt,
+    });
+
+    vi.setSystemTime(nextFireAt);
+    await scheduler.tick();
+    await scheduler.tick();
+
+    expect(events).toHaveLength(1);
+    expect(await store.getSchedule('sched-year-pinned-boundary')).toMatchObject({
+      status: 'completed',
+      nextFireAt,
+      lastRunId: events[0]!.runId,
+    });
+    expect(await store.listDueSchedules(Date.now())).toHaveLength(0);
+  });
+
+  it('completes a year-pinned occurrence in a non-UTC timezone', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-23T14:00:00Z'));
+
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub });
+    const nextFireAt = new Date('2026-09-23T14:00:00Z').getTime();
+
+    await store.createSchedule({
+      id: 'sched-year-pinned-new-york',
+      target: { type: 'workflow', workflowId: 'wf-test' },
+      cron: '0 0 10 23 9 * 2026',
+      timezone: 'America/New_York',
+      status: 'active',
+      nextFireAt,
+      createdAt: nextFireAt,
+      updatedAt: nextFireAt,
+    });
+
+    await scheduler.tick();
+
+    expect(events).toHaveLength(1);
+    expect(await store.getSchedule('sched-year-pinned-new-york')).toMatchObject({
+      status: 'completed',
+      nextFireAt,
+      lastRunId: events[0]!.runId,
+    });
+  });
+
+  it('fires the final occurrence of a year-pinned agent schedule once and marks it completed', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-23T10:00:01Z'));
+
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureAgentSchedulesTopic(pubsub);
+    const scheduler = new Scheduler({ schedulesStore: store, pubsub });
+    const nextFireAt = new Date('2026-09-23T10:00:00Z').getTime();
+    const target = { type: 'agent' as const, agentId: 'agent-test', prompt: 'Run the final check' };
+
+    await store.createSchedule({
+      id: 'sched-year-pinned-agent',
+      target,
+      cron: '0 0 10 23 9 * 2026',
+      timezone: 'UTC',
+      status: 'active',
+      nextFireAt,
+      createdAt: nextFireAt,
+      updatedAt: nextFireAt,
+    });
+
+    await scheduler.tick();
+    await scheduler.tick();
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      type: 'agent-schedule.fire',
+      data: {
+        scheduleId: 'sched-year-pinned-agent',
+        claimId: events[0]!.runId,
+        scheduledFireAt: nextFireAt,
+        target,
+      },
+    });
+    expect(await store.getSchedule('sched-year-pinned-agent')).toMatchObject({
+      status: 'completed',
+      nextFireAt,
+      lastRunId: events[0]!.runId,
+    });
+    expect(await store.listDueSchedules(Date.now())).toHaveLength(0);
+  });
+
+  it('deduplicates concurrent claims of a terminal year-pinned occurrence', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-23T10:00:01Z'));
+
+    const { store } = makeStore();
+    const pubsub = new EventEmitterPubSub();
+    const { events } = captureWorkflowsTopic(pubsub);
+    const a = new Scheduler({ schedulesStore: store, pubsub });
+    const b = new Scheduler({ schedulesStore: store, pubsub });
+    const nextFireAt = new Date('2026-09-23T10:00:00Z').getTime();
+
+    await store.createSchedule({
+      id: 'sched-terminal-dedup',
+      target: { type: 'workflow', workflowId: 'wf-test' },
+      cron: '0 0 10 23 9 * 2026',
+      timezone: 'UTC',
+      status: 'active',
+      nextFireAt,
+      createdAt: nextFireAt,
+      updatedAt: nextFireAt,
+    });
+
+    await Promise.all([a.tick(), b.tick()]);
+
+    expect(events).toHaveLength(1);
+    expect(await store.listTriggers('sched-terminal-dedup')).toHaveLength(1);
+    expect(await store.getSchedule('sched-terminal-dedup')).toMatchObject({
+      status: 'completed',
+      nextFireAt,
+      lastRunId: events[0]!.runId,
+    });
   });
 
   it('skips paused schedules', async () => {
@@ -874,6 +1062,28 @@ describe('Scheduler', () => {
       expect(events).toHaveLength(1);
       // Legacy/imperative schedules carry no hash — consumers must fail open.
       expect((events[0]!.data as any).scheduleDefinitionHash).toBeUndefined();
+
+      await scheduler.stop();
+    });
+
+    it('marks the fired workflow.start with its schedule trigger', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub, config: { tickIntervalMs: 60_000 } });
+
+      const schedule = await makeDue(store);
+      await scheduler.tick();
+
+      expect(events).toHaveLength(1);
+      expect(events[0]!.type).toBe('workflow.start');
+      // The workflow event processor uses this to run default-engine fires in-process.
+      expect((events[0]!.data as any).scheduleTrigger).toEqual({
+        scheduleId: schedule.id,
+        scheduledFireAt: schedule.nextFireAt,
+        triggerKind: 'schedule-fire',
+      });
+      expect(events[0]!.runId).toBe(`sched_${schedule.id}_${schedule.nextFireAt}`);
 
       await scheduler.stop();
     });

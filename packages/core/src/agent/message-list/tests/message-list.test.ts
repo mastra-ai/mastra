@@ -1272,6 +1272,62 @@ describe('MessageList', () => {
       ]);
     });
 
+    describe('steps that open with a tool call', () => {
+      const call = (toolCallId: string, toolName: string) =>
+        ({ type: 'tool-call', toolCallId, toolName, input: {} }) as const;
+      const result = (toolCallId: string, toolName: string) =>
+        ({ type: 'tool-result', toolCallId, toolName, output: { type: 'json', value: {} } }) as const;
+      const describePrompt = (list: MessageList) =>
+        list.get.all.aiV5
+          .model()
+          .map(
+            m =>
+              `${m.role}[${typeof m.content === 'string' ? 'text' : m.content.map(p => ('toolName' in p ? p.toolName : p.type))}]`,
+          );
+
+      it('keeps a step that opens with a tool call separate from the previous step', () => {
+        const list = new MessageList({ threadId, resourceId });
+        list.add({ role: 'user', content: 'list my items, then check the first one' }, 'input');
+        list.add({ role: 'assistant', content: [call('A', 'list_items')] } satisfies AIV5Type.ModelMessage, 'response');
+        list.add({ role: 'tool', content: [result('A', 'list_items')] } satisfies AIV5Type.ModelMessage, 'response');
+        list.add({ role: 'assistant', content: [call('B', 'get_item')] } satisfies AIV5Type.ModelMessage, 'response');
+        list.add({ role: 'tool', content: [result('B', 'get_item')] } satisfies AIV5Type.ModelMessage, 'response');
+
+        expect(describePrompt(list)).toEqual([
+          'user[text]',
+          'assistant[list_items]',
+          'tool[list_items]',
+          'assistant[get_item]',
+          'tool[get_item]',
+        ]);
+      });
+
+      it('keeps parallel tool calls from one step together', () => {
+        const list = new MessageList({ threadId, resourceId });
+        list.add({ role: 'user', content: 'check both items' }, 'input');
+        list.add(
+          {
+            role: 'assistant',
+            content: [call('A', 'get_item'), call('B', 'get_status')],
+          } satisfies AIV5Type.ModelMessage,
+          'response',
+        );
+        list.add(
+          {
+            role: 'tool',
+            content: [result('A', 'get_item'), result('B', 'get_status')],
+          } satisfies AIV5Type.ModelMessage,
+          'response',
+        );
+
+        expect(describePrompt(list)).toEqual([
+          'user[text]',
+          'assistant[get_item,get_status]',
+          'tool[get_item,get_status]',
+        ]);
+      });
+    });
+
     it.each(['https://example.com/leads.csv', 'data:text/csv;base64,bmFtZQpBY21l', 'bmFtZQpBY21l'])(
       'preserves attachment filenames in UI messages after storage round-trip: %s',
       data => {
@@ -2558,6 +2614,7 @@ describe('MessageList', () => {
             result: 123,
             step: undefined,
           },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2611,6 +2668,7 @@ describe('MessageList', () => {
             result: 42,
             step: undefined,
           },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2711,6 +2769,7 @@ describe('MessageList', () => {
             result: 100,
             step: undefined,
           },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2756,6 +2815,7 @@ describe('MessageList', () => {
         {
           type: 'tool-invocation',
           toolInvocation: { state: 'result', toolCallId: 'B', toolName: 'bar', args: {}, result: 7 },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2803,6 +2863,7 @@ describe('MessageList', () => {
         {
           type: 'tool-invocation',
           toolInvocation: { state: 'result', toolCallId: 'call-4', toolName: 'baz', args: {}, result: 5 },
+          updatedAt: expect.any(Number),
         },
       ]);
     });
@@ -2869,6 +2930,7 @@ describe('MessageList', () => {
         {
           type: 'tool-invocation',
           toolInvocation: { state: 'result', toolCallId: 'call-5', toolName: 'foo', args: {}, result: 123 },
+          updatedAt: expect.any(Number),
         },
       ]);
     });

@@ -56,3 +56,12 @@ export function sanitizeAnsiForRendering(text: string): string {
     return '';
   });
 }
+
+/**
+ * Replace every control character (including ESC, so all escape sequences are
+ * neutralised) with a space. Use for untrusted one-line text such as goal
+ * fields and provider/scorer error messages, where no styling should survive.
+ */
+export function stripControlChars(text: string): string {
+  return text.replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').trim();
+}

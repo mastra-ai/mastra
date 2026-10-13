@@ -254,7 +254,12 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+
+  -- traceId is second in the sort key, behind startedAt, so point lookups by
+  -- traceId (getRootSpan, trace deletes, trace-query root dedupe) need a skip
+  -- index to avoid scanning every granule.
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
@@ -346,7 +351,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
@@ -616,7 +623,19 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   -- Information-only JSON payloads
   data               Nullable(String),
   metadata           Nullable(String),
-  scope              Nullable(String)
+  scope              Nullable(String),
+
+  -- Same ID drilldown indexes as metric_events: these columns are outside
+  -- the sort key, so without them every drilldown scans the time range.
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_threadId threadId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_resourceId resourceId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_userId userId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_organizationId organizationId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_experimentId experimentId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_runId runId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_sessionId sessionId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_requestId requestId TYPE bloom_filter(0.01) GRANULARITY 2
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
@@ -757,7 +776,8 @@ SETTINGS allow_nullable_key = 1
 
 export const SCORE_EVENTS_CURRENT_DDL = `
 CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_CURRENT} (
-${SCORE_EVENT_COLUMNS_DDL}
+${SCORE_EVENT_COLUMNS_DDL},
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree(writeVersion)
 PARTITION BY cityHash64(scoreId) % 64
@@ -788,7 +808,8 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_DELTA} (
   ingestedAt         ${DELTA_INGESTED_AT_TYPE},
   traceId            Nullable(String),
   timestamp          DateTime64(3, 'UTC'),
-  scoreId            String
+  scoreId            String,
+  INDEX idx_scoreId scoreId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = MergeTree
 PARTITION BY toDate(ingestedAt)
@@ -800,12 +821,21 @@ SETTINGS allow_nullable_key = 1
 
 // Forward-only index: historical rows that predate this delta schema are not
 // backfilled into delta polling.
-export function buildScoreEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
-  return `
-CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}
-TO ${TABLE_SCORE_EVENTS_DELTA}
-AS
-SELECT
+//
+// A scoreId normally gets one cursorId. Retried or re-written inserts of the
+// same scoreId (client retries, Pub/Sub redelivery, writeVersion bumps) are
+// skipped while the scoreId is still in the delta table (until its TTL drops
+// the row, including after the score is deleted), and `LIMIT 1 BY`
+// collapses duplicates within a single insert block. This mirrors the DuckDB
+// store, which preserves cursorId on retry so the score is not re-emitted to
+// delta consumers. The inner `SELECT scoreId FROM mastra_score_events` refers
+// to the inserted block, so the delta lookup only touches the scoreIds being
+// written (served by idx_scoreId) instead of hashing the whole delta table.
+// Concurrent inserts of one scoreId can still race past the NOT IN check; the
+// read side treats a score's first delta row as its only cursor, so such
+// duplicates never reach consumers.
+export function buildScoreEventsDeltaMvQuery(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `SELECT
   ${buildDeltaCursorExpr(strategy, 'mastra_score_events_delta_cursor', 'scoreId')} AS cursorId,
   ingestedAt,
   traceId,
@@ -818,7 +848,20 @@ FROM (
     timestamp,
     scoreId
   FROM ${TABLE_SCORE_EVENTS}
-)
+  WHERE scoreId NOT IN (
+    SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA}
+    WHERE scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS})
+  )
+  LIMIT 1 BY scoreId
+)`;
+}
+
+export function buildScoreEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}
+TO ${TABLE_SCORE_EVENTS_DELTA}
+AS
+${buildScoreEventsDeltaMvQuery(strategy)}
 `;
 }
 
@@ -887,7 +930,11 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
 
   -- Information-only JSON payloads
   metadata           Nullable(String),
-  scope              Nullable(String)
+  scope              Nullable(String),
+
+  -- feedbackId is last in the sort key; id lookups (write versions, review
+  -- updates, deletes, trace-query dedupe) need a skip index.
+  INDEX idx_feedbackId feedbackId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
@@ -1197,6 +1244,18 @@ const addBloomIndex = (table: string, name: string, column: string, granularity 
   sql: `ALTER TABLE ${table} ADD INDEX IF NOT EXISTS ${name} ${column} TYPE bloom_filter(0.01) GRANULARITY ${granularity}`,
 });
 
+const LOG_SKIP_INDEX_COLUMNS = [
+  'traceId',
+  'threadId',
+  'resourceId',
+  'userId',
+  'organizationId',
+  'experimentId',
+  'runId',
+  'sessionId',
+  'requestId',
+] as const;
+
 export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   // Span events
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
@@ -1220,12 +1279,18 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_SCORE_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SCORE_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   addBloomIndex(TABLE_SCORE_EVENTS, 'idx_scoreId', 'scoreId', 1),
+  addBloomIndex(TABLE_SCORE_EVENTS_DELTA, 'idx_scoreId', 'scoreId', 1),
+  addBloomIndex(TABLE_SCORE_EVENTS_CURRENT, 'idx_traceId', 'traceId', 1),
   // Feedback
   addColumn(TABLE_FEEDBACK_EVENTS, 'writeVersion', 'UInt64 DEFAULT 0'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'reviewStatus', "LowCardinality(String) DEFAULT 'needs-review'"),
   addColumn(TABLE_FEEDBACK_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
+  addBloomIndex(TABLE_FEEDBACK_EVENTS, 'idx_feedbackId', 'feedbackId', 1),
+  // Trace roots / branches: traceId sits behind startedAt in the sort key.
+  addBloomIndex(TABLE_TRACE_ROOTS, 'idx_traceId', 'traceId', 1),
+  addBloomIndex(TABLE_TRACE_BRANCHES, 'idx_traceId', 'traceId', 1),
   // Metric skip indexes — additive, instant DDL. Existing parts keep no index
   // until merged or `MATERIALIZE INDEX` is run; new parts are bloom-filtered
   // immediately. With normal retention turning over the table, the index
@@ -1239,6 +1304,8 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_runId', 'runId'),
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_sessionId', 'sessionId'),
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_requestId', 'requestId'),
+  // Log skip indexes — same ID drilldown set as metrics.
+  ...LOG_SKIP_INDEX_COLUMNS.map(column => addBloomIndex(TABLE_LOG_EVENTS, `idx_${column}`, column)),
   // Deletion requests: `predicateValues` is outside the sort key, so guard
   // lookups via `has()` need a skip index to avoid a per-scope full scan.
   addBloomIndex(TABLE_DELETION_REQUESTS, 'idx_predicateValues', 'predicateValues'),

@@ -27,6 +27,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
+import { toPgJson } from '../../../db/sanitize-json';
 import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
 import { rowToSpanRecord } from './helpers';
 import {
@@ -197,7 +198,7 @@ function buildListTracesFilters(
   }
   if (filters.metadata != null) {
     conditions.push(`r."metadataSearch" @> $${i++}::jsonb`);
-    params.push(JSON.stringify(filters.metadata));
+    params.push(toPgJson(filters.metadata));
   }
   if (filters.tags != null && filters.tags.length > 0) {
     conditions.push(`r."tags" @> $${i++}::text[]`);
@@ -527,7 +528,7 @@ function buildListBranchesFilters(
   }
   if (filters.metadata != null) {
     conditions.push(`r."metadataSearch" @> $${i++}::jsonb`);
-    params.push(JSON.stringify(filters.metadata));
+    params.push(toPgJson(filters.metadata));
   }
   if (filters.tags != null && filters.tags.length > 0) {
     conditions.push(`r."tags" @> $${i++}::text[]`);

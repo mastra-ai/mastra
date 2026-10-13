@@ -56,7 +56,26 @@ describe('22573 history loader', () => {
     expect(
       await loadMemoryContextMessages({ memory, messageList: list, threadId: 'thread', resourceId: 'resource' }),
     ).toBe(result);
-    expect(list.get.all.db()).toEqual([incoming]);
+    expect(list.get.all.db()).toHaveLength(1);
+    expect(list.get.all.db()[0]).toMatchObject({
+      id: 'assistant',
+      createdAt: pending.createdAt,
+      content: {
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'color',
+              toolName: 'changeColor',
+              args: { color: 'green' },
+              result: { applied: true },
+            },
+          },
+        ],
+      },
+    });
+    expect(list.get.input.db()).toHaveLength(1);
     expect(memory.persistMessages).not.toHaveBeenCalled();
   });
 
@@ -74,13 +93,17 @@ describe('22573 history loader', () => {
     expect(memory.persistMessages).not.toHaveBeenCalled();
   });
 
-  it('preserves incoming content and metadata beyond tool state', async () => {
+  it('keeps the stored content and metadata when the client resends a stored message', async () => {
     const incoming = message('same', 'user', 'Updated content', 1);
     incoming.content.metadata = { clientRevision: 2 };
+    const stored = message('same', 'user', 'Old content', 1);
     const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
     list.add(incoming, 'input');
-    const { memory } = context([message('same', 'user', 'Old content', 1)]);
+    const { memory } = context([stored]);
     await loadMemoryContextMessages({ memory, messageList: list, threadId: 'thread', resourceId: 'resource' });
-    expect(list.get.all.db()).toEqual([incoming]);
+    const messages = list.get.all.db();
+    expect(messages).toHaveLength(1);
+    expect(messages[0]!.content.parts).toEqual([{ type: 'text', text: 'Old content' }]);
+    expect(messages[0]!.content.metadata).toBeUndefined();
   });
 });

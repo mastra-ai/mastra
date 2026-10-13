@@ -42,6 +42,7 @@ const SNAPSHOT_FIELDS = [
   'references',
   'scripts',
   'assets',
+  'files',
   'metadata',
   'tree',
 ] as const;
@@ -152,6 +153,7 @@ export class SkillsMySQL extends SkillsStorage {
       status: (row.status as StorageSkillType['status']) ?? 'draft',
       activeVersionId: (row.activeVersionId as string) ?? undefined,
       authorId: (row.authorId as string) ?? undefined,
+      visibility: (row.visibility as StorageSkillType['visibility']) ?? undefined,
       favoriteCount: row.favoriteCount === null || row.favoriteCount === undefined ? 0 : Number(row.favoriteCount),
       createdAt: row.createdAt instanceof Date ? row.createdAt : new Date(row.createdAt as string),
       updatedAt: row.updatedAt instanceof Date ? row.updatedAt : new Date(row.updatedAt as string),
@@ -172,6 +174,7 @@ export class SkillsMySQL extends SkillsStorage {
       references: this.safeParseJSON(row.references) as SkillVersion['references'],
       scripts: this.safeParseJSON(row.scripts) as SkillVersion['scripts'],
       assets: this.safeParseJSON(row.assets) as SkillVersion['assets'],
+      files: this.safeParseJSON(row.files) as SkillVersion['files'],
       metadata: this.safeParseJSON(row.metadata) as Record<string, unknown> | undefined,
       tree: this.safeParseJSON(row.tree) as SkillVersion['tree'],
       changedFields: this.safeParseJSON(row.changedFields) as string[] | undefined,
@@ -204,6 +207,7 @@ export class SkillsMySQL extends SkillsStorage {
     const { skill } = input;
     try {
       const now = new Date();
+      const visibility = skill.visibility ?? (skill.authorId ? 'private' : undefined);
       await this.operations.insert({
         tableName: TABLE_SKILLS,
         record: {
@@ -211,13 +215,14 @@ export class SkillsMySQL extends SkillsStorage {
           status: 'draft',
           activeVersionId: null,
           authorId: skill.authorId ?? null,
+          visibility: visibility ?? null,
           favoriteCount: 0,
           createdAt: now,
           updatedAt: now,
         },
       });
 
-      const { id: _id, authorId: _authorId, ...snapshotConfig } = skill;
+      const { id: _id, authorId: _authorId, visibility: _visibility, ...snapshotConfig } = skill;
       const versionId = crypto.randomUUID();
       try {
         await this.createVersion({
@@ -238,6 +243,7 @@ export class SkillsMySQL extends SkillsStorage {
         status: 'draft',
         activeVersionId: undefined,
         authorId: skill.authorId,
+        visibility,
         favoriteCount: 0,
         createdAt: now,
         updatedAt: now,
@@ -268,12 +274,13 @@ export class SkillsMySQL extends SkillsStorage {
           details: { skillId: id },
         });
 
-      const { authorId, activeVersionId, status, ...configFields } = updates;
+      const { authorId, visibility, activeVersionId, status, ...configFields } = updates;
       const configFieldNames = SNAPSHOT_FIELDS as readonly string[];
       const hasConfigUpdate = configFieldNames.some(field => field in configFields);
 
       const updateData: Record<string, unknown> = { updatedAt: new Date() };
       if (authorId !== undefined) updateData.authorId = authorId;
+      if (visibility !== undefined) updateData.visibility = visibility;
       if (activeVersionId !== undefined) {
         updateData.activeVersionId = activeVersionId;
         if (status === undefined) updateData.status = 'published';
@@ -527,6 +534,7 @@ export class SkillsMySQL extends SkillsStorage {
           references: input.references ?? null,
           scripts: input.scripts ?? null,
           assets: input.assets ?? null,
+          files: input.files ?? null,
           metadata: input.metadata ?? null,
           tree: input.tree ?? null,
           changedFields: input.changedFields ?? null,

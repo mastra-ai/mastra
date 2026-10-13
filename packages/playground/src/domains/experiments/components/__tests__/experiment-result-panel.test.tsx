@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
-import type { DatasetExperimentResult, GetSystemPackagesResponse } from '@mastra/client-js';
+import type { DatasetExperimentResult, GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ExperimentResultPanel } from '../experiment-result-panel';
+import { agentMarkdownResult, workflowResult } from './fixtures/experiment-results';
 import {
-  metricsCapableSystemPackages,
-  metricsUnavailableSystemPackages,
+  metricsCapableCapabilities,
+  metricsUnavailableCapabilities,
   traceSpans,
   traceUsageBreakdown,
 } from '@/pages/traces/__tests__/fixtures/traces';
@@ -22,6 +23,7 @@ const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetEx
   experimentId: 'exp-1',
   itemId: 'item-1',
   input: 'hello',
+  targetType: 'workflow',
   output: 'world',
   groundTruth: null,
   scores: {},
@@ -80,6 +82,31 @@ function renderPanel(
   );
   return { onTagsChange };
 }
+
+describe('ExperimentResultPanel output', () => {
+  describe('when the result is an agent result with text', () => {
+    it('renders the output text as markdown', () => {
+      renderPanel(agentMarkdownResult);
+
+      expect(screen.getByRole('heading', { name: 'Title' })).toBeDefined();
+      expect(screen.getByText('bold').tagName).toBe('STRONG');
+    });
+
+    it('does not render the raw markdown source', () => {
+      renderPanel(agentMarkdownResult);
+
+      expect(document.body.textContent).not.toContain('**bold**');
+    });
+  });
+
+  describe('when the result is a workflow result', () => {
+    it('renders the output as JSON', () => {
+      renderPanel(workflowResult);
+
+      expect(document.body.textContent).toContain('"answer": 42');
+    });
+  });
+});
 
 describe('ExperimentResultPanel metadata', () => {
   describe('given a result with a status and tags', () => {
@@ -200,14 +227,14 @@ describe('ExperimentResultPanel trace usage', () => {
   const onBreakdownRequest = vi.fn();
 
   const setUsageHandlers = ({
-    systemPackages,
+    capabilities,
     rootEntityType,
   }: {
-    systemPackages: GetSystemPackagesResponse;
+    capabilities: GetObservabilityCapabilitiesResponse;
     rootEntityType: EntityType;
   }) => {
     server.use(
-      http.get(`${TEST_BASE_URL}/api/system/packages`, () => HttpResponse.json(systemPackages)),
+      http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
       http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => {
         onTraceRequest();
         const [root] = traceSpans.spans;
@@ -233,7 +260,7 @@ describe('ExperimentResultPanel trace usage', () => {
   });
 
   it('renders no usage rows and fetches nothing when the result has no trace', async () => {
-    setUsageHandlers({ systemPackages: metricsCapableSystemPackages, rootEntityType: EntityType.AGENT });
+    setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
     renderPanel(makeResult({ traceId: null }));
 
     await screen.findByText('Item Id');
@@ -243,7 +270,7 @@ describe('ExperimentResultPanel trace usage', () => {
   });
 
   it('shows tokens and cost for an agent trace when metrics are supported', async () => {
-    setUsageHandlers({ systemPackages: metricsCapableSystemPackages, rootEntityType: EntityType.AGENT });
+    setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.AGENT });
     renderPanel(makeResult({ traceId: 'trace-a' }));
 
     expect(await screen.findByText('Input tokens')).toBeDefined();
@@ -252,11 +279,11 @@ describe('ExperimentResultPanel trace usage', () => {
     expect(screen.getByText('Output tokens')).toBeDefined();
     expect(screen.getByText('—')).toBeDefined();
     expect(screen.getByText('Cost')).toBeDefined();
-    expect(screen.getByText('$0.0010')).toBeDefined();
+    expect(screen.getByText('<$0.01')).toBeDefined();
   });
 
   it('skips usage for a workflow trace', async () => {
-    setUsageHandlers({ systemPackages: metricsCapableSystemPackages, rootEntityType: EntityType.WORKFLOW });
+    setUsageHandlers({ capabilities: metricsCapableCapabilities, rootEntityType: EntityType.WORKFLOW });
     renderPanel(makeResult({ traceId: 'trace-a' }));
 
     await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());
@@ -266,7 +293,7 @@ describe('ExperimentResultPanel trace usage', () => {
   });
 
   it('skips usage when the observability storage does not support metrics', async () => {
-    setUsageHandlers({ systemPackages: metricsUnavailableSystemPackages, rootEntityType: EntityType.AGENT });
+    setUsageHandlers({ capabilities: metricsUnavailableCapabilities, rootEntityType: EntityType.AGENT });
     renderPanel(makeResult({ traceId: 'trace-a' }));
 
     await waitFor(() => expect(onTraceRequest).toHaveBeenCalled());

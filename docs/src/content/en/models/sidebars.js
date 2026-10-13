@@ -256,6 +256,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/bee',
+          label: 'Bee by HEOSSI',
+        },
+        {
+          type: 'doc',
           id: 'providers/berget',
           label: 'Berget.AI',
         },
@@ -403,6 +408,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/empiriolabs',
           label: 'EmpirioLabs AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/engy',
+          label: 'engy',
         },
         {
           type: 'doc',
@@ -606,6 +616,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/lowrouter',
+          label: 'LowRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/lucidquery',
           label: 'LucidQuery',
         },
@@ -732,7 +747,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/novita-ai',
-          label: 'NovitaAI',
+          label: 'Novita AI',
         },
         {
           type: 'doc',
@@ -761,13 +776,13 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/opencode-go',
-          label: 'OpenCode Go',
+          id: 'providers/opencode',
+          label: 'OpenCode',
         },
         {
           type: 'doc',
-          id: 'providers/opencode',
-          label: 'OpenCode Zen',
+          id: 'providers/opencode-go',
+          label: 'OpenCode Go',
         },
         {
           type: 'doc',
@@ -788,6 +803,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/ovhcloud',
           label: 'OVHcloud AI Endpoints',
+        },
+        {
+          type: 'doc',
+          id: 'providers/pareto',
+          label: 'Pareto Inference',
         },
         {
           type: 'doc',
@@ -818,6 +838,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/poolside',
           label: 'Poolside',
+        },
+        {
+          type: 'doc',
+          id: 'providers/prime',
+          label: 'Prime Inference',
         },
         {
           type: 'doc',
@@ -948,6 +973,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/synthetic',
           label: 'Synthetic',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tempr',
+          label: 'Tempr Gateway',
         },
         {
           type: 'doc',

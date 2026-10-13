@@ -1,13 +1,15 @@
+import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
-import { useActivateModelPack } from '../../../../hooks/use-model-packs';
 import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
 import {
   useSwitchAgentControllerModeMutation,
   useSwitchAgentControllerModelMutation,
 } from '../../../../hooks/useAgentControllerStateMutations';
 import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
@@ -15,18 +17,18 @@ interface PromptHandoff {
   handoffPrompt: string;
   handoffModeId?: string;
   handoffModelId?: string;
-  handoffModelPackId?: string;
+  handoffThinkingLevel?: ThinkingLevelSetting;
 }
 
 export function promptHandoffState(
   prompt: string,
-  config: { modeId: string; modelId?: string; modelPackId?: string },
+  config: { modeId: string; modelId?: string; thinkingLevel?: ThinkingLevelSetting },
 ): PromptHandoff {
   return {
     handoffPrompt: prompt,
     handoffModeId: config.modeId,
     handoffModelId: config.modelId,
-    handoffModelPackId: config.modelPackId,
+    handoffThinkingLevel: config.thinkingLevel,
   };
 }
 
@@ -40,11 +42,38 @@ function readHandoffField(state: unknown, key: keyof PromptHandoff): string | un
   return typeof value === 'string' && value ? value : undefined;
 }
 
+const pendingHandoffKey = (resourceId: string) => `factory-pending-handoff:${resourceId}`;
+
+function storePendingHandoff(resourceId: string, prompt: string): void {
+  try {
+    sessionStorage.setItem(pendingHandoffKey(resourceId), prompt);
+  } catch {
+    // Browser storage can be unavailable; the current tab can still send.
+  }
+}
+
+function readPendingHandoff(resourceId: string): string | null {
+  try {
+    return sessionStorage.getItem(pendingHandoffKey(resourceId));
+  } catch {
+    return null;
+  }
+}
+
+export function clearPendingHandoff(resourceId: string): void {
+  try {
+    sessionStorage.removeItem(pendingHandoffKey(resourceId));
+  } catch {
+    // Storage can be unavailable; the message is already sent.
+  }
+}
+
 export function useHandoffPrompt(): void {
   const location = useLocation();
   const navigate = useNavigate();
   const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const { localUser, clearPending, pushNotice } = useChatTranscript();
+  const { prefillComposer } = useChatCommands();
   const mutationArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -55,17 +84,31 @@ export function useHandoffPrompt(): void {
   const { mutateAsync: sendMessage } = useSendAgentControllerMessageMutation(mutationArgs);
   const { mutateAsync: switchMode } = useSwitchAgentControllerModeMutation(mutationArgs);
   const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation(mutationArgs);
-  const { mutateAsync: activateModelPack } = useActivateModelPack(resourceId, projectPath);
   const handedOff = useRef(false);
+  const recovered = useRef(false);
   const prompt = readHandoffField(location.state, 'handoffPrompt');
   const modeId = readHandoffField(location.state, 'handoffModeId');
   const modelId = readHandoffField(location.state, 'handoffModelId');
-  const modelPackId = readHandoffField(location.state, 'handoffModelPackId');
+  const handoffThinkingLevel = readHandoffField(location.state, 'handoffThinkingLevel');
+  const thinkingLevel = isThinkingLevelSetting(handoffThinkingLevel) ? handoffThinkingLevel : undefined;
 
   useEffect(() => {
-    if (!prompt || !sessionEnabled || handedOff.current) return;
+    if (!sessionEnabled) return;
+    if (handedOff.current) return;
+    if (!prompt) {
+      if (recovered.current) return;
+      recovered.current = true;
+      const interruptedPrompt = readPendingHandoff(resourceId);
+      if (interruptedPrompt) {
+        prefillComposer(interruptedPrompt);
+        pushNotice('The previous message may not have been sent. Check the transcript before retrying.', 'error');
+      }
+      return;
+    }
     handedOff.current = true;
-    // history state outlives a reload; drop it before sending so the prompt cannot go twice
+    // Keep a recoverable draft before dropping history state. Never auto-resend
+    // after an interruption: the server may already have accepted the message.
+    storePendingHandoff(resourceId, prompt);
     void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
     localUser(prompt);
     void (async () => {
@@ -75,40 +118,34 @@ export function useHandoffPrompt(): void {
           pushNotice(error instanceof Error ? error.message : `Could not start in ${modeId} mode.`, 'error'),
         );
       }
-      // Pack activation applies the pack's own models server-side, so the
-      // handoff only carries a model when the draft explicitly deviated from
-      // the pack. A failed activation therefore falls back to the session
-      // defaults instead of half-applying the pack through its model.
-      if (modelPackId) {
-        await activateModelPack({ id: modelPackId, target: 'session' }).catch((error: unknown) =>
-          pushNotice(error instanceof Error ? error.message : 'Could not apply the selected model pack.', 'error'),
-        );
-      }
       if (modelId) {
-        await switchModel(modelId).catch((error: unknown) =>
+        await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>
           pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
         );
       }
       await sendMessage(prompt);
+      clearPendingHandoff(resourceId);
     })().catch(error => {
+      prefillComposer(prompt);
       clearPending();
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
     });
   }, [
-    activateModelPack,
     clearPending,
     localUser,
     location.pathname,
     location.search,
     modeId,
     modelId,
-    modelPackId,
     navigate,
+    prefillComposer,
     prompt,
     pushNotice,
+    resourceId,
     sendMessage,
     sessionEnabled,
     switchMode,
     switchModel,
+    thinkingLevel,
   ]);
 }

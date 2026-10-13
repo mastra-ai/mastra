@@ -154,6 +154,37 @@ describe('ProviderAccessSection', () => {
     });
   });
 
+  describe('when auth is disabled', () => {
+    it('labels org-pinned credentials as personal and saves them without a scope', async () => {
+      const providers: ProviderInfo[] = [{ provider: 'openai', source: 'stored' }];
+      let putBody: unknown;
+      server.use(
+        http.get(PROVIDERS_URL, () => providersResponse(providers)),
+        http.put(keyUrl('openai'), async ({ request }) => {
+          putBody = await request.json();
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ProviderAccessSection fixedScope="org" />);
+
+      await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
+      await screen.findByText('OpenAI');
+      expect(within(rowFor('openai')).getByText('Key saved')).toBeInTheDocument();
+      expect(screen.getByText('Personal')).toBeInTheDocument();
+      expect(screen.queryByText('Org-wide')).not.toBeInTheDocument();
+
+      const updateKey = within(rowFor('openai')).getByRole('button', { name: 'Update key for OpenAI' });
+      await waitFor(() => expect(updateKey).toBeEnabled());
+      await user.click(updateKey);
+      await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-local');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(putBody).toEqual({ key: 'sk-local' }));
+    });
+  });
+
   describe('when an OAuth provider uses a paste-code flow', () => {
     it('starts the flow, completes it, and refetches the signed-in status', async () => {
       const providers: ProviderInfo[] = [
@@ -306,6 +337,32 @@ describe('ProviderAccessSection', () => {
       );
     const orgWide = () => screen.getByRole('button', { name: 'Org-wide' });
     const personal = () => screen.getByRole('button', { name: 'Personal' });
+
+    it('shows a deployment-provided provider as configured by the deployment, with no key to add', async () => {
+      window.__MASTRACODE_CONFIG__ = { authEnabled: true };
+      server.use(
+        authenticated(),
+        http.get(PROVIDERS_URL, () =>
+          providersResponse([
+            { provider: 'amazon-bedrock', source: 'deployment' },
+            { provider: 'openai', source: 'none' },
+          ]),
+        ),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ProviderAccessSection />);
+
+      await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
+      await screen.findByText('Amazon Bedrock');
+      for (const scope of [personal, orgWide]) {
+        await user.click(scope());
+        const row = rowFor('amazon-bedrock');
+        expect(within(row).getByText('From deployment')).toBeInTheDocument();
+        expect(within(row).queryByRole('button', { name: /API key|Update key|Remove key/ })).not.toBeInTheDocument();
+      }
+      expect(within(rowFor('openai')).getByRole('button', { name: 'Add API key for OpenAI' })).toBeInTheDocument();
+    });
 
     it('saves an org-wide API key from the org view and shows the personal view as covered', async () => {
       window.__MASTRACODE_CONFIG__ = { authEnabled: true };
@@ -496,6 +553,83 @@ describe('ProviderAccessSection', () => {
       expect(
         within(rowFor('anthropic')).queryByRole('button', { name: 'Sign out of Anthropic for the org' }),
       ).not.toBeInTheDocument();
+    });
+
+    it('fixes onboarding API-key management to personal scope without treating org coverage as personal', async () => {
+      window.__MASTRACODE_CONFIG__ = { authEnabled: true };
+      const providers: ProviderInfo[] = [
+        { provider: 'openai', source: 'stored-org', orgKey: true, orgCredential: 'api_key' },
+      ];
+      let putBody: unknown;
+      server.use(
+        authenticated(),
+        http.get(PROVIDERS_URL, () => providersResponse(providers)),
+        http.put(keyUrl('openai'), async ({ request }) => {
+          putBody = await request.json();
+          providers[0] = {
+            ...providers[0],
+            source: 'stored-user',
+            userCredential: 'api_key',
+          };
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      const user = userEvent.setup();
+      const { client } = renderWithProviders(<ProviderAccessSection fixedScope="user" />);
+
+      expect(screen.queryByRole('button', { name: 'Personal' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Org-wide' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
+      await screen.findByText('OpenAI');
+      expect(within(rowFor('openai')).getByText('Not set')).toBeInTheDocument();
+      expect(within(rowFor('openai')).queryByText('Covered by org')).not.toBeInTheDocument();
+
+      await user.click(within(rowFor('openai')).getByRole('button', { name: 'Add API key for OpenAI' }));
+      expect(screen.queryByText('Just me')).not.toBeInTheDocument();
+      expect(screen.queryByText('Everyone in org')).not.toBeInTheDocument();
+      await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-personal');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+
+      await waitForMutationsIdle(client);
+      expect(putBody).toEqual({ key: 'sk-personal', scope: 'user' });
+      expect(within(rowFor('openai')).getByText('Key saved')).toBeInTheDocument();
+    });
+
+    it('starts onboarding OAuth at personal scope', async () => {
+      window.__MASTRACODE_CONFIG__ = { authEnabled: true };
+      let startBody: unknown;
+      server.use(
+        authenticated(),
+        http.get(PROVIDERS_URL, () =>
+          providersResponse([
+            {
+              provider: 'anthropic',
+              source: 'oauth-org',
+              orgCredential: 'oauth',
+              oauth: { supported: true, modes: ['paste-code'] },
+            },
+          ]),
+        ),
+        http.post(oauthUrl('anthropic', 'start'), async ({ request }) => {
+          startBody = await request.json();
+          return HttpResponse.json({
+            sessionId: 'session-personal',
+            kind: 'paste-code',
+            url: 'https://example.com/authorize',
+            instructions: 'Authorize and paste the code.',
+            expiresAt: Date.now() + 60_000,
+          });
+        }),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<ProviderAccessSection fixedScope="user" />);
+
+      await screen.findByText('Anthropic');
+      expect(within(rowFor('anthropic')).getByText('Not set')).toBeInTheDocument();
+      await user.click(within(rowFor('anthropic')).getByRole('button', { name: 'Sign in to Anthropic' }));
+
+      await waitFor(() => expect(startBody).toEqual({ mode: 'paste-code', scope: 'user' }));
     });
   });
 

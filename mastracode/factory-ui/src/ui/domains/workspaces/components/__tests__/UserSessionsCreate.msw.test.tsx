@@ -56,7 +56,7 @@ function stubFactoryWithRepository(sessions: FactoryUserSession[] = []) {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
       HttpResponse.json({ sessions }),
     ),
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
@@ -109,7 +109,7 @@ describe('User sessions creation', () => {
     const controller = trackControllerRequests();
     let sessionPosts = 0;
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () => {
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () => {
         sessionPosts += 1;
         return HttpResponse.json({ session: userSession() });
       }),
@@ -167,7 +167,7 @@ describe('User sessions creation', () => {
   it('says the session list failed instead of claiming there are none', async () => {
     stubFactoryWithRepository();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
         HttpResponse.json({ message: 'Nope' }, { status: 500 }),
       ),
     );

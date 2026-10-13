@@ -1,0 +1,62 @@
+import { ReactFlowProvider } from '@xyflow/react';
+import { List, X } from 'lucide-react';
+
+import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
+import { WorkflowDataInspector } from '../workflow/data/workflow-data-inspector';
+import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
+import { Txt } from '@/ds/components/Txt';
+import { BADGE_COLORS, WorkflowCodeContent } from '@/ds/components/Workflow';
+import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+
+export function WorkflowStepDetailContent({ requestContext }: { requestContext: Record<string, any> }) {
+  const { stepDetail, closeStepDetail } = useWorkflowStepDetail();
+
+  if (!stepDetail) {
+    return null;
+  }
+
+  if (stepDetail.type === 'data') return <WorkflowDataInspector selection={stepDetail.selection} />;
+
+  return (
+    <div className="flex h-full flex-col" data-testid="workflow-step-detail-panel">
+      <div className="flex items-center justify-between border-b border-border bg-sidebar px-4 py-3">
+        <div className="flex items-center gap-2">
+          {stepDetail.type === 'map-config' && <List className="size-4" style={{ color: BADGE_COLORS.map }} />}
+          {stepDetail.type === 'nested-graph' && (
+            <WorkflowIcon className="size-4" style={{ color: BADGE_COLORS.workflow }} />
+          )}
+          <div className="flex flex-col">
+            <Txt variant="subheading" tone="ink">
+              {stepDetail.type === 'map-config' ? `${stepDetail.stepName} Config` : `${stepDetail.stepName} Workflow`}
+            </Txt>
+            {stepDetail.type === 'map-config' && stepDetail.stepId && stepDetail.stepId !== stepDetail.stepName && (
+              <Txt variant="meta" tone="muted">
+                {stepDetail.stepId}
+              </Txt>
+            )}
+          </div>
+        </div>
+        <button onClick={closeStepDetail} className="rounded p-1 hover:bg-fill-subtle" aria-label="Close">
+          <X className="size-4 text-muted-foreground" />
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-auto">
+        {stepDetail.type === 'map-config' && stepDetail.mapConfig && (
+          <WorkflowCodeContent data={stepDetail.mapConfig} />
+        )}
+        {stepDetail.type === 'nested-graph' && stepDetail.nestedGraph && (
+          <div className="h-full min-h-100">
+            <ReactFlowProvider key={`nested-graph-${stepDetail.nestedGraph.fullStep}`}>
+              <WorkflowNestedGraph
+                stepGraph={stepDetail.nestedGraph.stepGraph}
+                workflowName={stepDetail.nestedGraph.fullStep}
+                requestContext={requestContext}
+              />
+            </ReactFlowProvider>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
+import { boardFiltersFromParams } from './boardFilters';
 import {
+  gitlabCandidate,
   incidentioCandidate,
   issueCandidate,
   jiraCandidate,
@@ -86,22 +88,72 @@ describe('board relevance', () => {
     expect([...relevance['review-requested']]).toEqual(['github:monalisa']);
   });
 
-  it('matches any selected relevance type for the selected teammate', () => {
-    expect(workItemMatchesRelevance(item, activityPage, 'github:octocat', new Set(['authored']))).toBe(true);
-    expect(workItemMatchesRelevance(item, activityPage, 'github:octocat', new Set(['assigned']))).toBe(false);
-    expect(
-      workItemMatchesRelevance(item, activityPage, 'github:monalisa', new Set(['authored', 'review-requested'])),
-    ).toBe(true);
-    expect(workItemMatchesRelevance(item, activityPage, undefined, new Set())).toBe(true);
+  it('attributes GitLab MR authors, assignees, and requested reviewers to GitLab identities', () => {
+    const relevance = workItemRelevance({ ...item, source: 'gitlab-pr' }, undefined);
+    expect([...relevance.authored]).toEqual(['gitlab:octocat']);
+    expect([...relevance.assigned]).toEqual(['gitlab:hubot']);
+    expect([...relevance['review-requested']]).toEqual(['gitlab:monalisa']);
   });
 
-  it('filters intake candidates by GitHub and Linear provider metadata', () => {
+  it('matches any selected relevance type for the selected teammate', () => {
+    expect(workItemMatchesRelevance(item, activityPage, new Set(['github:octocat']), new Set(['authored']))).toBe(true);
+    expect(workItemMatchesRelevance(item, activityPage, new Set(['github:octocat']), new Set(['assigned']))).toBe(
+      false,
+    );
+    expect(
+      workItemMatchesRelevance(
+        item,
+        activityPage,
+        new Set(['github:monalisa']),
+        new Set(['authored', 'review-requested']),
+      ),
+    ).toBe(true);
+    expect(workItemMatchesRelevance(item, activityPage, new Set(), new Set())).toBe(true);
+  });
+
+  it('matches a person through any of their identities', () => {
+    const factoryAndGithub = new Set(['factory:user-octocat', 'github:octocat']);
+    expect(workItemMatchesRelevance(item, activityPage, factoryAndGithub, new Set(['authored']))).toBe(true);
+    expect(workItemMatchesRelevance(item, activityPage, new Set(['factory:user-octocat']), new Set(['authored']))).toBe(
+      false,
+    );
+  });
+
+  it('applies URL-restored relevance types to distinct review cards', () => {
+    const authored = boardFiltersFromParams(
+      new URLSearchParams('teammate=github%3Aoctocat&relevance=authored'),
+      'review',
+    );
+    const assigned = { ...item, metadata: { ...item.metadata, author: 'another-user', assignees: ['octocat'] } };
+    expect(workItemMatchesRelevance(item, activityPage, authored.participantIds, authored.relevanceTypes)).toBe(true);
+    expect(workItemMatchesRelevance(assigned, activityPage, authored.participantIds, authored.relevanceTypes)).toBe(
+      false,
+    );
+
+    const either = boardFiltersFromParams(
+      new URLSearchParams('teammate=github%3Aoctocat&relevance=authored%2Cassigned'),
+      'review',
+    );
+    expect(workItemMatchesRelevance(item, activityPage, either.participantIds, either.relevanceTypes)).toBe(true);
+    expect(workItemMatchesRelevance(assigned, activityPage, either.participantIds, either.relevanceTypes)).toBe(true);
+    expect(
+      workItemMatchesRelevance(
+        { ...assigned, metadata: { author: 'another-user', assignees: ['hubot'] } },
+        activityPage,
+        either.participantIds,
+        either.relevanceTypes,
+      ),
+    ).toBe(false);
+  });
+
+  it('filters intake candidates by GitHub, GitLab, and Linear provider metadata', () => {
     const githubIssue = issueCandidate({
       number: 7,
       title: 'Fix login bug',
       url: 'https://github.com/acme/app/issues/7',
       author: 'octocat',
       assignee: 'hubot',
+      assignees: ['hubot', 'monalisa'],
       labels: [],
       comments: 0,
       createdAt: '2026-08-01T09:00:00.000Z',
@@ -116,6 +168,24 @@ describe('board relevance', () => {
       requestedReviewers: ['monalisa'],
       baseBranch: 'main',
       headBranch: 'feat/relevance',
+      createdAt: '2026-08-01T09:00:00.000Z',
+      updatedAt: '2026-08-01T09:00:00.000Z',
+    });
+    const gitlab = gitlabCandidate({
+      id: '7',
+      externalId: 'gitlab-issue:7',
+      identifier: 'group/project#7',
+      title: 'Match provider metadata',
+      url: 'https://gitlab.com/group/project/-/issues/7',
+      state: 'opened',
+      stateType: 'unstarted',
+      priority: null,
+      assignee: 'Grace Hopper',
+      assignees: ['Grace Hopper', 'Katherine Johnson'],
+      author: 'Ada Lovelace',
+      source: 'group/project',
+      sourceId: 'gitlab-project:7',
+      labels: [],
       createdAt: '2026-08-01T09:00:00.000Z',
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
@@ -153,12 +223,15 @@ describe('board relevance', () => {
       sourceId: '10001',
     });
 
-    expect(candidateMatchesRelevance(githubIssue, 'github:hubot', new Set(['assigned']))).toBe(true);
-    expect(candidateMatchesRelevance(githubPr, 'github:monalisa', new Set(['review-requested']))).toBe(true);
-    expect(candidateMatchesRelevance(linear, 'linear:ada lovelace', new Set(['authored']))).toBe(true);
-    expect(candidateMatchesRelevance(linear, 'linear:grace hopper', new Set(['assigned']))).toBe(true);
-    expect(candidateMatchesRelevance(jira, 'jira:ada lovelace', new Set(['authored']))).toBe(true);
-    expect(candidateMatchesRelevance(jira, 'jira:grace hopper', new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(githubIssue, new Set(['github:hubot']), new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(githubIssue, new Set(['github:monalisa']), new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(githubPr, new Set(['github:monalisa']), new Set(['review-requested']))).toBe(true);
+    expect(candidateMatchesRelevance(gitlab, new Set(['gitlab:ada lovelace']), new Set(['authored']))).toBe(true);
+    expect(candidateMatchesRelevance(gitlab, new Set(['gitlab:katherine johnson']), new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(linear, new Set(['linear:ada lovelace']), new Set(['authored']))).toBe(true);
+    expect(candidateMatchesRelevance(linear, new Set(['linear:grace hopper']), new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(jira, new Set(['jira:ada lovelace']), new Set(['authored']))).toBe(true);
+    expect(candidateMatchesRelevance(jira, new Set(['jira:grace hopper']), new Set(['assigned']))).toBe(true);
 
     const incidentio = incidentioCandidate({
       id: 'incidentio:follow-up:01HFOLLOWUP',
@@ -176,8 +249,12 @@ describe('board relevance', () => {
       updatedAt: '2026-08-01T09:00:00.000Z',
       sourceId: 'incidentio:follow-ups',
     });
-    expect(candidateMatchesRelevance(incidentio, 'incidentio:ada lovelace', new Set(['authored']))).toBe(true);
-    expect(candidateMatchesRelevance(incidentio, 'incidentio:grace hopper', new Set(['assigned']))).toBe(true);
+    expect(candidateMatchesRelevance(incidentio, new Set(['incidentio:ada lovelace']), new Set(['authored']))).toBe(
+      true,
+    );
+    expect(candidateMatchesRelevance(incidentio, new Set(['incidentio:grace hopper']), new Set(['assigned']))).toBe(
+      true,
+    );
   });
 
   it('builds a named teammate list from auth, audit, and provider metadata without raw Factory ids', () => {
@@ -205,9 +282,14 @@ describe('board relevance', () => {
   it('parses and serializes shareable relevance query values', () => {
     expect([...boardRelevanceFromQuery(null, 'work')]).toEqual(['worked', 'authored', 'assigned']);
     expect([...boardRelevanceFromQuery('assigned,review-requested', 'work')]).toEqual(['assigned']);
-    expect([...boardRelevanceFromQuery('none', 'review')]).toEqual([]);
+    expect([...boardRelevanceFromQuery('none', 'review')]).toEqual([
+      'worked',
+      'authored',
+      'assigned',
+      'review-requested',
+    ]);
     expect(boardRelevanceQueryValue(new Set(['worked', 'assigned']), 'work')).toBe('worked,assigned');
-    expect(boardRelevanceQueryValue(new Set(), 'review')).toBe('none');
+    expect(boardRelevanceQueryValue(new Set(), 'review')).toBeUndefined();
     expect(boardRelevanceQueryValue(new Set(['worked', 'authored', 'assigned']), 'work')).toBeUndefined();
   });
 
@@ -225,7 +307,29 @@ describe('board relevance', () => {
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
 
-    expect(boardLabels({ items: [labelled], candidates: [candidate] })).toEqual(['bug', 'p1', 'ux']);
+    const linear = linearCandidate({
+      id: 'linear-2',
+      identifier: 'ENG-13',
+      title: 'Linear labels',
+      url: 'https://linear.app/acme/issue/ENG-13',
+      state: 'Todo',
+      stateType: 'unstarted',
+      priorityLabel: 'High',
+      assignee: null,
+      creator: null,
+      team: 'Engineering',
+      labels: ['frontend'],
+      createdAt: '2026-08-01T09:00:00.000Z',
+      updatedAt: '2026-08-01T09:00:00.000Z',
+    });
+
+    expect(boardLabels({ items: [labelled], candidates: [candidate, linear] })).toEqual([
+      'bug',
+      'frontend',
+      'p1',
+      'ux',
+    ]);
+    expect(candidateMatchesLabels(linear, new Set(['frontend']))).toBe(true);
     expect(workItemMatchesLabels(labelled, new Set())).toBe(true);
     expect(workItemMatchesLabels(labelled, new Set(['bug', 'p1']))).toBe(true);
     expect(workItemMatchesLabels(labelled, new Set(['bug', 'missing']))).toBe(false);

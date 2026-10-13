@@ -1,4 +1,4 @@
-import { copyFile, readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { exports as resolveExports } from 'resolve.exports';
@@ -20,6 +20,15 @@ function getDtsFile(pkg: PackageJSON, key: string): string | null {
   const dtsFile = (exports || []).find(f => f.endsWith('.d.ts'));
 
   return dtsFile ?? null;
+}
+
+// Newer `ai` releases emit namespace re-exports with inline `type` modifiers
+// (e.g. `export { type output_Output as Output }`), which embedTypes mangles
+// into invalid syntax. Modifiers are redundant in a .d.ts, so drop them.
+function stripInlineTypeModifiers(dts: string): string {
+  return dts.replace(/^(\s*export \{)([^}]*)(\};?)$/gm, (_, open: string, body: string, close: string) => {
+    return `${open}${body.replace(/(^|,)(\s*)type\s+(?=[\w$])/g, '$1$2')}${close}`;
+  });
 }
 
 export async function copyAIDtsFiles(): Promise<string[]> {
@@ -46,7 +55,8 @@ export async function copyAIDtsFiles(): Promise<string[]> {
     }
 
     dtsFiles.push(join(rootDir, currentDtsFile));
-    await copyFile(join(aiPkgDir, aiDtsFile), join(rootDir, currentDtsFile));
+    const dts = await readFile(join(aiPkgDir, aiDtsFile), 'utf8');
+    await writeFile(join(rootDir, currentDtsFile), stripInlineTypeModifiers(dts));
   }
 
   return dtsFiles;

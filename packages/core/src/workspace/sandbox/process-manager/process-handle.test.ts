@@ -389,6 +389,61 @@ describe('ProcessHandle wait abortSignal', () => {
     expect(kill).not.toHaveBeenCalled();
   });
 
+  it('records that an abort killed the process', async () => {
+    const handle = new TestProcessHandle();
+    const controller = new AbortController();
+
+    const waiting = handle.wait({ abortSignal: controller.signal });
+    controller.abort();
+    handle.finish();
+    await waiting;
+
+    expect(handle.killedByAbort).toBe(true);
+  });
+
+  it('does not record an abort kill when the process exited before the kill landed', async () => {
+    const handle = new TestProcessHandle();
+    vi.spyOn(handle, 'kill').mockResolvedValue(false);
+    const controller = new AbortController();
+
+    const waiting = handle.wait({ abortSignal: controller.signal });
+    controller.abort();
+    handle.finish();
+    await waiting;
+
+    expect(handle.killedByAbort).toBe(false);
+  });
+
+  it('keeps the abort record when spawn and wait abort listeners fire together', async () => {
+    const handle = new TestProcessHandle();
+    // Mirrors providers whose kill() leaves exitCode unset while in flight, so a
+    // second kill() reports the process as already gone.
+    const kill = vi.spyOn(handle, 'kill').mockResolvedValueOnce(true).mockResolvedValue(false);
+
+    await Promise.all([handle.killForAbort(), handle.killForAbort()]);
+
+    expect(kill).toHaveBeenCalledTimes(1);
+    expect(handle.killedByAbort).toBe(true);
+  });
+
+  it('lets a later abort retry after an abort kill throws', async () => {
+    const handle = new TestProcessHandle();
+    const kill = vi.spyOn(handle, 'kill').mockRejectedValueOnce(new Error('transport down'));
+
+    await expect(handle.killForAbort()).rejects.toThrow('transport down');
+    expect(handle.killedByAbort).toBe(false);
+
+    await handle.killForAbort();
+    expect(kill).toHaveBeenCalledTimes(2);
+    expect(handle.killedByAbort).toBe(true);
+  });
+
+  it('does not record an abort kill for a direct kill()', async () => {
+    const handle = new TestProcessHandle();
+    await handle.kill();
+    expect(handle.killedByAbort).toBe(false);
+  });
+
   it('a wait without a signal is unaffected', async () => {
     const handle = new TestProcessHandle();
     const waiting = handle.wait();

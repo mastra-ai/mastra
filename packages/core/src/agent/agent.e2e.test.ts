@@ -1060,8 +1060,9 @@ describe('prepareStep (e2e)', () => {
       stepNumber: 0,
     });
 
-    expect((result.request.body as any).tools).toBeUndefined();
-    expect((result.request.body as any).tool_choice).toBeUndefined();
+    const body = result.request.body as any;
+    expect(body.tools?.map((t: any) => t.name ?? t.function?.name)).toEqual(['tool1']);
+    expect(body.tool_choice).toBe('none');
   });
 
   it('should execute a new tool added in prepareStep with toolChoice required', async () => {

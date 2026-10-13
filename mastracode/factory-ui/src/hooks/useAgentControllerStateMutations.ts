@@ -1,3 +1,4 @@
+import type { AgentControllerThinkingLevel } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../api/keys';
@@ -49,15 +50,27 @@ export function useSwitchAgentControllerModeMutation(args: AgentControllerMutati
   });
 }
 
+interface ModelSwitch {
+  modelId: string;
+  thinkingLevel?: AgentControllerThinkingLevel;
+}
+
 export function useSwitchAgentControllerModelMutation(args: AgentControllerMutationArgs) {
   const queryClient = useQueryClient();
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
-    mutationFn: (modelId: string) => requireAgentControllerSession(session).switchModel(modelId),
+    mutationFn: ({ modelId, thinkingLevel }: ModelSwitch) =>
+      requireAgentControllerSession(session).switchModel(modelId, { thinkingLevel }),
     onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
-      }),
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agentControllerSettings(args.agentControllerId, args.resourceId, args.scope),
+          exact: true,
+        }),
+      ]),
   });
 }

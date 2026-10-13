@@ -2,15 +2,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRef } from 'react';
 import type { FormEvent } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { Field, FieldError, FieldLabel } from '../Field';
+import { Form } from '../Form';
 import { Combobox } from './combobox';
-
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    Object.defineProperty(window, 'PointerEvent', { configurable: true, value: window.MouseEvent });
-  }
-});
 
 afterEach(() => {
   cleanup();
@@ -139,7 +135,7 @@ describe('Combobox', () => {
       const formRef = useRef<HTMLFormElement>(null);
 
       return (
-        <form ref={formRef} onSubmit={onSubmit}>
+        <Form ref={formRef} onSubmit={onSubmit}>
           <Combobox
             multiple
             container={formRef}
@@ -148,7 +144,7 @@ describe('Combobox', () => {
             onValueChange={onValueChange}
             clearLabel="Clear"
           />
-        </form>
+        </Form>
       );
     }
 
@@ -275,57 +271,59 @@ describe('Combobox', () => {
     render(<Combobox options={options} placeholder="Pick provider" />);
 
     const trigger = screen.getByRole('combobox');
-    // Composes the Button recipe: pill radius + full-width field layout.
+    // Composes the Button recipe: pill radius; width belongs to the call site.
     expect(trigger.className).toContain('rounded-full');
-    expect(trigger.className).toContain('w-full');
     expect(trigger.className).toContain('justify-between');
   });
 
-  it('renders options on the shared menu item recipe (ghost/md, rounded-lg)', async () => {
+  it('renders options on the shared menu item recipe (md, rounded-lg)', async () => {
     render(<Combobox options={options} placeholder="Pick provider" />);
 
     fireEvent.click(screen.getByRole('combobox'));
 
     const option = await screen.findByRole('option', { name: 'OpenAI' });
-    expect(option.className).toContain('min-h-form-md');
-    expect(option.className).toContain('text-ui-smd');
+    expect(option.className).toContain('min-h-control-md');
+    expect(option.className).toContain('text-label');
     expect(option.className).toContain('rounded-lg');
     expect(option.className).not.toContain('rounded-full');
     expect(option.className).not.toContain('rounded-md');
-    expect(option.className).toContain('data-highlighted:text-foreground');
-  });
-
-  it('applies the error border when an error is provided', () => {
-    render(<Combobox options={options} placeholder="Pick provider" error="Required" />);
-    expect(screen.getByRole('combobox').className).toContain('border-destructive');
-    expect(screen.getByRole('combobox').className).toContain('font-normal');
   });
 
   it('says what went wrong under the field, and nothing when nothing did', () => {
-    const withError = render(<Combobox options={options} name="provider" error="Required" />);
-    const field = screen.getByRole('combobox');
+    render(
+      <Field invalid>
+        <FieldLabel>Provider</FieldLabel>
+        <Combobox options={options} />
+        <FieldError>Required</FieldError>
+      </Field>,
+    );
+    const field = screen.getByRole('combobox', { name: 'Provider' });
     const message = screen.getByRole('alert');
 
     expect(field.getAttribute('aria-invalid')).toBe('true');
-    expect(field.getAttribute('aria-describedby')).toBe('error-provider');
-    expect(message.id).toBe('error-provider');
+    expect(field.getAttribute('aria-describedby')).toContain(message.id);
     expect(message.textContent).toContain('Required');
-    const withErrorCount = getFirstHTMLElement(withError.container).childElementCount;
 
     cleanup();
 
-    const withoutError = render(<Combobox options={options} />);
+    render(
+      <Field>
+        <FieldLabel>Provider</FieldLabel>
+        <Combobox options={options} />
+      </Field>,
+    );
 
-    expect(getFirstHTMLElement(withoutError.container).childElementCount).toBe(withErrorCount - 1);
+    expect(screen.getByRole('combobox', { name: 'Provider' }).getAttribute('aria-invalid')).toBeNull();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('takes the medium size unless the caller asks otherwise', () => {
     const { rerender } = render(<Combobox options={options} />);
-    expect(screen.getByRole('combobox').className).toContain('h-form-md');
+    expect(screen.getByRole('combobox').className).toContain('h-control-md');
 
     rerender(<Combobox options={options} size="sm" />);
 
-    expect(screen.getByRole('combobox').className).toContain('h-form-sm');
+    expect(screen.getByRole('combobox').className).toContain('h-control-sm');
   });
 
   it('renders a chevron-only trigger at icon sizes while keeping the value for assistive tech', async () => {
@@ -341,8 +339,9 @@ describe('Combobox', () => {
     );
 
     const trigger = screen.getByRole('combobox', { name: 'Switch provider' });
-    expect(trigger.className).toContain('w-form-sm');
+    expect(trigger.className).toContain('w-control-sm');
     expect(trigger.className).not.toContain('w-full');
+    expect(trigger.dataset.shape).toBe('icon');
     expect(screen.getByText('OpenAI').className).toContain('sr-only');
 
     fireEvent.click(trigger);
@@ -377,32 +376,6 @@ describe('Combobox', () => {
     expect(screen.getByRole('combobox').textContent).not.toContain('Pick provider');
   });
 
-  it('greys out the invitation only while nothing is chosen', () => {
-    const { rerender } = render(<Combobox multiple options={options} value={[]} placeholder="Pick providers" />);
-    const label = () => getFirstHTMLElement(screen.getByRole('combobox'));
-    expect(label().classList.contains('text-muted-foreground')).toBe(true);
-
-    rerender(<Combobox multiple options={options} value={['openai']} placeholder="Pick providers" />);
-
-    expect(label().textContent).toBe('1 selected');
-    expect(label().classList.contains('text-muted-foreground')).toBe(false);
-  });
-
-  it('uses the Input overlay surface (not the Button surface) for the default variant', () => {
-    render(<Combobox options={options} placeholder="Pick provider" />);
-
-    const trigger = screen.getByRole('combobox');
-    expect(trigger.classList.contains('bg-foreground/10')).toBe(true);
-    expect(trigger.classList.contains('border-border')).toBe(true);
-    expect(trigger.classList.contains('data-[placeholder]:text-muted-foreground')).toBe(true);
-    expect(trigger.classList.contains('data-[popup-open]:bg-foreground/14')).toBe(true);
-    expect(trigger.className).not.toContain('button-default');
-
-    const chevron = trigger.querySelector('svg');
-    expect(chevron?.classList.contains('text-muted-foreground')).toBe(true);
-    expect(chevron?.className.baseVal).not.toContain('opacity');
-  });
-
   it('keeps up with a selection that changes from outside', () => {
     const { rerender } = render(<Combobox multiple options={options} value={['openai']} />);
     expect(screen.getByRole('combobox').textContent).toContain('1 selected');
@@ -427,15 +400,17 @@ describe('Combobox', () => {
   });
 
   it('says what went wrong under a multi-select field too', () => {
-    const withError = render(<Combobox multiple options={options} value={[]} error="Required" />);
-    expect(screen.getByText('Required')).toBeTruthy();
-    const withErrorCount = getFirstHTMLElement(withError.container).childElementCount;
+    render(
+      <Field invalid>
+        <FieldLabel>Providers</FieldLabel>
+        <Combobox multiple options={options} value={[]} />
+        <FieldError>Required</FieldError>
+      </Field>,
+    );
+    const field = screen.getByRole('combobox', { name: 'Providers' });
 
-    cleanup();
-
-    const withoutError = render(<Combobox multiple options={options} value={[]} />);
-
-    expect(getFirstHTMLElement(withoutError.container).childElementCount).toBe(withErrorCount - 1);
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    expect(field.getAttribute('aria-describedby')).toContain(screen.getByRole('alert').id);
   });
 
   it('picks a single value with nobody listening', async () => {
@@ -460,5 +435,26 @@ describe('Combobox', () => {
       fireEvent.pointerDown(anthropic, { pointerType: 'mouse' });
       fireEvent.click(anthropic, { detail: 1 });
     }).not.toThrow();
+  });
+});
+
+describe('Combobox icon-only value', () => {
+  it('renders the selected start adornment centered without a chevron', () => {
+    render(
+      <Combobox
+        options={[{ label: 'OpenAI', value: 'openai', start: <span data-testid="logo" />, displayLabel: 'Hidden' }]}
+        value="openai"
+        showChevron={false}
+        iconOnlyValue
+      />,
+    );
+
+    const trigger = screen.getByRole('combobox');
+    const value = getFirstHTMLElement(trigger);
+    expect(value.className).toContain('justify-center');
+    expect(value.className).not.toContain('gap-2');
+    expect(screen.getByTestId('logo')).toBeTruthy();
+    expect(trigger.textContent).toBe('Hidden');
+    expect(trigger.querySelector('svg')).toBeNull();
   });
 });

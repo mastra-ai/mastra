@@ -13,13 +13,14 @@ import type { Context } from 'hono';
 
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
+import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
+import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type {
   FactoryStartCoordinator,
   FactoryStartPreparedResult,
   FactoryStartRequest,
 } from '../rules/start-coordinator.js';
-import { FactoryStartTransitionError } from '../rules/start-coordinator.js';
+import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
@@ -74,7 +75,8 @@ function toWireWorkItem(item: WorkItemRow): WorkItemRow {
   if (
     !item.metadata ||
     (!(FACTORY_RULE_MATERIALIZATION_KEY in item.metadata) &&
-      !(FACTORY_PULL_REQUEST_RECONCILIATION_KEY in item.metadata))
+      !(FACTORY_PULL_REQUEST_RECONCILIATION_KEY in item.metadata) &&
+      !(EXTERNAL_SOURCE_MISSING_KEY in item.metadata))
   ) {
     return item;
   }
@@ -103,6 +105,7 @@ function publicWorkItemMetadata(value: Record<string, unknown> | null): Record<s
   const {
     [FACTORY_RULE_MATERIALIZATION_KEY]: _materialization,
     [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: _reconciliation,
+    [EXTERNAL_SOURCE_MISSING_KEY]: _externalSourceMissingAt,
     ...metadata
   } = value;
   return metadata;
@@ -166,12 +169,17 @@ function summaryRole(boards: BoardRegistry, decision: Record<string, unknown>): 
 function summarySource(decision: Record<string, unknown>): WorkItemSource | null {
   if (decision.type !== 'upsertLinkedWorkItem') return null;
   const source = decision.source;
-  return source === 'github-issue' || source === 'github-pr' || source === 'linear-issue' || source === 'manual'
+  return source === 'github-issue' ||
+    source === 'github-pr' ||
+    source === 'gitlab-issue' ||
+    source === 'gitlab-pr' ||
+    source === 'linear-issue' ||
+    source === 'manual'
     ? source
     : null;
 }
 
-function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisionRecord) {
+function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisionRecord, overtaken = false) {
   return {
     id: decision.id,
     evaluationId: decision.evaluationId,
@@ -183,7 +191,7 @@ function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisio
     attempts: decision.attempts,
     failureOccurrence: decision.failureOccurrence,
     failureCode: decision.failureCode,
-    canRetry: factoryDispatchFailureMetadata(decision.failureCode).canRetry,
+    canRetry: decisionRetryable(decision, overtaken),
     lastError: decision.lastError?.slice(0, 512) ?? null,
     createdAt: decision.createdAt.toISOString(),
     updatedAt: decision.updatedAt.toISOString(),
@@ -427,8 +435,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             limit: query.data.limit,
           });
           const last = page.decisions.at(-1);
+          const overtaken = await overtakenDecisionIds(
+            workItems,
+            this.#boards,
+            resolved,
+            page.decisions.filter(decision => decision.status === 'failed'),
+          );
           return c.json({
-            decisions: page.decisions.map(decision => decisionSummary(this.#boards, decision)),
+            decisions: page.decisions.map(decision =>
+              decisionSummary(this.#boards, decision, overtaken.has(decision.id)),
+            ),
             ...(page.hasMore && last ? { nextCursor: encodeDecisionCursor(last) } : {}),
           });
         },
@@ -436,6 +452,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
 
       ...buildAttentionRoutes({
         workItems,
+        boards: this.#boards,
         comments: this.deps.comments,
         liveSessions,
         resolveProject: context => this.#resolveProject(loose(context)),
@@ -465,11 +482,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const { decisionId } = parsedPath.data;
           await workItems.ensureReady();
           const current = await workItems.getDeferredDecision(resolved.orgId, resolved.factoryProjectId, decisionId);
-          if (
-            !current ||
-            current.status !== 'failed' ||
-            !factoryDispatchFailureMetadata(current.failureCode).canRetry
-          ) {
+          if (!current || !decisionRetryable(current, false)) {
+            return c.json({ error: 'decision_not_retryable' }, 409);
+          }
+          // A run decided for a phase the card has left would seat the old role on it.
+          if ((await overtakenDecisionIds(workItems, this.#boards, resolved, [current])).size > 0) {
             return c.json({ error: 'decision_not_retryable' }, 409);
           }
           const decision = await workItems.retryDeferredDecision(
@@ -628,6 +645,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           } catch (error) {
             if (error instanceof FactoryStartTransitionError) {
               return c.json({ result: error.result }, error.result.code === 'stale' ? 409 : 422);
+            }
+            if (error instanceof WorkItemRepositoryError) {
+              return c.json({ error: error.code, message: error.message, candidates: error.candidates }, 409);
             }
             throw error;
           }

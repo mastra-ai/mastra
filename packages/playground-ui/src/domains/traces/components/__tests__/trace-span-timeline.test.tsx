@@ -140,6 +140,6 @@ describe('TraceSpanTimeline', () => {
   it('labels the time axis from zero to the trace duration', () => {
     render(<Harness />);
     const axis = screen.getByLabelText('Trace time axis');
-    expect(axis.textContent).toBe('0 ms250 ms500 ms750 ms1.00 s');
+    expect(axis.textContent).toBe('0 ms250 ms500 ms750 ms1.000 s');
   });
 });

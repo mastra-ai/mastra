@@ -366,6 +366,10 @@ export async function handleTypedOperation(
   switch (request.op) {
     case 'omGetLatest':
     case 'omGetHistory':
+    case 'omInitialize':
+    case 'omCreateReflectionGeneration':
+    case 'omSetPendingMessageTokens':
+    case 'omSetBufferingObservationFlag':
     case 'omUpdateActive':
     case 'omAppendBufferedChunk':
     case 'omSwapBuffered':
@@ -453,6 +457,7 @@ export async function handleTypedOperation(
         last_fire_at: request.lastFireAt,
         last_run_id: request.lastRunId,
         updated_at: Date.now(),
+        ...(request.newStatus ? { status: request.newStatus } : {}),
       });
 
       return { ok: true, result: true };
@@ -621,8 +626,11 @@ export async function handleTypedOperation(
 
     case 'patch': {
       const patchRecord = stripPatchKeys(request.record, ['id']);
+      // Treat a missing field as `null` before comparing: rows written before a
+      // nullable field existed have no key at all, and an expectation of `null`
+      // (e.g. `expectedOwnerId: null` for an unowned task) must still match them.
       const matchesExpected = (record: Record<string, any>) =>
-        !request.expected || Object.entries(request.expected).every(([key, value]) => record[key] === value);
+        !request.expected || Object.entries(request.expected).every(([key, value]) => (record[key] ?? null) === value);
       const existing = await ctx.db
         .query(convexTable)
         .withIndex('by_record_id', (q: any) => q.eq('id', request.id))
@@ -841,6 +849,7 @@ export async function handleTypedOperation(
         stepId: request.stepId,
         result: JSON.parse(request.result),
         requestContext: JSON.parse(request.requestContext),
+        state: request.state === undefined ? undefined : JSON.parse(request.state),
       });
 
       await ctx.db.patch(existing._id, {

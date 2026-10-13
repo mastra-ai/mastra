@@ -690,11 +690,20 @@ function innermostTokens<T extends { total?: unknown }>(tokens: T): T {
  *
  * The original usage data is preserved in the `raw` field for advanced use cases.
  */
-function getAnthropicCacheCreationUsage(providerMetadata?: SharedV2ProviderMetadata): {
+function getAnthropicCacheCreationUsage(
+  usage: LanguageModelV2Usage | LanguageModelV3Usage | undefined,
+  providerMetadata?: SharedV2ProviderMetadata,
+): {
   cacheCreationInputTokens5m?: number;
   cacheCreationInputTokens1h?: number;
 } {
-  const cacheCreation = providerMetadata?.anthropic?.cacheCreation;
+  const anthropic = providerMetadata?.anthropic as Record<string, unknown> | undefined;
+  // @ai-sdk/anthropic never sets `cacheCreation`; the TTL split arrives untouched from the API
+  // as `cache_creation` on `providerMetadata.anthropic.usage` and on `usage.raw`.
+  const cacheCreation =
+    anthropic?.cacheCreation ??
+    (anthropic?.usage as Record<string, unknown> | undefined)?.cache_creation ??
+    ((usage as { raw?: Record<string, unknown> } | undefined)?.raw?.cache_creation as unknown);
   if (typeof cacheCreation !== 'object' || cacheCreation === null) return {};
 
   const details = cacheCreation as Record<string, unknown>;
@@ -710,7 +719,7 @@ function normalizeUsage(
   usage: LanguageModelV2Usage | LanguageModelV3Usage | undefined,
   providerMetadata?: SharedV2ProviderMetadata,
 ): LanguageModelUsage {
-  const cacheCreationUsage = getAnthropicCacheCreationUsage(providerMetadata);
+  const cacheCreationUsage = getAnthropicCacheCreationUsage(usage, providerMetadata);
   if (!usage) {
     return {
       inputTokens: undefined,
@@ -733,7 +742,7 @@ function normalizeUsage(
     return {
       inputTokens,
       outputTokens,
-      totalTokens: (inputTokens ?? 0) + (outputTokens ?? 0),
+      totalTokens: inputTokens !== undefined && outputTokens !== undefined ? inputTokens + outputTokens : undefined,
       reasoningTokens: output.reasoning,
       cachedInputTokens: input.cacheRead,
       cacheCreationInputTokens: input.cacheWrite,
@@ -747,7 +756,11 @@ function normalizeUsage(
   return {
     inputTokens: v2Usage.inputTokens,
     outputTokens: v2Usage.outputTokens,
-    totalTokens: v2Usage.totalTokens ?? (v2Usage.inputTokens ?? 0) + (v2Usage.outputTokens ?? 0),
+    totalTokens:
+      v2Usage.totalTokens ??
+      (v2Usage.inputTokens !== undefined && v2Usage.outputTokens !== undefined
+        ? v2Usage.inputTokens + v2Usage.outputTokens
+        : undefined),
     reasoningTokens: (v2Usage as { reasoningTokens?: number }).reasoningTokens,
     cachedInputTokens: (v2Usage as { cachedInputTokens?: number }).cachedInputTokens,
     cacheCreationInputTokens: (v2Usage as { cacheCreationInputTokens?: number }).cacheCreationInputTokens,

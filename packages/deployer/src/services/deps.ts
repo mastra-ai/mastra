@@ -27,7 +27,12 @@ interface ArchitectureOptions {
 interface InstallOptions extends ArchitectureOptions {
   pnpmOverrides?: Record<string, string>;
   pnpmNodeLinker?: 'hoisted';
+  /** Patch key -> path relative to the output directory. */
+  patchedDependencies?: Record<string, string>;
 }
+
+const PNPM_PATCHES_DIR = 'pnpm-patches';
+const BUN_PATCHES_DIR = 'bun-patches';
 
 const PNPM_CONFIG_KEYS_TO_COPY = new Set([
   'allowBuilds',
@@ -111,6 +116,33 @@ function validatePnpmBuildApprovals(key: string, block: string): void {
   });
 }
 
+/**
+ * Reads the `patchedDependencies` map from a pnpm workspace file. Paths are returned as declared,
+ * i.e. relative to the workspace root. Returns an empty map for absent or unusable declarations.
+ */
+export function parsePnpmPatchedDependencies(source: string): Record<string, string> {
+  let parsed: unknown;
+  try {
+    parsed = parse(source);
+  } catch {
+    return {};
+  }
+
+  const patched = (parsed as { patchedDependencies?: unknown } | null)?.patchedDependencies;
+  if (!patched || typeof patched !== 'object' || Array.isArray(patched)) {
+    return {};
+  }
+
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(patched as Record<string, unknown>)) {
+    if (typeof value === 'string' && value.trim() && key.trim()) {
+      result[key] = value.trim();
+    }
+  }
+
+  return result;
+}
+
 export function copyPnpmWorkspaceSettings(source: string, options: InstallOptions = {}) {
   const hasArchitecture = Boolean(options.os?.length || options.cpu?.length || options.libc?.length);
   const lines = source.split(/\r?\n/);
@@ -165,11 +197,43 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
     );
   }
 
+  if (options.patchedDependencies && Object.keys(options.patchedDependencies).length > 0) {
+    blocks.push(
+      [
+        'patchedDependencies:',
+        ...Object.entries(options.patchedDependencies).map(
+          ([key, value]) => `  ${JSON.stringify(key)}: ${JSON.stringify(value)}`,
+        ),
+      ].join('\n'),
+    );
+    // The bundled output only installs runtime dependencies, so patches declared for
+    // dev-only or bundled-away packages are legitimately unused here.
+    blocks.push('allowUnusedPatches: true');
+  }
+
   if (options.pnpmNodeLinker) {
     blocks.push(`nodeLinker: ${options.pnpmNodeLinker}`);
   }
 
   return ["packages:\n  - '.'", ...blocks].join('\n\n') + '\n';
+}
+
+// Semver characters only; versions are interpolated into a shell command.
+const SAFE_PACKAGE_VERSION = /^[0-9A-Za-z.+-]+$/;
+
+/**
+ * Yarn classic writes `# yarn lockfile v1` within the first two lines; Berry lockfiles never contain it.
+ * Only the head of the file is read so large monorepo lockfiles are never loaded into memory.
+ */
+async function isYarnClassicLockfile(lockfilePath: string): Promise<boolean> {
+  const handle = await fsPromises.open(lockfilePath, 'r');
+  try {
+    const buffer = Buffer.alloc(512);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    return /^# yarn lockfile v1\r?$/m.test(buffer.toString('utf-8', 0, bytesRead));
+  } finally {
+    await handle.close();
+  }
 }
 
 export class Deps extends MastraBase {
@@ -209,7 +273,17 @@ export class Deps extends MastraBase {
     return `file:./workspace-module/${pkgName}-${version}.tgz`;
   }
 
-  public async pack({ dir, destination, sanitizedName }: { dir: string; destination: string; sanitizedName: string }) {
+  public async pack({
+    dir,
+    destination,
+    sanitizedName,
+    version,
+  }: {
+    dir: string;
+    destination: string;
+    sanitizedName: string;
+    version: string;
+  }) {
     const cpLogger = createChildProcessLogger({
       logger: this.logger,
       root: dir,
@@ -218,9 +292,23 @@ export class Deps extends MastraBase {
     let packCmd = 'pack';
     let destinationFlag = `--pack-destination ${destination}`;
     if (this.packageManager === 'yarn') {
-      // %s includes an '@' at the start of packages names with an '@'
-      // so we need to use our sanitizedName instead.
-      destinationFlag = `--out ${destination}/${sanitizedName}-%v.tgz`;
+      if (this.lockFile && (await isYarnClassicLockfile(this.lockFile.path))) {
+        if (!SAFE_PACKAGE_VERSION.test(version)) {
+          throw new MastraError({
+            id: 'DEPLOYER_INVALID_WORKSPACE_PACKAGE_VERSION',
+            domain: ErrorDomain.DEPLOYER,
+            category: ErrorCategory.USER,
+            details: { dir, version: String(version) },
+            text: `Invalid version ${JSON.stringify(version)} in workspace package at ${dir}`,
+          });
+        }
+        // Yarn classic has no --out/%v; --filename takes the full output path.
+        destinationFlag = `--filename ${destination}/${sanitizedName}-${version}.tgz`;
+      } else {
+        // %s includes an '@' at the start of packages names with an '@'
+        // so we need to use our sanitizedName instead.
+        destinationFlag = `--out ${destination}/${sanitizedName}-%v.tgz`;
+      }
     }
     if (this.packageManager === 'bun') {
       // bun uses `pm pack` instead of `pack`
@@ -258,13 +346,96 @@ export class Deps extends MastraBase {
       ? await fsPromises.readFile(sourceWorkspaceYamlPath, 'utf-8')
       : '';
 
+    const patchedDependencies = sourceWorkspaceYamlPath
+      ? await this.copyPnpmPatches(sourceWorkspaceYaml, path.dirname(sourceWorkspaceYamlPath), dir)
+      : undefined;
+
     await fsPromises.writeFile(
       path.join(dir, 'pnpm-workspace.yaml'),
-      copyPnpmWorkspaceSettings(sourceWorkspaceYaml, options),
+      copyPnpmWorkspaceSettings(sourceWorkspaceYaml, { ...options, patchedDependencies }),
       'utf-8',
     );
   }
 
+  /**
+   * Resolves a declared patch path against the source workspace and verifies that, once symlinks
+   * are followed, it still resolves inside the workspace. Returns the real path to copy from, or
+   * `undefined` when the patch escapes the workspace or its file cannot be resolved.
+   */
+  private async resolvePatchSource(
+    resolvedWorkspaceRoot: string,
+    declaredPath: string,
+    { key, label }: { key: string; label: string },
+  ): Promise<string | undefined> {
+    const sourcePath = path.resolve(resolvedWorkspaceRoot, declaredPath);
+    if (!sourcePath.startsWith(`${resolvedWorkspaceRoot}${path.sep}`)) {
+      this.logger.warn(`Skipping ${label} patch for "${key}": patch file is outside the workspace at ${sourcePath}`);
+      return undefined;
+    }
+
+    // A patch path can stay lexically under the workspace while traversing a symlink whose target
+    // lives outside it. copyFile follows symlinks, so compare the resolved real paths before copying.
+    let realWorkspaceRoot: string;
+    let realSourcePath: string;
+    try {
+      [realWorkspaceRoot, realSourcePath] = await Promise.all([
+        fsPromises.realpath(resolvedWorkspaceRoot),
+        fsPromises.realpath(sourcePath),
+      ]);
+    } catch {
+      this.logger.warn(`Skipping ${label} patch for "${key}": patch file not found at ${sourcePath}`);
+      return undefined;
+    }
+
+    if (!realSourcePath.startsWith(`${realWorkspaceRoot}${path.sep}`)) {
+      this.logger.warn(
+        `Skipping ${label} patch for "${key}": patch file is outside the workspace at ${realSourcePath}`,
+      );
+      return undefined;
+    }
+
+    return realSourcePath;
+  }
+
+  /**
+   * Copies the patch files declared by the source workspace into the output directory and returns
+   * the patch map rewritten to output-relative paths, so the patches survive the output install.
+   */
+  private async copyPnpmPatches(
+    sourceWorkspaceYaml: string,
+    sourceWorkspaceRoot: string,
+    dir: string,
+  ): Promise<Record<string, string>> {
+    const declared = parsePnpmPatchedDependencies(sourceWorkspaceYaml);
+    const rewritten: Record<string, string> = {};
+    const usedFileNames = new Set<string>();
+    const resolvedWorkspaceRoot = path.resolve(sourceWorkspaceRoot);
+
+    for (const [key, declaredPath] of Object.entries(declared)) {
+      const sourcePath = await this.resolvePatchSource(resolvedWorkspaceRoot, declaredPath, {
+        key,
+        label: 'pnpm',
+      });
+      if (!sourcePath) continue;
+
+      let fileName = path.basename(sourcePath);
+      if (usedFileNames.has(fileName)) {
+        fileName = `${key.replace(/[^a-zA-Z0-9._-]/g, '_')}-${fileName}`;
+      }
+      usedFileNames.add(fileName);
+
+      await fsPromises.mkdir(path.join(dir, PNPM_PATCHES_DIR), { recursive: true });
+      await fsPromises.copyFile(sourcePath, path.join(dir, PNPM_PATCHES_DIR, fileName));
+      rewritten[key] = `${PNPM_PATCHES_DIR}/${fileName}`;
+    }
+
+    return rewritten;
+  }
+
+  /**
+   * Writes the `.yarnrc.yml` for the bundled output, recording the supported architectures so the
+   * output install only resolves optional native binaries that match the deployment target.
+   */
   private async writeYarnConfig(dir: string, options: ArchitectureOptions) {
     const yarnrcPath = path.join(dir, '.yarnrc.yml');
     const config = {
@@ -281,6 +452,81 @@ export class Deps extends MastraBase {
         .map(([key, value]) => `  ${key}: ${JSON.stringify(value)}`)
         .join('\n')}`,
     );
+  }
+
+  /**
+   * Copies the source workspace's `.yarn/patches/` directory (Yarn Berry) into the output
+   * directory so patches survive the output install. Yarn auto-discovers patches from this
+   * directory and applies them per the lockfile references.
+   */
+  private async copyYarnPatches(dir: string): Promise<void> {
+    const sourcePatchesDir = path.join(this.rootDir, '.yarn', 'patches');
+    if (!fs.existsSync(sourcePatchesDir)) return;
+
+    const outputPatchesDir = path.join(dir, '.yarn', 'patches');
+    await fsPromises.cp(sourcePatchesDir, outputPatchesDir, { recursive: true, errorOnExist: false });
+  }
+
+  /**
+   * Copies the patch files referenced by the source workspace's `patchedDependencies` in
+   * package.json into the output directory and returns the map rewritten to output-relative
+   * paths, so bun patches survive the output install.
+   */
+  private async copyBunPatches(
+    declared: Record<string, string>,
+    sourceRoot: string,
+    dir: string,
+  ): Promise<Record<string, string>> {
+    const rewritten: Record<string, string> = {};
+    const usedFileNames = new Set<string>();
+    const resolvedRoot = path.resolve(sourceRoot);
+
+    for (const [key, declaredPath] of Object.entries(declared)) {
+      const sourcePath = await this.resolvePatchSource(resolvedRoot, declaredPath, {
+        key,
+        label: 'bun',
+      });
+      if (!sourcePath) continue;
+
+      let fileName = path.basename(sourcePath);
+      if (usedFileNames.has(fileName)) {
+        fileName = `${key.replace(/[^a-zA-Z0-9._-]/g, '_')}-${fileName}`;
+      }
+      usedFileNames.add(fileName);
+
+      await fsPromises.mkdir(path.join(dir, BUN_PATCHES_DIR), { recursive: true });
+      await fsPromises.copyFile(sourcePath, path.join(dir, BUN_PATCHES_DIR, fileName));
+      rewritten[key] = `${BUN_PATCHES_DIR}/${fileName}`;
+    }
+
+    return rewritten;
+  }
+
+  /**
+   * Reads `patchedDependencies` from the source package.json, copies the referenced patch
+   * files into the output directory, and writes the output-relative patch map into the
+   * output's package.json so `bun install` preserves patches in the bundled output.
+   */
+  private async copyBunPatchesToOutput(dir: string): Promise<void> {
+    const sourcePackageJsonPath = path.join(this.rootDir, 'package.json');
+    if (!fs.existsSync(sourcePackageJsonPath)) return;
+
+    const sourcePkg = await readJSON(sourcePackageJsonPath);
+    const patchedDeps = sourcePkg.patchedDependencies as Record<string, string> | undefined;
+    if (!patchedDeps || Object.keys(patchedDeps).length === 0) return;
+
+    const rewritten = await this.copyBunPatches(patchedDeps, this.rootDir, dir);
+    if (Object.keys(rewritten).length === 0) return;
+
+    const outputPackageJsonPath = path.join(dir, 'package.json');
+    let outputPkg: Record<string, unknown>;
+    try {
+      outputPkg = (await readJSON(outputPackageJsonPath)) as Record<string, unknown>;
+    } catch {
+      outputPkg = {};
+    }
+    outputPkg.patchedDependencies = rewritten;
+    await writeJSON(outputPackageJsonPath, outputPkg, { spaces: 2 });
   }
 
   private getNpmArgs(options: ArchitectureOptions): string[] {
@@ -330,12 +576,25 @@ export class Deps extends MastraBase {
     if (this.lockFile) {
       const destination = path.join(dir, this.lockFile.filename);
       if (path.resolve(this.lockFile.path) !== path.resolve(destination)) {
-        await fsPromises.copyFile(this.lockFile.path, destination);
+        const packedBunWorkspaces =
+          pm === 'bun' &&
+          fs.existsSync(path.join(dir, 'package.json')) &&
+          Object.values(
+            ((await readJSON(path.join(dir, 'package.json'))) as { resolutions?: Record<string, string> })
+              .resolutions ?? {},
+          ).some(spec => spec.startsWith('file:./workspace-module/'));
+
+        if (packedBunWorkspaces) {
+          // Bun cannot reuse the source workspace lockfile with packed tarballs; removing its workspace entries
+          // makes Bun ignore it and regenerate the lockfile anyway. Start with a clean lockfile instead.
+          await fsPromises.rm(destination, { force: true });
+        } else {
+          await fsPromises.copyFile(this.lockFile.path, destination);
+        }
       }
 
       if (pm === 'yarn') {
-        const lockfileContents = await fsPromises.readFile(destination, 'utf-8');
-        yarnClassic = /^# yarn lockfile v1\r?$/m.test(lockfileContents);
+        yarnClassic = await isYarnClassicLockfile(destination);
       }
     }
 
@@ -352,6 +611,10 @@ export class Deps extends MastraBase {
         if (architecture) {
           await this.writeYarnConfig(dir, architecture);
         }
+        await this.copyYarnPatches(dir);
+        break;
+      case 'bun':
+        await this.copyBunPatchesToOutput(dir);
         break;
       case 'npm':
         if (architecture) {

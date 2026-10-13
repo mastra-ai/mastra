@@ -332,6 +332,15 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
             schema.required?.push(key);
             const objectKeywords = ['properties', 'required', 'additionalProperties', 'x-optional'] as const;
             const arrayKeywords = ['items'] as const;
+            const numericKeywords = [
+              'format',
+              'minimum',
+              'maximum',
+              'exclusiveMinimum',
+              'exclusiveMaximum',
+              'multipleOf',
+            ] as const;
+            const isNumericType = (type: JSONSchema7['type']) => type === 'integer' || type === 'number';
             const genericConstraintKeywords = ['const', 'enum', 'oneOf', 'not', 'if', 'then', 'else'] as const;
             const branchConstraintKeywords = ['anyOf', 'oneOf', 'not', 'if', 'then', 'else'] as const;
             const typeSpecificKeywords = (type: JSONSchema7['type']) =>
@@ -384,7 +393,17 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 }
 
                 const branch = { type } as JSONSchema7;
-                for (const keyword of typeSpecificKeywords(type)) {
+                // Numeric formats (int32, double, ...) belong to numeric branches; any other format
+                // (e.g. date-time) belongs to the string branch when one exists.
+                const numericFormat =
+                  typeof prop.format === 'string' && ['int32', 'int64', 'float', 'double'].includes(prop.format);
+                const formatOwner =
+                  types.includes('string') && !numericFormat ? type === 'string' : isNumericType(type);
+                for (const keyword of [
+                  ...typeSpecificKeywords(type),
+                  ...(isNumericType(type) ? numericKeywords.filter(k => k !== 'format') : []),
+                  ...(formatOwner ? ['format'] : []),
+                ]) {
                   if (keyword in prop) {
                     // @ts-expect-error - keyword is a valid property for JSON Schema
                     branch[keyword] = prop[keyword];
@@ -394,7 +413,12 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 return Object.assign(branch, branchConstraints);
               });
 
-              for (const keyword of [...objectKeywords, ...arrayKeywords]) {
+              const numericBranchExists = types.some(isNumericType);
+              for (const keyword of [
+                ...objectKeywords,
+                ...arrayKeywords,
+                ...(numericBranchExists ? numericKeywords : []),
+              ]) {
                 // @ts-expect-error - keyword is a valid property for JSON Schema
                 delete prop[keyword];
               }
@@ -425,6 +449,11 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
                 }
                 for (const keyword of [...genericConstraintKeywords, 'anyOf'] as const) {
                   delete prop[keyword];
+                }
+                if (isNumericType(originalType)) {
+                  for (const keyword of numericKeywords) {
+                    delete prop[keyword];
+                  }
                 }
                 delete prop.type;
                 prop.anyOf = [propSchema, { type: 'null' }];

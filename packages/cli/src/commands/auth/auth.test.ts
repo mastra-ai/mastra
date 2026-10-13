@@ -47,6 +47,7 @@ vi.mock('./credentials.js', () => ({
   verifyToken: mockVerifyToken,
   tryRefreshToken: mockTryRefreshToken,
   login: mockLogin,
+  LoginCancelledError: class LoginCancelledError extends Error {},
 }));
 
 const mockFetchOrgs = vi.fn();
@@ -88,6 +89,18 @@ describe('loginAction', () => {
     const { loginAction } = await import('./login.js');
     await loginAction();
     expect(mockLogin).toHaveBeenCalled();
+  });
+
+  it('returns successfully when login is cancelled', async () => {
+    mockLoadCredentials.mockResolvedValue(null);
+    const { LoginCancelledError } = await import('./credentials.js');
+    mockLogin.mockRejectedValueOnce(new LoginCancelledError());
+    const spy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { loginAction } = await import('./login.js');
+
+    await expect(loginAction()).resolves.toBeUndefined();
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining('Login cancelled.'));
+    spy.mockRestore();
   });
 
   it('skips login() and prints user when existing token is still valid', async () => {

@@ -2,7 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { fetchFactoryProject, updateFactoryDefaultModel } from '../ui/domains/workspaces/services/github';
+import {
+  applyFactoryDefaultModelToSessions,
+  fetchFactoryProject,
+  updateFactoryDefaultModel,
+  updateFactoryModelScope,
+} from '../ui/domains/workspaces/services/github';
 
 /**
  * The Factory's org-wide default model. Factory runs (issue triage, board
@@ -28,5 +33,23 @@ export function useSetFactoryDefaultModelMutation(factoryProjectId: string | und
     onSuccess: project => {
       queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
     },
+  });
+}
+
+export function useSetFactoryModelScopeMutation(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (modelScope: 'factory' | 'user') => updateFactoryModelScope(baseUrl, factoryProjectId!, modelScope),
+    onSuccess: project => {
+      queryClient.setQueryData(queryKeys.factoryProject(factoryProjectId), project);
+    },
+  });
+}
+
+export function useApplyFactoryDefaultModelMutation(factoryProjectId: string) {
+  const { baseUrl } = useApiConfig();
+  return useMutation({
+    mutationFn: () => applyFactoryDefaultModelToSessions(baseUrl, factoryProjectId),
   });
 }

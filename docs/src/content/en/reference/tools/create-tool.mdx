@@ -52,6 +52,13 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     isOptional: false,
   },
   {
+    name: 'title',
+    type: 'string',
+    description:
+      'A human-readable display name for the tool. It is not sent to the model. It travels on the `tool-call` and `tool-call-input-streaming-start` stream chunks and on the stored tool-invocation part, so chat UIs can read it to label the call. MCP clients receive it as the tool `title`.',
+    isOptional: true,
+  },
+  {
     name: 'description',
     type: 'string',
     description: 'A description of what the tool does. This is used by the agent to decide when to use the tool.',
@@ -75,6 +82,14 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     description:
       'When true, Mastra enables strict tool input generation on model adapters that support it. This helps supported providers return arguments that match the tool schema more closely.',
     isOptional: true,
+  },
+  {
+    name: 'outputValidation',
+    type: "'strict' | 'warn'",
+    description:
+      "How a result that fails `outputSchema` validation is handled. Both modes log a warning. `'strict'` replaces the result with a validation error object. `'warn'` returns the tool's actual result unchanged, for tools whose side effects have already happened.",
+    isOptional: true,
+    defaultValue: "'strict'",
   },
   {
     name: 'toModelOutput',
@@ -203,7 +218,15 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
                       {
                         name: 'messages',
                         type: 'CoreMessage[]',
-                        description: 'All messages in the current conversation.',
+                        description:
+                          'Messages supplied by the tool invocation contract. For ordinary tools in the standard agent loop, this contains input messages only. It does not include the complete current conversation.',
+                      },
+                      {
+                        name: 'getMessages',
+                        type: '() => readonly MastraDBMessage[]',
+                        isOptional: true,
+                        description:
+                          'Reads the current in-memory conversation, including remembered messages and responses produced during this run. Available in the standard and durable agent loops. Reflects message-list removals, but not transient provider-prompt transforms. Treat the returned messages as read-only.',
                       },
                       {
                         name: 'suspend',

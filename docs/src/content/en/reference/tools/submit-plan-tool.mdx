@@ -81,6 +81,11 @@ The `tool-call-suspended` event carries a `suspendPayload`:
 <PropertiesTable
   content={[
   {
+    name: 'toolId',
+    type: "'submit_plan'",
+    description: 'ID of the tool that suspended the run.',
+  },
+  {
     name: 'path',
     type: 'string',
     description: 'Path to the plan file the agent wrote.',

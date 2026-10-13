@@ -23,6 +23,7 @@ import type { MastraMemory, MemoryConfigInternal } from '../memory';
 import type { StreamTransportRef } from '../stream/types';
 import type { ToolPayloadTransformPolicy } from '../tools';
 import type { Workspace } from '../workspace/workspace';
+import type { EagerToolExecutionCoordinator } from './workflows/agentic-execution/eager-tool-execution';
 
 // --- Identity / clock injectors --------------------------------------------
 
@@ -34,6 +35,8 @@ export const CURRENT_DATE_KEY = createRunScopeKey<() => Date>('loop:currentDate'
 
 export const SAVE_QUEUE_MANAGER_KEY = createRunScopeKey<SaveQueueManager>('loop:saveQueueManager');
 export const MEMORY_KEY = createRunScopeKey<MastraMemory>('loop:memory');
+/** Whether `MEMORY_KEY` resolves to the same store on resume, so snapshots may reference recalled messages. */
+export const FIXED_MEMORY_KEY = createRunScopeKey<boolean>('loop:fixedMemory');
 export const MEMORY_CONFIG_KEY = createRunScopeKey<MemoryConfigInternal>('loop:memoryConfig');
 export const THREAD_ID_KEY = createRunScopeKey<string>('loop:threadId');
 export const RESOURCE_ID_KEY = createRunScopeKey<string>('loop:resourceId');
@@ -42,9 +45,12 @@ export const THREAD_EXISTS_KEY = createRunScopeKey<boolean>('loop:threadExists')
 // --- Step-local tool/workspace mutations -----------------------------------
 
 export const STEP_TOOLS_KEY = createRunScopeKey<ToolSet>('loop:stepTools');
+export const REQUEST_TOOLS_KEY = createRunScopeKey<ToolSet>('loop:requestTools');
 export const STEP_ACTIVE_TOOLS_KEY = createRunScopeKey<string[]>('loop:stepActiveTools');
 export const STEP_WORKSPACE_KEY = createRunScopeKey<Workspace>('loop:stepWorkspace');
+export const TOOL_APPROVAL_VERDICTS_KEY = createRunScopeKey<Map<string, boolean>>('loop:toolApprovalVerdicts');
 export const STEP_MODEL_MESSAGES_KEY = createRunScopeKey<ModelMessage[]>('loop:stepModelMessages');
+export const EAGER_TOOL_EXECUTION_KEY = createRunScopeKey<EagerToolExecutionCoordinator>('loop:eagerToolExecution');
 
 // --- Delegation / bail flags -----------------------------------------------
 
@@ -64,6 +70,8 @@ export const SKIP_BG_TASK_WAIT_KEY = createRunScopeKey<boolean>('loop:skipBgTask
 
 export const DRAIN_PENDING_SIGNALS_KEY =
   createRunScopeKey<(runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[]>('loop:drainPendingSignals');
+export const SUBSCRIBE_PENDING_SIGNALS_KEY =
+  createRunScopeKey<(runId: string, listener: () => void) => () => void>('loop:subscribePendingSignals');
 export const INITIAL_SIGNAL_ECHOES_KEY = createRunScopeKey<CreatedAgentSignal[]>('loop:initialSignalEchoes');
 
 // --- Tool payload transform ------------------------------------------------

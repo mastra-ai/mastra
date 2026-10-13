@@ -12,7 +12,6 @@
  * overwrites any `session` id passed to `buildImage`, so this module dials the
  * hijacked `/session` endpoint itself and registers both services.
  */
-import { randomUUID } from 'node:crypto';
 import { Server, ServerCredentials, type ServiceDefinition, type UntypedServiceImplementation } from '@grpc/grpc-js';
 import type Docker from 'dockerode';
 import { createAbortError, throwIfAborted } from '../abort';
@@ -35,7 +34,7 @@ export function openBuildSession(
   abortSignal?: AbortSignal,
 ): Promise<BuildSession> {
   throwIfAborted(abortSignal, 'build Docker template');
-  const id = randomUUID();
+  const id = globalThis.crypto.randomUUID();
   return new Promise((resolve, reject) => {
     let settled = false;
     const abort = () => {

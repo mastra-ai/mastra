@@ -1069,6 +1069,58 @@ describe('suspended-run discovery', () => {
       );
     }, 30000);
 
+    it('resumes the run named by an explicit runId after a simulated restart', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId, toolCallId } = await suspendRun(agent, 'thread-1', 'resource-1');
+
+      const { agent: restartedAgent, mastra } = createSuspendedSetup({ storage, toolCallOnFirstCall: false });
+      const result = await restartedAgent.sendToolApproval({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        runId,
+        toolCallId,
+        approved: true,
+      });
+      expect(result).toEqual({ accepted: true, runId, toolCallId });
+
+      const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
+      await vi.waitFor(
+        async () => {
+          expect(mockFindUser).toHaveBeenCalledWith(expect.objectContaining({ name: 'Dero Israel' }));
+          expect((await workflowsStore.listWorkflowRuns({})).runs).toHaveLength(0);
+        },
+        { timeout: 10000 },
+      );
+    }, 30000);
+
+    it('does not resume a different suspended run when the explicit runId has ended', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const ended = await suspendRun(agent, 'thread-1', 'resource-1');
+      const approved = await agent.approveToolCall({ runId: ended.runId, toolCallId: ended.toolCallId });
+      for await (const _chunk of approved.fullStream) {
+        // drain so the run ends
+      }
+      const { agent: secondAgent } = createSuspendedSetup({ storage });
+      const { runId } = await suspendRun(secondAgent, 'thread-1', 'resource-1');
+      mockFindUser.mockClear();
+
+      const { agent: restartedAgent } = createSuspendedSetup({ storage, toolCallOnFirstCall: false });
+      await expect(
+        restartedAgent.sendToolApproval({
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          runId: ended.runId,
+          approved: true,
+        }),
+      ).rejects.toThrow();
+
+      expect(mockFindUser).not.toHaveBeenCalled();
+      const { runs } = await restartedAgent.listSuspendedRuns({ threadId: 'thread-1', resourceId: 'resource-1' });
+      expect(runs.map(run => run.runId)).toEqual([runId]);
+    }, 30000);
+
     it('matches a suspend()-parked run by toolCallId after a simulated restart', async () => {
       const resumedTool = vi.fn();
       const storage = new InMemoryStore();
@@ -1110,6 +1162,53 @@ describe('suspended-run discovery', () => {
         },
         { timeout: 10000 },
       );
+    }, 30000);
+
+    it('resumes a generic suspension with approval-shaped resume data', async () => {
+      const resumedTool = vi.fn();
+      const storage = new InMemoryStore();
+      const approvalLikeTool = createTool({
+        id: 'approval-like-tool',
+        description: 'Suspends for an approval-shaped response',
+        inputSchema: z.object({}),
+        suspendSchema: z.object({ question: z.string() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute: async (_input, context) => {
+          if (context?.agent?.resumeData === undefined) {
+            return await context?.agent?.suspend({ question: 'Continue?' });
+          }
+          resumedTool(context.agent.resumeData);
+          return context.agent.resumeData;
+        },
+      });
+      const agent = new Agent({
+        id: 'approval-shaped-suspension-agent',
+        name: 'Approval-shaped Suspension Agent',
+        instructions: 'Suspend before continuing.',
+        model: createMockModel({ toolName: 'approvalLikeTool', toolCallOnFirstCall: true }),
+        tools: { approvalLikeTool },
+      });
+      new Mastra({ agents: { agent }, logger: false, storage });
+
+      const stream = await agent.stream('Continue after approval', {
+        memory: { thread: 'thread-1', resource: 'resource-1' },
+      });
+      let toolCallId = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'tool-call-suspended') {
+          toolCallId = chunk.payload.toolCallId;
+        }
+      }
+      expect(toolCallId).toBeTruthy();
+
+      const result = await agent.sendToolApproval({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        toolCallId,
+        approved: true,
+      });
+      expect(result).toEqual({ accepted: true, runId: stream.runId, toolCallId });
+      await vi.waitFor(() => expect(resumedTool).toHaveBeenCalledWith({ approved: true }));
     }, 30000);
 
     it('declines a suspended run after a simulated restart', async () => {
@@ -1207,13 +1306,18 @@ describe('suspended-run discovery', () => {
      * key and delete the legacy row, which is exactly the storage shape a
      * `createEventedAgent()` run leaves behind.
      */
-    async function relocateSnapshotToDurableName(storage: InMemoryStore, runId: string, resourceId: string) {
+    async function relocateSnapshotToDurableName(
+      storage: InMemoryStore,
+      runId: string,
+      resourceId: string,
+      workflowName: string = DurableStepIds.AGENTIC_LOOP,
+    ) {
       const workflowsStore = (await storage.getStore('workflows'))!;
       const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: 'agentic-loop' });
       expect(run).not.toBeNull();
 
       await workflowsStore.persistWorkflowSnapshot({
-        workflowName: DurableStepIds.AGENTIC_LOOP,
+        workflowName,
         runId,
         resourceId,
         snapshot: run!.snapshot as WorkflowRunState,
@@ -1236,6 +1340,87 @@ describe('suspended-run discovery', () => {
           toolCalls: [expect.objectContaining({ toolCallId })],
         }),
       ]);
+    }, 30000);
+
+    /**
+     * Engine wrappers such as `createInngestAgent()` namespace the loop
+     * workflow name (`inngest:durable-agentic-loop`) and advertise it via
+     * `durableLoopWorkflowName` on the thread runtime agent (#25154).
+     */
+    it('discovers runs under the loop workflow name advertised by the runtime agent', async () => {
+      const namespacedLoop = `inngest:${DurableStepIds.AGENTIC_LOOP}`;
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId, toolCallId } = await suspendRun(agent, 'thread-1', 'resource-1');
+      await relocateSnapshotToDurableName(storage, runId, 'resource-1', namespacedLoop);
+
+      const { agent: restartedAgent } = createSuspendedSetup({ storage, toolCallOnFirstCall: false });
+
+      // Without an advertised name, arbitrary namespaces are not scanned.
+      const unadvertised = await restartedAgent.listSuspendedRuns({ resourceId: 'resource-1' });
+      expect(unadvertised.runs).toHaveLength(0);
+
+      restartedAgent.__setThreadRuntimeAgent({ durableLoopWorkflowName: namespacedLoop } as unknown as Agent);
+      const { runs, total } = await restartedAgent.listSuspendedRuns({
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+      });
+
+      expect(total).toBe(1);
+      expect(runs).toEqual([
+        expect.objectContaining({
+          runId,
+          toolCalls: [expect.objectContaining({ toolCallId })],
+        }),
+      ]);
+    }, 30000);
+
+    /**
+     * The durable tool-call step suspends a directly approval-gated tool with
+     * `{ type: 'approval', toolCallId, toolName, args }` rather than the
+     * `requireToolApproval` envelope, and must still be reported as requiring
+     * approval (#25154).
+     */
+    it('reports durable approval suspensions as requiring approval', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+      const { runId, toolCallId } = await suspendRun(agent, 'thread-1', 'resource-1');
+
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+      const snapshot = structuredClone(run!.snapshot as WorkflowRunState);
+      let rewritten = 0;
+      for (const step of Object.values(snapshot.context) as Record<string, any>[]) {
+        if (step?.status !== 'suspended') continue;
+        const { requireToolApproval: _requireToolApproval, __workflow_meta: _meta, ...rest } = step.suspendPayload;
+        step.suspendPayload = {
+          ...rest,
+          type: 'approval',
+          toolCallId,
+          toolName: 'findUserTool',
+          args: { name: 'Dero Israel' },
+        };
+        rewritten++;
+      }
+      expect(rewritten).toBeGreaterThan(0);
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+        runId,
+        resourceId: 'resource-1',
+        snapshot,
+      });
+      await workflowsStore.deleteWorkflowRunById({ runId, workflowName: 'agentic-loop' });
+
+      const { agent: restartedAgent } = createSuspendedSetup({ storage, toolCallOnFirstCall: false });
+      const { runs } = await restartedAgent.listSuspendedRuns({ resourceId: 'resource-1' });
+
+      expect(runs).toHaveLength(1);
+      expect(runs[0]!.toolCalls).toContainEqual({
+        toolCallId,
+        toolName: 'findUserTool',
+        args: { name: 'Dero Israel' },
+        requiresApproval: true,
+      });
     }, 30000);
 
     /**
@@ -1371,4 +1556,70 @@ describe('snapshot path contract for threadId pushdown (#22627)', () => {
     );
     expect(getSnapshotMemoryInfo(snapshot)).toEqual(expect.objectContaining({ threadId: 'durable-thread-1' }));
   }, 60000);
+});
+
+describe('aborting a suspended run (#25903)', () => {
+  it('abortThreadStream removes the approval-suspended run from listSuspendedRuns', async () => {
+    const { agent } = createSuspendedSetup();
+    const { runId } = await suspendRun(agent, 'abort-thread', 'abort-resource');
+    expect((await agent.listSuspendedRuns({ threadId: 'abort-thread' })).runs.map(r => r.runId)).toContain(runId);
+
+    expect(await agent.abortThreadStream({ threadId: 'abort-thread', resourceId: 'abort-resource' })).toBe(true);
+
+    await vi.waitFor(async () => {
+      expect((await agent.listSuspendedRuns({ threadId: 'abort-thread' })).runs).toHaveLength(0);
+    });
+  });
+
+  it('abortRunStream removes the approval-suspended run from listSuspendedRuns', async () => {
+    const { agent } = createSuspendedSetup();
+    const { runId } = await suspendRun(agent, 'abort-run', 'abort-resource');
+
+    await agent.abortRunStream(runId);
+
+    await vi.waitFor(async () => {
+      expect((await agent.listSuspendedRuns({ threadId: 'abort-run' })).runs).toHaveLength(0);
+    });
+  });
+
+  async function suspendDurable(threadId: string) {
+    const baseAgent = new Agent({
+      id: 'durable-abort-agent',
+      name: 'Durable Abort Agent',
+      instructions: 'You find users.',
+      model: createMockModel(),
+      tools: { findUserTool: createFindUserTool() },
+    });
+    const durableAgent: any = createDurableAgent({ agent: baseAgent });
+    new Mastra({ agents: { durableAgent }, logger: false, storage: new InMemoryStore() });
+    const result: any = await durableAgent.stream('Find the user with name - Dero Israel', {
+      requireToolApproval: true,
+      memory: { thread: threadId, resource: 'abort-resource' },
+    });
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') break;
+    }
+    await vi.waitFor(async () => {
+      expect((await durableAgent.listSuspendedRuns({ threadId })).runs.length).toBeGreaterThan(0);
+    });
+    return { durableAgent, result };
+  }
+
+  it('DurableAgent abortThreadStream removes the suspended run', async () => {
+    const { durableAgent } = await suspendDurable('durable-abort-thread');
+    expect(
+      await durableAgent.abortThreadStream({ threadId: 'durable-abort-thread', resourceId: 'abort-resource' }),
+    ).toBe(true);
+    await vi.waitFor(async () => {
+      expect((await durableAgent.listSuspendedRuns({ threadId: 'durable-abort-thread' })).runs).toHaveLength(0);
+    });
+  }, 30000);
+
+  it("DurableAgent stream result's abort() removes the suspended run", async () => {
+    const { durableAgent, result } = await suspendDurable('durable-abort-result');
+    result.abort();
+    await vi.waitFor(async () => {
+      expect((await durableAgent.listSuspendedRuns({ threadId: 'durable-abort-result' })).runs).toHaveLength(0);
+    });
+  }, 30000);
 });

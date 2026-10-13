@@ -57,7 +57,7 @@ describe('claimed thread ownership acknowledges every delivery', () => {
           sourceId: 'elsewhere',
           targetSourceId: 'someone-else',
           replyTopic: `${threadTopic}.reply`,
-          timeoutMs: 1_000,
+          expiresAt: Date.now() + 1_000,
           signal: {},
         },
       });
@@ -85,6 +85,7 @@ describe('claimed thread ownership acknowledges every delivery', () => {
           requestId: 'request-1',
           replyTopic: `${OWNER_DISCOVERY_TOPIC}.request-1`,
           sourceId: 'elsewhere',
+          expiresAt: Date.now() + 1_000,
         },
       });
       await nextTicks();
@@ -114,6 +115,7 @@ describe('claimed thread ownership acknowledges every delivery', () => {
           requestId: 'request-2',
           replyTopic,
           sourceId: 'elsewhere',
+          expiresAt: Date.now() + 1_000,
         },
       });
       await nextTicks();
@@ -140,6 +142,7 @@ describe('claimed thread ownership acknowledges every delivery', () => {
           requestId: 'request-3',
           replyTopic,
           sourceId: 'elsewhere',
+          expiresAt: Date.now() + 1_000,
         },
       });
       await nextTicks();
@@ -171,6 +174,7 @@ describe('claimed thread ownership acknowledges every delivery', () => {
             requestId: 'request-fail',
             replyTopic,
             sourceId: 'elsewhere',
+            expiresAt: Date.now() + 1_000,
           },
         }),
       ).rejects.toThrow(`publish to ${replyTopic} failed`);
@@ -199,6 +203,7 @@ describe('claimed thread ownership acknowledges every delivery', () => {
             requestId: 'request-fail',
             replyTopic,
             sourceId: 'elsewhere',
+            expiresAt: Date.now() + 1_000,
           },
         }),
       ).rejects.toThrow(`publish to ${replyTopic} failed`);
@@ -230,6 +235,7 @@ async function runtimeSourceId(pubsub: LeasePubSub) {
       requestId: 'source-probe',
       replyTopic: probeReplyTopic,
       sourceId: 'elsewhere',
+      expiresAt: Date.now() + 1_000,
     },
   });
   await nextTicks();
@@ -237,8 +243,239 @@ async function runtimeSourceId(pubsub: LeasePubSub) {
   return reply.event.data.sourceId as string;
 }
 
+describe('requests delivered after the caller timed out', () => {
+  // Older than the responder's clock-skew grace, so it must be treated as
+  // stale no matter how the two clocks drift in tests.
+  const longExpired = () => Date.now() - 60_000;
+
+  it('drops a stale owner discovery request without replying, but still acks it', async () => {
+    const { runtime, pubsub } = setup();
+    const owner = await claim(runtime, pubsub);
+
+    const replyTopic = `${OWNER_DISCOVERY_TOPIC}.request-stale`;
+    await pubsub.subscribe(replyTopic, () => {});
+    // Backlog replay / reclaim redelivery: the caller timed out long ago and
+    // released this reply topic. Replying would recreate the reply stream on a
+    // persistent backend.
+    await pubsub.publish(OWNER_DISCOVERY_TOPIC, {
+      type: 'thread-owner-request',
+      runId: 'request-stale',
+      data: {
+        type: 'thread-owner-request',
+        key,
+        requestId: 'request-stale',
+        replyTopic,
+        sourceId: 'elsewhere',
+        expiresAt: longExpired(),
+      },
+    });
+    await nextTicks();
+
+    expect(deliveriesOn(pubsub, replyTopic)).toHaveLength(0);
+    // Dropping must still ack — a stale request must not stay pending and redeliver.
+    expect(deliveriesOn(pubsub, OWNER_DISCOVERY_TOPIC).every(d => d.acked)).toBe(true);
+
+    owner.unsubscribe();
+    await nextTicks();
+  });
+
+  it('drops a stale peer discovery request without replying, but still acks it', async () => {
+    const { runtime, pubsub } = setup();
+    const owner = await claim(runtime, pubsub, true);
+
+    const replyTopic = `${PEER_DISCOVERY_TOPIC}.request-stale`;
+    await pubsub.subscribe(replyTopic, () => {});
+    await pubsub.publish(PEER_DISCOVERY_TOPIC, {
+      type: 'thread-peer-request',
+      runId: 'request-stale',
+      data: {
+        type: 'thread-peer-request',
+        requestId: 'request-stale',
+        replyTopic,
+        sourceId: 'elsewhere',
+        expiresAt: longExpired(),
+      },
+    });
+    await nextTicks();
+
+    expect(deliveriesOn(pubsub, replyTopic)).toHaveLength(0);
+    expect(deliveriesOn(pubsub, PEER_DISCOVERY_TOPIC).every(d => d.acked)).toBe(true);
+
+    owner.unsubscribe();
+    await nextTicks();
+  });
+
+  it('drops a stale idle signal without starting a run or replying, but still acks it', async () => {
+    const { runtime, pubsub } = setup();
+    let runs = 0;
+    (harness.agent as { stream?: unknown }).stream = async () => {
+      runs += 1;
+      return { text: Promise.resolve(''), runId: 'run-stale' };
+    };
+    try {
+      const owner = await claim(runtime, pubsub);
+      const targetSourceId = await runtimeSourceId(pubsub);
+
+      const replyTopic = `${threadTopic}.stale-reply`;
+      await pubsub.subscribe(replyTopic, () => {});
+
+      // The caller reported this signal as timed out long ago. Acting on it
+      // now would start a run nobody is waiting on.
+      await pubsub.publish(threadTopic, {
+        type: 'agent.thread-stream',
+        runId: 'run-stale',
+        data: {
+          type: 'idle-signal-enqueued',
+          requestId: 'stale-1',
+          runId: 'run-stale',
+          sourceId: 'elsewhere',
+          targetSourceId,
+          replyTopic,
+          expiresAt: longExpired(),
+          signal: { type: 'user', contents: 'hello' },
+        },
+      });
+      await nextTicks();
+
+      expect(runs).toBe(0);
+      expect(deliveriesOn(pubsub, replyTopic)).toHaveLength(0);
+      expect(deliveriesOn(pubsub, threadTopic).every(d => d.acked)).toBe(true);
+
+      owner.unsubscribe();
+      await nextTicks();
+    } finally {
+      delete (harness.agent as { stream?: unknown }).stream;
+    }
+  });
+
+  it('still acts on an idle signal just past its deadline (clock-skew grace)', async () => {
+    const { runtime, pubsub } = setup();
+    let runs = 0;
+    (harness.agent as { stream?: unknown }).stream = async () => {
+      runs += 1;
+      return { text: Promise.resolve(''), runId: 'run-skewed' };
+    };
+    try {
+      const owner = await claim(runtime, pubsub);
+      const targetSourceId = await runtimeSourceId(pubsub);
+
+      const replyTopic = `${threadTopic}.skewed-reply`;
+      await pubsub.subscribe(replyTopic, () => {});
+
+      // A responder clock running 1s ahead sees a live request as already past
+      // its deadline. The strict expiry checks in the run-start path must not
+      // reject it — the caller's 5s acceptance window is still open.
+      await pubsub.publish(threadTopic, {
+        type: 'agent.thread-stream',
+        runId: 'run-skewed',
+        data: {
+          type: 'idle-signal-enqueued',
+          requestId: 'skewed-1',
+          runId: 'run-skewed',
+          sourceId: 'elsewhere',
+          targetSourceId,
+          replyTopic,
+          expiresAt: Date.now() - 1_000,
+          signal: { type: 'user', contents: 'hello' },
+        },
+      });
+      await nextTicks();
+
+      expect(runs).toBe(1);
+      const replies = deliveriesOn(pubsub, replyTopic);
+      expect(replies).toHaveLength(1);
+      expect(replies[0].event.data.type).toBe('idle-signal-accepted');
+
+      owner.unsubscribe();
+      await nextTicks();
+    } finally {
+      delete (harness.agent as { stream?: unknown }).stream;
+    }
+  });
+
+  it('acts on a legacy idle signal that carries timeoutMs instead of expiresAt', async () => {
+    const { runtime, pubsub } = setup();
+    let runs = 0;
+    (harness.agent as { stream?: unknown }).stream = async () => {
+      runs += 1;
+      return { text: Promise.resolve(''), runId: 'run-legacy' };
+    };
+    try {
+      const owner = await claim(runtime, pubsub);
+      const targetSourceId = await runtimeSourceId(pubsub);
+
+      const replyTopic = `${threadTopic}.legacy-reply`;
+      await pubsub.subscribe(replyTopic, () => {});
+
+      // During a rolling deploy an older process publishes the relative
+      // window. The handler derives the deadline at receipt, which is what
+      // that sender expected.
+      await pubsub.publish(threadTopic, {
+        type: 'agent.thread-stream',
+        runId: 'run-legacy',
+        data: {
+          type: 'idle-signal-enqueued',
+          requestId: 'legacy-1',
+          runId: 'run-legacy',
+          sourceId: 'elsewhere',
+          targetSourceId,
+          replyTopic,
+          timeoutMs: 1_000,
+          signal: { type: 'user', contents: 'hello' },
+        },
+      });
+      await nextTicks();
+
+      expect(runs).toBe(1);
+      const replies = deliveriesOn(pubsub, replyTopic);
+      expect(replies).toHaveLength(1);
+      expect(replies[0].event.data.type).toBe('idle-signal-accepted');
+
+      owner.unsubscribe();
+      await nextTicks();
+    } finally {
+      delete (harness.agent as { stream?: unknown }).stream;
+    }
+  });
+
+  it('still answers a request just past its deadline (clock-skew grace)', async () => {
+    const { runtime, pubsub } = setup();
+    const owner = await claim(runtime, pubsub);
+
+    const replyTopic = `${OWNER_DISCOVERY_TOPIC}.request-skewed`;
+    await pubsub.subscribe(replyTopic, () => {});
+    // A responder whose clock runs slightly ahead sees every live request as
+    // already expired. The 100ms discovery window is far smaller than realistic
+    // skew, so a strict deadline would silently break cross-process discovery.
+    await pubsub.publish(OWNER_DISCOVERY_TOPIC, {
+      type: 'thread-owner-request',
+      runId: 'request-skewed',
+      data: {
+        type: 'thread-owner-request',
+        key,
+        requestId: 'request-skewed',
+        replyTopic,
+        sourceId: 'elsewhere',
+        expiresAt: Date.now() - 1_000,
+      },
+    });
+    await nextTicks();
+
+    expect(deliveriesOn(pubsub, replyTopic)).toHaveLength(1);
+
+    owner.unsubscribe();
+    await nextTicks();
+  });
+});
+
 describe('redelivered idle signals', () => {
-  const publishSignal = (pubsub: LeasePubSub, requestId: string, targetSourceId: string, replyTopic: string) =>
+  const publishSignal = (
+    pubsub: LeasePubSub,
+    requestId: string,
+    targetSourceId: string,
+    replyTopic: string,
+    expiresAt: number = Date.now() + 1_000,
+  ) =>
     pubsub.publish(threadTopic, {
       type: 'agent.thread-stream',
       runId: `run-${requestId}`,
@@ -249,7 +486,7 @@ describe('redelivered idle signals', () => {
         sourceId: 'elsewhere',
         targetSourceId,
         replyTopic,
-        timeoutMs: 1_000,
+        expiresAt,
         signal: { type: 'user', contents: 'hello' },
       },
     });

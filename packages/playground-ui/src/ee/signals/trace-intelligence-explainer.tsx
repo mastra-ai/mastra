@@ -1,10 +1,13 @@
 import type { SignalCatalogEntry } from '@mastra/client-js';
 import { Info } from 'lucide-react';
-import { getSignalHue } from './signal-colors';
+import { getSignalColor } from './signal-colors';
 import { orderedSignals, signalDescription, signalLabel } from './signal-formatting';
-import { nodeColor } from '@/ds/components/SankeyChart';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
+import { controlStateColorTransition } from '@/ds/primitives/transitions';
+import { quietTextHover } from '@/ds/primitives/typography';
+import { cn } from '@/lib/utils';
 
 /** Info tooltip for first-time viewers: signals → themes → snapshots. */
 export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: readonly SignalCatalogEntry[] }) {
@@ -16,14 +19,14 @@ export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: r
     <Tooltip>
       <TooltipTrigger
         aria-label="What is trace intelligence?"
-        className="text-muted-foreground hover:text-foreground flex cursor-help items-center transition-colors"
+        className={cn(quietTextHover, controlStateColorTransition, 'flex cursor-help items-center')}
         type="button"
       >
-        <Icon size="sm">
+        <Icon size="xs">
           <Info />
         </Icon>
       </TooltipTrigger>
-      <TooltipContent className="text-ui-sm max-w-sm space-y-3 p-4">
+      <TooltipContent className="max-w-sm space-y-3 p-4">
         <p className="text-foreground">
           Every trace is analyzed for {enabledSignals.length === 4 ? 'four' : enabledSignals.length}{' '}
           {enabledSignals.length === 1 ? 'signal' : 'signals'}, and traces with similar signals are clustered into named
@@ -32,12 +35,15 @@ export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: r
         <ul className="space-y-1.5">
           {enabledSignals.map(signalName => (
             <li key={signalName} className="text-muted-foreground">
-              <span
-                className="text-ui-xs font-mono font-semibold tracking-widest uppercase"
-                style={{ color: nodeColor(getSignalHue(signalName)) }}
+              <Txt
+                as="span"
+                variant="meta"
+
+                className="uppercase"
+                style={{ color: getSignalColor(signalName) }}
               >
                 {signalLabel(signalCatalog, signalName)}
-              </span>{' '}
+              </Txt>{' '}
               — {signalDescription(signalCatalog, signalName)}
             </li>
           ))}

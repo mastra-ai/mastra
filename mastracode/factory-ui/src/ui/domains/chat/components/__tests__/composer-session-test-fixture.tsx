@@ -1,15 +1,16 @@
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router';
+import { Link, MemoryRouter, Outlet, Route, Routes, useLocation, useParams } from 'react-router';
 import { expect } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import { thinkingConfig } from '../../../../__tests__/fixtures/thinkingConfig';
 import { OverlaysProvider } from '../../../../lib/overlays';
-import Chat from '../../Chat';
+import { ChatSessionRouteProvider } from '../../Chat';
 import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
 import { ChatSessionTestProvider } from '../../context/ChatSessionTestProvider';
 import { useHandoffPrompt } from '../../hooks/useHandoffPrompt';
@@ -78,7 +79,6 @@ export function stubPreparingSession({
     attachSse = resolve;
   });
   const encoder = new TextEncoder();
-  let sessionPackId: string | null = null;
   const result: PreparingSession = {
     finishWorkspace: releaseWorkspace,
     emit: async event => {
@@ -117,39 +117,8 @@ export function stubPreparingSession({
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () =>
-      HttpResponse.json({
-        packs: [
-          {
-            id: 'balanced',
-            name: 'Balanced',
-            description: '',
-            models: {
-              build: 'openai/gpt-4o-mini',
-              plan: 'openai/gpt-4o-mini',
-              fast: 'openai/gpt-4o-mini',
-            },
-            custom: false,
-            active: true,
-          },
-          {
-            id: 'mine',
-            name: 'Mine',
-            description: '',
-            models: { build: 'openai/gpt-5.4-mini', plan: 'openai/gpt-5.4-mini', fast: 'openai/gpt-5.4-mini' },
-            custom: true,
-            active: false,
-          },
-        ],
-        activePackId: 'balanced',
-        sessionPackId,
-      }),
-    ),
-    http.post(`${TEST_BASE_URL}/web/config/model-packs/:packId/activate`, async ({ params }) => {
-      sessionPackId = String(params.packId);
-      result.operations.push(`pack:${sessionPackId}`);
-      return HttpResponse.json({ ok: true, target: 'session', sessionPackId });
-    }),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-4o-mini' })),
+    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(thinkingConfig)),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () =>
       HttpResponse.json({
         connections: [
@@ -188,7 +157,7 @@ export function stubPreparingSession({
         },
       });
     }),
-    http.get(`${TEST_BASE_URL}/web/github/projects/:projectRepositoryId/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, () =>
       HttpResponse.json({ sessions: [] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, () =>
@@ -296,13 +265,13 @@ export function renderThread() {
         <Route
           path="/factories/:factoryId/user/threads/:threadId"
           element={
-            <MainSidebarProvider storageKey="preparing-test">
+            <SidebarProvider storageKey="preparing-test">
               <ChatSessionTestProvider threadId={SESSION_ID} userScoped deferUntilMessagesReady={false}>
                 <OverlaysProvider>
                   <ThreadSurface />
                 </OverlaysProvider>
               </ChatSessionTestProvider>
-            </MainSidebarProvider>
+            </SidebarProvider>
           }
         />
         <Route
@@ -335,15 +304,26 @@ function UserThreadRouteSurface() {
   );
 }
 
+/** Mirrors the provider stack `AppLayout` mounts around routed chat pages. */
+function ChatRouteShell() {
+  return (
+    <SidebarProvider>
+      <OverlaysProvider>
+        <ChatSessionRouteProvider>
+          <Outlet />
+        </ChatSessionRouteProvider>
+      </OverlaysProvider>
+    </SidebarProvider>
+  );
+}
+
 export function renderDraft() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/user/new/${SESSION_ID}`]}>
       <Routes>
-        <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<Chat />}>
-          <Route index element={<DraftRouteSurface />} />
-        </Route>
-        <Route path="/factories/:factoryId/user/threads/:threadId" element={<Chat />}>
-          <Route index element={<UserThreadRouteSurface />} />
+        <Route element={<ChatRouteShell />}>
+          <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<DraftRouteSurface />} />
+          <Route path="/factories/:factoryId/user/threads/:threadId" element={<UserThreadRouteSurface />} />
         </Route>
       </Routes>
       <PathnameProbe />

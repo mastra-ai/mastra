@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "empiriolabs/deepseek-v3-2"
+  model: "empiriolabs/deepseek-v4-1-flash"
 });
 
 // Generate a response
@@ -46,18 +46,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
-    "model": "empiriolabs/deepseek-v3-2",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 128000,
-    "maxOutput": 32768,
-    "inputCost": 0.57,
-    "outputCost": 1.71
-  },
-  {
     "model": "empiriolabs/deepseek-v4-1-flash",
     "imageInput": true,
     "audioInput": false,
@@ -68,18 +56,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 393216,
     "inputCost": 0.3,
     "outputCost": 1.2
-  },
-  {
-    "model": "empiriolabs/deepseek-v4-flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 393216,
-    "inputCost": 0.14,
-    "outputCost": 0.28
   },
   {
     "model": "empiriolabs/deepseek-v4-flash-0731",
@@ -334,6 +310,42 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4.35
   },
   {
+    "model": "empiriolabs/mimo-v2-6-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.14,
+    "outputCost": 0.28
+  },
+  {
+    "model": "empiriolabs/mimo-v2-6-pro",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.435,
+    "outputCost": 0.87
+  },
+  {
+    "model": "empiriolabs/mimo-v2-6-pro-ultraspeed",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 4.35,
+    "outputCost": 8.7
+  },
+  {
     "model": "empiriolabs/minimax-m2-7",
     "imageInput": false,
     "audioInput": false,
@@ -562,18 +574,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.5
   },
   {
-    "model": "empiriolabs/qwen3-6-max-preview",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 65536,
-    "inputCost": 1.31,
-    "outputCost": 7.88
-  },
-  {
     "model": "empiriolabs/qwen3-6-plus",
     "imageInput": true,
     "audioInput": false,
@@ -682,18 +682,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.94
   },
   {
-    "model": "empiriolabs/qwen3-max",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 65536,
-    "inputCost": 1.08,
-    "outputCost": 5.52
-  },
-  {
     "model": "empiriolabs/seed-2-0-code",
     "imageInput": true,
     "audioInput": false,
@@ -788,6 +776,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.2,
     "outputCost": 1.15
+  },
+  {
+    "model": "empiriolabs/step-5-preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1024000,
+    "maxOutput": 131072,
+    "inputCost": 1,
+    "outputCost": 2.7
   }
 ]}
 />
@@ -804,7 +804,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.empiriolabs.ai/v1",
-    id: "empiriolabs/deepseek-v3-2",
+    id: "empiriolabs/deepseek-v4-1-flash",
     apiKey: process.env.EMPIRIOLABS_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -822,8 +822,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "empiriolabs/step-3-7-flash"
-      : "empiriolabs/deepseek-v3-2";
+      ? "empiriolabs/step-5-preview"
+      : "empiriolabs/deepseek-v4-1-flash";
   }
 });
 ```

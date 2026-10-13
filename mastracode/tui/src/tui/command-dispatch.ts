@@ -49,6 +49,7 @@ import {
   handleObservabilityCommand,
   handleGithubCommand,
   handleGoalCommand,
+  handleSchedulesCommand,
   handleWorkflowsCommand,
   handlePruneCommand,
   handleProfileCommand,
@@ -75,6 +76,8 @@ const TRACKED_COMMANDS = new Set([
   'memory-gateway',
   'custom-providers',
   'threads',
+  'resume',
+  'clone',
   'new',
 ]);
 
@@ -166,6 +169,7 @@ export async function dispatchSlashCommand(
       await handleCloneCommand(ctx);
       return true;
     case 'threads':
+    case 'resume':
       await handleThreadsCommand(ctx);
       return true;
     case 'thread':
@@ -248,6 +252,7 @@ export async function dispatchSlashCommand(
       await handleDiffCommand(ctx, args[0]);
       return true;
     case 'name':
+    case 'rename':
       await handleNameCommand(ctx, args);
       return true;
     case 'resource':
@@ -281,6 +286,8 @@ export async function dispatchSlashCommand(
       await handleThemeCommand(ctx, args);
       return true;
     case 'update':
+    // Hidden alias: works when typed, but isn't listed in autocomplete or help.
+    case 'upgrade':
       await handleUpdateCommand(ctx);
       return true;
     case 'gateway':
@@ -304,6 +311,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'goal':
       await handleGoalCommand(buildCtx(), args);
+      return true;
+    case 'schedules':
+      await handleSchedulesCommand(buildCtx(), args);
       return true;
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);

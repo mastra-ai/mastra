@@ -75,12 +75,14 @@ export class WorkflowsOracle extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     try {
       return await this.db.tx(async client => {
@@ -94,6 +96,9 @@ export class WorkflowsOracle extends WorkflowsStorage {
 
         const snapshot = parseSnapshot(existing.snapshot);
         snapshot.context[stepId] = result;
+        if (state !== undefined) {
+          (snapshot.context as Record<string, unknown>).__state = state;
+        }
         snapshot.requestContext = { ...(snapshot.requestContext ?? {}), ...requestContext };
 
         await client.none(this.workflowMergeSql(), {

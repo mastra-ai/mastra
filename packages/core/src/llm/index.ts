@@ -78,6 +78,7 @@ export type {
 } from './model/base.types';
 export type {
   TripwireProperties,
+  IdentifiedModelConfig,
   MastraModelConfig,
   OpenAICompatibleConfig,
   WidenModelId,
@@ -89,11 +90,12 @@ export {
   PROVIDER_REGISTRY,
   parseModelString,
   getProviderConfig,
+  getModelReasoningOptions,
   modelSupportsAttachments,
   modelSupportsStructuredOutput,
   modelSupportsTemperature,
 } from './model/provider-registry.js';
-export type { AttachmentCapabilities } from './model/provider-registry.js';
+export type { AttachmentCapabilities, ModelReasoningOption } from './model/provider-registry.js';
 
 /**
  * Map of provider ID to the models that provider serves.
@@ -216,6 +218,8 @@ export {
   ModelsDevGateway,
   AzureOpenAIGateway,
   MastraGateway,
+  findGatewayForModel,
+  getGatewayId,
 } from './model/gateways';
 export type {
   AzureAccessToken,

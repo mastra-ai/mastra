@@ -2,6 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import {
   Agent,
   MemoryThread,
+  memoryMessagesQuery,
   Tool,
   Processor,
   Workflow,
@@ -30,9 +31,15 @@ import type {
   LegacyGetTracesResponse,
   LegacyTracesPaginatedArg,
   ListScoresBySpanParams,
+  QuerySpansInput,
+  QuerySpansResult,
   QueryTraceThreadsInput,
   QueryTraceThreadsResult,
+  QueryTracesGroupedInput,
   QueryTracesInput,
+  QueryTracesDeltaInput,
+  QueryTracesKeysetInput,
+  QueryTracesPaginatedInput,
 } from './resources/observability';
 import type {
   TraceRecord,
@@ -41,7 +48,8 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ListTracesLightResponse,
-  TraceQueryRequest,
+  TraceQueryGroupResponse,
+  TraceQueryKeysetTraceResponse,
   TraceQueryResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
@@ -143,6 +151,7 @@ import type {
   SaveScoreResponse,
   GetMemoryConfigParams,
   GetMemoryConfigResponse,
+  ListMemoryThreadMessagesParams,
   ListMemoryThreadMessagesResponse,
   MemorySearchResponse,
   ListAgentsModelProvidersResponse,
@@ -175,6 +184,7 @@ import type {
   CreateStoredSkillParams,
   StoredSkillResponse,
   GetSystemPackagesResponse,
+  GetObservabilityCapabilitiesResponse,
   BuilderSettingsResponse,
   BuilderAvailableModelsResponse,
   PermissionPatternsResponse,
@@ -429,25 +439,16 @@ export class MastraClient extends BaseResource {
    */
   public listThreadMessages(
     threadId: string,
-    opts: {
-      agentId?: string;
-      networkId?: string;
-      requestContext?: RequestContext | Record<string, any>;
-      includeSystemReminders?: boolean;
-    } = {},
+    opts: ListMemoryThreadMessagesParams = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
-    let url = '';
-    const includeSystemRemindersQuery =
-      opts.includeSystemReminders === undefined ? '' : `includeSystemReminders=${opts.includeSystemReminders}`;
-
     if (opts.networkId) {
-      url = `/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '&')}`;
-    } else if (opts.agentId) {
-      url = `/memory/threads/${threadId}/messages?agentId=${opts.agentId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, '&')}`;
-    } else {
-      url = `/memory/threads/${threadId}/messages${includeSystemRemindersQuery ? `?${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '?')}`;
+      const query = memoryMessagesQuery(opts);
+      query.set('networkId', opts.networkId);
+      return this.request(
+        `/memory/network/threads/${threadId}/messages?${query.toString()}${requestContextQueryString(opts.requestContext, '&')}`,
+      );
     }
-    return this.request(url);
+    return this.getMemoryThread({ threadId, agentId: opts.agentId }).listMessages(opts);
   }
 
   public deleteThread(
@@ -961,18 +962,22 @@ export class MastraClient extends BaseResource {
    * @param threadId - ID of the thread.
    * @param workingMemory - The new working memory content.
    * @param resourceId - Optional ID of the resource.
+   * @param mode - `replace` (default) or `merge` to atomically deep-merge a partial JSON object
+   * into resource-scoped schema working memory (requires storage support, e.g. PostgreSQL).
    */
   public updateWorkingMemory({
     agentId,
     threadId,
     workingMemory,
     resourceId,
+    mode,
     requestContext,
   }: {
     agentId: string;
     threadId: string;
     workingMemory: string;
     resourceId?: string;
+    mode?: 'replace' | 'merge';
     requestContext?: RequestContext | Record<string, any>;
   }) {
     return this.request(
@@ -982,6 +987,7 @@ export class MastraClient extends BaseResource {
         body: {
           workingMemory,
           resourceId,
+          ...(mode ? { mode } : {}),
         },
       },
     );
@@ -1123,7 +1129,15 @@ export class MastraClient extends BaseResource {
     return this.observability.listTraces(params);
   }
 
-  /** Queries completed logical traces using recursive trace and related-record predicates. */
+  /**
+   * Queries completed logical traces using recursive trace and related-record predicates.
+   * Grouped results remain supported but are deprecated. Use `queryTraceThreads()` to retrieve thread identities.
+   */
+  queryTraces(params: QueryTracesGroupedInput): Promise<TraceQueryGroupResponse>;
+  queryTraces(params: QueryTracesDeltaInput): Promise<Extract<TraceQueryResponse, { delta: unknown }>>;
+  queryTraces(params: QueryTracesPaginatedInput): Promise<Extract<TraceQueryResponse, { pagination: unknown }>>;
+  queryTraces(params: QueryTracesKeysetInput): Promise<TraceQueryKeysetTraceResponse>;
+  queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse>;
   queryTraces(params: QueryTracesInput): Promise<TraceQueryResponse> {
     return this.observability.queryTraces(params);
   }
@@ -1147,6 +1161,11 @@ export class MastraClient extends BaseResource {
   /** Queries thread identities using eligible-trace and cross-trace predicates. */
   queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
     return this.observability.queryTraceThreads(params);
+  }
+
+  /** Queries completed spans using a span predicate, returning one row per matching span. */
+  querySpans(params: QuerySpansInput): Promise<QuerySpansResult> {
+    return this.observability.querySpans(params);
   }
 
   /**
@@ -1356,6 +1375,11 @@ export class MastraClient extends BaseResource {
   /** Returns distinct tags with optional entity type filtering. */
   getTags(params: GetTagsArgs = {}): Promise<GetTagsResponse> {
     return this.observability.getTags(params);
+  }
+
+  /** Returns which optional observability APIs the configured observability storage supports. */
+  getObservabilityCapabilities(): Promise<GetObservabilityCapabilitiesResponse> {
+    return this.observability.getCapabilities();
   }
 
   // ============================================================================
@@ -1971,6 +1995,10 @@ export class MastraClient extends BaseResource {
     if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
     if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
     for (const id of params?.targetIds ?? []) searchParams.append('targetIds', id);
+    if (params?.orderBy) {
+      searchParams.set('orderBy[field]', params.orderBy.field);
+      searchParams.set('orderBy[direction]', params.orderBy.direction);
+    }
     const qs = searchParams.toString();
     return this.request(`/datasets${qs ? `?${qs}` : ''}`);
   }
@@ -2041,6 +2069,10 @@ export class MastraClient extends BaseResource {
     if (params?.search) searchParams.set('search', params.search);
     if (params?.version != null) {
       searchParams.set('version', String(params.version));
+    }
+    if (params?.orderBy) {
+      searchParams.set('orderBy[field]', params.orderBy.field);
+      searchParams.set('orderBy[direction]', params.orderBy.direction);
     }
     const qs = searchParams.toString();
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/items${qs ? `?${qs}` : ''}`);
@@ -2221,6 +2253,10 @@ export class MastraClient extends BaseResource {
     if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
     if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
     if (params?.targetId !== undefined) searchParams.set('targetId', params.targetId);
+    if (params?.orderBy) {
+      searchParams.set('orderBy[field]', params.orderBy.field);
+      searchParams.set('orderBy[direction]', params.orderBy.direction);
+    }
     const qs = searchParams.toString();
     return this.request(`/experiments${qs ? `?${qs}` : ''}`);
   }
@@ -2248,6 +2284,10 @@ export class MastraClient extends BaseResource {
     if (params?.trialIndex !== undefined) searchParams.set('trialIndex', String(params.trialIndex));
     if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
     if (params?.targetId !== undefined) searchParams.set('targetId', params.targetId);
+    if (params?.orderBy) {
+      searchParams.set('orderBy[field]', params.orderBy.field);
+      searchParams.set('orderBy[direction]', params.orderBy.direction);
+    }
     const qs = searchParams.toString();
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments${qs ? `?${qs}` : ''}`);
   }
@@ -2260,6 +2300,19 @@ export class MastraClient extends BaseResource {
     experimentId: PathParams<'GET /datasets/:datasetId/experiments/:experimentId'>['experimentId'],
   ): Promise<SerializedRouteResponse<'GET /datasets/:datasetId/experiments/:experimentId'>> {
     return this.request(`/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}`);
+  }
+
+  /**
+   * Gets an experiment by ID regardless of dataset association, including its
+   * `datasetId` (null for experiments orphaned by dataset deletion). When tenancy
+   * fields are supplied, experiments outside the tenant are reported as not found.
+   */
+  public getExperiment(
+    experimentId: PathParams<'GET /experiments/:experimentId'>['experimentId'],
+    options?: QueryParams<'GET /experiments/:experimentId'>,
+  ): Promise<SerializedRouteResponse<'GET /experiments/:experimentId'>> {
+    const qs = buildTenancyQuery(options);
+    return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`);
   }
 
   /**
@@ -2330,6 +2383,10 @@ export class MastraClient extends BaseResource {
     if (options?.page !== undefined) searchParams.set('page', String(options.page));
     if (options?.perPage !== undefined) searchParams.set('perPage', String(options.perPage));
     for (const tag of options?.tags ?? []) searchParams.append('tags', tag);
+    if (options?.orderBy) {
+      searchParams.set('orderBy[field]', options.orderBy.field);
+      searchParams.set('orderBy[direction]', options.orderBy.direction);
+    }
     const qs = searchParams.toString();
     return this.request(
       `/datasets/${encodeURIComponent(datasetId)}/experiments/${encodeURIComponent(experimentId)}/results${qs ? `?${qs}` : ''}`,
@@ -2443,7 +2500,8 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Compares two dataset experiments for regression detection
+   * Compares two to ten dataset experiments item by item against a baseline.
+   * Every experiment in `experimentIds` gets a result entry per item (`null` when it did not run that item).
    */
   public compareExperiments(params: CompareExperimentsParams): Promise<CompareExperimentsResponse> {
     const { datasetId, ...body } = params;

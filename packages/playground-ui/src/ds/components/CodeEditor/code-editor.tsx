@@ -16,40 +16,43 @@ import { codeLanguages } from './code-languages';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { useFieldControlAria } from '@/ds/components/Field/field-control-aria';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import type { JsonSchema } from '@/lib/json-schema';
 import { cn } from '@/lib/utils';
 
 export type CodeEditorLanguage = 'json' | 'markdown';
+type CodeEditorFont = 'body' | 'mono';
 
 /** Original dark theme — draculaInit + custom overrides. Unchanged from before light mode work. */
-function buildDarkTheme(): Extension {
+function buildDarkTheme(font: CodeEditorFont): Extension {
   const baseTheme = draculaInit({
     settings: {
-      fontFamily: 'var(--font-mono)',
-      fontSize: 'var(--text-ui-smd)',
+      fontFamily: `var(--font-${font})`,
+      fontSize: 'var(--text-body-sm)',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
-      gutterForeground: 'var(--neutral2)',
+      gutterForeground: 'var(--placeholder)',
       background: 'transparent',
-      foreground: 'var(--neutral6)',
-      caret: 'var(--neutral6)',
+      foreground: 'var(--foreground)',
+      caret: 'var(--foreground)',
     },
     styles: [
-      { tag: [t.className, t.propertyName], color: 'var(--neutral6)' },
-      { tag: t.heading, color: 'var(--accent3)', fontWeight: 'bold' },
+      { tag: [t.className, t.propertyName], color: 'var(--foreground)' },
+      { tag: t.heading, color: 'var(--info-indicator)', fontWeight: 'bold' },
       {
         tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
-        color: 'var(--accent3)',
+        color: 'var(--info-indicator)',
         fontWeight: 'bold',
       },
-      { tag: t.emphasis, fontStyle: 'italic', color: 'var(--neutral6)' },
-      { tag: t.strong, fontWeight: 'bold', color: 'var(--neutral6)' },
-      { tag: t.link, color: 'var(--accent3)', textDecoration: 'underline' },
-      { tag: t.url, color: 'var(--accent3)' },
-      { tag: t.monospace, color: 'var(--neutral6)' },
+      { tag: t.emphasis, fontStyle: 'italic', color: 'var(--foreground)' },
+      { tag: t.strong, fontWeight: 'bold', color: 'var(--foreground)' },
+      { tag: t.link, color: 'var(--info-indicator)', textDecoration: 'underline' },
+      { tag: t.url, color: 'var(--info-indicator)' },
+      { tag: t.monospace, color: 'var(--foreground)' },
       { tag: t.strikethrough, textDecoration: 'line-through' },
-      { tag: t.quote, fontStyle: 'italic', color: 'var(--neutral2)' },
+      { tag: t.quote, fontStyle: 'italic', color: 'var(--placeholder)' },
     ],
   });
 
@@ -58,54 +61,54 @@ function buildDarkTheme(): Extension {
       backgroundColor: 'transparent',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
+      color: 'var(--foreground)',
+      caretColor: 'var(--foreground)',
     },
     '.cm-lineNumbers .cm-gutterElement': {
-      color: 'var(--neutral2)',
+      color: 'var(--placeholder)',
     },
     '.cm-activeLineGutter': {
-      color: 'var(--neutral3)',
+      color: 'var(--muted-foreground)',
     },
     '.cm-cursor': {
-      borderLeftColor: 'var(--neutral6)',
+      borderLeftColor: 'var(--foreground)',
     },
     '.cm-selectionBackground, .cm-content ::selection': {
-      backgroundColor: 'color-mix(in srgb, var(--accent3) 22%, transparent)',
+      backgroundColor: 'var(--info-subtle)',
     },
     '.cm-tooltip-autocomplete': {
-      backgroundColor: 'var(--surface2)',
-      border: '1px solid var(--border1)',
+      backgroundColor: 'var(--background)',
+      border: '1px solid var(--border)',
       borderRadius: '6px',
-      boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
+      boxShadow: 'var(--elevation-overlay)',
     },
     '.cm-tooltip-autocomplete > ul': {
       fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
-      color: 'var(--neutral6)',
+      color: 'var(--foreground)',
     },
     '.cm-completionDetail': {
-      color: 'var(--neutral3)',
-      fontSize: 'var(--text-ui-sm)',
+      color: 'var(--muted-foreground)',
+      fontSize: 'var(--text-caption)',
       marginLeft: 'auto',
       paddingLeft: '12px',
     },
     '.cm-completionInfo': {
-      backgroundColor: 'var(--surface2)',
-      border: '1px solid var(--border1)',
-      color: 'var(--neutral3)',
+      backgroundColor: 'var(--background)',
+      border: '1px solid var(--border)',
+      color: 'var(--muted-foreground)',
       padding: '8px 12px',
     },
     '.cm-completionIcon': {
       display: 'none',
     },
     'ul.cm-completionList li[aria-selected]': {
-      backgroundColor: 'var(--surface4)',
-      color: 'var(--neutral6)',
+      backgroundColor: 'var(--fill-hover)',
+      color: 'var(--foreground)',
     },
     '.cm-line .cm-variable-highlight': {
-      color: 'var(--accent6) !important',
+      color: 'var(--warning-foreground) !important',
       fontWeight: '500',
     },
   });
@@ -113,115 +116,115 @@ function buildDarkTheme(): Extension {
   return [baseTheme, customLineNumberTheme];
 }
 
-function buildLightTheme(): Extension {
+function buildLightTheme(font: CodeEditorFont): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral6)',
-      fontSize: 'var(--text-ui-smd)',
+      color: 'var(--foreground)',
+      fontSize: 'var(--text-body-sm)',
     },
     '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--font-mono)',
+      fontFamily: `var(--font-${font})`,
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral2)',
+      color: 'var(--placeholder)',
       borderRight: 'none',
     },
     '.cm-content': {
-      color: 'var(--neutral6)',
-      caretColor: 'var(--neutral6)',
+      color: 'var(--foreground)',
+      caretColor: 'var(--foreground)',
     },
     '.cm-activeLine': {
       backgroundColor: 'transparent',
     },
     '.cm-lineNumbers .cm-gutterElement': {
-      color: 'var(--neutral2)',
+      color: 'var(--placeholder)',
     },
     '.cm-activeLineGutter': {
       backgroundColor: 'transparent',
-      color: 'var(--neutral3)',
+      color: 'var(--muted-foreground)',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: 'var(--neutral6)',
+      borderLeftColor: 'var(--foreground)',
     },
     '&.cm-focused .cm-selectionBackground, & .cm-line::selection, & .cm-selectionLayer .cm-selectionBackground, .cm-content ::selection':
       {
-        background: 'color-mix(in srgb, var(--accent3) 22%, transparent) !important',
+        background: 'var(--info-edge) !important',
       },
     '.cm-tooltip-autocomplete': {
-      backgroundColor: 'var(--surface2)',
-      border: '1px solid var(--border1)',
+      backgroundColor: 'var(--background)',
+      border: '1px solid var(--border)',
       borderRadius: '6px',
-      boxShadow: '0 8px 16px rgba(0, 0, 0, 0.2)',
+      boxShadow: 'var(--elevation-overlay)',
     },
     '.cm-tooltip-autocomplete > ul': {
       fontFamily: 'var(--font-mono)',
     },
     '.cm-completionLabel': {
-      color: 'var(--neutral6)',
+      color: 'var(--foreground)',
     },
     '.cm-completionDetail': {
-      color: 'var(--neutral3)',
-      fontSize: 'var(--text-ui-sm)',
+      color: 'var(--muted-foreground)',
+      fontSize: 'var(--text-caption)',
       marginLeft: 'auto',
       paddingLeft: '12px',
     },
     '.cm-completionInfo': {
-      backgroundColor: 'var(--surface2)',
-      border: '1px solid var(--border1)',
-      color: 'var(--neutral3)',
+      backgroundColor: 'var(--background)',
+      border: '1px solid var(--border)',
+      color: 'var(--muted-foreground)',
       padding: '8px 12px',
     },
     '.cm-completionIcon': {
       display: 'none',
     },
     'ul.cm-completionList li[aria-selected]': {
-      backgroundColor: 'var(--surface4)',
-      color: 'var(--neutral6)',
+      backgroundColor: 'var(--fill-hover)',
+      color: 'var(--foreground)',
     },
     '.cm-line .cm-variable-highlight': {
-      color: 'var(--accent6) !important',
+      color: 'var(--warning-foreground) !important',
       fontWeight: '500',
     },
   });
 
   const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--neutral2)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--accent1)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--accent6)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--accent2)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--accent5)' },
+    { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
+    { tag: [t.string, t.meta, t.regexp], color: 'var(--syntax-string)' },
+    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--syntax-literal)' },
+    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--syntax-keyword)' },
+    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--syntax-name)' },
     {
       tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--accent3)',
+      color: 'var(--syntax-link)',
     },
-    { tag: [t.variableName, t.number], color: 'var(--accent5)' },
-    { tag: [t.name, t.quote], color: 'var(--accent1)' },
-    { tag: t.heading, color: 'var(--accent3)', fontWeight: 'bold' },
+    { tag: [t.variableName, t.number], color: 'var(--syntax-name)' },
+    { tag: [t.name, t.quote], color: 'var(--syntax-string)' },
+    { tag: t.heading, color: 'var(--syntax-link)', fontWeight: 'bold' },
     {
       tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
-      color: 'var(--accent3)',
+      color: 'var(--syntax-link)',
       fontWeight: 'bold',
     },
-    { tag: [t.emphasis], fontStyle: 'italic', color: 'var(--neutral6)' },
-    { tag: [t.strong], fontWeight: 'bold', color: 'var(--neutral6)' },
-    { tag: t.link, color: 'var(--accent3)', textDecoration: 'underline' },
-    { tag: t.url, color: 'var(--accent3)' },
-    { tag: t.monospace, color: 'var(--neutral6)' },
+    { tag: [t.emphasis], fontStyle: 'italic', color: 'var(--foreground)' },
+    { tag: [t.strong], fontWeight: 'bold', color: 'var(--foreground)' },
+    { tag: t.link, color: 'var(--syntax-link)', textDecoration: 'underline' },
+    { tag: t.url, color: 'var(--syntax-link)' },
+    { tag: t.monospace, color: 'var(--foreground)' },
     { tag: t.strikethrough, textDecoration: 'line-through' },
-    { tag: [t.deleted], color: 'var(--accent2)' },
-    { tag: t.invalid, color: 'var(--error)' },
-    { tag: [t.standard(t.tagName)], color: 'var(--accent1)' },
+    { tag: [t.deleted], color: 'var(--syntax-keyword)' },
+    { tag: t.invalid, color: 'var(--destructive-foreground)' },
+    { tag: [t.standard(t.tagName)], color: 'var(--syntax-string)' },
   ]);
 
   return [editorTheme, syntaxHighlighting(highlightStyle)];
 }
 
 // eslint-disable-next-line react-refresh/only-export-components -- shared hook intentionally co-located with the editor it themes
-export const useCodemirrorTheme = (): Extension => {
+export const useCodemirrorTheme = (font: CodeEditorFont = 'mono'): Extension => {
   const isDark = useTheme().resolvedTheme === 'dark';
-  return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
+  return useMemo(() => (isDark ? buildDarkTheme(font) : buildLightTheme(font)), [isDark, font]);
 };
 
 const codeEditorVariants = cva(
@@ -232,7 +235,7 @@ const codeEditorVariants = cva(
   {
     variants: {
       variant: {
-        default: 'rounded-md border border-border1 bg-surface3 p-1 focus-within:border-neutral6/20',
+        default: cn(inputSurfaceAndFocusWithinStyle, 'rounded-md p-1', fieldErrorRimWithin),
         embedded: 'rounded-none border-none bg-transparent p-0',
       },
     },
@@ -273,11 +276,14 @@ const editorFocusExtensions: Extension[] = [editorFocusAttributes, editorFocusTh
 type CodeEditorContentAttributes = {
   'aria-label': string;
   id?: string;
+  'aria-labelledby'?: string;
   'aria-describedby'?: string;
   'aria-invalid'?: string;
 };
 
 export type CodeEditorProps = {
+  /** Prose editors can opt into the body face; code stays monospace by default. */
+  font?: CodeEditorFont;
   data?: Record<string, unknown> | Array<Record<string, unknown>>;
   value?: string;
   onChange?: (value: string) => void;
@@ -307,6 +313,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       showCopyButton = true,
       className,
       language = 'json',
+      font = 'mono',
       highlightVariables = false,
       placeholder,
       schema,
@@ -316,19 +323,27 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       editable,
       variant,
       id,
-      'aria-label': ariaLabel = 'Code editor',
-      'aria-describedby': ariaDescribedBy,
-      'aria-invalid': ariaInvalid,
+      'aria-label': ariaLabelProp,
+      'aria-labelledby': ariaLabelledByProp,
+      'aria-describedby': ariaDescribedByProp,
+      'aria-invalid': ariaInvalidProp,
       ...props
     },
     ref,
   ) => {
-    const theme = useCodemirrorTheme();
+    const fieldAria = useFieldControlAria({ 'aria-label': ariaLabelProp });
+    const ariaLabel = ariaLabelProp ?? 'Code editor';
+    const controlId = id ?? fieldAria.id;
+    const ariaLabelledBy = ariaLabelledByProp ?? fieldAria['aria-labelledby'];
+    const ariaDescribedBy = ariaDescribedByProp ?? fieldAria['aria-describedby'];
+    const ariaInvalid = ariaInvalidProp ?? fieldAria['aria-invalid'];
+    const theme = useCodemirrorTheme(font);
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
     const extensions = useMemo(() => {
       const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel };
-      if (id) contentAttributes.id = id;
+      if (controlId) contentAttributes.id = controlId;
+      if (ariaLabelledBy) contentAttributes['aria-labelledby'] = ariaLabelledBy;
       if (ariaDescribedBy) contentAttributes['aria-describedby'] = ariaDescribedBy;
       if (ariaInvalid !== undefined) contentAttributes['aria-invalid'] = String(ariaInvalid);
 
@@ -357,7 +372,18 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       }
 
       return exts;
-    }, [language, highlightVariables, schema, editable, lineWrapping, id, ariaLabel, ariaDescribedBy, ariaInvalid]);
+    }, [
+      language,
+      highlightVariables,
+      schema,
+      editable,
+      lineWrapping,
+      controlId,
+      ariaLabel,
+      ariaLabelledBy,
+      ariaDescribedBy,
+      ariaInvalid,
+    ]);
 
     return (
       <div className={cn(codeEditorVariants({ variant }), className)} {...props}>

@@ -418,7 +418,8 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
       });
 
       describe('MCP 2.x servers (MCPClient)', () => {
-        it('does not serve the legacy SSE transport for a 2.x MCPServer', async () => {
+        it('does not serve the legacy SSE transport for a 2.x MCPServer', async ctx => {
+          if ((mcpServer1 as { mcpVersion?: number }).mcpVersion !== 2) ctx.skip();
           const res = await fetch(`http://localhost:${port}/api/mcp/${mcpServer1.id}/sse`);
           expect(res.status).toBe(404);
 
@@ -430,7 +431,8 @@ export function createMCPTransportTestSuite(config: MCPTransportTestConfig) {
           expect(messages.status).toBe(404);
         });
 
-        it('fails to connect through the SSE URL without downgrading', async () => {
+        it('fails to connect through the SSE URL without downgrading', async ctx => {
+          if ((mcpServer1 as { mcpVersion?: number }).mcpVersion !== 2) ctx.skip();
           const sseClient = new MCPClient({
             id: `sse-rejection-${port}`,
             servers: {

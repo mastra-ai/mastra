@@ -8,7 +8,7 @@ export function PageHeaderAction({ className, ...props }: PageHeaderActionProps)
   return (
     <div
       data-slot="page-header-action"
-      className={cn('col-start-[action] row-start-1 self-center justify-self-end', className)}
+      className={cn('ml-auto flex min-h-control-lg shrink-0 items-center self-start', className)}
       {...props}
     />
   );
