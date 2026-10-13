@@ -89,7 +89,7 @@ function createDependencies({
 }
 
 describe('hydrateSessionDefaultModel', () => {
-  it('seeds a new thread with the personal pair and records that it came from the personal default', async () => {
+  it('seeds a new thread with the personal pair and marks it seeded', async () => {
     const session = createSession();
     const dependencies = createDependencies();
 
@@ -100,7 +100,7 @@ describe('hydrateSessionDefaultModel', () => {
     expect(session.subagents.model.set).toHaveBeenCalledWith({ modelId: PERSONAL_MODEL_ID, agentType: 'execute' });
     expect(session.thread.setSetting).toHaveBeenCalledWith({
       key: SEEDED_MODEL_SELECTION_KEY,
-      value: { modelId: PERSONAL_MODEL_ID, thinkingLevel: 'high', source: 'personal' },
+      value: { modelId: PERSONAL_MODEL_ID, thinkingLevel: 'high' },
     });
   });
 
@@ -115,7 +115,7 @@ describe('hydrateSessionDefaultModel', () => {
     expect(session.state.set).toHaveBeenCalledExactlyOnceWith({ thinkingLevel: undefined });
     expect(session.thread.setSetting).toHaveBeenCalledWith({
       key: SEEDED_MODEL_SELECTION_KEY,
-      value: { modelId: FACTORY_MODEL_ID, thinkingLevel: null, source: 'factory' },
+      value: { modelId: FACTORY_MODEL_ID, thinkingLevel: null },
     });
   });
 
@@ -131,7 +131,7 @@ describe('hydrateSessionDefaultModel', () => {
 
   it('keeps an already seeded thread when the session is recreated', async () => {
     const session = createSession({
-      seeded: { modelId: FACTORY_MODEL_ID, thinkingLevel: null, source: 'factory' },
+      seeded: { modelId: FACTORY_MODEL_ID, thinkingLevel: null },
     });
     const dependencies = createDependencies();
 

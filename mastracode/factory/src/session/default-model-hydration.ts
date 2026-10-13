@@ -4,7 +4,7 @@ import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { SourceControlSessionLookup } from './factory-session.js';
 import { resolveFactoryDefaultModelId, resolveFactoryProjectForSession } from './factory-session.js';
 import type { ModelSelectionSession } from './seed-model-selection.js';
-import { readSeededModelSelection, seedModelSelection } from './seed-model-selection.js';
+import { isSeeded, seedModelSelection } from './seed-model-selection.js';
 
 export interface DefaultModelHydrationSession extends Omit<ModelSelectionSession, 'state' | 'thread'> {
   readonly identity: { getResourceId(): string };
@@ -48,16 +48,15 @@ export async function hydrateSessionDefaultModel(
     ) {
       return;
     }
-    if (await readSeededModelSelection(session)) return;
+    if (await isSeeded(session)) return;
     if ((await session.thread.listActiveMessages({ limit: 1 })).length > 0) return;
 
     const personalDefault = await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId });
     if (personalDefault) {
-      await seedModelSelection(
-        session,
-        { modelId: personalDefault.modelId, thinkingLevel: personalDefault.thinkingLevel },
-        'personal',
-      );
+      await seedModelSelection(session, {
+        modelId: personalDefault.modelId,
+        thinkingLevel: personalDefault.thinkingLevel,
+      });
       return;
     }
 
@@ -66,7 +65,7 @@ export async function hydrateSessionDefaultModel(
       ? await resolveFactoryProjectForSession({ sourceControl: sourceControlHandle, sessionId: resourceId })
       : null;
     const factoryModelId = await resolveFactoryDefaultModelId(projects, owner?.factoryProjectId);
-    if (factoryModelId) await seedModelSelection(session, { modelId: factoryModelId, thinkingLevel: null }, 'factory');
+    if (factoryModelId) await seedModelSelection(session, { modelId: factoryModelId, thinkingLevel: null });
   } catch (error) {
     console.warn('[Factory default-model hydration] Unable to apply the default model.', error);
   }

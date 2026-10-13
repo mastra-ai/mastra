@@ -592,7 +592,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
         // thread's current pair in one step — which is what makes the choice
         // outlive this process.
         try {
-          await seedModelSelection(session, userModel, 'personal');
+          await seedModelSelection(session, userModel);
         } catch (error) {
           console.warn("[slack] Failed to apply the sender's default model", {
             modelId: userModel.modelId,

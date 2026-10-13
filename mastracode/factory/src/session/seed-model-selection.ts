@@ -1,9 +1,7 @@
-import { isThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import { z } from 'zod';
 
 import { SEEDED_MODEL_SELECTION_KEY } from './model-selection.js';
-import type { ModelSelection, ModelSelectionSource, SeededModelSelection } from './model-selection.js';
+import type { ModelSelection } from './model-selection.js';
 
 const SUBAGENT_TYPES = ['explore', 'plan', 'execute'] as const;
 
@@ -17,31 +15,15 @@ export interface ModelSelectionSession {
   };
 }
 
-const seededModelSelectionSchema = z.object({
-  modelId: z.string(),
-  thinkingLevel: z.custom<ThinkingLevelSetting>(isThinkingLevelSetting).nullable().catch(null),
-  source: z.enum(['personal', 'factory']),
-});
-
-/** The default pair this thread was seeded with, or null when no default ever seeded it. */
-export async function readSeededModelSelection(
-  session: Pick<ModelSelectionSession, 'thread'>,
-): Promise<SeededModelSelection | null> {
-  const parsed = seededModelSelectionSchema.safeParse(
-    await session.thread.getSetting({ key: SEEDED_MODEL_SELECTION_KEY }),
-  );
-  return parsed.success ? parsed.data : null;
+export async function isSeeded(session: Pick<ModelSelectionSession, 'thread'>): Promise<boolean> {
+  return (await session.thread.getSetting({ key: SEEDED_MODEL_SELECTION_KEY })) !== undefined;
 }
 
 /**
- * Copy a default pair onto the active thread and record which default it came from.
+ * Copy a default pair onto the active thread and mark the thread as seeded.
  * A null thinking level clears the thread override so the Factory fallback applies.
  */
-export async function seedModelSelection(
-  session: ModelSelectionSession,
-  selection: ModelSelection,
-  source: ModelSelectionSource,
-): Promise<void> {
+export async function seedModelSelection(session: ModelSelectionSession, selection: ModelSelection): Promise<void> {
   if (selection.thinkingLevel) {
     await session.model.switch(selection.modelId, { thinkingLevel: selection.thinkingLevel });
   } else {
@@ -51,8 +33,5 @@ export async function seedModelSelection(
   for (const agentType of SUBAGENT_TYPES) {
     await session.subagents.model.set({ modelId: selection.modelId, agentType });
   }
-  await session.thread.setSetting({
-    key: SEEDED_MODEL_SELECTION_KEY,
-    value: { ...selection, source } satisfies SeededModelSelection,
-  });
+  await session.thread.setSetting({ key: SEEDED_MODEL_SELECTION_KEY, value: selection });
 }

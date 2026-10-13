@@ -9,11 +9,5 @@ export interface ModelSelection {
   thinkingLevel: ThinkingLevelSetting | null;
 }
 
-export type ModelSelectionSource = 'personal' | 'factory';
-
-/** Thread metadata key recording the default pair a thread was seeded with, and whose default it was. */
+/** Thread metadata key marking a thread as seeded with a default pair, so it is seeded once. */
 export const SEEDED_MODEL_SELECTION_KEY = 'factorySeededModelSelection';
-
-export interface SeededModelSelection extends ModelSelection {
-  source: ModelSelectionSource;
-}
