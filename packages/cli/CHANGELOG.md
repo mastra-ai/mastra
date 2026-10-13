@@ -1,5 +1,40 @@
 # mastra
 
+## 1.34.1-alpha.3
+
+### Patch Changes
+
+- Improved filtering and comparing on the Experiments and Datasets pages in Studio. ([#26850](https://github.com/mastra-ai/mastra/pull/26850))
+
+  **Filters**
+
+  Both pages now use the same filter bar as Traces. Type to search, or add chips for target, status, dataset, experiments, or tag. Remove a chip to clear that filter, which replaces the Reset button. When no rows match, the list now says so instead of showing an empty table.
+
+  **Comparing experiments**
+
+  Experiment rows always show a checkbox, and a select-all box sits in the header. The action row shows how many experiments are selected, with a Compare button that stays visible and explains why it is disabled until you pick at least two experiments from the same dataset. Run Experiment moved to the page header. The results list on an experiment's page also gained a select-all checkbox.
+
+- Updated dependencies [[`54e9dc3`](https://github.com/mastra-ai/mastra/commit/54e9dc3ed0615ee84a6526395a9fefe17320fe7e), [`59164cb`](https://github.com/mastra-ai/mastra/commit/59164cb7f8b298e28e13305b0273ed2ef7f1d9e1), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`20830e8`](https://github.com/mastra-ai/mastra/commit/20830e8a81f8011de9039c14c93842e96c50a6fc), [`8dc4d65`](https://github.com/mastra-ai/mastra/commit/8dc4d65b34aad280c4f6ab265162c4846face7e3), [`7841502`](https://github.com/mastra-ai/mastra/commit/7841502f3646db1755dc31a0846e2fb6dc352acd), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`226823f`](https://github.com/mastra-ai/mastra/commit/226823ffde55e2dcce01f2111a6a35be3f2c9b85)]:
+  - @mastra/core@1.77.0-alpha.3
+  - @mastra/loggers@1.3.7-alpha.0
+  - @mastra/deployer@1.77.0-alpha.3
+
+## 1.34.1-alpha.2
+
+### Patch Changes
+
+- New datasets and experiments in Studio now come with a default name. Create new dataset pre-fills a name like "Dataset a3f9", and Run experiment names the run after its target plus a short id (for example `mastra-docs-a3f9`), following the target until you type your own. Name no longer blocks running an experiment. ([#26529](https://github.com/mastra-ai/mastra/pull/26529))
+
+- Added the optional run id field to generated Agent Controller CLI route metadata. ([#26058](https://github.com/mastra-ai/mastra/pull/26058))
+
+- Made `mastra traces import` easier to read: the destination flag is now `--target-project` and the date window flags are `--since` and `--until` (the old `--project`, `--from`, and `--to` still work), the summary names the source Langfuse project, and the printed resume command uses the project name you typed. Imported agent, tool, and evaluator spans now show their primitive type and name in Mastra Platform, and Langfuse's placeholder `default` environment is no longer copied, so imported traces show up in Mastra Studio without changing the environment filter. ([#26779](https://github.com/mastra-ai/mastra/pull/26779))
+
+- Fixed Studio failing to auto-connect when Mastra is mounted under a prefix in a host app (for example with `@mastra/next`, `@mastra/hono` or `@mastra/tanstack-start`). Studio now checks the server through `<server-api-prefix>/auth/capabilities` instead of the server root, so `mastra studio --server-api-prefix /api/mastra` connects even when the host app's root returns 401 or redirects. ([#26807](https://github.com/mastra-ai/mastra/pull/26807))
+
+- Updated dependencies [[`2a1bb80`](https://github.com/mastra-ai/mastra/commit/2a1bb80305bca1859504287e1a09f43c8a014330), [`519e97f`](https://github.com/mastra-ai/mastra/commit/519e97f624a15362fec7b143dea4eabcff556712), [`aea91e7`](https://github.com/mastra-ai/mastra/commit/aea91e7f3a4fb066bfda96dca670d7d2a766d770), [`da87b0a`](https://github.com/mastra-ai/mastra/commit/da87b0a1629d5ffc980b434f70fe60f9445ddb1c), [`182f097`](https://github.com/mastra-ai/mastra/commit/182f09745783aa83e42131307085ecf913cfbc38), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183)]:
+  - @mastra/core@1.77.0-alpha.2
+  - @mastra/deployer@1.77.0-alpha.2
+
 ## 1.34.1-alpha.1
 
 ### Patch Changes

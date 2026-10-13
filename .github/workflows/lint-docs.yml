@@ -14,7 +14,7 @@ concurrency:
 jobs:
   changes:
     name: Detect docs changes
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read
     outputs:
@@ -41,7 +41,7 @@ jobs:
     name: Check for deleted pages without redirects
     needs: changes
     if: needs.changes.outputs.docs == 'true'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -125,7 +125,7 @@ jobs:
     name: Validate redirects
     needs: changes
     if: needs.changes.outputs.docs == 'true'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
 
     steps:
       - name: Checkout repository
@@ -194,7 +194,7 @@ jobs:
     name: Lint docs
     needs: changes
     if: needs.changes.outputs.docs == 'true'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
 
     steps:
       - name: Checkout repository
