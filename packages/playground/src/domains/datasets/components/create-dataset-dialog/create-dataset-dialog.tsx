@@ -3,7 +3,6 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { useRef, useState } from 'react';
 import { CSVImportFlow } from '../csv-import/csv-import-flow';
-import type { DatasetTargetType } from '../target-type-options';
 import { AddItemsStep } from './add-items-step';
 import { EMPTY_SCHEMAS } from './dataset-schemas';
 import type { DatasetSchemas } from './dataset-schemas';
@@ -18,8 +17,6 @@ export interface CreateDatasetDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Called once, when the dialog closes after the dataset was created. */
   onSuccess?: (datasetId: string) => void;
-  targetType?: DatasetTargetType;
-  targetIds?: string[];
 }
 
 interface DatasetDraft {
@@ -38,13 +35,7 @@ const itemCount = (count: number) => `${count} ${count === 1 ? 'item' : 'items'}
  * Dataset creation wizard: details, an optional schema, then optional items.
  * Nothing is saved until the last step, which creates the dataset and then inserts its items.
  */
-export function CreateDatasetDialog({
-  open,
-  onOpenChange,
-  onSuccess,
-  targetType,
-  targetIds,
-}: CreateDatasetDialogProps) {
+export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDatasetDialogProps) {
   // A ref, not state: closing right after creation must see the new id, and a failed item insert must not create a second dataset.
   const createdId = useRef<string | null>(null);
   const { createDataset, batchInsertItems } = useDatasetMutations();
@@ -67,8 +58,6 @@ export function CreateDatasetDialog({
         inputSchema: schemas.inputSchema ?? undefined,
         groundTruthSchema: schemas.outputSchema ?? undefined,
         requestContextSchema: schemas.requestContextSchema ?? undefined,
-        targetType,
-        targetIds,
       });
       createdId.current = dataset.id;
       return dataset.id;

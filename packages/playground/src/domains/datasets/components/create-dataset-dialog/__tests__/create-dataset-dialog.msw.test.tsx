@@ -339,19 +339,6 @@ describe('CreateDatasetDialog', () => {
 
       expect(createBodies).toEqual([{ name: 'My dataset', description: 'First line\nSecond line' }]);
     });
-
-    it('sends targetType and targetIds when they are given', async () => {
-      const { createBodies } = givenServer();
-      const { onSuccess } = renderDialog({ targetType: 'workflow', targetIds: ['my-wf', 'other-wf'] });
-
-      await goToItems();
-      click('Create dataset');
-
-      await waitFor(() => expect(onSuccess).toHaveBeenCalled());
-
-      expect(createBodies[0].targetType).toBe('workflow');
-      expect(createBodies[0].targetIds).toEqual(['my-wf', 'other-wf']);
-    });
   });
 
   describe('when a schema is typed in', () => {
