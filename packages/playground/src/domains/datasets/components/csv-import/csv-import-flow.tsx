@@ -1,4 +1,3 @@
-'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   DialogAction,

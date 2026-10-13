@@ -13,6 +13,9 @@ import {
   createdDataset,
   emptyAgents,
   emptyWorkflows,
+  WEATHER_WORKFLOW_ID,
+  weatherWorkflow,
+  workflows,
 } from './fixtures/create-dataset-dialog';
 import { simulateDrop } from '@/test/mock-hello-pangea-dnd';
 import { server } from '@/test/msw-server';
@@ -429,6 +432,28 @@ describe('CreateDatasetDialog', () => {
       await waitFor(() => expect(schemaEditor('Input schema').value).toMatch(/MessageListInput/));
       fireEvent.click(screen.getByRole('tab', { name: 'Ground truth' }));
       expect(schemaEditor('Ground truth schema').value).not.toBe('');
+    });
+  });
+
+  describe('when the schemas are imported from a workflow', () => {
+    it("fills the input and ground truth editors with the workflow's schemas", async () => {
+      givenServer();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(workflows)),
+        http.get(`${TEST_BASE_URL}/api/workflows/${WEATHER_WORKFLOW_ID}`, () => HttpResponse.json(weatherWorkflow)),
+      );
+      renderDialog();
+
+      await fillDetails();
+      pickSource('Workflow');
+      fireEvent.click(screen.getByRole('combobox', { name: 'Workflow' }));
+      const option = await screen.findByRole('option', { name: 'Weather' });
+      fireEvent.pointerDown(option, { pointerType: 'mouse' });
+      fireEvent.click(option, { detail: 1 });
+
+      await waitFor(() => expect(schemaEditor('Input schema').value).toMatch(/"city"/));
+      fireEvent.click(screen.getByRole('tab', { name: 'Ground truth' }));
+      expect(schemaEditor('Ground truth schema').value).toMatch(/"forecast"/);
     });
   });
 

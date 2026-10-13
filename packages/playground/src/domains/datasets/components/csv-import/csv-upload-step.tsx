@@ -1,5 +1,3 @@
-'use client';
-
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';

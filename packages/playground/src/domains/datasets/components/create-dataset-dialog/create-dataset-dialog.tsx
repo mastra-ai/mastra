@@ -1,7 +1,7 @@
 import { Dialog, DialogContent } from '@mastra/playground-ui/components/Dialog';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { CSVImportFlow } from '../csv-import/csv-import-flow';
 import type { DatasetTargetType } from '../target-type-options';
 import { AddItemsStep } from './add-items-step';
@@ -22,12 +22,14 @@ export interface CreateDatasetDialogProps {
   targetIds?: string[];
 }
 
-type Step = 'details' | 'schema' | 'items' | 'manual' | 'csv';
+interface DatasetDraft {
+  name: string;
+  description: string;
+  schemas: DatasetSchemas;
+}
 
-const STEP_NUMBER: Record<Step, number> = { details: 1, schema: 2, items: 3, manual: 3, csv: 3 };
-const STEP_COUNT = 3;
-
-const RESET_DELAY_MS = 150;
+/** Creates the dataset (once, even across retries), then inserts the items. Rejects after reporting the failure. */
+type SaveDataset = (draft: DatasetDraft, items: NewItem[]) => Promise<void>;
 
 const errorMessage = (error: unknown) => (error instanceof Error ? error.message : 'Unknown error');
 const itemCount = (count: number) => `${count} ${count === 1 ? 'item' : 'items'}`;
@@ -43,48 +45,20 @@ export function CreateDatasetDialog({
   targetType,
   targetIds,
 }: CreateDatasetDialogProps) {
-  const [step, setStep] = useState<Step>('details');
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [schemas, setSchemas] = useState<DatasetSchemas>(EMPTY_SCHEMAS);
-  const [droppedFile, setDroppedFile] = useState<File>();
   // A ref, not state: closing right after creation must see the new id, and a failed item insert must not create a second dataset.
   const createdId = useRef<string | null>(null);
-  const successReported = useRef(false);
   const { createDataset, batchInsertItems } = useDatasetMutations();
   const pending = createDataset.isPending || batchInsertItems.isPending;
-
-  // Reset once the exit animation is over so the closing dialog doesn't flash back to step 1.
-  // Reopening sooner resets right away, before paint, so a new opening always starts fresh.
-  useLayoutEffect(() => {
-    if (open) return;
-    const reset = () => {
-      setStep('details');
-      setName('');
-      setDescription('');
-      setSchemas(EMPTY_SCHEMAS);
-      setDroppedFile(undefined);
-      createdId.current = null;
-      successReported.current = false;
-    };
-    const timer = setTimeout(reset, RESET_DELAY_MS);
-    return () => {
-      clearTimeout(timer);
-      reset();
-    };
-  }, [open]);
 
   const handleOpenChange = (nextOpen: boolean) => {
     onOpenChange(nextOpen);
     const id = createdId.current;
-    if (nextOpen || !id || successReported.current) return;
-    successReported.current = true;
+    if (nextOpen || !id) return;
+    createdId.current = null;
     onSuccess?.(id);
   };
 
-  const close = () => handleOpenChange(false);
-
-  const ensureDataset = async () => {
+  const ensureDataset = async ({ name, description, schemas }: DatasetDraft) => {
     if (createdId.current) return createdId.current;
     try {
       const dataset = await createDataset.mutateAsync({
@@ -104,8 +78,9 @@ export function CreateDatasetDialog({
     }
   };
 
-  const insertItems = async (items: NewItem[]) => {
-    const datasetId = await ensureDataset();
+  const save: SaveDataset = async (draft, items) => {
+    const datasetId = await ensureDataset(draft);
+    if (items.length === 0) return;
     try {
       await batchInsertItems.mutateAsync({ datasetId, items });
     } catch (error) {
@@ -114,24 +89,43 @@ export function CreateDatasetDialog({
     }
   };
 
-  const createEmpty = async () => {
-    try {
-      await ensureDataset();
-    } catch {
-      return;
-    }
-    toast.success('Dataset created');
-    close();
-  };
+  return (
+    <Dialog open={open} onOpenChange={handleOpenChange} pending={pending}>
+      <DialogContent size="lg">
+        {/* Unmounted once the dialog has closed, so every opening starts from an empty draft. */}
+        <CreateDatasetWizard pending={pending} save={save} onClose={() => handleOpenChange(false)} />
+      </DialogContent>
+    </Dialog>
+  );
+}
 
-  const createWithItems = async (items: NewItem[]) => {
+type Step = 'details' | 'schema' | 'items' | 'manual' | 'csv';
+
+const STEP_NUMBER: Record<Step, number> = { details: 1, schema: 2, items: 3, manual: 3, csv: 3 };
+const STEP_COUNT = 3;
+
+interface CreateDatasetWizardProps {
+  pending: boolean;
+  save: SaveDataset;
+  onClose: () => void;
+}
+
+function CreateDatasetWizard({ pending, save, onClose }: CreateDatasetWizardProps) {
+  const [step, setStep] = useState<Step>('details');
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [schemas, setSchemas] = useState<DatasetSchemas>(EMPTY_SCHEMAS);
+  const [droppedFile, setDroppedFile] = useState<File>();
+  const draft: DatasetDraft = { name, description, schemas };
+
+  const create = async (items: NewItem[]) => {
     try {
-      await insertItems(items);
+      await save(draft, items);
     } catch {
       return;
     }
-    toast.success(`Dataset created with ${itemCount(items.length)}`);
-    close();
+    toast.success(items.length === 0 ? 'Dataset created' : `Dataset created with ${itemCount(items.length)}`);
+    onClose();
   };
 
   const backToItems = () => {
@@ -160,18 +154,16 @@ export function CreateDatasetDialog({
       />
     );
   } else if (step === 'manual') {
-    content = (
-      <ManualItemsStep pending={pending} onBack={backToItems} onSubmit={items => void createWithItems(items)} />
-    );
+    content = <ManualItemsStep pending={pending} onBack={backToItems} onSubmit={items => void create(items)} />;
   } else if (step === 'csv') {
     content = (
       <CSVImportFlow
         inputSchema={schemas.inputSchema}
         groundTruthSchema={schemas.outputSchema}
         initialFile={droppedFile}
-        onImport={insertItems}
+        onImport={items => save(draft, items)}
         importLabel={count => `Create dataset with ${itemCount(count)}`}
-        onComplete={close}
+        onComplete={onClose}
         onCancel={backToItems}
         cancelLabel="Back"
       />
@@ -186,17 +178,15 @@ export function CreateDatasetDialog({
           setStep('csv');
         }}
         onBack={() => setStep('schema')}
-        onCreate={() => void createEmpty()}
+        onCreate={() => void create([])}
       />
     );
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange} pending={pending}>
-      <DialogContent size="lg">
-        <StepIndicator current={STEP_NUMBER[step]} total={STEP_COUNT} />
-        {content}
-      </DialogContent>
-    </Dialog>
+    <>
+      <StepIndicator current={STEP_NUMBER[step]} total={STEP_COUNT} />
+      {content}
+    </>
   );
 }

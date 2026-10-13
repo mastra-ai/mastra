@@ -1,4 +1,3 @@
-'use client';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@mastra/playground-ui/components/Collapsible';
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
@@ -8,10 +7,11 @@ import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { useWorkflowSchema } from '@mastra/react/hooks/datasets';
+import { toast } from '@mastra/playground-ui/utils/toast';
+import { useMastraClient } from '@mastra/react';
 import { useWorkflows } from '@mastra/react/hooks/workflows';
 import type { JSONSchema7 } from 'json-schema';
-import { useState, useEffect, useRef } from 'react';
+import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useAgentSchema } from '../hooks/use-agent-schema';
 import { useScorerSchema } from '../hooks/use-scorer-schema';
@@ -20,6 +20,7 @@ import { SchemaField } from './schema-settings/schema-field';
 type SourceType = 'custom' | 'agent' | 'workflow' | 'scorer';
 type ScorerTargetType = 'agent' | 'custom';
 type SchemaTab = 'input' | 'groundTruth' | 'requestContext';
+type SchemaValue = Record<string, unknown> | null;
 
 const jsonSchemaLink = (
   <a
@@ -100,70 +101,34 @@ export function SchemaConfigSection({
   const { data: workflows, isLoading: workflowsLoading } = useWorkflows({});
   const workflowOptions = workflows ? Object.entries(workflows) : [];
 
-  // Fetch workflow schema when workflow selected
-  const { data: workflowSchema, isLoading: workflowSchemaLoading } = useWorkflowSchema({
-    workflowId: sourceType === 'workflow' ? selectedWorkflow : null,
-    queryOptions: { enabled: !!(sourceType === 'workflow' ? selectedWorkflow : null) },
-  });
+  const [workflowSchemaLoading, setWorkflowSchemaLoading] = useState(false);
+  // Bumped whenever a source fills the editors, so they remount with the new text.
+  const [fillCount, setFillCount] = useState(0);
+  // The workflow whose schema is being fetched; a slower, older response must not win.
+  const requestedWorkflow = useRef<string | null>(null);
+  const client = useMastraClient();
 
   // Static schemas for agent and scorer
   const agentSchema = useAgentSchema();
   const scorerSchema = useScorerSchema();
 
-  // Get source schemas based on source type
-  const getSourceSchemas = (): { inputSchema: JSONSchema7 | null; outputSchema: JSONSchema7 | null } => {
-    switch (sourceType) {
-      case 'agent':
-        return {
-          inputSchema: agentSchema.inputSchema,
-          outputSchema: agentSchema.outputSchema,
-        };
-      case 'workflow':
-        if (!workflowSchema) return { inputSchema: null, outputSchema: null };
-        return {
-          inputSchema: (workflowSchema.inputSchema as JSONSchema7) ?? null,
-          outputSchema: (workflowSchema.outputSchema as JSONSchema7) ?? null,
-        };
-      case 'scorer':
-        return {
-          inputSchema: scorerTargetType === 'agent' ? scorerSchema.agentInputSchema : scorerSchema.customInputSchema,
-          outputSchema: scorerSchema.outputSchema,
-        };
-      default:
-        return { inputSchema: null, outputSchema: null };
-    }
-  };
-
-  const sourceSchemas = getSourceSchemas();
-
-  // The source whose schemas were last written into the editors. Filling once per source keeps
-  // refetches (e.g. on window focus) from overwriting what the user has edited since.
-  const filledSourceKeyRef = useRef<string | null>(null);
-
-  // Picking a source fills the input and ground truth editors with its schemas.
-  useEffect(() => {
-    if (sourceType === 'custom') {
-      filledSourceKeyRef.current = null;
-      return;
-    }
-    if (sourceType === 'workflow' && (!selectedWorkflow || !workflowSchema)) return;
-
-    const sourceKey =
-      sourceType === 'workflow'
-        ? `workflow:${selectedWorkflow}`
-        : sourceType === 'scorer'
-          ? `scorer:${scorerTargetType}`
-          : sourceType;
-    if (filledSourceKeyRef.current === sourceKey) return;
-    filledSourceKeyRef.current = sourceKey;
-
+  const fillFromSource = (source: {
+    inputSchema: SchemaValue | JSONSchema7;
+    outputSchema: SchemaValue | JSONSchema7;
+  }) => {
     onChange({
-      inputSchema: (sourceSchemas.inputSchema as Record<string, unknown> | null) ?? null,
-      outputSchema: (sourceSchemas.outputSchema as Record<string, unknown> | null) ?? null,
+      inputSchema: (source.inputSchema as SchemaValue) ?? null,
+      outputSchema: (source.outputSchema as SchemaValue) ?? null,
       requestContextSchema: requestContextSchema ?? null,
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sourceType, selectedWorkflow, workflowSchema, scorerTargetType]);
+    setFillCount(count => count + 1);
+  };
+
+  const fillFromScorer = (target: ScorerTargetType) =>
+    fillFromSource({
+      inputSchema: target === 'agent' ? scorerSchema.agentInputSchema : scorerSchema.customInputSchema,
+      outputSchema: scorerSchema.outputSchema,
+    });
 
   const handleInputSchemaChange = (schema: Record<string, unknown> | null) => {
     onChange({
@@ -191,9 +156,31 @@ export function SchemaConfigSection({
 
   const handleSourceChange = (value: SourceType) => {
     setSourceType(value);
-    // Reset workflow selection when switching away from workflow
-    if (value !== 'workflow') {
-      setSelectedWorkflow(null);
+    setSelectedWorkflow(null);
+    requestedWorkflow.current = null;
+    setWorkflowSchemaLoading(false);
+    if (value === 'agent') fillFromSource(agentSchema);
+    if (value === 'scorer') fillFromScorer(scorerTargetType);
+  };
+
+  const handleScorerTargetChange = (value: ScorerTargetType) => {
+    setScorerTargetType(value);
+    fillFromScorer(value);
+  };
+
+  const handleWorkflowChange = async (workflowId: string) => {
+    setSelectedWorkflow(workflowId);
+    requestedWorkflow.current = workflowId;
+    setWorkflowSchemaLoading(true);
+    try {
+      const schema = await client.getWorkflow(workflowId).getSchema();
+      if (requestedWorkflow.current === workflowId) fillFromSource(schema);
+    } catch (error) {
+      if (requestedWorkflow.current === workflowId) {
+        toast.error(`Failed to load the workflow schema: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    } finally {
+      if (requestedWorkflow.current === workflowId) setWorkflowSchemaLoading(false);
     }
   };
 
@@ -222,7 +209,11 @@ export function SchemaConfigSection({
           </Field>
 
           {sourceType === 'workflow' && (
-            <Select value={selectedWorkflow ?? ''} onValueChange={setSelectedWorkflow} disabled={disabled}>
+            <Select
+              value={selectedWorkflow ?? ''}
+              onValueChange={id => void handleWorkflowChange(id)}
+              disabled={disabled}
+            >
               <SelectTrigger aria-label="Workflow" size="sm" className="w-44">
                 <SelectValue placeholder="Select workflow..." />
               </SelectTrigger>
@@ -249,7 +240,7 @@ export function SchemaConfigSection({
           {sourceType === 'scorer' && (
             <Select
               value={scorerTargetType}
-              onValueChange={v => setScorerTargetType(v as ScorerTargetType)}
+              onValueChange={v => handleScorerTargetChange(v as ScorerTargetType)}
               disabled={disabled}
             >
               <SelectTrigger aria-label="Scorer target type" size="sm" className="w-28">
@@ -272,7 +263,7 @@ export function SchemaConfigSection({
           </div>
         </div>
 
-        {sourceType === 'workflow' && selectedWorkflow && workflowSchemaLoading && (
+        {workflowSchemaLoading && (
           <Txt variant="caption" tone="muted">
             Loading schema...
           </Txt>
@@ -287,10 +278,15 @@ export function SchemaConfigSection({
         )}
 
         <TabContent value="input" keepMounted flush>
-          <SchemaField label="Input schema" value={inputSchema} onChange={handleInputSchemaChange} />
+          <SchemaField key={fillCount} label="Input schema" value={inputSchema} onChange={handleInputSchemaChange} />
         </TabContent>
         <TabContent value="groundTruth" keepMounted flush>
-          <SchemaField label="Ground truth schema" value={outputSchema} onChange={handleOutputSchemaChange} />
+          <SchemaField
+            key={fillCount}
+            label="Ground truth schema"
+            value={outputSchema}
+            onChange={handleOutputSchemaChange}
+          />
         </TabContent>
         <TabContent value="requestContext" keepMounted flush>
           <SchemaField

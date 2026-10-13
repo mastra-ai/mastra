@@ -1,4 +1,3 @@
-'use client';
 import { Dialog, DialogContent } from '@mastra/playground-ui/components/Dialog';
 import { useDataset, useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { useState } from 'react';
