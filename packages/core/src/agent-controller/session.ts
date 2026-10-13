@@ -5605,15 +5605,17 @@ export class Session<TState = unknown> {
       const suspension = this.suspensions.get(address);
       if (!suspension) return;
       if (suspension.toolName === 'submit_plan') {
-        await this.handlePlanApprovalResume({
-          address,
-          response: resumeData as SubmitPlanResumeData,
-          requestContext,
-        });
+        await this.#disarmRunOnFailedStart(() =>
+          this.handlePlanApprovalResume({
+            address,
+            response: resumeData as SubmitPlanResumeData,
+            requestContext,
+          }),
+        );
         return;
       }
 
-      await this.resumeToolCall({ resumeData, address, requestContext });
+      await this.#disarmRunOnFailedStart(() => this.resumeToolCall({ resumeData, address, requestContext }));
     } catch (error) {
       const err = getErrorFromUnknown(error);
       const sourceIsActive =
@@ -5622,6 +5624,21 @@ export class Session<TState = unknown> {
       this.emit({ type: 'error', error: err });
       if (!this.suspensions.has(address) && this.getCurrentRunId() === address.runId)
         await this.finishAgentRun('error');
+    }
+  }
+
+  /**
+   * Run a tool-call answer that arms the session run before it dispatches. When
+   * the answer fails before a run starts, disarm the run again, as a run end
+   * does. A run that was already armed is left alone.
+   */
+  async #disarmRunOnFailedStart(answer: () => Promise<void>): Promise<void> {
+    const wasRunning = this.run.isRunning();
+    try {
+      await answer();
+    } catch (error) {
+      if (!wasRunning && this.run.isRunning() && this.run.getRunId() === null) this.run.reset();
+      throw error;
     }
   }
 
@@ -5705,7 +5722,7 @@ export class Session<TState = unknown> {
     agent?: Agent;
     abortSignal?: AbortSignal;
   }): Promise<void> {
-    await this.#approveToolCall(input);
+    await this.#disarmRunOnFailedStart(() => this.#approveToolCall(input));
   }
 
   /**
@@ -5797,7 +5814,7 @@ export class Session<TState = unknown> {
     agent?: Agent;
     abortSignal?: AbortSignal;
   }): Promise<void> {
-    await this.#declineToolCall(input);
+    await this.#disarmRunOnFailedStart(() => this.#declineToolCall(input));
   }
 
   async #declineToolCall(

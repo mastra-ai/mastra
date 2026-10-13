@@ -139,4 +139,53 @@ describe('Session.respondToPersistedToolApproval', () => {
     expect(await env.suspendedRuns(session)).toHaveLength(1);
     expect(env.executed).toEqual([]);
   }, 30_000);
+
+  it.each([true, false])(
+    'leaves the session idle and the call answerable when the answer fails before its run starts (approved=%s) (#26870)',
+    async approved => {
+      const env = backend();
+      const session = await env.parkThenRestart();
+      const sendToolApproval = vi
+        .spyOn(session.machinery.getAgent(), 'sendToolApproval')
+        .mockRejectedValueOnce(new Error('no suspended run'));
+
+      await expect(session.respondToPersistedToolApproval({ toolCallId: 'call-1', approved })).rejects.toThrow(
+        'no suspended run',
+      );
+
+      expect(session.run.isRunning()).toBe(false);
+      expect(session.run.getRunId()).toBeNull();
+      expect(await env.suspendedRuns(session)).toHaveLength(1);
+
+      // The call is still parked, and a retry answers it.
+      await session.respondToPersistedToolApproval({ toolCallId: 'call-1', approved });
+
+      expect(sendToolApproval).toHaveBeenCalledTimes(2);
+      await vi.waitFor(async () => expect(await env.suspendedRuns(session)).toEqual([]));
+      expect(env.executed).toEqual(approved ? ['lookup'] : []);
+      await vi.waitFor(() => expect(session.run.isRunning()).toBe(false));
+    },
+    30_000,
+  );
+
+  it('keeps an already active run armed when an answer fails before its run starts (#26870)', async () => {
+    const env = backend();
+    const session = await env.parkThenRestart();
+
+    // Another run is in flight on the session.
+    session.run.nextOperation();
+    const activeRun = session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'active-run' });
+    vi.spyOn(session.machinery.getAgent(), 'sendToolApproval').mockRejectedValueOnce(new Error('no suspended run'));
+
+    await expect(session.respondToPersistedToolApproval({ toolCallId: 'call-1', approved: true })).rejects.toThrow(
+      'no suspended run',
+    );
+
+    expect(session.run.isRunning()).toBe(true);
+    expect(session.run.getRunId()).toBe('active-run');
+    expect(activeRun.signal.aborted).toBe(false);
+
+    activeRun.abort();
+  }, 30_000);
 });
