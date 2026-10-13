@@ -1149,7 +1149,14 @@ export class SourceControlStorage extends FactoryStorageDomain {
           const projectRepositories = await db().findMany<ProjectRepositoryDbRow>(PROJECT_REPOSITORIES, {
             connection_id: id,
           });
+          // Same cleanup as `projectRepositories.unlink`, for every link of the connection.
           for (const projectRepository of projectRepositories) {
+            for (const session of await db().findMany<SessionDbRow>(SESSIONS, {
+              project_repository_id: projectRepository.id,
+            })) {
+              await db().deleteMany(SESSION_REPOSITORIES, { session_id: session.session_id });
+            }
+            await db().deleteMany(SESSION_REPOSITORIES, { project_repository_id: projectRepository.id });
             await db().deleteMany(SESSIONS, { project_repository_id: projectRepository.id });
           }
           await db().deleteMany(PROJECT_REPOSITORIES, { connection_id: id });
