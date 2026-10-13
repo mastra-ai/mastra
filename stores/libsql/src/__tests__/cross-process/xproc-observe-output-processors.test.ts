@@ -124,6 +124,7 @@ for (const engine of ['durable', 'evented'] as const) {
 
         expect(produced.scoringData).toBeUndefined();
         expect(observed.scoringDataDefined).toBe(false);
+        expect(observed.messagesIncludeAnswer).toBe(true);
       },
       CELL_TIMEOUT_MS,
     );

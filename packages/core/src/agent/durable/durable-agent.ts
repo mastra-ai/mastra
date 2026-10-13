@@ -926,23 +926,23 @@ export class DurableAgent<
   async #loadLatestMessageListState(
     workflowsStore: WorkflowsStorage,
     runId: string,
-    loopSnapshot: WorkflowRunState,
-  ): Promise<unknown> {
+    fallbackSnapshot: WorkflowRunState,
+  ): Promise<Awaited<ReturnType<typeof hydrateMessageListState>> | undefined> {
     let latest: unknown;
     try {
       const nested = await workflowsStore.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_EXECUTION });
       const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
       latest = snapshot && latestMessageListState(snapshot);
     } catch {
-      // Fall back to the loop snapshot.
+      // Fall back to the supplied snapshot.
     }
-    latest ??= latestMessageListState(loopSnapshot);
-    if (!latest) return latest;
+    latest ??= latestMessageListState(fallbackSnapshot);
+    if (!latest) return undefined;
     // Messages memory already stores are kept as refs; restore them so callers
     // see the full rows (e.g. ToolSearch results). #loadRecalledMessages has
     // already loaded them, so this normally needs no storage read.
     return hydrateMessageListState(
-      { state: undefined, getInitData: () => loopSnapshot.context?.input, mastra: this.#mastra },
+      { state: undefined, getInitData: () => fallbackSnapshot.context?.input, mastra: this.#mastra },
       latest as Parameters<typeof hydrateMessageListState>[1],
     );
   }
@@ -4739,7 +4739,8 @@ export class DurableAgent<
       }
     };
 
-    const observedEntry = getRunRegistryEntry(runId, this.#mastra) ?? this.#runRegistry.get(runId);
+    const localEntry = this.#runRegistry.get(runId);
+    const observedEntry = localEntry ?? getRunRegistryEntry(runId, this.#mastra);
     const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
     let structuredOutput = observedEntry?.structuredOutput;
     let outputProcessors = observedEntry?.outputProcessors;
@@ -4748,9 +4749,11 @@ export class DurableAgent<
     let requestContext = observedEntry?.requestContext;
     let messageList = observedEntry?.messageList ?? this.#runRegistry.getMessageList(runId);
     let workflowInput: DurableAgenticWorkflowInput | undefined;
-    const workflowsStore = !observedEntry ? await this.#mastra?.getStorage()?.getStore('workflows') : undefined;
+    let loopSnapshot: WorkflowRunState | undefined;
+    let workflowInputSnapshot: WorkflowRunState | undefined;
+    const workflowsStore = !localEntry ? await this.#mastra?.getStorage()?.getStore('workflows') : undefined;
 
-    if (!structuredOutput || !observedEntry) {
+    if (!structuredOutput || !localEntry) {
       const snapshotStore = workflowsStore ?? (await this.#mastra?.getStorage()?.getStore('workflows'));
 
       for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
@@ -4761,10 +4764,12 @@ export class DurableAgent<
           typeof persisted.snapshot === 'string'
             ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
             : persisted.snapshot;
+        if (workflowName === DurableStepIds.AGENTIC_LOOP) loopSnapshot = snapshot;
         const persistedInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
         if (persistedInput?.__workflowKind !== 'durable-agent') continue;
 
         workflowInput = persistedInput;
+        workflowInputSnapshot = snapshot;
         break;
       }
     }
@@ -4784,7 +4789,7 @@ export class DurableAgent<
       }
     }
 
-    if (!observedEntry && workflowInput) {
+    if (!localEntry && workflowInput) {
       requestContext = workflowInput.requestContextEntries
         ? new RequestContext(
             Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>,
@@ -4810,27 +4815,25 @@ export class DurableAgent<
 
       messageList = new MessageList({ threadId, resourceId });
       try {
-        let messageListState: Parameters<typeof hydrateMessageListState>[1] = workflowInput.messageListState;
-        if (workflowsStore) {
-          for (const workflowName of [DurableStepIds.AGENTIC_EXECUTION, DurableStepIds.AGENTIC_LOOP]) {
-            const persisted = await workflowsStore.getWorkflowRunById({ runId, workflowName });
-            const snapshot =
-              typeof persisted?.snapshot === 'string'
-                ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
-                : persisted?.snapshot;
-            const latestState = snapshot && latestMessageListState(snapshot);
-            if (latestState) {
-              messageListState = latestState as Parameters<typeof hydrateMessageListState>[1];
-              break;
+        const snapshot = workflowInputSnapshot ?? loopSnapshot;
+        const initialState = await hydrateMessageListState(
+          { state: undefined, getInitData: () => workflowInput!, mastra: this.#mastra },
+          (workflowInput.messageListState ?? latestMessageListState(workflowInputSnapshot!)) as Parameters<
+            typeof hydrateMessageListState
+          >[1],
+        );
+        messageList.deserialize(initialState);
+
+        if (workflowsStore && snapshot) {
+          const inputMessages = messageList.get.input.db();
+          const latestState = await this.#loadLatestMessageListState(workflowsStore, runId, snapshot);
+          if (latestState) {
+            messageList.deserialize(latestState);
+            if (messageList.get.input.db().length === 0 && inputMessages.length > 0) {
+              messageList.add(inputMessages, 'input');
             }
           }
         }
-        messageList.deserialize(
-          await hydrateMessageListState(
-            { state: undefined, getInitData: () => workflowInput!, mastra: this.#mastra },
-            messageListState,
-          ),
-        );
       } catch (error) {
         this.#mastra
           ?.getLogger?.()
@@ -4848,40 +4851,29 @@ export class DurableAgent<
 
     const refreshObservedMessageList = async () => {
       const targetMessageList = messageList;
-      if (!workflowsStore || !workflowInput || !returnScorerData || !targetMessageList) return;
+      const snapshot = workflowInputSnapshot ?? loopSnapshot;
+      if (!workflowsStore || !snapshot || !targetMessageList) return;
 
       try {
-        let latestState: unknown;
-        for (const workflowName of [DurableStepIds.AGENTIC_EXECUTION, DurableStepIds.AGENTIC_LOOP]) {
-          const persisted = await workflowsStore.getWorkflowRunById({ runId, workflowName });
-          const snapshot =
-            typeof persisted?.snapshot === 'string'
-              ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
-              : persisted?.snapshot;
-          latestState = snapshot && latestMessageListState(snapshot);
-          if (latestState) break;
+        const inputMessages = targetMessageList.get.input.db();
+        const latestState = await this.#loadLatestMessageListState(workflowsStore, runId, snapshot);
+        if (latestState) {
+          targetMessageList.deserialize(latestState);
+          if (targetMessageList.get.input.db().length === 0 && inputMessages.length > 0) {
+            targetMessageList.add(inputMessages, 'input');
+          }
         }
-        if (!latestState) return;
-
-        targetMessageList.deserialize(
-          await hydrateMessageListState(
-            { state: undefined, getInitData: () => workflowInput!, mastra: this.#mastra },
-            latestState as Parameters<typeof hydrateMessageListState>[1],
-          ),
-        );
       } catch (error) {
-        this.#mastra
-          ?.getLogger?.()
-          ?.warn?.(`[DurableAgent] observe(${runId}) scorer messageList refresh failed: ${error}`);
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] observe(${runId}) messageList refresh failed: ${error}`);
       }
     };
 
     let observedResponseText = '';
     const handleObservedChunk = async (chunk: ChunkType<TOutput>) => {
-      if (returnScorerData && chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
+      if (chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
         observedResponseText += chunk.payload.text;
       }
-      if (returnScorerData && chunk.type === 'step-finish') {
+      if (chunk.type === 'step-finish') {
         await refreshObservedMessageList();
         if (messageList && messageList.get.response.db().length === 0 && observedResponseText) {
           messageList.add({ role: 'assistant', content: observedResponseText }, 'response');

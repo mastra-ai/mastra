@@ -22,6 +22,7 @@ export interface Cor1411PeerResult {
   scoringDataDefined: boolean;
   scoringInputIncludesPrompt: boolean;
   scoringOutputIncludesAnswer: boolean;
+  messagesIncludeAnswer: boolean;
 }
 
 const uppercaser = (onCall: () => void) => ({
@@ -82,6 +83,7 @@ void runPeer<Cor1411PeerArgs>(async (peer): Promise<Cor1411PeerResult> => {
       scoringDataDefined: scoringData !== undefined,
       scoringInputIncludesPrompt: JSON.stringify(scoringData?.input)?.includes(prompt) ?? false,
       scoringOutputIncludesAnswer: JSON.stringify(scoringData?.output)?.includes(finalText.toUpperCase()) ?? false,
+      messagesIncludeAnswer: JSON.stringify(output.messages).includes(finalText.toUpperCase()),
     };
   } finally {
     await mastra.shutdown();
