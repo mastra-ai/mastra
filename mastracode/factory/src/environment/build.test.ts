@@ -34,6 +34,8 @@ class BuildingSandbox extends FactorySandbox<Settings> {
   startError: Error | undefined;
   /** Runs before the next `start` call only: await to hold that start open, throw to fail it. */
   readonly beforeStart: Array<() => Promise<void>> = [];
+  /** What `list` reports: the provider's build history. */
+  listed: FactorySandboxBuild[] = [];
   readonly builds: FactorySandboxBuilds<Settings> = {
     start: async (ctx, settings): Promise<FactorySandboxBuildStart> => {
       await this.beforeStart.shift()?.();
@@ -45,6 +47,7 @@ class BuildingSandbox extends FactorySandbox<Settings> {
       this.gets.push(buildId);
       return { buildId, status: this.statusOf(buildId) };
     },
+    list: async () => this.listed,
   };
   create(): never {
     throw new Error('not used');
@@ -104,6 +107,19 @@ async function recordBuild(
     id: projectId,
     input: { lastBuildId: buildId, activeTemplateHeads: heads, lastBuildInputs: environmentBuildInputs(environment) },
   });
+}
+
+/** The project storage methods a build uses, bound to `seed` so a test can replace one. */
+function projectsWith(seed: FactoryStorageTestSeed): EnvironmentBuildDeps['projects'] {
+  const projects = seed.projects;
+  return {
+    getById: args => projects.getById(args),
+    claimBuildAttempt: args => projects.claimBuildAttempt(args),
+    claimBuildStart: args => projects.claimBuildStart(args),
+    renewBuildStart: args => projects.renewBuildStart(args),
+    releaseBuildStart: args => projects.releaseBuildStart(args),
+    pinActiveTemplate: args => projects.pinActiveTemplate(args),
+  };
 }
 
 function depsFor(
@@ -422,6 +438,139 @@ describe('runEnvironmentBuild', () => {
     expect(await runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' })).toMatchObject({
       outcome: 'skipped',
       reason: 'in_progress',
+    });
+  });
+
+  it('keeps its lease while a slow provider start runs, so a later trigger never starts a second build', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    let finishStart!: () => void;
+    sandbox.beforeStart.push(() => new Promise<void>(resolve => (finishStart = resolve)));
+    const deps = { ...depsFor(seed, sandbox, now), leaseRenewMs: 5 };
+
+    const first = runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' });
+    await vi.waitFor(() => expect(finishStart).toBeTypeOf('function'));
+    // The provider call outlives the lease; the live run keeps renewing it.
+    clock = new Date(clock.getTime() + 11 * 60_000);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(await runEnvironmentBuild(deps, { projectId: project.id, trigger: 'schedule' })).toEqual({
+      outcome: 'skipped',
+      reason: 'starting',
+    });
+    finishStart();
+
+    expect(await first).toMatchObject({ outcome: 'started', buildId: 'build-1' });
+    expect(sandbox.starts).toHaveLength(1);
+  });
+
+  it('never hands a build to polling when its run lost the lease before the provider answered', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    let finishOlder!: () => void;
+    sandbox.beforeStart.push(() => new Promise<void>(resolve => (finishOlder = resolve)));
+    const deps = depsFor(seed, sandbox, now);
+
+    const older = runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' });
+    await vi.waitFor(() => expect(finishOlder).toBeTypeOf('function'));
+    // The older run stalls without renewing, so its lease lapses and a newer run starts.
+    clock = new Date(clock.getTime() + 11 * 60_000);
+    expect(await runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' })).toMatchObject({
+      outcome: 'started',
+      buildId: 'build-1',
+    });
+    finishOlder();
+
+    expect(await older).toEqual({ outcome: 'failed', reason: 'superseded', buildId: 'build-2' });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({ lastBuildId: 'build-1' });
+  });
+
+  it('retries recording a started build and keeps other triggers out meanwhile', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    let writeFailures = 2;
+    const projects = projectsWith(seed);
+    projects.releaseBuildStart = async args => {
+      if (args.changes?.lastBuildId && writeFailures-- > 0) throw new Error('database unavailable');
+      return seed.projects.releaseBuildStart(args);
+    };
+    let retry!: () => void;
+    const deps = {
+      ...depsFor(seed, sandbox, now),
+      projects,
+      // Hold the first wait between tries open; later ones pass straight through.
+      sleep: () => (retry ? Promise.resolve() : new Promise<void>(resolve => (retry = resolve))),
+    };
+
+    const first = runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' });
+    await vi.waitFor(() => expect(retry).toBeTypeOf('function'));
+    expect(await runEnvironmentBuild(deps, { projectId: project.id, trigger: 'schedule' })).toEqual({
+      outcome: 'skipped',
+      reason: 'starting',
+    });
+    retry();
+
+    expect(await first).toMatchObject({ outcome: 'started', buildId: 'build-1' });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+      lastBuildId: 'build-1',
+      lastBuildHeads: { 'acme/api': SHA_A },
+    });
+    expect(sandbox.starts).toHaveLength(1);
+  });
+
+  it('leaves an unrecorded build holding the lease, then finds it at the provider before building again', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    const projects = projectsWith(seed);
+    projects.releaseBuildStart = async args => {
+      if (args.changes?.lastBuildId) throw new Error('database unavailable');
+      return seed.projects.releaseBuildStart(args);
+    };
+    const deps = { ...depsFor(seed, sandbox, now), projects, sleep: async () => {} };
+
+    expect(await runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' })).toEqual({
+      outcome: 'failed',
+      reason: 'not_recorded',
+      buildId: 'build-1',
+    });
+    expect(
+      await runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+    ).toEqual({
+      outcome: 'skipped',
+      reason: 'starting',
+    });
+    clock = new Date(clock.getTime() + 11 * 60_000);
+    sandbox.listed = [{ buildId: 'build-1', status: 'building' }];
+    expect(
+      await runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+    ).toEqual({
+      outcome: 'skipped',
+      reason: 'in_progress',
+      buildId: 'build-1',
+    });
+    expect(sandbox.starts).toHaveLength(1);
+  });
+
+  it('pins a ready build whose poll never finished before deciding a schedule run has nothing to build', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    await recordBuild(seed, project.id, 'build-0', { 'acme/api': SHA_B });
+    // `build-0` was built on SHA_A, but its poll died before pinning it.
+    await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { lastBuildHeads: { 'acme/api': SHA_A }, activeTemplateId: 'tpl-old' },
+    });
+
+    expect(
+      await runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
+    ).toEqual({
+      outcome: 'skipped',
+      reason: 'unchanged',
+    });
+    expect(sandbox.starts).toHaveLength(0);
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+      activeTemplateId: 'build-0',
+      activeTemplateHeads: { 'acme/api': SHA_A },
     });
   });
 
