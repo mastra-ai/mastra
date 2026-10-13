@@ -8,6 +8,10 @@ Each customer brings a different vendor risk questionnaire, often asking similar
 
 This template brings approved evidence and cited drafts into one review flow. It flags answers that lack support so reviewers can correct them, leave them unanswered or withhold them. Mastra workflows coordinate intake, drafting, approval and export; your team decides what to share.
 
+## Demo
+
+<video controls width="640" height="360" src="https://res.cloudinary.com/mastra-assets/video/upload/v1791907234/Vendor-Risk-Questionnaire_oabldy.mp4"></video>
+
 ## Prerequisites
 
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env`. The default model is `openai/gpt-6.1-sol`. Optionally set `VRQ_MODEL` to another OpenAI model that supports Responses, structured output and medium reasoning.
