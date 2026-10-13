@@ -83,7 +83,7 @@ const renderExperimentRoute = (initialPath = `/experiments/${EXPERIMENT_ID}`) =>
  */
 const findResultDialog = async (resultId: string) => {
   const dialog = await screen.findByRole('dialog', { name: `Experiment item ${resultId.replace('res-', 'item-')}` });
-  await within(dialog).findByRole('heading', { name: `Result ${resultId}` });
+  await within(dialog).findByRole('heading', { name: 'Experiment result' });
   return dialog;
 };
 
@@ -211,12 +211,12 @@ describe('experiment item sub-route', () => {
       renderExperimentRoute();
 
       expect((await screen.findByRole('button', { name: '0 selected' })).hasAttribute('disabled')).toBe(true);
-      expect(screen.queryByRole('button', { name: 'Flag for review' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Request review' })).toBeNull();
 
       fireEvent.click(screen.getByRole('checkbox', { name: 'Select result item-1' }));
 
       expect(await screen.findByRole('button', { name: '1 selected' })).toBeDefined();
-      expect(screen.getByRole('button', { name: 'Flag for review' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Request review' })).toBeDefined();
     });
 
     it('clears the selection and hides the actions when the count button is clicked', async () => {
@@ -226,7 +226,7 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByRole('button', { name: '1 selected' }));
 
       expect(await screen.findByRole('button', { name: '0 selected' })).toBeDefined();
-      expect(screen.queryByRole('button', { name: 'Flag for review' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Request review' })).toBeNull();
     });
   });
 
