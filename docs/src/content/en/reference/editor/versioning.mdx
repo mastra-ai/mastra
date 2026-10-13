@@ -48,7 +48,7 @@ Selecting a label resolves its current target for that request. A later request 
 
 For an agent execution, Mastra resolves selected versions throughout the configured agent graph before behavior begins. This includes the root, explicit `versions.agents` selectors, and agents selected by `versions.defaultLabel` or `versions.defaultStatus`. It records the resulting immutable version IDs with the run, so suspension, tool approval, retry, and recovery continue on the same versions even if a label moves. A later, separate execution resolves the label again and can therefore use its new target.
 
-Completed client-tool continuations sent through `sendToolApproval({ messages, approved: true })` use retained thread history to recover that identity. After the completed message stream is trimmed, a compact identity remains available for five minutes on PubSub implementations that support retained history. Missing or expired identities reject the continuation instead of selecting the current label target. This temporary window doesn't apply to suspended durable runs, which retain their pins in the saved run state.
+Completed client-tool continuations sent through `sendToolApproval({ messages, approved: true })` recover a compact run identity after the completed message stream is trimmed. The default PubSub keeps up to 1,000 completed identities in process for five minutes. A restart or eviction can end that window early. Use a PubSub implementation with retained history when continuations must cross server instances. Missing or expired identities reject the continuation instead of selecting a newer version. Suspended durable runs retain their pins in saved run state without this temporary window.
 
 ### Storage and deployment limits
 
@@ -75,7 +75,7 @@ Direct editor namespace lookups also reject conflicting selectors. Exact version
 ```typescript title="Select an agent by label"
 const candidate = await mastra.getAgentById('support-agent', {
   label: 'candidate',
-});
+})
 ```
 
 With the default server prefix, pass selectors as query parameters under `/api`:
@@ -95,13 +95,14 @@ See the [Client SDK agents reference](/reference/client-js/agents#version-manage
 
 ## Sub-agent versioning
 
-Version overrides propagate through [supervisor-agent delegation](/docs/subagents) in request context. Define selectors at three levels:
+Version overrides propagate through [supervisor-agent delegation](/docs/subagents) in request context. Define selectors at four levels, from lowest to highest priority:
 
 1. `Mastra` instance `versions`: Defaults for every invocation
-1. Server request-body `versions`: Per-request values added to request context
-1. Direct `generate()` or `stream()` `versions`: Per-invocation values
+1. Request-context `versions`: Defaults for the current request
+1. Agent method defaults: `defaultOptions.versions`, or `defaultGenerateOptionsLegacy.versions` and `defaultStreamOptionsLegacy.versions` for AI SDK v4
+1. Explicit call `versions`: Values for a new execution
 
-Entries merge by agent ID. For the same ID, precedence is **direct invocation > request body or existing request context > Mastra instance default**.
+Entries merge by agent ID. Higher-priority configuration replaces lower-priority selectors for the same ID or shared default. Version selectors in agent method defaults are applied before Mastra selects and pins versions. Explicit selectors on AgentController Session calls also take precedence over agent method defaults.
 
 For each agent, including the root, Mastra chooses the first configured selector in this order:
 
@@ -110,13 +111,13 @@ For each agent, including the root, Mastra chooses the first configured selector
 1. `versions.defaultStatus`: A shared publication status
 1. Existing system default
 
-The source precedence above merges configuration first; this selector precedence then applies to the merged result. For example, a per-agent selector on the Mastra instance still overrides a call-site `defaultLabel` for that agent.
+The source precedence above merges configuration first. Selector precedence then applies to the merged result. For example, a per-agent selector on the Mastra instance still overrides a call-site `defaultLabel` for that agent.
 
 Set defaults on the Mastra instance:
 
 ```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core';
-import { MastraEditor } from '@mastra/editor';
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
 
 export const mastra = new Mastra({
   agents: { supervisor, researchAgent, writerAgent },
@@ -128,7 +129,7 @@ export const mastra = new Mastra({
       'writer-agent': { versionId: 'abc-123' },
     },
   },
-});
+})
 ```
 
 Override one sub-agent for a direct invocation:
@@ -140,7 +141,7 @@ const result = await supervisor.generate('Research and write about AI safety', {
       'research-agent': { status: 'draft' },
     },
   },
-});
+})
 ```
 
 Or pass selectors in the server request body:
@@ -158,7 +159,7 @@ curl -X POST http://localhost:4111/api/agents/supervisor/generate \
   }'
 ```
 
-Use `versions.agents[rootAgentId]` to select only the root agent. The root follows the same rules as every sub-agent; its selector doesn't change the defaults for other agents.
+Use `versions.agents[rootAgentId]` to select only the root agent without changing the defaults for its sub-agents.
 
 Mastra resolves the configured agent graph and pins its selected versions at run start. Both explicit selectors and shared defaults propagate through delegation. Continuing an existing run uses its saved immutable version IDs, not a fresh label lookup. Omit mutable selectors when resuming; a continuation can repeat an already-pinned exact `versionId`, but it can't provide a label or `defaultLabel` to reselect the run.
 
