@@ -791,6 +791,15 @@ export class AgentThreadStreamRuntime {
             // If renewLease reports the lease is gone, stop renewing; the current stream may still finish,
             // but another process can now claim the thread until this run completes or errors.
             this.#stopLeaseRenewal(pubsub, runId, timer);
+            return;
+          }
+          // A renewal that was already in flight when the suspended-run sweep stopped this
+          // timer extends the lease past `sweptAt + AGENT_THREAD_LEASE_TTL_MS`. Re-stamp the
+          // swept-run marker so it outlives the lease it just extended; otherwise the marker
+          // can expire while the lease is still held and a send inside that gap would again
+          // be acknowledged as `deliver` to a run with no receiver (#26474).
+          if (state.sweptLeasedRunIds.has(runId)) {
+            state.sweptLeasedRunIds.set(runId, Date.now());
           }
         })
         .catch(() => {});
