@@ -26,6 +26,7 @@ import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
 import type { MastraTimeoutError } from '../../../../loop/timeout';
 import { buildMessagesFromChunks } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import type { CollectedChunk } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
+import { getToolResultInvocationState } from '../../../../loop/workflows/agentic-execution/provider-tool-result-state';
 import { endPendingProviderToolSpan } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { PendingProviderToolCall } from '../../../../loop/workflows/agentic-execution/provider-tool-spans';
 import type { Mastra } from '../../../../mastra';
@@ -58,7 +59,7 @@ import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
-import { endRunSpansWithError, globalRunRegistry, markRunActive } from '../../run-registry';
+import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
@@ -271,7 +272,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // so it is logged rather than thrown.
       if (pubsub) {
         try {
-          await ensureRemoteAbortListener(pubsub, runId);
+          await ensureRemoteAbortListener(pubsub, runId, mastra);
         } catch (error) {
           logger?.warn?.('Failed to subscribe to cross-process abort requests', {
             runId,
@@ -348,7 +349,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // block with stepResult.reason: 'abort' (set by the predicate's abort
       // guard). We intentionally do NOT emit an ABORT event here because
       // that would close the stream before the FINISH event arrives.
-      const executionAbortSignalEarly = globalRunRegistry.get(runId)?.abortSignal ?? abortSignal;
+      const executionAbortSignalEarly =
+        getRunRegistryEntry(runId, mastra as Mastra | undefined)?.abortSignal ?? abortSignal;
       if (executionAbortSignalEarly?.aborted) {
         // A run-level budget expiry between iterations (e.g. while a tool
         // call was running) must fail the run, not settle it as a clean
@@ -380,11 +382,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // If an input processor called abort() during preparation, the tripwire
       // data is stored on the registry entry. Emit a tripwire chunk and bail
       // immediately — the model must never be called.
-      const registryTripwire = globalRunRegistry.get(runId)?.tripwire;
+      const registryTripwire = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tripwire;
       if (registryTripwire) {
         // Clear it so it doesn't fire again on a subsequent iteration (shouldn't
         // happen since the loop will stop, but belt-and-suspenders).
-        const entry = globalRunRegistry.get(runId);
+        const entry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
         if (entry) entry.tripwire = undefined;
 
         logger?.warn?.('Input processor tripwire triggered (from preparation)', {
@@ -456,7 +458,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       let skipUnavailableAttachments = false;
       const maxProcessorRetries = resolveMaxProcessorRetries({
         maxProcessorRetries: typedInput.options?.maxProcessorRetries,
-        hasErrorProcessors: Boolean(globalRunRegistry.get(runId)?.errorProcessors?.length),
+        hasErrorProcessors: Boolean(getRunRegistryEntry(runId, mastra as Mastra | undefined)?.errorProcessors?.length),
         hasConfiguredErrorProcessors: Boolean(typedInput.options?.hasErrorProcessors),
         agentId,
         logger,
@@ -471,7 +473,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
       // Input queued while this step's model request has produced only reasoning cancels
       // the request (not the run), and the step returns so the loop asks again with that input.
-      const signalRegistry = globalRunRegistry.get(runId);
+      const signalRegistry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
       const interruption = new AbortController();
       let interruptible = false;
       signalRegistry?.stopStepSignalListener?.();
@@ -673,7 +675,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // modelSpanData is threaded through the iteration state (seeded in preparation.ts);
             // after a resume the registry override points steps at the resumed generation.
-            const inputModelSpanData = (globalRunRegistry.get(runId)?.resumeModelSpanData ??
+            const inputModelSpanData = (getRunRegistryEntry(runId, mastra as Mastra | undefined)?.resumeModelSpanData ??
               inputData.modelSpanData) as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
             const modelSpan = inputModelSpanData
               ? (observability?.rebuildSpan(inputModelSpanData) as AIModelGenerationSpan | undefined)
@@ -689,7 +691,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // On remote engines (Inngest) the step's tracingContext span is not part of the
             // exported trace, so parent client-tool spans on the rebuilt AGENT_RUN span instead.
-            const inputAgentSpanData = (globalRunRegistry.get(runId)?.resumeAgentSpanData ??
+            const inputAgentSpanData = (getRunRegistryEntry(runId, mastra as Mastra | undefined)?.resumeAgentSpanData ??
               inputData.agentSpanData) as ExportedSpan<SpanType.AGENT_RUN> | undefined;
             const agentRunSpan = inputAgentSpanData
               ? (observability?.rebuildSpan(inputAgentSpanData) as AnySpan | undefined)
@@ -715,7 +717,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                 : undefined;
 
-            const registryEntry = globalRunRegistry.get(runId);
+            const registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
             const runAbortSignal = registryEntry?.abortSignal ?? abortSignal;
             const executionAbortSignal = stopListening
               ? runAbortSignal
@@ -966,7 +968,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             }
             await persistUnavailableAttachments({
               messageList,
-              memory: globalRunRegistry.get(runId)?.memory,
+              memory: getRunRegistryEntry(runId, mastra as Mastra | undefined)?.memory,
               readOnly: typedInput.state?.memoryConfig?.readOnly,
               logger,
             });
@@ -1707,11 +1709,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   messageList.updateToolInvocation({
                     type: 'tool-invocation',
                     toolInvocation: {
-                      state: 'result',
                       toolCallId: resultPayload.toolCallId,
                       toolName: resultPayload.toolName,
                       args: resultPayload.args,
-                      result: resultPayload.result,
+                      ...getToolResultInvocationState(resultPayload),
                     },
                     providerMetadata: withToolPayloadTransformProviderMetadata(
                       resultPayload.providerMetadata,
@@ -2043,6 +2044,26 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     finishReason = payload.stepResult?.reason || payload.finishReason || 'stop';
                     usage = payload.output?.usage || payload.usage || usage;
 
+                    // A provider can end the stream with finishReason 'error' without ever
+                    // enqueueing an error part (e.g. Google reports MALFORMED_FUNCTION_CALL
+                    // this way). Throw so the shared retry / error-processor / fallback path
+                    // sees it, matching the regular loop.
+                    if (finishReason === 'error') {
+                      const rawReason = payload.stepResult?.rawReason;
+                      throw new MastraError({
+                        id: 'AGENT_STREAM_ERROR',
+                        text: rawReason
+                          ? `Agent stream finished with finishReason "error" (provider reported "${rawReason}") but no error payload was provided`
+                          : 'Agent stream finished with finishReason "error" but no error payload was provided',
+                        domain: ErrorDomain.AGENT,
+                        category: ErrorCategory.SYSTEM,
+                        details: {
+                          runId,
+                          ...(rawReason && { rawFinishReason: rawReason }),
+                        },
+                      });
+                    }
+
                     // A provider can close the stream cleanly with finishReason 'other'
                     // without producing any output (e.g. @ai-sdk/openai defaults to
                     // 'other' when the SSE stream ends before a response.completed
@@ -2166,7 +2187,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               lastError = errorObj;
 
               // Try processAPIError before deciding retry/break
-              const registryEntryInner = globalRunRegistry.get(runId);
+              const registryEntryInner = getRunRegistryEntry(runId, mastra as Mastra | undefined);
               const canRetryErrorInner = maxProcessorRetries !== undefined && processorRetryCount < maxProcessorRetries;
               // See the outer site below: the processor always runs, only the retry is gated.
               if (registryEntryInner?.errorProcessors?.length) {
@@ -2569,7 +2590,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // attempts or paying for fallback model calls. Re-derive the signal
             // from the registry (the inner try-scoped `executionAbortSignal` is
             // out of scope here).
-            const outerRegistryEntry = globalRunRegistry.get(runId);
+            const outerRegistryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
             const outerAbortSignal = outerRegistryEntry?.abortSignal ?? abortSignal;
 
             // A run-level budget expiry (#21724) is a hard failure: no retry
@@ -2617,7 +2638,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Error processor retry for non-stream errors (e.g. provider
             // rejections that throw before the stream opens). Stream-level
             // errors are already handled in the inner catch above.
-            const registryEntry = globalRunRegistry.get(runId);
+            const registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
             const canRetryError = maxProcessorRetries !== undefined && processorRetryCount < maxProcessorRetries;
             // The processor always runs so it can observe (and report) the terminal
             // failure; only the retry itself is gated by the budget. This matches the

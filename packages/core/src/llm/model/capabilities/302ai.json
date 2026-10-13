@@ -5,6 +5,7 @@
     "claude-fable-5-1",
     "claude-haiku-4-5",
     "claude-haiku-4-5-20251001",
+    "claude-haiku-5-5",
     "claude-opus-4-1-20250805",
     "claude-opus-4-1-20250805-thinking",
     "claude-opus-4-5-20251101",
@@ -74,6 +75,7 @@
     "gpt-6-astra",
     "gpt-6-luna",
     "gpt-6-sol",
+    "gpt-6.1-sol",
     "grok-4-1-fast-reasoning",
     "grok-4-fast-non-reasoning",
     "grok-4-fast-reasoning",
@@ -188,6 +190,7 @@
     "qwen3.8-max"
   ],
   "structuredOutput": [
+    "claude-haiku-5-5",
     "deepseek-flash",
     "gemini-3.1-flash-lite",
     "gemini-3.1-flash-lite-preview",
@@ -228,6 +231,7 @@
     "gpt-6-astra",
     "gpt-6-luna",
     "gpt-6-sol",
+    "gpt-6.1-sol",
     "grok-4.3",
     "grok-4.5",
     "grok-4.6",
@@ -416,6 +420,12 @@
       {
         "type": "effort",
         "values": ["high"]
+      }
+    ],
+    "gpt-6.1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "claude-opus-4-5-20251101": [
@@ -629,6 +639,15 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-haiku-5-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "gemini-3.8-flash": [

@@ -58,7 +58,7 @@ export const mastra = new Mastra({
   },
   {
     name: 'authorizeUser',
-    type: '(user: BetterAuthUser, request: HonoRequest) => Promise<boolean> | boolean',
+    type: '(user: BetterAuthUser, request: MastraAuthRequest) => Promise<boolean> | boolean',
     description:
       'Custom authorization function to determine if a user should be granted access. Called after session verification. By default, allows all authenticated users with valid sessions.',
     isOptional: true,

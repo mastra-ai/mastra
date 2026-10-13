@@ -146,7 +146,7 @@ Subscribes to the session's event stream over SSE. The promise resolves once the
     type: 'boolean | { maxRetries?: number; delayMs?: number; maxDelayMs?: number }',
     isOptional: true,
     description:
-      'Re-establishes the stream after an established stream drops. Retries back off exponentially from `delayMs` (default `1000`) up to `maxDelayMs` (default `30000`). `maxRetries` (default `Infinity`) bounds the attempts per outage and resets once a connection is re-established. When retries are exhausted, `onError` fires.',
+      'Re-establishes the stream after an established stream drops. Retries back off exponentially from `delayMs` (default `1000`) up to `maxDelayMs` (default `30000`). `maxRetries` (default `Infinity`) bounds the attempts per outage and resets once a connection is re-established. When retries are exhausted, `onError` fires. A reconnect request that fails with a 4xx (other than `408` and `429`) or `501` stops reconnecting immediately and passes that `MastraClientError` to `onError`.',
   },
 ]}
 />

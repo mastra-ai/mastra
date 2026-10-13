@@ -2112,6 +2112,94 @@ describe('GitHub session workspace preparation', () => {
     expect(() => requireGithubTokenInjector(reviewerContext)('stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
+  describe('when the run-binding lookup fails', () => {
+    type FactoryWorkspace = Awaited<ReturnType<typeof createLocalFactory>>['workspace'];
+
+    async function startReviewSession(workspace: FactoryWorkspace) {
+      mocks.runBindingRole = 'review';
+      addProject();
+      addSession({ id: 'session-a' });
+      const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+      await workspace({ requestContext: reviewerContext });
+      expect(lastGhToken()).toBe('ghp_reviewer');
+      mocks.runBindingRole = 'work';
+      return reviewerContext;
+    }
+
+    async function reuseWithFailingBindingLookup(workspace: FactoryWorkspace) {
+      const lookup = mocks.findActiveRunBindingForSession.getMockImplementation()!;
+      mocks.findActiveRunBindingForSession.mockImplementation(async () => {
+        throw new Error('binding storage unavailable');
+      });
+      const laterContext = createGithubRequestContext('project-1', 'session-a');
+      try {
+        await workspace({
+          requestContext: laterContext,
+          mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+        });
+      } finally {
+        mocks.findActiveRunBindingForSession.mockImplementation(lookup);
+      }
+      return laterContext;
+    }
+
+    it('replaces the reviewer PAT and invalidates reviewer refresh contexts on reuse', async () => {
+      mocks.githubPat = 'ghp_worker';
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      const reviewerContext = await startReviewSession(workspace);
+
+      const laterContext = await reuseWithFailingBindingLookup(workspace);
+
+      expect(lastGhToken()).toBe('ghp_worker');
+      expect(() => requireGithubTokenInjector(reviewerContext)('stale-reviewer-token')).toThrow(/no longer matches/);
+      expect(() => requireGithubTokenInjector(laterContext)('rotated-worker-token')).not.toThrow();
+    });
+
+    it('falls back to repository access when no worker PAT is configured', async () => {
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      await startReviewSession(workspace);
+
+      await reuseWithFailingBindingLookup(workspace);
+
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+    });
+
+    it('keeps the worker PAT across a sandbox reconnect', async () => {
+      mocks.githubPat = 'ghp_worker';
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      const reviewerContext = await startReviewSession(workspace);
+      const laterContext = await reuseWithFailingBindingLookup(workspace);
+
+      mocks.setEnv.mockClear();
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      await sandbox.start();
+
+      expect(lastGhToken()).toBe('ghp_worker');
+      expect(() => requireGithubTokenInjector(reviewerContext)('stale-reviewer-token')).toThrow(/no longer matches/);
+      expect(() => requireGithubTokenInjector(laterContext)('rotated-worker-token')).not.toThrow();
+    });
+
+    it('restores the reviewer PAT once the review binding is readable again', async () => {
+      mocks.githubPat = 'ghp_worker';
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      await startReviewSession(workspace);
+      await reuseWithFailingBindingLookup(workspace);
+      expect(lastGhToken()).toBe('ghp_worker');
+
+      mocks.runBindingRole = 'review';
+      await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+      });
+
+      expect(lastGhToken()).toBe('ghp_reviewer');
+    });
+  });
+
   it('keeps refresh authority with the current context across a sandbox reconnect', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';
@@ -3077,6 +3165,59 @@ describe('FactorySkillSource layering', () => {
     expect(visibleNames).toEqual(expect.arrayContaining([...REVIEW_ONLY_FACTORY_SKILLS]));
     expect(await source.exists(reviewSkill)).toBe(true);
     expect((await source.stat(reviewSkill)).type).toBe('file');
+  });
+
+  describe('repository skill roots', () => {
+    const repoRoot = path.resolve('/repo/.claude/skills');
+    const repoFallback = (names: string[]) =>
+      ({
+        ...fallbackStub,
+        readdir: async () => names.map(name => ({ name, type: 'directory' as const })),
+      }) as any;
+
+    it('hides repository skills named after bundled or app-local Factory skills', async () => {
+      const localRoot = await makeLocalRoot({ 'my-app-skill': '---\ndescription: app\n---\n# App Skill\n' });
+      await fs.writeFile(path.join(localRoot, 'README.md'), 'not a skill');
+      const source = new FactorySkillSource(
+        repoFallback(['my-app-skill', 'factory-plan', 'repo-only-skill', 'README.md']),
+        [repoRoot],
+        localRoot,
+      );
+
+      const names = (await source.readdir(repoRoot)).map(entry => entry.name);
+      // README.md is a file in the local root, so it reserves nothing.
+      expect(names).toEqual(['repo-only-skill', 'README.md']);
+    });
+
+    it('picks up app-local skills added after the source was created', async () => {
+      const localRoot = await makeLocalRoot({});
+      const source = new FactorySkillSource(repoFallback(['late-skill']), [repoRoot], localRoot);
+      expect((await source.readdir(repoRoot)).map(entry => entry.name)).toEqual(['late-skill']);
+
+      await fs.mkdir(path.join(localRoot, 'late-skill'));
+      await fs.writeFile(path.join(localRoot, 'late-skill', 'SKILL.md'), '# Late\n');
+      expect(await source.readdir(repoRoot)).toEqual([]);
+    });
+
+    it('does not filter paths that are not registered skill roots', async () => {
+      const localRoot = await makeLocalRoot({ 'my-app-skill': '# App\n' });
+      const source = new FactorySkillSource(repoFallback(['my-app-skill', 'factory-plan']), [repoRoot], localRoot);
+      const names = (await source.readdir(path.join(repoRoot, 'nested'))).map(entry => entry.name);
+      expect(names).toEqual(['my-app-skill', 'factory-plan']);
+    });
+
+    it('reserves only bundled names without a usable local root', async () => {
+      const names = ['factory-triage', 'my-app-skill'];
+      const noLocal = new FactorySkillSource(repoFallback(names), [repoRoot], undefined);
+      expect((await noLocal.readdir(repoRoot)).map(entry => entry.name)).toEqual(['my-app-skill']);
+
+      const missingLocal = new FactorySkillSource(
+        repoFallback(names),
+        [repoRoot],
+        path.join(os.tmpdir(), 'factory-missing-local-root-does-not-exist'),
+      );
+      expect((await missingLocal.readdir(repoRoot)).map(entry => entry.name)).toEqual(['my-app-skill']);
+    });
   });
 
   it('resolveLocalFactorySkillsPath handles the dev-server cwd variants', async () => {

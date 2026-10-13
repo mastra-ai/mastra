@@ -8,15 +8,13 @@ import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { ClockIcon } from 'lucide-react';
-import type { ComparisonRow, ComparisonSide } from './build-comparison-rows';
+import type { ComparisonColumn, ComparisonSide } from './build-comparison-rows';
 import { ComparisonScoreRow } from './comparison-score-row';
 import { ComparisonSection } from './comparison-section';
 
 export interface ComparisonSideCellProps {
-  side: 'baseline' | 'contender';
-  row: ComparisonRow;
-  /** Only the contender renders deltas, so a difference is stated once. */
-  showDeltas?: boolean;
+  /** One experiment's side of the row. Contenders carry their deltas against the baseline. */
+  column: ComparisonColumn;
   isLoading?: boolean;
 }
 
@@ -38,11 +36,10 @@ const codeBoxClass = cn(
 );
 
 /**
- * One side of a single item row. Baseline and contender render the exact same
+ * One experiment's side of a single item row. Every column renders the exact same
  * sections in the same order so the row can be read as a visual diff.
  */
-export function ComparisonSideCell({ side, row, showDeltas, isLoading }: ComparisonSideCellProps) {
-  const data = row[side];
+export function ComparisonSideCell({ column: data, isLoading }: ComparisonSideCellProps) {
   const duration = sideDuration(data);
 
   if (isLoading) {
@@ -101,7 +98,7 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
                 key={score.scorerId}
                 scorerId={score.scorerId}
                 value={score.value}
-                delta={showDeltas ? row.deltas[score.scorerId] : null}
+                delta={data.deltas?.[score.scorerId]}
                 reason={score.reason}
               />
             ))}
