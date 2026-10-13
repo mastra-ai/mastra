@@ -301,10 +301,18 @@ requestContext.set(MASTRA_THREAD_ID_KEY, threadId)
 Server ownership checks read only `MASTRA_RESOURCE_ID_KEY` and `MASTRA_THREAD_ID_KEY`. If your middleware sets identity through `MASTRA_SCOPES_KEY` and you want those checks, set `MASTRA_RESOURCE_ID_KEY` too:
 
 ```typescript
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY } from '@mastra/core/request-context'
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_SCOPES_KEY } from '@mastra/core/request-context'
 
 requestContext.set(MASTRA_SCOPES_KEY, [`org:${user.orgId}`, `resource:${user.id}`])
 requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
+```
+
+The same applies to a `thread:` scope: it sets the run's thread identity, but only `MASTRA_THREAD_ID_KEY` drives the server's thread checks, so set both when middleware pins the thread:
+
+```typescript
+requestContext.set(MASTRA_SCOPES_KEY, [`resource:${user.id}`, `thread:${threadId}`])
+requestContext.set(MASTRA_RESOURCE_ID_KEY, user.id)
+requestContext.set(MASTRA_THREAD_ID_KEY, threadId)
 ```
 
 Scopes from the request context and per-call `scopes` need a `@mastra/server` release that reserves them. Older servers pass these values from request bodies through to the agent, so while one is registered, agents throw an `AGENT_SCOPES_SERVER_OUTDATED` error instead of using them. The agent's own `scopes` option still applies.

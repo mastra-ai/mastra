@@ -7875,9 +7875,22 @@ export class Agent<
   #getSnapshotScopes(existingSnapshot: WorkflowRunState | null | undefined): string[] | undefined {
     for (const key in existingSnapshot?.context) {
       const step = existingSnapshot?.context[key];
-      if (step && step.status === 'suspended' && Array.isArray(step.suspendPayload?.__resolvedScopes)) {
-        return step.suspendPayload.__resolvedScopes;
+      const persisted = step?.status === 'suspended' ? step.suspendPayload?.__resolvedScopes : undefined;
+      if (persisted === undefined) continue;
+      // Corrupted persisted state is a system fault, not a client error: coercing it to
+      // "no scopes" would silently drop the run's scope set and misreport a re-supplied
+      // scope as AGENT_SCOPES_CONFLICT. Mirrors the durable resume and network snapshot
+      // rehydration guards.
+      if (!Array.isArray(persisted)) {
+        throw new MastraError({
+          id: 'AGENT_SCOPES_INVALID',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          text: `Agent "${this.name}": persisted run scopes are malformed; expected an array of strings.`,
+          details: { agentName: this.name },
+        });
       }
+      return persisted;
     }
     return undefined;
   }

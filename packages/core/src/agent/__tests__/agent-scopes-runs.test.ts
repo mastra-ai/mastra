@@ -353,6 +353,43 @@ describe('agent scopes on runs', () => {
     ).resolves.toMatchObject({ id: 'AGENT_SCOPES_CONFLICT' });
   });
 
+  it('rejects a resume whose persisted scopes are malformed instead of treating them as no scopes', async () => {
+    const approve = createTool({
+      id: 'approve',
+      description: 'needs approval',
+      inputSchema: z.object({}),
+      requireApproval: true,
+      execute: async () => ({ ok: true }),
+    });
+    const { agent } = setup({ model: toolCallingModel('approve'), tools: { approve } });
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({ agents: { agent }, logger: false, storage });
+    const stream = await agent.stream('go', { scopes: ['org:a', 'resource:u1', 'thread:t1'] });
+    let toolCallId: string | undefined;
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'tool-call-approval') toolCallId = chunk.payload.toolCallId;
+    }
+    expect(toolCallId).toBeDefined();
+
+    // Corrupt the persisted scope set the way a broken serializer or manual edit would.
+    const workflowsStore = await mastra.getStorage()!.getStore('workflows');
+    const snapshot: any = await workflowsStore!.loadWorkflowSnapshot({
+      workflowName: 'agentic-loop',
+      runId: stream.runId,
+    });
+    for (const key in snapshot.context) {
+      const step = snapshot.context[key];
+      if (step?.status === 'suspended' && step.suspendPayload?.__resolvedScopes) {
+        step.suspendPayload.__resolvedScopes = 'org:a';
+      }
+    }
+    await workflowsStore!.persistWorkflowSnapshot({ workflowName: 'agentic-loop', runId: stream.runId, snapshot });
+
+    await expect(
+      conflictOf(agent.approveToolCall({ runId: stream.runId, toolCallId: toolCallId! })),
+    ).resolves.toMatchObject({ id: 'AGENT_SCOPES_INVALID' });
+  });
+
   it('rejects a resume that adds scopes to a run that started without any', async () => {
     const approve = createTool({
       id: 'approve',
