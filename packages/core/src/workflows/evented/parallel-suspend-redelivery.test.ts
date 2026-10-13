@@ -47,7 +47,9 @@ async function runCell(engine: Engine) {
   try {
     const run = await workflow.createRun({ runId: `t57-${engine}-run` });
     expect((await run.start({ inputData: { seed: 10 } })).status).toBe('suspended');
+    expect(executed).toEqual([]);
     expect((await run.resume({ step: 'left', resumeData: 1 })).status).toBe('suspended');
+    expect(executed).toEqual(['left']);
     const result = await run.resume({ step: 'right', resumeData: 2 });
     expect(result.status).toBe('success');
     expect(result.result).toEqual({
@@ -79,7 +81,9 @@ describe('T57 wf-parallel-suspend', () => {
       const runId = 't57-redeliver-run';
       const run = await workflow.createRun({ runId });
       expect((await run.start({ inputData: { seed: 10 } })).status).toBe('suspended');
+      expect(executed).toEqual([]);
       expect((await run.resume({ step: 'left', resumeData: 1 })).status).toBe('suspended');
+      expect(executed).toEqual(['left']);
       const result = await run.resume({ step: 'right', resumeData: 2 });
       expect(result.status).toBe('success');
       expect(result.result).toEqual({
@@ -96,6 +100,7 @@ describe('T57 wf-parallel-suspend', () => {
       const outcome = await driver.redeliver(match, { viaPublish: true });
       expect(outcome.event.id).not.toBe(rightRun!.id);
       expect(outcome.event.deliveryAttempt).toBe(1);
+      expect(outcome.event.data).toEqual(rightRun!.data);
       expect(outcome.event.data).toMatchObject({ workflowId: workflow.id, runId, executionPath: path });
       expect(outcome.handled).toHaveLength(1);
       expect(outcome.handled[0]!.result.ok).toBe(true);

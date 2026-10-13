@@ -74,24 +74,36 @@ describe('T6 tool-approval redelivery', () => {
       agents: { 't6-redelivery-agent': agent },
     });
 
+    let initialCleanup: (() => void) | undefined;
+    let resumedCleanup: (() => void) | undefined;
     try {
       await mastra.startWorkers();
       driver.assertEvented(agent.getWorkflow() as { engineType?: string });
       const initial = await agent.stream('Send it.', { maxSteps: 4 });
+      initialCleanup = initial.cleanup;
       let approvalRequests = 0;
+      let approvalPayload: unknown;
       for await (const chunk of initial.fullStream) {
         if (chunk.type === 'tool-call-approval') {
           approvalRequests++;
+          approvalPayload = chunk.payload;
           break;
         }
       }
       expect(approvalRequests).toBe(1);
+      expect(approvalPayload).toMatchObject({
+        toolCallId: 'approve-1',
+        toolName: 'sendEmail',
+        args: { to: 'alice@example.com' },
+      });
       expect(executions).toBe(0);
 
       const resumed = await agent.approveToolCall({ runId: initial.runId });
+      resumedCleanup = resumed.cleanup;
       for await (const chunk of resumed.fullStream) {
         if (chunk.type === 'tool-call-approval') approvalRequests++;
       }
+      expect(await resumed.text).toBe('sent');
       expect(approvalRequests).toBe(1);
       expect(executions).toBe(1);
       expect(modelCalls).toBe(2);
@@ -103,6 +115,17 @@ describe('T6 tool-approval redelivery', () => {
         workflowId: 'durable-agentic-execution',
         runId: workflowRunId,
         executionPath: [3, 0],
+        stepResults: {
+          'extract-tool-calls': {
+            output: [
+              {
+                toolCallId: 'approve-1',
+                toolName: 'sendEmail',
+                args: { to: 'alice@example.com' },
+              },
+            ],
+          },
+        },
       });
       const deliveriesBefore = driver.deliveryCount(match);
       const { event, handled } = await driver.redeliver(match, { viaPublish: true });
@@ -117,6 +140,8 @@ describe('T6 tool-approval redelivery', () => {
       expect(approvalRequests).toBe(1);
       expect(modelCalls).toBe(2);
     } finally {
+      initialCleanup?.();
+      resumedCleanup?.();
       await mastra.stopWorkers();
       driver.dispose();
     }

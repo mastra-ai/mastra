@@ -250,6 +250,7 @@ describe('T58 wf-evented-redeliver', () => {
 
         expect(event.id).not.toBe(original.id);
         expect(event.deliveryAttempt).toBe(1);
+        expect(event.data).toEqual(original.data);
         expect(event.data).toMatchObject({ workflowId, runId, executionPath: [0] });
         expect(handled).toHaveLength(1);
         expect(handled[0]!.result.ok).toBe(true);

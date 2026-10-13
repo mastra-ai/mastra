@@ -21,7 +21,7 @@ function finalText() {
   return [
     { type: 'stream-start', warnings: [] },
     { type: 'text-start', id: 'final' },
-    { type: 'text-delta', id: 'final', delta: 'verified' },
+    { type: 'text-delta', id: 'final', delta: 'verified comparison value 42' },
     { type: 'text-end', id: 'final' },
     { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
   ];
@@ -37,7 +37,7 @@ describe('T1 tool-roundtrip redelivery', () => {
           modelCalls === 1
             ? toolCall('write-1', 'writeRecord', { name: 'comparison', amount: 42 })
             : modelCalls === 2
-              ? toolCall('read-1', 'readRecord', { name: 'comparison' })
+              ? toolCall('read-1', 'readRecord', { name: 'comparison', receipt: 'receipt-1' })
               : finalText();
         return {
           stream: convertArrayToReadableStream(parts as any[]),
@@ -48,7 +48,8 @@ describe('T1 tool-roundtrip redelivery', () => {
     }) as unknown as LanguageModelV2;
 
     const writes: Array<{ name: string; amount: number }> = [];
-    let reads = 0;
+    const reads: Array<{ name: string; receipt: string }> = [];
+    const readResults: Array<{ name: string; amount: number; verified: true }> = [];
     const writeRecord = createTool({
       id: 'writeRecord',
       description: 'Write a record',
@@ -61,10 +62,13 @@ describe('T1 tool-roundtrip redelivery', () => {
     const readRecord = createTool({
       id: 'readRecord',
       description: 'Read a record',
-      inputSchema: z.object({ name: z.string() }),
-      execute: async () => {
-        reads++;
-        return { ...writes[0], verified: true };
+      inputSchema: z.object({ name: z.string(), receipt: z.string() }),
+      execute: async input => {
+        reads.push(input);
+        expect(input.receipt).toBe('receipt-1');
+        const result = { ...writes[0]!, verified: true as const };
+        readResults.push(result);
+        return result;
       },
     });
     const agent = createEventedAgent({
@@ -90,7 +94,7 @@ describe('T1 tool-roundtrip redelivery', () => {
       const { output, cleanup } = await agent.stream('Run the comparison.', { maxSteps: 6 });
       try {
         await output.consumeStream();
-        expect(await output.text).toBe('verified');
+        expect(await output.text).toBe('verified comparison value 42');
 
         const original = driver.stepRuns({ spec: 'tool-step' }).at(-1)!;
         const workflowRunId = original.data?.runId as string;
@@ -101,12 +105,19 @@ describe('T1 tool-roundtrip redelivery', () => {
           executionPath: [3, 0],
           stepResults: {
             'extract-tool-calls': {
-              output: [{ toolCallId: 'read-1', toolName: 'readRecord', args: { name: 'comparison' } }],
+              output: [
+                {
+                  toolCallId: 'read-1',
+                  toolName: 'readRecord',
+                  args: { name: 'comparison', receipt: 'receipt-1' },
+                },
+              ],
             },
           },
         });
         expect(writes).toEqual([{ name: 'comparison', amount: 42 }]);
-        expect(reads).toBe(1);
+        expect(reads).toEqual([{ name: 'comparison', receipt: 'receipt-1' }]);
+        expect(readResults).toEqual([{ name: 'comparison', amount: 42, verified: true }]);
         expect(modelCalls).toBe(3);
 
         const deliveriesBefore = driver.deliveryCount(match);
@@ -118,8 +129,16 @@ describe('T1 tool-roundtrip redelivery', () => {
         expect(driver.deliveryCount(match)).toBe(deliveriesBefore + 1);
 
         // COR-1307: the harness's fresh-id replay re-executes the completed read tool step.
-        await vi.waitFor(() => expect(reads).toBe(2));
-        expect(writes).toHaveLength(1);
+        await vi.waitFor(() => expect(reads).toHaveLength(2));
+        expect(reads).toEqual([
+          { name: 'comparison', receipt: 'receipt-1' },
+          { name: 'comparison', receipt: 'receipt-1' },
+        ]);
+        expect(readResults).toEqual([
+          { name: 'comparison', amount: 42, verified: true },
+          { name: 'comparison', amount: 42, verified: true },
+        ]);
+        expect(writes).toEqual([{ name: 'comparison', amount: 42 }]);
         expect(modelCalls).toBe(3);
       } finally {
         cleanup();

@@ -21,6 +21,7 @@ describe('T4 background-tools redelivery', () => {
     async ({ disposition, args }) => {
       let modelCalls = 0;
       const emittedArgs: unknown[] = [];
+      const chunkTypes: string[] = [];
       const model = new MockLanguageModelV2({
         doStream: async () => {
           modelCalls++;
@@ -91,9 +92,13 @@ describe('T4 background-tools redelivery', () => {
       try {
         await mastra.startWorkers();
         driver.assertEvented(agent.getWorkflow() as { engineType?: string });
-        const stream = await agent.stream('Research delivery.', { maxSteps: 4 });
+        const stream = await agent.stream('Research delivery.', {
+          maxSteps: 4,
+          onChunk: chunk => chunkTypes.push(chunk.type),
+        });
         cleanup = stream.cleanup;
         await stream.output.consumeStream();
+        expect(await stream.output.text).toBe('done');
         expect(emittedArgs[0]).toEqual(args);
         await vi.waitFor(() => expect(received).toHaveLength(1));
         expect(received[0]).toEqual({ topic: 'delivery' });
@@ -105,6 +110,17 @@ describe('T4 background-tools redelivery', () => {
           workflowId: 'durable-agentic-execution',
           runId: workflowRunId,
           executionPath: [3, 0],
+          stepResults: {
+            'extract-tool-calls': {
+              output: [
+                {
+                  toolCallId: `${disposition}-1`,
+                  toolName: 'research',
+                  args,
+                },
+              ],
+            },
+          },
         });
         const deliveriesBefore = driver.deliveryCount(match);
         const { event, handled } = await driver.redeliver(match, { viaPublish: true });
@@ -119,6 +135,7 @@ describe('T4 background-tools redelivery', () => {
         const expectedExecutions = disposition === 'awaited' ? 1 : 2;
         await vi.waitFor(() => expect(received).toHaveLength(expectedExecutions));
         expect(received).toEqual(Array.from({ length: expectedExecutions }, () => ({ topic: 'delivery' })));
+        expect(chunkTypes.filter(type => type === 'background-task-started')).toHaveLength(1);
         expect(modelCalls).toBe(2);
       } finally {
         cleanup?.();

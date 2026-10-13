@@ -54,8 +54,14 @@ async function runCell(engine: Engine) {
   if (engine === 'evented') await mastra.startWorkers();
   try {
     const run = await parent.createRun({ runId: `t56-${engine}-run` });
-    expect((await run.start({ inputData: { value: 0 } })).status).toBe('suspended');
-    expect((await run.resume({ step: [nested.id, 'gate'], resumeData: { add: 1 } })).status).toBe('suspended');
+    const started = await run.start({ inputData: { value: 0 } });
+    expect(started.status).toBe('suspended');
+    if (engine === 'default') expect(started.suspendPayload).toEqual({ [nested.id]: { value: 0 } });
+    expect(executed).toEqual([]);
+    const firstResume = await run.resume({ step: [nested.id, 'gate'], resumeData: { add: 1 } });
+    expect(firstResume.status).toBe('suspended');
+    if (engine === 'default') expect(firstResume.suspendPayload).toEqual({ [nested.id]: { value: 1 } });
+    expect(executed).toEqual([0]);
     const result = await run.resume({ step: [nested.id, 'gate'], resumeData: { add: 1 } });
     expect(result.status).toBe('success');
     expect(result.result).toEqual({ value: 2 });
@@ -83,8 +89,12 @@ describe('T56 wf-nested-suspend-loop', () => {
       driver.assertEvented(parent);
       const runId = 't56-redeliver-run';
       const run = await parent.createRun({ runId });
-      expect((await run.start({ inputData: { value: 0 } })).status).toBe('suspended');
-      expect((await run.resume({ step: [nested.id, 'gate'], resumeData: { add: 1 } })).status).toBe('suspended');
+      const started = await run.start({ inputData: { value: 0 } });
+      expect(started.status).toBe('suspended');
+      expect(executed).toEqual([]);
+      const firstResume = await run.resume({ step: [nested.id, 'gate'], resumeData: { add: 1 } });
+      expect(firstResume.status).toBe('suspended');
+      expect(executed).toEqual([0]);
       const result = await run.resume({ step: [nested.id, 'gate'], resumeData: { add: 1 } });
       expect(result.status).toBe('success');
       expect(result.result).toEqual({ value: 2 });
@@ -97,6 +107,7 @@ describe('T56 wf-nested-suspend-loop', () => {
       const outcome = await driver.redeliver(match, { viaPublish: true });
       expect(outcome.event.id).not.toBe(original.id);
       expect(outcome.event.deliveryAttempt).toBe(1);
+      expect(outcome.event.data).toEqual(original.data);
       expect(outcome.handled).toHaveLength(1);
       expect(outcome.handled[0]!.result.ok).toBe(true);
       expect(driver.deliveryCount(match)).toBe(before + 1);
