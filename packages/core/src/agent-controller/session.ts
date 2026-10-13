@@ -1545,9 +1545,19 @@ export class SessionStream {
     return this.#subscription === subscription ? this.#abortedRunId : null;
   }
 
-  /** Stop dropping chunks for the aborted run (only if it is `runId`, when given). */
-  clearAbortedRun({ runId }: { runId?: string } = {}): void {
-    if (runId === undefined || this.#abortedRunId === runId) this.#abortedRunId = null;
+  /**
+   * Stop dropping chunks for the aborted run (only if it is `runId`, when given).
+   * Returns a callback that restores the filter while the same subscription is
+   * still live and no other run has replaced it, or undefined if nothing was cleared.
+   */
+  clearAbortedRun({ runId }: { runId?: string } = {}): (() => void) | undefined {
+    const cleared = this.#abortedRunId;
+    if (cleared === null || (runId !== undefined && cleared !== runId)) return undefined;
+    this.#abortedRunId = null;
+    const subscription = this.#subscription;
+    return () => {
+      if (this.#subscription === subscription && this.#abortedRunId === null) this.#abortedRunId = cleared;
+    };
   }
 
   /** Agent that owns `subscription`, when it is the live subscription. */
@@ -6004,11 +6014,12 @@ export class Session<TState = unknown> {
     });
     const toolsets = await this.machinery.buildToolsets(requestContext);
     let resumedSubscriptionBoundary: { promise: Promise<void>; cancel: () => void } | undefined;
+    let restoreAbortedRun: (() => void) | undefined;
     if (sourceIsActive()) {
       await this.thread.ensureSubscription(threadId, agent, requestContext, resourceId, sourceIsActive);
       // A tool call can stay parked after its run was aborted. Resuming it reuses
       // the aborted run id, so stop dropping that run's chunks on this subscription.
-      this.stream.clearAbortedRun({ runId: suspension.runId });
+      restoreAbortedRun = this.stream.clearAbortedRun({ runId: suspension.runId });
       if (sourceIsActive())
         resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
     }
@@ -6048,12 +6059,15 @@ export class Session<TState = unknown> {
           toolsets,
         },
       });
+      restoreAbortedRun = undefined;
       if (resumedSubscriptionBoundary) {
         await resumedSubscriptionBoundary.promise;
       } else {
         await observer?.promise;
       }
     } catch (error) {
+      // The resume never dispatched, so keep dropping the aborted run's trailing chunks.
+      restoreAbortedRun?.();
       if (!observer?.dispatched()) {
         this.suspensions.register({ ...address, toolName: suspension.toolName });
         this.#suspensionAgents.set(this.suspensions.get(address)!, agent);

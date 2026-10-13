@@ -176,4 +176,31 @@ describe('resuming a tool call parked after an abort (#26871)', () => {
     expect(next.some(e => e.type === 'tool_end' && e.toolCallId === 'ask-1')).toBe(false);
     expect(session.run.isRunning()).toBe(false);
   });
+
+  it('Given a resume that fails to dispatch, When it fails, Then the aborted run stays filtered and a retry still completes', async () => {
+    const harness = await createHarness('abort-resume-fails', [slowAndAskStream, () => textStream('thanks')]);
+    const { session, agent, events } = harness;
+    const markAbortedRun = vi.spyOn(session.stream, 'markAbortedRun');
+    const parked = await abortWhileSlowToolRuns(harness);
+    const subscription = markAbortedRun.mock.calls.find(([arg]) => arg.runId === parked.runId)![0].subscription;
+    expect(session.stream.abortedRunId({ subscription })).toBe(parked.runId);
+
+    const sendStreamResume = vi.spyOn(agent, 'sendStreamResume').mockRejectedValueOnce(new Error('dispatch failed'));
+    await session.respondToToolSuspension({ toolCallId: parked.toolCallId, resumeData: 'the first' });
+    expect(sendStreamResume).toHaveBeenCalledTimes(1);
+    expect(events.some(e => e.type === 'error' && e.error.message === 'dispatch failed')).toBe(true);
+    expect(session.stream.abortedRunId({ subscription })).toBe(parked.runId);
+    expect(session.suspensions.has({ toolCallId: parked.toolCallId })).toBe(true);
+
+    sendStreamResume.mockRestore();
+    const resumeStart = events.length;
+    await withTimeout(
+      session.respondToToolSuspension({ toolCallId: parked.toolCallId, resumeData: 'the first' }),
+      5000,
+    );
+    await vi.waitFor(() =>
+      expect(events.slice(resumeStart).some(e => e.type === 'agent_end' && e.reason === 'complete')).toBe(true),
+    );
+    expect(session.run.isRunning()).toBe(false);
+  });
 });
