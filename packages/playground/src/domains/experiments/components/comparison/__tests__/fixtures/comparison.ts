@@ -1,4 +1,5 @@
-import type { CompareExperimentsResponse, DatasetExperimentResult } from '@mastra/client-js';
+import type { CompareExperimentsResponse, DatasetExperimentResult, MastraClient } from '@mastra/client-js';
+import type { ExperimentUsage } from '@mastra/react/hooks/experiments';
 import type { ScoresByItemId } from '../../build-comparison-rows';
 
 export const DATASET_ID = 'dataset-1';
@@ -57,7 +58,7 @@ const makeResult = (overrides: Partial<DatasetExperimentResult> & Pick<DatasetEx
     startedAt: '2026-08-01T10:00:00.000Z',
     completedAt: '2026-08-01T10:00:05.000Z',
     retryCount: 0,
-    traceId: null,
+    traceId: `trace-${overrides.id}`,
     status: 'complete',
     tags: null,
     comment: null,
@@ -100,6 +101,57 @@ export const contenderResults: DatasetExperimentResult[] = [
     error: { message: 'Agent run failed: rate limited', stack: 'Error: rate limited\n    at run()' },
   }),
 ];
+
+/** Per-experiment usage: totals plus per-item usage keyed by trace id. `item-b`'s contender trace has no token metrics (it errored). */
+export const baselineUsage: ExperimentUsage = {
+  summary: { inputTokens: 210, outputTokens: 40, estimatedCost: 0.0025, costUnit: 'usd' },
+  traces: {
+    'trace-res-baseline-a': { inputTokens: 120, outputTokens: 30, estimatedCost: 0.0015, costUnit: 'usd' },
+    'trace-res-baseline-b': { inputTokens: 90, outputTokens: 10, estimatedCost: 0.001, costUnit: 'usd' },
+  },
+};
+
+export const contenderUsage: ExperimentUsage = {
+  summary: { inputTokens: 200, outputTokens: 60, estimatedCost: 0.004, costUnit: 'usd' },
+  traces: {
+    'trace-res-contender-a': { inputTokens: 200, outputTokens: 60, estimatedCost: 0.004, costUnit: 'usd' },
+  },
+};
+
+type MetricBreakdownResponse = Awaited<ReturnType<MastraClient['getMetricBreakdown']>>;
+
+const INPUT = 'mastra_model_total_input_tokens';
+const OUTPUT = 'mastra_model_total_output_tokens';
+
+/** `POST /api/observability/metrics/breakdown` per experiment, grouped by trace id and metric name. */
+export const usageBreakdownByExperimentId: Record<string, MetricBreakdownResponse> = {
+  [BASELINE_ID]: {
+    groups: [
+      {
+        dimensions: { traceId: 'trace-res-baseline-a', name: INPUT },
+        value: 120,
+        estimatedCost: 0.001,
+        costUnit: 'usd',
+      },
+      {
+        dimensions: { traceId: 'trace-res-baseline-a', name: OUTPUT },
+        value: 30,
+        estimatedCost: 0.0005,
+        costUnit: 'usd',
+      },
+    ],
+  },
+  [CONTENDER_ID]: {
+    groups: [
+      {
+        dimensions: { traceId: 'trace-res-contender-a', name: INPUT },
+        value: 200,
+        estimatedCost: 0.003,
+        costUnit: 'usd',
+      },
+    ],
+  },
+};
 
 /** Raw score rows as `GET /api/scores/run/:experimentId` returns them (`entityId` = dataset item id). */
 const makeScoreRow = (runId: string, entityId: string, scorerId: string, score: number, reason: string | null) => ({

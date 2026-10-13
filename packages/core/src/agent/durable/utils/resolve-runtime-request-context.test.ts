@@ -48,9 +48,11 @@ describe('rebuildRunToolsFromMastra request context', () => {
       if (registryState === 'placeholder') {
         globalRunRegistry.set(runId, { isPlaceholder: true, tools: {} } as any);
       }
+      // Sibling steps of one run share the same Mastra instance.
+      const mastra = makeMastra(agent);
       const rebuild = () =>
         rebuildRunToolsFromMastra({
-          mastra: makeMastra(agent),
+          mastra,
           runId,
           agentId: 'agent-1',
           state: {} as any,

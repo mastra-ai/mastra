@@ -114,7 +114,7 @@ describe('Experiments page — dataset filter from URL', () => {
 
     // The column header only renders once the (empty) list has loaded.
     expect(await screen.findByText('Target')).toBeDefined();
-    expect(screen.getByRole('button', { name: /reset/i })).toBeDefined();
+    expect(screen.getByRole('group', { name: 'Experiments filters' })).toBeDefined();
     expect(screen.queryByText('No Experiments yet')).toBeNull();
   });
 
@@ -126,11 +126,11 @@ describe('Experiments page — dataset filter from URL', () => {
     expect(screen.getByText('entity-extraction / model-b')).toBeDefined();
   });
 
-  it('clears the ?dataset= param when filters are reset', async () => {
+  it('clears the ?dataset= param when the Dataset chip is removed', async () => {
     setupHandlers();
     renderPage('/experiments?dataset=dataset-1');
 
-    fireEvent.click(await screen.findByRole('button', { name: /reset/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove Dataset filter' }));
 
     await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/experiments'));
     expect(screen.getByText('entity-extraction / model-b')).toBeDefined();

@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { experiments } from '../components/__tests__/fixtures/experiments';
-import { ExperimentCrumbStatusIcon } from '../experiment-crumb';
+import { ExperimentCrumbItemCount, ExperimentCrumbStatusIcon } from '../experiment-crumb';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -78,5 +78,54 @@ describe('ExperimentCrumbStatusIcon', () => {
 
     // The header reads the polled dataset-scoped query, not repeated unscoped lookups.
     expect(unscopedCalls).toBe(1);
+  });
+});
+
+describe('ExperimentCrumbItemCount', () => {
+  const renderCount = () =>
+    renderWithProviders(
+      <Routes>
+        <Route path="/experiments/:experimentId" element={<ExperimentCrumbItemCount />} />
+      </Routes>,
+      { router: { initialEntries: [`/experiments/${base.id}`] } },
+    );
+
+  const stubLiveExperiment = (experiment: DatasetExperiment) =>
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/datasets/:datasetId/experiments/:experimentId`, () =>
+        HttpResponse.json(experiment),
+      ),
+    );
+
+  describe('when the run is in progress', () => {
+    it('follows the processed items until the run completes', async () => {
+      stubLiveExperiment({ ...triggered, status: 'running', succeededCount: 3, failedCount: 1 });
+      renderCount();
+
+      expect(await screen.findByText('4/10 items · 1 errored')).toBeTruthy();
+
+      stubLiveExperiment({ ...triggered, status: 'completed', succeededCount: 10, failedCount: 0 });
+      await advancePoll();
+
+      expect(await screen.findByText('10 items')).toBeTruthy();
+    });
+  });
+
+  describe('when the run completed with errors', () => {
+    it('shows the total item count with the errored items', async () => {
+      stubLiveExperiment({ ...base, status: 'completed', succeededCount: 8, failedCount: 2 });
+      renderCount();
+
+      expect(await screen.findByText('10 items · 2 errored')).toBeTruthy();
+    });
+  });
+
+  describe('when the run has a single item', () => {
+    it('uses the singular noun', async () => {
+      stubLiveExperiment({ ...base, status: 'completed', totalItems: 1, succeededCount: 1, failedCount: 0 });
+      renderCount();
+
+      expect(await screen.findByText('1 item')).toBeTruthy();
+    });
   });
 });

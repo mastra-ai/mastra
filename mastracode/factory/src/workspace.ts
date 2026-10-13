@@ -599,7 +599,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // (installation tokens 403 on integration-restricted endpoints); git
       // clone/checkout keep using the minted installation token. Resolved per
       // start so the installed credential never outlives rotation.
-      const patKind = await resolveGithubPatKind('default');
+      const patKind = await resolveGithubPatKind();
       const ghCliToken =
         (await getGithubPat(() => githubProvider.integrationStorage, session.orgId, patKind)) ??
         (await getRepositoryToken());
@@ -724,13 +724,13 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       if (!token) throw new Error('Repository access did not include a bearer token for the Factory session');
       return token;
     };
-    const resolveGithubPatKind = async (fallback: GithubPatKind): Promise<GithubPatKind> => {
+    const resolveGithubPatKind = async (): Promise<GithubPatKind> => {
       if (!workItems) return 'default';
       try {
         return isActiveReviewBinding(await findSessionBinding(), session.orgId) ? 'reviewer' : 'default';
       } catch {
-        // Preserve the installed role when binding storage is temporarily unavailable.
-        return fallback;
+        // An unreadable binding cannot prove review authority, so fall back to the worker role.
+        return 'default';
       }
     };
     const githubTokenInjector = (registered: GithubTokenRegistration, generation: number) => (token: string) => {
@@ -771,7 +771,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if (!registered) return;
 
           const previousPatKind = registered.patKind;
-          const patKind = await resolveGithubPatKind(previousPatKind);
+          const patKind = await resolveGithubPatKind();
           if (githubTokenInjectors.get(workspaceId) !== registered) return;
 
           if (patKind !== previousPatKind) {
@@ -920,7 +920,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       // role-aware PAT behavior without applying GitHub credentials to other
       // source-control providers.
       if (githubProvider) {
-        const setupPatKind = await resolveGithubPatKind('default');
+        const setupPatKind = await resolveGithubPatKind();
         const setupGhToken =
           (await getGithubPat(() => githubProvider.integrationStorage, session.orgId, setupPatKind)) ?? token;
         target.setEnv?.(env => ({ ...env, GH_TOKEN: setupGhToken }));
