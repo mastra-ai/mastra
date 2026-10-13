@@ -104,10 +104,13 @@ function isStaleSuspension(liveResult: WorkflowRunStreamResult, storedResult: Wo
     if (liveStep?.status !== 'suspended') return false;
     const storedStep = storedResult.steps[stepId];
     if (!storedStep) return false;
-    if (SETTLED_STEP_STATUSES.includes(storedStep.status)) return true;
+    const settled = SETTLED_STEP_STATUSES.includes(storedStep.status);
     // A step that keeps working after resume is stored as `running` with `resumedAt` set.
-    if (typeof storedStep.resumedAt !== 'number') return false;
-    return typeof liveStep.suspendedAt !== 'number' || storedStep.resumedAt > liveStep.suspendedAt;
+    if (!settled && typeof storedStep.resumedAt !== 'number') return false;
+    // Storage may predate the step suspending again (e.g. in a loop); only trust it when it is newer.
+    const movedOnAt = settled ? storedStep.endedAt : storedStep.resumedAt;
+    if (typeof movedOnAt !== 'number' || typeof liveStep.suspendedAt !== 'number') return true;
+    return movedOnAt > liveStep.suspendedAt;
   });
 }
 

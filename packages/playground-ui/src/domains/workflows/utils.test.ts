@@ -62,6 +62,17 @@ describe('resolveWorkflowRunResult', () => {
     });
   });
 
+  describe('when storage holds an earlier settled result of a step that suspended again', () => {
+    it('keeps the observed suspension', () => {
+      const live = {
+        ...replayedSuspension,
+        steps: { approval: { status: 'suspended', payload: {}, startedAt: 300, suspendedAt: 305 } },
+      } as WorkflowRunStreamResult;
+      const stored = storedRun({ approval: { status: 'success', startedAt: 100, endedAt: 120 } });
+      expect(resolveWorkflowRunResult(live, stored)?.steps.approval.status).toBe('suspended');
+    });
+  });
+
   describe('when storage has not caught up with the suspension', () => {
     it('keeps the observed suspension', () => {
       const stored = storedRun({ approval: { status: 'running', startedAt: 100 } });
