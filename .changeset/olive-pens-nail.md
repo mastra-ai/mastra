@@ -9,7 +9,7 @@ Added agent version labels, conditional label updates, and immutable execution p
 await agent.generate('Hello');
 
 // Select the version currently assigned to an existing label.
-await agent.generate('Hello', { versions: { self: { label: 'candidate' } } });
+await agent.generate('Hello', { versions: { agents: { [agent.id]: { label: 'candidate' } } } });
 ```
 
 Added label storage to InMemory and Filesystem, with protection against deleting labeled versions. Filesystem conditional-write coordination is limited to one process. Labels are agent-only; prompt blocks and skills are not supported, and root selections are not inherited by sub-agents.
