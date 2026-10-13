@@ -1457,6 +1457,7 @@ export class MastraFactory {
       session =>
         hydrateSupervisorSession(session, {
           projects: factoryProjectsStorage,
+          modelDefaults: modelDefaultsStorage,
         }).catch(error => {
           console.warn('[Factory Supervisor] Failed to hydrate supervisor session', {
             error: error instanceof Error ? error.message : String(error),
@@ -1480,7 +1481,8 @@ export class MastraFactory {
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionDefaultModel(session, {
-          sourceControl: { sessions: sourceControlSessions },
+          sourceControl: sourceControlSessions,
+          projects: factoryProjectsStorage,
           workItems: workItemsStorage,
           modelDefaults: modelDefaultsStorage,
         }),

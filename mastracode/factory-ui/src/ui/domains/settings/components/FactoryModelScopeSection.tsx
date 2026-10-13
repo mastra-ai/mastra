@@ -33,7 +33,8 @@ export function FactoryModelScopeSection() {
       description={
         <>
           <span>
-            This setting is saved now. Session model and credential resolution will follow it once support is wired in.
+            Factory: all sessions use only organization credentials and the Factory default model. User: each session
+            uses only its owner's credentials and default model.
           </span>
           {error && (
             <Txt as="span" variant="meta" className="text-destructive-foreground">

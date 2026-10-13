@@ -48,7 +48,7 @@ describe('credential store provider registry', () => {
     ctx.set('user', { workosId: 'user_1', id: 'prov_1', organizationId: 'org_1' });
 
     expect(resolveCredentialStore(ctx)).toBe(store);
-    expect(seenTenant).toEqual({ orgId: 'org_1', userId: 'user_1' });
+    expect(seenTenant).toEqual({ orgId: 'org_1', userId: 'user_1', credentialScope: 'user' });
   });
 
   it('fails closed without an authenticated tenant on the request context', async () => {
@@ -63,12 +63,14 @@ describe('credential store provider registry', () => {
     expect(warn).toHaveBeenNthCalledWith(1, '[MastraCode] Tenant credential resolution failed closed', {
       reason: 'missing-user-context',
       hasRequestContext: false,
-      factorySession: false,
+      credentialScope: 'user',
+      ownerResolved: false,
     });
     expect(warn).toHaveBeenNthCalledWith(2, '[MastraCode] Tenant credential resolution failed closed', {
       reason: 'missing-user-context',
       hasRequestContext: true,
-      factorySession: false,
+      credentialScope: 'user',
+      ownerResolved: false,
     });
     warn.mockRestore();
   });
@@ -85,7 +87,8 @@ describe('credential store provider registry', () => {
     expect(warn).toHaveBeenCalledWith('[MastraCode] Tenant credential resolution failed closed', {
       reason: 'credential-store-unavailable',
       hasOrganization: true,
-      orgFirst: false,
+      credentialScope: 'user',
+      ownerResolved: true,
     });
     warn.mockRestore();
   });
@@ -93,13 +96,21 @@ describe('credential store provider registry', () => {
   it('falls back to the provider id when workosId is absent', () => {
     const ctx = new RequestContext();
     ctx.set('user', { id: 'prov_2' });
-    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: undefined, userId: 'prov_2' });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: undefined,
+      userId: 'prov_2',
+      credentialScope: 'user',
+    });
   });
 
   it('reads a session-shaped user, whose org lives on the session half', () => {
     const ctx = new RequestContext();
     ctx.set('user', { session: { activeOrganizationId: 'org_1' }, user: { id: 'prov_3' } });
-    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'prov_3' });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: 'org_1',
+      userId: 'prov_3',
+      credentialScope: 'user',
+    });
   });
 
   it('takes a session-shaped user org from the session half only, never the inner user', () => {
@@ -108,41 +119,95 @@ describe('credential store provider registry', () => {
     // `toFactoryAuthUser` in `@mastra/factory` reads the session half and nothing
     // else. Falling back to the inner user here would resolve a tenant the
     // Factory refuses, and the two would disagree about who the caller is.
-    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: undefined, userId: 'prov_4' });
-  });
-
-  it('carries the org-first flag only when it is exactly true', () => {
-    const flagged = new RequestContext();
-    flagged.set('user', { workosId: 'user_1', organizationId: 'org_1', orgFirstCredentials: true });
-    expect(resolveTenantFromRequestContext(flagged)).toEqual({ orgId: 'org_1', userId: 'user_1', orgFirst: true });
-
-    const truthy = new RequestContext();
-    truthy.set('user', { workosId: 'user_1', organizationId: 'org_1', orgFirstCredentials: 'yes' });
-    expect(resolveTenantFromRequestContext(truthy)).toEqual({ orgId: 'org_1', userId: 'user_1' });
-  });
-
-  it('reads the org-first flag stamped on a session-shaped wrapper', () => {
-    const ctx = new RequestContext();
-    ctx.set('user', {
-      session: { activeOrganizationId: 'org_1' },
-      user: { id: 'prov_6' },
-      orgFirstCredentials: true,
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: undefined,
+      userId: 'prov_4',
+      credentialScope: 'user',
     });
-    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'prov_6', orgFirst: true });
   });
 
-  it('flips org-first for runs on a factory-owned session, keyed off controller state', () => {
+  it('uses factory scope for a factory project when the scope is absent', () => {
     const ctx = new RequestContext();
     ctx.set('user', { workosId: 'user_1', organizationId: 'org_1' });
     ctx.set('controller', { state: { factoryProjectId: 'project-1' } });
-    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'user_1', orgFirst: true });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: 'org_1',
+      userId: 'user_1',
+      credentialScope: 'factory',
+    });
   });
 
-  it('keeps user-first when controller state carries no factory project', () => {
+  it.each(['factory', 'user'] as const)('uses the stamped %s credential scope', credentialScope => {
+    const ctx = new RequestContext();
+    ctx.set('user', { workosId: 'user_1', organizationId: 'org_1' });
+    ctx.set('controller', {
+      state: {
+        factoryProjectId: 'project-1',
+        factoryModelScope: credentialScope,
+        factoryOwnerUserId: 'user_1',
+      },
+    });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: 'org_1',
+      userId: 'user_1',
+      credentialScope,
+    });
+  });
+
+  it('uses stamped factory scope for an interactive repo session without a factory project id', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { workosId: 'user_1', organizationId: 'org_1' });
+    ctx.set('controller', { state: { factoryModelScope: 'factory', factoryOrgId: 'org_factory' } });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: 'org_factory',
+      userId: 'user_1',
+      credentialScope: 'factory',
+    });
+  });
+
+  it('uses the session owner instead of the sender for user scope', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { workosId: 'u-sender', organizationId: 'org_1' });
+    ctx.set('controller', {
+      state: { factoryModelScope: 'user', factoryOwnerUserId: 'u-owner', factoryOrgId: 'org_factory' },
+    });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: 'org_factory',
+      userId: 'u-owner',
+      credentialScope: 'user',
+    });
+  });
+
+  it('fails closed when a Factory user-scope session has no owner', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', { workosId: 'u-sender', organizationId: 'org_1' });
+    ctx.set('controller', { state: { factoryModelScope: 'user' } });
+    expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
+  });
+
+  it('ignores the removed principal precedence flag', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', {
+      workosId: 'user_1',
+      organizationId: 'org_1',
+      ['org' + 'FirstCredentials']: true,
+    });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: 'org_1',
+      userId: 'user_1',
+      credentialScope: 'user',
+    });
+  });
+
+  it('uses user scope when controller state carries no Factory identity', () => {
     const ctx = new RequestContext();
     ctx.set('user', { workosId: 'user_1', organizationId: 'org_1' });
     ctx.set('controller', { state: { projectPath: '/tmp/x' } });
-    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'user_1' });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: 'org_1',
+      userId: 'user_1',
+      credentialScope: 'user',
+    });
   });
 
   it('ignores malformed user values', () => {

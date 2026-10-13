@@ -20,7 +20,6 @@ import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
-  resolveFactoryDefaultModelId,
   resolveFactoryProjectForSession,
   resolveFactorySourceControl,
   resolveFactorySourceRepository,
@@ -374,12 +373,15 @@ export async function prepareFactoryRuleBinding(
         attributeToUserId: isAgentActor(approver) ? undefined : approver,
       }));
 
+    const project = await projects.getById({ id: input.record.factoryProjectId });
+    const modelScope = project?.modelScope ?? 'factory';
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
-      defaultModelId: await resolveFactoryDefaultModelId(projects, input.record.factoryProjectId),
+      modelScope,
+      defaultModelId: modelScope === 'factory' ? (project?.defaultModelId ?? undefined) : undefined,
       threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
       kickoffKey: input.record.id,
       destinationStage,
@@ -671,6 +673,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
             sessionId: request.sessionId,
           }),
         deps.domains.intake,
+        { projects: deps.domains.projects, modelDefaults: deps.domains.modelDefaults },
       )
     : undefined;
   if (transitionService && startCoordinator) {

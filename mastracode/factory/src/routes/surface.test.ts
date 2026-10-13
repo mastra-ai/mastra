@@ -10,15 +10,18 @@ import { FactoryTransitionService } from '../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { prepareFactoryRuleBinding } from './surface.js';
 
-async function seedFactoryWithRepository(options?: { defaultModelId?: string }) {
+async function seedFactoryWithRepository(options?: { defaultModelId?: string; modelScope?: 'factory' | 'user' }) {
   const seeded = await createFactoryStorageForTests();
   const sourceControl = seeded.sourceControl.forIntegration('github');
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Mastra' } });
-  if (options?.defaultModelId) {
+  if (options?.defaultModelId || options?.modelScope) {
     await seeded.projects.update({
       orgId: 'org-1',
       id: project.id,
-      input: { defaultModelId: options.defaultModelId },
+      input: {
+        ...(options.defaultModelId ? { defaultModelId: options.defaultModelId } : {}),
+        ...(options.modelScope ? { modelScope: options.modelScope } : {}),
+      },
     });
   }
   const installation = await sourceControl.installations.upsert({
@@ -86,7 +89,11 @@ describe('prepareFactoryRuleBinding', () => {
     );
 
     expect(prepare).toHaveBeenCalledWith(
-      expect.objectContaining({ defaultModelId: 'anthropic/claude-opus-5', destinationStage: 'triage' }),
+      expect.objectContaining({
+        modelScope: 'factory',
+        defaultModelId: 'anthropic/claude-opus-5',
+        destinationStage: 'triage',
+      }),
     );
   });
 
@@ -103,6 +110,24 @@ describe('prepareFactoryRuleBinding', () => {
     );
 
     expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ defaultModelId: undefined }));
+  });
+
+  it('forwards user scope without a Factory model fallback', async () => {
+    const { seeded, project, github } = await seedFactoryWithRepository({
+      defaultModelId: 'anthropic/claude-opus-5',
+      modelScope: 'user',
+    });
+    const prepare = vi.fn(async () => ({}) as never);
+
+    await prepareFactoryRuleBinding(
+      github,
+      { prepare } as unknown as FactoryStartCoordinator,
+      seeded.projects,
+      boards,
+      bindingInput(project.id),
+    );
+
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ modelScope: 'user', defaultModelId: undefined }));
   });
 
   it('creates the source-control session the coordinator requires', async () => {

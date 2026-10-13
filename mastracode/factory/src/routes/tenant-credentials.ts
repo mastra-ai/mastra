@@ -3,8 +3,8 @@
  *
  * The SDK's `resolveModel` asks the registered `CredentialStoreProvider` for a
  * store synchronously, so this module keeps a small per-tenant **snapshot** of
- * resolved credentials (user rows over org rows) hydrated from the
- * `model-credentials` domain. The snapshot serves the gateway's synchronous
+ * credentials from one exclusive scope hydrated from the `model-credentials`
+ * domain. The snapshot serves the gateway's synchronous
  * path-selection reads (`get` / `getStoredApiKey`); the fetch-time
  * `getApiKey` is authoritative — it re-resolves against the domain and
  * refreshes expired OAuth tokens under the domain's row lock, so a slightly
@@ -41,7 +41,7 @@ export class TenantCredentialStore implements CredentialStore {
   readonly allowEnvironmentFallback = false;
   readonly #orgId: string;
   readonly #userId: string;
-  readonly #orgFirst: boolean;
+  readonly #scope: SdkCredentialTenant['credentialScope'];
   readonly #credentials: ModelCredentialsStorage | undefined;
   readonly #deploymentProviders: ReadonlySet<string>;
   #snapshot = new Map<string, AuthCredential>();
@@ -52,13 +52,13 @@ export class TenantCredentialStore implements CredentialStore {
     orgId: string,
     userId: string,
     credentials: ModelCredentialsStorage | undefined,
-    orgFirst = false,
+    scope: SdkCredentialTenant['credentialScope'],
     deploymentProviders: ReadonlySet<string> = new Set(),
   ) {
     this.#orgId = orgId;
     this.#userId = userId;
     this.#credentials = credentials;
-    this.#orgFirst = orgFirst;
+    this.#scope = scope;
     this.#deploymentProviders = deploymentProviders;
   }
 
@@ -81,13 +81,8 @@ export class TenantCredentialStore implements CredentialStore {
     if (!storage) return; // Keep the last tenant-scoped snapshot.
     const records = await storage.listCredentials(this.#orgId, this.#userId);
     const next = new Map<string, AuthCredential>();
-    // Lower-precedence rows first so higher-precedence rows overwrite them
-    // (user > org normally; org > user for org-first automated runs).
-    const [under, over] = this.#orgFirst ? (['user', 'org'] as const) : (['org', 'user'] as const);
-    for (const record of records.filter(r => r.scope === under)) {
-      next.set(record.provider, record.credential);
-    }
-    for (const record of records.filter(r => r.scope === over)) {
+    const storageScope = this.#scope === 'factory' ? 'org' : 'user';
+    for (const record of records.filter(r => r.scope === storageScope)) {
       next.set(record.provider, record.credential);
     }
     this.#snapshot = next;
@@ -111,7 +106,7 @@ export class TenantCredentialStore implements CredentialStore {
   }
 
   /**
-   * Authoritative fetch-time resolution: re-reads the domain (user > org) and
+   * Authoritative fetch-time resolution: re-reads only the selected scope and
    * refreshes expired OAuth tokens under the domain's row lock. Mirrors
    * `AuthStorage.getApiKey` semantics: `undefined` on missing credential or
    * failed refresh (caller surfaces a re-login error).
@@ -133,7 +128,7 @@ export class TenantCredentialStore implements CredentialStore {
       this.#orgId,
       this.#userId,
       provider,
-      this.#orgFirst ? 'org' : 'user',
+      this.#scope === 'factory' ? 'org' : 'user',
     );
     if (!resolved) {
       this.#snapshot.delete(provider);
@@ -176,15 +171,20 @@ let registeredDeploymentProviders: ReadonlySet<string> = new Set();
 
 function storeFor(tenant: SdkCredentialTenant, credentials: ModelCredentialsStorage): TenantCredentialStore {
   const orgId = tenantOrgId(tenant);
-  const orgFirst = tenant.orgFirst === true;
-  const key = `${orgId}\u0000${tenant.userId}\u0000${orgFirst ? 'org-first' : 'user-first'}`;
+  const key = `${orgId}\u0000${tenant.userId}\u0000${tenant.credentialScope}`;
   let store = tenantStores.get(key);
   if (!store) {
     if (tenantStores.size >= MAX_CACHED_TENANTS) {
       const oldest = tenantStores.keys().next().value;
       if (oldest !== undefined) tenantStores.delete(oldest);
     }
-    store = new TenantCredentialStore(orgId, tenant.userId, credentials, orgFirst, registeredDeploymentProviders);
+    store = new TenantCredentialStore(
+      orgId,
+      tenant.userId,
+      credentials,
+      tenant.credentialScope,
+      registeredDeploymentProviders,
+    );
     tenantStores.set(key, store);
   }
   return store;
@@ -217,7 +217,22 @@ export function registerTenantCredentialResolver(
 export async function primeTenantCredentialsForRequestContext(requestContext: RequestContext): Promise<void> {
   const tenant = resolveTenantFromRequestContext(requestContext);
   if (!tenant || !registeredCredentials) return;
-  await primeTenantCredentials({ tenant, credentials: registeredCredentials });
+  await storeFor(tenant, registeredCredentials).ensureFresh();
+}
+
+/** Prime one already-resolved Factory session tenant before entering the agent run. */
+export async function primeTenantCredentialsForTenant(tenant: SdkCredentialTenant): Promise<void> {
+  if (!registeredCredentials) return;
+  try {
+    await storeFor(tenant, registeredCredentials).ensureFresh();
+  } catch (error) {
+    console.warn('[factory] Failed to prime scoped tenant model credentials', {
+      orgId: tenant.orgId,
+      userId: tenant.userId,
+      credentialScope: tenant.credentialScope,
+      error,
+    });
+  }
 }
 
 /** Test hook: clear registration and cached tenant snapshots. */
@@ -236,8 +251,8 @@ export function resetTenantCredentialResolverForTests(): void {
  */
 export function invalidateTenantCredentialSnapshots(tenant: { orgId: string; userId?: string }): void {
   if (tenant.userId) {
-    tenantStores.delete(`${tenant.orgId}\u0000${tenant.userId}\u0000user-first`);
-    tenantStores.delete(`${tenant.orgId}\u0000${tenant.userId}\u0000org-first`);
+    tenantStores.delete(`${tenant.orgId}\u0000${tenant.userId}\u0000user`);
+    tenantStores.delete(`${tenant.orgId}\u0000${tenant.userId}\u0000factory`);
     return;
   }
   for (const key of tenantStores.keys()) {
@@ -246,21 +261,20 @@ export function invalidateTenantCredentialSnapshots(tenant: { orgId: string; use
 }
 
 /**
- * Middleware mounted after the web auth gate: primes both credential precedence
- * modes so the request's first model call can resolve user → organization when
- * `orgFirst` is false or organization → user when `orgFirst` is true. Cheap when
- * fresh because each store has a TTL.
+ * Middleware mounted after the web auth gate: primes both exclusive credential
+ * scopes because the HTTP principal is known before the controller session is.
+ * Cheap when fresh because each store has a TTL.
  */
 export async function primeTenantCredentials({
   tenant,
   credentials,
 }: {
-  tenant: SdkCredentialTenant;
+  tenant: Pick<SdkCredentialTenant, 'orgId' | 'userId'> & Partial<Pick<SdkCredentialTenant, 'credentialScope'>>;
   credentials: ModelCredentialsStorage;
 }): Promise<void> {
   await Promise.all([
-    storeFor({ ...tenant, orgFirst: false }, credentials).ensureFresh(),
-    storeFor({ ...tenant, orgFirst: true }, credentials).ensureFresh(),
+    storeFor({ ...tenant, credentialScope: 'user' }, credentials).ensureFresh(),
+    storeFor({ ...tenant, credentialScope: 'factory' }, credentials).ensureFresh(),
   ]);
 }
 

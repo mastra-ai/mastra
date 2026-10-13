@@ -1,6 +1,8 @@
+import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { resolveFactoryProjectForSession, type SourceControlSessionLookup } from './factory-session.js';
 
 export interface DefaultModelApplicableSession {
   model: { switch(modelId: string): Promise<unknown> };
@@ -9,7 +11,10 @@ export interface DefaultModelApplicableSession {
 
 export interface DefaultModelHydrationSession extends DefaultModelApplicableSession {
   readonly identity: { getResourceId(): string };
-  state: { get(): Record<string, unknown> | undefined };
+  state: {
+    get(): Record<string, unknown> | undefined;
+    set(updates: Record<string, unknown>): Promise<unknown>;
+  };
   thread: {
     getId(): string | null | undefined;
     getSetting(args: { key: string }): Promise<unknown>;
@@ -25,23 +30,61 @@ async function applyDefaultModel(session: DefaultModelApplicableSession, modelId
 }
 
 export interface DefaultModelHydrationDependencies {
-  sourceControl: {
-    sessions: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
-  };
+  sourceControl: Pick<SourceControlSessionLookup, 'getBySessionId' | 'getSourceControlBySessionId'>;
+  projects: Pick<FactoryProjectsStorage, 'getById'>;
   workItems: Pick<WorkItemsStorage, 'findActiveRunBindingByThread'>;
   modelDefaults: Pick<ModelDefaultsStorage, 'get'>;
 }
 
-/** Seed the user's default model unless the interactive thread already selected its own model. */
+/** Seed a repo session's scoped default model unless its thread already selected one. */
 export async function hydrateSessionDefaultModel(
   session: DefaultModelHydrationSession,
-  { sourceControl, workItems, modelDefaults }: DefaultModelHydrationDependencies,
+  { sourceControl, projects, workItems, modelDefaults }: DefaultModelHydrationDependencies,
 ): Promise<void> {
   const resourceId = session.identity.getResourceId();
-  if (session.state.get()?.factoryProjectId || typeof session.thread.getSetting !== 'function') return;
+  const initialState = session.state.get() ?? {};
+  if (initialState.factoryProjectId || typeof session.thread.getSetting !== 'function') return;
+  const hadFactoryIdentity = initialState.factoryModelScope === 'factory' || initialState.factoryModelScope === 'user';
+  const clearFactoryIdentity = () =>
+    session.state.set({ factoryOrgId: undefined, factoryModelScope: undefined, factoryOwnerUserId: undefined });
+  const failClosedWithoutIdentity = () =>
+    session.state.set({ factoryModelScope: 'user', factoryOwnerUserId: undefined });
+  let identityResolved = false;
   try {
-    const sourceSession = await sourceControl.sessions.getBySessionId(resourceId);
-    if (!sourceSession) return;
+    const sourceSession = await sourceControl.getBySessionId(resourceId);
+    if (!sourceSession) {
+      await clearFactoryIdentity();
+      return;
+    }
+    const sourceControlHandle = await sourceControl.getSourceControlBySessionId(resourceId);
+    if (!sourceControlHandle) {
+      await clearFactoryIdentity();
+      return;
+    }
+    const owner = await resolveFactoryProjectForSession({ sourceControl: sourceControlHandle, sessionId: resourceId });
+    if (!owner) {
+      await clearFactoryIdentity();
+      return;
+    }
+    const project = await projects.getById({ id: owner.factoryProjectId });
+    if (!project) {
+      await clearFactoryIdentity();
+      return;
+    }
+
+    const modelScope = project.modelScope === 'user' ? 'user' : 'factory';
+    await session.state.set({
+      factoryOrgId: sourceSession.orgId,
+      factoryModelScope: modelScope,
+      factoryOwnerUserId: sourceSession.userId,
+    });
+    identityResolved = true;
+    await primeTenantCredentialsForTenant({
+      orgId: sourceSession.orgId,
+      userId: sourceSession.userId,
+      credentialScope: modelScope,
+    });
+
     const threadId = session.thread.getId();
     if (
       threadId &&
@@ -62,9 +105,19 @@ export async function hydrateSessionDefaultModel(
     ]);
     if (existingThreadSettings.some(setting => typeof setting === 'string')) return;
 
+    if (modelScope === 'factory') {
+      if (project.defaultModelId) await applyDefaultModel(session, project.defaultModelId);
+      return;
+    }
+
     const modelDefault = await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId });
     if (modelDefault) await applyDefaultModel(session, modelDefault.modelId);
   } catch (error) {
-    console.warn('[Factory default-model hydration] Unable to apply the user default model.', error);
+    if (!identityResolved && !hadFactoryIdentity) {
+      try {
+        await failClosedWithoutIdentity();
+      } catch {}
+    }
+    console.warn('[Factory default-model hydration] Unable to apply the scoped default model.', error);
   }
 }

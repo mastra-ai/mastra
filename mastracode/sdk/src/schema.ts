@@ -42,6 +42,10 @@ export interface MastraCodeState {
   projectName?: string;
   /** Factory project that owns this session. */
   factoryProjectId?: string;
+  /** Whether this session uses organization or owner-scoped models and credentials. */
+  factoryModelScope?: 'factory' | 'user';
+  /** Stable user id of the Factory session owner. */
+  factoryOwnerUserId?: string;
   /** Authoritative organization id seeded by factory at session construction. */
   factoryOrgId?: string;
   /**
@@ -175,6 +179,8 @@ export const stateSchema = z
     projectPath: z.string().optional(),
     projectName: z.string().optional(),
     factoryProjectId: z.string().optional(),
+    factoryModelScope: z.enum(['factory', 'user']).optional(),
+    factoryOwnerUserId: z.string().optional(),
     factoryOrgId: z.string().optional(),
     factoryOrgUnresolved: z.boolean().optional(),
     projectRepositoryId: z.string().optional(),

@@ -3,9 +3,12 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 
 import { boardForWorkItem } from '../boards/index.js';
-import { hydrateFactorySession } from '../session/factory-session.js';
+import { primeTenantCredentialsForTenant } from '../routes/tenant-credentials.js';
+import { hydrateFactorySession, resolveFactorySessionModel } from '../session/factory-session.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
+import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import type { FactoryModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { CreateWorkItemInput, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -20,6 +23,7 @@ export interface FactoryStartRequest {
   kickoffKey: string;
   /** Where the arrival path lands the card; a session opened on an existing card names none. */
   destinationStage?: FactoryRuleStage;
+  modelScope: FactoryModelScope;
   defaultModelId?: string;
   workItem: {
     id?: string;
@@ -104,6 +108,8 @@ export class FactoryStartCoordinator {
         request: FactoryStartRequest,
       ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>);
   readonly #intake?: IntakeStorage;
+  readonly #projects?: FactoryProjectsStorage;
+  readonly #modelDefaults?: ModelDefaultsStorage;
 
   constructor(
     controller: FactoryController,
@@ -115,12 +121,15 @@ export class FactoryStartCoordinator {
           request: FactoryStartRequest,
         ) => SourceControlStorageHandle | undefined | Promise<SourceControlStorageHandle | undefined>),
     intake?: IntakeStorage,
+    sessionModel?: { projects: FactoryProjectsStorage; modelDefaults: ModelDefaultsStorage },
   ) {
     this.#controller = controller;
     this.#storage = storage;
     this.#transitionService = transitionService;
     this.#sourceControl = sourceControl;
     this.#intake = intake;
+    this.#projects = sessionModel?.projects;
+    this.#modelDefaults = sessionModel?.modelDefaults;
   }
 
   async prepare(request: FactoryStartRequest): Promise<FactoryStartPreparedResult> {
@@ -129,6 +138,16 @@ export class FactoryStartCoordinator {
       typeof this.#sourceControl === 'function' ? await this.#sourceControl(request) : this.#sourceControl;
     if (!sourceControl) throw new Error('Factory source control storage is unavailable');
     const sourceSession = await resolveSourceSession(sourceControl, request);
+    const sessionModel =
+      this.#projects && this.#modelDefaults
+        ? await resolveFactorySessionModel({
+            projects: this.#projects,
+            modelDefaults: this.#modelDefaults,
+            factoryProjectId: request.factoryProjectId,
+            orgId: request.orgId,
+            ownerUserId: sourceSession.userId,
+          })
+        : { modelScope: request.modelScope, modelId: request.defaultModelId };
     const storedItem = request.workItem.id
       ? await storage.get({ orgId: request.orgId, id: request.workItem.id })
       : null;
@@ -180,18 +199,14 @@ export class FactoryStartCoordinator {
       );
     }
     const requestContext = request.requestContext ?? new RequestContext();
-    // Factory runs resolve model credentials org > user: the org's shared keys
-    // win, with the acting user's personal credentials as a fallback — a board
-    // run should never silently prefer whoever kicked it off. The flag rides
-    // the stashed user even when a caller-provided context already has one.
+    // Preserve an authenticated caller when present. Autonomous starts still
+    // need a principal so deployed credential resolution can authenticate the
+    // request before selecting the stamped session owner's exclusive scope.
     const existingUser = requestContext.get('user');
-    if (existingUser && typeof existingUser === 'object') {
-      requestContext.set('user', { ...existingUser, orgFirstCredentials: true });
-    } else {
+    if (!existingUser || typeof existingUser !== 'object') {
       requestContext.set('user', {
         workosId: request.userId,
         organizationId: request.orgId,
-        orgFirstCredentials: true,
       });
     }
     // Sessions kicked off against third-party content (a PR under review, or
@@ -233,17 +248,26 @@ export class FactoryStartCoordinator {
       // memory seam's organizationId): the session owner is a USER id, not an
       // org, so it must never be improvised from ownerId.
       factoryOrgId: request.orgId,
+      factoryModelScope: sessionModel.modelScope,
+      factoryOwnerUserId: sourceSession.userId,
       pluginInstructions: [
         ...existingPluginInstructions.filter(instruction => instruction !== targetRepositoryInstruction),
         targetRepositoryInstruction,
       ],
       ...(untrustedCheckout ? { untrustedCheckout: true, ...(baseRef ? { baseRef } : {}) } : {}),
     });
+    await primeTenantCredentialsForTenant({
+      orgId: request.orgId,
+      userId: sourceSession.userId,
+      credentialScope: sessionModel.modelScope,
+    });
     // Apply the factory's main model before any model-dependent run work.
     // Observational-memory settings are loaded per invocation by the input processor.
     await hydrateFactorySession(session, {
       orgId: request.orgId,
-      defaultModelId: request.defaultModelId,
+      modelScope: sessionModel.modelScope,
+      ownerUserId: sourceSession.userId,
+      defaultModelId: sessionModel.modelId,
     });
     // The tool is `requireApproval`, and that prompt parks the run whether or not
     // someone pressed Start — a person is reading the plan, not an approval queue.

@@ -69,6 +69,11 @@ describe('FactoryModelScopeSection', () => {
     const combobox = screen.getByRole('combobox', { name: 'Model scope' });
     await waitFor(() => expect(combobox).toBeEnabled());
     expect(combobox).toHaveTextContent("Each user's model and credentials");
+    expect(
+      screen.getByText(
+        "Factory: all sessions use only organization credentials and the Factory default model. User: each session uses only its owner's credentials and default model.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it('saves the selected model scope and updates the displayed value', async () => {
