@@ -1963,6 +1963,8 @@ describe('trace-query responses and storage capability', () => {
       createdAt: '2026-08-01T00:00:00Z',
       metadata: { customer: { id: 'customer-1' }, labels: ['support'], count: 2 },
       inputPreview: 'Help with my order',
+      outputPreview: 'Here is your order',
+      errorPreview: null,
       threadId: null,
       resourceId: null,
       startedAt: '2026-08-01T00:00:00Z',
