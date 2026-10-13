@@ -788,6 +788,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'mastra-platform/connect/end-user-connections',
+          label: 'End-user connections',
+        },
+        {
+          type: 'doc',
           id: 'mastra-platform/connect/providers',
           label: 'Providers',
         },
