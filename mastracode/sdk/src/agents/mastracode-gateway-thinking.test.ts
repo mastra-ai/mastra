@@ -131,30 +131,20 @@ describe('MastraCodeGateway thinking level forwarding', () => {
       apiKey: 'gateway-key',
     });
 
-  it("sends OpenRouter's reasoning setting for models routed through the Mastra gateway", async () => {
-    expect((await requestBody(resolveThroughGateway('max', 'deepseek', 'deepseek-v4-pro'))).reasoning).toEqual({
-      effort: 'max',
-    });
-  });
-
-  it.each([
-    ['an effort Claude', 'max', 'anthropic', 'claude-opus-4-7', 'max'],
-    ['a budget Claude', 'high', 'anthropic', 'claude-sonnet-4-5', 'high'],
-    ['GPT', 'xhigh', 'openai', 'gpt-5.5', 'xhigh'],
-    ['a level Gemini', 'max', 'google', 'gemini-3-pro-preview', 'high'],
-    ['a budget Gemini', 'medium', 'google', 'gemini-2.5-flash', 'medium'],
-  ] as const)('sends the Mastra gateway the effort %s runs', async (_model, level, providerId, modelId, effort) => {
-    expect((await requestBody(resolveThroughGateway(level, providerId, modelId))).reasoning).toEqual({ effort });
-  });
-
   it.each([
     ['anthropic', 'claude-opus-4-7'],
     ['openai', 'gpt-5.5'],
+    ['google', 'gemini-3-pro-preview'],
     ['deepseek', 'deepseek-v4-pro'],
   ])(
-    'leaves %s through the Mastra gateway on its default at off, like the direct path',
+    'sends %s through the Mastra gateway no thinking field, since the gateway forwards the body as is to an org key',
     async (providerId, modelId) => {
-      expect(await requestBody(resolveThroughGateway('off', providerId, modelId))).not.toHaveProperty('reasoning');
+      for (const level of ['high', 'max'] as const) {
+        const body = await requestBody(resolveThroughGateway(level, providerId, modelId));
+        for (const thinkingField of ['thinking', 'reasoning_effort', 'reasoning', 'enable_thinking']) {
+          expect(body).not.toHaveProperty(thinkingField);
+        }
+      }
     },
   );
 

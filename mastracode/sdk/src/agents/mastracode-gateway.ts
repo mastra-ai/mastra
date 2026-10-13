@@ -28,7 +28,6 @@ import {
   createPromptCacheMiddleware,
   opencodeClaudeMaxProvider,
 } from '../providers/claude-max.js';
-import { mastraGatewayThinkingOptions } from '../providers/gateway-thinking.js';
 import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
 import { createGoogleThinkingMiddleware } from '../providers/google-thinking.js';
 import { KIMI_CODING_MODELS, kimiCodingProvider } from '../providers/kimi-coding.js';
@@ -547,7 +546,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       );
     }
 
-    if (this.#routeThroughMastraGateway) return this.#resolveThroughMastraGateway(args);
+    if (this.#routeThroughMastraGateway) return this.#mastraGateway.resolveLanguageModel(args);
 
     if (args.providerId === 'google') {
       return this.#resolveGoogleModel(args);
@@ -602,7 +601,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         });
       }
 
-      return this.#resolveThroughMastraGateway({ ...args, modelId: bareModelId });
+      return this.#mastraGateway.resolveLanguageModel({ ...args, modelId: bareModelId });
     }
 
     if (storedCred?.type === 'oauth') {
@@ -677,7 +676,7 @@ export class MastraCodeGateway extends MastraModelGateway {
         });
       }
 
-      return this.#resolveThroughMastraGateway(args);
+      return this.#mastraGateway.resolveLanguageModel(args);
     }
 
     if (storedCred?.type === 'oauth') {
@@ -717,14 +716,5 @@ export class MastraCodeGateway extends MastraModelGateway {
       model: routerModel as any,
       middleware: [thinkingMiddleware],
     });
-  }
-
-  #resolveThroughMastraGateway(args: Parameters<MastraCodeGateway['resolveLanguageModel']>[0]): GatewayLanguageModel {
-    const gatewayModel = this.#mastraGateway.resolveLanguageModel(args);
-    if (gatewayModel.specificationVersion !== 'v3') return gatewayModel;
-    return withThinkingOptionsModel(
-      gatewayModel,
-      mastraGatewayThinkingOptions(args.providerId, args.modelId, this.#thinkingLevel),
-    );
   }
 }

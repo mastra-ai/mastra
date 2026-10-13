@@ -15,10 +15,8 @@ const LOW_TO_HIGH: readonly ActiveThinkingLevel[] = ['low', 'medium', 'high'];
 const sendReasoningEffort = (reasoningEffort: ActiveThinkingLevel): ThinkingProviderOptions => ({ reasoningEffort });
 const ENABLE_REASONING: ThinkingProviderOptions = { reasoning: { enabled: true } };
 
-export const OPENROUTER_OPTIONS_KEY = 'openrouter';
-
 const OPENROUTER_FORMAT: ThinkingRequestFormat = {
-  optionsKey: OPENROUTER_OPTIONS_KEY,
+  optionsKey: 'openrouter',
   sendEffort: effort => ({ reasoning: { effort } }),
   enableThinking: ENABLE_REASONING,
 };
