@@ -5,11 +5,18 @@ import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { ClockIcon } from 'lucide-react';
+import { ClockIcon, CoinsIcon, HashIcon } from 'lucide-react';
 import { getResultErrorMessage, getResultOutputText } from '../../utils/result-output';
 import { sideDurationMs } from './build-comparison-rows';
 import type { ComparisonColumn } from './build-comparison-rows';
-import { formatDurationDelta, formatScore } from './comparison-metric-format';
+import {
+  costDeltaFormatter,
+  formatCostValue,
+  formatDurationDelta,
+  formatScore,
+  formatTokenCount,
+  totalTokens,
+} from './comparison-metric-format';
 import { ComparisonMetricList, ScorerLabel } from './comparison-metric-list';
 import type { ComparisonMetric } from './comparison-metric-list';
 import { ComparisonPayload } from './comparison-payload';
@@ -19,6 +26,8 @@ export interface ComparisonSideCellProps {
   /** One experiment's side of the row. Contenders carry their deltas against the baseline. */
   column: ComparisonColumn;
   isLoading?: boolean;
+  /** Shows the cost and tokens lines. False when the observability storage cannot serve metrics. */
+  showUsage?: boolean;
 }
 
 function formatValue(value: unknown): string {
@@ -27,7 +36,36 @@ function formatValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function sideMetrics(side: ComparisonColumn): ComparisonMetric[] {
+function sideMetrics(side: ComparisonColumn, showUsage: boolean): ComparisonMetric[] {
+  const costUnit = side.usage?.costUnit;
+  const cost: ComparisonMetric[] = showUsage
+    ? [
+        {
+          id: 'cost',
+          icon: <CoinsIcon />,
+          label: 'Cost',
+          value: formatCostValue(side.usage?.estimatedCost, costUnit),
+          delta: side.costDelta ?? null,
+          formatDelta: costDeltaFormatter(costUnit),
+          higherIsBetter: false,
+        },
+      ]
+    : [];
+
+  const tokens: ComparisonMetric[] = showUsage
+    ? [
+        {
+          id: 'tokens',
+          icon: <HashIcon />,
+          label: 'Tokens',
+          value: formatTokenCount(totalTokens(side.usage)),
+          delta: side.tokenDelta ?? null,
+          formatDelta: formatTokenCount,
+          higherIsBetter: false,
+        },
+      ]
+    : [];
+
   const durationMs = sideDurationMs(side);
   const duration: ComparisonMetric[] =
     durationMs == null
@@ -45,7 +83,9 @@ function sideMetrics(side: ComparisonColumn): ComparisonMetric[] {
         ];
 
   return [
+    ...cost,
     ...duration,
+    ...tokens,
     ...side.scores.map(score => ({
       id: `scorer:${score.scorerId}`,
       icon: <ScorersIcon />,
@@ -60,7 +100,7 @@ function sideMetrics(side: ComparisonColumn): ComparisonMetric[] {
  * One experiment's side of a single item row. Every column renders the exact same
  * sections in the same order so the row can be read as a visual diff.
  */
-export function ComparisonSideCell({ column: data, isLoading }: ComparisonSideCellProps) {
+export function ComparisonSideCell({ column: data, isLoading, showUsage = false }: ComparisonSideCellProps) {
   if (isLoading) {
     return (
       <div className="flex h-32 items-center justify-center">
@@ -80,7 +120,7 @@ export function ComparisonSideCell({ column: data, isLoading }: ComparisonSideCe
   const outputStr = formatValue(data.output);
   const outputText = getResultOutputText(data);
   const errorMessage = getResultErrorMessage(data);
-  const metrics = sideMetrics(data);
+  const metrics = sideMetrics(data, showUsage);
 
   return (
     <div className={sectionStackClass}>

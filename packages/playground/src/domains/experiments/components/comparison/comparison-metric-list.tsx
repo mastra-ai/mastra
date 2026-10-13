@@ -15,6 +15,8 @@ export interface ComparisonMetric {
   delta: number | null;
   formatDelta?: (absDelta: number) => string;
   higherIsBetter?: boolean;
+  /** Renders the value larger and bolder, for the figures users compare first. */
+  emphasis?: boolean;
 }
 
 /** Scorer key: links out to the scorer page. */
@@ -47,13 +49,20 @@ export function ComparisonMetricList({ metrics }: { metrics: ComparisonMetric[] 
         hasTrend ? 'grid-cols-[minmax(0,1fr)_auto_auto]' : 'grid-cols-[minmax(0,1fr)_auto]',
       )}
     >
-      {metrics.map(({ id, icon, label, value, delta, formatDelta, higherIsBetter }) => (
+      {metrics.map(({ id, icon, label, value, delta, formatDelta, higherIsBetter, emphasis }) => (
         <Fragment key={id}>
           <dt className="flex min-w-0 items-center gap-1.5 text-body-sm text-muted-foreground [&>svg]:size-3.5 [&>svg]:shrink-0">
             {icon}
             {label}
           </dt>
-          <dd className="flex min-w-0 justify-end text-right text-body-sm text-foreground tabular-nums">{value}</dd>
+          <dd
+            className={cn(
+              'flex min-w-0 justify-end text-right text-foreground tabular-nums',
+              emphasis ? 'text-heading font-semibold' : 'text-body-sm',
+            )}
+          >
+            {value}
+          </dd>
           {hasTrend && (
             <dd className="flex justify-end text-body-sm">
               {delta != null && <ScoreDelta delta={delta} format={formatDelta} higherIsBetter={higherIsBetter} />}
