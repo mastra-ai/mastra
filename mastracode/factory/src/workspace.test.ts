@@ -1735,6 +1735,16 @@ describe('GitHub session workspace preparation', () => {
     expect(hasFailedSetupCommand('session-x', 'pnpm install')).toBe(false);
   });
 
+  it('remembers every failed setup command of a session, not only the latest', () => {
+    // An environment boot records the primary, per-repository and workspace
+    // commands; a second failure must not make the first one run again.
+    recordFailedSetupCommand('session-y', 'pnpm install');
+    recordFailedSetupCommand('session-y', 'workspace:pnpm -r build');
+    expect(hasFailedSetupCommand('session-y', 'pnpm install')).toBe(true);
+    expect(hasFailedSetupCommand('session-y', 'workspace:pnpm -r build')).toBe(true);
+    evictSessionSandbox('session-y');
+  });
+
   it('an infra failure inside setup is not recorded and retries in full', async () => {
     const { workspace } = await createLocalFactory();
     addProject({ setupCommand: 'pnpm install' });
@@ -3393,6 +3403,19 @@ describe('factory environment sandbox context', () => {
     expect(peekSessionEnvironment('session-a')).toBe(state);
     expect(peekSessionEnvironmentTeardown('session-a')).toEqual(teardown);
     if (reopen) expect(state?.repositories.map(repo => repo.slug)).toEqual(['octocat/hello']);
+  });
+
+  it('looks for project skills inside the primary checkout of an environment session', async () => {
+    const { resolver } = environmentFixture({ links: twoLinks });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    // The filesystem root is the workspace root; `hello` is the primary checkout under it.
+    const skills = (workspace as any)._config.skills as string[];
+    expect(skills).toEqual(expect.arrayContaining(['hello/.claude/skills', 'hello/.agents/skills']));
+    expect(skills).not.toContain('.claude/skills');
   });
 
   it('builds the list-form context from every inEnvironment link in position order', async () => {

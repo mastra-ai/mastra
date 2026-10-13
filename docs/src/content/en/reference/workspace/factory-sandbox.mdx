@@ -92,7 +92,7 @@ abstract class FactorySandbox<TSettings extends Record<string, unknown> = Record
     name: 'create',
     type: '(ctx, settings) => MastraSandbox',
     description:
-      'Constructs the sandbox for one session. Synchronous and side-effect free: the VM is provisioned on start(), not here. Factory passes the project's stored settings.',
+      'Constructs the sandbox for one session. Synchronous and side-effect free: the VM is provisioned on start(), not here. Factory passes the stored project settings.',
   },
   {
     name: 'template',
