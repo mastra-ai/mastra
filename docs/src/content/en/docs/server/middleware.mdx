@@ -83,10 +83,10 @@ registerApiRoute('/my-custom-route', {
 
 By default, middleware runs before Mastra authenticates the request, so the user isn't known yet. Set `phase: 'afterAuth'` on a middleware entry to run it after route authentication succeeds instead:
 
-| Phase                  | Runs                                   | Authenticated user on `requestContext` | Runs on rejected requests |
-| ---------------------- | -------------------------------------- | -------------------------------------- | ------------------------- |
-| `beforeAuth` (default) | Before route matching and auth         | No                                     | Yes                       |
-| `afterAuth`            | After auth succeeds, before the handler | Yes, under `user`                      | No                        |
+| Phase | Runs | Authenticated user on `requestContext` | Runs on rejected requests |
+| - | - | - | - |
+| `beforeAuth` (default) | Before route matching and auth | No | Yes |
+| `afterAuth` | After auth succeeds, before the handler | Yes, under `user` | No |
 
 Use `beforeAuth` for work that doesn't depend on the caller, such as CORS, logging, or blocking route groups. Use `afterAuth` for work that does, such as per-user authorization or setting request context values from the user:
 
