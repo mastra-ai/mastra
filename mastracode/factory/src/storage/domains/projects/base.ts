@@ -322,9 +322,11 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
    * Takes the project's build-start lease for `token`. Every trigger (manual,
    * schedule, push) takes it before reading build state and holds it through
    * `builds.start` and recording the result, so two runs never both start a
-   * build. Resolves false while another run holds an unexpired lease. A lease
-   * expires after `leaseMs`, so a crashed run never blocks builds for good.
-   * Only the claim is transactional; provider calls run outside it.
+   * build. `claimed` is false while another run holds an unexpired lease. The
+   * holder renews the lease while it works (`renewBuildStart`), so a lease
+   * only expires when its run died or stalled; `recovered` reports that this
+   * claim replaced such an expired lease, whose start may have reached the
+   * provider. Only the claim is transactional; provider calls run outside it.
    */
   async claimBuildStart({
     id,
@@ -336,13 +338,14 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     token: string;
     leaseMs: number;
     now?: Date;
-  }): Promise<boolean> {
-    let claimed = false;
+  }): Promise<{ claimed: boolean; recovered: boolean }> {
+    const result = { claimed: false, recovered: false };
     await this.storage.withTransaction(ops =>
       ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
         const expiresAt = current.build_start_claim_expires_at;
         if (current.build_start_claim && expiresAt && expiresAt.getTime() > now.getTime()) return null;
-        claimed = true;
+        result.claimed = true;
+        result.recovered = Boolean(current.build_start_claim);
         return {
           build_start_claim: token,
           build_start_claim_expires_at: new Date(now.getTime() + leaseMs),
@@ -350,7 +353,33 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
         };
       }),
     );
-    return claimed;
+    return result;
+  }
+
+  /**
+   * Extends the build-start lease held by `token` to `now + leaseMs`. Resolves
+   * false, writing nothing, when `token` no longer holds it.
+   */
+  async renewBuildStart({
+    id,
+    token,
+    leaseMs,
+    now = new Date(),
+  }: {
+    id: string;
+    token: string;
+    leaseMs: number;
+    now?: Date;
+  }): Promise<boolean> {
+    let renewed = false;
+    await this.storage.withTransaction(ops =>
+      ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
+        if (current.build_start_claim !== token) return null;
+        renewed = true;
+        return { build_start_claim_expires_at: new Date(now.getTime() + leaseMs), updated_at: now };
+      }),
+    );
+    return renewed;
   }
 
   /**

@@ -413,15 +413,25 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         await held;
         const second = clients[1]!.claimBuildStart({ ...lease, token: 'run-2' }).finally(() => secondDone.resolve());
         const results = await Promise.all([first, second]);
-        expect(results.filter(Boolean)).toHaveLength(1);
-        const [winner, loser] = results[0] ? ['run-1', 'run-2'] : ['run-2', 'run-1'];
+        expect(results.filter(result => result.claimed)).toHaveLength(1);
+        const [winner, loser] = results[0]!.claimed ? ['run-1', 'run-2'] : ['run-2', 'run-1'];
+        expect(await clients[1]!.renewBuildStart({ ...lease, token: loser })).toBe(false);
+        expect(await clients[1]!.renewBuildStart({ ...lease, token: winner })).toBe(true);
 
         const changes = { lastBuildId: 'build-x' };
         expect(await clients[1]!.releaseBuildStart({ id: projectId, token: loser, changes })).toBe(false);
         expect(await clients[0]!.getById({ id: projectId })).toMatchObject({ lastBuildId: null });
         expect(await clients[0]!.releaseBuildStart({ id: projectId, token: winner, changes })).toBe(true);
         expect(await clients[1]!.getById({ id: projectId })).toMatchObject({ lastBuildId: 'build-x' });
-        expect(await clients[1]!.claimBuildStart({ ...lease, token: 'run-3' })).toBe(true);
+        expect(await clients[1]!.claimBuildStart({ ...lease, token: 'run-3' })).toEqual({
+          claimed: true,
+          recovered: false,
+        });
+        const expired = new Date(now.getTime() + 61_000);
+        expect(await clients[0]!.claimBuildStart({ ...lease, token: 'run-4', now: expired })).toEqual({
+          claimed: true,
+          recovered: true,
+        });
       });
     });
 
