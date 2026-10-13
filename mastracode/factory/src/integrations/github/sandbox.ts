@@ -521,7 +521,7 @@ export async function checkoutSessionBranch(
 export interface SyncEnvironmentRepositoryOptions {
   /** The session branch to resume when the remote already carries it. */
   branch: string;
-  /** The repository's default branch; a detached checkout moves to its tip. */
+  /** The repository's default branch; new session branches start at its remote tip. */
   defaultBranch: string;
   token: string;
   repoFullName: string;
@@ -564,7 +564,14 @@ export async function syncEnvironmentRepository(
 
   // A local session branch may hold commits the remote never saw; switch
   // to it instead of resetting it onto the remote tip.
-  const local = await execute(sandbox, 'git', ['-C', workdir, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`]);
+  const local = await execute(sandbox, 'git', [
+    '-C',
+    workdir,
+    'rev-parse',
+    '--verify',
+    '--quiet',
+    `refs/heads/${branch}`,
+  ]);
   if (local.exitCode === 0) {
     const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', branch], {
       timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
@@ -602,13 +609,31 @@ export async function syncEnvironmentRepository(
   // remote never saw. The default branch and a detached HEAD (the template
   // image pinned at its build commit) become the session branch.
   if (currentBranch && currentBranch !== defaultBranch) return kept;
-  if (!currentBranch) {
-    const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', defaultBranch], {
-      env: authEnv,
-      timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
-      phase: 'environment default fetch',
-    });
-    if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
+  if (currentBranch) {
+    const status = await execute(sandbox, 'git', ['-C', workdir, 'status', '--porcelain']);
+    if (status.exitCode !== 0) throw classifyGitFailure(status, 'pull-failed');
+    if (status.stdout.trim()) return kept;
+  }
+  const fetch = await gitTransfer(sandbox, ['-C', workdir, 'fetch', 'origin', defaultBranch], {
+    env: authEnv,
+    timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
+    phase: 'environment default fetch',
+  });
+  if (fetch.exitCode !== 0) throw classifyGitFailure(fetch, 'pull-failed');
+  if (currentBranch) {
+    // Do not discard local-only commits on the default branch. A shallow
+    // checkout whose ancestry cannot be established is also left untouched.
+    const ancestor = await execute(sandbox, 'git', [
+      '-C',
+      workdir,
+      'merge-base',
+      '--is-ancestor',
+      'HEAD',
+      'FETCH_HEAD',
+    ]);
+    if (ancestor.exitCode === 1) return kept;
+    if (ancestor.exitCode !== 0) throw classifyGitFailure(ancestor, 'pull-failed');
+  } else {
     const checkout = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-B', defaultBranch, 'FETCH_HEAD'], {
       env: authEnv,
       timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
@@ -619,7 +644,7 @@ export async function syncEnvironmentRepository(
       throw classifyGitFailure(checkout, 'pull-failed');
     }
   }
-  const created = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch], {
+  const created = await execute(sandbox, 'git', ['-C', workdir, 'checkout', '-b', branch, 'FETCH_HEAD'], {
     timeoutMs: CHECKOUT_COMMAND_TIMEOUT_MS,
     phase: 'environment branch create',
   });
