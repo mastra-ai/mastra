@@ -2,9 +2,10 @@ import { ReadableStream } from 'node:stream/web';
 import { coreFeatures } from '@mastra/core/features';
 import type { ObservabilityExporter, TracingEvent, ExportedSpan, MetricEvent } from '@mastra/core/observability';
 import { SpanType, SamplingStrategyType, TracingEventType } from '@mastra/core/observability';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { DefaultObservabilityInstance } from './instances';
+import { PricingRegistry } from './metrics/pricing-registry';
 import { ModelSpanTracker } from './model-tracing';
 
 /**
@@ -2275,6 +2276,12 @@ describe('ModelSpanTracker', () => {
       });
 
       it('falls back to pricing estimates when the aggregate Gateway cost is non-finite', () => {
+        onTestFinished(() => vi.restoreAllMocks());
+        vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(
+          PricingRegistry.fromModelsDev({
+            vercel: { models: { 'claude-haiku-4-5': { cost: { input: 1, output: 5 } } } },
+          }),
+        );
         const span = endGeneration({
           attributes: { model: 'anthropic/claude-haiku-4.5', provider: 'gateway' },
           usage: { inputTokens: 100, outputTokens: 50 },

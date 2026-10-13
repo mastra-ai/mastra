@@ -27,7 +27,6 @@ export const loginPreservesModelPackScenario = {
       version: 1,
       modePackId: packId,
       omPackId: 'custom',
-      quietModePreferenceSelected: true,
     };
     settings.customModelPacks = [
       {

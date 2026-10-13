@@ -3,7 +3,7 @@ import type { ActorSignal, MastraFGAPermissionInput } from '../../../auth/ee';
 import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
-import type { ToolCallConcurrency } from '../../../loop/types';
+import type { AgentLoopResumeClaim, ToolCallConcurrency } from '../../../loop/types';
 import { createRunScope } from '../../../mastra/run-scope';
 import type { MastraMemory } from '../../../memory/memory';
 import { checkThreadFGA } from '../../../memory/thread-fga';
@@ -47,6 +47,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   resumeContext?: {
     resumeData: any;
     snapshot: any;
+    claim?: AgentLoopResumeClaim;
   };
   agentId: string;
   actor?: ActorSignal;
@@ -64,6 +65,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
    */
   skipBgTaskWait?: boolean;
   drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  subscribePendingSignals?: (runId: string, listener: () => void) => () => void;
 }
 
 export function createPrepareStreamWorkflow<OUTPUT = undefined>({
@@ -96,6 +98,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   toolPayloadTransform,
   skipBgTaskWait,
   drainPendingSignals,
+  subscribePendingSignals,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   // Per-run scope shared between prepare-stream steps. Class instances
   // (MessageList, Tools), Maps, and closures live here instead of step
@@ -187,6 +190,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     toolPayloadTransform,
     skipBgTaskWait,
     drainPendingSignals,
+    subscribePendingSignals,
     runScope,
   });
 

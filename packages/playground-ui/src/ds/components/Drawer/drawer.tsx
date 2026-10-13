@@ -403,7 +403,14 @@ const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
           <DrawerPopup ref={ref} variant={resolvedVariant} className={className} {...props}>
             {showHandle && side === 'bottom' && <DrawerHandleBar />}
             <DrawerFloatingSideHandle side={side} variant={resolvedVariant} />
-            <div data-slot="drawer-content" className={cn('relative flex min-h-0 flex-1 flex-col', nestedFadeClass)}>
+            <div
+              data-slot="drawer-content"
+              className={cn(
+                'relative flex min-h-0 flex-1 flex-col',
+                '[&>form]:flex [&>form]:min-h-0 [&>form]:flex-1 [&>form]:flex-col [&>form]:gap-0',
+                nestedFadeClass,
+              )}
+            >
               {showCloseButton && <DrawerDefaultCloseButton />}
               {children}
             </div>

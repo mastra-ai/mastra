@@ -19,7 +19,8 @@ import type { Workspace } from '../../../workspace';
 import type { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
 import type { ToolsInput } from '../../types';
-import { globalRunRegistry } from '../run-registry';
+import { recordRunSavedMessages } from '../run-message-refs';
+import { getRunRegistryEntry, globalRunRegistry, setRunRegistryEntry } from '../run-registry';
 import type {
   RunRegistryEntry,
   SerializableDurableState,
@@ -70,9 +71,13 @@ export interface ResolvedRuntimeDependencies {
  * is configured. Shared by `resolveRuntimeDependencies` and
  * `rebuildRunToolsFromMastra` so the construction lives in one place.
  */
-function makeSaveQueueManager(memory: MastraMemory | undefined, mastra?: Mastra): SaveQueueManager | undefined {
+function makeSaveQueueManager(
+  memory: MastraMemory | undefined,
+  runId: string,
+  mastra?: Mastra,
+): SaveQueueManager | undefined {
   if (!memory) return undefined;
-  return new SaveQueueManager({ logger: mastra?.getLogger?.(), memory });
+  return new SaveQueueManager({ logger: mastra?.getLogger?.(), memory, onSaved: recordRunSavedMessages(runId) });
 }
 
 /**
@@ -227,7 +232,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   // see the updated state.  Creating a new instance each iteration would
   // orphan those references (their newResponseMessages Set would point at
   // stale objects).
-  const existingEntry = globalRunRegistry.get(runId);
+  const existingEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
   const messageList = existingEntry?.messageList
     ? existingEntry.messageList.deserialize(input.messageListState)
     : createRunMessageList({
@@ -254,7 +259,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   // are detected by the explicit `isPlaceholder` flag or by the absence of a
   // real model instance (every in-process seeding site stores the live model;
   // placeholders and metadata-only stubs do not).
-  const globalEntry = globalRunRegistry.get(runId);
+  const globalEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
   const hasHydratedEntry = isHydratedRegistryEntry(globalEntry);
   // Prefer the full toolset over `tools`: after the first step `tools` holds the
   // per-step snapshot the model was shown (possibly narrowed by processors such
@@ -353,7 +358,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
 
   // Build this before the registry write-back. On a remote worker that
   // write-back is what makes finish-time persistence available to later steps.
-  const saveQueueManager = makeSaveQueueManager(memory, mastra);
+  const saveQueueManager = makeSaveQueueManager(memory, runId, mastra);
 
   // Write the rebuilt state back into the per-process registry so sibling
   // durable steps in THIS process (e.g. the tool-call step that runs after the
@@ -380,7 +385,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     if (globalEntry) {
       Object.assign(globalEntry, rebuilt);
     } else {
-      globalRunRegistry.set(runId, rebuilt as RunRegistryEntry);
+      setRunRegistryEntry(runId, rebuilt as RunRegistryEntry, mastra as Mastra | undefined);
     }
   }
 
@@ -439,7 +444,7 @@ export interface RebuiltRunTools {
  * The durable tool-call step runs as a SEPARATE step from the LLM-execution
  * step and, on a cross-process engine (e.g. the @mastra/inngest connect()
  * worker), can execute in a different process than the one that prepared the
- * run. In that process `globalRunRegistry.get(runId)` is empty (or a minimal
+ * run. In that process `getRunRegistryEntry(runId, mastra as Mastra | undefined)` is empty (or a minimal
  * placeholder), so per-request closure tools (workspace/skill tools:
  * `skill`, `skill_read`, `skill_search`, `mastra_workspace_*`) are absent and
  * the model's tool call rejects with `ToolNotFoundError`.
@@ -502,13 +507,13 @@ export async function rebuildRunToolsFromMastra(options: {
 
     // A hydrated entry means the caller's process still holds the toolset tools
     // (e.g. a memoryless run rebuilding only for a save queue), so nothing was lost.
-    const toolsetsLocal = isHydratedRegistryEntry(globalRunRegistry.get(runId));
+    const toolsetsLocal = isHydratedRegistryEntry(getRunRegistryEntry(runId, mastra as Mastra | undefined));
     if (!toolsetsLocal) assertToolsetToolsAvailable(tools, execOptions?.toolsetToolNames, agentId, runId);
 
     const memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
     const workspace = await (agent as any).getWorkspace?.({ requestContext: resolveRequestContext });
-    const saveQueueManager = makeSaveQueueManager(memory, mastra);
-    let existing = globalRunRegistry.get(runId);
+    const saveQueueManager = makeSaveQueueManager(memory, runId, mastra);
+    let existing = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     const rebuiltProcessors: Partial<Awaited<ReturnType<typeof rebuildProcessorPipeline>>> =
       !options.rehydrateProcessors
         ? {}
@@ -541,7 +546,7 @@ export async function rebuildRunToolsFromMastra(options: {
       ...(options.rehydrateProcessors ? { requestContext: resolveRequestContext } : {}),
     };
     // A sibling may have published during construction. Keep lookup, merge and return synchronous.
-    existing = globalRunRegistry.get(runId);
+    existing = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     if (existing) {
       const needsProcessorPipeline = !existing.outputProcessors || !existing.processorStates;
       if (
@@ -567,7 +572,7 @@ export async function rebuildRunToolsFromMastra(options: {
       existing.processorStates ??= rebuiltProcessors.processorStates;
     } else {
       existing = patch as RunRegistryEntry;
-      globalRunRegistry.set(runId, existing);
+      setRunRegistryEntry(runId, existing, mastra as Mastra | undefined);
     }
 
     return {
@@ -585,7 +590,7 @@ export async function rebuildRunToolsFromMastra(options: {
   } catch (error) {
     if (error instanceof DurableProcessorRebuildError) throw error;
 
-    const entry = globalRunRegistry.get(runId);
+    const entry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     // Falling back would silently drop call-time toolsets, so surface the failure.
     if ((execOptions?.toolsetToolNames?.length ?? 0) > 0 && !isHydratedRegistryEntry(entry)) {
       throw error;

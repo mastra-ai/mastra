@@ -10,6 +10,7 @@ import { z } from 'zod';
 
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import { FACTORY_RULE_STAGES, factoryRuleStage } from '../rules/types.js';
 import type { FactoryRuleStage } from '../rules/types.js';
@@ -90,7 +91,7 @@ function summarizeItem(item: WorkItemRow) {
   };
 }
 
-function summarizeDecision(decision: FactoryDeferredDecisionRecord) {
+function summarizeDecision(decision: FactoryDeferredDecisionRecord, overtaken = false) {
   const type = typeof decision.decision.type === 'string' ? decision.decision.type : 'decision';
   const role = typeof decision.decision.role === 'string' ? decision.decision.role : null;
   const skill = typeof decision.decision.skillName === 'string' ? decision.decision.skillName : null;
@@ -107,7 +108,7 @@ function summarizeDecision(decision: FactoryDeferredDecisionRecord) {
     leaseExpiresAt: iso(decision.leaseExpiresAt),
     failureCode: decision.failureCode,
     failureLabel: decision.failureCode ? factoryDispatchFailureMetadata(decision.failureCode).label : null,
-    canRetry: decision.status === 'failed' ? factoryDispatchFailureMetadata(decision.failureCode).canRetry : false,
+    canRetry: decisionRetryable(decision, overtaken),
     lastError: decision.lastError ? truncate(decision.lastError, MAX_ERROR) : null,
     approvedBy: decision.approvedBy,
     createdAt: iso(decision.createdAt),
@@ -209,6 +210,8 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
         for (const decision of decisions) {
           decisionsByStatus[decision.status] = (decisionsByStatus[decision.status] ?? 0) + 1;
         }
+        const failed = decisions.filter(d => d.status === 'failed').slice(0, MAX_LIST);
+        const overtaken = await overtakenDecisionIds(deps.workItems, deps.boards, scope, failed);
         const activeSeats = bindings.filter(binding => binding.status === 'active');
         const seatsByRole: Record<string, number> = {};
         for (const seat of activeSeats) seatsByRole[seat.role] = (seatsByRole[seat.role] ?? 0) + 1;
@@ -218,12 +221,9 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
           decisions: decisionsByStatus,
           openProposals: decisions
             .filter(d => d.status === 'proposed')
-            .map(summarizeDecision)
+            .map(decision => summarizeDecision(decision))
             .slice(0, MAX_LIST),
-          failedDecisions: decisions
-            .filter(d => d.status === 'failed')
-            .map(summarizeDecision)
-            .slice(0, MAX_LIST),
+          failedDecisions: failed.map(decision => summarizeDecision(decision, overtaken.has(decision.id))),
           activeSeats: { total: activeSeats.length, byRole: seatsByRole },
           pendingStarts: pendingStarts.filter(start => start.status !== 'sent').length,
         };
@@ -248,7 +248,7 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
         const item = await findItem(deps, ref);
         if (!item) throw new Error(`No work item matches ${ref.id ?? `#${ref.number}`} in this Factory.`);
         const [decisions, bindings, audit, feed, all] = await Promise.all([
-          deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId),
+          deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, { workItemId: item.id }),
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId, item.id),
           deps.audit.list({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId, limit: 200 }),
           deps.comments.listRecent({ ...scope, workItemId: item.id, limit: 10 }),
@@ -258,6 +258,13 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
           ? all.find(candidate => candidate.id === item.parentWorkItemId)
           : undefined;
         const children = all.filter(candidate => candidate.parentWorkItemId === item.id);
+        const itemDecisions = decisions.filter(decision => decision.workItemId === item.id).slice(-MAX_LIST);
+        const overtaken = await overtakenDecisionIds(
+          deps.workItems,
+          deps.boards,
+          scope,
+          itemDecisions.filter(decision => decision.status === 'failed'),
+        );
         return {
           item: summarizeItem(item),
           labels: itemLabels(item),
@@ -283,10 +290,7 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
             createdAt: iso(binding.createdAt),
             revokedAt: iso(binding.revokedAt),
           })),
-          decisions: decisions
-            .filter(decision => decision.workItemId === item.id)
-            .map(summarizeDecision)
-            .slice(-MAX_LIST),
+          decisions: itemDecisions.map(decision => summarizeDecision(decision, overtaken.has(decision.id))),
           audit: audit.events
             .filter(event => event.targets.some(target => target.type === 'work_item' && target.id === item.id))
             .slice(0, 25)
@@ -318,7 +322,9 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
       inputSchema: z.object({ limit: z.number().int().min(1).max(MAX_LIST).default(25) }).strict(),
       execute: async ({ limit }) => {
         const [decisions, items] = await Promise.all([
-          deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId),
+          deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, {
+            statuses: ['failed', 'proposed'],
+          }),
           deps.workItems.list(scope),
         ]);
         const itemsById = new Map(items.map(item => [item.id, item]));
@@ -371,7 +377,7 @@ export function createFactorySupervisorReadTools(deps: SupervisorReadDependencie
           proposals: decisions
             .filter(d => d.status === 'proposed')
             .slice(0, limit)
-            .map(summarizeDecision),
+            .map(decision => summarizeDecision(decision)),
         };
       },
     }),
