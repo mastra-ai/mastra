@@ -1,6 +1,6 @@
 import type { MastraServerCache } from '../../cache/base';
 import { InMemoryServerCache } from '../../cache/inmemory';
-import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
 import { withAck } from '../../events/acking-callback';
 import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
@@ -38,7 +38,14 @@ import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
 
 import { publishAbortRequest } from './abort-transport';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from './constants';
+import {
+  AGENT_STREAM_TOPIC,
+  AgentStreamEventTypes,
+  DURABLE_STOP_WHEN_ERROR_ID,
+  DurableStepIds,
+  markErrorForStreamRejection,
+  shouldRejectStream,
+} from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import {
   ExecutionFence,
@@ -2107,7 +2114,7 @@ export class DurableAgent<
       status: result?.status,
       error:
         result?.status === 'failed'
-          ? new Error((result as any).error?.message || 'Workflow execution failed')
+          ? this.workflowFailureError((result as any).error, 'Workflow execution failed')
           : undefined,
     });
     return result;
@@ -2213,6 +2220,35 @@ export class DurableAgent<
     );
   };
 
+  protected workflowFailureError(workflowError: unknown, fallbackMessage: string): Error {
+    const serialized = (workflowError ?? {}) as {
+      code?: unknown;
+      id?: unknown;
+      message?: unknown;
+      details?: { name?: unknown; message?: unknown };
+    };
+    if (serialized.code === DURABLE_STOP_WHEN_ERROR_ID || serialized.id === DURABLE_STOP_WHEN_ERROR_ID) {
+      const error = new Error(
+        typeof serialized.details?.message === 'string'
+          ? serialized.details.message
+          : typeof serialized.message === 'string'
+            ? serialized.message
+            : fallbackMessage,
+      );
+      error.name = typeof serialized.details?.name === 'string' ? serialized.details.name : 'Error';
+      return markErrorForStreamRejection(error);
+    }
+    return new Error(typeof serialized.message === 'string' ? serialized.message : fallbackMessage);
+  }
+
+  protected workflowExecutionError(workflowError: unknown, fallbackMessage: string): Error {
+    const serialized = (workflowError ?? {}) as { code?: unknown; id?: unknown };
+    if (serialized.code === DURABLE_STOP_WHEN_ERROR_ID || serialized.id === DURABLE_STOP_WHEN_ERROR_ID) {
+      return this.workflowFailureError(workflowError, fallbackMessage);
+    }
+    return getErrorFromUnknown(workflowError, { fallbackMessage });
+  }
+
   /**
    * Emit an error event to pubsub.
    *
@@ -2224,7 +2260,9 @@ export class DurableAgent<
   protected async emitError(runId: string, error: Error, generation?: number): Promise<void> {
     // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
     endRunSpansWithError(runId, error);
-    await runOutsideRunFenceScope(() => emitErrorEvent(this.pubsub, runId, error, generation));
+    await runOutsideRunFenceScope(() =>
+      emitErrorEvent(this.pubsub, runId, error, generation, shouldRejectStream(error) ? 'reject' : undefined),
+    );
   }
 
   /**
@@ -2808,7 +2846,11 @@ export class DurableAgent<
             detachStream();
           }
         })
-        .catch(error => this.settleExecution(runId, executionFence, { error })),
+        .catch(error =>
+          this.settleExecution(runId, executionFence, {
+            error: this.workflowExecutionError(error, 'Workflow execution failed'),
+          }),
+        ),
     );
     const trackedEntry = globalRunRegistry.get(runId);
     if (trackedEntry) {
@@ -3384,7 +3426,7 @@ export class DurableAgent<
             status: result?.status,
             error:
               result?.status === 'failed'
-                ? new Error((result as any).error?.message || 'Workflow resume failed')
+                ? this.workflowFailureError((result as any).error, 'Workflow resume failed')
                 : undefined,
           });
           if (result?.status === 'suspended' && closeOnSuspend) {
@@ -3399,7 +3441,11 @@ export class DurableAgent<
             detachResumeStream();
           }
         })
-        .catch(error => this.settleExecution(runId, executionFence, { error })),
+        .catch(error =>
+          this.settleExecution(runId, executionFence, {
+            error: this.workflowExecutionError(error, 'Workflow resume failed'),
+          }),
+        ),
     );
     const trackedResumeEntry = globalRunRegistry.get(runId);
     if (trackedResumeEntry) {
@@ -3784,10 +3830,11 @@ export class DurableAgent<
             if (finished) await this.deleteRunSnapshots(runId);
           });
           if (result?.status === 'failed') {
-            throw new Error((result as any).error?.message || 'Workflow recover failed');
+            throw this.workflowFailureError((result as any).error, 'Workflow recover failed');
           }
         })
         .catch(async error => {
+          const executionError = this.workflowExecutionError(error, 'Workflow recover failed');
           // Settles a recovery that failed before the run finished; otherwise
           // returns the settlement reached above.
           const settlement = await executionFence.settle(async () => {});
@@ -3801,11 +3848,11 @@ export class DurableAgent<
             // the same runId and owns the run's topic: leave both to it.
             await threadRegistration?.rollback({ releaseLease: false });
             performCleanup();
-          } else if (!(await this.#reportRecoveryFailure(runId, error, executionFence.generation))) {
+          } else if (!(await this.#reportRecoveryFailure(runId, executionError, executionFence.generation))) {
             await threadRegistration?.rollback();
             performCleanup();
           }
-          throw error;
+          throw executionError;
         })
         .finally(releaseLocalRecovery),
     );
@@ -4118,7 +4165,11 @@ export class DurableAgent<
             await stopGoalActivity({ agentId: workflowInput.agentId, runId });
           }
         })
-        .catch(error => this.settleExecution(runId, executionFence, { error })),
+        .catch(error =>
+          this.settleExecution(runId, executionFence, {
+            error: this.workflowExecutionError(error, 'Workflow execution failed'),
+          }),
+        ),
     );
     const trackedEntry = globalRunRegistry.get(runId);
     if (trackedEntry) {

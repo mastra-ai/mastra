@@ -6,7 +6,7 @@ import type { IMastraLogger } from '../../logger';
 import type { TracingContext } from '../../observability';
 import type { OutputProcessorOrWorkflow, ProcessorState } from '../../processors';
 import type { RequestContext } from '../../request-context';
-import { safeClose, safeEnqueue } from '../../stream/base';
+import { safeClose, safeEnqueue, safeError } from '../../stream/base';
 import { MastraModelOutput } from '../../stream/base/output';
 import { markChunkOutputProcessed } from '../../stream/base/output-processed';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
@@ -616,16 +616,17 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (data.error.stack) {
             error.stack = data.error.stack;
           }
-          // Enqueue an error chunk and close the stream normally (mirrors the
-          // regular agent's deferred-error-chunk pattern). Using
-          // controller.error() would error the base ReadableStream, which
-          // MastraModelOutput.consumeStream swallows — leaving fullStream
-          // hanging because no 'finish' event fires on the internal emitter.
-          safeEnqueue(controller, {
-            type: 'error',
-            payload: { error },
-          } as ChunkType<OUTPUT>);
-          safeClose(controller);
+          if (data.delivery === 'reject') {
+            safeError(controller, error);
+          } else {
+            // Ordinary durable failures remain deferred error chunks so the stream
+            // closes normally even when no finish event follows.
+            safeEnqueue(controller, {
+              type: 'error',
+              payload: { error },
+            } as ChunkType<OUTPUT>);
+            safeClose(controller);
+          }
           markTerminated();
           try {
             await onError?.({ error });
@@ -983,7 +984,13 @@ export async function emitFinishEvent(pubsub: PubSub, runId: string, data: Agent
 /**
  * Helper to emit an error event to pubsub
  */
-export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error, generation?: number): Promise<void> {
+export async function emitErrorEvent(
+  pubsub: PubSub,
+  runId: string,
+  error: Error,
+  generation?: number,
+  delivery?: AgentErrorEventData['delivery'],
+): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.ERROR,
     runId,
@@ -993,6 +1000,7 @@ export async function emitErrorEvent(pubsub: PubSub, runId: string, error: Error
         message: error.message,
         // stack intentionally omitted — avoid leaking internals through external pubsub
       },
+      ...(delivery ? { delivery } : {}),
     },
     ...generationTag(runId, generation),
   });
