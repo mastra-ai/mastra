@@ -471,6 +471,26 @@ describe('KnowledgeRoutes', () => {
     expect(JSON.stringify(events)).not.toContain('foreign-project');
   });
 
+  it('omits scope members it cannot identify when the adapter lacks structural reads', async () => {
+    class NoStructuralReads extends InMemoryKnowledgeStorage {
+      override async listScopeNodes(): Promise<never> {
+        throw new KnowledgeUnsupportedError('listScopeNodes');
+      }
+    }
+    const store = new NoStructuralReads({ db: new InMemoryDB() });
+    const h = await createHarness({ knowledge: store });
+    const anchor = await node(store, 'Session anchor', h.threadScope('thread-1'));
+    await record(store, anchor, 'Session evidence', h.threadScope('thread-1'), 'thread-1');
+    const sessionId = (await store.getScopeAddress(`resource:${h.projectId}:thread:thread-1`))!.scopeNodeId;
+    const resourceScopeId = (await store.getScopeAddress(`resource:${h.projectId}`))!.scopeNodeId;
+
+    // The identity scope lens works without structural reads, but scope members whose
+    // addresses cannot be proven are omitted rather than assumed harmless.
+    const lens = await graph(h, `?scopeNodeId=${resourceScopeId}`);
+    expect(lens.status).toBe(200);
+    expect(lens.body.nodes.map(graphNode => graphNode.id)).not.toContain(sessionId);
+  });
+
   it('labels scope nodes by what they are: org, project, session, or the structural kind/topic', async () => {
     const h = await createHarness();
     await h.knowledge.reconcileStructure({
