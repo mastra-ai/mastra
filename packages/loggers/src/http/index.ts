@@ -234,11 +234,11 @@ export class HttpTransport extends LoggerTransport {
   _transform(chunk: string, _enc: string, cb: Function): void {
     try {
       // Parse the log line if it's a string
-      const log = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
+      let log = typeof chunk === 'string' ? JSON.parse(chunk) : chunk;
 
-      // Add timestamp if not present
+      // Enrich a copy rather than mutating the caller's record.
       if (log.time === undefined || log.time === null) {
-        log.time = Date.now();
+        log = { ...log, time: Date.now() };
       }
 
       // Add to buffer

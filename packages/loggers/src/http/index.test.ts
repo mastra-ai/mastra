@@ -896,6 +896,30 @@ describe('HttpTransport', () => {
       vi.setSystemTime(now);
     });
 
+    it.each([undefined, null])('does not mutate an object with time %s', time => {
+      const log = { msg: 'caller-owned', time };
+      const callback = vi.fn();
+
+      transport._transform(log as any, 'utf8', callback);
+
+      expect(callback).toHaveBeenCalledWith(null, log);
+      expect(log).toEqual({ msg: 'caller-owned', time });
+      expect(transport.getBufferedLogs()[0]).toEqual({ msg: 'caller-owned', time: now });
+      expect(transport.getBufferedLogs()[0]).not.toBe(log);
+    });
+
+    it('sends a frozen record without adding a timestamp to the input', async () => {
+      const log = Object.freeze({ msg: 'frozen record' });
+      const callback = vi.fn();
+
+      transport._transform(log as any, 'utf8', callback);
+      await transport._flush();
+
+      expect(callback).toHaveBeenCalledWith(null, log);
+      expect(log).toEqual({ msg: 'frozen record' });
+      expect(getSentLog()).toEqual({ msg: 'frozen record', time: now });
+    });
+
     it('should preserve a zero timestamp from object input', async () => {
       transport.write({ msg: 'epoch record', time: 0 } as any);
       await transport._flush();
