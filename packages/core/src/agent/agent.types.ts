@@ -6,7 +6,13 @@ import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
-import type { LoopConfig, LoopOptions, PrepareStepFunction, ToolCallConcurrency } from '../loop/types';
+import type {
+  AgentLoopResumeClaim,
+  LoopConfig,
+  LoopOptions,
+  PrepareStepFunction,
+  ToolCallConcurrency,
+} from '../loop/types';
 import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
@@ -914,6 +920,7 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
   resumeContext?: {
     resumeData: any;
     snapshot: WorkflowRunState;
+    claim?: AgentLoopResumeClaim;
   };
   toolCallId?: string;
   /** Internal: The run's resolved scopes, persisted in suspend snapshots for resume */
