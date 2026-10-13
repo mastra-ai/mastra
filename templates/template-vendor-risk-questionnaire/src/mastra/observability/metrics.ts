@@ -6,10 +6,13 @@ import { telemetryId } from './privacy.ts';
 
 export const ratio = (numerator: number, denominator: number) => (denominator === 0 ? null : numerator / denominator);
 export async function readDomainMetrics(url: string, runId: string) {
-  const db = await openDatabase(url),
-    processing = await openProcessingStore(url),
-    review = await openReviewStore(url);
+  let db: Awaited<ReturnType<typeof openDatabase>> | undefined,
+    processing: Awaited<ReturnType<typeof openProcessingStore>> | undefined,
+    review: Awaited<ReturnType<typeof openReviewStore>> | undefined;
   try {
+    db = await openDatabase(url);
+    processing = await openProcessingStore(url);
+    review = await openReviewStore(url);
     const status = await processing.status(runId),
       state = await review.read(runId),
       intake = await processing.readIntake(runId);
@@ -129,8 +132,8 @@ export async function readDomainMetrics(url: string, runId: string) {
       exports: events.filter(e => e.kind === 'exported').length,
     };
   } finally {
-    db.close();
-    processing.close();
-    review.close();
+    db?.close();
+    processing?.close();
+    review?.close();
   }
 }
