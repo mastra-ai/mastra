@@ -20,6 +20,7 @@ import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const mobileState = vi.hoisted(() => ({ value: false }));
+const handleSpy = vi.hoisted(() => ({ collapse: vi.fn(), expand: vi.fn(), toggle: vi.fn() }));
 
 vi.mock('react-resizable-panels', () => ({
   Group: ({ children }: { children: ReactNode }) => <div data-testid="panel-group">{children}</div>,
@@ -33,18 +34,15 @@ vi.mock('@mastra/playground-ui/resize/collapsible-panel', () => ({
   CollapsiblePanel: ({
     id,
     children,
-    collapsible,
-    minSize,
+    ref,
   }: {
     id: string;
     children: ReactNode;
-    collapsible?: boolean;
-    minSize?: number;
-  }) => (
-    <section data-testid={`collapsible-${id}`} data-collapsible={String(collapsible)} data-min-size={minSize}>
-      {children}
-    </section>
-  ),
+    ref?: { current: typeof handleSpy | null };
+  }) => {
+    if (ref) ref.current = handleSpy;
+    return <section data-testid={`collapsible-${id}`}>{children}</section>;
+  },
 }));
 
 vi.mock('@mastra/playground-ui/resize/separator', () => ({
@@ -117,6 +115,7 @@ beforeEach(() => {
 
 afterEach(() => {
   mobileState.value = false;
+  vi.clearAllMocks();
 });
 
 describe('ExperimentItemSidePanel', () => {
@@ -138,20 +137,12 @@ describe('ExperimentItemSidePanel', () => {
       expect(screen.queryByRole('dialog')).toBeNull();
     });
 
-    it('cannot be collapsed shut', async () => {
+    it('opens the side panel', async () => {
       renderExperimentPage(itemPath);
 
       await findInlineResult();
 
-      expect(screen.getByTestId('collapsible-route-side-panel').dataset.collapsible).toBe('false');
-    });
-
-    it('keeps the side panel wide enough for the result', async () => {
-      renderExperimentPage(itemPath);
-
-      await findInlineResult();
-
-      expect(Number(screen.getByTestId('collapsible-route-side-panel').dataset.minSize)).toBe(480);
+      await waitFor(() => expect(handleSpy.expand).toHaveBeenCalled());
     });
   });
 

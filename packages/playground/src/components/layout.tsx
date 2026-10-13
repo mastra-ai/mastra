@@ -77,7 +77,7 @@ const UNCLIPPED: CSSProperties = { overflow: 'visible' };
  */
 export function StudioFrame({ children, className }: { children: React.ReactNode; className?: string }) {
   const isMobile = useIsMobile();
-  const { hasPanel, panelOptions, panelHandle, onPanelResize } = useRouteSidePanel();
+  const { hasPanel, panelHandle, onPanelResize } = useRouteSidePanel();
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: 'studio-frame-layout-v1',
     storage: localStorage,
@@ -103,10 +103,10 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
               id="route-side-panel"
               ref={panelHandle}
               direction="right"
-              collapsible={panelOptions?.collapsible ?? true}
+              collapsible
               collapsedSize={0}
               hideExpandButton
-              minSize={panelOptions?.minSize ?? 320}
+              minSize={320}
               maxSize="50%"
               defaultSize={380}
               className="min-w-0"

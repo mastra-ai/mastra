@@ -4,13 +4,11 @@ import type { ComponentProps, ReactNode } from 'react';
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SidePanelContext } from './side-panel-context';
-import type { SidePanelOptions } from './side-panel-context';
 
 interface PanelOwner {
   owner: string;
   priority: number;
   order: number;
-  options: SidePanelOptions;
 }
 
 /**
@@ -27,18 +25,18 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
   const panelHandle = useRef<CollapsiblePanelHandle | null>(null);
   const orderRef = useRef(0);
 
-  const register = useCallback((owner: string, priority: number, options: SidePanelOptions) => {
+  const register = useCallback((owner: string, priority: number) => {
     const order = orderRef.current + 1;
     orderRef.current = order;
 
-    setOwners(current => [...current.filter(entry => entry.owner !== owner), { owner, priority, order, options }]);
+    setOwners(current => [...current.filter(entry => entry.owner !== owner), { owner, priority, order }]);
 
     return () => {
       setOwners(current => current.filter(entry => !(entry.owner === owner && entry.order === order)));
     };
   }, []);
 
-  const active = useMemo(() => {
+  const activeOwner = useMemo(() => {
     let active: PanelOwner | undefined;
     for (const owner of owners) {
       if (
@@ -50,17 +48,15 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    return active ?? null;
+    return active?.owner ?? null;
   }, [owners]);
-  const activeOwner = active?.owner ?? null;
-  const activeOptions = active?.options ?? null;
 
   const toggle = useCallback(() => panelHandle.current?.toggle(), []);
   const onPanelResize = useCallback((sizeInPixels: number) => setPanelCollapsed(sizeInPixels <= 0), []);
 
   const value = useMemo(
-    () => ({ el, setEl, activeOwner, activeOptions, register, panelHandle, isCollapsed, onPanelResize, toggle }),
-    [activeOptions, activeOwner, el, isCollapsed, onPanelResize, register, toggle],
+    () => ({ el, setEl, activeOwner, register, panelHandle, isCollapsed, onPanelResize, toggle }),
+    [activeOwner, el, isCollapsed, onPanelResize, register, toggle],
   );
   return <SidePanelContext.Provider value={value}>{children}</SidePanelContext.Provider>;
 }
@@ -75,21 +71,19 @@ export function RouteSidePanelSlot(props: Omit<ComponentProps<'div'>, 'ref'>) {
 export function RouteSidePanel({
   owner,
   priority = 0,
-  collapsible = true,
-  minSize,
   children,
 }: {
   owner: string;
   priority?: number;
   children: ReactNode;
-} & Partial<SidePanelOptions>) {
+}) {
   const ctx = use(SidePanelContext);
   const register = ctx?.register;
 
   useEffect(() => {
     if (!register) return;
-    return register(owner, priority, { collapsible, minSize });
-  }, [owner, priority, collapsible, minSize, register]);
+    return register(owner, priority);
+  }, [owner, priority, register]);
 
   if (!ctx?.el || ctx.activeOwner !== owner) return null;
   return createPortal(children, ctx.el);

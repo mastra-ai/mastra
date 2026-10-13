@@ -1,24 +1,33 @@
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-
-import { ExperimentItemPanel } from '@/domains/experiments/components/experiment-item-panel';
-import type { ExperimentItemPanelProps } from '@/domains/experiments/components/experiment-item-panel';
+import { useEffect } from 'react';
+import { ExperimentItemPanel } from './experiment-item-panel';
+import type { ExperimentItemPanelProps } from './experiment-item-panel';
 import { useExperimentItemPanel } from '@/domains/experiments/context/experiment-item-panel-context';
-import { RouteSidePanel } from '@/lib/route-side-panel';
+import { RouteSidePanel, useRouteSidePanel } from '@/lib/route-side-panel';
 
 /**
- * Hosts the item result inline in the route side panel, next to the Studio frame, on desktop.
- * The panel exists only while an item is selected and can't be collapsed shut: closing the
- * item is what removes it. On mobile the result keeps its drawer: the edge drawer can't auto-open.
+ * Shows the selected experiment item in the route side panel, next to the
+ * Studio frame. Mobile keeps the drawer, since the edge drawer can't be opened
+ * programmatically.
  */
 export function ExperimentItemSidePanel(props: Omit<ExperimentItemPanelProps, 'variant'>) {
   const { currentItemId } = useExperimentItemPanel();
+  const { hasPanel, panelHandle } = useRouteSidePanel();
   const isMobile = useIsMobile();
+
+  // The panel starts collapsed on a first visit; open it whenever an item is selected.
+  // Deferred a frame so the resizable group has registered the panel.
+  useEffect(() => {
+    if (!currentItemId || !hasPanel) return;
+    const frame = requestAnimationFrame(() => panelHandle.current?.expand());
+    return () => cancelAnimationFrame(frame);
+  }, [currentItemId, hasPanel, panelHandle]);
 
   if (isMobile) return <ExperimentItemPanel {...props} />;
   if (!currentItemId) return null;
 
   return (
-    <RouteSidePanel owner="experiment-item" collapsible={false} minSize={480}>
+    <RouteSidePanel owner="experiment-item">
       <ExperimentItemPanel {...props} variant="inline" />
     </RouteSidePanel>
   );
