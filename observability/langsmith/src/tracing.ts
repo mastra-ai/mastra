@@ -85,6 +85,8 @@ export class LangSmithExporter extends TrackingExporter<
    * size exceeds `#runIdCacheMaxEntries` so the cache cannot grow without bound.
    */
   #langsmithRunIdBySpanId = new Map<string, string>();
+  /** Manual-mode client flushes, chained so an overlapping flush waits for the earlier upload */
+  #manualFlushChain: Promise<void> = Promise.resolve();
   #runIdCacheMaxEntries: number;
 
   constructor(config: LangSmithExporterConfig = {}) {
@@ -140,7 +142,12 @@ export class LangSmithExporter extends TrackingExporter<
     const manualFlushMode =
       (this.#client as unknown as { manualFlushMode?: boolean }).manualFlushMode ?? this.config.manualFlushMode;
     if (manualFlushMode) {
-      await this.#client.flush();
+      // The SDK's flush() empties its queue before uploading, so an overlapping call
+      // would find nothing to wait for. Run each flush after the previous one settles.
+      const client = this.#client;
+      const flush = this.#manualFlushChain.then(() => client.flush());
+      this.#manualFlushChain = flush.catch(() => {});
+      await flush;
     } else {
       await this.#client.awaitPendingTraceBatches();
     }

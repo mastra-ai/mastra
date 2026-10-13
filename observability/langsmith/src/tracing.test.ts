@@ -1170,6 +1170,40 @@ describe('TestLangSmithExporter', () => {
       await flush;
     });
 
+    it.each(['flush', 'shutdown'] as const)(
+      'should run an overlapping manual %s after the earlier client.flush() finishes',
+      async method => {
+        mockClient.manualFlushMode = true;
+        let release!: () => void;
+        mockClient.flush.mockReturnValueOnce(
+          new Promise<void>(resolve => {
+            release = resolve;
+          }),
+        );
+
+        const first = exporter.flush();
+        const second = exporter[method]();
+        const isSecondDone = settled(second);
+        await vi.advanceTimersByTimeAsync(10);
+        // The second client.flush() must not start while the first upload is in flight
+        expect(mockClient.flush).toHaveBeenCalledTimes(1);
+        expect(isSecondDone()).toBe(false);
+
+        release();
+        await Promise.all([first, second]);
+        expect(mockClient.flush).toHaveBeenCalledTimes(2);
+      },
+    );
+
+    it('should still flush after an earlier manual flush failed', async () => {
+      mockClient.manualFlushMode = true;
+      mockClient.flush.mockRejectedValueOnce(new Error('upload failed'));
+
+      await expect(exporter.flush()).rejects.toThrow('upload failed');
+      await exporter.flush();
+      expect(mockClient.flush).toHaveBeenCalledTimes(2);
+    });
+
     it('should wait for awaitPendingTraceBatches() in auto flush mode', async () => {
       const release = held(mockClient.awaitPendingTraceBatches);
 
