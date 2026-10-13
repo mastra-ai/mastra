@@ -2446,7 +2446,13 @@ export class EventedRun<
 
     // Check if workflow is suspended before proceeding
     if (snapshot.status !== 'suspended') {
-      throw new Error('This workflow run was not suspended');
+      throw new MastraError({
+        id: 'WORKFLOW_RUN_NOT_SUSPENDED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: 'This workflow run was not suspended',
+        details: { workflowId: this.workflowId, runId: this.runId, status: snapshot.status },
+      });
     }
 
     // Resolve label to step path if provided
