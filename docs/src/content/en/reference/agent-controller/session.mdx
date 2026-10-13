@@ -148,20 +148,25 @@ Returns: `() => void`
 
 ### Messages and run control
 
-#### `sendMessage({ content, files?, requestContext? })`
+#### `sendMessage({ content, files?, requestContext?, author? })`
 
-Send a user message. The session creates a thread first when no thread is active.
+Send a user message. The session creates a thread first when no thread is active. Pass `author` when the host has authenticated the sender.
 
 ```typescript
 await session.sendMessage({
   content: 'Summarize this file.',
   files: [{ data: fileContents, mediaType: 'text/plain', filename: 'notes.txt' }],
+  author: { id: 'user-123' },
 })
 ```
 
-When `requestContext` carries `MASTRA_MESSAGE_AUTHOR_KEY`, the stored message names that sender under `content.providerMetadata.mastra.author`. See [Reserved keys](/docs/server/request-context#reserved-keys).
+The author persists under `content.metadata.signal.author`. Read it with `getMessageAuthor(message)` from `@mastra/core/agent`. When `requestContext` carries `MASTRA_MESSAGE_AUTHOR_KEY`, the session uses that value if `author` is omitted. See [Reserved keys](/docs/server/request-context#reserved-keys).
 
-#### `steer({ content, requestContext? })`
+#### `queueMessage({ content, files?, requestContext?, author? })`
+
+Queue a message for the next run, or send it immediately while the session is idle. Author metadata persists with the queued message.
+
+#### `steer({ content, requestContext?, author? })`
 
 Queue steering content into an active run.
 
@@ -351,7 +356,9 @@ To change the resource ID, use [`controller.setResourceId()`](/reference/agent-c
 
 ## Thread
 
-`session.thread` owns the active thread binding and resource-scoped thread operations. Stored threads and messages can survive controller recreation when storage is configured. Conversation settings such as mode, model, thinking level, token usage, and pending runs are restored from the active thread when the session creates or switches threads. The live session and its event bus don't persist.
+`session.thread` owns the active thread binding and resource-scoped thread operations. Stored threads and messages can survive controller recreation when storage is configured. Conversation settings such as mode, model, thinking level, token usage, pending runs, and ownership are restored from the active thread when the session creates or switches threads. The live session and its event bus don't persist.
+
+New threads store the Session host's `ownerId` in the reserved `metadata.ownerId` and `metadata.createdBy` fields. Clones use the cloning Session host for both fields. Existing threads without `metadata.ownerId` read as owned by the current Session host without writing a backfill.
 
 ### `session.thread.create({ title?, id?, requestContext? })`
 
@@ -424,6 +431,43 @@ Return the active thread ID, creating and binding a new thread when none is boun
 ```typescript
 const threadId = await session.thread.ensureId()
 ```
+
+### `session.thread.getOwner({ threadId? })`
+
+Return a thread's durable owner. Omit `threadId` to read the active thread. The method returns `undefined` when no thread is selected. An owner-less legacy thread returns the Session host's `ownerId` without writing a backfill.
+
+```typescript
+const ownerId = await session.thread.getOwner()
+```
+
+Returns: `Promise<string | undefined>`
+
+### `session.thread.transferOwnership({ toOwnerId })`
+
+Store `toOwnerId` in the active thread's `metadata.ownerId` and emit `thread_owner_changed`. The original `metadata.createdBy` value doesn't change.
+
+```typescript
+await session.thread.transferOwnership({
+  toOwnerId: 'user-456',
+})
+```
+
+Returns: `Promise<void>`
+
+Transfers are serialized within one process. Storage-backed applications that require a durable cross-process compare-and-set should perform it in their own store first, then call this method to mirror the result.
+
+A successful change emits:
+
+```typescript
+const event = {
+  type: 'thread_owner_changed',
+  threadId: 'thread-7',
+  fromOwnerId: 'user-123',
+  toOwnerId: 'user-456',
+}
+```
+
+Runs snapshot ownership when they start. Within agent tools and dynamic runtime functions, `AgentControllerRequestContext.threadOwnerId` remains unchanged for the run's lifetime. A transfer becomes visible on the next run. `AgentControllerRequestContext.session.ownerId` continues to identify the process-local Session host.
 
 ### `session.thread.list(options?)`
 

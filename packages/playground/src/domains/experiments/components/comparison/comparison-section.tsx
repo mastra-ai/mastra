@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Card } from '@mastra/playground-ui/components/Card';
 import { CollapsibleBox, useCollapsibleBox } from '@mastra/playground-ui/components/CollapsibleBox';
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -16,6 +17,8 @@ export interface ComparisonSectionProps {
   tone?: 'default' | 'negative';
   /** Clips long content with a fade until expanded. Off for short, always-visible blocks like metric lists. */
   collapsible?: boolean;
+  /** Wraps the content in a card (a destructive box when `tone` is negative), with the clipping inside it so the rounded frame stays intact. */
+  framed?: boolean;
   children: ReactNode;
 }
 
@@ -28,9 +31,17 @@ export function ComparisonSection({
   actions,
   tone = 'default',
   collapsible = true,
+  framed = false,
   children,
 }: ComparisonSectionProps) {
   const box = useCollapsibleBox({ collapsedHeight: 160 });
+  const content = collapsible ? (
+    <CollapsibleBox state={box} expandLabel="Expand">
+      {children}
+    </CollapsibleBox>
+  ) : (
+    children
+  );
 
   return (
     <section className="grid min-w-0 gap-2">
@@ -41,12 +52,14 @@ export function ComparisonSection({
         <div className="ml-auto flex items-center gap-1">{actions}</div>
       </div>
       <div role="region" aria-label={title} className="min-w-0">
-        {collapsible ? (
-          <CollapsibleBox state={box} expandLabel="Expand">
-            {children}
-          </CollapsibleBox>
+        {!framed ? (
+          content
+        ) : tone === 'negative' ? (
+          <div className="min-w-0 overflow-hidden rounded-lg border border-destructive-edge bg-destructive-subtle">
+            {content}
+          </div>
         ) : (
-          children
+          <Card className="min-w-0 overflow-hidden">{content}</Card>
         )}
         {collapsible && box.isExpanded && box.isClipped && (
           <div className="flex justify-center pt-1">

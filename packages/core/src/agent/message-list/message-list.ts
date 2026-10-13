@@ -452,6 +452,7 @@ export class MessageList {
       contents: signal.contents,
       attributes: signal.attributes,
       metadata: signal.metadata,
+      author: signal.author,
       providerOptions: signal.providerOptions,
       createdAt,
       acceptedAt,

@@ -129,7 +129,10 @@ const deltasAgainst = (baseline: ComparisonSide, side: ComparisonSide): Record<s
 };
 
 /** Run duration of one side in ms, or null when either timestamp is missing. */
-export function sideDurationMs(side: Pick<ComparisonSide, 'startedAt' | 'completedAt'>): number | null {
+export function sideDurationMs(side: {
+  startedAt?: string | Date | null;
+  completedAt?: string | Date | null;
+}): number | null {
   if (!side.startedAt || !side.completedAt) return null;
   return new Date(side.completedAt).getTime() - new Date(side.startedAt).getTime();
 }

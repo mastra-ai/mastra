@@ -14,7 +14,7 @@ export interface UseExperimentResultsSelectionArgs {
 
 /**
  * Selection state for experiment results plus the bulk actions that act on it
- * (flag for review, tag). Lives at page level so the results list and the
+ * (request review, tag). Lives at page level so the results list and the
  * top-area actions can share it.
  */
 export function useExperimentResultsSelection({ datasetId, experimentId, results }: UseExperimentResultsSelectionArgs) {
