@@ -195,9 +195,11 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
   }
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
 
-  // Force the client's attribution header to match the project whose
-  // connections this resolver discovers.
-  const client = resolveClient({ ...options.client, projectId });
+  // Force the attribution header to match the project whose connections this
+  // resolver discovers — both for discovery here and for the clients the
+  // provider toolsets create from these options at tool-execution time.
+  const clientOptions = { ...options.client, projectId };
+  const client = resolveClient(clientOptions);
   const resolverId = ++nextResolverId;
   // Keyed by `${integrationId}::${connectionId}` so multiple active
   // connections for the same provider each get their own MCP client.
@@ -277,7 +279,15 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
         try {
           const { connections, catalog, catalogAvailable } = await loadSnapshotInputs();
           const requests = buildRequests(normalizedProviders, catalog, catalogAvailable);
-          const snapshot = await mapTools(connections, requests, options, client, mcpClients, resolverId);
+          const snapshot = await mapTools(
+            connections,
+            requests,
+            options,
+            clientOptions,
+            client,
+            mcpClients,
+            resolverId,
+          );
           cache = { snapshot, fetchedAt: Date.now() };
           lastFailureAt = undefined;
           return snapshot;
@@ -532,6 +542,9 @@ async function mapTools(
   connections: ProjectConnection[],
   requests: NormalizedRequest[],
   options: ToolsOptions,
+  // Client options with the resolver's projectId merged in, so the clients the
+  // proxy toolsets create at execution time carry the attribution header.
+  clientOptions: ConnectClientOptions,
   client: ResolvedClient,
   mcpClients: Map<string, { integrationId: string; connectionId: string; client: MCPClient }>,
   resolverId: number,
@@ -574,7 +587,7 @@ async function mapTools(
         } else {
           providerTools = request.registration.createTools({
             connectionId: resolution.connectionId,
-            client: options.client,
+            client: clientOptions,
             ...providerFilterOptions(request.options),
           } as Parameters<typeof request.registration.createTools>[0]);
           applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval);
@@ -601,7 +614,7 @@ async function mapTools(
             connections: resolution.connections,
             allowTools: request.options.allowTools,
             disallowTools: request.options.disallowTools,
-            client: options.client,
+            client: clientOptions,
           });
           applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval, [
             listConnectionsToolKey(integrationId),

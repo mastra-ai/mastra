@@ -112,8 +112,32 @@ describe('connect', () => {
     expect(tools).toEqual(fakeTools);
     const [callArgs] = createTools.mock.calls[0]!;
     expect(callArgs).toMatchObject({ connectionId: 'c_lin1' });
+    // Proxy providers build their own client from these options at
+    // tool-execution time, so they must inherit the resolver's projectId for
+    // activity attribution.
+    expect(callArgs.client).toMatchObject({ projectId: 'proj_1' });
     expect(callArgs.allowTools).toBeUndefined();
     expect(callArgs.disallowTools).toBeUndefined();
+  });
+
+  it('passes the resolved projectId to tool creation for every active connection', async () => {
+    const { createTools } = installProvider();
+    const fetchMock = platformFetch(
+      Response.json({
+        connections: [
+          makeConnection({ id: 'c1', accountLabel: 'Acme' }),
+          makeConnection({ id: 'c2', accountLabel: 'Globex' }),
+        ],
+      }),
+    );
+    await connect({
+      projectId: 'proj_1',
+      client: { accessToken: TOKEN, baseUrl: 'https://example.test', fetch: fetchMock as never },
+    })();
+    expect(createTools.mock.calls.length).toBeGreaterThan(0);
+    for (const [callArgs] of createTools.mock.calls) {
+      expect(callArgs.client).toMatchObject({ projectId: 'proj_1' });
+    }
   });
 
   it('accepts the string-array shorthand for integrations', async () => {
