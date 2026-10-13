@@ -629,8 +629,10 @@ export class MastraStorageExporter extends BaseExporter {
     // writing it, so an empty buffer doesn't mean the data reached storage. Each round
     // joins those writes first (they can defer span updates back into the buffer), then
     // writes whatever the buffer holds. Writes that start while we work get a few more
-    // rounds, then we stop so flush() stays bounded under non-stop traffic (same cap as
-    // ObservabilityBus). A batch that failed is left to its retry timer, as before.
+    // rounds, then we stop taking on new work so flush() stays bounded under non-stop
+    // traffic (same cap as ObservabilityBus), but we still join the writes already running
+    // so nothing is mid-write when we return. A batch that failed is left to its retry
+    // timer, as before.
     for (let round = 0; round < MAX_FLUSH_ROUNDS; round++) {
       if (this.#inFlightFlushes.size > 0) {
         await Promise.allSettled([...this.#inFlightFlushes]);
@@ -645,9 +647,9 @@ export class MastraStorageExporter extends BaseExporter {
         return;
       }
     }
+    await Promise.allSettled([...this.#inFlightFlushes]);
     this.logger.warn(`flush() stopped after ${MAX_FLUSH_ROUNDS} rounds; new writes kept starting`, {
-      inFlightWrites: this.#inFlightFlushes.size,
-      bufferedEvents: this.#eventBuffer.totalSize,
+      bufferedEventsLeftBehind: this.#eventBuffer.totalSize,
     });
   }
 

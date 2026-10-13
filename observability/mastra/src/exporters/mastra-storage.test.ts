@@ -1021,18 +1021,27 @@ describe('MastraStorageExporter', () => {
         expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1);
       });
 
-      it('should stop after a few rounds when new writes keep starting', async () => {
+      it('should join the writes still running when it stops after a few rounds', async () => {
         const exporter = new MastraStorageExporter({ strategy: 'realtime', logger: mockLogger });
         await exporter.init({ mastra: mockMastra });
 
         // Like a server under non-stop traffic: a new event (and, in realtime mode, its write)
-        // arrives before the current write finishes, so a write is always in flight
+        // arrives before the current write finishes, so a write is always in flight. Writes 1-3
+        // each start the next one; write 4 starts during round 3 and is the last, so flush()
+        // hits the cap with a write still running.
+        let writesInFlight = 0;
+        let writesStarted = 0;
         mockObservabilityStore.batchCreateSpans.mockImplementation(
           () =>
             new Promise<void>(resolve => {
+              writesInFlight++;
+              const startNext = ++writesStarted <= 3;
               setImmediate(() => {
-                void exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED));
-                setImmediate(resolve);
+                if (startNext) void exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED));
+                setImmediate(() => {
+                  writesInFlight--;
+                  resolve();
+                });
               });
             }),
         );
@@ -1042,6 +1051,8 @@ describe('MastraStorageExporter', () => {
         await exporter.flush();
 
         expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('rounds'), expect.anything());
+        expect(writesInFlight).toBe(0);
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(4);
         mockObservabilityStore.batchCreateSpans.mockImplementation(async () => {});
       });
     });
