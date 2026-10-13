@@ -100,10 +100,15 @@ const SETTLED_STEP_STATUSES = ['success', 'failed', 'canceled'];
 // suspension that preceded the resume. Persistence has already moved those steps on, so trust it.
 function isStaleSuspension(liveResult: WorkflowRunStreamResult, storedResult: WorkflowRunStreamResult) {
   if (!isIdleRunStatus(liveResult.status)) return false;
-  return Object.entries(liveResult.steps).some(
-    ([stepId, liveStep]) =>
-      liveStep?.status === 'suspended' && SETTLED_STEP_STATUSES.includes(storedResult.steps[stepId]?.status ?? ''),
-  );
+  return Object.entries(liveResult.steps).some(([stepId, liveStep]) => {
+    if (liveStep?.status !== 'suspended') return false;
+    const storedStep = storedResult.steps[stepId];
+    if (!storedStep) return false;
+    if (SETTLED_STEP_STATUSES.includes(storedStep.status)) return true;
+    // A step that keeps working after resume is stored as `running` with `resumedAt` set.
+    if (typeof storedStep.resumedAt !== 'number') return false;
+    return typeof liveStep.suspendedAt !== 'number' || storedStep.resumedAt > liveStep.suspendedAt;
+  });
 }
 
 export function resolveWorkflowRunResult(

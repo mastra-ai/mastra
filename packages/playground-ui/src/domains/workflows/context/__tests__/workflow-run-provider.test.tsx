@@ -412,45 +412,65 @@ describe('WorkflowRunProvider', () => {
 
   describe('when a run resumed outside Studio is observed', () => {
     it('keeps the stored running state instead of the replayed suspension', async () => {
-      let observeStarted = false;
-      const staleReplay: StreamVNextChunkType[] = [
-        { ...runningChunk, runId: completedLoop.runId },
-        {
-          type: 'workflow-step-suspended',
-          runId: completedLoop.runId,
-          from: 'WORKFLOW',
-          payload: { id: 'persisted', status: 'suspended', suspendPayload: {}, startedAt: 100, suspendedAt: 105 },
+      const runId = completedLoop.runId;
+      const start: StreamVNextChunkType = { ...runningChunk, runId };
+      const stepStart: StreamVNextChunkType = {
+        type: 'workflow-step-start',
+        runId,
+        from: 'WORKFLOW',
+        payload: { id: 'persisted', stepCallId: 'persisted-call', status: 'running', payload: {}, startedAt: 100 },
+      };
+      const suspended: StreamVNextChunkType = {
+        type: 'workflow-step-suspended',
+        runId,
+        from: 'WORKFLOW',
+        payload: { id: 'persisted', status: 'suspended', suspendPayload: {}, startedAt: 100, suspendedAt: 105 },
+      };
+      const finish: StreamVNextChunkType = {
+        type: 'workflow-finish',
+        runId,
+        from: 'WORKFLOW',
+        payload: {
+          workflowStatus: 'suspended',
+          output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+          metadata: {},
         },
-        {
-          type: 'workflow-finish',
-          runId: completedLoop.runId,
-          from: 'WORKFLOW',
-          payload: {
-            workflowStatus: 'suspended',
-            output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
-            metadata: {},
-          },
+      };
+      let streamController!: ReadableStreamDefaultController<Uint8Array>;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          streamController = controller;
         },
-      ];
+      });
+      const send = (...chunks: StreamVNextChunkType[]) =>
+        act(async () => {
+          streamController.enqueue(
+            new TextEncoder().encode(chunks.map(chunk => JSON.stringify(chunk) + '\x1e').join('')),
+          );
+        });
       server.use(
         http.get(`${BASE_URL}/api/workflows/two-step-workflow/runs/completed-loop`, () =>
           HttpResponse.json(resumedElsewhereLoop),
         ),
-        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () =>
-          HttpResponse.json({ runId: completedLoop.runId }),
-        ),
-        http.post(`${BASE_URL}/api/workflows/two-step-workflow/observe`, () => {
-          observeStarted = true;
-          return new HttpResponse(staleReplay.map(chunk => JSON.stringify(chunk) + '\x1e').join(''));
-        }),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/create-run`, () => HttpResponse.json({ runId })),
+        http.post(`${BASE_URL}/api/workflows/two-step-workflow/observe`, () => new HttpResponse(stream)),
       );
-      renderProvider(completedLoop.runId);
-      await waitFor(() => expect(screen.getByLabelText('Run state').textContent).toBe('running'));
+      renderProvider(runId);
+      await waitFor(() => expect(screen.getByLabelText('Persisted state').textContent).toBe('success'));
       fireEvent.click(screen.getByRole('button', { name: 'Observe run' }));
-      await waitFor(() => expect(observeStarted).toBe(true));
-      await waitFor(() => expect(screen.getByLabelText('Streaming state').textContent).toBe('false'));
+
+      // The server replays the cached suspension, then the live run re-emits it.
+      await send(start, stepStart);
+      await waitFor(() => expect(screen.getByLabelText('Persisted state').textContent).toBe('running'));
+      await send(suspended, finish);
+      await waitFor(() => expect(screen.getByLabelText('Persisted state').textContent).toBe('success'));
+      await send(start, stepStart);
+      await waitFor(() => expect(screen.getByLabelText('Persisted state').textContent).toBe('running'));
+      await send(suspended);
+      await act(async () => streamController.close());
+
+      await waitFor(() => expect(screen.getByLabelText('Persisted state').textContent).toBe('success'));
       expect(screen.getByLabelText('Run state').textContent).toBe('running');
-      expect(screen.getByLabelText('Persisted state').textContent).toBe('success');
       expect(screen.getByLabelText('Child state').textContent).toBe('running');
     });
   });
