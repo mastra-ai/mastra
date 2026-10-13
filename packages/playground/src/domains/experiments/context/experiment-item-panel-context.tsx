@@ -78,6 +78,7 @@ export function ExperimentItemPanelProvider({
   // Shared prev/next/close keyboard nav, active while an item is open, focus-independent.
   useItemPanelKeyboardNav({
     active: Boolean(currentItemId),
+    withArrowKeys: true,
     onPrevious: goToPreviousItem,
     onNext: goToNextItem,
     onClose: close,

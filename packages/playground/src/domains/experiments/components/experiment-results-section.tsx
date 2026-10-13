@@ -150,6 +150,9 @@ export function ExperimentResultsSection({
         onToggleSelectAll={onToggleSelectAll}
         sort={sort}
         onSortChange={onSortChange}
+        selectOnNavigate
+        // While an item is open, the item panel's own shortcuts own the arrow keys.
+        keyboardGlobal={!currentItemId}
       />
     </div>
   );

@@ -13,6 +13,8 @@ function isEditableTarget(target: EventTarget | null): boolean {
 export type ItemPanelKeyboardNavOptions = {
   /** Only listen while an item panel is open. */
   active: boolean;
+  /** Also move between items with ArrowUp/ArrowDown. */
+  withArrowKeys?: boolean;
   onPrevious?: () => void;
   onNext?: () => void;
   onClose: () => void;
@@ -20,18 +22,25 @@ export type ItemPanelKeyboardNavOptions = {
 
 /**
  * Window-level keyboard navigation shared by the item list and the side panel:
- * PageUp/PageDown move between items and Escape closes, regardless of focus.
+ * PageUp/PageDown (and optionally ArrowUp/ArrowDown) move between items and
+ * Escape closes, regardless of focus.
  */
-export function useItemPanelKeyboardNav({ active, onPrevious, onNext, onClose }: ItemPanelKeyboardNavOptions) {
+export function useItemPanelKeyboardNav({
+  active,
+  withArrowKeys = false,
+  onPrevious,
+  onNext,
+  onClose,
+}: ItemPanelKeyboardNavOptions) {
   useEffect(() => {
     if (!active) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented || isEditableTarget(event.target)) return;
-      if (event.key === 'PageUp') {
+      if (event.key === 'PageUp' || (withArrowKeys && event.key === 'ArrowUp')) {
         event.preventDefault();
         onPrevious?.();
-      } else if (event.key === 'PageDown') {
+      } else if (event.key === 'PageDown' || (withArrowKeys && event.key === 'ArrowDown')) {
         event.preventDefault();
         onNext?.();
       } else if (event.key === 'Escape') {
@@ -42,5 +51,5 @@ export function useItemPanelKeyboardNav({ active, onPrevious, onNext, onClose }:
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [active, onPrevious, onNext, onClose]);
+  }, [active, withArrowKeys, onPrevious, onNext, onClose]);
 }

@@ -10,6 +10,7 @@ import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { GaugeIcon } from 'lucide-react';
+import { useState } from 'react';
 import { getResultErrorMessage, getResultOutputPreview } from '../utils/result-output';
 import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
@@ -81,6 +82,10 @@ export type ExperimentResultsListProps<T extends ExperimentResultsListItem> = {
   /** Server-side sort; the `startedAt` header is only sortable when `onSortChange` is provided. */
   sort?: ListSort<ExperimentResultsSortKey>;
   onSortChange?: (direction: 'asc' | 'desc', key: ExperimentResultsSortKey) => void;
+  /** Arrow/page/Home/End keyboard navigation also opens the result it lands on. */
+  selectOnNavigate?: boolean;
+  /** Listen for ArrowUp/ArrowDown on the whole page, before any row has focus. */
+  keyboardGlobal?: boolean;
 };
 
 /**
@@ -103,6 +108,8 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   onToggleSelectAll,
   sort,
   onSortChange,
+  selectOnNavigate = false,
+  keyboardGlobal = false,
 }: ExperimentResultsListProps<T>) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const hasSelection = Boolean(selectedIds && onToggleSelect);
@@ -125,7 +132,26 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   const selectedVisibleCount = selectedIds ? results.filter(r => selectedIds.has(r.id)).length : 0;
   const isAllSelected = results.length > 0 && selectedVisibleCount === results.length;
 
-  const { containerRef, getRowProps } = useDataListKeyboard({ count: results.length });
+  const { containerRef, getRowProps, setActiveIndex } = useDataListKeyboard({
+    count: results.length,
+    global: keyboardGlobal,
+    // Skip the clamped boundary case: re-clicking the open result would close it.
+    onNavigate: selectOnNavigate
+      ? index => {
+          const result = results[index];
+          if (result && result.id !== featuredResultId) onResultClick(result.id);
+        }
+      : undefined,
+  });
+
+  // Keep the roving index on the open result when it changes from outside the
+  // list (prev/next buttons, panel shortcuts), so the next arrow press continues from it.
+  const featuredIndex = results.findIndex(r => r.id === featuredResultId);
+  const [syncedFeaturedIndex, setSyncedFeaturedIndex] = useState(featuredIndex);
+  if (featuredIndex !== syncedFeaturedIndex) {
+    setSyncedFeaturedIndex(featuredIndex);
+    if (featuredIndex >= 0) setActiveIndex(featuredIndex);
+  }
 
   // Scorer columns get the scorers icon (matching the sidebar nav) plus a
   // link to the scorer page, so score columns are recognizable even

@@ -77,7 +77,7 @@ const UNCLIPPED: CSSProperties = { overflow: 'visible' };
  */
 export function StudioFrame({ children, className }: { children: React.ReactNode; className?: string }) {
   const isMobile = useIsMobile();
-  const { hasPanel, panelHandle, onPanelResize } = useRouteSidePanel();
+  const { hasPanel, panelOptions, panelHandle, onPanelResize } = useRouteSidePanel();
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: 'studio-frame-layout-v1',
     storage: localStorage,
@@ -97,15 +97,16 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
         </Panel>
         {hasPanel && !isMobile && (
           <>
-            <PanelSeparator />
+            {/* The separator is the gap between the two cards, so its handle sits between them. */}
+            <PanelSeparator className="w-2" />
             <CollapsiblePanel
               id="route-side-panel"
               ref={panelHandle}
               direction="right"
-              collapsible
+              collapsible={panelOptions?.collapsible ?? true}
               collapsedSize={0}
               hideExpandButton
-              minSize={320}
+              minSize={panelOptions?.minSize ?? 320}
               maxSize="50%"
               defaultSize={380}
               className="min-w-0"
