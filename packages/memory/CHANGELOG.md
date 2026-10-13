@@ -1,5 +1,25 @@
 # @mastra/memory
 
+## 1.37.1-alpha.2
+
+### Patch Changes
+
+- Fixed live scorers missing tool calls when observational memory is enabled. Observational memory removes messages from the agent's context once it has observed them, and live scorers only saw the messages that were left. On runs that suspend and resume, scorer `output` could miss every tool call made before `suspend()`, or end up empty. Scorers now receive every response message the run produced, across all suspend/resume segments, under the original `runId`. The prompt sent to the model is unchanged. ([#26687](https://github.com/mastra-ai/mastra/pull/26687))
+
+- Updated dependencies [[`2a1bb80`](https://github.com/mastra-ai/mastra/commit/2a1bb80305bca1859504287e1a09f43c8a014330), [`519e97f`](https://github.com/mastra-ai/mastra/commit/519e97f624a15362fec7b143dea4eabcff556712), [`aea91e7`](https://github.com/mastra-ai/mastra/commit/aea91e7f3a4fb066bfda96dca670d7d2a766d770), [`da87b0a`](https://github.com/mastra-ai/mastra/commit/da87b0a1629d5ffc980b434f70fe60f9445ddb1c), [`182f097`](https://github.com/mastra-ai/mastra/commit/182f09745783aa83e42131307085ecf913cfbc38), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183)]:
+  - @mastra/core@1.77.0-alpha.2
+
+## 1.37.1-alpha.1
+
+### Patch Changes
+
+- Fixed observational memory erasing schema-based working memory. This happened when the Observer model returned an empty working-memory object, which Gemini does with `manageWorkingMemory: true`. ([#26681](https://github.com/mastra-ai/mastra/pull/26681))
+
+  An empty working-memory result no longer replaces stored working memory. Mastra now retries the extraction when this happens. Other extracted values, such as the thread title, are kept whether the retry succeeds or fails.
+
+- Updated dependencies [[`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`821b8d4`](https://github.com/mastra-ai/mastra/commit/821b8d4253dcac5d8cf886994884e4645899bedc), [`878e0e2`](https://github.com/mastra-ai/mastra/commit/878e0e2f5adf9669158c7a8a8d67cd8809633c24), [`3504acd`](https://github.com/mastra-ai/mastra/commit/3504acdb2833b71db61dc9387c0f25f3cd0a3070), [`5bb6d71`](https://github.com/mastra-ai/mastra/commit/5bb6d711680d17370eacdcdab105e5af69202c5f), [`dab6849`](https://github.com/mastra-ai/mastra/commit/dab6849945ab2a0e4c946f5b31fb6f41b2c1cd7d), [`5227c95`](https://github.com/mastra-ai/mastra/commit/5227c95d54d0b4846220530450063f259797b587)]:
+  - @mastra/core@1.77.0-alpha.1
+
 ## 1.37.1-alpha.0
 
 ### Patch Changes

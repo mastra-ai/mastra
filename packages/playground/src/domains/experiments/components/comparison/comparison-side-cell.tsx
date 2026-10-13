@@ -1,21 +1,33 @@
-import { Code } from '@mastra/playground-ui/components/Code';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { ClockIcon } from 'lucide-react';
-import type { ComparisonColumn, ComparisonSide } from './build-comparison-rows';
-import { ComparisonScoreRow } from './comparison-score-row';
-import { ComparisonSection } from './comparison-section';
+import { ClockIcon, CoinsIcon, HashIcon } from 'lucide-react';
+import { getResultErrorMessage, getResultOutputText } from '../../utils/result-output';
+import { sideDurationMs } from './build-comparison-rows';
+import type { ComparisonColumn } from './build-comparison-rows';
+import {
+  costDeltaFormatter,
+  formatCostValue,
+  formatDurationDelta,
+  formatScore,
+  formatTokenCount,
+  totalTokens,
+} from './comparison-metric-format';
+import { ComparisonMetricList, ScorerLabel } from './comparison-metric-list';
+import type { ComparisonMetric } from './comparison-metric-list';
+import { ComparisonPayload } from './comparison-payload';
+import { ComparisonSection, sectionStackClass } from './comparison-section';
 
 export interface ComparisonSideCellProps {
   /** One experiment's side of the row. Contenders carry their deltas against the baseline. */
   column: ComparisonColumn;
   isLoading?: boolean;
+  /** Shows the cost and tokens lines. False when the observability storage cannot serve metrics. */
+  showUsage?: boolean;
 }
 
 function formatValue(value: unknown): string {
@@ -24,24 +36,71 @@ function formatValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function sideDuration(side: ComparisonSide): string | null {
-  if (!side.startedAt || !side.completedAt) return null;
-  const ms = new Date(side.completedAt).getTime() - new Date(side.startedAt).getTime();
-  return formatDuration(ms) ?? null;
-}
+function sideMetrics(side: ComparisonColumn, showUsage: boolean): ComparisonMetric[] {
+  const costUnit = side.usage?.costUnit;
+  const cost: ComparisonMetric[] = showUsage
+    ? [
+        {
+          id: 'cost',
+          icon: <CoinsIcon />,
+          label: 'Cost',
+          value: formatCostValue(side.usage?.estimatedCost, costUnit),
+          delta: side.costDelta ?? null,
+          formatDelta: costDeltaFormatter(costUnit),
+          higherIsBetter: false,
+        },
+      ]
+    : [];
 
-const codeBoxClass = cn(
-  raisedSurfaceStyle,
-  'max-h-[30vh] overflow-y-auto rounded-xl p-4 break-all whitespace-pre-wrap',
-);
+  const tokens: ComparisonMetric[] = showUsage
+    ? [
+        {
+          id: 'tokens',
+          icon: <HashIcon />,
+          label: 'Tokens',
+          value: formatTokenCount(totalTokens(side.usage)),
+          delta: side.tokenDelta ?? null,
+          formatDelta: formatTokenCount,
+          higherIsBetter: false,
+        },
+      ]
+    : [];
+
+  const durationMs = sideDurationMs(side);
+  const duration: ComparisonMetric[] =
+    durationMs == null
+      ? []
+      : [
+          {
+            id: 'duration',
+            icon: <ClockIcon />,
+            label: 'Duration',
+            value: formatDuration(durationMs) ?? '-',
+            delta: side.durationDeltaMs,
+            formatDelta: formatDurationDelta,
+            higherIsBetter: false,
+          },
+        ];
+
+  return [
+    ...cost,
+    ...duration,
+    ...tokens,
+    ...side.scores.map(score => ({
+      id: `scorer:${score.scorerId}`,
+      icon: <ScorersIcon />,
+      label: <ScorerLabel scorerId={score.scorerId} />,
+      value: formatScore(score.value),
+      delta: side.deltas?.[score.scorerId] ?? null,
+    })),
+  ];
+}
 
 /**
  * One experiment's side of a single item row. Every column renders the exact same
  * sections in the same order so the row can be read as a visual diff.
  */
-export function ComparisonSideCell({ column: data, isLoading }: ComparisonSideCellProps) {
-  const duration = sideDuration(data);
-
+export function ComparisonSideCell({ column: data, isLoading, showUsage = false }: ComparisonSideCellProps) {
   if (isLoading) {
     return (
       <div className="flex h-32 items-center justify-center">
@@ -59,61 +118,38 @@ export function ComparisonSideCell({ column: data, isLoading }: ComparisonSideCe
   }
 
   const outputStr = formatValue(data.output);
+  const outputText = getResultOutputText(data);
+  const errorMessage = getResultErrorMessage(data);
+  const metrics = sideMetrics(data, showUsage);
 
   return (
-    <div className="grid content-start gap-5">
-      {duration && (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Txt tone="muted" className="flex items-center justify-end gap-1.5 [&>svg]:size-3.5">
-                <ClockIcon />
-                <Txt as="span" variant="body" font="mono">
-                  {duration}
-                </Txt>
-              </Txt>
-            }
-          />
-          <TooltipContent>Run duration</TooltipContent>
-        </Tooltip>
+    <div className={sectionStackClass}>
+      {metrics.length > 0 && (
+        <ComparisonSection title="Metrics" collapsible={false}>
+          <ComparisonMetricList metrics={metrics} />
+        </ComparisonSection>
       )}
 
-      {data.error ? (
-        <ComparisonSection title="Error" tone="negative" actions={<CopyButton content={data.error.message} />}>
-          <Txt tone="muted" className="rounded-xl border border-destructive-edge bg-destructive-subtle p-4 break-words">
-            {data.error.message}
+      {errorMessage ? (
+        <ComparisonSection title="Error" tone="negative" actions={<CopyButton content={errorMessage} />}>
+          <Txt tone="muted" className="rounded-lg border border-destructive-edge bg-destructive-subtle p-3 break-words">
+            {errorMessage}
           </Txt>
         </ComparisonSection>
       ) : (
         <ComparisonSection title="Output" actions={<CopyButton content={outputStr} />}>
-          <Code className={cn(codeBoxClass, 'font-mono text-body text-muted-foreground')} code={outputStr} />
-        </ComparisonSection>
-      )}
-
-      {data.scores.length > 0 && (
-        <ComparisonSection title="Scores">
-          <div className="grid gap-2">
-            {data.scores.map(score => (
-              <ComparisonScoreRow
-                key={score.scorerId}
-                scorerId={score.scorerId}
-                value={score.value}
-                delta={data.deltas?.[score.scorerId]}
-                reason={score.reason}
-              />
-            ))}
-          </div>
+          <ComparisonPayload value={outputText ?? data.output} />
         </ComparisonSection>
       )}
 
       {data.comment && (
-        <ComparisonSection title="Comment" defaultOpen={false}>
-          <Txt tone="muted">{data.comment}</Txt>
+        <ComparisonSection title="Comment">
+          <ComparisonPayload value={data.comment} />
         </ComparisonSection>
       )}
 
       {data.metadata && Object.keys(data.metadata).length > 0 && (
-        <ComparisonSection title="Metadata" defaultOpen={false}>
+        <ComparisonSection title="Metadata">
           <dl className="grid gap-1">
             {Object.entries(data.metadata).map(([key, value]) => (
               <div key={key} className="flex items-start justify-between gap-4">

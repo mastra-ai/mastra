@@ -101,7 +101,15 @@ export {
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
 
 // Run registry for non-serializable state
-export { RunRegistry, ExtendedRunRegistry, globalRunRegistry, type ExtendedRunRegistryEntry } from './run-registry';
+export {
+  RunRegistry,
+  ExtendedRunRegistry,
+  globalRunRegistry,
+  getRunRegistryEntry,
+  setRunRegistryEntry,
+  deleteRunRegistryEntry,
+  type ExtendedRunRegistryEntry,
+} from './run-registry';
 
 // Lets shared test suites simulate a process crash
 export { __resetExecutionFencesForTests } from './execution-fence';
@@ -205,6 +213,7 @@ export {
 // Shared workflow utilities
 export {
   executeDurableAgentScorers,
+  loadRunStoredMessages,
   modelConfigSchema,
   modelListEntrySchema,
   accumulatedUsageSchema,

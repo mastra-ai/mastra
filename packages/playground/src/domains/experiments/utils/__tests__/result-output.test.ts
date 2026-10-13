@@ -5,7 +5,12 @@ import {
   agentMarkdownResult,
   workflowResult,
 } from '../../components/__tests__/fixtures/experiment-results';
-import { getOptionalResultColumns, getResultErrorMessage, getResultOutputText } from '../result-output';
+import {
+  getOptionalResultColumns,
+  getResultErrorMessage,
+  getResultOutputPreview,
+  getResultOutputText,
+} from '../result-output';
 
 describe('getResultOutputText', () => {
   describe('when the result is an agent result with text', () => {
@@ -18,6 +23,30 @@ describe('getResultOutputText', () => {
     it('returns undefined', () => {
       expect(getResultOutputText(workflowResult)).toBeUndefined();
     });
+  });
+});
+
+describe('getResultOutputPreview', () => {
+  it('uses the agent text', () => {
+    expect(getResultOutputPreview(agentMarkdownResult)).toBe('# Title\n\n**bold**');
+  });
+
+  it('falls back to a plain string output when the target is unknown', () => {
+    expect(getResultOutputPreview({ targetType: null, output: 'Try a frittata.' })).toBe('Try a frittata.');
+  });
+
+  it('falls back to compact JSON for structured output', () => {
+    expect(getResultOutputPreview({ targetType: null, output: { dish: 'panna cotta' } })).toBe(
+      '{"dish":"panna cotta"}',
+    );
+  });
+
+  it('returns undefined when there is no output', () => {
+    expect(getResultOutputPreview({ targetType: null, output: null })).toBeUndefined();
+  });
+
+  it('keeps typed non-agent output out of the list', () => {
+    expect(getResultOutputPreview(workflowResult)).toBeUndefined();
   });
 });
 

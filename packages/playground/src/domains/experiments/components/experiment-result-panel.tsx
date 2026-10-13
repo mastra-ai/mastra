@@ -183,7 +183,6 @@ function ExperimentResultPanelBody({
                   ))}
                   {onTagsChange && (
                     <ExperimentResultsTagPicker
-                      appearance="inline"
                       selectedResults={selectedResults}
                       vocabulary={tagVocabulary}
                       onAddTag={tag => onTagsChange([...tags, tag])}

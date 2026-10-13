@@ -1,5 +1,33 @@
 # @mastra/mcp
 
+## 2.4.0-alpha.0
+
+### Minor Changes
+
+- Linked MCP calls across traces, in both directions. When an agent or workflow calls a tool through `MCPClient`, the request carries the W3C `traceparent` of the tool call span. `MCPServer` keeps its own trace for the request and links its request span to that span. Its `tools/call` reply names the span that served the call, and `MCPClient` links the tool call span back to it, so you can move between the two traces from either side. When the server uses a tracing bridge and its HTTP instrumentation continues the caller's trace, the request joins that trace instead. ([#26059](https://github.com/mastra-ai/mastra/pull/26059))
+
+  The server reads `traceparent` and `tracestate` from the request `_meta`, or from the HTTP headers that OpenTelemetry-instrumented callers send. It also records them on the request span as `callerTraceparent` and `callerTracestate`, so exporters without span link support still show the caller.
+
+  This needs no setup. To send your own trace context, or none, set `traceContext` on the server:
+
+  ```ts
+  const mcp = new MCPClient({
+    servers: {
+      orders: {
+        url: new URL('https://orders.example.com/mcp'),
+        traceContext: () => undefined, // send no trace context
+      },
+    },
+  });
+  ```
+
+  `@mastra/mcp` now requires `@mastra/core` 1.76.0 or later.
+
+### Patch Changes
+
+- Updated dependencies [[`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`821b8d4`](https://github.com/mastra-ai/mastra/commit/821b8d4253dcac5d8cf886994884e4645899bedc), [`878e0e2`](https://github.com/mastra-ai/mastra/commit/878e0e2f5adf9669158c7a8a8d67cd8809633c24), [`3504acd`](https://github.com/mastra-ai/mastra/commit/3504acdb2833b71db61dc9387c0f25f3cd0a3070), [`5bb6d71`](https://github.com/mastra-ai/mastra/commit/5bb6d711680d17370eacdcdab105e5af69202c5f), [`dab6849`](https://github.com/mastra-ai/mastra/commit/dab6849945ab2a0e4c946f5b31fb6f41b2c1cd7d), [`5227c95`](https://github.com/mastra-ai/mastra/commit/5227c95d54d0b4846220530450063f259797b587)]:
+  - @mastra/core@1.77.0-alpha.1
+
 ## 2.3.0
 
 ### Minor Changes

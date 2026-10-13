@@ -1,5 +1,43 @@
 # @mastra/factory
 
+## 0.21.1-alpha.2
+
+### Patch Changes
+
+- Fixed the Factory web UI hanging on the splash screen when authentication is disabled (`auth: null` or `MASTRACODE_AUTH_DISABLED=1`). `GET /auth/me` now returns 404, so the UI shows that no authentication provider is configured instead of retrying forever. ([#26797](https://github.com/mastra-ai/mastra/pull/26797))
+
+- Fixed a reused Factory workspace keeping the reviewer GitHub token when the run-binding lookup fails. A session whose role cannot be read now falls back to the worker token (or repository access), and refresh callbacks from the earlier reviewer context are rejected. The reviewer token comes back once the review binding is readable again. ([#26804](https://github.com/mastra-ai/mastra/pull/26804))
+
+- Factory skills settings now flag a skill the agent cannot load. Skills are checked with the same frontmatter parser the agent uses, so a `SKILL.md` with invalid YAML (for example an unquoted `: ` in the `description`) shows "Failed to load" with the parse error, instead of looking healthy and then failing at kickoff with "skill not found". ([#26788](https://github.com/mastra-ai/mastra/pull/26788))
+
+- Added a persisted `modelScope` field to Factory projects, defaulting to `factory` to preserve the existing Factory-level behavior. This release saves and exposes the selection for future support; it does not change session model or credential resolution. ([#26803](https://github.com/mastra-ai/mastra/pull/26803))
+
+  Consumers can inspect the saved setting through the exported `FactoryProject` type:
+
+  ```ts
+  import type { FactoryProject } from '@mastra/factory';
+
+  function usesFactoryDefaults(project: FactoryProject) {
+    return project.modelScope === 'factory';
+  }
+  ```
+
+- Updated dependencies [[`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183), [`2a1bb80`](https://github.com/mastra-ai/mastra/commit/2a1bb80305bca1859504287e1a09f43c8a014330), [`519e97f`](https://github.com/mastra-ai/mastra/commit/519e97f624a15362fec7b143dea4eabcff556712), [`aea91e7`](https://github.com/mastra-ai/mastra/commit/aea91e7f3a4fb066bfda96dca670d7d2a766d770), [`da87b0a`](https://github.com/mastra-ai/mastra/commit/da87b0a1629d5ffc980b434f70fe60f9445ddb1c), [`182f097`](https://github.com/mastra-ai/mastra/commit/182f09745783aa83e42131307085ecf913cfbc38), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183)]:
+  - @mastra/code-sdk@1.12.1-alpha.2
+  - @mastra/core@1.77.0-alpha.2
+
+## 0.21.1-alpha.1
+
+### Patch Changes
+
+- Removed the commit id from the review verdict badge on Reviewing cards. The badge now reads "Approved" or "Changes requested", and still adds "(outdated)" once new commits are pushed after the review. ([#26770](https://github.com/mastra-ai/mastra/pull/26770))
+
+- Improved GitHub API latency in Factory. GitHub calls for an installation now reuse its access token until it nears expiry, instead of requesting a new token before every call. After the first call, each GitHub call takes about half as long, and Factory requests far fewer tokens, reducing the risk of hitting GitHub's token rate limits. ([#26709](https://github.com/mastra-ai/mastra/pull/26709))
+
+- Updated dependencies [[`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`821b8d4`](https://github.com/mastra-ai/mastra/commit/821b8d4253dcac5d8cf886994884e4645899bedc), [`878e0e2`](https://github.com/mastra-ai/mastra/commit/878e0e2f5adf9669158c7a8a8d67cd8809633c24), [`3504acd`](https://github.com/mastra-ai/mastra/commit/3504acdb2833b71db61dc9387c0f25f3cd0a3070), [`5bb6d71`](https://github.com/mastra-ai/mastra/commit/5bb6d711680d17370eacdcdab105e5af69202c5f), [`dab6849`](https://github.com/mastra-ai/mastra/commit/dab6849945ab2a0e4c946f5b31fb6f41b2c1cd7d), [`5227c95`](https://github.com/mastra-ai/mastra/commit/5227c95d54d0b4846220530450063f259797b587)]:
+  - @mastra/core@1.77.0-alpha.1
+  - @mastra/code-sdk@1.12.1-alpha.1
+
 ## 0.21.1-alpha.0
 
 ### Patch Changes

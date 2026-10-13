@@ -16,7 +16,8 @@ import {
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
-  globalRunRegistry,
+  getRunRegistryEntry,
+  loadRunStoredMessages,
   pruneAgentLoopSnapshot,
 } from '@mastra/core/agent/durable';
 import type {
@@ -344,7 +345,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       )
       // Run the agentic loop with dowhile
       .dowhile(singleIterationWorkflow, async params => {
-        const { inputData, engine } = params;
+        const { inputData, engine, mastra } = params;
         const state = inputData as IterationState;
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
         const { step } = engine as { step: BaseContext<Inngest>['step'] };
@@ -389,7 +390,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         let stopped: boolean;
         try {
           stopped = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
-            const stopWhen = globalRunRegistry.get(state.runId)?.stopWhen;
+            const stopWhen = getRunRegistryEntry(state.runId, mastra)?.stopWhen;
             if (!stopWhen || state.accumulatedSteps.length === 0) {
               return false;
             }
@@ -524,14 +525,16 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       )
       // Execute scorers (fire-and-forget, doesn't affect main result)
       .map(
-        async ({ inputData, getInitData, mastra, requestContext, tracingContext }) => {
-          executeDurableAgentScorers({
+        async params => {
+          const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
+          void executeDurableAgentScorers({
             initData: getInitData() as DurableAgenticWorkflowInput,
             finalOutput: inputData,
             mastra,
             requestContext,
             tracingContext,
-          });
+            loadStoredMessages: loadRunStoredMessages(params),
+          }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));
 
           return inputData;
         },

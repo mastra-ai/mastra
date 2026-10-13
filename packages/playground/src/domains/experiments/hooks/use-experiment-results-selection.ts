@@ -41,6 +41,12 @@ export function useExperimentResultsSelection({ datasetId, experimentId, results
 
   const clearSelection = useCallback(() => setSelectedIds(new Set()), []);
 
+  const toggleSelectAll = useCallback(() => {
+    setSelectedIds(prev =>
+      results.length > 0 && results.every(r => prev.has(r.id)) ? new Set() : new Set(results.map(r => r.id)),
+    );
+  }, [results]);
+
   const flagSelectedForReview = useCallback(async () => {
     if (isFlagging || selectedIds.size === 0) return;
     setIsFlagging(true);
@@ -73,6 +79,7 @@ export function useExperimentResultsSelection({ datasetId, experimentId, results
     selectedIds,
     selectedResults,
     toggleSelect,
+    toggleSelectAll,
     clearSelection,
     flagSelectedForReview,
     isFlagging,

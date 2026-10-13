@@ -1,15 +1,17 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
-import { AlertCircleIcon, GaugeIcon } from 'lucide-react';
-import { getResultErrorMessage, getResultOutputText } from '../utils/result-output';
+import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import { formatDuration } from '@mastra/playground-ui/utils/duration';
+import { GaugeIcon } from 'lucide-react';
+import { getResultErrorMessage, getResultOutputPreview } from '../utils/result-output';
+import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 /**
@@ -30,14 +32,31 @@ export type ExperimentResultsListItem = {
   scores?: Record<string, number> | Array<{ score: number | null }> | null;
   /** When the run started; drives the `startedAt` column. */
   startedAt?: string | Date | null;
+  /** When the run finished; with `startedAt`, drives the `duration` column. */
+  completedAt?: string | Date | null;
+  /** Token usage and cost of the run's trace; drives the `cost` and `tokens` columns. */
+  usage?: { inputTokens?: number; outputTokens?: number; estimatedCost?: number; costUnit?: string };
 };
 
-const BUILT_IN_COLUMNS = new Set(['itemId', 'id', 'status', 'input', 'output', 'error', 'tags', 'scores', 'startedAt']);
+const BUILT_IN_COLUMNS = new Set([
+  'itemId',
+  'id',
+  'status',
+  'input',
+  'output',
+  'error',
+  'tags',
+  'scores',
+  'startedAt',
+  'cost',
+  'tokens',
+  'duration',
+]);
 
 export type ExperimentResultsSortKey = 'startedAt';
 
 export type ExperimentResultsListColumn = {
-  /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | `startedAt` | a scorer id */
+  /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | `startedAt` | `cost` | `tokens` | `duration` | a scorer id */
   name: string;
   label: string;
   size: string;
@@ -100,6 +119,9 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   const hasTagsColumn = hasColumn('tags');
   const hasScoresColumn = hasColumn('scores');
   const hasStartedAtColumn = hasColumn('startedAt');
+  const hasCostColumn = hasColumn('cost');
+  const hasTokensColumn = hasColumn('tokens');
+  const hasDurationColumn = hasColumn('duration');
   const selectedVisibleCount = selectedIds ? results.filter(r => selectedIds.has(r.id)).length : 0;
   const isAllSelected = results.length > 0 && selectedVisibleCount === results.length;
 
@@ -167,23 +189,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
             const rowCells = (
               <>
                 {hasItemIdColumn && (
-                  <DataList.Cell className="flex items-center gap-1.5 text-muted-foreground">
-                    <span>{result.itemId?.slice(0, 8) ?? ''}</span>
-                    {hasError && (
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <AlertCircleIcon
-                              role="img"
-                              aria-label="Error"
-                              className="size-3.5 text-destructive-foreground"
-                            />
-                          }
-                        />
-                        <TooltipContent>{errorMessage(result.error)}</TooltipContent>
-                      </Tooltip>
-                    )}
-                  </DataList.Cell>
+                  <DataList.Cell className="text-muted-foreground">{result.itemId?.slice(0, 8) ?? ''}</DataList.Cell>
                 )}
 
                 {hasStatusColumn && (
@@ -202,7 +208,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
 
                 {hasOutputColumn && (
                   <DataList.Cell className="truncate font-mono" data-testid={`result-output-${result.id}`}>
-                    {getResultOutputText(result) ?? ''}
+                    {getResultOutputPreview(result) ?? ''}
                   </DataList.Cell>
                 )}
 
@@ -234,10 +240,39 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
 
                 {hasStartedAtColumn &&
                   (result.startedAt ? (
-                    <DataList.CreatedCell timestamp={result.startedAt} />
+                    <DataList.TextCell data-testid={`result-created-${result.id}`}>
+                      {formatDate(result.startedAt, 'date-time')}
+                    </DataList.TextCell>
                   ) : (
                     <DataList.Cell className="text-placeholder">—</DataList.Cell>
                   ))}
+
+                {hasCostColumn && (
+                  <DataList.Cell
+                    className="text-muted-foreground tabular-nums"
+                    data-testid={`result-cost-${result.id}`}
+                  >
+                    {formatCostValue(result.usage?.estimatedCost, result.usage?.costUnit)}
+                  </DataList.Cell>
+                )}
+
+                {hasTokensColumn && (
+                  <DataList.Cell
+                    className="text-muted-foreground tabular-nums"
+                    data-testid={`result-tokens-${result.id}`}
+                  >
+                    {formatTokenCount(totalTokens(result.usage))}
+                  </DataList.Cell>
+                )}
+
+                {hasDurationColumn && (
+                  <DataList.Cell
+                    className="text-muted-foreground tabular-nums"
+                    data-testid={`result-duration-${result.id}`}
+                  >
+                    {formatDuration(runDurationMs(result)) ?? '-'}
+                  </DataList.Cell>
+                )}
 
                 {scorerIds?.map(scorerId => {
                   const scores = scoresByItemId?.[result.itemId];
@@ -256,6 +291,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                 <DataList.RowButton
                   key={result.id}
                   featured={isFeatured}
+                  variant={hasError ? 'error' : 'default'}
                   data-selected={isFeatured || undefined}
                   onClick={() => onResultClick(result.id)}
                   {...getRowProps(index)}
@@ -275,6 +311,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                 <DataList.RowButton
                   colStart={2}
                   featured={isFeatured}
+                  variant={hasError ? 'error' : 'default'}
                   data-selected={isFeatured || undefined}
                   onClick={() => onResultClick(result.id)}
                   {...getRowProps(index)}
@@ -320,11 +357,9 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
   );
 }
 
-function errorMessage(error: unknown): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message || 'Error';
-  }
-  return typeof error === 'string' && error ? error : 'Error';
+function runDurationMs({ startedAt, completedAt }: ExperimentResultsListItem): number | undefined {
+  if (!startedAt || !completedAt) return undefined;
+  return new Date(completedAt).getTime() - new Date(startedAt).getTime();
 }
 
 /** Format unknown value for display */
