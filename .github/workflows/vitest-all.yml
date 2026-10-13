@@ -13,7 +13,7 @@ permissions: {}
 jobs:
   test:
     name: UNIT Test (Shard ${{ matrix.shard }})
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     timeout-minutes: 30
     strategy:
@@ -67,7 +67,7 @@ jobs:
 
   e2e-test:
     name: E2E Test (${{ matrix.project }})
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     if: ${{ github.repository == 'mastra-ai/mastra' }}
     timeout-minutes: 30
     strategy:
@@ -149,7 +149,7 @@ jobs:
 
   merge-reports:
     name: Merge Test Reports
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     needs: [test, e2e-test]
     if: always()
     # Minimal permissions - read-only access
