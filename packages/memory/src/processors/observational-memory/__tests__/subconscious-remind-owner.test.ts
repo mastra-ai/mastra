@@ -64,7 +64,7 @@ function createHarness(options: { knowledgeResourceId?: string }) {
   const memory = new Memory({ storage });
   const requestContext = new RequestContext();
   requestContext.set('organizationId', ORG);
-  if (options.knowledgeResourceId) requestContext.set('knowledgeResourceId', options.knowledgeResourceId);
+  if (options.knowledgeResourceId) requestContext.set('mastra__knowledgeResourceId', options.knowledgeResourceId);
 
   const emitted = { reminder: 0, reply: 0 };
   let sourceRecordId = '';

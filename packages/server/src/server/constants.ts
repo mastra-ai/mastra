@@ -66,6 +66,9 @@ const RESERVED_CONTEXT_KEYS = new Set([
   // Factory stores the authoritative per-caller OM settings result here before
   // model-driven memory processors run. Client input must not spoof that result.
   'mastra__factoryMemorySettings',
+  // Re-anchors subconscious Knowledge on another resource. Only host middleware
+  // may set it; a body value would point Knowledge at a resource FGA never checked.
+  'mastra__knowledgeResourceId',
   // Tenant scope must be established server-side, never self-asserted by a
   // client. The trusted-actor FGA gate keys off `organizationId`, so a
   // body-supplied value must not be merged into the request context.

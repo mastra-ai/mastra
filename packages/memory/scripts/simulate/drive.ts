@@ -42,7 +42,7 @@ function requestContextWithOrg(organizationId: string, knowledgeResourceId?: str
   if (!organizationId.trim()) throw new Error('Replay requires a non-empty organizationId.');
   const requestContext = new RequestContext();
   requestContext.set('organizationId', organizationId);
-  if (knowledgeResourceId?.trim()) requestContext.set('knowledgeResourceId', knowledgeResourceId);
+  if (knowledgeResourceId?.trim()) requestContext.set('mastra__knowledgeResourceId', knowledgeResourceId);
   return requestContext;
 }
 
