@@ -803,16 +803,30 @@ describe('OtelExporter', () => {
           forceFlush: vi.fn().mockRejectedValue(new Error('batch rejected')),
         } as any;
       });
+      let releaseExport!: () => void;
       const customExporter = {
         export: vi.fn(),
         shutdown: vi.fn().mockResolvedValue(undefined),
-        forceFlush: vi.fn().mockResolvedValue(undefined),
+        forceFlush: vi.fn().mockReturnValue(
+          new Promise<void>(resolve => {
+            releaseExport = resolve;
+          }),
+        ),
       };
       exporter = new OtelExporter({ provider, exporter: customExporter, signals: { logs: false } });
       await exporter.exportTracingEvent(endedSpan);
 
-      await expect(exporter.flush()).rejects.toThrow('batch rejected');
+      let settled = false;
+      const flushing = exporter.flush().finally(() => {
+        settled = true;
+      });
+      flushing.catch(() => {});
+      await new Promise(resolve => setImmediate(resolve));
       expect(customExporter.forceFlush).toHaveBeenCalledTimes(1);
+      expect(settled).toBe(false);
+
+      releaseExport();
+      await expect(flushing).rejects.toThrow('batch rejected');
     });
 
     it('should flush normally when the span exporter has no forceFlush', async () => {
