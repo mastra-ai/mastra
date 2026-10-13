@@ -332,7 +332,8 @@ export interface GlobalSettings {
   // Global behavior preferences
   preferences: {
     yolo: boolean | null;
-    theme: 'auto' | 'dark' | 'light';
+    /** 'auto' | 'dark' | 'light', or the name of a custom theme file in ~/.mastracode/themes/<name>.json */
+    theme: 'auto' | 'dark' | 'light' | (string & {});
     /** Default reasoning effort level used for all threads/models unless overridden in-session. */
     thinkingLevel: ThinkingLevelSetting;
     /** Whether native subagents are enabled for Mastra Code TUI sessions. */

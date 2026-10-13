@@ -452,6 +452,7 @@ export class MessageList {
       contents: signal.contents,
       attributes: signal.attributes,
       metadata: signal.metadata,
+      author: signal.author,
       providerOptions: signal.providerOptions,
       createdAt,
       acceptedAt,
@@ -698,6 +699,14 @@ export class MessageList {
     getSource: (message: MastraDBMessage) => MessageSource | null;
   } {
     return this.stateManager.createSourceChecker();
+  }
+
+  /**
+   * Ids of every message that entered this list from memory or as input, including messages
+   * later promoted to the response or replaced by a copy with the same id.
+   */
+  public getRememberedAndInputMessageIds(): Set<string> {
+    return new Set([...this.memoryMessagesPersisted, ...this.newUserMessagesPersisted].map(message => message.id));
   }
 
   public getLatestUserContent(): string | null {

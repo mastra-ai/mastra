@@ -1,4 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
+import { MastraError } from '../../error';
 import { withAck } from '../../events/acking-callback';
 import type { PubSub } from '../../events/pubsub';
 import type { Event, EventCallback } from '../../events/types';
@@ -611,8 +612,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.ERROR: {
           const data = streamEvent.data as AgentErrorEventData;
-          const error = new Error(data.error.message);
+          const error: Error & { id?: string } = new Error(data.error.message);
           error.name = data.error.name;
+          if (data.error.id) error.id = data.error.id;
           if (data.error.stack) {
             error.stack = data.error.stack;
           }
@@ -996,6 +998,7 @@ export async function emitErrorEvent(
     runId,
     data: {
       error: {
+        ...(error instanceof MastraError ? { id: error.id } : {}),
         name: error.name,
         message: error.message,
         // stack intentionally omitted — avoid leaking internals through external pubsub

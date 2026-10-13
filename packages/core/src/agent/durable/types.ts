@@ -651,6 +651,8 @@ export interface AgentFinishEventData {
  */
 export interface AgentErrorEventData {
   error: {
+    /** Stable error id (e.g. `AGENT_RESUME_ALREADY_CLAIMED`) when the source was a `MastraError`. */
+    id?: string;
     name: string;
     message: string;
     stack?: string;
