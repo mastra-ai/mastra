@@ -88,7 +88,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     last_build_attempted_at: { type: 'timestamp', nullable: true },
     build_on_push_enabled: { type: 'boolean', default: false },
     build_push_debounce_minutes: { type: 'integer', default: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES },
-    /** Set once the source-control domain has backfilled positions and the oldest link's workdir onto the project. */
+    /** Set once the source-control domain has backfilled repository positions and environment membership. */
     environment_backfilled_at: { type: 'timestamp', nullable: true },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
@@ -224,31 +224,45 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
   }: {
     orgId: string;
     id: string;
-    input: UpdateFactoryProjectInput;
+    input: UpdateFactoryProjectInput | ((current: FactoryProject) => Promise<UpdateFactoryProjectInput | null>);
   }): Promise<FactoryProject | null> {
-    const row = await this.#db.updateAtomic<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id }, () => ({
-      ...(input.name !== undefined ? { name: input.name } : {}),
-      ...(input.description !== undefined ? { description: input.description } : {}),
-      ...(input.defaultModelId !== undefined ? { default_model_id: input.defaultModelId } : {}),
-      ...(input.slackWorkItemsEnabled !== undefined ? { slack_work_items_enabled: input.slackWorkItemsEnabled } : {}),
-      ...(input.autoRunEnabled !== undefined ? { auto_run_enabled: input.autoRunEnabled } : {}),
-      ...(input.autoApprovePlans !== undefined ? { auto_approve_plans: input.autoApprovePlans } : {}),
-      ...(input.sandboxWorkingDirectory !== undefined
-        ? { sandbox_working_directory: input.sandboxWorkingDirectory }
-        : {}),
-      ...(input.sandboxSettings !== undefined ? { sandbox_settings: input.sandboxSettings } : {}),
-      ...(input.workspaceSetupCommand !== undefined ? { workspace_setup_command: input.workspaceSetupCommand } : {}),
-      ...(input.activeTemplateId !== undefined ? { active_template_id: input.activeTemplateId } : {}),
-      ...(input.activeTemplateHeads !== undefined ? { active_template_heads: input.activeTemplateHeads } : {}),
-      ...(input.lastBuildId !== undefined ? { last_build_id: input.lastBuildId } : {}),
-      ...(input.lastBuildHeads !== undefined ? { last_build_heads: input.lastBuildHeads } : {}),
-      ...(input.lastBuildAttemptedAt !== undefined ? { last_build_attempted_at: input.lastBuildAttemptedAt } : {}),
-      ...(input.buildOnPushEnabled !== undefined ? { build_on_push_enabled: input.buildOnPushEnabled } : {}),
-      ...(input.buildPushDebounceMinutes !== undefined
-        ? { build_push_debounce_minutes: input.buildPushDebounceMinutes }
-        : {}),
-      updated_at: new Date(),
-    }));
+    const update = (ops: FactoryStorageOps) =>
+      ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id }, async current => {
+        const changes = typeof input === 'function' ? await input(toFactoryProject(current)) : input;
+        if (changes === null) return null;
+        return {
+          ...(changes.name !== undefined ? { name: changes.name } : {}),
+          ...(changes.description !== undefined ? { description: changes.description } : {}),
+          ...(changes.defaultModelId !== undefined ? { default_model_id: changes.defaultModelId } : {}),
+          ...(changes.slackWorkItemsEnabled !== undefined
+            ? { slack_work_items_enabled: changes.slackWorkItemsEnabled }
+            : {}),
+          ...(changes.autoRunEnabled !== undefined ? { auto_run_enabled: changes.autoRunEnabled } : {}),
+          ...(changes.autoApprovePlans !== undefined ? { auto_approve_plans: changes.autoApprovePlans } : {}),
+          ...(changes.sandboxWorkingDirectory !== undefined
+            ? { sandbox_working_directory: changes.sandboxWorkingDirectory }
+            : {}),
+          ...(changes.sandboxSettings !== undefined ? { sandbox_settings: changes.sandboxSettings } : {}),
+          ...(changes.workspaceSetupCommand !== undefined
+            ? { workspace_setup_command: changes.workspaceSetupCommand }
+            : {}),
+          ...(changes.activeTemplateId !== undefined ? { active_template_id: changes.activeTemplateId } : {}),
+          ...(changes.activeTemplateHeads !== undefined ? { active_template_heads: changes.activeTemplateHeads } : {}),
+          ...(changes.lastBuildId !== undefined ? { last_build_id: changes.lastBuildId } : {}),
+          ...(changes.lastBuildHeads !== undefined ? { last_build_heads: changes.lastBuildHeads } : {}),
+          ...(changes.lastBuildAttemptedAt !== undefined
+            ? { last_build_attempted_at: changes.lastBuildAttemptedAt }
+            : {}),
+          ...(changes.buildOnPushEnabled !== undefined ? { build_on_push_enabled: changes.buildOnPushEnabled } : {}),
+          ...(changes.buildPushDebounceMinutes !== undefined
+            ? { build_push_debounce_minutes: changes.buildPushDebounceMinutes }
+            : {}),
+          updated_at: new Date(),
+        };
+      });
+    // LibSQL's standalone updateAtomic only serializes one client; a transaction
+    // also protects a read-dependent update against other database connections.
+    const row = typeof input === 'function' ? await this.storage.withTransaction(update) : await update(this.#db);
     return row ? toFactoryProject(row) : null;
   }
 

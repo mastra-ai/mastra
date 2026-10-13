@@ -894,27 +894,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               }
             }
           }
-          if (settingsPatch !== undefined) {
-            if (!this.deps.sandbox) return context.json({ error: 'no_sandbox' }, 400);
-            const result = await this.#mergeSettings(project.sandboxSettings ?? {}, settingsPatch);
-            if ('issues' in result) {
-              return context.json(
-                {
-                  error: 'invalid_environment',
-                  issues: result.issues.map(issue => ({
-                    message: issue.message,
-                    path: Array.isArray(issue.path)
-                      ? issue.path.map(segment =>
-                          typeof segment === 'object' && segment !== null && 'key' in segment ? segment.key : segment,
-                        )
-                      : [],
-                  })),
-                },
-                400,
-              );
-            }
-            input.sandboxSettings = result.merged;
-          }
+          if (settingsPatch !== undefined && !this.deps.sandbox) return context.json({ error: 'no_sandbox' }, 400);
 
           // Resolve every listed link before writing anything, so a foreign id leaves the project untouched.
           const links = new Map(
@@ -933,8 +913,43 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           }
 
           let updated = project;
-          if (Object.keys(input).length > 0) {
-            updated = (await (await this.#projects()).update({ orgId: tenant.orgId, id: projectId, input })) ?? project;
+          if (Object.keys(input).length > 0 || settingsPatch !== undefined) {
+            let issues: ReadonlyArray<{ message: string; path?: unknown }> | undefined;
+            const result = await (
+              await this.#projects()
+            ).update({
+              orgId: tenant.orgId,
+              id: projectId,
+              input:
+                settingsPatch === undefined
+                  ? input
+                  : async current => {
+                      const settings = await this.#mergeSettings(current.sandboxSettings ?? {}, settingsPatch);
+                      if ('issues' in settings) {
+                        issues = settings.issues;
+                        return null;
+                      }
+                      return { ...input, sandboxSettings: settings.merged };
+                    },
+            });
+            if (issues) {
+              return context.json(
+                {
+                  error: 'invalid_environment',
+                  issues: issues.map(issue => ({
+                    message: issue.message,
+                    path: Array.isArray(issue.path)
+                      ? issue.path.map(segment =>
+                          typeof segment === 'object' && segment !== null && 'key' in segment ? segment.key : segment,
+                        )
+                      : [],
+                  })),
+                },
+                400,
+              );
+            }
+            if (!result) return context.json({ error: 'Project not found' }, 404);
+            updated = result;
           }
           for (const { projectRepositoryId, ...input } of repositoryPatches ?? []) {
             if (Object.keys(input).length === 0) continue;

@@ -826,6 +826,26 @@ describe('ProjectRoutes', () => {
         body: JSON.stringify(body),
       });
 
+    it.each([null, '/custom-workspace'])(
+      'preserves the project workdir %s across source-control initialization',
+      async workdir => {
+        const { seed, project, app, github, links } = await seedEnvironment();
+        expect((await patch(app, project.id, { sandboxWorkingDirectory: '/initial-workspace' })).status).toBe(200);
+        expect((await patch(app, project.id, { sandboxWorkingDirectory: workdir })).status).toBe(200);
+
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          await seed.sourceControl.init();
+          const response = await app.request(`/web/factory/projects/${project.id}/environment`);
+          expect(response.status).toBe(200);
+          expect(await response.json()).toMatchObject({ environment: { sandboxWorkingDirectory: workdir } });
+          expect(await seed.projects.getById({ id: project.id })).toMatchObject({ sandboxWorkingDirectory: workdir });
+        }
+        expect(await github.projectRepositories.get({ orgId: 'org-1', id: links[0]!.id })).toMatchObject({
+          sandboxWorkdir: '/workspace',
+        });
+      },
+    );
+
     it('reads the provider schema and empty settings with the ordered repositories, and writes settings, order and membership', async () => {
       const { seed, project, links, app, github } = await seedEnvironment();
 
@@ -1340,6 +1360,32 @@ describe('ProjectRoutes', () => {
         const { app, project: building } = await seedBuilding(sandbox);
         const response = await app.request(`/web/factory/projects/${building.id}/environment/builds`);
         expect([response.status, await response.json()]).toEqual([404, { error: 'no_history' }]);
+      });
+
+      it('saves settings and push triggers together without accepting triggers from an invalid patch', async () => {
+        const { app, project, seed } = await seedBuilding();
+        const response = await patch(app, project.id, {
+          settings: { cpuCount: 8 },
+          buildTriggers: { push: { enabled: true, debounceMinutes: 3 } },
+        });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+          environment: {
+            settings: { cpuCount: 8 },
+            buildTriggers: { push: { enabled: true, debounceMinutes: 3 } },
+          },
+        });
+
+        const refused = await patch(app, project.id, {
+          settings: { cpuCount: 0 },
+          buildTriggers: { push: { enabled: false, debounceMinutes: 9 } },
+        });
+        expect(refused.status).toBe(400);
+        expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+          sandboxSettings: { cpuCount: 8 },
+          buildOnPushEnabled: true,
+          buildPushDebounceMinutes: 3,
+        });
       });
 
       it('stores push triggers, keeps the cron in core Schedules, and rejects a bad cron', async () => {
