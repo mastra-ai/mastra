@@ -274,7 +274,7 @@ patchedDependencies:
   '@manypkg/tools@2.1.1': 6d493cdb757f34ceacd3b1a081f91d3c2bbe777930133424ef34d222b7fcfd7b
   body-parser@2.3.0: 7d9c103b0e037f8eb979d4cddbfabb13eedde34858ca1168365d426ff8175aa2
   co-body@6.2.0: 1702c49cad650dc4e1f4b928671fb2d06036472e6e5fcd761721b00224ce14c7
-  gray-matter@4.0.3: 058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8
+  gray-matter@4.0.3: feade48d529833ddeaca517a4cfd3fb0044de7dbd275fbc07ad0b7fc90825e6a
   react-docgen-typescript@2.4.0: 72ad9e4cf9a40a5fe81ef734342a161c384244ff341bd04215a405bbea3bbbe6
   read-yaml-file@1.1.0: 834a9a43c1785ff0b4911ae833daf9fc54055df0834080003b572e6cf4131eb9
   vite-plugin-dts@4.5.4: 3ddacd024147b08f768b61bdd772e1d4ba72f92b7ad7da696aed08e5de032af8
@@ -4759,7 +4759,7 @@ importers:
         version: 1.20.1
       gray-matter:
         specifier: ^4.0.3
-        version: 4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8)
+        version: 4.0.3(patch_hash=feade48d529833ddeaca517a4cfd3fb0044de7dbd275fbc07ad0b7fc90825e6a)
       hono:
         specifier: 4.13.13
         version: 4.13.13
@@ -5087,7 +5087,7 @@ importers:
         version: 11.4.1
       gray-matter:
         specifier: ^4.0.3
-        version: 4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8)
+        version: 4.0.3(patch_hash=feade48d529833ddeaca517a4cfd3fb0044de7dbd275fbc07ad0b7fc90825e6a)
       hono:
         specifier: 4.13.13
         version: 4.13.13
@@ -52411,7 +52411,7 @@ snapshots:
 
   graphql@16.14.0: {}
 
-  gray-matter@4.0.3(patch_hash=058d8be9f17b95a6f86e58debce82671ee3f258e44883a9da932cf16a717ebb8):
+  gray-matter@4.0.3(patch_hash=feade48d529833ddeaca517a4cfd3fb0044de7dbd275fbc07ad0b7fc90825e6a):
     dependencies:
       js-yaml: 3.15.2
       kind-of: 6.0.3

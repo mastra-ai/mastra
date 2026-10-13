@@ -2,7 +2,7 @@ diff --git a/CHANGELOG.md b/CHANGELOG.md
 deleted file mode 100644
 index eebdf42eb721b756d4f554b09b943774faa659b0..0000000000000000000000000000000000000000
 diff --git a/lib/engines.js b/lib/engines.js
-index 38f993db06cf364191ac635a6590c2d29303297d..bc95719c5cc4f417d35380b855858086fd56e80c 100644
+index 38f993db06cf364191ac635a6590c2d29303297d..505fad9614033bcc13d075ba0ac162d6815ea5eb 100644
 --- a/lib/engines.js
 +++ b/lib/engines.js
 @@ -13,8 +13,9 @@ const engines = exports = module.exports;
@@ -17,3 +17,29 @@ index 38f993db06cf364191ac635a6590c2d29303297d..bc95719c5cc4f417d35380b855858086
  };
  
  /**
+@@ -34,19 +35,12 @@ engines.json = {
+  */
+ 
+ engines.javascript = {
+-  parse: function parse(str, options, wrap) {
+-    /* eslint no-eval: 0 */
+-    try {
+-      if (wrap !== false) {
+-        str = '(function() {\nreturn ' + str.trim() + ';\n}());';
+-      }
+-      return eval(str) || {};
+-    } catch (err) {
+-      if (wrap !== false && /(unexpected|identifier)/i.test(err.message)) {
+-        return parse(str, options, false);
+-      }
+-      throw new SyntaxError(err);
+-    }
++  // Security: front matter must never be evaluated as code. The upstream engine
++  // runs `eval` on `---js` / `---javascript` blocks, which is arbitrary code
++  // execution for any untrusted markdown. Callers that really need JS front
++  // matter can still opt in by passing their own `engines.js` option.
++  parse: function parse() {
++    throw new Error('JavaScript front matter is not supported');
+   },
+   stringify: function() {
+     throw new Error('stringifying JavaScript is not supported');
