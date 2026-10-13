@@ -100,14 +100,14 @@ Interactive examples live under **AI / Ask User** in Storybook, including compos
 
 ### Tables
 
-`Table` renders a data table from the native `table`, `thead`, `tbody`, `tr`, `th`, and `td` elements with the same raised surface as `DataList`. Each part takes its element's props, so `colSpan`, `rowSpan`, and `aria-*` work as they do in HTML, and any component can go in a cell.
+`Table variant="inset"` renders a data table from the native `table`, `thead`, `tbody`, `tr`, `th`, and `td` elements with the same raised surface as `DataList`. Each part takes its element's props, so `colSpan` and `aria-*` work as they do in HTML, and any component can go in a cell.
 
 ```tsx
-import { Table } from '@mastra/playground-ui/new/table';
+import { Table } from '@mastra/playground-ui/components/Table';
 
 export function CreditHistory({ credits }: { credits: Credit[] }) {
   return (
-    <Table aria-labelledby="credit-history">
+    <Table variant="inset" aria-labelledby="credit-history">
       <Table.Header>
         <Table.Row>
           <Table.Head>Type</Table.Head>
@@ -122,9 +122,7 @@ export function CreditHistory({ credits }: { credits: Credit[] }) {
               <Table.RowLink href={`/billing/credits/${credit.id}`}>{credit.type}</Table.RowLink>
             </Table.Cell>
             <Table.Cell>{credit.title}</Table.Cell>
-            <Table.Cell align="end" tone="muted">
-              {credit.balance}
-            </Table.Cell>
+            <Table.Cell align="end">{credit.balance}</Table.Cell>
           </Table.Row>
         ))}
       </Table.Body>
@@ -133,15 +131,21 @@ export function CreditHistory({ credits }: { credits: Credit[] }) {
 }
 ```
 
-- `Table` takes `columnDividers` to draw lines between columns.
+- `Table` takes `variant="inset"` for the DataList surface. Omit `variant` to preserve the existing default appearance and sizing. `columnDividers` draws lines between columns in inset mode.
 - `Table.Head` takes `align` (`start`, `center`, or `end`).
-- `Table.Cell` takes `align` and `tone` (`ink` or `muted`).
+- `Table.Cell` takes `align` and `tone` (`ink`, `muted`, or `negative`).
+- Every column is the same color. Use `Txt tone="muted"` only for secondary text inside a cell, such as a second line, or mute every column except the first.
+- `Table.SortButton` goes inside a sortable `Table.Head` and shows the sort arrow.
 - `Table.RowLink` makes the whole row a link. Pass `render={<Link to="…" />}` for a router link.
+- `Table.Pagination` goes below the table: Previous, numbered pages, and Next. It takes a zero-based `page`, `pageCount`, and `onPageChange`. The caller supplies the current page’s rows, from a local slice or a server query.
+- Text is left-aligned; numbers are right-aligned with `align="end"` on the head and cells. Negative amounts keep their minus sign and use `tone="negative"`, which renders them red.
 - Rows are at least 36px tall and grow with their content. Cells stay on one line unless you wrap their text in an element with `whitespace-normal`.
 
-Use `Table` for data people read and compare, such as billing history or usage. Use `DataList` for lists of entities people click into, such as agents or traces, which need row keyboard navigation, sticky or reorderable columns, or virtualization. Search and filters go in an `ActionRow` above either one.
+Use `Table` for data people read and compare, such as billing history or usage. Use `DataList` for lists of entities people click into, such as agents or traces, which need row keyboard navigation, sticky or reorderable columns, or virtualization. Search and filters go in an `ActionRow` above either one. Choose based on the rows rendered at once, not the total dataset size; large server-paginated datasets can use Table.
 
-The full guide, with recipes for spanning cells, editable cells, sorting, loading, and empty states, is the **New / Table** docs page in Storybook.
+The full guide, with recipes for column dividers, editable cells, sorting, client-side and server-side pagination, loading, and empty states, is the **DataDisplay / Table** docs page in Storybook.
+
+Legacy named parts remain supported. `Thead` creates its own row; `Table.Header` takes an explicit `Table.Row`. In inset mode, `className` applies to the outer surface and native props (including `ref` and `style`) apply to the `table`.
 
 ### Semantic color tokens
 
