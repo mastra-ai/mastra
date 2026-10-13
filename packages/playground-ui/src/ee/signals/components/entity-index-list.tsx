@@ -29,13 +29,13 @@ export function EntityIndexList({ entities, hasSearch, getEntityHref, LinkCompon
         {entities.map(entity => {
           const metadata = entityIndexMetadata(entity);
           const key = `${entity.entityType}:${entity.entityId}`;
-          const isWaiting = entity.status === 'collecting';
+          const isAnalyzing = entity.status === 'collecting';
           const cells = (
             <>
               <DataList.Cell className="min-w-0 overflow-visible text-left">
-                {isWaiting ? null : <span className="sr-only">Open agent {entity.entityId}</span>}
+                {isAnalyzing ? null : <span className="sr-only">Open agent {entity.entityId}</span>}
                 <span
-                  aria-hidden={isWaiting ? undefined : true}
+                  aria-hidden={isAnalyzing ? undefined : true}
                   className="block overflow-clip text-ellipsis whitespace-nowrap"
                 >
                   {entity.entityId}
@@ -50,7 +50,7 @@ export function EntityIndexList({ entities, hasSearch, getEntityHref, LinkCompon
             </>
           );
           // No signals yet means the detail page has nothing to show, so the row stays static.
-          if (isWaiting) {
+          if (isAnalyzing) {
             return (
               <DataList.RowStatic key={key} className="min-w-0">
                 {cells}

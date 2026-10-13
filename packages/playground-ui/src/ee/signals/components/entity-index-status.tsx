@@ -1,6 +1,6 @@
 import type { ThemeLearningEntity } from '@mastra/client-js';
 
-import { entityStatusLabel, waitingForTracesDescription } from './entity-index-model';
+import { entityStatusLabel, analyzingDescription } from './entity-index-model';
 import { Badge } from '@/ds/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
@@ -14,8 +14,8 @@ export function EntityIndexStatus({ entity }: { entity: ThemeLearningEntity }) {
   );
   if (entity.status !== 'collecting') return badge;
 
-  // Waiting agents have no detail page to open, so the badge carries the explanation.
-  const description = waitingForTracesDescription(entity.traceCount);
+  // Analyzing agents have no detail page to open, so the badge carries the explanation.
+  const description = analyzingDescription(entity.traceCount);
   return (
     <Tooltip>
       <TooltipTrigger render={<span tabIndex={0} className="pointer-events-auto inline-flex rounded-full" />}>

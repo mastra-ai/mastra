@@ -147,38 +147,36 @@ describe('TraceIntelligenceEntityIndex', () => {
       expect(row.getAttribute('href')).toBe('/intelligence/entities/agent/support-agent');
     });
 
-    it('shows agents waiting for traces as non-clickable rows', async () => {
+    it('shows analyzing agents as non-clickable rows', async () => {
       useEntityFixture();
       renderIndex();
 
       await screen.findByText('billing-agent');
       expect(screen.getByText('billing-agent').closest('a')).toBeNull();
-      expect(screen.getByText('Waiting for traces')).toBeTruthy();
+      expect(screen.getByText('Analyzing')).toBeTruthy();
       expect(screen.queryByRole('link', { name: /billing-agent/ })).toBeNull();
       expect(screen.getByRole('link', { name: /support-agent/ })).toBeTruthy();
     });
 
-    it('explains collected traces when the waiting status is hovered or focused', async () => {
+    it('explains collected traces when the analyzing status is hovered or focused', async () => {
       useEntityFixture();
       renderIndex();
 
       await screen.findByText('billing-agent');
-      fireEvent.focus(closestElement('Waiting for traces', '[tabindex="0"]'));
+      fireEvent.focus(closestElement('Analyzing', '[tabindex="0"]'));
 
       expect((await screen.findByRole('tooltip')).textContent).toBe(
-        '42 traces collected so far. Signals appear once enough traces are processed.',
+        '42 traces collected. Signals appear when analysis finishes.',
       );
     });
 
-    it('shows agents waiting for traces as non-clickable cards in compact view', async () => {
+    it('shows analyzing agents as non-clickable cards in compact view', async () => {
       useEntityFixture();
       renderIndex({ initialView: 'compact' });
 
       await screen.findByText('billing-agent');
       expect(closestElement('billing-agent', '[data-entity-card]').querySelector('a')).toBeNull();
-      expect(
-        within(closestElement('billing-agent', '[data-entity-card]')).getByText('Waiting for traces'),
-      ).toBeTruthy();
+      expect(within(closestElement('billing-agent', '[data-entity-card]')).getByText('Analyzing')).toBeTruthy();
       expect(screen.getByRole('link', { name: 'Open support-agent' })).toBeTruthy();
     });
 
@@ -269,9 +267,9 @@ describe('TraceIntelligenceEntityIndex', () => {
   });
 
   describe.each([
-    [undefined, 'Signals appear once enough traces are processed.'],
-    [1, '1 trace collected so far. Signals appear once enough traces are processed.'],
-  ])('when a waiting agent reports trace count %s', (traceCount, expectedDescription) => {
+    [undefined, 'Signals appear when analysis finishes.'],
+    [1, '1 trace collected. Signals appear when analysis finishes.'],
+  ])('when an analyzing agent reports trace count %s', (traceCount, expectedDescription) => {
     it('describes only the traces the API reports', async () => {
       useEntityFixture({
         entities: [
@@ -281,7 +279,7 @@ describe('TraceIntelligenceEntityIndex', () => {
       renderIndex();
 
       await screen.findByText('new-agent');
-      fireEvent.focus(closestElement('Waiting for traces', '[tabindex="0"]'));
+      fireEvent.focus(closestElement('Analyzing', '[tabindex="0"]'));
 
       expect((await screen.findByRole('tooltip')).textContent).toBe(expectedDescription);
     });
