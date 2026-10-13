@@ -333,8 +333,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             params.workflowStatus === 'suspended'
           );
         },
-        // Excluding `running` means resume claims cannot persist; the agent loop
-        // serializes its own resumes, so suppress the per-resume warning.
+        // Excluding `running` means the workflow's own resume claim cannot persist.
+        // Agent resume methods claim the parent agentic-loop run before the loop
+        // starts instead, so suppress the per-resume warning.
         allowUnclaimedResumes: true,
         // Agent-loop snapshots are pure resume artifacts — strip everything a
         // resume never reads (stale suspend payloads, duplicated message
@@ -706,8 +707,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             params.workflowStatus === 'suspended'
           );
         },
-        // Excluding `running` means resume claims cannot persist; the agent loop
-        // serializes its own resumes, so suppress the per-resume warning.
+        // Excluding `running` means the workflow's own resume claim cannot persist.
+        // Agent resume methods claim the parent agentic-loop run before the loop
+        // starts instead, so suppress the per-resume warning.
         allowUnclaimedResumes: true,
         // Agent-loop snapshots are pure resume artifacts — strip everything a
         // resume never reads (stale suspend payloads, duplicated message

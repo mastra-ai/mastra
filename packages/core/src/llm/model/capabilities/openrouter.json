@@ -52,6 +52,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemma-3-12b-it",
     "google/gemma-3-27b-it",
@@ -72,6 +73,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-wonder",
     "minimax/minimax-01",
     "minimax/minimax-m3",
     "mistralai/codestral-2508",
@@ -196,6 +198,8 @@
     "sakana/fugu-ultra",
     "sakana/fugu-ultra-v2",
     "sakana/sakana-namazu",
+    "scaledown/extract",
+    "scaledown/summarize",
     "stepfun/step-3.7-flash",
     "stepfun/step-5-preview",
     "thinkingmachines/inkling",
@@ -308,6 +312,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemma-2-27b-it",
     "google/gemma-3-12b-it",
@@ -348,6 +353,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-wonder",
     "microsoft/phi-4",
     "microsoft/wizardlm-2-8x22b",
     "minimax/minimax-01",
@@ -611,6 +617,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemma-2-27b-it",
     "google/gemma-3-12b-it",
@@ -638,6 +645,7 @@
     "meta/muse-spark-1.2-contributor",
     "meta/muse-spark-1.3",
     "meta/muse-spark-1.3-contributor",
+    "meta/muse-wonder",
     "microsoft/phi-4",
     "minimax/minimax-m2",
     "minimax/minimax-m2.5",
@@ -1329,6 +1337,12 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
+    "meta/muse-wonder": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "meta/muse-spark-1.1": [
       {
         "type": "effort",
@@ -1651,6 +1665,12 @@
       {
         "type": "effort",
         "values": ["minimal", "high"]
+      }
+    ],
+    "google/gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "google/gemini-3.1-flash-lite": [

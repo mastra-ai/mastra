@@ -17,7 +17,7 @@ permissions: {}
 jobs:
   mastracode-e2e:
     name: Mastra Code E2E
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -78,7 +78,7 @@ jobs:
 
   mastracode-web-e2e:
     name: Mastra Code web host OM scenarios
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: read

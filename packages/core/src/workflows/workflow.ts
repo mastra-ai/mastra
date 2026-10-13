@@ -3067,7 +3067,10 @@ export class Workflow<
     actor,
     engine: _engine,
     bail: _bail,
-    ...rest
+    tracing,
+    tracingContext,
+    loggerVNext,
+    metrics,
   }: {
     runId?: string;
     resourceId?: string;
@@ -3104,7 +3107,7 @@ export class Workflow<
     perStep?: boolean;
     actor?: ActorSignal;
   } & Partial<ObservabilityContext>): Promise<TOutput | undefined> {
-    const observabilityContext = resolveObservabilityContext(rest);
+    const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
     this.__registerMastra(mastra);
 
     // FGA authorization check
@@ -4778,6 +4781,17 @@ export class Run<
     return this._resume({ ...params, skipParentWorkflowClaim: true });
   }
 
+  /**
+   * Resumes a run whose suspension the caller already claimed (`suspended -> running`) in storage.
+   * Skips the built-in claim and the `suspended` status check, which a claimed run no longer passes.
+   * @internal
+   */
+  async resumeClaimed(
+    params: Parameters<this['resume']>[0] & { claimedSnapshot: WorkflowRunState; onExecutionStarted?: () => void },
+  ) {
+    return this._resume(params);
+  }
+
   async resume<TResume>(
     params: {
       resumeData?: TResume;
@@ -5023,7 +5037,13 @@ export class Run<
     }
 
     if (!params.claimedSnapshot && snapshot.status !== 'suspended') {
-      throw new Error('This workflow run was not suspended');
+      throw new MastraError({
+        id: 'WORKFLOW_RUN_NOT_SUSPENDED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: 'This workflow run was not suspended',
+        details: { workflowId: this.workflowId, runId: this.runId, status: snapshot.status },
+      });
     }
 
     const snapshotResumeLabel = params.label ? snapshot?.resumeLabels?.[params.label] : undefined;

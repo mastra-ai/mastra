@@ -8,6 +8,7 @@
   ],
   "temperature": [
     "ambient/large",
+    "ambient/small",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-0731",
     "moonshotai/kimi-k2.6",
@@ -17,6 +18,7 @@
     "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.8-27b",
     "stepfun/step-3.7-flash",
+    "unsloth/qwen3.8-27b-gguf",
     "xiaomi/mimo-v2.5",
     "z-ai/glm-5.2",
     "zai-org/GLM-5.1-FP8",

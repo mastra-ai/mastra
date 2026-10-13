@@ -14,7 +14,7 @@
  */
 
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
-import { SandboxUnsupportedFeatureError } from '@mastra/core/workspace';
+import { SandboxError, SandboxUnsupportedFeatureError } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 
 import { createRepoTemplate } from '../utils/repo-template';
@@ -857,6 +857,73 @@ describe('E2BSandbox', () => {
       await sandbox._start();
 
       expect(Sandbox.create).toHaveBeenCalled();
+    });
+
+    describe("reattach: 'required'", () => {
+      it('throws SANDBOX_REATTACH_FAILED instead of discovering or creating when the preferred sandbox is gone', async () => {
+        const { Sandbox } = await import('e2b');
+        ((Sandbox as any).getInfo as any).mockRejectedValue(new Error('sandbox "sbx_gone" was not found'));
+        (Sandbox.list as any).mockReturnValue({
+          nextItems: vi.fn().mockResolvedValue([{ sandboxId: 'sbx_logical', state: 'running' }]),
+        });
+
+        const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_gone', reattach: 'required' });
+        const error = await sandbox._start().catch(e => e);
+
+        expect(error).toBeInstanceOf(SandboxError);
+        expect(error.code).toBe('SANDBOX_REATTACH_FAILED');
+        expect(error.details).toMatchObject({ provider: 'e2b', sandboxId: 'sbx_gone', logicalId: 'my-logical-id' });
+        expect(Sandbox.list).not.toHaveBeenCalled();
+        expect(Sandbox.create).not.toHaveBeenCalled();
+      });
+
+      it('throws when the preferred sandbox vanishes between getInfo and connect', async () => {
+        const { Sandbox } = await import('e2b');
+        ((Sandbox as any).getInfo as any).mockResolvedValue({ sandboxId: 'sbx_racy', metadata: {}, state: 'running' });
+        (Sandbox.connect as any).mockRejectedValueOnce(new Error('sandbox "sbx_racy" was not found'));
+
+        const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_racy', reattach: 'required' });
+        await expect(sandbox._start()).rejects.toMatchObject({ code: 'SANDBOX_REATTACH_FAILED' });
+        expect(Sandbox.create).not.toHaveBeenCalled();
+      });
+
+      it('propagates non-gone errors unchanged', async () => {
+        const { Sandbox } = await import('e2b');
+        ((Sandbox as any).getInfo as any).mockRejectedValue(new Error('401 unauthorized: invalid API key'));
+
+        const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_preferred', reattach: 'required' });
+        const error = await sandbox._start().catch(e => e);
+        expect(error).not.toBeInstanceOf(SandboxError);
+        expect(error.message).toContain('401 unauthorized');
+      });
+
+      it('reattaches a live preferred sandbox', async () => {
+        const { Sandbox } = await import('e2b');
+        ((Sandbox as any).getInfo as any).mockResolvedValue({ sandboxId: 'sbx_live', metadata: {}, state: 'running' });
+
+        const sandbox = new E2BSandbox({ id: 'my-logical-id', sandboxId: 'sbx_live', reattach: 'required' });
+        await sandbox._start();
+
+        expect(Sandbox.connect).toHaveBeenCalledWith('sbx_live', expect.any(Object));
+        expect(Sandbox.create).not.toHaveBeenCalled();
+      });
+
+      it('creates normally when no sandboxId is set', async () => {
+        const { Sandbox } = await import('e2b');
+        const sandbox = new E2BSandbox({ id: 'my-logical-id', reattach: 'required' });
+        await sandbox._start();
+        expect(Sandbox.create).toHaveBeenCalled();
+      });
+
+      it('clone() inherits reattach', async () => {
+        const { Sandbox } = await import('e2b');
+        ((Sandbox as any).getInfo as any).mockRejectedValue(new Error('sandbox "sbx_child" was not found'));
+
+        const parent = new E2BSandbox({ id: 'parent-id', reattach: 'required' });
+        const child = parent.clone({ id: 'child-id', sandboxId: 'sbx_child' });
+        await expect(child._start()).rejects.toMatchObject({ code: 'SANDBOX_REATTACH_FAILED' });
+        expect(Sandbox.create).not.toHaveBeenCalled();
+      });
     });
 
     it('exposes the resolved provider sandbox ID after create', async () => {

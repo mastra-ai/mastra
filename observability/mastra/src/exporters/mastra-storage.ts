@@ -69,6 +69,8 @@ type FlushResult = {
 };
 
 const FLUSH_SUCCEEDED: FlushResult = { failed: false };
+/** Max join/write rounds a single flush() makes before it returns under continuous traffic */
+const MAX_FLUSH_ROUNDS = 3;
 
 /**
  * Storage-backed exporter. Buffers observability events and flushes them in
@@ -86,6 +88,8 @@ export class MastraStorageExporter extends BaseExporter {
   #observabilityStorage?: ObservabilityStorage;
   #resolvedStrategy?: TracingStorageStrategy;
   #flushTimer?: NodeJS.Timeout;
+  /** Storage writes (timer, size trigger, or flush()) that haven't finished yet */
+  #inFlightFlushes = new Set<Promise<void>>();
   #emitDropEvent?: (event: ObservabilityDropEvent) => void;
 
   // Signals whose storage methods threw "not implemented" — skip on future flushes
@@ -222,7 +226,7 @@ export class MastraStorageExporter extends BaseExporter {
     }
     this.#flushTimer = setTimeout(() => {
       this.#flushTimer = undefined;
-      this.flushBuffer().catch(error => {
+      this.trackFlushBuffer().catch(error => {
         this.logger.error('Scheduled flush failed', {
           error: error instanceof Error ? error.message : String(error),
         });
@@ -265,7 +269,7 @@ export class MastraStorageExporter extends BaseExporter {
    */
   private async handleBatchedFlush(): Promise<void> {
     if (this.shouldFlush()) {
-      await this.flushBuffer();
+      await this.trackFlushBuffer();
     } else if (this.#eventBuffer.totalSize === 1) {
       this.scheduleFlush();
     }
@@ -413,6 +417,16 @@ export class MastraStorageExporter extends BaseExporter {
       this.emitDrop('tracing', 'retry-exhausted', dropped.length, error);
       return { failed: true, retryAttempt };
     }
+  }
+
+  /**
+   * Runs flushBuffer() and tracks its promise so flush() can wait for writes
+   * that a timer or size trigger started on their own.
+   */
+  private trackFlushBuffer(): Promise<void> {
+    const promise = this.flushBuffer().finally(() => this.#inFlightFlushes.delete(promise));
+    this.#inFlightFlushes.add(promise);
+    return promise;
   }
 
   /**
@@ -611,12 +625,32 @@ export class MastraStorageExporter extends BaseExporter {
    * are exported before the runtime instance is terminated.
    */
   async flush(): Promise<void> {
-    if (this.#eventBuffer.totalSize > 0) {
-      this.logger.debug('Flushing buffered events', {
-        bufferedEvents: this.#eventBuffer.totalSize,
-      });
-      await this.flushBuffer();
+    // A timer or size trigger may have taken a batch out of the buffer and still be
+    // writing it, so an empty buffer doesn't mean the data reached storage. Each round
+    // joins those writes first (they can defer span updates back into the buffer), then
+    // writes whatever the buffer holds. Writes that start while we work get a few more
+    // rounds, then we stop taking on new work so flush() stays bounded under non-stop
+    // traffic (same cap as ObservabilityBus), but we still join the writes already running
+    // so nothing is mid-write when we return. A batch that failed is left to its retry
+    // timer, as before.
+    for (let round = 0; round < MAX_FLUSH_ROUNDS; round++) {
+      if (this.#inFlightFlushes.size > 0) {
+        await Promise.allSettled([...this.#inFlightFlushes]);
+      }
+      if (this.#eventBuffer.totalSize > 0) {
+        this.logger.debug('Flushing buffered events', {
+          bufferedEvents: this.#eventBuffer.totalSize,
+        });
+        await this.trackFlushBuffer();
+      }
+      if (this.#inFlightFlushes.size === 0) {
+        return;
+      }
     }
+    await Promise.allSettled([...this.#inFlightFlushes]);
+    this.logger.warn(`flush() stopped after ${MAX_FLUSH_ROUNDS} rounds; new writes kept starting`, {
+      bufferedEventsLeftBehind: this.#eventBuffer.totalSize,
+    });
   }
 
   async shutdown(): Promise<void> {
