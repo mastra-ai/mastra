@@ -413,7 +413,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         })().finally(() => freshDone.resolve());
         await Promise.all([stalePin, freshPin]);
         vi.restoreAllMocks();
-        expect(await fresh.getById({ id: projectId })).toMatchObject({ lastBuildId: 'build-2', activeTemplateId: 'tpl-2' });
+        expect(await fresh.getById({ id: projectId })).toMatchObject({
+          lastBuildId: 'build-2',
+          activeTemplateId: 'tpl-2',
+        });
       });
     });
   },
