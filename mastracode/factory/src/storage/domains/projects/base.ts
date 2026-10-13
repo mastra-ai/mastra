@@ -35,6 +35,8 @@ export interface FactoryProject {
   lastBuildId: string | null;
   /** Repository slug → commit the most recent build attempt pinned, so its status can be read back. */
   lastBuildHeads: Record<string, string> | null;
+  /** Fingerprint of the settings, repositories and setup commands the most recent build attempt used. */
+  lastBuildInputs: string | null;
   /** When the most recent build attempt started (also the leading edge of the push debounce window). */
   lastBuildAttemptedAt: Date | null;
   /** Whether a push to an environment repository's default branch starts a build. */
@@ -66,6 +68,7 @@ export interface UpdateFactoryProjectInput {
   activeTemplateHeads?: Record<string, string> | null;
   lastBuildId?: string | null;
   lastBuildHeads?: Record<string, string> | null;
+  lastBuildInputs?: string | null;
   lastBuildAttemptedAt?: Date | null;
   buildOnPushEnabled?: boolean;
   buildPushDebounceMinutes?: number;
@@ -91,6 +94,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     active_template_heads: { type: 'json', nullable: true },
     last_build_id: { type: 'text', nullable: true },
     last_build_heads: { type: 'json', nullable: true },
+    last_build_inputs: { type: 'text', nullable: true },
     last_build_attempted_at: { type: 'timestamp', nullable: true },
     build_on_push_enabled: { type: 'boolean', default: false },
     build_push_debounce_minutes: { type: 'integer', default: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES },
@@ -120,6 +124,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   active_template_heads: Record<string, string> | null;
   last_build_id: string | null;
   last_build_heads: Record<string, string> | null;
+  last_build_inputs: string | null;
   last_build_attempted_at: Date | null;
   build_on_push_enabled: boolean | null;
   build_push_debounce_minutes: number | null;
@@ -147,6 +152,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     activeTemplateHeads: row.active_template_heads ?? null,
     lastBuildId: row.last_build_id ?? null,
     lastBuildHeads: row.last_build_heads ?? null,
+    lastBuildInputs: row.last_build_inputs ?? null,
     lastBuildAttemptedAt: row.last_build_attempted_at ?? null,
     buildOnPushEnabled: row.build_on_push_enabled ?? false,
     buildPushDebounceMinutes: row.build_push_debounce_minutes ?? DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES,
@@ -263,6 +269,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
           ...(changes.activeTemplateHeads !== undefined ? { active_template_heads: changes.activeTemplateHeads } : {}),
           ...(changes.lastBuildId !== undefined ? { last_build_id: changes.lastBuildId } : {}),
           ...(changes.lastBuildHeads !== undefined ? { last_build_heads: changes.lastBuildHeads } : {}),
+          ...(changes.lastBuildInputs !== undefined ? { last_build_inputs: changes.lastBuildInputs } : {}),
           ...(changes.lastBuildAttemptedAt !== undefined
             ? { last_build_attempted_at: changes.lastBuildAttemptedAt }
             : {}),
@@ -283,8 +290,8 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
    * Leading-edge debounce for push-triggered builds: stamps
    * `last_build_attempted_at = now` and resolves true when no attempt started
    * within the last `debounceMinutes`, else writes nothing and resolves
-   * false. The read and the write run under one `updateAtomic`, so two
-   * concurrent webhooks never both win.
+   * false. The read and the write run in one transaction, so two concurrent
+   * webhooks never both win, even on different database connections.
    */
   async claimBuildAttempt({
     id,
@@ -296,12 +303,14 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     now?: Date;
   }): Promise<boolean> {
     let claimed = false;
-    await this.#db.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
-      const last = current.last_build_attempted_at;
-      if (last && now.getTime() - last.getTime() < debounceMinutes * 60_000) return null;
-      claimed = true;
-      return { last_build_attempted_at: now, updated_at: now };
-    });
+    await this.storage.withTransaction(ops =>
+      ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
+        const last = current.last_build_attempted_at;
+        if (last && now.getTime() - last.getTime() < debounceMinutes * 60_000) return null;
+        claimed = true;
+        return { last_build_attempted_at: now, updated_at: now };
+      }),
+    );
     return claimed;
   }
 
@@ -309,7 +318,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
    * Pins the active template to a finished build, but only while that build is
    * still the project's last one. Overlapping runs (two settings edits in a
    * row, Build now during a push build) can finish out of order; the write and
-   * the `last_build_id` check run under one `updateAtomic` so a stale run never
+   * the `last_build_id` check run in one transaction so a stale run never
    * overwrites a newer build's pin. Resolves false when the pin was skipped.
    */
   async pinActiveTemplate({
@@ -326,11 +335,13 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     now?: Date;
   }): Promise<boolean> {
     let pinned = false;
-    await this.#db.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
-      if (current.last_build_id !== buildId) return null;
-      pinned = true;
-      return { active_template_id: templateId, active_template_heads: heads, updated_at: now };
-    });
+    await this.storage.withTransaction(ops =>
+      ops.updateAtomic<FactoryProjectDbRow>('factory_projects', { id }, current => {
+        if (current.last_build_id !== buildId) return null;
+        pinned = true;
+        return { active_template_id: templateId, active_template_heads: heads, updated_at: now };
+      }),
+    );
     return pinned;
   }
 
