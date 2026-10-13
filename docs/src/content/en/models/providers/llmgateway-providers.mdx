@@ -2182,18 +2182,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.66
   },
   {
-    "model": "llmgateway-providers/fireworks/deepseek-v4-pro",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 393216,
-    "inputCost": 1.32,
-    "outputCost": 3.96
-  },
-  {
     "model": "llmgateway-providers/fireworks/deepseek-v4.1-flash",
     "imageInput": true,
     "audioInput": false,
@@ -2564,6 +2552,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.75,
     "outputCost": 3.75
+  },
+  {
+    "model": "llmgateway-providers/google-vertex/gemini-4-argon",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "llmgateway-providers/groq/gpt-oss-120b",

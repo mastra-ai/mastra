@@ -60,6 +60,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-nano-banana-2.1",
     "google/gemini-omni-flash-preview",
     "google/gemma-4-26b-a4b-it",
@@ -480,6 +481,7 @@
     "alibaba/qwen3.8-omni-flash",
     "anthropic/claude-haiku-5.5",
     "anthropic/claude-sonnet-4.5",
+    "cohere/command-a",
     "deepseek/deepseek-v3.2",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-0731",
@@ -498,6 +500,7 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemma-4-26b-a4b-it",
     "google/gemma-4-31b-it",
     "meta/muse-glimmer-30b",
@@ -570,7 +573,9 @@
     "openai/o3-pro",
     "openai/o4-mini",
     "openai/o4-mini-fast",
+    "sakana/fugu-max",
     "sakana/fugu-ultra",
+    "sakana/fugu-ultra-v2",
     "spacexai/grok-4.1-fast-reasoning",
     "spacexai/grok-4.3",
     "spacexai/grok-4.5",
@@ -1341,6 +1346,12 @@
       {
         "type": "effort",
         "values": ["minimal", "medium", "high"]
+      }
+    ],
+    "google/gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "google/gemini-3.1-flash-lite": [

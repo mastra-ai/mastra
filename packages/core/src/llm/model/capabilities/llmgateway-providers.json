@@ -150,6 +150,7 @@
     "google-vertex/gemini-3.6-flash",
     "google-vertex/gemini-3.7-flash",
     "google-vertex/gemini-3.8-flash",
+    "google-vertex/gemini-4-argon",
     "inference.net/glm-5.3-flash",
     "luminal/deepseek-v4.1-flash",
     "meta-contributor/muse-spark-1.2-contributor",
@@ -402,7 +403,6 @@
     "entrim/deepseek-v4.1-flash",
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
-    "fireworks/deepseek-v4-pro",
     "fireworks/deepseek-v4.1-flash",
     "fireworks/glm-5.3",
     "fireworks/glm-5.3-flash",
@@ -707,7 +707,6 @@
     "entrim/deepseek-v4.1-flash",
     "entrim/glm-5.3-flash",
     "fireworks/deepseek-v4-flash",
-    "fireworks/deepseek-v4-pro",
     "fireworks/deepseek-v4.1-flash",
     "gonka24/glm-5.3-flash",
     "google-ai-studio/gemini-2.5-flash",
@@ -733,6 +732,7 @@
     "google-vertex/gemini-3.6-flash",
     "google-vertex/gemini-3.7-flash",
     "google-vertex/gemini-3.8-flash",
+    "google-vertex/gemini-4-argon",
     "inference.net/glm-5.3",
     "inference.net/glm-5.3-flash",
     "meta-contributor/muse-spark-1.2-contributor",
@@ -2384,12 +2384,6 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "fireworks/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "fireworks/glm-5.3": [
       {
         "type": "effort",
@@ -2804,6 +2798,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "google-vertex/gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["high"]
       }
     ],
     "google-vertex/gemini-3.1-flash-lite": [
