@@ -1,19 +1,24 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
+import { getMessageAuthor } from '../agent/signals';
 import { getAgentVersionPins } from '../agent/version-pins';
 import { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
+import { MockMemory } from '../memory/mock';
 import { MASTRA_VERSIONS_KEY, RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { createMockModel } from '../test-utils/llm-mock';
 import { AgentController } from './agent-controller';
+import { THREAD_OWNER_ID_CONTEXT_KEY } from './session';
 import { createMockWorkspace } from './test-utils';
+import type { AgentControllerRequestContext } from './types';
 
-async function createRuntime() {
+async function createRuntime({ persistMessages = false } = {}) {
   const defaults = vi.fn((_input: { requestContext: RequestContext }) => ({
     versions: { agents: { root: { versionId: 'default-version' } } } satisfies VersionOverrides,
   }));
   const contexts: RequestContext[] = [];
+  const storage = new InMemoryStore();
   const agent = new Agent({
     id: 'root',
     name: 'Root',
@@ -23,8 +28,8 @@ async function createRuntime() {
     },
     model: createMockModel({ mockText: 'Completed' }),
     defaultOptions: defaults,
+    ...(persistMessages && { memory: new MockMemory({ storage }) }),
   });
-  const storage = new InMemoryStore();
   const controller = new AgentController({
     id: 'controller',
     storage,
@@ -78,6 +83,43 @@ describe('AgentController per-call version selection', () => {
       expect(runtime.requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
         agents: { root: { versionId: 'context-version' } },
       });
+    },
+  );
+
+  it.each(['sendMessage', 'queueMessage', 'steer'] as const)(
+    '%s preserves explicit versions and message authors independently of the trusted thread owner',
+    async method => {
+      const runtime = await createRuntime({ persistMessages: true });
+      await runtime.session.thread.transferOwnership({ toOwnerId: 'thread-owner' });
+      runtime.requestContext.setRaw(THREAD_OWNER_ID_CONTEXT_KEY, 'spoofed-owner');
+      runtime.requestContext.set('controller', { threadOwnerId: 'spoofed-owner' });
+      const author = { id: 'message-author', name: 'Reviewer' };
+
+      await runtime.session[method]({
+        content: 'Run the requested version with an explicit author',
+        requestContext: runtime.requestContext,
+        versions: { agents: { root: { versionId: 'requested-version' } } },
+        author,
+      });
+
+      const executionContext = runtime.contexts.at(-1)!;
+      const controllerContext = executionContext.get('controller') as AgentControllerRequestContext;
+      expect(getAgentVersionPins(executionContext)?.root).toMatchObject({
+        agentId: 'root',
+        versionId: 'requested-version',
+      });
+      expect(controllerContext.threadOwnerId).toBe('thread-owner');
+      expect(controllerContext.session.ownerId).toBe('owner');
+      expect(executionContext.getRaw(THREAD_OWNER_ID_CONTEXT_KEY)).toBe('thread-owner');
+      expect(runtime.requestContext.getRaw(THREAD_OWNER_ID_CONTEXT_KEY)).toBe('spoofed-owner');
+      expect(runtime.requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+        agents: { root: { versionId: 'context-version' } },
+      });
+
+      const messages = await runtime.session.thread.listMessages({ threadId: runtime.session.thread.requireId() });
+      const userMessages = messages.filter(message => message.role === 'signal');
+      expect(userMessages).toHaveLength(1);
+      expect(getMessageAuthor(userMessages[0]!)).toEqual(author);
     },
   );
 
