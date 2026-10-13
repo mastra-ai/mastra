@@ -1,5 +1,6 @@
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { MessageHistory } from '@mastra/core/processors';
+import { maxObservationCursor } from '@mastra/core/storage';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 import xxhash from 'xxhash-wasm';
 
@@ -211,6 +212,10 @@ export abstract class ObservationStrategy {
             ...committedRecord,
             activeObservations: processed.observations,
             observationTokenCount: processed.observationTokens,
+            // `committedRecord` can be a detached pre-commit copy (SQL adapters), so its cursor
+            // misses what this cycle just persisted. Reflection must carry the persisted cursor,
+            // or the new generation starts behind it and re-selects just-observed messages.
+            lastObservedAt: maxObservationCursor(committedRecord.lastObservedAt, processed.lastObservedAt),
           },
           observationTokens: processed.observationTokens,
           threadId,
