@@ -1,8 +1,8 @@
 import type { IMastraLogger } from '../../../logger';
 import type { RequestContext } from '../../../request-context';
 import type { RequireToolApproval } from '../../../tools';
-import { getNeedsApprovalFn } from '../../../tools/toolchecks';
-import type { ToolApprovalContext } from '../../../tools/types';
+import { getBeforeApprovalFn, getNeedsApprovalFn } from '../../../tools/toolchecks';
+import type { ToolApprovalContext, ToolBeforeHookResult } from '../../../tools/types';
 
 export function buildToolApprovalContext({
   toolName,
@@ -70,5 +70,49 @@ export async function resolveToolApprovalVerdict({
   } catch (error) {
     logger?.error(`Error evaluating needsApprovalFn for tool ${context.toolName}:`, error);
     return true;
+  }
+}
+
+/**
+ * Runs a tool's `beforeApproval` hook for a call that is about to suspend for approval.
+ * Returns the rejection when the hook returns `{ proceed: false, output }`, otherwise
+ * `undefined` so the call continues to the approval gate. A hook that throws is logged and
+ * treated as "continue": the approval gate still protects execution.
+ */
+export async function runBeforeApprovalHook({
+  tool,
+  input,
+  context,
+  logger,
+}: {
+  tool: unknown;
+  input: unknown;
+  context: {
+    toolCallId: string;
+    toolName: string;
+    requestContext?: RequestContext;
+    workspace?: ToolApprovalContext['workspace'];
+  };
+  logger?: IMastraLogger;
+}): Promise<ToolBeforeHookResult | undefined> {
+  const beforeApproval = getBeforeApprovalFn(tool);
+  if (!beforeApproval) return undefined;
+
+  const { requestContext } = buildToolApprovalContext({
+    toolName: context.toolName,
+    args: input as ToolApprovalContext['args'],
+    requestContext: context.requestContext,
+  });
+  try {
+    const result = await beforeApproval(input, {
+      toolCallId: context.toolCallId,
+      toolName: context.toolName,
+      requestContext,
+      workspace: context.workspace,
+    });
+    return result && typeof result === 'object' && result.proceed === false ? result : undefined;
+  } catch (error) {
+    logger?.error(`Error calling beforeApproval for tool ${context.toolName}:`, error);
+    return undefined;
   }
 }

@@ -26,6 +26,7 @@ import { createWorkflow } from '../../workflows/create';
 import type { Step, SuspendOptions } from '../../workflows/step';
 import { createStep } from '../../workflows/workflow';
 import { PRIMITIVE_TYPES } from '../types';
+import { runBeforeApprovalHook } from '../workflows/agentic-execution/tool-approval-verdict';
 import { pruneAgentLoopSnapshot } from '../workflows/prune-snapshot';
 
 /**
@@ -1634,7 +1635,15 @@ export async function createNetworkLoop({
             task: inputData.task,
           });
         }
-        if (!resumeData) {
+        const rejection = resumeData
+          ? undefined
+          : await runBeforeApprovalHook({
+              tool,
+              input: inputDataToUse,
+              context: { toolCallId, toolName: toolId, requestContext },
+              logger,
+            });
+        if (!resumeData && !rejection) {
           const requireApprovalResumeSchema = JSON.stringify(
             standardSchemaToJSONSchema(toStandardSchema(toolApprovalSchema)),
           );
@@ -1704,8 +1713,8 @@ export async function createNetworkLoop({
             },
           });
         } else {
-          if (!resumeData.approved) {
-            const rejectionResult = resolveDeclineReason(resumeData);
+          if (rejection || !resumeData?.approved) {
+            const rejectionResult = rejection ? rejection.output : resolveDeclineReason(resumeData);
             await saveMessagesWithProcessors(
               memory,
               [

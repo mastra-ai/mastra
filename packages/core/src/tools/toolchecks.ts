@@ -1,6 +1,6 @@
 import { Tool, MASTRA_TOOL_MARKER } from './tool';
 import type { ToolToConvert } from './tool-builder/builder';
-import type { NeedsApprovalFn, VercelTool } from './types';
+import type { BeforeApprovalFn, NeedsApprovalFn, VercelTool } from './types';
 
 /**
  * Checks if a tool is a Mastra Tool, using both instanceof and marker.
@@ -78,4 +78,13 @@ export function getNeedsApprovalFn(tool: unknown): NeedsApprovalFn | undefined {
   if (typeof tool !== 'object' || tool === null) return undefined;
   const fn = (tool as { needsApprovalFn?: unknown }).needsApprovalFn;
   return typeof fn === 'function' ? (fn as NeedsApprovalFn) : undefined;
+}
+
+/**
+ * Reads a per-tool {@link BeforeApprovalFn} attached to a tool instance, if present.
+ */
+export function getBeforeApprovalFn(tool: unknown): BeforeApprovalFn | undefined {
+  if (typeof tool !== 'object' || tool === null) return undefined;
+  const fn = (tool as { beforeApproval?: unknown }).beforeApproval;
+  return typeof fn === 'function' ? (fn as BeforeApprovalFn) : undefined;
 }

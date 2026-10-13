@@ -80,6 +80,27 @@ export type NeedsApprovalContext = {
  */
 export type NeedsApprovalFn = (input: any, ctx?: NeedsApprovalContext) => boolean | Promise<boolean>;
 
+/**
+ * Context passed to a tool's `beforeApproval` hook alongside the parsed tool input.
+ */
+export type BeforeApprovalContext = NeedsApprovalContext & {
+  /** ID of the tool call awaiting approval. */
+  toolCallId: string;
+  /** Name the model used to call the tool. */
+  toolName: string;
+};
+
+/**
+ * Per-tool hook that runs after the call is known to require approval but before the
+ * run suspends for it. Return `{ proceed: false, output }` to reject the call: the run
+ * does not pause, the tool does not execute, and `output` is returned to the model as
+ * the tool result. Return nothing to continue to the approval gate.
+ */
+export type BeforeApprovalFn<TInput = any, TOutput = unknown> = (
+  input: TInput,
+  ctx: BeforeApprovalContext,
+) => void | ToolBeforeHookResult<TOutput> | Promise<void | ToolBeforeHookResult<TOutput>>;
+
 export interface ToolHookContext<
   TInput = unknown,
   TContext = unknown,
@@ -768,6 +789,15 @@ export interface ToolAction<
         input: TSchemaIn,
         ctx?: { requestContext?: Record<string, unknown>; workspace?: Workspace },
       ) => boolean | Promise<boolean>);
+  /**
+   * Runs before the approval gate for calls that require approval. Use it to validate a
+   * call (e.g. check that referenced records exist) so invalid calls are never shown to a
+   * human. Return `{ proceed: false, output }` to reject: the run does not suspend, the
+   * tool does not execute, and `output` is returned to the model as the tool result.
+   * Not run on resume, so keep validating inside `execute` if state can change while paused.
+   * If the hook throws, the error is logged and the call continues to the approval gate.
+   */
+  beforeApproval?: BeforeApprovalFn<TSchemaIn>;
   /**
    * Enables strict tool input generation for providers that support it.
    * When enabled, supported providers will attempt to generate arguments

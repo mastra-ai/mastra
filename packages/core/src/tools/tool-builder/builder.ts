@@ -38,6 +38,7 @@ import { markBuilderValidatedInput } from '../builder-validation-context';
 import { createToolObserve } from '../observe';
 import { ToolStream } from '../stream';
 import type {
+  BeforeApprovalFn,
   CoreTool,
   McpMetadata,
   MastraToolInvocationOptions,
@@ -1187,6 +1188,10 @@ export class CoreToolBuilder extends MastraBase {
       description: this.originalTool.description,
       requireApproval,
       needsApprovalFn,
+      beforeApproval:
+        'beforeApproval' in this.originalTool && typeof this.originalTool.beforeApproval === 'function'
+          ? (this.originalTool.beforeApproval as BeforeApprovalFn)
+          : undefined,
       hasSuspendSchema: !!this.getSuspendSchema(),
       execute: this.originalTool.execute
         ? this.createExecute(
