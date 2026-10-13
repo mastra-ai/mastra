@@ -64,5 +64,6 @@ A `proxy_error` carries the provider's response in its `status` and `detail` pro
 - **Status `401`:** Check whether the credential has expired, been revoked, or been rotated. If it needs replacing, [reauthorize the connection](/reference/cli/mastra#replace-a-connection-that-needs-reauthorization).
 - **Status `403`:** Check the provider's response for missing scopes, resource-access restrictions, or account requirements. Grant only the access the agent needs. You can exclude unsupported operations with `allowTools`, but filtering tools doesn't change the credential's permissions.
 - **No tools from a provider:** Run `mastra connect list` to check the project and connection status. Check provider selection and tool filters, and confirm that your installed `@mastra/connect` version includes the toolset. Connection changes follow the resolver's [caching behavior](/reference/connect/tools#the-resolver). Check app logs for `[@mastra/connect] Skipping` warnings when a connection can't be resolved.
+- **Resend won't connect:** Use an API key with **Full access** permission. A **Sending access** key fails to connect because Mastra checks a new key by listing your domains, which sending access keys can't do.
 
 See [errors](/reference/connect/tools#errors) for every error code.
