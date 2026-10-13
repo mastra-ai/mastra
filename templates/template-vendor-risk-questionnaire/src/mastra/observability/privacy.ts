@@ -74,11 +74,16 @@ class MetadataOnlyProcessor implements SpanOutputProcessor {
   name = 'vrq-metadata-only';
   private wrapped = new WeakSet<AnySpan>();
   private sanitized = new WeakMap<AnySpan, Record<string, string | number | boolean>>();
+  private entityIds = new WeakMap<AnySpan, string>();
   process(span?: AnySpan) {
     if (!span) return undefined;
     const failed = Boolean(span.errorInfo);
     span.name = span.type;
-    span.entityId = telemetryId(span.entityId);
+    if (span.entityId !== this.entityIds.get(span)) {
+      span.entityId = telemetryId(span.entityId);
+      if (span.entityId === undefined) this.entityIds.delete(span);
+      else this.entityIds.set(span, span.entityId);
+    }
     span.entityName = undefined;
     span.input = undefined;
     span.output = undefined;
