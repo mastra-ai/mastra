@@ -45,7 +45,7 @@ export function ComparisonMetricList({ metrics }: { metrics: ComparisonMetric[] 
   return (
     <dl
       className={cn(
-        'grid auto-rows-6 items-center gap-x-4 gap-y-1',
+        'grid auto-rows-[minmax(1.5rem,auto)] items-center gap-x-4 gap-y-1',
         hasTrend ? 'grid-cols-[minmax(0,1fr)_auto_auto]' : 'grid-cols-[minmax(0,1fr)_auto]',
       )}
     >

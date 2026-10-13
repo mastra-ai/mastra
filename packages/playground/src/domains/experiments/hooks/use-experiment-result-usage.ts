@@ -5,12 +5,16 @@ import { useObservabilityStorageCapabilities } from '@/domains/configuration/hoo
 /**
  * Token/cost usage of an experiment result's trace, only when that trace is an
  * agent run (root span) and the observability store can serve metrics.
+ * `isLoading` stays true until it is known whether usage exists, so callers can reserve its space.
  */
 export function useExperimentResultUsage(traceId: string | null | undefined) {
-  const { data: trace } = useTraceSpans({ traceId: traceId, queryOptions: { enabled: !!traceId } });
+  const { data: trace, isLoading: isTraceLoading } = useTraceSpans({
+    traceId: traceId,
+    queryOptions: { enabled: !!traceId },
+  });
   const rootSpan = trace?.spans.find(span => !span.parentSpanId);
   const isAgentTrace = rootSpan?.entityType === 'agent';
-  const { supportsMetrics } = useObservabilityStorageCapabilities();
+  const { supportsMetrics, isLoading: isCapabilitiesLoading } = useObservabilityStorageCapabilities();
 
   const usage = useTraceUsage({
     traceIds: traceId ? [traceId] : [],
@@ -18,5 +22,8 @@ export function useExperimentResultUsage(traceId: string | null | undefined) {
     autoRefetch: false,
   });
 
-  return traceId ? usage.data?.get(traceId) : undefined;
+  return {
+    usage: traceId ? usage.data?.get(traceId) : undefined,
+    isLoading: !!traceId && (isTraceLoading || isCapabilitiesLoading || usage.isLoading),
+  };
 }

@@ -1,5 +1,33 @@
 # mastracode
 
+## 0.47.0-alpha.3
+
+### Minor Changes
+
+- Added custom themes. Pick one of eight bundled palettes, follow your terminal's light or dark appearance, or drop your own theme JSON into `~/.mastracode/themes/`. ([#26719](https://github.com/mastra-ai/mastra/pull/26719))
+
+  **Themes**
+
+  - `/theme` opens a picker with live preview. `/theme list`, `/theme <name>`, and `/theme status` cover the rest.
+  - `MASTRA_THEME` overrides the preference with a mode (`dark` or `light`), a theme name, or a light/dark pair like `catppuccin-latte/catppuccin-mocha` that follows the detected terminal appearance.
+  - Bundled themes: `tokyo-night`, `catppuccin-mocha`, `catppuccin-latte`, `gruvbox-dark`, `dracula`, `nord`, `solarized-dark`, `solarized-light`. A user file with the same name wins.
+  - Theme colors adapt to the terminal's actual background for contrast, and every surface — tool pills, code highlighting, the judge display, MCP selector, overlays, and status line — now resolves through the active theme.
+
+  ```sh
+  MASTRA_THEME=solarized-light/solarized-dark mastracode
+  ```
+
+  ```text
+  /theme catppuccin-mocha                  # a bundled theme
+  /theme solarized-light/solarized-dark    # follow the terminal with a pair
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`54e9dc3`](https://github.com/mastra-ai/mastra/commit/54e9dc3ed0615ee84a6526395a9fefe17320fe7e), [`59164cb`](https://github.com/mastra-ai/mastra/commit/59164cb7f8b298e28e13305b0273ed2ef7f1d9e1), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`1b3b35e`](https://github.com/mastra-ai/mastra/commit/1b3b35eff32fe8833c9d938e4d4f0e37c5bbed4e), [`8dc4d65`](https://github.com/mastra-ai/mastra/commit/8dc4d65b34aad280c4f6ab265162c4846face7e3), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`aa00f41`](https://github.com/mastra-ai/mastra/commit/aa00f41855e8d6802546f613ffec1669e03409fc), [`226823f`](https://github.com/mastra-ai/mastra/commit/226823ffde55e2dcce01f2111a6a35be3f2c9b85)]:
+  - @mastra/core@1.77.0-alpha.3
+  - @mastra/code-sdk@1.13.0-alpha.3
+
 ## 0.46.1-alpha.2
 
 ### Patch Changes
