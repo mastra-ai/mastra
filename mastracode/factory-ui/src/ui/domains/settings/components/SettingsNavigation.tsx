@@ -114,7 +114,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         id: 'environment',
         label: SETTINGS_SECTION_LABELS.environment,
         icon: Box,
-        searchText: 'environment sandbox resources cpu memory workdir repositories order setup teardown build triggers',
+        searchText: 'environment sandbox resources cpu memory workdir repositories order setup teardown',
       },
       {
         id: 'intake',
