@@ -35,23 +35,31 @@ export function FactoryModelsSettings({ models, settings, onBehaviorChange }: Fa
       </SettingsSubsection>
     </>
   );
+  const factoryDefaultsSubsection = (
+    <SettingsSubsection
+      scope="factory"
+      title="Factory defaults"
+      description="Applied to Factory runs (triage, board work items) and channel sessions."
+    >
+      <SettingsContainer>
+        <FactoryModelScopeSection />
+        {(!providersKnown || anyConnected) && <FactoryDefaultModelSection models={models} />}
+      </SettingsContainer>
+    </SettingsSubsection>
+  );
 
   if (providersKnown && !anyConnected) {
-    return <div className="flex flex-col gap-8">{providerSubsections}</div>;
+    return (
+      <div className="flex flex-col gap-8">
+        {factoryDefaultsSubsection}
+        {providerSubsections}
+      </div>
+    );
   }
 
   return (
     <div className="flex flex-col gap-8">
-      <SettingsSubsection
-        scope="factory"
-        title="Factory defaults"
-        description="Applied to Factory runs (triage, board work items) and channel sessions."
-      >
-        <SettingsContainer>
-          <FactoryModelScopeSection />
-          <FactoryDefaultModelSection models={models} />
-        </SettingsContainer>
-      </SettingsSubsection>
+      {factoryDefaultsSubsection}
       <SettingsSubsection
         scope="deployment"
         title="Thinking defaults"
