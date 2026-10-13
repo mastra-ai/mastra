@@ -82,7 +82,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.92
   },
   {
-    "model": "cloudferro-sherlock/speakleash/Bielik-11B-v2.6-Instruct",
+    "model": "cloudferro-sherlock/speakleash/Bielik-11B-v3.0-Instruct",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -94,16 +94,16 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.67
   },
   {
-    "model": "cloudferro-sherlock/speakleash/Bielik-11B-v3.0-Instruct",
+    "model": "cloudferro-sherlock/zai-org/GLM-5.3",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 32000,
-    "inputCost": 0.67,
-    "outputCost": 0.67
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 131072,
+    "inputCost": 0.34,
+    "outputCost": 4.48
   }
 ]}
 />
@@ -138,7 +138,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "cloudferro-sherlock/speakleash/Bielik-11B-v3.0-Instruct"
+      ? "cloudferro-sherlock/zai-org/GLM-5.3"
       : "cloudferro-sherlock/MiniMaxAI/MiniMax-M2.5";
   }
 });

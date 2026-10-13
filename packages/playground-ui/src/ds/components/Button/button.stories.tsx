@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Plus, Settings, Trash } from 'lucide-react';
+import { ArrowUpRight, Plus, Settings, Trash } from 'lucide-react';
 import { Fragment } from 'react';
 import { Input } from '../Input';
 import { TooltipProvider } from '../Tooltip';
@@ -8,7 +8,7 @@ import type { ButtonVariant } from './Button';
 import { Button } from './Button';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
-const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost'];
+const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost', 'link'];
 
 const meta: Meta<typeof Button> = {
   title: 'Elements/Button',
@@ -132,7 +132,7 @@ export const IconButtonDefault: Story = {
 export const IconButtonVariants: Story = {
   render: () => (
     <div className="flex flex-wrap items-center gap-2">
-      {ALL_VARIANTS.map(variant => (
+      {ALL_VARIANTS.filter(variant => variant !== 'link').map(variant => (
         <Button key={variant} size="icon-md" variant={variant} tooltip={variant}>
           <Settings />
         </Button>
@@ -220,6 +220,53 @@ export const OnDifferentSurfaces: Story = {
           <Button>Rename</Button>
         </div>
       </div>
+    </div>
+  ),
+};
+
+export const Link: Story = {
+  render: () => (
+    <div className="flex w-120 flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <Txt as="span" variant="subheading">
+          Usage this month
+        </Txt>
+        <Button variant="link" render={<a href="#" />}>
+          View usage
+        </Button>
+      </div>
+      <div className="flex items-center justify-between">
+        <Txt as="span" variant="subheading">
+          Credit history
+        </Txt>
+        <Button
+          variant="link"
+          render={<a href="https://mastra.ai" target="_blank" rel="noopener noreferrer" />}
+          iconEnd={<ArrowUpRight />}
+        >
+          Open billing portal
+        </Button>
+      </div>
+      <div className="flex items-center justify-between">
+        <Txt as="span" variant="subheading">
+          Disabled
+        </Txt>
+        <Button variant="link" disabled>
+          View usage
+        </Button>
+      </div>
+    </div>
+  ),
+};
+
+export const WithIconEnd: Story = {
+  render: () => (
+    <div className="flex items-center gap-4">
+      {(['default', 'ghost', 'primary'] as const).map(variant => (
+        <Button key={variant} variant={variant} iconEnd={<ArrowUpRight />}>
+          Open portal
+        </Button>
+      ))}
     </div>
   ),
 };

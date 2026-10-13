@@ -1,4 +1,4 @@
-import type { GetMetricAggregateArgs, GetMetricAggregateResponse } from '@mastra/client-js';
+import type { GetMetricAggregateArgs, GetMetricAggregateResponse, MastraClient } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -25,6 +25,7 @@ import {
   noWorkflows,
   resultsResponse,
 } from './fixtures/experiment-item-route';
+import { experimentTotalsBreakdown } from '@/domains/experiments/components/__tests__/fixtures/experiment-usage';
 import ExperimentPage from '@/pages/experiments/experiment';
 import ReviewQueuePage from '@/pages/experiments/review-queue';
 import { legacyTraceCapabilities, traceQueryCapabilities } from '@/pages/traces/__tests__/fixtures/trace-query';
@@ -82,11 +83,12 @@ const renderExperimentRoute = (initialPath = `/experiments/${EXPERIMENT_ID}`) =>
  */
 const findResultDialog = async (resultId: string) => {
   const dialog = await screen.findByRole('dialog', { name: `Experiment item ${resultId.replace('res-', 'item-')}` });
-  await within(dialog).findByRole('heading', { name: `Result ${resultId}` });
+  await within(dialog).findByRole('heading', { name: 'Experiment result' });
   return dialog;
 };
 
 let metricRequests: GetMetricAggregateArgs[] = [];
+let breakdownRequests: Parameters<MastraClient['getMetricBreakdown']>[0][] = [];
 
 const metricAggregateByAggregation: Record<string, GetMetricAggregateResponse> = {
   sum: { value: 12400, estimatedCost: 0.0123, costUnit: 'USD' },
@@ -96,8 +98,13 @@ const metricAggregateByAggregation: Record<string, GetMetricAggregateResponse> =
 
 beforeEach(() => {
   metricRequests = [];
+  breakdownRequests = [];
   server.use(
     http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceQueryCapabilities)),
+    http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, async ({ request }) => {
+      breakdownRequests.push((await request.json()) as Parameters<MastraClient['getMetricBreakdown']>[0]);
+      return HttpResponse.json(experimentTotalsBreakdown);
+    }),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, async ({ request }) => {
       const body = (await request.json()) as GetMetricAggregateArgs;
       metricRequests.push(body);
@@ -107,7 +114,7 @@ beforeEach(() => {
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json(noScorers)),
-    http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json(experimentsResponse)),
+    http.get(`${TEST_BASE_URL}/api/experiments/${EXPERIMENT_ID}`, () => HttpResponse.json(experiment)),
     // The meta bar resolves the dataset name; a 404 falls back to the raw id.
     http.get(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}`, () =>
       HttpResponse.json({ error: 'not found' }, { status: 404 }),
@@ -146,18 +153,19 @@ describe('experiment item sub-route', () => {
   });
 
   describe('given the experiment route on a metrics-capable store', () => {
-    it('when the page loads, then it requests metric aggregates filtered by the route experimentId and renders Tokens/Latency in the meta bar', async () => {
+    it('when the page loads, then it requests metrics filtered by the route experimentId and renders cost, tokens and avg duration', async () => {
       renderExperimentRoute();
 
-      expect(await screen.findByText('Tokens')).toBeDefined();
-      expect(await screen.findByText('12.4K')).toBeDefined();
-      expect(screen.getByText('Latency (avg)')).toBeDefined();
-      expect(await screen.findByText('1.85s')).toBeDefined();
+      expect(await screen.findByText('Total tokens')).toBeDefined();
+      expect(await screen.findByText('12,400')).toBeDefined();
+      expect(await screen.findByText('$0.0123')).toBeDefined();
+      expect(await screen.findByText('1.85s avg per item')).toBeDefined();
 
       expect(metricRequests.length).toBeGreaterThanOrEqual(3);
-      for (const body of metricRequests) {
+      for (const body of [...metricRequests, ...breakdownRequests]) {
         expect(body.filters).toEqual({ experimentId: EXPERIMENT_ID });
       }
+      expect(breakdownRequests.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -199,22 +207,59 @@ describe('experiment item sub-route', () => {
   });
 
   describe('when the user selects results for review', () => {
-    it('shows the selected count in the review action without a separate selection label', async () => {
+    it('shows the selected count and reveals the actions once something is selected', async () => {
+      renderExperimentRoute();
+
+      expect((await screen.findByRole('button', { name: '0 selected' })).hasAttribute('disabled')).toBe(true);
+      expect(screen.queryByRole('button', { name: 'Request review' })).toBeNull();
+
+      fireEvent.click(screen.getByRole('checkbox', { name: 'Select result item-1' }));
+
+      expect(await screen.findByRole('button', { name: '1 selected' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Request review' })).toBeDefined();
+    });
+
+    it('clears the selection and hides the actions when the count button is clicked', async () => {
+      renderExperimentRoute();
+
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
+      fireEvent.click(await screen.findByRole('button', { name: '1 selected' }));
+
+      expect(await screen.findByRole('button', { name: '0 selected' })).toBeDefined();
+      expect(screen.queryByRole('button', { name: 'Request review' })).toBeNull();
+    });
+  });
+
+  describe('when the user toggles the select-all checkbox', () => {
+    const resultCheckboxes = () =>
+      resultsResponse.results.map(r => screen.getByRole('checkbox', { name: `Select result ${r.itemId}` }));
+
+    it('selects every loaded result', async () => {
+      renderExperimentRoute();
+
+      fireEvent.click(await screen.findByRole('checkbox', { name: 'Select all' }));
+
+      expect(await screen.findByRole('button', { name: `${resultsResponse.results.length} selected` })).toBeDefined();
+      expect(resultCheckboxes().every(box => box.getAttribute('aria-checked') === 'true')).toBe(true);
+    });
+
+    it('shows a mixed state while only some results are selected', async () => {
       renderExperimentRoute();
 
       fireEvent.click(await screen.findByRole('checkbox', { name: 'Select result item-1' }));
 
-      expect(await screen.findByRole('button', { name: 'Flag 1 to review' })).toBeDefined();
-      expect(screen.queryByText('1 selected')).toBeNull();
+      expect(screen.getByRole('checkbox', { name: 'Select all' }).getAttribute('aria-checked')).toBe('mixed');
     });
 
-    it('only shows the selection actions once something is selected', async () => {
+    it('clears the selection once every result is selected', async () => {
       renderExperimentRoute();
 
-      // Selecting is what reveals the actions, so no bulk-selection affordance is needed beforehand.
-      expect(await screen.findByRole('checkbox', { name: 'Select result item-1' })).toBeDefined();
-      expect(screen.queryByRole('button', { name: /Flag \d+ to review/ })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+      const selectAll = await screen.findByRole('checkbox', { name: 'Select all' });
+      fireEvent.click(selectAll);
+      fireEvent.click(selectAll);
+
+      expect(await screen.findByRole('button', { name: '0 selected' })).toBeDefined();
+      expect(resultCheckboxes().every(box => box.getAttribute('aria-checked') === 'false')).toBe(true);
     });
   });
 
@@ -520,7 +565,7 @@ describe('experiment item sub-route', () => {
 
       const traceSection = screen.getByText('Experiment agent run').closest('section');
       if (!traceSection) throw new Error('Expected trace section');
-      fireEvent.click(within(traceSection).getByLabelText('Close Panel'));
+      fireEvent.click(within(traceSection).getByLabelText('Close trace'));
 
       await waitFor(() => expect(screen.queryByText('Experiment agent run')).toBeNull());
       expect(dialog.isConnected).toBe(true);

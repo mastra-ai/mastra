@@ -1,4 +1,5 @@
 import { MAX_SAVED_VIEW_NAME_CHARS } from './saved-view-schema';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 
 // Uncontrolled so blur is the one exit: Enter blurs, Escape restores the name first, blur commits.
 export function SavedViewNameInput({ name, onCommit }: { name: string; onCommit: (name: string) => void }) {
@@ -8,6 +9,7 @@ export function SavedViewNameInput({ name, onCommit }: { name: string; onCommit:
       aria-label="View name"
       defaultValue={name}
       maxLength={MAX_SAVED_VIEW_NAME_CHARS}
+      {...passwordManagerOptOutProps}
       onFocus={event => event.currentTarget.select()}
       onBlur={event => onCommit(event.currentTarget.value)}
       onKeyDown={event => {

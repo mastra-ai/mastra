@@ -260,8 +260,9 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
         className={cn(
           'flex h-full min-h-0 flex-col overflow-hidden',
           'transition-opacity duration-200 motion-reduce:transition-none',
-          'px-2',
-          isHidden && 'pointer-events-none px-0 opacity-0',
+          // Inset on every side, like the mobile drawer's container, so the header and footer never touch an edge.
+          'p-2',
+          isHidden && 'pointer-events-none p-0 opacity-0',
         )}
       >
         {children}

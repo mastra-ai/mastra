@@ -53,6 +53,28 @@ describe('MessageMerger insertion positions', () => {
     expectParts(merge([step, tool('c1')], [tool('c1', true), ...reasoning]), [step, tool('c1', true), ...reasoning]);
   });
 
+  it('inserts a step-start when a new step opens with a tool call', () => {
+    expectParts(merge([step, tool('c1', true)], [tool('c2')]), [step, tool('c1', true), step, tool('c2')]);
+  });
+
+  it('keeps parallel tool calls of one step together', () => {
+    expectParts(merge([step, tool('c1', true)], [tool('c2'), tool('c3')]), [
+      step,
+      tool('c1', true),
+      step,
+      tool('c2'),
+      tool('c3'),
+    ]);
+  });
+
+  it('does not duplicate an explicit step-start before an opening tool call', () => {
+    expectParts(merge([step, tool('c1', true)], [step, tool('c2')]), [step, tool('c1', true), step, tool('c2')]);
+  });
+
+  it('does not start a new step for the result of an existing call', () => {
+    expectParts(merge([step, tool('c1')], [tool('c1', true)]), [step, tool('c1', true)]);
+  });
+
   it('preserves explicit incoming step-starts', () => {
     expectParts(merge([tool('c1')], [tool('c1', true), step, text('A'), text('B')]), [
       tool('c1', true),
