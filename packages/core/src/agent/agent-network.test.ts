@@ -9,8 +9,8 @@ import { MASTRA_SCOPES_KEY, MASTRA_VERSIONS_KEY, RequestContext } from '../reque
 import { InMemoryStore } from '../storage';
 import { createTool } from '../tools';
 import { createStep, createWorkflow } from '../workflows';
-import { Agent } from './index';
 import { getAgentVersionPins } from './version-pins';
+import { Agent } from './index';
 
 const createNetworkTestModel = (text = '{}') =>
   new MockLanguageModelV2({
