@@ -811,6 +811,21 @@ export function buildAuthRoutes(provider: IMastraAuthProvider, options: { public
 }
 
 /**
+ * `/auth/*` routes for auth-disabled mode (`auth: null`). Only `/auth/me`, answering
+ * 404 — the UI's "auth disabled" signal. Without it the deployer's HTML catch-all
+ * answers `/auth/me` with 200 text/html and the UI retries forever.
+ */
+export function buildAuthDisabledRoutes(): ApiRoute[] {
+  return [
+    registerApiRoute('/auth/me', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: c => c.json({ authEnabled: false, authenticated: false }, 404),
+    }),
+  ];
+}
+
+/**
  * Channel webhook paths whose adapter verifies the platform's request signature,
  * making the delivery self-authenticating. Add a platform here only once its
  * adapter rejects unsigned or mis-signed requests.

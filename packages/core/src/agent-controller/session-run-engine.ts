@@ -612,6 +612,7 @@ export class SessionRunEngine {
   ): Promise<{ message: MastraDBMessage; suspended?: boolean } | undefined> {
     if ('runId' in chunk && chunk.runId) {
       this.#session.run.setRunId({ runId: chunk.runId });
+      this.#session.__captureRunThreadOwnerId(chunk.runId, requestContext);
     }
 
     if (isSpanChunk(chunk)) {

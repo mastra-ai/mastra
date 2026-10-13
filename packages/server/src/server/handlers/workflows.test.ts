@@ -31,6 +31,7 @@ import {
   LIST_WORKFLOW_RUNS_ROUTE,
   STREAM_WORKFLOW_ROUTE,
   TIME_TRAVEL_WORKFLOW_ROUTE,
+  EXECUTE_WORKFLOW_STEP_ROUTE,
 } from './workflows';
 
 function createMockWorkflow(name: string) {
@@ -1554,6 +1555,75 @@ describe('vNext Workflow Handlers', () => {
       } as any);
 
       expect(capturedOptions.forEachIndex).toBe(2);
+    });
+  });
+
+  describe('EXECUTE_WORKFLOW_STEP_ROUTE', () => {
+    it('executes a nested workflow step resolved through its parent workflow', async () => {
+      const double = createStep({
+        id: 'double',
+        inputSchema: z.object({ n: z.number() }),
+        outputSchema: z.object({ n: z.number() }),
+        execute: async ({ inputData }) => ({ n: inputData.n * 2 }),
+      });
+      const inner = createWorkflow({
+        id: 'inner',
+        inputSchema: z.object({ n: z.number() }),
+        outputSchema: z.object({ n: z.number() }),
+      })
+        .then(double)
+        .commit();
+      const outer = createWorkflow({
+        id: 'outer',
+        inputSchema: z.object({ n: z.number() }),
+        outputSchema: z.object({ n: z.number() }),
+      })
+        .then(inner)
+        .commit();
+      const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+      const body = EXECUTE_WORKFLOW_STEP_ROUTE.bodySchema!.parse({
+        stepId: 'double',
+        executionPath: [0],
+        parentWorkflow: { workflowId: 'outer', runId: 'run-1', executionPath: [0] },
+        stepResults: {},
+        state: {},
+        requestContext: {},
+        input: { n: 2 },
+      });
+
+      const result = await EXECUTE_WORKFLOW_STEP_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workflowId: 'inner',
+        runId: 'run-1',
+        ...body,
+      } as any);
+
+      expect(result).toMatchObject({ status: 'success', output: { n: 4 } });
+    });
+
+    it('validates the nested parent workflow chain', () => {
+      const parse = (parentWorkflow: unknown) =>
+        EXECUTE_WORKFLOW_STEP_ROUTE.bodySchema!.safeParse({
+          stepId: 'double',
+          executionPath: [0],
+          parentWorkflow,
+          stepResults: {},
+          state: {},
+          requestContext: {},
+        }).success;
+
+      expect(
+        parse({
+          workflowId: 'inner',
+          runId: 'run-1',
+          executionPath: [1],
+          parentWorkflow: { workflowId: 'outer', runId: 'run-1', executionPath: [0] },
+        }),
+      ).toBe(true);
+      expect(parse({ workflowId: 'outer', runId: 'run-1', executionPath: [-1] })).toBe(false);
+      expect(
+        parse({ workflowId: 'inner', runId: 'run-1', executionPath: [0], parentWorkflow: { workflowId: 'outer' } }),
+      ).toBe(false);
     });
   });
 });

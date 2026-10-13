@@ -42,11 +42,12 @@ describe('ProjectRoutes', () => {
     });
     expect(createdResponse.status).toBe(201);
     const created = (await createdResponse.json()) as {
-      project: { id: string; name: string; description: string; slackWorkItemsEnabled: boolean };
+      project: { id: string; name: string; description: string; modelScope: string; slackWorkItemsEnabled: boolean };
     };
     expect(created.project).toMatchObject({
       name: 'Platform',
       description: 'Core services',
+      modelScope: 'factory',
       slackWorkItemsEnabled: false,
     });
 
@@ -57,11 +58,16 @@ describe('ProjectRoutes', () => {
     const updatedResponse = await app.request(`/web/factory/projects/${created.project.id}`, {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name: 'Platform engineering', description: null, slackWorkItemsEnabled: true }),
+      body: JSON.stringify({
+        name: 'Platform engineering',
+        description: null,
+        modelScope: 'user',
+        slackWorkItemsEnabled: true,
+      }),
     });
     expect(updatedResponse.status).toBe(200);
     expect((await updatedResponse.json()) as unknown).toMatchObject({
-      project: { name: 'Platform engineering', description: null, slackWorkItemsEnabled: true },
+      project: { name: 'Platform engineering', description: null, modelScope: 'user', slackWorkItemsEnabled: true },
     });
 
     expect((await app.request(`/web/factory/projects/${created.project.id}`, { method: 'DELETE' })).status).toBe(204);
@@ -83,9 +89,16 @@ describe('ProjectRoutes', () => {
 
     expect((await buildApp().request('/web/factory/projects')).status).toBe(401);
     expect((await buildApp({ workosId: 'user-1' }).request('/web/factory/projects')).status).toBe(403);
+    const otherOrg = buildApp({ workosId: 'user-2', organizationId: 'org-2' });
+    expect((await otherOrg.request(`/web/factory/projects/${project.id}`)).status).toBe(404);
     expect(
-      (await buildApp({ workosId: 'user-2', organizationId: 'org-2' }).request(`/web/factory/projects/${project.id}`))
-        .status,
+      (
+        await otherOrg.request(`/web/factory/projects/${project.id}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ modelScope: 'factory' }),
+        })
+      ).status,
     ).toBe(404);
   });
 
@@ -747,6 +760,14 @@ describe('ProjectRoutes', () => {
         })
       ).status,
     ).toBe(400);
+
+    const invalidScope = await app.request(`/web/factory/projects/${project.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ modelScope: 'org' }),
+    });
+    expect(invalidScope.status).toBe(400);
+    expect(await invalidScope.json()).toEqual({ error: 'invalid_project' });
   });
 
   describe('environment', () => {

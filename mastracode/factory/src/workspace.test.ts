@@ -2120,6 +2120,94 @@ describe('GitHub session workspace preparation', () => {
     expect(() => requireGithubTokenInjector(reviewerContext)('stale-reviewer-token')).toThrow(/no longer matches/);
   });
 
+  describe('when the run-binding lookup fails', () => {
+    type FactoryWorkspace = Awaited<ReturnType<typeof createLocalFactory>>['workspace'];
+
+    async function startReviewSession(workspace: FactoryWorkspace) {
+      mocks.runBindingRole = 'review';
+      addProject();
+      addSession({ id: 'session-a' });
+      const reviewerContext = createGithubRequestContext('project-1', 'session-a');
+      await workspace({ requestContext: reviewerContext });
+      expect(lastGhToken()).toBe('ghp_reviewer');
+      mocks.runBindingRole = 'work';
+      return reviewerContext;
+    }
+
+    async function reuseWithFailingBindingLookup(workspace: FactoryWorkspace) {
+      const lookup = mocks.findActiveRunBindingForSession.getMockImplementation()!;
+      mocks.findActiveRunBindingForSession.mockImplementation(async () => {
+        throw new Error('binding storage unavailable');
+      });
+      const laterContext = createGithubRequestContext('project-1', 'session-a');
+      try {
+        await workspace({
+          requestContext: laterContext,
+          mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+        });
+      } finally {
+        mocks.findActiveRunBindingForSession.mockImplementation(lookup);
+      }
+      return laterContext;
+    }
+
+    it('replaces the reviewer PAT and invalidates reviewer refresh contexts on reuse', async () => {
+      mocks.githubPat = 'ghp_worker';
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      const reviewerContext = await startReviewSession(workspace);
+
+      const laterContext = await reuseWithFailingBindingLookup(workspace);
+
+      expect(lastGhToken()).toBe('ghp_worker');
+      expect(() => requireGithubTokenInjector(reviewerContext)('stale-reviewer-token')).toThrow(/no longer matches/);
+      expect(() => requireGithubTokenInjector(laterContext)('rotated-worker-token')).not.toThrow();
+    });
+
+    it('falls back to repository access when no worker PAT is configured', async () => {
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      await startReviewSession(workspace);
+
+      await reuseWithFailingBindingLookup(workspace);
+
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+    });
+
+    it('keeps the worker PAT across a sandbox reconnect', async () => {
+      mocks.githubPat = 'ghp_worker';
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      const reviewerContext = await startReviewSession(workspace);
+      const laterContext = await reuseWithFailingBindingLookup(workspace);
+
+      mocks.setEnv.mockClear();
+      const sandbox = mocks.createSandbox.mock.results[0]!.value;
+      await sandbox.start();
+
+      expect(lastGhToken()).toBe('ghp_worker');
+      expect(() => requireGithubTokenInjector(reviewerContext)('stale-reviewer-token')).toThrow(/no longer matches/);
+      expect(() => requireGithubTokenInjector(laterContext)('rotated-worker-token')).not.toThrow();
+    });
+
+    it('restores the reviewer PAT once the review binding is readable again', async () => {
+      mocks.githubPat = 'ghp_worker';
+      mocks.githubReviewerPat = 'ghp_reviewer';
+      const { workspace } = await createLocalFactory();
+      await startReviewSession(workspace);
+      await reuseWithFailingBindingLookup(workspace);
+      expect(lastGhToken()).toBe('ghp_worker');
+
+      mocks.runBindingRole = 'review';
+      await workspace({
+        requestContext: createGithubRequestContext('project-1', 'session-a'),
+        mastra: { getWorkspaceById: vi.fn(() => ({ setToolsConfig: vi.fn() })) } as any,
+      });
+
+      expect(lastGhToken()).toBe('ghp_reviewer');
+    });
+  });
+
   it('keeps refresh authority with the current context across a sandbox reconnect', async () => {
     mocks.githubPat = 'ghp_worker';
     mocks.githubReviewerPat = 'ghp_reviewer';
