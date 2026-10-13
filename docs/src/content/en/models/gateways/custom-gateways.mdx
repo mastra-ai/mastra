@@ -371,7 +371,7 @@ interface ProviderConfig {
 
 ### Model pricing
 
-models.dev does not list private deployments, so their calls have no cost in [metrics](/docs/observability/metrics/overview). Add a `pricing` entry per model to give them one. Prices are in USD per 1 million tokens and use the same keys as a model's `cost` on [models.dev](https://models.dev): `input`, `output`, `cache_read`, `cache_write`, `reasoning`, `input_audio`, and `output_audio`. `@mastra/observability` reads these prices when the gateway is registered and uses them before models.dev prices.
+models.dev does not list private deployments, so their calls have no cost in [metrics](/docs/observability/metrics/overview). Add a `pricing` entry per model to give them one. Prices are in USD per 1 million tokens and use the same keys as a model's `cost` on [models.dev](https://models.dev): `input`, `output`, `cache_read`, `cache_write`, `reasoning`, `input_audio`, and `output_audio`. `@mastra/observability` reads these prices from the gateways passed to the `Mastra` constructor and uses them before models.dev prices. Gateways added later with `addGateway()` aren't priced. Prices are matched by provider and model ID, so if a gateway names its provider the same as a public one, such as `openai`, its prices also apply to direct calls to that provider.
 
 ```typescript
 async fetchProviders(): Promise<Record<string, ProviderConfig>> {
