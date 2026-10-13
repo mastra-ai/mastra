@@ -407,6 +407,39 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
     const signalDrainStep = withExecutionFence(this.signalDrainStep());
     const isTaskCompleteStep = withExecutionFence(this.isTaskCompleteStep());
     const goalStep = withExecutionFence(this.goalStep());
+    const executeLLM = llmExecutionStep.execute;
+    llmExecutionStep.execute = async params => {
+      let workflowState = params.state;
+      const setState: typeof params.setState = async nextState => {
+        await params.setState(nextState);
+        workflowState = nextState;
+      };
+      const llmOutput = await executeLLM({ ...params, setState });
+      if (llmOutput && llmOutput.stepResult.reason === 'abort') {
+        const initData = params.getInitData() as IterationState;
+        // Preserve transcript, usage and span bookkeeping, then finish only this
+        // iteration. The outer loop still runs its normal terminal side effects.
+        const executionOutput = await llmMappingStep.execute({
+          ...params,
+          state: workflowState,
+          bail: params.bail<unknown>,
+          inputData: {
+            llmOutput,
+            toolResults: [],
+            runId: initData.runId,
+            agentId: initData.agentId,
+            messageId: initData.messageId,
+            state: llmOutput.state ?? initData.state,
+          },
+        });
+        if (!executionOutput) return executionOutput;
+        return params.bail<IterationState>({
+          ...createBaseIterationStateUpdate({ currentState: initData, executionOutput }),
+          modelList: initData.modelList,
+        });
+      }
+      return llmOutput;
+    };
 
     return (
       this.workflowFactory()({

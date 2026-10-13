@@ -2262,6 +2262,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (stepResult.status === 'bailed') {
       // @ts-expect-error - bailed status not in type
       stepResult.status = 'success';
+      const updatedState = (stepResult as any).__state ?? currentState;
 
       await this.endWorkflow({
         workflow,
@@ -2274,13 +2275,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults: {
           ...stepResults,
           [leafId]: stepResult,
+          __state: updatedState,
         },
         prevResult: stepResult,
         activeStepsPath,
         requestContext,
         actor,
         perStep,
-        state: currentState,
+        state: updatedState,
         outputOptions,
       });
       return;
