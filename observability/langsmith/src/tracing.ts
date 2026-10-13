@@ -165,8 +165,11 @@ export class LangSmithExporter extends TrackingExporter<
 
   /** Spans aborted by shutdown() were only queued on the client; send them before releasing state. */
   protected override async _postShutdown(): Promise<void> {
-    await this.#flushClient();
-    this.#langsmithRunIdBySpanId.clear();
+    try {
+      await this.#flushClient();
+    } finally {
+      this.#langsmithRunIdBySpanId.clear();
+    }
   }
 
   async onScoreEvent(event: ScoreEvent): Promise<void> {

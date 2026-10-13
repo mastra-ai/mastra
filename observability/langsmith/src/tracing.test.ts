@@ -1204,6 +1204,49 @@ describe('TestLangSmithExporter', () => {
       expect(mockClient.flush).toHaveBeenCalledTimes(2);
     });
 
+    it.each([
+      { manualFlushMode: true, used: 'flush', unused: 'awaitPendingTraceBatches' },
+      { manualFlushMode: false, used: 'awaitPendingTraceBatches', unused: 'flush' },
+    ] as const)(
+      'should pick the client method from a real Client with manualFlushMode: $manualFlushMode',
+      async ({ manualFlushMode, used, unused }) => {
+        const { Client: RealClient } = await vi.importActual<typeof import('langsmith')>('langsmith');
+        const client = new RealClient({ apiKey: 'test-api-key', manualFlushMode });
+        const usedSpy = vi.spyOn(client, used).mockResolvedValue(undefined);
+        const unusedSpy = vi.spyOn(client, unused).mockResolvedValue(undefined);
+        const realExporter = new TestLangSmithExporter({ apiKey: 'test-api-key', client });
+
+        await realExporter.flush();
+
+        expect(usedSpy).toHaveBeenCalledTimes(1);
+        expect(unusedSpy).not.toHaveBeenCalled();
+      },
+    );
+
+    it('should clear the run-id map when the final shutdown flush fails', async () => {
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: createMockSpan({
+          id: 'root-span',
+          name: 'root',
+          type: SpanType.AGENT_RUN,
+          isRoot: true,
+          attributes: {},
+        }),
+      });
+      mockClient.awaitPendingTraceBatches.mockRejectedValueOnce(new Error('upload failed'));
+      mockClient.createFeedback = vi.fn().mockResolvedValue(undefined);
+
+      await expect(exporter.shutdown()).rejects.toThrow('upload failed');
+
+      // A score for the old span must not find a stale LangSmith run id
+      await exporter.onScoreEvent({
+        type: 'score',
+        score: { spanId: 'root-span', traceId: 'trace-1', scorerId: 'accuracy', scorerName: 'Accuracy', score: 1 },
+      } as any);
+      expect(mockClient.createFeedback).not.toHaveBeenCalled();
+    });
+
     it('should wait for awaitPendingTraceBatches() in auto flush mode', async () => {
       const release = held(mockClient.awaitPendingTraceBatches);
 
