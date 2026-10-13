@@ -10,9 +10,26 @@ import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { CalendarIcon, CircleAlertIcon, ClockIcon, GaugeIcon, LayersIcon, TargetIcon, StarIcon } from 'lucide-react';
+import {
+  CalendarIcon,
+  CircleAlertIcon,
+  ClockIcon,
+  CoinsIcon,
+  GaugeIcon,
+  HashIcon,
+  LayersIcon,
+  TargetIcon,
+  StarIcon,
+} from 'lucide-react';
 import type { ComparisonRole } from './build-comparison-rows';
-import { diff, formatDurationDelta, formatScore } from './comparison-metric-format';
+import {
+  costDeltaFormatter,
+  diff,
+  formatCostValue,
+  formatDurationDelta,
+  formatScore,
+  formatTokenCount,
+} from './comparison-metric-format';
 import { ComparisonMetricList, ScorerLabel } from './comparison-metric-list';
 import type { ComparisonMetric } from './comparison-metric-list';
 import { ComparisonSection, sectionStackClass } from './comparison-section';
@@ -32,6 +49,10 @@ export interface ComparisonSideMetrics {
   averageScore: number | null;
   /** Mean item run duration, in milliseconds. */
   averageDurationMs: number | null;
+  /** Total estimated cost of the experiment. Undefined when the observability storage cannot serve metrics. */
+  cost?: { value: number | null; unit: string | null };
+  /** Total input plus output tokens of the experiment. Undefined when the observability storage cannot serve metrics. */
+  tokens?: number | null;
 }
 
 export interface ComparisonSideHeaderProps {
@@ -117,7 +138,53 @@ export function ComparisonSideHeader({
       ]
     : [];
 
+  const cost = metrics?.cost;
+  const baselineCost = baselineMetrics?.cost;
+  const costTrend =
+    cost && baselineCost && cost.unit === baselineCost.unit ? trend(cost.value, baselineCost.value) : null;
+
   const summaryMetrics: ComparisonMetric[] = [
+    ...(cost
+      ? [
+          {
+            id: 'total-cost',
+            icon: <CoinsIcon />,
+            label: 'Total cost',
+            value: formatCostValue(cost.value, cost.unit),
+            delta: costTrend,
+            formatDelta: costDeltaFormatter(cost.unit),
+            higherIsBetter: false,
+            emphasis: true,
+          },
+        ]
+      : []),
+    ...(metrics
+      ? [
+          {
+            id: 'avg-duration',
+            icon: <ClockIcon />,
+            label: 'Avg duration',
+            value: formatDuration(metrics.averageDurationMs) ?? '-',
+            delta: trend(metrics.averageDurationMs, baselineMetrics?.averageDurationMs),
+            formatDelta: formatDurationDelta,
+            higherIsBetter: false,
+            emphasis: true,
+          },
+        ]
+      : []),
+    ...(metrics?.tokens !== undefined
+      ? [
+          {
+            id: 'total-tokens',
+            icon: <HashIcon />,
+            label: 'Total tokens',
+            value: formatTokenCount(metrics.tokens),
+            delta: trend(metrics.tokens, baselineMetrics?.tokens),
+            formatDelta: formatTokenCount,
+            higherIsBetter: false,
+          },
+        ]
+      : []),
     ...details,
     ...(metrics
       ? [
@@ -136,15 +203,6 @@ export function ComparisonSideHeader({
             label: 'Avg score',
             value: formatScore(metrics.averageScore),
             delta: trend(metrics.averageScore, baselineMetrics?.averageScore),
-          },
-          {
-            id: 'avg-duration',
-            icon: <ClockIcon />,
-            label: 'Avg duration',
-            value: formatDuration(metrics.averageDurationMs) ?? '-',
-            delta: trend(metrics.averageDurationMs, baselineMetrics?.averageDurationMs),
-            formatDelta: formatDurationDelta,
-            higherIsBetter: false,
           },
         ]
       : []),

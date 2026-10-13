@@ -18,17 +18,32 @@ const makeColumn = (overrides: Partial<ComparisonColumn>): ComparisonColumn => (
   startedAt: null,
   completedAt: null,
   scores: [],
+  traceId: null,
+  usage: null,
+  costDelta: null,
+  tokenDelta: null,
   ...overrides,
 });
 
-const renderCell = (column: ComparisonColumn) =>
+const renderCell = (column: ComparisonColumn, { showUsage = false }: { showUsage?: boolean } = {}) =>
   render(
     <TestLinkProvider>
-      <ComparisonSideCell column={column} />
+      <ComparisonSideCell column={column} showUsage={showUsage} />
     </TestLinkProvider>,
   );
 
 const outputRegion = () => screen.getByRole('region', { name: 'Output' });
+const metricsRegion = () => screen.getByRole('region', { name: 'Metrics' });
+const metricTerms = () =>
+  within(metricsRegion())
+    .getAllByRole('term')
+    .map(term => term.textContent);
+
+const pricedTiming = {
+  startedAt: '2026-01-01T00:00:00.000Z',
+  completedAt: '2026-01-01T00:00:05.000Z',
+  usage: { inputTokens: 120, outputTokens: 30, estimatedCost: 0.0015, costUnit: 'usd' },
+};
 
 describe('ComparisonSideCell', () => {
   afterEach(cleanup);
@@ -54,6 +69,56 @@ describe('ComparisonSideCell', () => {
       renderCell(makeColumn({ targetType: 'workflow', output: { text: 'not an agent response' } }));
 
       expect(outputRegion().querySelector('pre')?.textContent).toContain('"text": "not an agent response"');
+    });
+  });
+
+  describe('when usage is shown and the item is priced', () => {
+    it('lists the cost first, then the duration and the tokens', () => {
+      renderCell(makeColumn(pricedTiming), { showUsage: true });
+
+      expect(metricTerms()).toEqual(['Cost', 'Duration', 'Tokens']);
+      expect(within(metricsRegion()).getByText('$0.0015')).toBeTruthy();
+    });
+
+    it('shows the input and output tokens together', () => {
+      renderCell(makeColumn(pricedTiming), { showUsage: true });
+
+      expect(within(metricsRegion()).getByText('150')).toBeTruthy();
+    });
+  });
+
+  describe('when a contender uses more tokens than the baseline', () => {
+    it('shows the extra tokens as a regression', () => {
+      renderCell(makeColumn({ ...pricedTiming, role: 'contender', tokenDelta: 1200 }), { showUsage: true });
+
+      const delta = within(metricsRegion()).getByText(/^\+1,200$/);
+      expect(delta.className).toContain('text-destructive-foreground');
+    });
+  });
+
+  describe('when a contender costs more than the baseline', () => {
+    it('shows the extra cost as a regression', () => {
+      renderCell(makeColumn({ ...pricedTiming, role: 'contender', costDelta: 0.0015 }), { showUsage: true });
+
+      const delta = within(metricsRegion()).getByText(/^\+\$0\.0015$/);
+      expect(delta.className).toContain('text-destructive-foreground');
+    });
+  });
+
+  describe('when usage is shown but the item has no usage', () => {
+    it('shows a dash for the cost and the tokens', () => {
+      renderCell(makeColumn({ ...pricedTiming, usage: null }), { showUsage: true });
+
+      expect(metricTerms().slice(0, 3)).toEqual(['Cost', 'Duration', 'Tokens']);
+      expect(within(metricsRegion()).getAllByText('-')).toHaveLength(2);
+    });
+  });
+
+  describe('when usage is not shown', () => {
+    it('leaves the cost and the tokens out of the metrics', () => {
+      renderCell(makeColumn(pricedTiming));
+
+      expect(metricTerms()).toEqual(['Duration']);
     });
   });
 });

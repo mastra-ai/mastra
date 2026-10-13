@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ComparisonSideHeader } from '../comparison-side-header';
@@ -8,6 +8,8 @@ import { TestLinkProvider } from '@/test/link-provider';
 function renderColumn(ui: ReactElement) {
   return render(<TestLinkProvider>{ui}</TestLinkProvider>);
 }
+
+const summaryRegion = () => screen.getByRole('region', { name: 'Summary' });
 
 describe('ComparisonSideHeader', () => {
   afterEach(cleanup);
@@ -177,6 +179,124 @@ describe('ComparisonSideHeader', () => {
 
       expect(screen.getByText('+0.30').className).toContain('text-success-indicator');
       expect(screen.getByText('-500ms').className).toContain('text-success-indicator');
+    });
+  });
+
+  describe('when the total cost is known', () => {
+    const metrics = {
+      errorCount: 0,
+      averageScore: 0.5,
+      averageDurationMs: 1500,
+      cost: { value: 0.0015, unit: 'usd' },
+      tokens: 12400,
+    };
+
+    it('lists the total cost, the average duration and the total tokens first', () => {
+      renderColumn(
+        <ComparisonSideHeader role="baseline" label="Baseline" experiment={namedExperiment} metrics={metrics} />,
+      );
+
+      const terms = within(summaryRegion())
+        .getAllByRole('term')
+        .map(term => term.textContent);
+      expect(terms.slice(0, 3)).toEqual(['Total cost', 'Avg duration', 'Total tokens']);
+      expect(within(summaryRegion()).getByText('$0.0015')).toBeDefined();
+      expect(within(summaryRegion()).getByText('12,400')).toBeDefined();
+    });
+
+    it('emphasizes the total cost and the average duration values with a larger, bolder font', () => {
+      renderColumn(
+        <ComparisonSideHeader role="baseline" label="Baseline" experiment={namedExperiment} metrics={metrics} />,
+      );
+
+      const valueOf = (label: string) =>
+        within(summaryRegion())
+          .getAllByRole('term')
+          .find(term => term.textContent === label)?.nextElementSibling;
+      for (const term of ['Total cost', 'Avg duration']) {
+        expect(valueOf(term)?.className).toContain('text-heading');
+        expect(valueOf(term)?.className).toContain('font-semibold');
+      }
+      expect(valueOf('Total tokens')?.className).not.toContain('font-semibold');
+      expect(valueOf('Errors')?.className).not.toContain('font-semibold');
+    });
+  });
+
+  describe('when a contender uses fewer tokens than the baseline', () => {
+    it('shows the saving as an improvement', () => {
+      const baselineMetrics = { errorCount: 0, averageScore: 0.5, averageDurationMs: 1500, tokens: 12400 };
+      renderColumn(
+        <ComparisonSideHeader
+          role="contender"
+          label="Contender 1"
+          experiment={namedExperiment}
+          metrics={{ ...baselineMetrics, tokens: 10000 }}
+          baselineMetrics={baselineMetrics}
+        />,
+      );
+
+      expect(screen.getByText('-2,400').className).toContain('text-success-indicator');
+    });
+  });
+
+  describe('when a contender is cheaper than the baseline', () => {
+    it('shows the saving as an improvement', () => {
+      const baselineMetrics = {
+        errorCount: 0,
+        averageScore: 0.5,
+        averageDurationMs: 1500,
+        cost: { value: 0.003, unit: 'usd' },
+      };
+      renderColumn(
+        <ComparisonSideHeader
+          role="contender"
+          label="Contender 1"
+          experiment={namedExperiment}
+          metrics={{ ...baselineMetrics, cost: { value: 0.002, unit: 'usd' } }}
+          baselineMetrics={baselineMetrics}
+        />,
+      );
+
+      expect(screen.getByText('-$0.001').className).toContain('text-success-indicator');
+    });
+  });
+
+  describe('when the two experiments use different cost units', () => {
+    it('shows the cost without a difference', () => {
+      const baselineMetrics = {
+        errorCount: 0,
+        averageScore: 0.5,
+        averageDurationMs: 1500,
+        cost: { value: 0.003, unit: 'usd' },
+      };
+      renderColumn(
+        <ComparisonSideHeader
+          role="contender"
+          label="Contender 1"
+          experiment={namedExperiment}
+          metrics={{ ...baselineMetrics, cost: { value: 0.002, unit: 'eur' } }}
+          baselineMetrics={baselineMetrics}
+        />,
+      );
+
+      expect(screen.getByText('€0.002')).toBeDefined();
+      expect(screen.queryByText(/[+-][$€]/)).toBeNull();
+    });
+  });
+
+  describe('when metrics are unsupported', () => {
+    it('leaves the total cost and the total tokens out of the summary', () => {
+      renderColumn(
+        <ComparisonSideHeader
+          role="baseline"
+          label="Baseline"
+          experiment={namedExperiment}
+          metrics={{ errorCount: 0, averageScore: 0.5, averageDurationMs: 1500 }}
+        />,
+      );
+
+      expect(screen.queryByText('Total cost')).toBeNull();
+      expect(screen.queryByText('Total tokens')).toBeNull();
     });
   });
 
