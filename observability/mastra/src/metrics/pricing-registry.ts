@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { MIN_PRICED_MODELS, MODELS_DEV_API_URL, modelsDevToPricingModels, pickModelsDevCosts } from './models-dev';
+import type { ModelsDevCosts } from './models-dev';
 import type { PricingModel } from './pricing-model';
 
 const DATA_FILE_NAME = 'pricing-data.json';
@@ -28,6 +29,17 @@ const AI_SDK_PROVIDER_NAMESPACE_ALIASES = new Map([
 let cachedLoadError: string | null = null;
 let globalRegistry: PricingRegistry | null = null;
 let bundledRegistry: PricingRegistry | null = null;
+// Prices that custom gateways returned from `fetchProviders()`. Checked before models.dev.
+let gatewayRegistry: PricingRegistry | null = null;
+// Their `fetchProviders()` can hit the network and never carries prices.
+const BUILT_IN_GATEWAY_IDS = new Set(['models.dev', 'netlify', 'mastra', 'azure-openai']);
+
+/** The part of a model router gateway that pricing reads. */
+type PricingGateway = {
+  id: string;
+  getId?(): string;
+  fetchProviders(): Promise<Record<string, { pricing?: Record<string, Record<string, unknown>> }>>;
+};
 // When the global pricing was last confirmed against models.dev. 0 means the bundled snapshot.
 let refreshedAt = 0;
 let lastRefreshAttemptAt = 0;
@@ -62,8 +74,12 @@ export class PricingRegistry {
   }
 
   get(args: { provider: string; model: string }): PricingModel | null {
-    const match = this.find(args);
-    if (match || this !== globalRegistry) {
+    if (this !== globalRegistry) {
+      return this.find(args);
+    }
+
+    const match = gatewayRegistry?.find(args) ?? this.find(args);
+    if (match) {
       return match;
     }
 
@@ -98,6 +114,30 @@ function getBundledRegistry(): PricingRegistry | null {
     }
   }
   return bundledRegistry;
+}
+
+/**
+ * Read the `pricing` of every provider the custom gateways in `mastra.listGateways()` return,
+ * so models that models.dev does not list get costs. Replaces the gateway prices in use.
+ */
+export async function loadGatewayPricing(gateways: Iterable<PricingGateway>): Promise<void> {
+  const costs: ModelsDevCosts = {};
+  for (const gateway of gateways) {
+    if (BUILT_IN_GATEWAY_IDS.has(gateway.getId?.() ?? gateway.id)) continue;
+
+    let providers: Awaited<ReturnType<PricingGateway['fetchProviders']>>;
+    try {
+      providers = await gateway.fetchProviders();
+    } catch {
+      continue; // The model router reports this gateway's failure when it loads providers.
+    }
+    for (const [providerId, config] of Object.entries(providers ?? {})) {
+      for (const [modelId, cost] of Object.entries(config?.pricing ?? {})) {
+        (costs[providerId] ??= { models: {} }).models[modelId] = { cost };
+      }
+    }
+  }
+  gatewayRegistry = new PricingRegistry(modelsDevToPricingModels(costs));
 }
 
 /**

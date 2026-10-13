@@ -2,6 +2,7 @@ export {
   MastraModelGateway,
   type MastraModelGatewayInterface,
   type ProviderConfig,
+  type ModelPricing,
   type GatewayLanguageModel,
   type GatewayAuthRequest,
   type GatewayAuthResult,

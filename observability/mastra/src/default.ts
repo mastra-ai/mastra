@@ -24,6 +24,7 @@ import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityC
 import type { ObservabilityInstanceConfig, ObservabilityRegistryConfig } from './config';
 import { MastraPlatformExporter, MastraStorageExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
+import { loadGatewayPricing } from './metrics/pricing-registry';
 import {
   buildFeedbackEvent,
   buildScoreEvent,
@@ -232,6 +233,7 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     const instances = this.listInstances();
     const { mastra } = options;
     this.#mastra = mastra;
+    void loadGatewayPricing(Object.values(mastra.listGateways?.() ?? {}));
 
     const mastraEnvironment = mastra.getEnvironment?.();
 

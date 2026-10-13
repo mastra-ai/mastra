@@ -21,6 +21,20 @@ export interface ModelProviderOverride {
   npm?: string; // SDK package to use for this model
 }
 
+/**
+ * What one model costs, in USD per 1 million tokens. Same keys as a models.dev model's
+ * `cost`, so prices can be copied from models.dev or a provider's price page as they are.
+ */
+export type ModelPricing = {
+  input?: number;
+  output?: number;
+  cache_read?: number;
+  cache_write?: number;
+  reasoning?: number;
+  input_audio?: number;
+  output_audio?: number;
+};
+
 export interface ProviderConfig {
   url?: string;
   apiKeyHeader?: string;
@@ -37,6 +51,9 @@ export interface ProviderConfig {
   // so existing configs keep type-checking and keep their capability/override data;
   // surfaces that offer models for *new* selection should de-emphasize or hide them.
   deprecatedModels?: string[];
+  // Prices keyed by model id, for models that models.dev does not list (private deployments,
+  // resellers). `@mastra/observability` uses them for cost metrics before models.dev prices.
+  pricing?: Record<string, ModelPricing>;
 }
 
 /**

@@ -185,3 +185,65 @@ describe('PricingRegistry.getGlobal refresh', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('loadGatewayPricing', () => {
+  const PRIVATE_MODEL = { provider: 'my-provider', model: 'model-1' };
+
+  async function loadModule() {
+    vi.resetModules();
+    vi.stubEnv('MASTRA_OFFLINE', 'true');
+    return import('./pricing-registry');
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('prices models that custom gateways return and prefers them over models.dev', async () => {
+    const { PricingRegistry, loadGatewayPricing } = await loadModule();
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull();
+
+    await loadGatewayPricing([
+      {
+        id: 'private',
+        fetchProviders: async () => ({
+          'my-provider': { pricing: { 'model-1': { input: 0.5, output: 1.5 } } },
+          openai: { pricing: { 'gpt-4o': { input: 99, output: 99 } } },
+        }),
+      },
+    ]);
+
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)?.tiers[0]?.rates).toEqual({
+      input_tokens: 0.5e-6,
+      output_tokens: 1.5e-6,
+    });
+    expect(
+      PricingRegistry.getGlobal()?.get({ provider: 'openai', model: 'gpt-4o' })?.tiers[0]?.rates.input_tokens,
+    ).toBe(99e-6);
+    // A model the gateway does not price still gets the models.dev price.
+    expect(PricingRegistry.getGlobal()?.get({ provider: 'openai', model: 'gpt-4o-mini' })).not.toBeNull();
+  });
+
+  it('skips built-in gateways and gateways whose fetchProviders fails', async () => {
+    const { PricingRegistry, loadGatewayPricing } = await loadModule();
+    const builtIn = vi.fn(async () => ({ openai: { pricing: { 'gpt-4o': { input: 99, output: 99 } } } }));
+
+    await loadGatewayPricing([
+      { id: 'models.dev', fetchProviders: builtIn },
+      { id: 'legacy', getId: () => 'netlify', fetchProviders: builtIn },
+      {
+        id: 'broken',
+        fetchProviders: async () => {
+          throw new Error('down');
+        },
+      },
+      {
+        id: 'private',
+        fetchProviders: async () => ({ 'my-provider': { pricing: { 'model-1': { input: 2, output: 4 } } } }),
+      },
+    ]);
+
+    expect(builtIn).not.toHaveBeenCalled();
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)?.tiers[0]?.rates.input_tokens).toBe(2e-6);
+  });
+});
