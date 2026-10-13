@@ -8,7 +8,12 @@ import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { describe, expect, it, vi } from 'vitest';
 
 import { HTTPException } from '../http-exception';
-import { AGENT_VERSION_PINS_CONTEXT_KEY, GENERATE_AGENT_ROUTE, GENERATE_LEGACY_ROUTE } from './agents';
+import {
+  AGENT_VERSION_PINS_CONTEXT_KEY,
+  GENERATE_AGENT_ROUTE,
+  GENERATE_LEGACY_ROUTE,
+  STREAM_GENERATE_LEGACY_ROUTE,
+} from './agents';
 import { createTestServerContext } from './test-utils';
 
 async function createRuntime(
@@ -124,28 +129,62 @@ function continuation(result: unknown): { versions: VersionOverrides; versionCon
 }
 
 describe('registered agent graph versioning over HTTP', () => {
-  // Core prepares legacy version pins before evaluating method defaults.
-  it.todo('applies defaultGenerateOptionsLegacy.versions before resolving the root version');
+  it.each(['generate', 'stream'] as const)(
+    'applies legacy %s method defaults before resolving the root and graph',
+    async method => {
+      const evaluateDefaults = vi.fn(
+        (_requestContext: RequestContext): VersionOverrides => ({ defaultLabel: 'candidate' }),
+      );
+      const runtime = await createRuntime(undefined, evaluateDefaults, 'v1');
+      await runtime.publish('graph-root', 'published-root');
+      const rootVersionId = await runtime.candidate('graph-root', 'candidate-root');
+      await runtime.publish('graph-child', 'published-child');
+      const childVersionId = await runtime.candidate('graph-child', 'candidate-child');
+      const context = runtime.context();
+      const params = { ...context, agentId: 'graph-root', messages: 'Use the legacy method defaults' };
 
-  it('preserves legacy dynamic context and explicit selector precedence', async () => {
-    const evaluateDefaults = vi.fn(
-      (_requestContext: RequestContext): VersionOverrides => ({ agents: { 'graph-root': { status: 'draft' } } }),
-    );
-    const runtime = await createRuntime(undefined, evaluateDefaults, 'v1');
-    const rootVersionId = await runtime.publish('graph-root', 'published-root');
-    await runtime.candidate('graph-root', 'draft-root');
-    const context = runtime.context();
+      const text =
+        method === 'generate'
+          ? (await GENERATE_LEGACY_ROUTE.handler(params)).text
+          : await (await STREAM_GENERATE_LEGACY_ROUTE.handler(params)).text();
 
-    const result = await GENERATE_LEGACY_ROUTE.handler({
-      ...context,
-      agentId: 'graph-root',
-      messages: 'Use the legacy root selection',
-      versions: { agents: { 'graph-root': { versionId: rootVersionId } } },
-    });
+      expect(text).toContain('candidate-root');
+      expect(text).not.toContain('published-root');
+      expect(evaluateDefaults).toHaveBeenCalledExactlyOnceWith(context.requestContext);
+      expect(context.requestContext.get(AGENT_VERSION_PINS_CONTEXT_KEY)).toMatchObject({
+        root: { agentId: 'graph-root', versionId: rootVersionId },
+        agents: { 'graph-child': { agentId: 'graph-child', versionId: childVersionId } },
+      });
+    },
+  );
 
-    expect(result.text).toBe('published-root');
-    expect(evaluateDefaults).toHaveBeenCalledExactlyOnceWith(context.requestContext);
-  });
+  it.each(['generate', 'stream'] as const)(
+    'preserves legacy %s dynamic context and explicit selector precedence',
+    async method => {
+      const evaluateDefaults = vi.fn(
+        (_requestContext: RequestContext): VersionOverrides => ({ agents: { 'graph-root': { status: 'draft' } } }),
+      );
+      const runtime = await createRuntime(undefined, evaluateDefaults, 'v1');
+      const rootVersionId = await runtime.publish('graph-root', 'published-root');
+      await runtime.candidate('graph-root', 'draft-root');
+      const context = runtime.context();
+
+      const params = {
+        ...context,
+        agentId: 'graph-root',
+        messages: 'Use the legacy root selection',
+        versions: { agents: { 'graph-root': { versionId: rootVersionId } } },
+      };
+      const text =
+        method === 'generate'
+          ? (await GENERATE_LEGACY_ROUTE.handler(params)).text
+          : await (await STREAM_GENERATE_LEGACY_ROUTE.handler(params)).text();
+
+      expect(text).toContain('published-root');
+      expect(text).not.toContain('draft-root');
+      expect(evaluateDefaults).toHaveBeenCalledExactlyOnceWith(context.requestContext);
+    },
+  );
 
   it('evaluates dynamic agent defaults once with the original HTTP request context', async () => {
     const evaluateDefaults = vi.fn((_requestContext: RequestContext) => ({ defaultLabel: 'candidate' }));

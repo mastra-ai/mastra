@@ -62,10 +62,6 @@ Upgrade core, editor, and the selected storage adapter together before enabling 
 
 Run pinning doesn't add persisted trace or evaluation provenance, or a historical evaluation interface.
 
-For legacy AI SDK v4 execution, set version selectors on the Mastra instance, in request context, or in explicit `generateLegacy()` and `streamLegacy()` call options. Version selectors inside `defaultGenerateOptionsLegacy` or `defaultStreamOptionsLegacy` aren't applied before the run's versions are pinned.
-
-AgentController session routes carry version selectors through request context. An agent's `defaultOptions.versions` can override those selectors for the same agent or shared default. Avoid conflicting agent-level defaults when selecting versions through these session routes.
-
 ## Code source
 
 With `source: 'code'`, active agent overrides are serialized as deterministic JSON under `<codePath>/agents/<encodedAgentId>.json`. The default `codePath` is `./mastra/editor`.
@@ -143,9 +139,9 @@ Version overrides propagate through [supervisor-agent delegation](/docs/subagent
 1. `Mastra` instance `versions`: Defaults for every invocation
 1. Request-context `versions`: Defaults for the current request
 1. Agent method defaults: `defaultOptions.versions`, or `defaultGenerateOptionsLegacy.versions` and `defaultStreamOptionsLegacy.versions` for AI SDK v4
-1. Explicit call `versions`: Values for a new execution
+1. Explicit call options or server request-body `versions`: Values for a new execution
 
-Entries merge by agent ID. Higher-priority configuration replaces lower-priority selectors for the same ID or shared default. Version selectors in agent method defaults are applied before Mastra selects and pins versions. Explicit selectors on AgentController Session calls also take precedence over agent method defaults.
+Entries merge by agent ID. Higher-priority configuration replaces lower-priority selectors for the same ID or shared default. Version selectors in agent method defaults are applied before Mastra selects and pins versions. Explicit selectors on AgentController session requests also take precedence over agent method defaults.
 
 For each agent, including the root, Mastra chooses the first configured selector in this order:
 

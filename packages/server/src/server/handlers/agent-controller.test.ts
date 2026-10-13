@@ -3,6 +3,7 @@ import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
@@ -37,6 +38,7 @@ import {
   GET_AGENT_CONTROLLER_GOAL_ROUTE,
   GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE,
 } from './agent-controller';
+import { AGENT_VERSION_PINS_CONTEXT_KEY } from './agents';
 
 function makeAgent(id = 'test-agent') {
   return new Agent({ id, name: id, instructions: 'test', model: {} as any });
@@ -666,12 +668,79 @@ describe('agent-controller routes', () => {
         requestContext,
       );
       expect(requestContext.get('mastra__versions')).toEqual({ agents: { 'test-agent': { versionId: 'version-1' } } });
-      expect(spy).toHaveBeenCalledWith({ content: 'hello candidate', requestContext });
+      expect(spy).toHaveBeenCalledWith({
+        content: 'hello candidate',
+        requestContext,
+        versions: { agents: { 'test-agent': { versionId: 'version-1' } } },
+      });
     });
 
-    // Session currently transports HTTP selectors through RequestContext, below
-    // agent.defaultOptions.versions in Core's existing execution precedence.
-    it.todo('keeps a controller HTTP root selector ahead of conflicting agent defaultOptions versions');
+    it.each([
+      ['message', SEND_AGENT_CONTROLLER_MESSAGE_ROUTE],
+      ['steer', STEER_AGENT_CONTROLLER_SESSION_ROUTE],
+      ['follow-up', FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE],
+    ] as const)('keeps an HTTP %s label ahead of agent defaults in a real background run', async (_name, route) => {
+      const executionContexts: RequestContext[] = [];
+      const defaults = vi.fn(() => ({ versions: { agents: { 'test-agent': { versionId: 'default-version' } } } }));
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test agent',
+        instructions: ({ requestContext }) => {
+          executionContexts.push(requestContext);
+          return 'Answer briefly.';
+        },
+        model: createMockModel({ mockText: 'Completed' }),
+        defaultOptions: defaults,
+      });
+      const storage = new InMemoryStore();
+      const controller = new AgentController({
+        id: 'code',
+        storage,
+        workspace: new Workspace({ name: 'version-test-workspace', skills: ['/tmp/test-skills'] }),
+        modes: [{ id: 'default', name: 'Default', default: true, agent }],
+      });
+      const runtime = new Mastra({ logger: false, storage, agentControllers: { code: controller } });
+      let candidateVersion = 'requested-version';
+      const applyStoredOverrides = vi.fn(async (source: Agent, selector: { versionId?: string; label?: string }) => {
+        const fork = source.__fork();
+        fork.__setRawConfig({ resolvedVersionId: selector.versionId ?? candidateVersion });
+        return fork;
+      });
+      vi.spyOn(runtime, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as never);
+      const requestContext = new RequestContext();
+      requestContext.set('tenant', 'original-tenant');
+      await controller.init();
+      const session = await controller.createSession({
+        id: 'version-user',
+        resourceId: 'version-user',
+        ownerId: 'code',
+        requestContext,
+      });
+      let endReason: string | undefined;
+      session.subscribe(event => {
+        if (event.type === 'agent_end') endReason = event.reason;
+      });
+
+      await route.handler({
+        mastra: runtime,
+        controllerId: 'code',
+        resourceId: 'version-user',
+        message: 'Use the requested label',
+        versions: { agents: { 'test-agent': { label: 'candidate' } } },
+        requestContext,
+      } as any);
+      candidateVersion = 'moved-version';
+      await vi.waitFor(() => expect(endReason).toBe('complete'), { timeout: 5_000 });
+
+      expect(applyStoredOverrides).toHaveBeenCalledWith(agent, { label: 'candidate' }, requestContext);
+      expect(applyStoredOverrides).toHaveBeenCalledWith(agent, { versionId: 'requested-version' });
+      expect(defaults).toHaveBeenCalled();
+      expect(executionContexts.at(-1)?.get('tenant')).toBe('original-tenant');
+      expect(executionContexts.at(-1)?.get(AGENT_VERSION_PINS_CONTEXT_KEY)).toMatchObject({
+        root: { agentId: 'test-agent', versionId: 'requested-version' },
+      });
+      session.thread.cleanupSubscription();
+    });
 
     it('rejects request-context dependency/default selectors that an active controller message would ignore', async () => {
       const session = await getRouteSession('user-active-version');
