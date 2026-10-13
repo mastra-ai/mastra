@@ -2,7 +2,7 @@ import React from 'react';
 
 import { Icon } from '../../icons/Icon';
 import { Txt } from '../Txt';
-import { resolveTableAlign, tableAlignClasses } from './table-align';
+import { resolveTableAlign, tableAlignClasses, toNativeAlign } from './table-align';
 import type { TableAlign } from './table-align';
 import { useTableVariant } from './table-context';
 import { cn } from '@/lib/utils';
@@ -22,21 +22,24 @@ export interface CellProps extends Omit<React.ComponentProps<'td'>, 'align'> {
   children: React.ReactNode;
 }
 
-export const Cell = ({ className, children, tone = 'ink', ...props }: CellProps) => {
+const insetCellClass = cn(
+  'h-9 border-transparent bg-background bg-clip-padding px-2 py-1 align-middle whitespace-nowrap first:pl-3 last:pr-3',
+  'group-data-column-dividers/table:border-l group-data-column-dividers/table:px-3',
+);
+
+export const Cell = ({ className, children, tone = 'ink', align, ...props }: CellProps) => {
   const variant = useTableVariant();
-  const { align = 'start', ...insetProps } = props;
   if (variant === 'inset') {
     return (
       <td
         data-slot="table-cell"
         className={cn(
-          'h-9 border-transparent bg-background bg-clip-padding px-2 py-1 align-middle whitespace-nowrap first:pl-3 last:pr-3',
-          'group-data-column-dividers/table:border-l group-data-column-dividers/table:px-3',
+          insetCellClass,
           tableAlignClasses[resolveTableAlign(align)],
           tableCellToneClasses[tone],
           className,
         )}
-        {...insetProps}
+        {...props}
       >
         {children}
       </td>
@@ -44,9 +47,9 @@ export const Cell = ({ className, children, tone = 'ink', ...props }: CellProps)
   }
   return (
     <td
-      className={cn('text-foreground first:pl-3 last:pr-3', className)}
-      {...insetProps}
-      align={props.align === 'start' ? 'left' : props.align === 'end' ? 'right' : props.align}
+      className={cn(tableCellToneClasses[tone], 'first:pl-3 last:pr-3', className)}
+      {...props}
+      align={toNativeAlign(align)}
     >
       <div className={cn('flex size-full shrink-0 items-center')}>{children}</div>
     </td>

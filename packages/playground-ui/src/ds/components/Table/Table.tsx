@@ -1,9 +1,9 @@
 import type { ComponentProps, ComponentPropsWithoutRef, CSSProperties, ReactNode } from 'react';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Cell } from './Cells';
-import { resolveTableAlign, tableAlignClasses } from './table-align';
+import { resolveTableAlign, tableAlignClasses, toNativeAlign } from './table-align';
 import type { TableAlign } from './table-align';
-import { TableVariantContext, useTableVariant } from './table-context';
+import { insetSlot, TableVariantContext, useTableVariant } from './table-context';
 import type { TableVariant } from './table-context';
 import { TablePagination } from './table-pagination';
 import { TableRowButton } from './table-row-button';
@@ -27,42 +27,38 @@ const rowSize = {
   small: '[&>tbody>tr]:h-table-row-small',
 };
 
-export function Table({
-  className,
-  children,
-  size = 'default',
-  style,
-  variant = 'default',
-  columnDividers,
-  ...props
-}: TableProps) {
+type TableFrameProps = Omit<TableProps, 'variant'> & { variant: TableVariant };
+
+function InsetTable({ className, columnDividers, ...props }: Omit<TableProps, 'variant' | 'size'>) {
+  return (
+    <div
+      data-slot="table-container"
+      data-column-dividers={columnDividers || undefined}
+      className={cn('group/table w-full rounded-xl p-1', raisedSurfaceStyle, className)}
+    >
+      <div data-slot="table-scroll" className="overflow-x-auto rounded-lg">
+        <div className="group-data-column-dividers/table:-ml-px">
+          <table
+            data-slot="table"
+            className="w-full border-separate border-spacing-0 text-body-sm tabular-nums"
+            tabIndex={0}
+            {...props}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TableFrame({ variant, size = 'default', className, columnDividers, ...props }: TableFrameProps) {
+  if (variant === 'inset') return <InsetTable className={className} columnDividers={columnDividers} {...props} />;
+  return <table className={cn('w-full', rowSize[size], className)} {...props} />;
+}
+
+export function Table({ variant = 'default', ...props }: TableProps) {
   return (
     <TableVariantContext value={variant}>
-      {variant === 'inset' ? (
-        <div
-          data-slot="table-container"
-          data-column-dividers={columnDividers || undefined}
-          className={cn('group/table w-full rounded-xl p-1', raisedSurfaceStyle, className)}
-        >
-          <div data-slot="table-scroll" className="overflow-x-auto rounded-lg">
-            <div className="group-data-column-dividers/table:-ml-px">
-              <table
-                data-slot="table"
-                className="w-full border-separate border-spacing-0 text-body-sm tabular-nums"
-                tabIndex={0}
-                style={style}
-                {...props}
-              >
-                {children}
-              </table>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <table className={cn('w-full', rowSize[size], className)} style={style} {...props}>
-          {children}
-        </table>
-      )}
+      <TableFrame variant={variant} {...props} />
     </TableVariantContext>
   );
 }
@@ -106,26 +102,31 @@ export interface ThProps extends Omit<ComponentProps<'th'>, 'align'> {
   children: ReactNode;
 }
 
-export const Th = ({ className, children, ...props }: ThProps) => {
+const insetHeadClass = cn(
+  'group/head h-10 px-2 align-middle text-column whitespace-nowrap text-muted-foreground first:pl-3 last:pr-3',
+  'border-transparent group-data-column-dividers/table:border-l group-data-column-dividers/table:px-3',
+);
+
+const legacyHeadClass =
+  'h-full text-left text-meta tracking-wide whitespace-nowrap text-placeholder uppercase first:pl-3 last:pr-3';
+
+export const Th = ({ className, children, align, ...props }: ThProps) => {
   const variant = useTableVariant();
-  const { align = 'start', ...insetProps } = props;
-  const insetAlign = resolveTableAlign(align);
+  if (variant === 'inset') {
+    const insetAlign = resolveTableAlign(align);
+    return (
+      <th
+        className={cn(insetHeadClass, tableAlignClasses[insetAlign], className)}
+        data-slot="table-head"
+        data-align={insetAlign}
+        {...props}
+      >
+        {children}
+      </th>
+    );
+  }
   return (
-    <th
-      className={cn(
-        variant === 'inset'
-          ? cn(
-              'group/head h-10 px-2 align-middle text-column whitespace-nowrap text-muted-foreground first:pl-3 last:pr-3',
-              'border-transparent group-data-column-dividers/table:border-l group-data-column-dividers/table:px-3',
-              tableAlignClasses[insetAlign],
-            )
-          : 'h-full text-left text-meta tracking-wide whitespace-nowrap text-placeholder uppercase first:pl-3 last:pr-3',
-        className,
-      )}
-      data-slot={variant === 'inset' ? 'table-head' : undefined}
-      data-align={variant === 'inset' ? insetAlign : undefined}
-      {...(variant === 'inset' ? insetProps : props)}
-    >
+    <th className={cn(legacyHeadClass, className)} {...props} align={toNativeAlign(align)}>
       {children}
     </th>
   );
@@ -150,7 +151,7 @@ export const Tbody = ({ className, children, ...props }: TbodyProps) => {
   const variant = useTableVariant();
   return (
     <tbody
-      data-slot={variant === 'inset' ? 'table-body' : undefined}
+      data-slot={insetSlot(variant, 'table-body')}
       className={cn(variant === 'inset' && tableBodyStyles, className)}
       {...props}
     >
@@ -210,7 +211,7 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
           onClick && 'cursor-pointer',
           className,
         )}
-        data-slot={variant === 'inset' ? 'table-row' : undefined}
+        data-slot={insetSlot(variant, 'table-row')}
         style={style}
         onClick={onClick}
         ref={internalRef}

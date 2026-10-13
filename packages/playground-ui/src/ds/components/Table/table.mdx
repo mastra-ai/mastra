@@ -105,7 +105,7 @@ Renders `tbody` (the same component as `Tbody`). In inset mode it holds the data
 
 ### `Table.Row`
 
-Renders `tr` (the same component as `Row`). The default variant preserves existing `selected`, `isActive`, and row-action behavior. In inset mode a row that contains a `Table.RowLink` highlights on hover and keyboard focus.
+Renders `tr` (the same component as `Row`). The default variant preserves existing `selected`, `isActive`, and row-action behavior; `selected` has no effect in inset tables. In inset mode a row that contains a `Table.RowLink` highlights on hover and keyboard focus.
 
 ### `Table.Head`
 
@@ -178,7 +178,9 @@ The following sizing rules apply to the inset variant.
 
 ```tsx
 <Table.Cell>
-  <p className="min-w-64 whitespace-normal">{agent.notes}</p>
+  <Txt as="p" variant="body-sm" className="min-w-64 whitespace-normal">
+    {agent.notes}
+  </Txt>
 </Table.Cell>
 ```
 
@@ -225,7 +227,9 @@ Keep one row per record. `columnDividers` draws a 1px line between columns. Inpu
       <Table.Row key={agent.id}>
         <Table.Cell>{agent.name}</Table.Cell>
         <Table.Cell>
-          <p className="min-w-64 whitespace-normal">{agent.note}</p>
+          <Txt as="p" variant="body-sm" className="min-w-64 whitespace-normal">
+            {agent.note}
+          </Txt>
         </Table.Cell>
         <Table.Cell align="end">{formatFullNumber(agent.cost, { currency: 'USD' })}</Table.Cell>
         <Table.Cell align="end">
@@ -279,7 +283,7 @@ When clicking a row opens a drawer, dialog, or side panel instead of navigating,
 </Table.Row>
 ```
 
-Use one `Table.RowLink` or `Table.RowButton` per row, never both. Never put `onClick` on `Table.Row` itself: a `tr` can't take keyboard focus, so the row would only work with a mouse.
+Use one `Table.RowLink` or `Table.RowButton` per row, never both. Whole-row targets need `variant="inset"`; in a default table they render as a plain link or button in their cell. Never put `onClick` on `Table.Row` itself: a `tr` can't take keyboard focus, so the row would only work with a mouse.
 
 ### Showing and hiding columns
 

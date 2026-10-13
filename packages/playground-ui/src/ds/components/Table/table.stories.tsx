@@ -26,6 +26,7 @@ import { SkeletonText } from '@/ds/components/Skeleton/skeleton-text';
 import { Switch } from '@/ds/components/Switch/switch';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { formatFullNumber } from '@/lib/cost';
+import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof Table> = {
   title: 'DataDisplay/Table',
@@ -323,6 +324,11 @@ function matchesCreditStatuses(credit: Credit, statuses: string[]) {
   return statuses.includes(credit.status);
 }
 
+function amountTone(value: number) {
+  if (value < 0) return 'muted';
+  return 'ink';
+}
+
 function formatCreditAmount(value: number) {
   return formatFullNumber(value, { currency: 'USD' });
 }
@@ -341,7 +347,7 @@ function CreditHistoryTitle({ id, withLink = true }: { id: string; withLink?: bo
       <Txt as="h2" id={id} variant="subheading">
         Credit history
       </Txt>
-      {withLink ? <BillingPortalLink /> : null}
+      {withLink && <BillingPortalLink />}
     </div>
   );
 }
@@ -376,7 +382,7 @@ function CreditRow({ credit }: { credit: Credit }) {
   return (
     <Table.Row>
       <Table.Cell>{credit.type}</Table.Cell>
-      <Table.Cell align="end" tone={credit.amount < 0 ? 'muted' : 'ink'}>
+      <Table.Cell align="end" tone={amountTone(credit.amount)}>
         {formatCreditAmount(credit.amount)}
       </Table.Cell>
       <Table.Cell>
@@ -493,7 +499,8 @@ const CREDIT_FILTER_FIELDS: PropertyFilterField[] = [
 ];
 
 function tokenValues(token: PropertyFilterToken) {
-  return Array.isArray(token.value) ? token.value : [token.value];
+  if (Array.isArray(token.value)) return token.value;
+  return [token.value];
 }
 
 function matchesCreditToken(credit: Credit, token: PropertyFilterToken) {
@@ -671,7 +678,9 @@ export const InsetComposition: Story = {
             <Table.Row key={usage.agent}>
               <Table.Cell>{usage.agent}</Table.Cell>
               <Table.Cell>
-                <p className="min-w-64 whitespace-normal">{usage.note}</p>
+                <Txt as="p" variant="body-sm" className="min-w-64 whitespace-normal">
+                  {usage.note}
+                </Txt>
               </Table.Cell>
               <Table.Cell align="end">{hours.format(usage.vcpuHours)}</Table.Cell>
               <Table.Cell align="end">{hours.format(usage.memoryGbHours)}</Table.Cell>
@@ -750,13 +759,20 @@ function compareCredits(left: Credit, right: Credit, key: SortKey) {
 }
 
 function sortCredits(credits: Credit[], sort: CreditSort) {
-  const multiplier = sort.direction === 'ascending' ? 1 : -1;
-  return credits.toSorted((left, right) => compareCredits(left, right, sort.key) * multiplier);
+  const ascending = credits.toSorted((left, right) => compareCredits(left, right, sort.key));
+  if (sort.direction === 'ascending') return ascending;
+  return ascending.toReversed();
+}
+
+function sortDirectionFor(sort: CreditSort, key: SortKey) {
+  if (sort.key === key) return sort.direction;
+  return 'none';
 }
 
 function nextSort(current: CreditSort, key: SortKey): CreditSort {
   if (current.key !== key) return { key, direction: 'ascending' };
-  return { key, direction: current.direction === 'ascending' ? 'descending' : 'ascending' };
+  if (current.direction === 'ascending') return { key, direction: 'descending' };
+  return { key, direction: 'ascending' };
 }
 
 type SortableHeadProps = {
@@ -768,7 +784,7 @@ type SortableHeadProps = {
 };
 
 function SortableHead({ label, sortKey, sort, onSort, align }: SortableHeadProps) {
-  const direction = sort.key === sortKey ? sort.direction : 'none';
+  const direction = sortDirectionFor(sort, sortKey);
   return (
     <Table.Head align={align} aria-sort={direction}>
       <Table.SortButton direction={direction} onClick={() => onSort(sortKey)}>
@@ -918,6 +934,11 @@ const CREDIT_COLUMNS: CreditColumn[] = [
   { id: 'balance', label: 'Balance', align: 'end', cell: credit => formatCreditAmount(credit.balance) },
 ];
 
+function columnTone(column: CreditColumn, credit: Credit) {
+  if (column.id === 'amount') return amountTone(credit.amount);
+  return 'ink';
+}
+
 export const InsetColumnPicker: Story = {
   parameters: {
     layout: 'padded',
@@ -975,7 +996,7 @@ export const InsetColumnPicker: Story = {
           <Table.Header>
             <Table.Row>
               {columns.map(column => (
-                <Table.Head key={column.id} align={column.align} className={column.grow ? 'w-full' : undefined}>
+                <Table.Head key={column.id} align={column.align} className={cn(column.grow && 'w-full')}>
                   {column.label}
                 </Table.Head>
               ))}
@@ -985,11 +1006,7 @@ export const InsetColumnPicker: Story = {
             {CREDITS.map(credit => (
               <Table.Row key={credit.id}>
                 {columns.map(column => (
-                  <Table.Cell
-                    key={column.id}
-                    align={column.align}
-                    tone={column.id === 'amount' && credit.amount < 0 ? 'muted' : undefined}
-                  >
+                  <Table.Cell key={column.id} align={column.align} tone={columnTone(column, credit)}>
                     {column.cell(credit)}
                   </Table.Cell>
                 ))}
@@ -1002,6 +1019,22 @@ export const InsetColumnPicker: Story = {
   },
 };
 
+function CreditDetail({ credit }: { credit: Credit }) {
+  return (
+    <>
+      <DrawerHeader>
+        <DrawerTitle>{credit.title}</DrawerTitle>
+        <DrawerDescription>{credit.reason}</DrawerDescription>
+      </DrawerHeader>
+      <DrawerBody>
+        <Txt variant="body-sm">
+          {credit.type}, {formatCreditAmount(credit.amount)}, {credit.date}
+        </Txt>
+      </DrawerBody>
+    </>
+  );
+}
+
 export const InsetRowButtons: Story = {
   parameters: {
     layout: 'padded',
@@ -1013,7 +1046,7 @@ export const InsetRowButtons: Story = {
     },
   },
   render: function RowButtonsStory() {
-    const [selected, setSelected] = useState<Credit | null>(null);
+    const [selected, setSelected] = useState<Credit | undefined>(undefined);
 
     return (
       <div className="flex max-w-5xl flex-col gap-3">
@@ -1026,7 +1059,7 @@ export const InsetRowButtons: Story = {
                 <Table.Cell>
                   <Table.RowButton onClick={() => setSelected(credit)}>{credit.type}</Table.RowButton>
                 </Table.Cell>
-                <Table.Cell align="end" tone={credit.amount < 0 ? 'muted' : undefined}>
+                <Table.Cell align="end" tone={amountTone(credit.amount)}>
                   {formatCreditAmount(credit.amount)}
                 </Table.Cell>
                 <Table.Cell>
@@ -1043,18 +1076,8 @@ export const InsetRowButtons: Story = {
             ))}
           </Table.Body>
         </Table>
-        <Drawer side="right" open={selected !== null} onOpenChange={open => !open && setSelected(null)}>
-          <DrawerContent>
-            <DrawerHeader>
-              <DrawerTitle>{selected?.title}</DrawerTitle>
-              <DrawerDescription>{selected?.reason}</DrawerDescription>
-            </DrawerHeader>
-            <DrawerBody>
-              <Txt variant="body-sm">
-                {selected ? `${selected.type}, ${formatCreditAmount(selected.amount)}, ${selected.date}` : null}
-              </Txt>
-            </DrawerBody>
-          </DrawerContent>
+        <Drawer side="right" open={selected !== undefined} onOpenChange={open => !open && setSelected(undefined)}>
+          <DrawerContent>{selected && <CreditDetail credit={selected} />}</DrawerContent>
         </Drawer>
       </div>
     );

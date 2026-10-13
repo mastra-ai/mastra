@@ -193,9 +193,14 @@ it('keeps legacy row actions reachable by keyboard', async () => {
   expect(onClick).toHaveBeenCalledTimes(1);
 });
 
+function pageLabel(item: HTMLLIElement) {
+  if (item.textContent === 'More pages') return '…';
+  return item.textContent;
+}
+
 function pageLabels() {
   const nav = screen.getByRole('navigation', { name: 'Pagination' });
-  return Array.from(nav.querySelectorAll('li'), item => item.textContent || '…');
+  return Array.from(nav.querySelectorAll('li'), pageLabel);
 }
 
 describe('Table.Pagination', () => {
@@ -324,4 +329,26 @@ it('forwards the legacy row ref to the rendered tr', () => {
     </Table>,
   );
   expect(rowRef.current).toBe(screen.getByRole('row'));
+});
+
+it('maps start and end alignment to valid native attributes in the default variant', () => {
+  render(
+    <Table>
+      <Thead>
+        <Th align="end">Balance</Th>
+      </Thead>
+      <Tbody>
+        <Row>
+          <Cell align="end">$6.95</Cell>
+        </Row>
+      </Tbody>
+    </Table>,
+  );
+  expect(screen.getByRole('columnheader', { name: 'Balance' }).getAttribute('align')).toBe('right');
+  expect(screen.getByRole('cell', { name: '$6.95' }).getAttribute('align')).toBe('right');
+});
+
+it('names collapsed page ranges for screen readers', () => {
+  render(<Table.Pagination page={10} pageCount={24} onPageChange={() => {}} />);
+  expect(screen.getAllByText('More pages')).toHaveLength(2);
 });
