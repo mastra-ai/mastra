@@ -9,4 +9,7 @@ If you called a durable agent's loop through the workflow routes, use the agent 
 ```diff
 - POST /workflows/durable-agentic-loop/start-async
 + POST /agents/:agentId/stream
+
+- POST /workflows/durable-agentic-loop/resume-async
++ POST /agents/:agentId/resume-stream
 ```
