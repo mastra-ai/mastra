@@ -207,7 +207,7 @@ export function ExperimentsList({
 
   const selectedCount = selection?.selectedExperimentIds.length ?? 0;
   const selectAllState =
-    selectedCount === 0
+    selectedCount === 0 || filteredData.length === 0
       ? false
       : filteredData.every(exp => selection?.selectedExperimentIds.includes(exp.id))
         ? true
