@@ -26,10 +26,10 @@
   },
   "dependencies": {
     "@libsql/client": "0.18.0",
-    "@mastra/core": "latest",
-    "@mastra/duckdb": "latest",
-    "@mastra/libsql": "latest",
-    "@mastra/observability": "latest",
+    "@mastra/core": "1.75.0",
+    "@mastra/duckdb": "1.14.0",
+    "@mastra/libsql": "1.25.1",
+    "@mastra/observability": "1.19.0",
     "csv-parse": "7.0.3",
     "fast-xml-parser": "5.11.2",
     "fflate": "0.8.3",
@@ -37,11 +37,11 @@
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@mastra/evals": "latest",
+    "@mastra/evals": "1.10.5",
     "@types/node": "^22.20.1",
     "concurrently": "9.2.1",
     "hono": "4.13.13",
-    "mastra": "latest",
+    "mastra": "1.33.0",
     "oxfmt": "0.72.0",
     "typescript": "^5.9.3",
     "vitest": "4.1.11"
