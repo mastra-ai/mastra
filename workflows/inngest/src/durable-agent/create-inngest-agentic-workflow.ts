@@ -1,3 +1,4 @@
+import { buildDeferredStepFinishChunk } from '@internal/core/durable';
 import {
   createDurableBackgroundTaskCheckStep,
   createDurableLLMExecutionStep,
@@ -9,12 +10,14 @@ import {
   emitFinishEvent,
   runDurableFinishSideEffects,
   modelConfigSchema,
+  modelListEntrySchema,
   durableAgenticOutputSchema,
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
   resolveDurableToolCallConcurrency,
   executeDurableAgentScorers,
-  globalRunRegistry,
+  getRunRegistryEntry,
+  loadRunStoredMessages,
   pruneAgentLoopSnapshot,
 } from '@mastra/core/agent/durable';
 import type {
@@ -60,6 +63,7 @@ const durableAgenticInputSchema = z.object({
   initialUntaggedSystemMessages: z.array(z.any()).optional(),
   toolsMetadata: z.array(z.any()),
   modelConfig: modelConfigSchema,
+  modelList: z.array(modelListEntrySchema).optional(),
   options: z.any(),
   state: z.any(),
   messageId: z.string(),
@@ -91,6 +95,8 @@ export interface InngestDurableAgenticWorkflowOptions {
  * Iteration state schema - extends base with observability fields.
  */
 const iterationStateSchema = baseIterationStateSchema.extend({
+  // Fallback model list; the shared base state update does not carry it
+  modelList: z.array(modelListEntrySchema).optional(),
   // Observability - exported span data for agent run
   agentSpanData: z.any().optional(),
   // Observability - exported span data for model generation (ONE span for entire run)
@@ -178,6 +184,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           initialUntaggedSystemMessages: state.initialUntaggedSystemMessages,
           toolsMetadata: state.toolsMetadata,
           modelConfig: state.modelConfig,
+          modelList: state.modelList,
           options: state.options,
           state: state.state,
           messageId: state.messageId,
@@ -266,6 +273,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // Extend with Inngest-specific observability fields
         const newIterationState: IterationState = {
           ...baseUpdate,
+          modelList: initData.modelList,
           // Preserve agent span data for observability
           agentSpanData: initData.agentSpanData,
           // Preserve model span data (ONE span for entire agent run)
@@ -336,13 +344,30 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         { id: 'init-iteration-state' },
       )
       // Run the agentic loop with dowhile
-      .dowhile(singleIterationWorkflow, async ({ inputData, engine }) => {
+      .dowhile(singleIterationWorkflow, async params => {
+        const { inputData, engine, mastra } = params;
         const state = inputData as IterationState;
+        const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+        const { step } = engine as { step: BaseContext<Inngest>['step'] };
+
+        const emitStepFinish = async (isContinued: boolean) => {
+          if (state.lastStepResult) {
+            state.lastStepResult.isContinued = isContinued;
+          }
+          const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
+          state.deferredStepFinishChunk = undefined;
+          if (deferredChunk && pubsub) {
+            await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
+              await emitChunkEvent(pubsub, state.runId, deferredChunk);
+            });
+          }
+        };
 
         // bail() from a delegation hook is a hard stop. The flag travels on
         // serialized iteration state (set by the tool-call step, aggregated by
         // llm-mapping), so it survives the wire to this cross-process predicate.
         if (state.delegationBailed) {
+          await emitStepFinish(false);
           return false;
         }
 
@@ -353,6 +378,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
         if (!shouldContinue || !underMaxSteps) {
+          await emitStepFinish(false);
           return false;
         }
 
@@ -361,19 +387,25 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // The lookup happens inside a memoized step so Inngest replays reuse the
         // recorded decision (even on a worker without the registry entry) instead
         // of re-invoking (possibly stateful) user predicates.
-        const { step } = engine as { step: BaseContext<Inngest>['step'] };
-        const stopped: boolean = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
-          const stopWhen = globalRunRegistry.get(state.runId)?.stopWhen;
-          if (!stopWhen || state.accumulatedSteps.length === 0) {
-            return false;
-          }
-          const steps = state.accumulatedSteps as any;
-          const conditions = await Promise.all(
-            (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(condition => condition({ steps })),
-          );
-          return conditions.some(Boolean);
-        });
+        let stopped: boolean;
+        try {
+          stopped = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
+            const stopWhen = getRunRegistryEntry(state.runId, mastra)?.stopWhen;
+            if (!stopWhen || state.accumulatedSteps.length === 0) {
+              return false;
+            }
+            const steps = state.accumulatedSteps as any;
+            const conditions = await Promise.all(
+              (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(condition => condition({ steps })),
+            );
+            return conditions.some(Boolean);
+          });
+        } catch (error) {
+          await emitStepFinish(shouldContinue);
+          throw error;
+        }
 
+        await emitStepFinish(!stopped);
         return !stopped;
       })
       // Map final state to output format, close agent span, and emit finish event
@@ -424,6 +456,11 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               from: ChunkFrom.AGENT,
               payload: tripwire,
             });
+          }
+          if (pubsub && !tripwire) {
+            for (const chunk of finishResult.structuredOutputChunks ?? []) {
+              await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
+            }
           }
 
           const finalOutput = {
@@ -488,14 +525,16 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       )
       // Execute scorers (fire-and-forget, doesn't affect main result)
       .map(
-        async ({ inputData, getInitData, mastra, requestContext, tracingContext }) => {
-          executeDurableAgentScorers({
+        async params => {
+          const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
+          void executeDurableAgentScorers({
             initData: getInitData() as DurableAgenticWorkflowInput,
             finalOutput: inputData,
             mastra,
             requestContext,
             tracingContext,
-          });
+            loadStoredMessages: loadRunStoredMessages(params),
+          }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));
 
           return inputData;
         },

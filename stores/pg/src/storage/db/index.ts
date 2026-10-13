@@ -10,8 +10,11 @@ import {
   getDefaultValue,
 } from '@mastra/core/storage';
 import type {
+  KNOWLEDGE_TABLE_NAME,
   StorageColumn,
   TABLE_NAMES,
+  TABLE_MEMORY_RUN_FENCES,
+  TABLE_WORKFLOW_RUN_OWNERS,
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
@@ -31,6 +34,9 @@ import type { SchemaSnapshot } from './schema-snapshot';
 // Re-export DbClient for external use
 export type { DbClient } from '../client';
 
+/** Tables retention can prune: the core tables plus the run fencing tables, which aren't in TABLE_NAMES. */
+export type PrunableTable = TABLE_NAMES | typeof TABLE_WORKFLOW_RUN_OWNERS | typeof TABLE_MEMORY_RUN_FENCES;
+
 const POSTGRES_MAX_BIND_PARAMETERS = 65_535;
 
 /**
@@ -39,7 +45,10 @@ const POSTGRES_MAX_BIND_PARAMETERS = 65_535;
  * 1. An existing database client (Pool or PoolAdapter)
  * 2. Config to create a new pool internally
  */
-export type PgDomainConfig = PgDomainClientConfig | PgDomainPoolConfig | PgDomainRestConfig;
+export type PgDomainConfig = (PgDomainClientConfig | PgDomainPoolConfig | PgDomainRestConfig) & {
+  /** @internal Identifies the physical backend and namespace for keyed Knowledge isolation. */
+  storageIsolationKey?: unknown;
+};
 
 /**
  * Pass an existing database client (DbClient)
@@ -202,7 +211,7 @@ export function generateTableSQL({
   compositePrimaryKey,
   includeAllConstraints = false,
 }: {
-  tableName: TABLE_NAMES;
+  tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
   schema: Record<string, StorageColumn>;
   schemaName?: string;
   compositePrimaryKey?: string[];
@@ -499,7 +508,10 @@ export class PgDB extends MastraBase {
    * replica identity, so a table created by an older version still needs the
    * statement to run.
    */
-  private snapshotShowsTableConverged(snapshot: SchemaSnapshot, tableName: TABLE_NAMES): boolean {
+  private snapshotShowsTableConverged(
+    snapshot: SchemaSnapshot,
+    tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME,
+  ): boolean {
     if (!snapshot.tables.has(tableName)) return false;
 
     if (tableName === TABLE_WORKFLOW_SNAPSHOT) {
@@ -1019,9 +1031,13 @@ export class PgDB extends MastraBase {
     await flush();
   }
 
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+  /** `client` lets a caller run the insert inside its own transaction. */
+  async insert(
+    { tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> },
+    client: Pick<DbClient, 'none'> | Pick<TxClient, 'none'> = this.client,
+  ): Promise<void> {
     try {
-      await this.executeInsert(this.client, { tableName, record });
+      await this.executeInsert(client, { tableName, record });
     } catch (error) {
       throw new MastraError(
         {
@@ -1074,7 +1090,7 @@ export class PgDB extends MastraBase {
     schema,
     compositePrimaryKey,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
     schema: Record<string, StorageColumn>;
     compositePrimaryKey?: string[];
   }): Promise<void> {
@@ -1593,7 +1609,7 @@ export class PgDB extends MastraBase {
     schema,
     ifNotExists,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: TABLE_NAMES | KNOWLEDGE_TABLE_NAME;
     schema: Record<string, StorageColumn>;
     ifNotExists: string[];
   }): Promise<void> {
@@ -2217,7 +2233,7 @@ export class PgDB extends MastraBase {
     cutoff,
     limit,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: PrunableTable;
     column: string;
     cutoff: Date | string | number;
     limit: number;
@@ -2226,6 +2242,8 @@ export class PgDB extends MastraBase {
     const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
     const parsedColumn = `"${parseSqlIdentifier(column, 'column name')}"`;
 
+    // The outer anchor check keeps a row whose anchor moved past the cutoff
+    // after the subquery selected it (e.g. a run ownership renewal).
     const sql = `
       DELETE FROM ${fullTableName}
       WHERE ctid IN (
@@ -2233,6 +2251,7 @@ export class PgDB extends MastraBase {
         WHERE ${parsedColumn} < $1
         LIMIT $2
       )
+      AND ${parsedColumn} < $1
     `;
 
     const result = await this.client.query(sql, [cutoff, limit]);
@@ -2303,7 +2322,7 @@ export class PgDB extends MastraBase {
     column,
   }: {
     indexName: string;
-    tableName: TABLE_NAMES;
+    tableName: PrunableTable;
     column: string;
   }): Promise<void> {
     const name = buildConstraintName({ baseName: indexName });

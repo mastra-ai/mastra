@@ -380,6 +380,83 @@ describe('Span', () => {
     });
   });
 
+  describe('links', () => {
+    const tracing = () =>
+      new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+    const callerSpan = { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' };
+
+    it('exports links to spans in other traces without joining them', () => {
+      const span = tracing().startSpan({ type: SpanType.GENERIC, name: 'served-request', links: [callerSpan] });
+
+      const exported = span.exportSpan();
+      expect(exported.links).toEqual([callerSpan]);
+      expect(exported.traceId).not.toBe(callerSpan.traceId);
+      expect(exported.isRootSpan).toBe(true);
+      expect(exported.externalParentSpanId).toBeUndefined();
+    });
+
+    it('drops links with invalid IDs and omits the field when none remain', () => {
+      const instance = tracing();
+      const mixed = instance.startSpan({
+        type: SpanType.GENERIC,
+        name: 'mixed',
+        links: [
+          callerSpan,
+          { traceId: 'not-hex', spanId: callerSpan.spanId },
+          { traceId: callerSpan.traceId, spanId: '' },
+          { traceId: 'abc', spanId: '1' },
+          { traceId: '0'.repeat(32), spanId: callerSpan.spanId },
+          { traceId: callerSpan.traceId, spanId: '0'.repeat(16) },
+        ],
+      });
+      const invalidOnly = instance.startSpan({
+        type: SpanType.GENERIC,
+        name: 'invalid-only',
+        links: [{ traceId: 'zz', spanId: 'zz' }],
+      });
+
+      expect(mixed.exportSpan().links).toEqual([callerSpan]);
+      expect(invalidOnly.exportSpan()).not.toHaveProperty('links');
+    });
+
+    it('exports links set on the span before it ends, without changing earlier exports', () => {
+      const span = tracing().startSpan({ type: SpanType.GENERIC, name: 'tool-call', links: [callerSpan] });
+      const started = span.exportSpan();
+      const serverSpan = { traceId: '11111111111111111111111111111111', spanId: '2222222222222222' };
+
+      span.links = [...(span.links ?? []), serverSpan];
+      span.end();
+
+      const ended = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED)!.exportedSpan;
+      expect(ended.links).toEqual([callerSpan, serverSpan]);
+      expect(started.links).toEqual([callerSpan]);
+    });
+
+    it('drops links with invalid IDs set on the span after it starts', () => {
+      const span = tracing().startSpan({ type: SpanType.GENERIC, name: 'tool-call', links: [callerSpan] });
+
+      span.links = [...(span.links ?? []), { traceId: 'abc', spanId: '1' }, { traceId: '0'.repeat(32), spanId: '1' }];
+      span.end();
+
+      const ended = testExporter.events.find(
+        e => e.type === TracingEventType.SPAN_ENDED && e.exportedSpan.id === span.id,
+      )!.exportedSpan;
+      expect(ended.links).toEqual([callerSpan]);
+    });
+
+    it('keeps links when a span is rebuilt from its exported form', () => {
+      const instance = tracing();
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'served-request', links: [callerSpan] });
+
+      expect(instance.rebuildSpan(span.exportSpan()).exportSpan().links).toEqual([callerSpan]);
+    });
+  });
+
   describe('getExternalParentId', () => {
     it('should return undefined when no parent', () => {
       const options = {

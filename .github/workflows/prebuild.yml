@@ -14,7 +14,7 @@ permissions: {}
 jobs:
   changes:
     name: Detect code changes
-    runs-on: starsling-ubuntu-24.04-2
+    runs-on: starsling-ubuntu-26.04-2
     permissions:
       contents: read
     outputs:
@@ -65,7 +65,7 @@ jobs:
   prebuild:
     name: Build
     needs: changes
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     env:
@@ -103,7 +103,7 @@ jobs:
     name: Detect affected tests
     needs: changes
     if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 10
     outputs:
       run_full: ${{ steps.compute.outputs.run_full }}
@@ -421,7 +421,7 @@ jobs:
     name: Memory Tests
     needs: [affected-tests, prebuild]
     if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.memory_changed == 'true' && needs.prebuild.result == 'success'
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read
     timeout-minutes: 15

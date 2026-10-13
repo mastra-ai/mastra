@@ -53,7 +53,7 @@ test.describe('Metrics dashboard page', () => {
       await page.goto('/metrics');
 
       await page.getByRole('button', { name: 'Last 24 hours' }).click();
-      await page.getByRole('menuitem', { name: 'Last 7 days' }).click();
+      await page.getByRole('menuitemradio', { name: 'Last 7 days' }).click();
 
       await expect(page).toHaveURL(/period=7d/);
     });

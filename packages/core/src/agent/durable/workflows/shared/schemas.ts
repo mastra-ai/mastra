@@ -48,6 +48,10 @@ function findNonJsonSafePath(value: unknown, path: string, ancestors: Set<object
   }
 }
 
+export function isJsonSafe(value: unknown): boolean {
+  return findNonJsonSafePath(value, '', new Set()) === undefined;
+}
+
 /**
  * Schema for the serialized durable options carried in workflow input. These
  * options cross step boundaries (and processes) as JSON, so live objects such
@@ -180,6 +184,8 @@ export const baseIterationStateSchema = z.object({
   usageAggregationVersion: z.literal(1).optional(),
   // Last step result for continuation check
   lastStepResult: z.any().optional(),
+  // Step-finish waits here until the loop's continuation policy resolves.
+  deferredStepFinishChunk: z.any().optional(),
   // Background task tracking
   backgroundTaskPending: z.boolean().optional(),
   // Set when a delegation hook calls ctx.bail() — signals the loop to stop

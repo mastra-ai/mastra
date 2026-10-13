@@ -20,9 +20,11 @@ export interface ComposerAttachment {
 
 interface ComposerAttachmentsContextValue {
   attachments: ComposerAttachment[];
-  addFiles: (files: File[] | FileList) => Promise<string[]>;
+  addFiles: (files: File[] | FileList) => Promise<void>;
   addUrl: (url: string) => Promise<void>;
   remove: (id: string) => void;
+  /** Puts back attachments that were cleared for a message the server never received. */
+  restore: (attachments: ComposerAttachment[]) => void;
   clear: () => void;
   isAddingAttachments: boolean;
   toCoreUserMessages: () => Promise<CoreUserMessage[]>;
@@ -151,10 +153,7 @@ export const ComposerAttachmentsProvider = ({
             return attachment;
           }),
         );
-        const accepted = list.filter(attachment => attachment.kind !== 'file');
-        if (accepted.length > 0 && generation.current === currentGeneration)
-          setAttachments(prev => [...prev, ...accepted]);
-        return list.filter(attachment => attachment.kind === 'file').map(attachment => attachment.name);
+        if (list.length > 0 && generation.current === currentGeneration) setAttachments(prev => [...prev, ...list]);
       } finally {
         if (generation.current === currentGeneration) setPendingAdditions(count => count - 1);
       }
@@ -185,6 +184,13 @@ export const ComposerAttachmentsProvider = ({
     [setAttachments],
   );
 
+  const restore = useCallback(
+    (restored: ComposerAttachment[]) => {
+      setAttachments(prev => [...restored, ...prev]);
+    },
+    [setAttachments],
+  );
+
   const clear = useCallback(() => {
     generation.current++;
     setPendingAdditions(0);
@@ -201,11 +207,12 @@ export const ComposerAttachmentsProvider = ({
       addFiles,
       addUrl,
       remove,
+      restore,
       clear,
       isAddingAttachments: pendingAdditions > 0,
       toCoreUserMessages,
     }),
-    [attachments, addFiles, addUrl, remove, clear, toCoreUserMessages, pendingAdditions],
+    [attachments, addFiles, addUrl, remove, restore, clear, toCoreUserMessages, pendingAdditions],
   );
 
   return <ComposerAttachmentsContext.Provider value={value}>{children}</ComposerAttachmentsContext.Provider>;
