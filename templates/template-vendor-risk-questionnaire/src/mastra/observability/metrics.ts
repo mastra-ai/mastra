@@ -29,7 +29,7 @@ export async function readDomainMetrics(url: string, runId: string) {
     const started = events.find(e => e.kind === 'processing_started');
     const finished = events.find(e => e.kind === 'processing_finished');
     const exported = events.filter(e => e.kind === 'exported').at(-1);
-    const elapsed = (a: typeof started, b: typeof started) =>
+    const elapsed = (a: { at: string } | undefined, b: { at: string } | undefined) =>
       a && b ? Math.max(0, Date.parse(b.at) - Date.parse(a.at)) : null;
     const unionMs = (intervals: Array<[number, number]>) => {
       const ordered = intervals.sort((a, b) => a[0] - b[0]);
