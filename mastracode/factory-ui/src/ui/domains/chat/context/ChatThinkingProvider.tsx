@@ -25,12 +25,12 @@ export function ChatThinkingProvider({ children }: ChatThinkingProviderProps) {
 }
 
 function DraftChatThinkingProvider({ children }: ChatThinkingProviderProps) {
-  const { activeModelId } = useChatModels();
+  const { activeModelId, defaultThinkingLevel } = useChatModels();
   const [override, setOverride] = useState<ThinkingLevelSetting>();
-  const { level, loadError } = useEffectiveThinkingLevel(activeModelId, override);
+  const level = useEffectiveThinkingLevel(activeModelId, override, defaultThinkingLevel);
   const value: ChatThinkingApi = {
     level,
-    loadError,
+    loadError: undefined,
     override,
     setLevel: async next => {
       setOverride(next);
@@ -45,7 +45,7 @@ function DraftChatThinkingProvider({ children }: ChatThinkingProviderProps) {
 
 function LiveChatThinkingProvider({ children }: ChatThinkingProviderProps) {
   const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
-  const { activeModelId } = useChatModels();
+  const { activeModelId, defaultThinkingLevel } = useChatModels();
   const sessionArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -56,12 +56,11 @@ function LiveChatThinkingProvider({ children }: ChatThinkingProviderProps) {
   const settingsQuery = useAgentControllerSettings(sessionArgs);
   const { mutateAsync: updateSettings } = useUpdateAgentControllerSettingsMutation(sessionArgs);
   const override = settingsQuery.data?.thinkingLevel;
-  const effective = useEffectiveThinkingLevel(activeModelId, override);
+  const effectiveLevel = useEffectiveThinkingLevel(activeModelId, override, defaultThinkingLevel);
   const settingsLoaded = settingsQuery.data !== undefined;
-  const settingsLoadError = settingsQuery.error ?? undefined;
   const value: ChatThinkingApi = {
-    level: settingsLoaded ? effective.level : undefined,
-    loadError: settingsLoaded ? effective.loadError : settingsLoadError,
+    level: settingsLoaded ? effectiveLevel : undefined,
+    loadError: settingsLoaded ? undefined : (settingsQuery.error ?? undefined),
     override,
     setLevel: async next => {
       await updateSettings({ thinkingLevel: next });

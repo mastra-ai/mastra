@@ -24,7 +24,9 @@ import {
   resolveFactorySourceControl,
   resolveFactorySourceRepository,
 } from '../../session/factory-session.js';
+import type { ModelSelection } from '../../session/model-selection.js';
 import { readRequestContextOrgId, seedSessionOrg } from '../../session/org-seed.js';
+import { seedModelSelection } from '../../session/seed-model-selection.js';
 import type {
   ChannelAccountLink,
   ChannelAccountLinkKey,
@@ -517,9 +519,9 @@ export function createChannelSessionResolver(deps: SlackChannelDeps): ChannelSes
  * chat-only `channel:...` id names no project, so there is nothing to read.
  *
  * The model this session starts on is picked here, once, in the order of who
- * chose it: the linked sender's default model, else the factory project's
- * default, else the SDK's built-in model. The choice is persisted on the thread
- * as `currentModelId`, so it outlives the process that made it.
+ * chose it: the linked sender's default pair, else the factory project's
+ * default model, else the SDK's built-in model. The choice is persisted on the
+ * thread as `currentModelId` and `thinkingLevel`, so it outlives the process that made it.
  *
  * The model resolution is skipped on a session that already has a model
  * persisted on the thread. That is the durable record of a deliberate choice —
@@ -578,23 +580,22 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       }
     } else {
       const factoryModelId = await resolveFactoryDefaultModelId(projects, owner.factoryProjectId);
-      const userModelId = await resolveUserDefaultModel(modelDefaults, owner);
-      const selectedModelId = userModelId ?? factoryModelId;
+      const userModel = await resolveUserDefaultModel(modelDefaults, owner);
 
       await hydrateFactorySession(session, {
         orgId: owner.orgId,
         defaultModelId: factoryModelId,
       });
 
-      if (selectedModelId && selectedModelId !== factoryModelId) {
-        // The sender's own choice beats the factory's. `switch` applies the model
-        // and persists it as the thread's current model in one step — which is
-        // what makes the choice outlive this process.
+      if (userModel && (userModel.modelId !== factoryModelId || userModel.thinkingLevel)) {
+        // The sender's own choice beats the factory's. Seeding persists it as the
+        // thread's current pair in one step — which is what makes the choice
+        // outlive this process.
         try {
-          await session.model.switch(selectedModelId);
+          await seedModelSelection(session, userModel, 'personal');
         } catch (error) {
           console.warn("[slack] Failed to apply the sender's default model", {
-            modelId: selectedModelId,
+            modelId: userModel.modelId,
             error: error instanceof Error ? error.message : String(error),
           });
           const currentModelId = session.model.get();
@@ -609,7 +610,7 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
             }
           }
         }
-      } else if (!selectedModelId) {
+      } else if (!userModel && !factoryModelId) {
         // Neither preference exists, so the SDK's built-in mode default is this
         // thread's model of record. Pin it too: a later SDK upgrade that moves
         // that default must not silently retarget a thread that already started.
@@ -622,11 +623,11 @@ export function createChannelSessionStartHook(deps: SlackChannelDeps): ChannelSe
       // Subagents follow the sender's default model. When none is set, they use
       // the factory default. Pin the choice on the thread like the main model so
       // a restart restores it rather than whatever default exists by then.
+      const subagentModelId = userModel?.modelId ?? factoryModelId;
       for (const agentType of SUBAGENT_TYPES) {
-        const modelId = userModelId ?? factoryModelId;
-        if (!modelId) continue;
-        if (await applySubagentModel(session, agentType, modelId)) {
-          await session.thread.setSetting({ key: pinnedSubagentModelKey(agentType), value: modelId });
+        if (!subagentModelId) continue;
+        if (await applySubagentModel(session, agentType, subagentModelId)) {
+          await session.thread.setSetting({ key: pinnedSubagentModelKey(agentType), value: subagentModelId });
         }
       }
     }
@@ -656,7 +657,7 @@ async function applySubagentModel(
 }
 
 /**
- * The sender's personal default model, or `undefined` when they have none.
+ * The sender's personal default pair, or `undefined` when they have none.
  *
  * Best-effort by design: an uninitialized model-defaults domain or a read
  * failure means "no personal preference", which falls through to the factory
@@ -665,11 +666,11 @@ async function applySubagentModel(
 async function resolveUserDefaultModel(
   modelDefaults: ModelDefaultsStorage | undefined,
   owner: { orgId: string; userId: string },
-): Promise<string | undefined> {
+): Promise<ModelSelection | undefined> {
   if (!modelDefaults) return undefined;
   try {
     const record = await modelDefaults.get({ orgId: owner.orgId, userId: owner.userId });
-    return record?.modelId;
+    return record ? { modelId: record.modelId, thinkingLevel: record.thinkingLevel } : undefined;
   } catch (error) {
     console.warn('[slack] default model lookup failed for a new session', {
       orgId: owner.orgId,

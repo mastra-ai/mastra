@@ -320,6 +320,19 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if (!parsedPath.success) return context.json({ error: 'Project not found' }, 404);
           const parsedBody = FACTORY_ROUTE_CONTRACTS.projectUpdate.bodySchema.safeParse(await readJson(context));
           if (!parsedBody.success) return context.json({ error: 'invalid_project' }, 400);
+          if (
+            parsedBody.data.defaultModelId !== undefined &&
+            this.deps.auth.enabled() &&
+            !(await this.deps.auth.isOrganizationAdmin(context, tenant.orgId))
+          ) {
+            return context.json(
+              {
+                error: 'forbidden',
+                message: 'Organization administrator access is required to change the Factory default model.',
+              },
+              403,
+            );
+          }
           const project = await (
             await this.#projects()
           ).update({ orgId: tenant.orgId, id: parsedPath.data.id, input: parsedBody.data });

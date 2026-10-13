@@ -1,44 +1,38 @@
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { SourceControlSessionLookup } from './factory-session.js';
+import { resolveFactoryDefaultModelId, resolveFactoryProjectForSession } from './factory-session.js';
+import type { ModelSelectionSession } from './seed-model-selection.js';
+import { readSeededModelSelection, seedModelSelection } from './seed-model-selection.js';
 
-export interface DefaultModelApplicableSession {
-  model: { switch(modelId: string): Promise<unknown> };
-  subagents: { model: { set(args: { modelId: string; agentType: string }): Promise<unknown> } };
-}
-
-export interface DefaultModelHydrationSession extends DefaultModelApplicableSession {
+export interface DefaultModelHydrationSession extends Omit<ModelSelectionSession, 'state' | 'thread'> {
   readonly identity: { getResourceId(): string };
-  state: { get(): Record<string, unknown> | undefined };
-  thread: {
+  state: { get(): Readonly<Record<string, unknown>> | undefined } & ModelSelectionSession['state'];
+  thread: ModelSelectionSession['thread'] & {
     getId(): string | null | undefined;
-    getSetting(args: { key: string }): Promise<unknown>;
+    listActiveMessages(args: { limit: number }): Promise<unknown[]>;
   };
-}
-
-async function applyDefaultModel(session: DefaultModelApplicableSession, modelId: string): Promise<void> {
-  await session.model.switch(modelId);
-
-  for (const agentType of ['explore', 'plan', 'execute']) {
-    await session.subagents.model.set({ modelId, agentType });
-  }
 }
 
 export interface DefaultModelHydrationDependencies {
-  sourceControl: {
-    sessions: Pick<SourceControlStorageHandle['sessions'], 'getBySessionId'>;
-  };
+  sourceControl: { sessions: Pick<SourceControlSessionLookup, 'getBySessionId' | 'getSourceControlBySessionId'> };
   workItems: Pick<WorkItemsStorage, 'findActiveRunBindingByThread'>;
   modelDefaults: Pick<ModelDefaultsStorage, 'get'>;
+  projects: Pick<FactoryProjectsStorage, 'getById'>;
 }
 
-/** Seed the user's default model unless the interactive thread already selected its own model. */
+/**
+ * Seed a new interactive thread with its owner's default pair, else the Factory's default model.
+ * A thread that was already seeded or already has messages keeps what it has, so
+ * later default changes never move an existing chat.
+ */
 export async function hydrateSessionDefaultModel(
   session: DefaultModelHydrationSession,
-  { sourceControl, workItems, modelDefaults }: DefaultModelHydrationDependencies,
+  { sourceControl, workItems, modelDefaults, projects }: DefaultModelHydrationDependencies,
 ): Promise<void> {
   const resourceId = session.identity.getResourceId();
-  if (session.state.get()?.factoryProjectId || typeof session.thread.getSetting !== 'function') return;
+  if (session.state.get()?.factoryProjectId) return;
   try {
     const sourceSession = await sourceControl.sessions.getBySessionId(resourceId);
     if (!sourceSession) return;
@@ -54,17 +48,26 @@ export async function hydrateSessionDefaultModel(
     ) {
       return;
     }
-    const existingThreadSettings = await Promise.all([
-      session.thread.getSetting({ key: 'currentModelId' }),
-      session.thread.getSetting({ key: 'modeModelId_build' }),
-      session.thread.getSetting({ key: 'modeModelId_plan' }),
-      session.thread.getSetting({ key: 'modeModelId_fast' }),
-    ]);
-    if (existingThreadSettings.some(setting => typeof setting === 'string')) return;
+    if (await readSeededModelSelection(session)) return;
+    if ((await session.thread.listActiveMessages({ limit: 1 })).length > 0) return;
 
-    const modelDefault = await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId });
-    if (modelDefault) await applyDefaultModel(session, modelDefault.modelId);
+    const personalDefault = await modelDefaults.get({ orgId: sourceSession.orgId, userId: sourceSession.userId });
+    if (personalDefault) {
+      await seedModelSelection(
+        session,
+        { modelId: personalDefault.modelId, thinkingLevel: personalDefault.thinkingLevel },
+        'personal',
+      );
+      return;
+    }
+
+    const sourceControlHandle = await sourceControl.sessions.getSourceControlBySessionId(resourceId);
+    const owner = sourceControlHandle
+      ? await resolveFactoryProjectForSession({ sourceControl: sourceControlHandle, sessionId: resourceId })
+      : null;
+    const factoryModelId = await resolveFactoryDefaultModelId(projects, owner?.factoryProjectId);
+    if (factoryModelId) await seedModelSelection(session, { modelId: factoryModelId, thinkingLevel: null }, 'factory');
   } catch (error) {
-    console.warn('[Factory default-model hydration] Unable to apply the user default model.', error);
+    console.warn('[Factory default-model hydration] Unable to apply the default model.', error);
   }
 }

@@ -129,7 +129,6 @@ export const queryKeys = {
   defaultModel: () => ['default-model'] as const,
   om: (resourceId: string | undefined, scope?: string, factoryId?: string) =>
     ['om', resourceId ?? null, scope ?? null, factoryId ?? null] as const,
-  thinkingConfig: () => ['thinking-config'] as const,
   factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,

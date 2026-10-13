@@ -100,6 +100,45 @@ describe('ProjectRoutes', () => {
     ).toBe(404);
   });
 
+  it('lets only organization admins change the Factory default model when auth is enabled', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const buildApp = (isAdmin: boolean, enabled = true) => {
+      const app = new Hono();
+      app.use('*', async (context, next) => {
+        context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(
+        app as never,
+        projectRoutes(seed, undefined, undefined, undefined, {
+          auth: fakeRouteAuth({ enabled, isOrganizationAdmin: async () => isAdmin }),
+        }),
+      );
+      return app;
+    };
+    const patch = (app: Hono, body: unknown) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const memberModel = await patch(buildApp(false), { defaultModelId: 'openai/gpt-5.6' });
+    const memberRename = await patch(buildApp(false), { name: 'Platform engineering' });
+    const adminModel = await patch(buildApp(true), { defaultModelId: 'openai/gpt-5.6' });
+    const localModel = await patch(buildApp(false, false), { defaultModelId: 'anthropic/claude-opus-4-6' });
+
+    expect(memberModel.status).toBe(403);
+    expect(memberRename.status).toBe(200);
+    expect(adminModel.status).toBe(200);
+    expect(localModel.status).toBe(200);
+    expect(await seed.projects.get({ orgId: 'org-1', id: project.id })).toMatchObject({
+      name: 'Platform engineering',
+      defaultModelId: 'anthropic/claude-opus-4-6',
+    });
+  });
+
   describe('apply default model', () => {
     const mount = (
       seed: FactoryStorageTestSeed,

@@ -1,9 +1,13 @@
+import { FACTORY_FALLBACK_THINKING_LEVEL } from '@mastra/factory/session/model-selection';
+import type { ModelSelection } from '@mastra/factory/session/model-selection';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
+import type { DefaultModelResponse } from '../../../../api/types';
 import { useDefaultModelQuery } from '../../../../hooks/use-default-model';
 import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
+import type { FactoryProjectPayload } from '../../workspaces/services/github';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatModelsContext } from './ChatModelsContext';
 import type { ChatModelsApi } from './ChatModelsContext';
@@ -28,11 +32,13 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
   const factoryProjectQuery = useFactoryProjectQuery(factorySessionState?.factoryProjectId);
   const defaultModelQuery = useDefaultModelQuery();
   const [draftModelId, setDraftModelId] = useState<string>();
-  const defaultModelId = defaultModelQuery.data?.modelId ?? undefined;
+  const isLoading = factoryProjectQuery.isPending || defaultModelQuery.isPending;
+  const defaultModel = draftDefaultModel(defaultModelQuery.data, factoryProjectQuery.data);
   const value: ChatModelsApi = {
-    activeModelId: draftModelId ?? defaultModelId ?? factoryProjectQuery.data?.defaultModelId ?? undefined,
-    defaultModelId,
-    isLoading: factoryProjectQuery.isPending || defaultModelQuery.isPending,
+    activeModelId: draftModelId ?? defaultModel?.modelId,
+    defaultModelId: defaultModel?.modelId,
+    defaultThinkingLevel: isLoading ? undefined : (defaultModel?.thinkingLevel ?? FACTORY_FALLBACK_THINKING_LEVEL),
+    isLoading,
     error: defaultModelQuery.error ?? factoryProjectQuery.error ?? undefined,
     setModel: modelId => {
       setDraftModelId(modelId);
@@ -41,6 +47,15 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
   };
 
   return <ChatModelsContext.Provider value={value}>{children}</ChatModelsContext.Provider>;
+}
+
+function draftDefaultModel(
+  personal: DefaultModelResponse | undefined,
+  factory: FactoryProjectPayload | undefined,
+): ModelSelection | undefined {
+  if (personal?.modelId) return { modelId: personal.modelId, thinkingLevel: personal.thinkingLevel };
+  if (factory?.defaultModelId) return { modelId: factory.defaultModelId, thinkingLevel: null };
+  return undefined;
 }
 
 function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
@@ -57,6 +72,7 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
   const value: ChatModelsApi = {
     activeModelId: state?.modelId,
     defaultModelId: defaultModelQuery.data?.modelId ?? undefined,
+    defaultThinkingLevel: FACTORY_FALLBACK_THINKING_LEVEL,
     isLoading: false,
     error: undefined,
     setModel: modelId => switchModel({ modelId }),

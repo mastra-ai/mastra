@@ -12,15 +12,12 @@ import { Transcript } from '../Transcript';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
 const SESSION_API = `${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId`;
-const THINKING_CONFIG_API = `${TEST_BASE_URL}/web/config/thinking`;
 
 function useThinkingHandlers({
   initialThinkingLevel = 'medium',
-  failThinkingConfig = false,
   modelId = 'openai/gpt-4o-mini',
 }: {
   initialThinkingLevel?: string;
-  failThinkingConfig?: boolean;
   modelId?: string;
 } = {}) {
   let thinkingLevel: string | undefined = initialThinkingLevel;
@@ -35,15 +32,6 @@ function useThinkingHandlers({
         threadId: 'thread-test',
         settings: { yolo: false, thinkingLevel, notifications: 'bell', smartEditing: true },
       }),
-    ),
-    http.get(THINKING_CONFIG_API, () =>
-      failThinkingConfig
-        ? new HttpResponse(null, { status: 503 })
-        : HttpResponse.json({
-            levels: ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
-            globalDefault: 'low',
-            editable: true,
-          }),
     ),
     http.put(`${SESSION_API}/state`, async ({ request }) => {
       const body: unknown = await request.json();
@@ -70,7 +58,7 @@ function useThinkingHandlers({
 beforeEach(useOverlayControllerHandlers);
 
 describe('the /think command', () => {
-  it('given a session override, when /think reports and clears it, then the fallback is the global default', async () => {
+  it('given a session override, when /think reports and clears it, then the run falls back to the Factory default level', async () => {
     const stateUpdates = useThinkingHandlers();
     const user = userEvent.setup();
     const { client } = renderWithProviders(
@@ -87,7 +75,7 @@ describe('the /think command', () => {
 
     expect(await screen.findByRole('region', { name: '/think options' })).toBeInTheDocument();
     expect(await screen.findByRole('option', { name: /^Medium/ })).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByRole('option', { name: /^Default/ })).toHaveTextContent('Global default');
+    expect(screen.getByRole('option', { name: /^Default/ })).toHaveTextContent('Use the default level');
     await user.click(screen.getByRole('option', { name: 'High' }));
 
     await waitForMutationsIdle(client);
@@ -98,9 +86,7 @@ describe('the /think command', () => {
     await user.type(input, '/think status');
     await user.keyboard('{Enter}');
 
-    expect(
-      await screen.findByText('Thinking level: high (session override). Default: low (global default).'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Thinking level: high (session override). Default: off.')).toBeInTheDocument();
 
     await user.type(input, '/think');
     await user.keyboard('{Enter}');
@@ -109,30 +95,7 @@ describe('the /think command', () => {
 
     await waitForMutationsIdle(client);
     expect(stateUpdates).toContainEqual({ state: { thinkingLevel: null } });
-    expect(await screen.findByText('Thinking level set to default: low (global default).')).toBeInTheDocument();
-    expect(input).toHaveValue('');
-  });
-
-  it('clears the session override when the defaults request fails', async () => {
-    const stateUpdates = useThinkingHandlers({ initialThinkingLevel: 'high', failThinkingConfig: true });
-    const user = userEvent.setup();
-    const { client } = renderWithProviders(
-      <OverlayTestProviders>
-        <Transcript />
-        <Composer />
-      </OverlayTestProviders>,
-    );
-    const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
-    await waitFor(() => expect(input).toBeEnabled());
-
-    await user.type(input, '/think default');
-    await user.keyboard('{Enter}');
-
-    await waitForMutationsIdle(client);
-    expect(stateUpdates).toContainEqual({ state: { thinkingLevel: null } });
-    expect(
-      await screen.findByText('Thinking level set to default. Current default is unavailable.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByText('Thinking level set to default: off.')).toBeInTheDocument();
     expect(input).toHaveValue('');
   });
 

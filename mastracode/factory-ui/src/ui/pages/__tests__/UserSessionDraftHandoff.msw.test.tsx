@@ -1,3 +1,4 @@
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -6,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
-import { thinkingConfig } from '../../__tests__/fixtures/thinkingConfig';
 import { createAppRoutes } from '../../router';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
@@ -45,6 +45,7 @@ interface DraftRoute {
 interface DraftRouteOptions {
   factoryProjectGate?: Promise<void>;
   defaultModelId?: string | null;
+  defaultThinkingLevel?: ThinkingLevelSetting | null;
 }
 
 function readSentMessage(body: unknown): string {
@@ -52,7 +53,11 @@ function readSentMessage(body: unknown): string {
   return typeof body.message === 'string' ? body.message : '';
 }
 
-function stubDraftRoute({ factoryProjectGate, defaultModelId = null }: DraftRouteOptions = {}): DraftRoute {
+function stubDraftRoute({
+  factoryProjectGate,
+  defaultModelId = null,
+  defaultThinkingLevel = null,
+}: DraftRouteOptions = {}): DraftRoute {
   let releaseWorkspace = () => {};
   const workspaceReady = new Promise<void>(resolve => {
     releaseWorkspace = resolve;
@@ -103,13 +108,14 @@ function stubDraftRoute({ factoryProjectGate, defaultModelId = null }: DraftRout
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: defaultModelId })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: defaultModelId, thinkingLevel: defaultThinkingLevel }),
+    ),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({
         models: [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true }],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(thinkingConfig)),
     http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [] }),
     ),
@@ -180,7 +186,7 @@ function stubDraftRoute({ factoryProjectGate, defaultModelId = null }: DraftRout
 }
 
 describe('a user session draft on the real thread route', () => {
-  it('given a new draft, when the first prompt is sent, then the session starts without a mode picker or mode switch', async () => {
+  it('given a new draft on the Factory default, when the first prompt is sent, then the session starts without a mode picker, mode switch, or model switch', async () => {
     const route = stubDraftRoute();
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
@@ -201,7 +207,7 @@ describe('a user session draft on the real thread route', () => {
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
     );
     await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
-    expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-4o-mini']);
+    expect(route.bindingsBeforePrompt).toEqual([]);
     const thread = within(screen.getByRole('main'));
     // The title lands in the header breadcrumb as well; the transcript renders the message as a paragraph.
     await waitFor(() => expect(thread.getByText('fix the login bug', { selector: 'p' })).toBeInTheDocument());
@@ -212,8 +218,8 @@ describe('a user session draft on the real thread route', () => {
     expect(route.posted).toEqual(['fix the login bug']);
   });
 
-  it('does not switch models when the draft already uses the personal default', async () => {
-    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
+  it('shows the personal default pair in the draft and lets the server seed it without a switch', async () => {
+    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini', defaultThinkingLevel: 'high' });
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
@@ -222,6 +228,7 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
+    expect(await screen.findByRole('button', { name: 'Thinking: High · default' })).toBeInTheDocument();
     await user.type(message, 'keep the default');
     await user.keyboard('{Enter}');
 
@@ -242,7 +249,7 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · global default' }));
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Off · default' }));
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
@@ -266,12 +273,12 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · global default' }));
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Off · default' }));
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
     await user.click(await screen.findByRole('button', { name: 'Use default' }));
-    expect(await screen.findByText('Follows the global default.')).toBeInTheDocument();
+    expect(await screen.findByText('Follows the default.')).toBeInTheDocument();
     await user.type(message, 'use the default');
     await user.keyboard('{Enter}');
 

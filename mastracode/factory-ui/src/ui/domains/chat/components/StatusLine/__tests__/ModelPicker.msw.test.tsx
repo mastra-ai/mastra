@@ -7,9 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
-import type { ThinkingConfigInfo } from '../../../../../../api/types';
 import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
-import { thinkingConfig } from '../../../../../__tests__/fixtures/thinkingConfig';
 import { ChatConnectionContext } from '../../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../../context/ChatModelsProvider';
 import { ChatSessionContext } from '../../../context/ChatSessionContext';
@@ -62,7 +60,7 @@ function renderPicker({
   settingsLoaded,
   catalogLoaded,
   modelSwitched,
-  thinkingDefaultsFail = false,
+  settingsFail = false,
 }: {
   kind?: ChatSessionContextApi['kind'];
   modelId?: string;
@@ -71,7 +69,7 @@ function renderPicker({
   settingsLoaded?: Promise<void>;
   catalogLoaded?: Promise<void>;
   modelSwitched?: Promise<void>;
-  thinkingDefaultsFail?: boolean;
+  settingsFail?: boolean;
 } = {}) {
   const modelSwitches: unknown[] = [];
   const stateUpdates: unknown[] = [];
@@ -81,16 +79,9 @@ function renderPicker({
       await catalogLoaded;
       return HttpResponse.json({ models });
     }),
-    http.get(`${TEST_BASE_URL}/web/config/thinking`, () =>
-      thinkingDefaultsFail
-        ? HttpResponse.json({ error: 'unavailable' }, { status: 500 })
-        : HttpResponse.json<ThinkingConfigInfo>({
-            ...thinkingConfig,
-            globalDefault: 'medium',
-          }),
-    ),
     http.get(`${API}/sessions/:resourceId`, async ({ params }) => {
       await settingsLoaded;
+      if (settingsFail) return HttpResponse.json({ error: 'unavailable' }, { status: 500 });
       return HttpResponse.json({
         controllerId: AGENT_CONTROLLER_ID,
         resourceId: params.resourceId,
@@ -213,12 +204,12 @@ describe('ModelPicker', () => {
     expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
   });
 
-  it('given no session level, when the session picks one, then it leaves the global default and saves it', async () => {
+  it('given no session level, when the session picks one, then it leaves the default and saves it', async () => {
     const user = userEvent.setup();
     const { client, stateUpdates } = renderPicker();
 
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · global default' }));
-    expect(screen.getByText('Follows the global default.')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Off · default' }));
+    expect(screen.getByText('Follows the default.')).toBeInTheDocument();
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     expect(screen.queryByText('Max')).not.toBeInTheDocument();
     fireEvent.change(ramp, { target: { value: '3' } });
@@ -230,7 +221,7 @@ describe('ModelPicker', () => {
     expect(screen.getByText('Set for this session.')).toBeInTheDocument();
   });
 
-  it('given a session level, when Use default is chosen, then the session follows the global default', async () => {
+  it('given a session level, when Use default is chosen, then the session follows the default', async () => {
     const user = userEvent.setup();
     const { client, stateUpdates } = renderPicker({ thinkingLevel: 'high' });
 
@@ -239,12 +230,12 @@ describe('ModelPicker', () => {
     await waitForMutationsIdle(client);
 
     expect(stateUpdates).toEqual([{ thinkingLevel: null }]);
-    expect(screen.getByRole('button', { name: 'Thinking: Medium · global default' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thinking: Off · default' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Use default' })).not.toBeInTheDocument();
   });
 
   it('says the thinking level failed to load instead of loading forever', async () => {
-    renderPicker({ thinkingDefaultsFail: true });
+    renderPicker({ settingsFail: true });
 
     expect(
       await screen.findByRole(
@@ -253,12 +244,6 @@ describe('ModelPicker', () => {
         { timeout: 10_000 },
       ),
     ).toHaveAttribute('aria-disabled', 'true');
-  });
-
-  it("keeps the session's own level usable when the defaults fail to load", async () => {
-    renderPicker({ thinkingLevel: 'high', thinkingDefaultsFail: true });
-
-    expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
   });
 
   it('holds the thinking control disabled, not the global default, until the session level loads', async () => {
@@ -271,7 +256,7 @@ describe('ModelPicker', () => {
     expect(
       await screen.findByRole('button', { name: "Thinking: unavailable. The thinking level isn't loaded yet." }),
     ).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.queryByRole('button', { name: 'Thinking: Medium · global default' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thinking: Off · default' })).not.toBeInTheDocument();
 
     loadSettings();
     expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();

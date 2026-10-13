@@ -16,13 +16,12 @@ export type BoardCatalogResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.boardC
 export type InstalledBoardInfo = BoardCatalogResponse['boards'][number];
 export type InstalledPhaseInfo = InstalledBoardInfo['phases'][number];
 
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type {
   CustomProviderInfo,
   OMConfigInfo,
   ProviderInfo,
   ProviderOMDefaultsResponse,
-  ThinkingConfigInfo,
-  UpdateThinkingConfigResponse,
 } from '@mastra/factory/routes/config';
 import type {
   ArtifactEntry,
@@ -39,14 +38,7 @@ import type {
   WorkspaceRenderedListing,
 } from '@mastra/factory/routes/fs';
 
-export type {
-  ProviderInfo,
-  CustomProviderInfo,
-  OMConfigInfo,
-  ProviderOMDefaultsResponse,
-  ThinkingConfigInfo,
-  UpdateThinkingConfigResponse,
-};
+export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
 export type {
   ArtifactEntry,
   ArtifactListing,
@@ -76,6 +68,7 @@ export interface CustomProvidersResponse {
 
 export interface DefaultModelResponse {
   modelId: string | null;
+  thinkingLevel: ThinkingLevelSetting | null;
 }
 
 export interface OMResponse {

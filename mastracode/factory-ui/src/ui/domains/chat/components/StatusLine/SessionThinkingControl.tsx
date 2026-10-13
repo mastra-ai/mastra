@@ -6,7 +6,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useAvailableModelsQuery, useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
 import type { ChatThinkingApi } from '../../context/ChatThinkingContext';
 import { useChatThinking } from '../../context/useChatThinking';
-import { GLOBAL_THINKING_SOURCE_LABEL, thinkingLevelOptionsForModel } from '../../services/thinkingLevels';
+import { DEFAULT_THINKING_SOURCE_LABEL, thinkingLevelOptionsForModel } from '../../services/thinkingLevels';
 import type { EffectiveThinkingLevel, ThinkingLevelOrigin } from '../../services/thinkingLevels';
 
 interface SessionThinkingControlProps {
@@ -37,7 +37,7 @@ function showFailure(fallback: string) {
 }
 
 function originLabel(origin: ThinkingLevelOrigin) {
-  return origin === 'session' ? 'this session' : GLOBAL_THINKING_SOURCE_LABEL;
+  return origin === 'session' ? 'this session' : DEFAULT_THINKING_SOURCE_LABEL;
 }
 
 export function SessionThinkingControl({ modelId, switchingModel }: SessionThinkingControlProps) {

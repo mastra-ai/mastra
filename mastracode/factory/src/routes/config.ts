@@ -5,9 +5,7 @@ import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboa
 import {
   getCustomProviderId,
   isThinkingLevelSetting,
-  loadSettings,
   MASTRA_GATEWAY_PROVIDER,
-  saveSettings,
   THINKING_LEVEL_VALUES,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting, ThinkingLevelSetting } from '@mastra/code-sdk/onboarding/settings';
@@ -454,22 +452,6 @@ export interface ProviderOMDefaultsResponse {
   config: OMConfigInfo;
 }
 
-/** `GET /web/config/thinking` — deployment-scoped reasoning-effort defaults. */
-export interface ThinkingConfigInfo {
-  /** All selectable levels, in escalation order. */
-  levels: readonly ThinkingLevelSetting[];
-  /** `preferences.thinkingLevel` — what every run uses without a session override. */
-  globalDefault: ThinkingLevelSetting;
-  /** False when the deployment refuses writes, so the UI can render read-only rows. */
-  editable: boolean;
-}
-
-/** `PUT /web/config/thinking` success payload. */
-export interface UpdateThinkingConfigResponse {
-  ok: true;
-  globalDefault: ThinkingLevelSetting;
-}
-
 function modelProvider(modelId: string): string {
   // Effective IDs keep their `mastra/` route; the provider segment after it is what
   // the SDK resolver falls back to when the gateway is not configured.
@@ -615,17 +597,6 @@ export interface ConfigRoutesDeps extends RouteDependencies {
    * own credentials (see `DEPLOYMENT_MODEL_PROVIDERS`).
    */
   deploymentProviders?: ReadonlySet<string>;
-  /**
-   * Path of the server's settings.json backing the deployment-scoped thinking
-   * defaults. Defaults to the standard app-data location; injectable for tests.
-   */
-  settingsPath?: string;
-  /**
-   * Organization this deployment serves (`MASTRACODE_DEPLOYMENT_ORGANIZATION_ID`).
-   * When auth is enabled, only admins of this organization may write
-   * deployment-wide settings; without it those writes stay blocked.
-   */
-  deploymentOrganizationId?: string;
 }
 
 /**
@@ -638,8 +609,6 @@ export interface ConfigRoutesDeps extends RouteDependencies {
  *   - `GET    /web/config/custom-providers`        — list custom OpenAI-compatible providers
  *   - `POST   /web/config/custom-providers`        — create/update a custom provider
  *   - `DELETE /web/config/custom-providers/:id`    — remove a custom provider
- *   - `GET    /web/config/thinking`                — read thinking (reasoning-effort) defaults
- *   - `PUT    /web/config/thinking`                — set the global thinking default
  *   - `GET    /web/config/om`                      — read OM models/thresholds/observe-attachments
  *   - `PUT    /web/config/om/:role/model`          — switch observer/reflector model
  *   - `PUT    /web/config/om/thresholds`           — set observation/reflection thresholds
@@ -698,34 +667,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       } catch {
         return undefined;
       }
-    };
-
-    const deploymentThinkingAccess = async (
-      c: Context,
-    ): Promise<{ ok: true } | { ok: false; status: 401 | 403; error: string; message?: string }> => {
-      if (!auth.enabled()) return { ok: true };
-      await auth.ensureUser(c);
-      const tenant = auth.tenant(c);
-      if (!tenant) return { ok: false, status: 401, error: 'unauthorized' };
-      const orgId = tenantOrgId(tenant);
-      if (!options.deploymentOrganizationId || orgId !== options.deploymentOrganizationId) {
-        return {
-          ok: false,
-          status: 403,
-          error: 'deployment_organization_required',
-          message:
-            "Deployment thinking defaults are shared by the whole deployment. Set MASTRACODE_DEPLOYMENT_ORGANIZATION_ID to let that organization's admins change them while authentication is enabled",
-        };
-      }
-      if (!(await auth.isOrganizationAdmin(c, orgId))) {
-        return {
-          ok: false,
-          status: 403,
-          error: 'organization_admin_required',
-          message: 'Only organization admins can change deployment thinking defaults while authentication is enabled',
-        };
-      }
-      return { ok: true };
     };
 
     return [
@@ -1022,7 +963,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if ('response' in context) return context.response;
           try {
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            return c.json({ modelId: record?.modelId ?? null });
+            return c.json({ modelId: record?.modelId ?? null, thinkingLevel: record?.thinkingLevel ?? null });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1045,12 +986,22 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          const parsed = z.object({ modelId: z.string().trim().min(1).max(256) }).safeParse(body);
-          if (!parsed.success) return c.json({ error: 'Missing required field: modelId' }, 400);
-          const { modelId } = parsed.data;
+          const parsed = z
+            .object({
+              modelId: z.string().trim().min(1).max(256),
+              thinkingLevel: z.custom<ThinkingLevelSetting>(isThinkingLevelSetting).nullable().default(null),
+            })
+            .safeParse(body);
+          if (!parsed.success) {
+            return c.json(
+              { error: `Expected modelId and an optional thinkingLevel, one of: ${THINKING_LEVEL_VALUES.join(', ')}` },
+              400,
+            );
+          }
+          const { modelId, thinkingLevel } = parsed.data;
           try {
-            await context.storage.set({ orgId: context.orgId, userId: context.userId, modelId });
-            return c.json({ ok: true, modelId });
+            await context.storage.set({ orgId: context.orgId, userId: context.userId, modelId, thinkingLevel });
+            return c.json({ ok: true, modelId, thinkingLevel });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1069,61 +1020,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if ('response' in context) return context.response;
           try {
             await context.storage.clear({ orgId: context.orgId, userId: context.userId });
-            return c.json({ ok: true, modelId: null });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      // One settings.json for the whole deployment: with auth on, only deployment-org admins may write it.
-      registerApiRoute('/web/config/thinking', {
-        method: 'GET',
-        requiresAuth: false,
-        handler: async c => {
-          try {
-            const settings = loadSettings(options.settingsPath);
-            return c.json({
-              levels: THINKING_LEVEL_VALUES,
-              globalDefault: settings.preferences.thinkingLevel,
-              editable: (await deploymentThinkingAccess(loose(c))).ok,
-            });
-          } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
-          }
-        },
-      }),
-
-      registerApiRoute('/web/config/thinking', {
-        method: 'PUT',
-        requiresAuth: false,
-        handler: async c => {
-          const access = await deploymentThinkingAccess(loose(c));
-          if (!access.ok) {
-            return c.json(
-              { error: access.error, ...(access.message ? { message: access.message } : {}) },
-              access.status,
-            );
-          }
-          let body: unknown;
-          try {
-            body = await c.req.json();
-          } catch {
-            return c.json({ error: 'Invalid JSON body' }, 400);
-          }
-          const parsed = z
-            .object({ globalDefault: z.custom<ThinkingLevelSetting>(isThinkingLevelSetting) })
-            .strict()
-            .safeParse(body);
-          if (!parsed.success) {
-            return c.json({ error: `Expected only globalDefault, one of: ${THINKING_LEVEL_VALUES.join(', ')}` }, 400);
-          }
-          const { globalDefault } = parsed.data;
-          try {
-            const settings = loadSettings(options.settingsPath);
-            settings.preferences.thinkingLevel = globalDefault;
-            saveSettings(settings, options.settingsPath);
-            return c.json({ ok: true, globalDefault: settings.preferences.thinkingLevel });
+            return c.json({ ok: true, modelId: null, thinkingLevel: null });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

@@ -18,7 +18,7 @@ export class FactorySourceControlConflictError extends Error {}
  * uninitialized storage domain means "no default", never a failed run.
  */
 export async function resolveFactoryDefaultModelId(
-  projects: FactoryProjectsStorage | undefined,
+  projects: Pick<FactoryProjectsStorage, 'getById'> | undefined,
   factoryProjectId: string | undefined,
 ): Promise<string | undefined> {
   if (!projects || !factoryProjectId) return undefined;

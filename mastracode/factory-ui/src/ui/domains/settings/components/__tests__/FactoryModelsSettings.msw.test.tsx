@@ -12,9 +12,6 @@ describe('FactoryModelsSettings', () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [] })),
       http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
-      http.get(`${TEST_BASE_URL}/web/config/thinking`, () =>
-        HttpResponse.json({ globalDefault: 'off', levels: ['off'], editable: false }),
-      ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
         HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', modelScope: 'factory' } }),
       ),

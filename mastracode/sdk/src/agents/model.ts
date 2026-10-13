@@ -268,34 +268,34 @@ export interface ThinkingRequestContext {
   state?: { thinkingLevel?: unknown };
   session?: { modeId?: string };
 }
+export interface ThinkingResolutionOptions {
+  /** Ends the chain at this level instead of the shared settings file, for hosts that own their thinking default. */
+  defaultLevel?: ThinkingLevelSetting;
+}
+
 /**
  * Resolve the effective thinking level for the current request.
  *
  * Precedence:
  *   1. Session override (`state.thinkingLevel`, set via /think or the session
  *      settings panel).
- *   2. Per-mode default from settings (`models.modeThinkingDefaults[mode]`),
- *      unless the host turns mode defaults off.
- *   3. Global default (`preferences.thinkingLevel`).
+ *   2. The host's `defaultLevel`, when it passes one. Settings are not read.
+ *   3. Per-mode default from settings (`models.modeThinkingDefaults[mode]`).
+ *   4. Global default (`preferences.thinkingLevel`).
  *
  * Resolved per-request (not seeded at session start) so configuration changes
  * apply to the next request of every session — including automated
  * (rule-driven) Factory runs that nobody ever opens interactively.
  */
-
-export interface ThinkingResolutionOptions {
-  applyModeDefaults?: boolean;
-}
-
 export function resolveRequestThinkingLevel(
   agentControllerContext: ThinkingRequestContext | undefined,
   settingsPath?: string,
-  { applyModeDefaults = true }: ThinkingResolutionOptions = {},
+  { defaultLevel }: ThinkingResolutionOptions = {},
 ): ThinkingLevelSetting {
   const override = agentControllerContext?.state?.thinkingLevel;
   if (isThinkingLevelSetting(override)) return override;
-  const modeId = applyModeDefaults ? agentControllerContext?.session?.modeId : undefined;
-  return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
+  if (defaultLevel) return defaultLevel;
+  return resolveDefaultThinkingLevel(loadSettings(settingsPath), agentControllerContext?.session?.modeId).level;
 }
 
 /**

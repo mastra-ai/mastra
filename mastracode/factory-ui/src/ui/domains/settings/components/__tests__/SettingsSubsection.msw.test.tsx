@@ -35,7 +35,7 @@ describe('SettingsSubsection', () => {
 
   describe('given a deployment-scoped section', () => {
     it('says the settings reach past this factory', () => {
-      render(<SettingsSubsection scope="deployment" title="Thinking defaults" />);
+      render(<SettingsSubsection scope="deployment" title="Factory skills" />);
 
       expect(screen.getByText('Deployment-wide')).toBeInTheDocument();
       expect(screen.queryByText('Factory-wide')).not.toBeInTheDocument();

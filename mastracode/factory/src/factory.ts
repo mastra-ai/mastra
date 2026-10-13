@@ -676,7 +676,6 @@ export class MastraFactory {
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     const knowledgeEnabled =
       this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
-    const deploymentOrganizationId = process.env.MASTRACODE_DEPLOYMENT_ORGANIZATION_ID?.trim() || undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
@@ -1307,7 +1306,6 @@ export class MastraFactory {
             intakeReady,
             factoryReady,
             knowledgeEnabled,
-            deploymentOrganizationId,
             deploymentModelProviders,
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
@@ -1478,14 +1476,15 @@ export class MastraFactory {
       { blocking: true },
     );
 
-    // Personal default models seed interactive user sessions only. Active Factory
-    // run bindings are excluded and continue to use the project default model.
+    // Default pairs seed new interactive user sessions only. Active Factory run
+    // bindings are excluded and follow the project default on each run start.
     prepared.base.controller.onSessionCreated(
       session =>
         hydrateSessionDefaultModel(session, {
           sourceControl: { sessions: sourceControlSessions },
           workItems: workItemsStorage,
           modelDefaults: modelDefaultsStorage,
+          projects: factoryProjectsStorage,
         }),
       { blocking: true },
     );

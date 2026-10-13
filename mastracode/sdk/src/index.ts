@@ -314,7 +314,7 @@ export interface MastraCodeConfig {
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
   settingsPath?: string;
-  /** How request-time thinking defaults resolve. Hosts that hide modes pass `{ applyModeDefaults: false }`. */
+  /** How request-time thinking defaults resolve. A host that owns its default passes `{ defaultLevel }`. */
   thinkingResolution?: ThinkingResolutionOptions;
   /** Initial state overrides (yolo, thinkingLevel, etc.) */
   initialState?: Partial<MastraCodeState>;
