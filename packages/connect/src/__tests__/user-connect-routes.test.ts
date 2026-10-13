@@ -575,6 +575,12 @@ describe('validateReturnTo', () => {
     expect(validateReturnTo('/done', [])).toEqual({ ok: true, value: '/done' });
     expect(validateReturnTo('//evil.test', [])).toEqual({ ok: false });
     expect(validateReturnTo('/\\evil.test', [])).toEqual({ ok: false });
+    // The WHATWG parser strips ASCII tab/newline before parsing, so these
+    // decode to protocol-relative URLs despite passing a raw prefix check.
+    expect(validateReturnTo('/\t/evil.test', [])).toEqual({ ok: false });
+    expect(validateReturnTo('/\n\\evil.test', [])).toEqual({ ok: false });
+    expect(validateReturnTo('/\r/evil.test', [])).toEqual({ ok: false });
+    expect(validateReturnTo('/done?next=1#frag', [])).toEqual({ ok: true, value: '/done?next=1#frag' });
     expect(validateReturnTo('https://evil.test/x', [])).toEqual({ ok: false });
     expect(validateReturnTo('javascript:alert(1)', [])).toEqual({ ok: false });
     expect(validateReturnTo('https://user:pass@app.example.com/x', ['https://app.example.com'])).toEqual({

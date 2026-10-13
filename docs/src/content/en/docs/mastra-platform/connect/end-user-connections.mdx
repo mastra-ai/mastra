@@ -7,7 +7,7 @@ packages:
 
 # End-user connections
 
-By default, connections belong to your project: every agent request uses the same Linear workspace or Slack account. End-user connections add a second kind of connection, owned by one user of your application. Each connection carries a resource ID — an opaque key you choose for that user — and the platform only serves it to requests asserting the same key.
+By default, connections belong to your project: every agent request uses the same Linear workspace or Slack account. End-user connections add a second kind of connection, owned by one user of your application. Each connection carries a resource ID, an opaque key you choose for that user, and the platform only serves it to requests asserting the same key.
 
 With end-user connections, an agent resolves your project's shared connections plus the calling user's own, so "create an issue" lands in that user's Linear workspace rather than yours.
 
@@ -56,7 +56,7 @@ export const assistant = new Agent({
 })
 ```
 
-Calling `tools()` per request is cheap: identical options share one internal state, with snapshots cached per resource ID. When the resource ID resolves to `undefined`, the agent gets global connections only — the same behavior as before.
+Calling `tools()` per request is cheap: identical options share one internal state, with snapshots cached per resource ID. When the resource ID resolves to `undefined`, the agent gets global connections only, the same behavior as before.
 
 If both a global and a user connection exist for one provider, the agent sees both through the usual [multi-connection handling](/docs/mastra-platform/connect/tools#choose-between-connections).
 
@@ -87,7 +87,7 @@ export const mastra = new Mastra({
 })
 ```
 
-The routes do no authentication of their own. Your server's auth pipeline authenticates each request, and the routes are gated on the resource ID it derives — a request without one gets a 401. All platform calls happen server-side with your platform token; the browser never sees it.
+The routes do no authentication of their own. Your server's auth pipeline authenticates each request, and the routes are gated on the resource ID it derives, so a request without one gets a 401. All platform calls happen server-side with your platform token. The browser never sees it.
 
 To start a connection, send the user to the hosted page:
 
@@ -97,7 +97,7 @@ GET /connect/linear?returnTo=/settings/integrations
 
 The page shows a Connect button, opens the provider's authorization flow in a popup, polls until the connection is active, and then redirects back to `returnTo` with `connectionId` and `status` query parameters. `returnTo` accepts relative paths only, unless you allowlist origins with `returnTo.allowedOrigins`.
 
-Prefer your own UI? Call the JSON routes directly — see the [route reference](/reference/connect/user-connect-routes#routes).
+Prefer your own UI? Call the JSON routes directly. See the [route reference](/reference/connect/user-connect-routes#routes).
 
 ### The authorization link never leaves the server
 

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { PROVIDERS, type ProviderRegistration, type ProxyProviderRegistration } from '../registry.js';
-import { __clearSharedToolsStateForTests, tools as connect } from '../tools.js';
+import { __clearSharedToolsStateForTests, __sharedToolsStateCountForTests, tools as connect } from '../tools.js';
 import type { ToolsOptions as ConnectOptions } from '../tools.js';
 
 // Test-only seam: the shipped barrel exports a readonly view; tests mutate the
@@ -158,6 +158,22 @@ describe('resource-scoped resolution', () => {
     // A different resource key fetches its own snapshot through the same state.
     await connect({ ...platform.options, resourceId: 'user-b' })();
     expect(platform.fetchMock.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+  });
+
+  it('bounds the shared-state registry: distinct option sets evict least recently acquired', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const platform = scopedPlatform(() => [makeConnection()]);
+
+    // Each distinct access token mints its own state (e.g. per-tenant tokens).
+    for (let i = 0; i < 40; i++) {
+      connect({ ...platform.options, client: { ...platform.options.client, accessToken: `token-${i}` } });
+    }
+    expect(__sharedToolsStateCountForTests()).toBeLessThanOrEqual(32);
+
+    // An evicted state is not fatal: the same options re-acquire a fresh state.
+    const revived = connect({ ...platform.options, client: { ...platform.options.client, accessToken: 'token-0' } });
+    await revived();
+    expect(platform.connectionLists().length).toBeGreaterThan(0);
   });
 
   it('derives the resource key per resolution from a callback', async () => {

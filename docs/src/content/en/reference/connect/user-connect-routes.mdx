@@ -26,7 +26,7 @@ export const mastra = new Mastra({
 
 Returns: `ApiRoute[]` for the server's `apiRoutes` option.
 
-The routes do no authentication of their own: the server's auth pipeline authenticates each request, and `mapUserToResourceId` establishes the resource ID the routes are gated on. A request without a resolvable resource ID is rejected with a 401 on every route. All platform calls happen server-side with your platform token; the browser only ever talks to these routes.
+The routes do no authentication of their own: the server's auth pipeline authenticates each request, and `mapUserToResourceId` establishes the resource ID the routes are gated on. A request without a resolvable resource ID is rejected with a 401 on every route. All platform calls happen server-side with your platform token. The browser only ever talks to these routes.
 
 ## Parameters
 
