@@ -21,8 +21,9 @@ import type {
   ScoreRecord,
   SpanRecord,
 } from '@mastra/core/storage';
-import { buildStoredPreview, computeTraceStatus, EntityType } from '@mastra/core/storage';
+import { computeTraceStatus, EntityType } from '@mastra/core/storage';
 import { toPgText } from '../../../db/sanitize-json';
+import { storedPreview as buildStoredPreview, readPreview } from './preview-compat';
 import { coerceFeedbackReviewStatus } from './review-status';
 import { encodeJsonbValue } from './sql';
 
@@ -241,13 +242,13 @@ function commonContextToRow(record: CommonContextWritable): Record<string, unkno
 
 /**
  * Serialize a span payload for its jsonb column and build its stored preview from the same value.
- * Upstream previews win (cut to the shared format). The preview goes into a `text` column, which
+ * Nonblank upstream previews win (trimmed without a length cap). The preview goes into a `text` column, which
  * rejects NUL, so it gets the same repair `toPgJson` applies to the payload.
  */
 function spanPayload(value: unknown, upstream: string | null | undefined) {
   const encoded = encodeJsonbValue(value);
   const preview = buildStoredPreview(upstream, value, encoded?.json);
-  return { encoded, preview: toPgText(preview) };
+  return { encoded, preview: preview === null ? null : toPgText(preview) };
 }
 
 export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown> {
@@ -363,7 +364,7 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
 
 /** A stored preview as lists return it: `''` (nothing to preview) and NULL become null. */
 function listPreview(value: unknown): string | null {
-  return typeof value === 'string' && value !== '' ? value : null;
+  return readPreview(value);
 }
 
 /**

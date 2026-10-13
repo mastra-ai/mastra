@@ -620,7 +620,7 @@ describe('Postgres advanced trace query', () => {
     });
     expect(response.traces[0]).not.toHaveProperty('input');
     expect(response.traces[0]).not.toHaveProperty('cursorId');
-    // Every preview was stored, so no payload is read.
+    // Empty output/error previews are intentional and do not trigger fallback.
     expect(any).toHaveBeenCalledTimes(1);
   });
 
@@ -646,8 +646,12 @@ describe('Postgres advanced trace query', () => {
     expect(response.page.next).toBeNull();
   });
 
-  it('reads payloads only for roots whose stored previews are NULL', async () => {
-    const stored = traceRow('trace-new', '2026-01-01T12:00:00.000Z');
+  it('reads payloads only for missing previews', async () => {
+    const stored = {
+      ...traceRow('trace-new', '2026-01-01T12:00:00.000Z'),
+      outputPreview: 'output',
+      errorPreview: 'error',
+    };
     const old = {
       ...traceRow('trace-old', '2026-01-01T11:00:00.000Z'),
       inputPreview: null,
@@ -667,10 +671,11 @@ describe('Postgres advanced trace query', () => {
 
     expect(any).toHaveBeenCalledTimes(2);
     const [text, values] = any.mock.calls[1]!;
-    expect(text).toContain('CASE WHEN e."inputPreview" IS NULL THEN e."input" END');
+    expect(text).toContain('e."input" AS "input"');
+    expect(text).toContain('NULL AS "output"');
     expect(values).toEqual([['trace-old'], ['7']]);
     expect(response.traces.map(trace => [trace.inputPreview, trace.outputPreview, trace.errorPreview])).toEqual([
-      ['Help with my order', null, null],
+      ['Help with my order', 'output', 'error'],
       ['old question', 'stored output', null],
     ]);
   });

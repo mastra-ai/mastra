@@ -464,7 +464,7 @@ export function extractBranchSpans<
 // Lightweight Span & Trace Schemas (for timeline rendering)
 // ============================================================================
 
-/** Maximum length of a stored or rendered preview, before the `…` a cut preview ends with. */
+/** Maximum generated preview length, before the trailing `…`. Supplied previews have no cap. */
 export const PREVIEW_MAX_LENGTH = 100;
 
 /** @deprecated Use {@link PREVIEW_MAX_LENGTH}. */
@@ -583,15 +583,15 @@ export function buildPreviewFromJson(json: string | null | undefined): string | 
 
 /**
  * The preview a store writes for one payload: an upstream preview when the span record carries
- * one (cut to the same format), otherwise one built from the stored value. `''` means "nothing to
- * preview"; stores keep `NULL` for rows written before they stored previews.
+ * a nonblank one (trimmed without a length cap), otherwise one built from the payload.
+ * Generated previews are bounded; `''` means there is nothing to preview.
  */
 export function buildStoredPreview(
   upstream: string | null | undefined,
   value: unknown,
   serialized?: string | null,
 ): string {
-  return (typeof upstream === 'string' ? buildPreview(upstream) : buildPreview(value, serialized)) ?? '';
+  return upstream?.trim() || buildPreview(value, serialized) || '';
 }
 
 /**
@@ -603,7 +603,7 @@ export function buildStoredPreview(
  */
 export function isPreviewTruncated(preview: string | null | undefined): boolean {
   if (!preview) return false;
-  return preview.length > PREVIEW_MAX_LENGTH || (preview.length === PREVIEW_MAX_LENGTH && preview.endsWith('…'));
+  return preview.endsWith('…') && (preview.length === PREVIEW_MAX_LENGTH || preview.length === PREVIEW_MAX_LENGTH + 1);
 }
 
 /**
@@ -633,8 +633,7 @@ export function buildInputPreview(input: unknown, _maxLength = PREVIEW_MAX_LENGT
 
 /** Stored preview when the record carries one (`''` means none), else one built from the value. */
 function lightPreview(stored: string | null | undefined, value: unknown): string | null {
-  if (typeof stored === 'string') return stored || null;
-  return buildPreview(value);
+  return stored == null ? buildPreview(value) : stored.trim() || null;
 }
 
 /**

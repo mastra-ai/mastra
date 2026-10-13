@@ -19,7 +19,7 @@ import {
   traceQueryTimeRangeSchema,
 } from './trace-query';
 import type { TraceQueryIssue, TraceQueryPlanOptions, TrustedTraceQueryScalarPredicate } from './trace-query';
-import { isPreviewTruncated, PREVIEW_MAX_LENGTH } from './tracing';
+import { isPreviewTruncated } from './tracing';
 
 /**
  * @deprecated Span query previews use the shared preview format (`buildPreview`), at most
@@ -84,10 +84,8 @@ export const spanQueryCostSchema = z.discriminatedUnion('state', [
   z.object({ state: z.literal('unavailable') }).strict(),
 ]);
 
-const previewSchema = z
-  .string()
-  .refine(value => [...value].length <= PREVIEW_MAX_LENGTH + 1, 'Preview exceeds its character limit')
-  .nullable();
+// Supplied previews are not length-limited; only automatic generation is bounded.
+const previewSchema = z.string().nullable();
 
 export const spanQueryRowSchema = spanQueryIdentitySchema
   .extend({

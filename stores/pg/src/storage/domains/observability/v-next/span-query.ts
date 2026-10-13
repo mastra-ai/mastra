@@ -8,6 +8,7 @@ import type {
 } from '@mastra/core/storage';
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
 import { compileSpanQueryPredicate, runWithPostgresTraceQueryTimeout } from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
@@ -129,7 +130,7 @@ const PREVIEW_PAYLOADS = [
  */
 function toSpanQueryPayload(row: Record<string, unknown>): SpanQueryPayload {
   const [inputPreview, outputPreview, errorPreview] = PREVIEW_PAYLOADS.map(([preview, payload]) =>
-    typeof row[preview] === 'string' ? row[preview] : coreStorage.buildPreview(row[payload]),
+    readPreview(row[preview], row[payload]),
   );
   return {
     organizationId: (row.organizationId as string | null) ?? null,
@@ -181,7 +182,7 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
       // preview columns existed), so new rows never read their payloads here.
       const payloadRows = await tx.any<Record<string, unknown>>(
         `SELECT ${identities},
-      ${PREVIEW_PAYLOADS.map(([preview, payload]) => `"${preview}", CASE WHEN "${preview}" IS NULL THEN "${payload}" END AS "${payload}"`).join(',\n      ')}
+      ${PREVIEW_PAYLOADS.map(([preview, payload]) => `"${preview}", CASE WHEN ${missingPreviewSql(`"${preview}"`)} THEN "${payload}" END AS "${payload}"`).join(',\n      ')}
       FROM ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} WHERE ${payloadWhere}`,
         payloadValues,
       );
@@ -200,7 +201,7 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
       );
       if (metrics.length > coreStorage.SPAN_QUERY_MAX_COST_METRICS)
         throw new coreStorage.TraceQueryResourceLimitError();
-      return coreStorage.buildSpanQueryResponse(plan, selected, payloads, metrics);
+      return buildSpanQueryResponse(plan, selected, payloads, metrics);
     },
     { repeatableRead: true },
   );

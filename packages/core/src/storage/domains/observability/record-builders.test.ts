@@ -1,9 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import type { FeedbackEvent, LogEvent, MetricEvent, ScoreEvent } from '../../../observability';
+import type { AnyExportedSpan, FeedbackEvent, LogEvent, MetricEvent, ScoreEvent } from '../../../observability';
 import { EntityType } from '../../../observability/types/tracing';
-import { buildFeedbackRecord, buildLogRecord, buildMetricRecord, buildScoreRecord } from './record-builders';
+import {
+  buildCreateSpanRecord,
+  buildUpdateSpanRecord,
+  buildFeedbackRecord,
+  buildLogRecord,
+  buildMetricRecord,
+  buildScoreRecord,
+} from './record-builders';
 
 describe('record-builders', () => {
+  it('preserves exporter-supplied previews for create and update records', () => {
+    const previews = { inputPreview: ' custom ', outputPreview: '', errorPreview: null };
+    const span = { id: 'span', traceId: 'trace', ...previews } as AnyExportedSpan;
+    expect(buildCreateSpanRecord(span)).toMatchObject(previews);
+    expect(buildUpdateSpanRecord(span)).toMatchObject(previews);
+  });
   describe('buildMetricRecord', () => {
     it('maps shared correlation fields and canonical cost fields', () => {
       const timestamp = new Date('2026-01-01T00:00:00.000Z');

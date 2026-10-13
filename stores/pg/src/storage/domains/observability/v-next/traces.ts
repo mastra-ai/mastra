@@ -11,7 +11,6 @@
 
 import {
   BRANCH_SPAN_TYPES,
-  buildPreview,
   listBranchesArgsSchema,
   listTracesArgsSchema,
   TraceStatus,
@@ -39,6 +38,7 @@ import {
   encodeDeltaCursor,
   readSafeXactHorizon,
 } from './polling';
+import { needsPreview, readPreview } from './preview-compat';
 import { SPAN_LIGHT_SELECT_COLUMN_NAMES } from './signal-schema';
 import { SPAN_SELECT_COLUMNS } from './sql';
 
@@ -289,11 +289,11 @@ const PREVIEW_PAYLOADS = [
  * differ in key order from the one the writer would have stored. Acceptable for old rows.
  */
 async function fillMissingPreviews(client: DbClient, span: string, rows: Record<string, any>[]): Promise<void> {
-  const missing = rows.filter(row => PREVIEW_PAYLOADS.some(([preview]) => row[preview] == null));
+  const missing = rows.filter(row => PREVIEW_PAYLOADS.some(([preview]) => needsPreview(row[preview])));
   if (!missing.length) return;
   const payloads = await client.manyOrNone<Record<string, unknown>>(
     `SELECT e."cursorId"::text AS "cursorId",
-      ${PREVIEW_PAYLOADS.map(([preview, payload]) => `CASE WHEN e."${preview}" IS NULL THEN e."${payload}" END AS "${payload}"`).join(',\n      ')}
+      ${PREVIEW_PAYLOADS.map(([preview, payload]) => `${missing.some(row => needsPreview(row[preview])) ? `e."${payload}"` : 'NULL'} AS "${payload}"`).join(',\n      ')}
      FROM ${span} e
      WHERE (e."traceId", e."cursorId") IN (SELECT * FROM unnest($1::text[], $2::bigint[]))`,
     [missing.map(row => String(row.traceId)), missing.map(row => String(row.cursorId))],
@@ -302,7 +302,7 @@ async function fillMissingPreviews(client: DbClient, span: string, rows: Record<
   for (const row of missing) {
     const payload = byCursor.get(String(row.cursorId));
     for (const [preview, column] of PREVIEW_PAYLOADS) {
-      if (row[preview] == null) row[preview] = buildPreview(payload?.[column]) ?? '';
+      if (needsPreview(row[preview])) row[preview] = readPreview(row[preview], payload?.[column]);
     }
   }
 }

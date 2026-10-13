@@ -392,10 +392,11 @@ describe('buildPreviewFromJson', () => {
 });
 
 describe('buildStoredPreview', () => {
-  it('prefers an upstream preview, cut to the same format', () => {
+  it('trims supplied previews without limiting them and regenerates blanks', () => {
     expect(buildStoredPreview(' upstream ', { text: 'built' })).toBe('upstream');
-    expect(buildStoredPreview('u'.repeat(300), 'built')).toBe(`${'u'.repeat(PREVIEW_MAX_LENGTH)}…`);
-    expect(buildStoredPreview('', 'built')).toBe('');
+    expect(buildStoredPreview('u'.repeat(300), 'built')).toBe('u'.repeat(300));
+    expect(buildStoredPreview('', 'built')).toBe('built');
+    expect(buildStoredPreview(' \n\t ', 'built')).toBe('built');
   });
 
   it('builds from the stored value otherwise, with an empty string for nothing to preview', () => {

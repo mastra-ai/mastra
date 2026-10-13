@@ -131,7 +131,7 @@ export function createPreviewTests(getStorage: () => ObservabilityStorage, optio
       }
     });
 
-    it('prefers upstream previews, cut to the same format', async () => {
+    it('trims upstream previews without limiting them and regenerates blank previews', async () => {
       await getStorage().batchCreateSpans({
         records: [
           root('trace-upstream', { inputPreview: `  ${'u'.repeat(250)}`, outputPreview: 'upstream output' }),
@@ -141,7 +141,7 @@ export function createPreviewTests(getStorage: () => ObservabilityStorage, optio
       await options.afterWrite?.();
 
       const rootPreviews = {
-        inputPreview: `${'u'.repeat(PREVIEW_MAX_LENGTH)}…`,
+        inputPreview: 'u'.repeat(250),
         outputPreview: 'upstream output',
         errorPreview: null,
       };
@@ -149,8 +149,8 @@ export function createPreviewTests(getStorage: () => ObservabilityStorage, optio
       expect(await listLight()).toEqual({ 'trace-upstream': rootPreviews });
       if (options.spanQuery !== false) {
         expect(await listSpans()).toEqual({
-          'trace-upstream-root': { ...rootPreviews, truncated: [true, false, false] },
-          'trace-upstream-child': { ...expected.child, errorPreview: null, truncated: [true, false, false] },
+          'trace-upstream-root': { ...rootPreviews, truncated: [false, false, false] },
+          'trace-upstream-child': { ...expected.child, truncated: [true, false, false] },
         });
       }
     });

@@ -29,6 +29,7 @@ import {
   encodeDeltaCursor,
   readSafeXactHorizon,
 } from './polling';
+import { needsPreview, readPreview } from './preview-compat';
 import { latestScorePredicate } from './scores';
 
 type SqlFragment = { sql: string; values: unknown[] };
@@ -1007,12 +1008,12 @@ async function fillMissingTracePreviews(
   rows: Record<string, unknown>[],
   deadline: number,
 ): Promise<void> {
-  const missing = rows.filter(row => PREVIEW_PAYLOADS.some(([preview]) => row[preview] == null));
+  const missing = rows.filter(row => PREVIEW_PAYLOADS.some(([preview]) => needsPreview(row[preview])));
   if (!missing.length) return;
   await setRemainingTimeout(transaction, deadline);
   const payloads = await transaction.any<Record<string, unknown>>(
     `SELECT e."cursorId"::text AS "cursorId",
-      ${PREVIEW_PAYLOADS.map(([preview, payload]) => `CASE WHEN e."${preview}" IS NULL THEN e."${payload}" END AS "${payload}"`).join(',\n      ')}
+      ${PREVIEW_PAYLOADS.map(([preview, payload]) => `${missing.some(row => needsPreview(row[preview])) ? `e."${payload}"` : 'NULL'} AS "${payload}"`).join(',\n      ')}
     FROM ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} e
     WHERE (e."traceId", e."cursorId") IN (SELECT * FROM unnest($1::text[], $2::bigint[]))`,
     [missing.map(row => String(row.traceId)), missing.map(row => String(row.cursorId))],
@@ -1021,7 +1022,7 @@ async function fillMissingTracePreviews(
   for (const row of missing) {
     const payload = byCursor.get(String(row.cursorId));
     for (const [preview, column] of PREVIEW_PAYLOADS) {
-      if (row[preview] == null) row[preview] = coreStorage.buildPreview(payload?.[column]) ?? '';
+      if (needsPreview(row[preview])) row[preview] = readPreview(row[preview], payload?.[column]);
     }
   }
 }
@@ -1035,9 +1036,9 @@ function traceRowToResult(row: Record<string, unknown>) {
     parentSpanId: row.parentSpanId ?? null,
     createdAt: asIsoTimestamp(row.startedAt),
     metadata: row.metadata ?? null,
-    inputPreview: row.inputPreview ? String(row.inputPreview) : null,
-    outputPreview: row.outputPreview ? String(row.outputPreview) : null,
-    errorPreview: row.errorPreview ? String(row.errorPreview) : null,
+    inputPreview: readPreview(row.inputPreview),
+    outputPreview: readPreview(row.outputPreview),
+    errorPreview: readPreview(row.errorPreview),
     threadId: row.threadId == null ? null : String(row.threadId),
     resourceId: row.resourceId == null ? null : String(row.resourceId),
     startedAt: asIsoTimestamp(row.startedAt),

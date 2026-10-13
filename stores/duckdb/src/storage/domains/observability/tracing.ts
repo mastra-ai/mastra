@@ -21,7 +21,6 @@ import type {
 } from '@mastra/core/storage';
 import {
   BRANCH_SPAN_TYPES,
-  buildStoredPreview,
   computeTraceStatus,
   listBranchesArgsSchema,
   listTracesArgsSchema,
@@ -44,6 +43,7 @@ import {
   previewFromPayload,
 } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled, encodeDeltaCursor, validateCursorId } from './polling';
+import { storedPreview as buildStoredPreview, needsPreview } from './preview-compat';
 
 // ============================================================================
 // Columns & Reconstruction
@@ -114,18 +114,13 @@ const PREVIEW_PAYLOADS = [
 ] as const;
 
 /**
- * Reconstructs a stored preview the way {@link argMaxNonNull} reconstructs its payload: the latest
- * event row with something to preview wins, else `''`. Every event row written since previews were
- * stored carries all three (`''` for a payload the row does not carry or that has nothing to
- * preview), so a NULL result means every row of the span predates them; readers build those from
- * the payload. The payload columns are never read here.
- *
- * The one case this differs from the payload's own row: a newer row whose payload previews as blank
- * (e.g. whitespace) next to an older row with text. The older row's preview shows then.
+ * Select the preview from the latest event carrying its payload (or an explicit preview).
+ * Wrapping the preview preserves NULL on that event instead of reviving an older preview.
+ * Payload presence must be checked here to distinguish blank content from a payload-less event.
  */
 const RECONSTRUCT_PREVIEWS_SQL = PREVIEW_PAYLOADS.map(
-  ([preview]) =>
-    `coalesce(arg_max(${preview}, timestamp) FILTER (WHERE ${preview} <> ''), max(${preview})) as ${preview}`,
+  ([preview, payload]) =>
+    `(coalesce(arg_max(struct_pack(value := ${preview}), timestamp) FILTER (WHERE (${payload} IS NOT NULL AND CAST(${payload} AS VARCHAR) <> '${JSON_NULL_PLACEHOLDER}') OR ${preview} <> ''), arg_max(struct_pack(value := ${preview}), timestamp))).value as ${preview}`,
 ).join(',\n    ');
 
 const SPAN_RECONSTRUCT_SELECT = `
@@ -354,7 +349,7 @@ function rowToLightSpanRecord(row: Record<string, unknown>): LightSpanRecord {
  * spans are on the page.
  */
 async function fillMissingReconstructedPreviews(db: DuckDBConnection, rows: Record<string, unknown>[]): Promise<void> {
-  const flagged = rows.filter(row => PREVIEW_PAYLOADS.some(([preview]) => row[preview] == null));
+  const flagged = rows.filter(row => PREVIEW_PAYLOADS.some(([preview]) => needsPreview(row[preview])));
   if (flagged.length === 0) return;
 
   const traceIds = [...new Set(flagged.map(row => row.traceId as string))];
@@ -370,7 +365,7 @@ async function fillMissingReconstructedPreviews(db: DuckDBConnection, rows: Reco
   for (const row of flagged) {
     const payload = byKey.get(`${row.traceId}\u0000${row.spanId}`);
     for (const [preview, column] of PREVIEW_PAYLOADS) {
-      if (row[preview] == null) row[preview] = previewFromPayload(payload?.[column] ?? null);
+      if (needsPreview(row[preview])) row[preview] = previewFromPayload(payload?.[column] ?? null);
     }
   }
 }
@@ -667,7 +662,7 @@ function previewOf(
   carried: boolean,
   value: unknown,
   upstream: string | null | undefined,
-): { json: string | null; preview: string } {
+): { json: string | null; preview: string | null } {
   if (!carried) return { json: null, preview: '' };
   const json = serializePayload(value);
   return { json, preview: buildStoredPreview(upstream, json === null ? null : value, json) };

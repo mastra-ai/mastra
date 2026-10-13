@@ -1,5 +1,5 @@
-import { buildPreview, buildPreviewFromJson } from '@mastra/core/storage';
 import { DuckDBConnection } from '../../db/index';
+import { readPreview } from './preview-compat';
 
 /** Shorthand for {@link DuckDBConnection.sqlValue}. */
 export const v = DuckDBConnection.sqlValue;
@@ -98,10 +98,10 @@ export function parseJsonArray(value: unknown): unknown[] | null {
  * would have stored for the same value; an already decoded value goes through `buildPreview`.
  */
 export function previewFromPayload(value: unknown): string | null {
-  return typeof value === 'string' ? buildPreviewFromJson(value) : buildPreview(value);
+  return readPreview(null, value, typeof value === 'string');
 }
 
 /** A stored preview as the API returns it: `''` (nothing to preview) and NULL both become null. */
 export function apiPreview(value: unknown): string | null {
-  return typeof value === 'string' && value !== '' ? value : null;
+  return readPreview(value);
 }

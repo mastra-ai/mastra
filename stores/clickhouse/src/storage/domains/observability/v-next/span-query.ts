@@ -10,6 +10,7 @@ import type {
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
 import { TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
+import { buildSpanQueryResponse } from './preview-compat';
 import { needsPreviewPayloads, PREVIEW_COLUMNS, resolveStoredPreviews } from './previews';
 import { compileSpanQueryPredicate, runWithClickHouseTraceQueryTimeout } from './trace-query';
 
@@ -201,7 +202,7 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
     const { inputPreview: _input, outputPreview: _output, errorPreview: _error, ...metadata } = row;
     return [{ ...metadata, ...identity, durationMs: Number(row.durationMs) }];
   });
-  const result = coreStorage.buildSpanQueryResponse(plan, hydrated, payloads, metrics);
+  const result = buildSpanQueryResponse(plan, hydrated, payloads, metrics);
   const last = page.at(-1)!;
   // Cursor follows the selected page even if a concurrent deletion removed a hydrated row.
   result.page.next =

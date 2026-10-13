@@ -287,7 +287,6 @@ describe('bounded result contract', () => {
     { endedAt: '2026-10-01T11:59:59Z' },
     { durationMs: 999 },
     { inputPreview: null, inputTruncated: true },
-    { outputPreview: fourByteCharacter.repeat(102) },
     { errorPreview: null, errorTruncated: true },
     { input: 'full-payload-is-not-a-list-field' },
   ])('rejects invalid result states: %j', overrides => {
@@ -298,11 +297,16 @@ describe('bounded result contract', () => {
     [null, null, false],
     ['', null, false],
     ['short preview', 'short preview', false],
+    ['x'.repeat(500), 'x'.repeat(500), false],
     ['x'.repeat(100), 'x'.repeat(100), false],
     [`${'x'.repeat(100)}…`, `${'x'.repeat(100)}…`, true],
     [`${'x'.repeat(99)}…`, `${'x'.repeat(99)}…`, true],
   ])('maps a stored preview to its value and truncation state %#', (input, value, truncated) => {
     expect(createSpanQueryPreview(input)).toEqual({ value, truncated });
+  });
+
+  it('accepts custom previews without a length limit', () => {
+    expect(spanQueryRowSchema.safeParse({ ...row, outputPreview: fourByteCharacter.repeat(500) }).success).toBe(true);
   });
 
   it('rejects duplicate logical rows but permits matching IDs in different trusted resources', () => {

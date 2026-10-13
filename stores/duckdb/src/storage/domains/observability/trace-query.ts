@@ -23,6 +23,7 @@ import type {
 import type { DuckDBConnection } from '../../db/index';
 import { apiPreview, parseJson, payloadColumnSql, previewFromPayload } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
+import { needsPreview } from './preview-compat';
 
 type ParameterType = 'scalar' | 'timestamp';
 type FieldDefinition = { sql: string; parameterType: ParameterType };
@@ -882,7 +883,7 @@ const TRACE_PREVIEW_PAYLOADS = [
  */
 async function fillMissingTracePreviews(db: DuckDBConnection, rows: Record<string, unknown>[]): Promise<void> {
   const flagged = rows.filter(
-    row => row.traceId != null && TRACE_PREVIEW_PAYLOADS.some(([preview]) => row[preview] == null),
+    row => row.traceId != null && TRACE_PREVIEW_PAYLOADS.some(([preview]) => needsPreview(row[preview])),
   );
   if (flagged.length === 0) return;
 
@@ -906,7 +907,7 @@ async function fillMissingTracePreviews(db: DuckDBConnection, rows: Record<strin
   for (const row of flagged) {
     const payload = byTrace.get(String(row.traceId));
     for (const [preview, column] of TRACE_PREVIEW_PAYLOADS) {
-      if (row[preview] == null) row[preview] = previewFromPayload(payload?.[column] ?? null);
+      if (needsPreview(row[preview])) row[preview] = previewFromPayload(payload?.[column] ?? null);
     }
   }
 }

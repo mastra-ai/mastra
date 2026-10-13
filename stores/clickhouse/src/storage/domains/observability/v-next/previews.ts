@@ -5,7 +5,7 @@
  * preview. A NULL preview means the row was written before the columns existed; readers fetch the
  * payload columns for just those rows and build the same preview from them.
  */
-import { buildPreviewFromJson } from '@mastra/core/storage';
+import { needsPreview, readPreview } from './preview-compat';
 
 export const PREVIEW_COLUMNS = ['inputPreview', 'outputPreview', 'errorPreview'] as const;
 
@@ -20,7 +20,7 @@ export type StoredPreviews = Record<(typeof PREVIEW_COLUMNS)[number], string | n
 
 /** Whether a row was written before previews were stored, so it needs its payload columns. */
 export function needsPreviewPayloads(row: Record<string, unknown>): boolean {
-  return PREVIEW_COLUMNS.some(column => row[column] == null);
+  return PREVIEW_COLUMNS.some(column => needsPreview(row[column]));
 }
 
 /**
@@ -34,10 +34,7 @@ export function resolveStoredPreviews(
   const previews = {} as StoredPreviews;
   for (const column of PREVIEW_COLUMNS) {
     const stored = row[column];
-    previews[column] =
-      stored != null
-        ? String(stored) || null
-        : buildPreviewFromJson((payloads?.[PREVIEW_PAYLOAD_COLUMNS[column]] as string | null | undefined) ?? null);
+    previews[column] = readPreview(stored, payloads?.[PREVIEW_PAYLOAD_COLUMNS[column]], true);
   }
   return previews;
 }

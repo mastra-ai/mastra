@@ -19,7 +19,8 @@ import type {
   FeedbackRecord,
   CreateFeedbackRecord,
 } from '@mastra/core/storage';
-import { buildStoredPreview, computeTraceStatus, EntityType } from '@mastra/core/storage';
+import { computeTraceStatus, EntityType } from '@mastra/core/storage';
+import { storedPreview as buildStoredPreview } from './preview-compat';
 import { resolveStoredPreviews } from './previews';
 import { coerceFeedbackReviewStatus } from './review-status';
 

@@ -1,7 +1,7 @@
 import { createPreviewTests } from '@internal/storage-test-utils';
 import { SpanType } from '@mastra/core/observability';
 import type { CreateSpanRecord, ObservabilityStorage } from '@mastra/core/storage';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuckDBStore } from '../../../index';
 
 const store = new DuckDBStore({ path: ':memory:' });
@@ -95,6 +95,33 @@ describe('DuckDB stored previews', () => {
 
     const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
     expect(spans[0]!.inputPreview).toBe('upstream input');
+  });
+
+  it('keeps empty sentinels when no event carries a payload, without fetching payloads', async () => {
+    await storage.batchCreateSpans({ records: [span({ input: null, output: null, error: null })] });
+    const query = vi.spyOn(store.db, 'query');
+    try {
+      const { spans } = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+      expect(spans[0]).toMatchObject({ inputPreview: null, outputPreview: null, errorPreview: null });
+      expect(query.mock.calls.some(([sql]) => sql.includes('arg_max(input,'))).toBe(false);
+    } finally {
+      query.mockRestore();
+    }
+  });
+
+  it('does not keep an older preview when a newer payload is blank or has no stored preview', async () => {
+    await storage.batchCreateSpans({ records: [span({ endedAt: null, input: 'old input' })] });
+    await storage.batchCreateSpans({ records: [span({ input: '   ' })] });
+    const blank = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+    expect(blank.spans[0]!.inputPreview).toBeNull();
+
+    await store.db.execute(`UPDATE span_events SET input = '"new input"', inputPreview = NULL WHERE eventType = 'end'`);
+    const legacy = await storage.listTracesLight({ pagination: { page: 0, perPage: 10 } });
+    expect(legacy.spans[0]!.inputPreview).toBe('new input');
+    const stored = await store.db.query<{ inputPreview: string | null }>(
+      `SELECT inputPreview FROM span_events WHERE eventType = 'end'`,
+    );
+    expect(stored[0]!.inputPreview).toBeNull();
   });
 
   it('adds the preview columns to an existing span_events table', async () => {

@@ -8,7 +8,8 @@ import type {
 } from '@mastra/core/storage';
 import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
-import { payloadColumnSql, previewFromPayload } from './helpers';
+import { payloadColumnSql } from './helpers';
+import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
 import { compileSpanQueryPredicate } from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
@@ -153,7 +154,7 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     ${previewPayloads
       .map(
         ([preview, payload]) =>
-          `${preview}, CASE WHEN ${preview} IS NULL THEN CAST(${payload} AS VARCHAR) END AS ${preview}Payload`,
+          `${preview}, CASE WHEN ${missingPreviewSql(preview)} THEN CAST(${payload} AS VARCHAR) END AS ${preview}Payload`,
       )
       .join(',\n    ')}
     FROM span_events WHERE ${payloadWhere}`,
@@ -171,7 +172,7 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     };
     for (const [preview] of previewPayloads) {
       const stored = row[preview];
-      payload[preview] = stored ?? previewFromPayload((row as Record<string, unknown>)[`${preview}Payload`] ?? null);
+      payload[preview] = readPreview(stored, (row as Record<string, unknown>)[`${preview}Payload`], true);
     }
     return payload;
   });
@@ -186,5 +187,5 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
     metricValues,
   );
   if (metrics.length > coreStorage.SPAN_QUERY_MAX_COST_METRICS) throw new coreStorage.TraceQueryResourceLimitError();
-  return coreStorage.buildSpanQueryResponse(plan, selected, payloads, metrics);
+  return buildSpanQueryResponse(plan, selected, payloads, metrics);
 }
