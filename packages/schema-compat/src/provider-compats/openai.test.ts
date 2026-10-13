@@ -778,6 +778,9 @@ describe('OpenAISchemaCompatLayer', () => {
     it.each([
       ['azure.responses', 'my-gpt5-deployment'],
       ['azure.chat', 'gpt-4o'],
+      ['azure.chat', 'demo1-gpt'],
+      ['azure.chat', 'proto3-chat'],
+      ['azure.responses', 'solo4'],
     ])('should apply for @ai-sdk/azure models (%s, %s)', (provider, modelId) => {
       const layer = new OpenAISchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
       expect(layer.shouldApply()).toBe(true);
@@ -788,6 +791,13 @@ describe('OpenAISchemaCompatLayer', () => {
       ['azure.responses', 'deepseek-v3'],
       ['azure.chat', 'meta-llama-3-70b'],
       ['azure.responses', 'o3-mini'],
+      ['azure.chat', 'DeepSeek-V3'],
+      ['azure.chat', 'Meta-Llama-3.1-405B-Instruct'],
+      ['azure.chat', 'Llama-3.3-70B-Instruct'],
+      ['azure.chat', 'Mistral-Large-2411'],
+      ['azure.chat', 'Phi-4'],
+      ['azure.chat', 'grok-3'],
+      ['azure.chat', 'Cohere-command-r-plus'],
     ])('should not apply for @ai-sdk/azure models owned by another layer (%s, %s)', (provider, modelId) => {
       const layer = new OpenAISchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
       expect(layer.shouldApply()).toBe(false);

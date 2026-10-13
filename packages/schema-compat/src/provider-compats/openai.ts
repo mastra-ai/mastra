@@ -108,7 +108,8 @@ export function isOpenAICompatibleModel(model: { provider?: string; modelId?: st
   if (provider.includes('openai') || modelId.includes('openai')) return true;
   // @ai-sdk/azure reports `azure.responses` / `azure.chat`, and deployment names rarely contain "openai".
   // Model families with their own layer must still reach it, since the first applicable layer wins.
-  return provider.startsWith('azure.') && !/claude|deepseek|meta/.test(modelId);
+  // Azure catalog IDs are mixed case (e.g. `DeepSeek-V3`, `Phi-4`), so match case-insensitively.
+  return provider.startsWith('azure.') && !/claude|deepseek|meta|llama|mistral|phi|grok|cohere/i.test(modelId);
 }
 
 export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
@@ -117,11 +118,9 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   }
 
   isReasoningModel(): boolean {
-    // there isn't a good way to automatically detect reasoning models besides doing this.
-    // in the future when o5 is released this compat wont apply and we'll want to come back and update this class + our tests
-    const modelId = this.getModel().modelId;
-    if (!modelId) return false;
-    return modelId.includes(`o3`) || modelId.includes(`o4`) || modelId.includes(`o1`);
+    // Match o-series only as a standalone token, so Azure deployment names like `my-o3-deployment` match
+    // but `demo1-gpt` or `proto3-chat` do not.
+    return /(^|[-_./:])o[1-9](?=$|[-_.:])/i.test(this.getModel().modelId ?? '');
   }
 
   shouldApply(): boolean {
