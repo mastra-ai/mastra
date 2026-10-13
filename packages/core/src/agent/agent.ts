@@ -11776,8 +11776,7 @@ export class Agent<
       versions?: VersionOverrides;
     },
   >(options: OPTIONS): Promise<{ agent: Agent<any, any, any, any>; options: OPTIONS }> {
-    const callerContext = options.requestContext ?? new RequestContext();
-    const requestContext = new RequestContext<unknown>(callerContext.entries());
+    const requestContext = options.requestContext ?? new RequestContext();
     const inheritedDelegationPins = requestContext.get(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY) === true;
     requestContext.delete(MASTRA_AGENT_VERSION_PINS_DELEGATED_KEY);
 
