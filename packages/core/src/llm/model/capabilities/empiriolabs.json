@@ -1,7 +1,6 @@
 {
   "attachment": [
     "deepseek-v4-1-flash",
-    "fugu-max",
     "fugu-ultra-v1-0",
     "fugu-ultra-v1-1",
     "fugu-ultra-v2-0",
@@ -112,7 +111,6 @@
     "deepseek-v4-flash-0731",
     "deepseek-v4-pro",
     "deepseek-v4-pro-0813",
-    "fugu-max",
     "fugu-ultra-v1-0",
     "fugu-ultra-v1-1",
     "fugu-ultra-v2-0",
@@ -204,12 +202,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "fugu-max": [
-      {
-        "type": "effort",
-        "values": ["high", "xhigh", "max"]
       }
     ],
     "seed-2-0-lite": [
