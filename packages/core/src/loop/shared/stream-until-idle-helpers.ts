@@ -360,6 +360,9 @@ export async function runIdleLoop<
   const runningTaskIds = new Set<string>();
   const pendingCompletions: Array<Record<string, unknown>> = [];
   const processedTerminalKeys = new Set<string>();
+  /** Tasks whose terminal bg chunk this wrapper already saw — the startup
+   * adoption lookup must not re-add them from a stale storage snapshot. */
+  const settledTaskIds = new Set<string>();
   let isProcessing = false;
   let closed = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -552,6 +555,7 @@ export async function runIdleLoop<
         if (chunk.type === 'background-task-running' || chunk.type === 'background-task-resumed') {
           runningTaskIds.add(taskId);
         } else if (TERMINAL_BG_CHUNKS.has(chunk.type)) {
+          settledTaskIds.add(taskId);
           runningTaskIds.delete(taskId);
           pendingCompletions.push(chunk);
           if (runningTaskIds.size === 0) void processIfIdle();
@@ -567,6 +571,33 @@ export async function runIdleLoop<
   // --- Initial turn ---
   isProcessing = true;
   clearIdleTimer();
+
+  // Adopt tasks started by a prior wrapper on this scope (#26841): a new
+  // untilIdle stream aborts the previous wrapper via acquireStreamSlot, and
+  // this wrapper's bg subscription (`includeExisting: false`) never saw their
+  // 'running' events. Without this lookup the wrapper closes after its first
+  // turn and those tasks' completions wake nobody. Runs concurrently with the
+  // first turn (isProcessing blocks continuations and tryClose until both
+  // settle); `settledTaskIds` keeps a task whose terminal chunk already
+  // arrived from being re-added off a stale storage snapshot.
+  const bgManager = deps.bgManager;
+  const adoptPriorTasks = (async () => {
+    try {
+      const { tasks } = await bgManager.listTasks({
+        agentId: agent.id,
+        threadId,
+        resourceId,
+        status: ['running', 'pending'],
+      });
+      for (const task of tasks) {
+        if (!settledTaskIds.has(task.id)) runningTaskIds.add(task.id);
+      }
+    } catch {
+      // Best-effort: on a failed lookup the wrapper behaves as before the
+      // adoption pass (tracks only tasks whose events it sees itself).
+    }
+  })();
+
   let first: TFirstResult;
   try {
     first = await firstTurn(initialStreamOpts);
@@ -591,6 +622,9 @@ export async function runIdleLoop<
         // already closed
       }
     }
+    // The adoption lookup must land before the first idle evaluation, or
+    // tryClose below could close the wrapper while an adopted task still runs.
+    await adoptPriorTasks;
     isProcessing = false;
     if (runningTaskIds.size === 0 && pendingCompletions.length > 0) {
       void processIfIdle();
