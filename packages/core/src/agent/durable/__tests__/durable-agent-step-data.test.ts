@@ -9,9 +9,30 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
+import { InMemoryStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
+
+const probe = (requireApproval = false) =>
+  createTool({
+    id: 'probe',
+    description: 'probe',
+    inputSchema: z.object({ q: z.number() }),
+    requireApproval,
+    execute: async () => ({ ok: true }),
+  });
+
+function expectStepData(steps: any[], modelId: string) {
+  expect(steps).toHaveLength(2);
+  for (const step of steps) {
+    expect(step.response?.modelId).toBe(modelId);
+    expect(step.response?.messages?.length).toBeGreaterThan(0);
+  }
+}
 
 function toolThenTextModel(modelId: string) {
   let calls = 0;
@@ -105,4 +126,85 @@ describe('DurableAgent step data (#26780)', () => {
     expect(finish.response.modelId).toBe('per-call-model');
     expect(finish.response.messages.length).toBeGreaterThan(0);
   });
+
+  it('generate() returns step data and runs the per-call model', async () => {
+    const agentModel = toolThenTextModel('agent-model');
+    const perCallModel = toolThenTextModel('per-call-model');
+    const durableAgent = createDurableAgent({
+      agent: new Agent({
+        id: 'step-data-generate',
+        name: 'Step Data Generate',
+        instructions: 'Test',
+        model: agentModel.model as LanguageModelV2,
+        tools: { probe: probe() },
+      }),
+      pubsub,
+    });
+
+    const result: any = await durableAgent.generate('go', {
+      maxSteps: 5,
+      model: perCallModel.model as LanguageModelV2,
+    } as any);
+
+    expect(perCallModel.calls()).toBe(2);
+    expect(agentModel.calls()).toBe(0);
+    expectStepData(result.steps, 'per-call-model');
+    expect(result.response.modelId).toBe('per-call-model');
+  });
+
+  it('carries step data on the evented engine', async () => {
+    const model = toolThenTextModel('evented-model');
+    const agent = createEventedAgent({
+      agent: new Agent({
+        id: 'step-data-evented',
+        name: 'Step Data Evented',
+        instructions: 'Test',
+        model: model.model as LanguageModelV2,
+        tools: { probe: probe() },
+      }),
+    });
+    new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+
+    const stepEvents: any[] = [];
+    const { output, cleanup } = await agent.stream('go', {
+      maxSteps: 5,
+      onStepFinish: (e: any) => void stepEvents.push(e),
+    } as any);
+    await output.consumeStream();
+    const steps = await output.steps;
+    cleanup();
+
+    expectStepData(stepEvents, 'evented-model');
+    expectStepData(steps, 'evented-model');
+  });
+
+  it('carries step data on the segment resumed by an approval', async () => {
+    const model = toolThenTextModel('resume-model');
+    const memory = { thread: 'step-data-resume', resource: 'r' };
+    const durableAgent = createDurableAgent({
+      agent: new Agent({
+        id: 'step-data-resume',
+        name: 'Step Data Resume',
+        instructions: 'Test',
+        model: model.model as LanguageModelV2,
+        memory: new MockMemory(),
+        tools: { probe: probe(true) },
+      }),
+      pubsub,
+    });
+    new Mastra({ agents: { durableAgent }, storage: new InMemoryStore(), logger: false });
+
+    const stream = await durableAgent.stream('go', { memory, maxSteps: 5 });
+    for await (const chunk of stream.fullStream) if (chunk.type === 'tool-call-approval') break;
+
+    const resumed: any = await durableAgent.approveToolCall({ runId: stream.runId, toolCallId: 'call-1', memory });
+    for await (const _ of resumed.fullStream);
+    const steps = await resumed.steps;
+
+    expect(steps.length).toBeGreaterThan(0);
+    for (const step of steps) {
+      expect(step.response?.modelId).toBe('resume-model');
+      expect(step.response?.messages?.length).toBeGreaterThan(0);
+    }
+  }, 30000);
 });

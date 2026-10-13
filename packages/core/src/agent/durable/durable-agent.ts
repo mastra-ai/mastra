@@ -1324,6 +1324,16 @@ export class DurableAgent<
     } catch (error) {
       this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to resolve model during recover(${runId}): ${error}`);
     }
+    // A per-call `model` is a live instance and cannot be persisted, so recovery
+    // resolves the agent's own model instead. Say so rather than switching silently.
+    const persistedModelId = workflowInput.modelConfig?.modelId;
+    if (model && persistedModelId && model.modelId !== persistedModelId) {
+      this.#mastra
+        ?.getLogger?.()
+        ?.warn?.(
+          `[DurableAgent] recover(${runId}) continues with the agent's model '${model.modelId}'; the run started with '${persistedModelId}', which cannot be restored.`,
+        );
+    }
     executionFence.throwIfLost();
 
     // Restore the live fallback model list the run was prepared with (#22594).
