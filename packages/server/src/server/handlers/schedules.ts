@@ -143,7 +143,17 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
     // unknown; translate that into a clean HTTP 404 instead of letting it
     // surface as 500. Hidden internal workflows are treated as unknown.
     if ('workflowId' in body && body.workflowId) {
-      if (!getPublicWorkflowById(mastra, body.workflowId)) {
+      // The scheduler later resolves the stored id through core, which also
+      // sees hidden workflows. Reject ids where that lookup would pick a
+      // different workflow than the public one validated here.
+      const workflow = getPublicWorkflowById(mastra, body.workflowId);
+      let resolved: unknown;
+      try {
+        resolved = mastra.getWorkflowById(body.workflowId);
+      } catch {
+        resolved = undefined;
+      }
+      if (!workflow || resolved !== workflow) {
         throw new HTTPException(404, { message: `Workflow "${body.workflowId}" not found` });
       }
       return await mastra.schedules.create({

@@ -15,7 +15,10 @@ import { HTTPException } from '../http-exception';
  */
 export function getPublicWorkflowById(mastra: Mastra, workflowId: string): Workflow | undefined {
   const workflows = mastra.listWorkflows();
-  return Object.values(workflows).find(workflow => workflow.id === workflowId) ?? workflows[workflowId];
+  return (
+    Object.values(workflows).find(workflow => workflow.id === workflowId) ??
+    (Object.hasOwn(workflows, workflowId) ? workflows[workflowId] : undefined)
+  );
 }
 
 // Validation helper
