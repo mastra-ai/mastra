@@ -101,17 +101,17 @@ Prefer your own UI? Call the JSON routes directly. See the [route reference](/re
 
 ### The authorization link never leaves the server
 
-The provider's authorization link is a bearer capability: anyone who opens it can bind their third-party account to the pending connection. For end-user sessions, that link stays on the platform. Session creation returns a `launchUrl` instead — an authenticated route that re-verifies the caller owns the session before redirecting into the provider's flow. A forwarded or leaked launch URL returns 404 for anyone else, so another user can't attach their account to a session they don't own.
+The provider's authorization link is a bearer capability: anyone who opens it can bind their third-party account to the pending connection. For end-user sessions, that link stays on the platform. Session creation returns a `launchUrl` instead: an authenticated route that re-verifies the caller owns the session before redirecting into the provider's flow. A forwarded or leaked launch URL returns 404 for anyone else, so another user can't attach their account to a session they don't own.
 
 ## Let agents prompt for a connection
 
-Resource-scoped tool resolutions include a built-in `request_connection` tool. When a task needs a provider the user hasn't connected — or the user asks to connect one — the agent calls it and gets back a structured list of connectable providers with their current connection state. Chat UIs that understand the payload (Studio does) render it as a connect card: the user clicks Connect, authorizes in a popup through the mounted routes, and the agent can retry the task against fresh tools.
+Resource-scoped tool resolutions include a built-in `request_connection` tool. When a task needs a provider the user hasn't connected (or the user asks to connect one), the agent calls it and gets back a structured list of connectable providers with their current connection state. Chat UIs that understand the payload (Studio does) render it as a connect card: the user clicks Connect, authorizes in a popup through the mounted routes, and the agent can retry the task against fresh tools.
 
-The connectable set follows your `tools()` configuration: the `providers` allowlist when you set one, otherwise the full platform catalog. The tool is informational only — it never creates sessions or handles authorization links — and it is never added to global-only resolutions, since there is no user to scope a new connection to. To turn it off, pass `connectPrompt: false` to [`tools()`](/reference/connect/tools).
+The connectable set follows your `tools()` configuration: the `providers` allowlist when you set one, otherwise the full platform catalog. The tool never creates sessions or handles authorization links. It only reports what can be connected. It's also never added to global-only resolutions, since there is no user to scope a new connection to. To turn it off, pass `connectPrompt: false` to [`tools()`](/reference/connect/tools).
 
 ## Inspect connections in Studio
 
-With `userConnectRoutes()` mounted, Studio's **Connections** page shows the project's global connections alongside the connections belonging to the resource ID your studio session resolves to, and lets you run the connect flow against your allowlisted providers. Because the routes are gated on an end-user identity, the page needs `server.auth` with `mapUserToResourceId` configured — without it, Studio shows a setup prompt instead.
+With `userConnectRoutes()` mounted, Studio's **Connections** page shows the project's global connections alongside the connections belonging to the resource ID your studio session resolves to, and lets you run the connect flow against the providers your routes expose. Because the routes are gated on an end-user identity, the page needs `server.auth` with `mapUserToResourceId` configured. Without it, Studio shows a setup prompt instead.
 
 ## Clean up after deleted users
 

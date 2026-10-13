@@ -21,7 +21,7 @@ export function AddConnectionSection({ providers }: AddConnectionSectionProps) {
   if (providers.length === 0) {
     return (
       <Txt as="p" variant="body" tone="muted">
-        No providers are enabled. Add provider ids to the `providers` allowlist of `userConnectRoutes()`.
+        No providers are available. Check the platform catalog and the providers option of userConnectRoutes().
       </Txt>
     );
   }
