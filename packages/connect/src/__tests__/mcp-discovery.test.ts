@@ -648,6 +648,7 @@ describe('resource-scoped MCP resolution', () => {
       'catalog-mcp-user_update_record',
       'catalog-mcp_list_records',
       'catalog-mcp_update_record',
+      'request_connection',
     ]);
 
     // Every MCP protocol request under the scope carries the assertion header;

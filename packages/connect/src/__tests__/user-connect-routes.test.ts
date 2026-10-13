@@ -166,10 +166,10 @@ afterEach(() => {
 });
 
 describe('userConnectRoutes construction', () => {
-  it('requires a non-empty providers allowlist', () => {
-    expect(() => userConnectRoutes({ providers: [], projectId: 'proj_1' })).toThrow(/never defaults open/);
-    // @ts-expect-error providers is required
-    expect(() => userConnectRoutes({ projectId: 'proj_1' })).toThrow();
+  it('rejects an explicit empty allowlist but accepts omitting providers entirely', () => {
+    expect(() => userConnectRoutes({ providers: [], projectId: 'proj_1' })).toThrow(/non-empty allowlist/);
+    // Omitted providers = the full platform catalog is connectable.
+    expect(userConnectRoutes({ projectId: 'proj_1' }).length).toBeGreaterThan(0);
   });
 
   it('rejects reserved provider ids that collide with static route segments', () => {
@@ -301,6 +301,16 @@ describe('GET /providers', () => {
       authFields: [],
     });
   });
+
+  it('returns the full catalog when no allowlist is configured', async () => {
+    const { fetchMock } = fakePlatform();
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch, { providers: undefined }));
+    const response = await (findRoute(routes, 'GET', '/connect/providers') as any).handler(
+      makeCtx({ resourceId: 'end-user-42' }),
+    );
+    const body = await json(response);
+    expect(body.providers.map((provider: { id: string }) => provider.id)).toEqual(['linear', 'slack', 'github']);
+  });
 });
 
 describe('GET /connections', () => {
@@ -353,6 +363,20 @@ describe('POST /:provider/sessions', () => {
     );
     expect(response.status).toBe(404);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('without an allowlist, accepts any catalog provider and 404s unknown ids', async () => {
+    const { fetchMock } = fakePlatform();
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch, { providers: undefined }));
+    const handler = (findRoute(routes, 'POST', '/connect/:provider/sessions') as any).handler;
+
+    // github is outside the default test allowlist but in the catalog.
+    const created = await handler(makeCtx({ resourceId: 'end-user-42', params: { provider: 'github' } }));
+    expect(created.status).toBe(201);
+    expect((await json(created)).integrationId).toBe('github');
+
+    const unknown = await handler(makeCtx({ resourceId: 'end-user-42', params: { provider: 'nope' } }));
+    expect(unknown.status).toBe(404);
   });
 });
 

@@ -66,3 +66,34 @@ export interface UserConnectionStatusResponse {
 export interface UserConnectErrorBody {
   error: { code: string; message: string };
 }
+
+/**
+ * One provider in the structured output of the built-in `request_connection`
+ * tool (`@mastra/connect`'s `ConnectPromptProvider`). Chat renders these as a
+ * connect card.
+ */
+export interface ConnectPromptProvider {
+  id: string;
+  displayName: string | null;
+  logoUrl: string | null;
+  authType: string | null;
+  connected: boolean;
+  scope: UserConnectionScope | null;
+}
+
+/** Structured output of the built-in `request_connection` tool. */
+export interface ConnectPromptPayload {
+  type: 'connect-prompt';
+  requestedProvider?: string;
+  providers: ConnectPromptProvider[];
+}
+
+/** Narrows an arbitrary tool output to a connect-prompt payload. */
+export function isConnectPromptPayload(output: unknown): output is ConnectPromptPayload {
+  return (
+    typeof output === 'object' &&
+    output !== null &&
+    (output as { type?: unknown }).type === 'connect-prompt' &&
+    Array.isArray((output as { providers?: unknown }).providers)
+  );
+}

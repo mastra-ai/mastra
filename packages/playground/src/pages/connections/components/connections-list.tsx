@@ -3,7 +3,7 @@ import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 
-import type { UserConnection } from '@/domains/connections/types';
+import type { UserConnection } from '@mastra/playground-ui/domains/connect';
 
 const COLUMNS = '1fr 1fr auto auto';
 

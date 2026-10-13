@@ -78,7 +78,8 @@ export const mastra = new Mastra({
     },
     apiRoutes: [
       ...userConnectRoutes({
-        // Required: only these providers are exposed to end users.
+        // Optional: restrict which providers end users can connect.
+        // Omit to expose the full platform catalog.
         providers: ['linear', 'slack'],
       }),
     ],
@@ -101,6 +102,12 @@ Prefer your own UI? Call the JSON routes directly — see the [route reference](
 ### The authorization link never leaves the server
 
 The provider's authorization link is a bearer capability: anyone who opens it can bind their third-party account to the pending connection. For end-user sessions, that link stays on the platform. Session creation returns a `launchUrl` instead — an authenticated route that re-verifies the caller owns the session before redirecting into the provider's flow. A forwarded or leaked launch URL returns 404 for anyone else, so another user can't attach their account to a session they don't own.
+
+## Let agents prompt for a connection
+
+Resource-scoped tool resolutions include a built-in `request_connection` tool. When a task needs a provider the user hasn't connected — or the user asks to connect one — the agent calls it and gets back a structured list of connectable providers with their current connection state. Chat UIs that understand the payload (Studio does) render it as a connect card: the user clicks Connect, authorizes in a popup through the mounted routes, and the agent can retry the task against fresh tools.
+
+The connectable set follows your `tools()` configuration: the `providers` allowlist when you set one, otherwise the full platform catalog. The tool is informational only — it never creates sessions or handles authorization links — and it is never added to global-only resolutions, since there is no user to scope a new connection to. To turn it off, pass `connectPrompt: false` to [`tools()`](/reference/connect/tools).
 
 ## Inspect connections in Studio
 

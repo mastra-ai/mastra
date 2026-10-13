@@ -2,16 +2,16 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import {
+  useConnectSurface,
+  useDisconnectUserConnection,
+  useUserConnections,
+} from '@mastra/playground-ui/domains/connect';
 import { useMemo } from 'react';
 
 import { AddConnectionSection } from './components/add-connection-section';
 import { ConnectionsList } from './components/connections-list';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import {
-  useConnectSurface,
-  useDisconnectUserConnection,
-  useUserConnections,
-} from '@/domains/connections/hooks/use-user-connect';
 import { navCrumb } from '@/domains/navigation/crumbs';
 
 const crumbs = [navCrumb('/connections')];

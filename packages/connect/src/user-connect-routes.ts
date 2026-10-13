@@ -10,7 +10,7 @@ import {
   resolveClient,
   validateResourceId,
 } from './client.js';
-import type { ConnectClientOptions, ProjectConnection, ResolvedClient } from './client.js';
+import type { ConnectClientOptions, IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import { MastraConnectError } from './errors.js';
 import { renderConnectPage } from './user-connect-page.js';
 
@@ -27,11 +27,12 @@ export interface UserConnectIdentityContext {
 
 export interface UserConnectRoutesOptions {
   /**
-   * Required explicit allowlist of platform integration ids exposed to end
-   * users (e.g. `['linear', 'slack']`). The end-user surface never defaults
-   * open: providers outside this set 404 on every mounted route.
+   * Allowlist of platform integration ids exposed to end users (e.g.
+   * `['linear', 'slack']`). Providers outside the set 404 on every mounted
+   * route. Omit it to expose every provider in the platform catalog. An
+   * explicit empty array is rejected: pass a real allowlist or none at all.
    */
-  providers: string[];
+  providers?: string[];
   /**
    * Derives the caller's end-user resource key per request. Defaults to the
    * server-derived `MASTRA_RESOURCE_ID_KEY`, which `server.auth.mapUserToResourceId`
@@ -167,13 +168,13 @@ function connectionScope(connection: ProjectConnection): 'global' | 'user' {
  * ```
  */
 export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[] {
-  if (!Array.isArray(options.providers) || options.providers.length === 0) {
+  if (options.providers !== undefined && (!Array.isArray(options.providers) || options.providers.length === 0)) {
     throw new MastraConnectError(
       'invalid_options',
-      'userConnectRoutes requires a non-empty providers allowlist: the end-user surface never defaults open.',
+      'Invalid providers: pass a non-empty allowlist, or omit the option to expose the full platform catalog.',
     );
   }
-  const providers = options.providers.map(provider => {
+  const providers = options.providers?.map(provider => {
     const id = typeof provider === 'string' ? provider.trim().toLowerCase() : '';
     if (!id) {
       throw new MastraConnectError('invalid_options', 'Invalid provider id in userConnectRoutes providers allowlist.');
@@ -183,7 +184,8 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
     }
     return id;
   });
-  const allowlist = new Set(providers);
+  /** Undefined = no allowlist configured: the full platform catalog is connectable. */
+  const allowlist = providers === undefined ? undefined : new Set(providers);
 
   const basePath = options.basePath ?? '/connect';
   if (!basePath.startsWith('/') || basePath.endsWith('/') || basePath.includes(':') || basePath.includes('*')) {
@@ -263,9 +265,10 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       }
     };
 
-  /** Lists the caller's visible connections (global + own), filtered to the allowlist. */
+  /** Lists the caller's visible connections (global + own), filtered to the allowlist when one is set. */
   const listVisibleConnections = async (client: ResolvedClient): Promise<ProjectConnection[]> => {
     const connections = await listProjectConnections(client, projectId);
+    if (allowlist === undefined) return connections;
     return connections.filter(connection => allowlist.has(connection.integrationId.toLowerCase()));
   };
 
@@ -273,7 +276,9 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
     const provider = String(c.req.param('provider') ?? '')
       .trim()
       .toLowerCase();
-    return allowlist.has(provider) ? provider : null;
+    if (!provider || RESERVED_PROVIDER_IDS.has(provider) || provider.includes('/')) return null;
+    if (allowlist !== undefined && !allowlist.has(provider)) return null;
+    return provider;
   };
 
   const notFound = (c: RouteContext, code: string, message: string): Response =>
@@ -288,19 +293,21 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       requiresAuth: true,
       handler: gated(async (c, client) => {
         const catalog = await listIntegrations(client);
+        const toListed = (entry: IntegrationCatalogEntry) => ({
+          id: entry.id,
+          displayName: entry.displayName ?? null,
+          logoUrl: entry.logoUrl ?? null,
+          authType: entry.authType ?? null,
+          authFields: entry.authFields ?? null,
+        });
+        if (providers === undefined) {
+          // No allowlist configured: the full catalog is connectable.
+          return c.json({ providers: catalog.map(toListed) });
+        }
         const byId = new Map(catalog.map(entry => [entry.id.toLowerCase(), entry]));
         const visible = providers.flatMap(id => {
           const entry = byId.get(id);
-          if (!entry) return [];
-          return [
-            {
-              id: entry.id,
-              displayName: entry.displayName ?? null,
-              logoUrl: entry.logoUrl ?? null,
-              authType: entry.authType ?? null,
-              authFields: entry.authFields ?? null,
-            },
-          ];
+          return entry ? [toListed(entry)] : [];
         });
         return c.json({ providers: visible });
       }),
@@ -381,6 +388,13 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       handler: gated(async (c, client) => {
         const provider = providerParam(c);
         if (!provider) return notFound(c, 'provider_not_found', 'Provider not available.');
+        if (allowlist === undefined) {
+          // Without an allowlist the param only passed shape checks; confirm
+          // the provider exists in the catalog so unknown ids 404 instead of
+          // surfacing a platform error.
+          const known = (await listIntegrations(client)).some(entry => entry.id.toLowerCase() === provider);
+          if (!known) return notFound(c, 'provider_not_found', 'Provider not available.');
+        }
         const session = await createProjectConnectSession(client, projectId, provider);
         return c.json(
           {

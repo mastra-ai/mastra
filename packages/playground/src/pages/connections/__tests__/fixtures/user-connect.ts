@@ -4,7 +4,7 @@ import type {
   UserConnectSessionResponse,
   UserConnectionStatusResponse,
   UserConnectionsResponse,
-} from '@/domains/connections/types';
+} from '@mastra/playground-ui/domains/connect';
 
 export const providersResponse: UserConnectProvidersResponse = {
   providers: [

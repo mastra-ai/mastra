@@ -8,7 +8,7 @@ import type {
   UserConnectSessionResponse,
   UserConnectionStatusResponse,
   UserConnectionsResponse,
-} from '../types';
+} from './types';
 
 /** Default mount prefix of `userConnectRoutes()` on the dev server. */
 export const CONNECT_BASE_PATH = '/connect';

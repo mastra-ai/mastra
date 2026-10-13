@@ -1,13 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useEffect, useState } from 'react';
 
 import {
   useConnectLaunchHref,
   useConnectionStatus,
   useCreateConnectSession,
-} from '@/domains/connections/hooks/use-user-connect';
-import type { UserConnectProvider } from '@/domains/connections/types';
+} from '@mastra/playground-ui/domains/connect';
+import type { UserConnectProvider } from '@mastra/playground-ui/domains/connect';
+import { useEffect, useState } from 'react';
 
 interface PendingConnect {
   provider: string;
