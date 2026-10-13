@@ -1,12 +1,22 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowUpRight, Bot, Ellipsis } from 'lucide-react';
+import { ArrowUpRight, Bot, Columns3, Ellipsis } from 'lucide-react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { Badge } from '../Badge';
 import { Cell, TxtCell, DateTimeCell, EntryCell } from './Cells';
 import { Table, Thead, Th, Tbody, Row } from './Table';
 import { ActionRow } from '@/ds/components/ActionRow';
 import { Button } from '@/ds/components/Button/Button';
 import { Combobox } from '@/ds/components/Combobox/combobox';
+import {
+  Drawer,
+  DrawerBody,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from '@/ds/components/Drawer/drawer';
+import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { Input } from '@/ds/components/Input/input';
 import { ListSearch } from '@/ds/components/ListSearch/list-search';
 import { PropertyFilterApplied } from '@/ds/components/PropertyFilter/property-filter-applied';
@@ -856,5 +866,185 @@ export const InsetPaginationManyPages: Story = {
   render: function ManyPages() {
     const [page, setPage] = useState(5);
     return <Table.Pagination page={page} pageCount={MANY_PAGES} onPageChange={setPage} />;
+  },
+};
+
+type CreditColumnId = 'type' | 'amount' | 'description' | 'status' | 'date' | 'balance';
+
+type CreditColumn = {
+  id: CreditColumnId;
+  label: string;
+  align?: 'end';
+  required?: boolean;
+  grow?: boolean;
+  cell: (credit: Credit) => ReactNode;
+};
+
+const CREDIT_COLUMNS: CreditColumn[] = [
+  { id: 'type', label: 'Type', required: true, cell: credit => credit.type },
+  {
+    id: 'amount',
+    label: 'Amount',
+    align: 'end',
+    cell: credit => formatCreditAmount(credit.amount),
+  },
+  {
+    id: 'description',
+    label: 'Description',
+    grow: true,
+    cell: credit => <CreditDescription credit={credit} />,
+  },
+  {
+    id: 'status',
+    label: 'Status',
+    cell: credit => (
+      <Badge size="sm" emphasis="subtle">
+        {CREDIT_STATUS_LABELS[credit.status]}
+      </Badge>
+    ),
+  },
+  { id: 'date', label: 'Date', cell: credit => credit.date },
+  { id: 'balance', label: 'Balance', align: 'end', cell: credit => formatCreditAmount(credit.balance) },
+];
+
+export const InsetColumnPicker: Story = {
+  parameters: {
+    layout: 'padded',
+    docs: {
+      description: {
+        story:
+          'A Columns menu in the ActionRow shows and hides columns. The caller keeps the visible set; the first column stays on so every row keeps its name.',
+      },
+    },
+  },
+  render: function ColumnPickerStory() {
+    const [hidden, setHidden] = useState<ReadonlySet<CreditColumnId>>(new Set(['status']));
+    const columns = CREDIT_COLUMNS.filter(column => !hidden.has(column.id));
+
+    function toggleColumn(id: CreditColumnId) {
+      setHidden(current => {
+        const next = new Set(current);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+    }
+
+    return (
+      <div className="flex max-w-5xl flex-col gap-3">
+        <CreditHistoryTitle id="credit-history-columns" />
+        <ActionRow>
+          <ActionRow.End>
+            <DropdownMenu>
+              <DropdownMenu.Trigger
+                render={
+                  <Button variant="ghost" size="md" icon={<Columns3 />}>
+                    Columns
+                  </Button>
+                }
+              />
+              <DropdownMenu.Content align="end" className="min-w-48">
+                <DropdownMenu.Label>Show columns</DropdownMenu.Label>
+                {CREDIT_COLUMNS.map(column => (
+                  <DropdownMenu.CheckboxItem
+                    key={column.id}
+                    checked={!hidden.has(column.id)}
+                    disabled={column.required}
+                    onCheckedChange={() => toggleColumn(column.id)}
+                  >
+                    {column.label}
+                  </DropdownMenu.CheckboxItem>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu>
+          </ActionRow.End>
+        </ActionRow>
+        <Table variant="inset" aria-labelledby="credit-history-columns">
+          <Table.Header>
+            <Table.Row>
+              {columns.map(column => (
+                <Table.Head key={column.id} align={column.align} className={column.grow ? 'w-full' : undefined}>
+                  {column.label}
+                </Table.Head>
+              ))}
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {CREDITS.map(credit => (
+              <Table.Row key={credit.id}>
+                {columns.map(column => (
+                  <Table.Cell
+                    key={column.id}
+                    align={column.align}
+                    tone={column.id === 'amount' && credit.amount < 0 ? 'negative' : undefined}
+                  >
+                    {column.cell(credit)}
+                  </Table.Cell>
+                ))}
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table>
+      </div>
+    );
+  },
+};
+
+export const InsetRowButtons: Story = {
+  parameters: {
+    layout: 'padded',
+    docs: {
+      description: {
+        story:
+          'Table.RowButton makes the whole row clickable for an action that is not navigation, here opening a drawer. Use Table.RowLink when the row goes to another page.',
+      },
+    },
+  },
+  render: function RowButtonsStory() {
+    const [selected, setSelected] = useState<Credit | null>(null);
+
+    return (
+      <div className="flex max-w-5xl flex-col gap-3">
+        <CreditHistoryTitle id="credit-history-row-buttons" />
+        <Table variant="inset" aria-labelledby="credit-history-row-buttons">
+          <CreditHeader />
+          <Table.Body>
+            {CREDITS.map(credit => (
+              <Table.Row key={credit.id}>
+                <Table.Cell>
+                  <Table.RowButton onClick={() => setSelected(credit)}>{credit.type}</Table.RowButton>
+                </Table.Cell>
+                <Table.Cell align="end" tone={credit.amount < 0 ? 'negative' : undefined}>
+                  {formatCreditAmount(credit.amount)}
+                </Table.Cell>
+                <Table.Cell>
+                  <CreditDescription credit={credit} />
+                </Table.Cell>
+                <Table.Cell>
+                  <Badge size="sm" emphasis="subtle">
+                    {CREDIT_STATUS_LABELS[credit.status]}
+                  </Badge>
+                </Table.Cell>
+                <Table.Cell>{credit.date}</Table.Cell>
+                <Table.Cell align="end">{formatCreditAmount(credit.balance)}</Table.Cell>
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table>
+        <Drawer side="right" open={selected !== null} onOpenChange={open => !open && setSelected(null)}>
+          <DrawerContent>
+            <DrawerHeader>
+              <DrawerTitle>{selected?.title}</DrawerTitle>
+              <DrawerDescription>{selected?.reason}</DrawerDescription>
+            </DrawerHeader>
+            <DrawerBody>
+              <Txt variant="body-sm">
+                {selected ? `${selected.type}, ${formatCreditAmount(selected.amount)}, ${selected.date}` : null}
+              </Txt>
+            </DrawerBody>
+          </DrawerContent>
+        </Drawer>
+      </div>
+    );
   },
 };

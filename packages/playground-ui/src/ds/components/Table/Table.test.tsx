@@ -277,3 +277,37 @@ describe('Table.SortButton', () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('Table.RowButton', () => {
+  it('makes the row one button that keeps other row controls independent', async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+    const onRefund = vi.fn();
+    render(
+      <Table variant="inset" aria-label="Credits">
+        <Table.Body>
+          <Table.Row>
+            <Table.Cell>
+              <Table.RowButton onClick={onOpen}>Credit grant</Table.RowButton>
+            </Table.Cell>
+            <Table.Cell align="end">
+              <button type="button" onClick={onRefund}>
+                Refund
+              </button>
+            </Table.Cell>
+          </Table.Row>
+        </Table.Body>
+      </Table>,
+    );
+
+    const open = screen.getByRole('button', { name: 'Credit grant' });
+    expect(open.getAttribute('type')).toBe('button');
+    await user.tab();
+    await user.tab();
+    expect(document.activeElement).toBe(open);
+    await user.keyboard('{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Refund' }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(onRefund).toHaveBeenCalledTimes(1);
+  });
+});

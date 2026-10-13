@@ -6,6 +6,7 @@ import type { TableAlign } from './table-align';
 import { TableVariantContext, useTableVariant } from './table-context';
 import type { TableVariant } from './table-context';
 import { TablePagination } from './table-pagination';
+import { TableRowButton } from './table-row-button';
 import { TableRowLink } from './table-row-link';
 import { TableSortButton } from './table-sort-button';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -134,10 +135,10 @@ const tableBodyStyles = [
   '[&>tr+tr>td]:border-t',
   '[&>tr:first-child>td:first-child]:rounded-tl-lg',
   '[&>tr:first-child>td:last-child]:rounded-tr-lg',
-  '[&>tr:first-child_[data-slot=table-row-link]]:after:rounded-t-lg',
-  '[&>tr:last-child_[data-slot=table-row-link]]:after:rounded-b-lg',
-  '[&_:is(a,button,input,select,textarea):not([data-slot=table-row-link])]:relative',
-  '[&_:is(a,button,input,select,textarea):not([data-slot=table-row-link])]:z-1',
+  '[&>tr:first-child_[data-row-target]]:after:rounded-t-lg',
+  '[&>tr:last-child_[data-row-target]]:after:rounded-b-lg',
+  '[&_:is(a,button,input,select,textarea):not([data-row-target])]:relative',
+  '[&_:is(a,button,input,select,textarea):not([data-row-target])]:z-1',
 ];
 
 export interface TbodyProps extends ComponentProps<'tbody'> {
@@ -208,9 +209,9 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
           variant === 'default' && 'focus:bg-fill-subtle',
           variant === 'default' && focusRingInset,
           variant === 'inset' && [
-            'has-[[data-slot=table-row-link]]:relative',
-            'has-[[data-slot=table-row-link]]:hover:*:bg-surface-panel',
-            'has-[[data-slot=table-row-link]:focus-visible]:*:bg-surface-panel',
+            'has-[[data-row-target]]:relative',
+            'has-[[data-row-target]]:hover:*:bg-surface-panel',
+            'has-[[data-row-target]:focus-visible]:*:bg-surface-panel',
           ],
           selected && 'bg-fill-hover',
           onClick && 'cursor-pointer',
@@ -237,5 +238,6 @@ Table.Row = Row;
 Table.Head = Th;
 Table.Cell = Cell;
 Table.RowLink = TableRowLink;
+Table.RowButton = TableRowButton;
 Table.SortButton = TableSortButton;
 Table.Pagination = TablePagination;

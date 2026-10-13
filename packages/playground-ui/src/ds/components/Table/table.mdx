@@ -121,6 +121,13 @@ Renders `td` (the same component as `Cell`). In inset mode it renders children d
 - `align?: 'start' | 'center' | 'end'`, default `'start'`. Use `'end'` for numbers, matching the column's head.
 - `tone?: 'ink' | 'muted' | 'negative'`, default `'ink'`. Leave data cells at `'ink'`; see **Text color** below for when `'muted'` applies. Use `'negative'` for amounts below zero.
 
+### `Table.RowButton`
+
+Renders a `button` whose click area covers the whole row, for an action that stays on the page, such as opening a drawer.
+
+- Takes every `button` prop except `type`, which is always `"button"`.
+- Put it in the cell that names the row. Its text is the button's accessible name.
+
 ### `Table.SortButton`
 
 Renders a `button` that wraps a `Table.Head` label with a sort arrow.
@@ -255,7 +262,83 @@ Put a `Table.RowLink` in the cell that names the row. It is a real link: Tab rea
 </Table.Row>
 ```
 
-Use one `Table.RowLink` per row. For a row that runs an action instead of navigating, such as opening a side panel, use `DataList` with `DataList.RowButton`.
+Use one `Table.RowLink` per row. For a row that opens something on the page instead, use `Table.RowButton`.
+
+### Rows that open something
+
+When clicking a row opens a drawer, dialog, or side panel instead of navigating, use `Table.RowButton`. It behaves like `Table.RowLink`: the click area covers the row, the row highlights on hover and focus, and other controls in the row keep their own clicks. Enter and Space activate it.
+
+<Canvas of={TableStories.InsetRowButtons} />
+
+```tsx
+<Table.Row>
+  <Table.Cell>
+    <Table.RowButton onClick={() => setSelected(credit)}>{credit.type}</Table.RowButton>
+  </Table.Cell>
+  <Table.Cell align="end">{formatFullNumber(credit.amount, { currency: 'USD' })}</Table.Cell>
+</Table.Row>
+```
+
+Use one `Table.RowLink` or `Table.RowButton` per row, never both. Never put `onClick` on `Table.Row` itself: a `tr` can't take keyboard focus, so the row would only work with a mouse.
+
+### Showing and hiding columns
+
+Columns are just the cells you render, so the caller keeps the visible set and renders the matching `Table.Head` and `Table.Cell`s. A `DropdownMenu` with `CheckboxItem`s in the `ActionRow` is the control. Keep the first column, which names the row, always visible.
+
+<Canvas of={TableStories.InsetColumnPicker} />
+
+```tsx
+const [hidden, setHidden] = useState<ReadonlySet<ColumnId>>(new Set());
+const visible = columns.filter(column => !hidden.has(column.id));
+
+<DropdownMenu>
+  <DropdownMenu.Trigger
+    render={
+      <Button variant="ghost" icon={<Columns3 />}>
+        Columns
+      </Button>
+    }
+  />
+  <DropdownMenu.Content align="end">
+    <DropdownMenu.Label>Show columns</DropdownMenu.Label>
+    {columns.map(column => (
+      <DropdownMenu.CheckboxItem
+        key={column.id}
+        checked={!hidden.has(column.id)}
+        disabled={column.required}
+        onCheckedChange={() => toggle(column.id)}
+      >
+        {column.label}
+      </DropdownMenu.CheckboxItem>
+    ))}
+  </DropdownMenu.Content>
+</DropdownMenu>
+
+<Table variant="inset" aria-label="Credit history">
+  <Table.Header>
+    <Table.Row>
+      {visible.map(column => (
+        <Table.Head key={column.id} align={column.align}>
+          {column.label}
+        </Table.Head>
+      ))}
+    </Table.Row>
+  </Table.Header>
+  <Table.Body>
+    {rows.map(row => (
+      <Table.Row key={row.id}>
+        {visible.map(column => (
+          <Table.Cell key={column.id} align={column.align}>
+            {column.cell(row)}
+          </Table.Cell>
+        ))}
+      </Table.Row>
+    ))}
+  </Table.Body>
+</Table>
+```
+
+To remember the choice across visits, store the hidden set where the page keeps its preferences, such as local storage or the URL. Filtering rows by a column's value is separate: use the search and filter recipe below.
 
 ### Search and filters
 

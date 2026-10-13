@@ -14,3 +14,5 @@ export { TablePagination } from './table-pagination';
 export type { TablePaginationProps } from './table-pagination';
 export { TableSortButton } from './table-sort-button';
 export type { TableSortButtonProps, TableSortDirection } from './table-sort-button';
+export { TableRowButton } from './table-row-button';
+export type { TableRowButtonProps } from './table-row-button';
