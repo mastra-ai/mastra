@@ -606,7 +606,7 @@ describe('SourceControlStorage', () => {
       return { project, first, second, third, fourth };
     }
 
-    it('backfills positions, dedupes slugs and copies the oldest link onto the project', async () => {
+    it('backfills positions and dedupes slugs without using a repository checkout as the workspace root', async () => {
       const { project, first, second, third, fourth } = await seedDuplicateSlugProject();
 
       await domain.init();
@@ -618,7 +618,7 @@ describe('SourceControlStorage', () => {
       expect(await linkRow(third.id)).toMatchObject({ position: 3, in_environment: true });
       expect(await linkRow(fourth.id)).toMatchObject({ position: 4, in_environment: false });
       expect(await projects.getById({ id: project.id })).toMatchObject({
-        sandboxWorkingDirectory: '/workspace/oldest',
+        sandboxWorkingDirectory: null,
         sandboxSettings: null,
       });
     });
@@ -642,7 +642,7 @@ describe('SourceControlStorage', () => {
       expect(again.links).toEqual(before.links);
     });
 
-    it('leaves a new project unconfigured until the next init, then copies the oldest link and never sets resources', async () => {
+    it('leaves new project workdirs and resources unconfigured across initialization', async () => {
       const withLink = await createProject({ name: 'with link' });
       const withoutLink = await createProject({ name: 'without link' });
       expect(await projects.getById({ id: withLink.id })).toMatchObject({
@@ -663,7 +663,7 @@ describe('SourceControlStorage', () => {
       await domain.init();
 
       expect(await projects.getById({ id: withLink.id })).toMatchObject({
-        sandboxWorkingDirectory: '/workspace/linked',
+        sandboxWorkingDirectory: null,
         sandboxSettings: null,
       });
       expect(await projects.getById({ id: withoutLink.id })).toMatchObject({

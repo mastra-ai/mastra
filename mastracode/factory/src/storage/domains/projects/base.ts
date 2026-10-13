@@ -66,7 +66,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     workspace_setup_command: { type: 'text', nullable: true },
     active_template_id: { type: 'text', nullable: true },
     active_template_heads: { type: 'json', nullable: true },
-    /** Set once the source-control domain has backfilled positions and the oldest link's workdir onto the project. */
+    /** Set once the source-control domain has backfilled repository positions and environment membership. */
     environment_backfilled_at: { type: 'timestamp', nullable: true },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
