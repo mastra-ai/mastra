@@ -35,7 +35,7 @@ const ARTIFACTS_LIST_COMMAND = 'cd "$1" && test -d .artifacts && find .artifacts
  */
 export const ROOT_FILES_LIST_COMMAND = [
   'cd "$1" && ref=$(mktemp) && TZ=UTC touch -t "$2" "$ref"',
-  "&& find . -mindepth 1 -maxdepth 1 -type f ! -name '.*' -newer \"$ref\" -print0",
+  '&& find . -mindepth 1 -maxdepth 1 -type f ! -name \'.*\' -newer "$ref" -print0',
   '; status=$?; rm -f "$ref"; exit $status',
 ].join(' ');
 
