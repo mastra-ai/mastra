@@ -60,7 +60,12 @@ describe('AppSidebar permissions', () => {
       await screen.findByRole('link', { name: 'Agents' });
       expect(screen.queryByRole('link', { name: 'Tools' })).toBeNull();
       expect(screen.queryByRole('link', { name: 'MCP Servers' })).toBeNull();
-      expect(screen.queryByRole('button', { name: 'More' })).toBeNull();
+      // Connections is not RBAC-gated (the connect surface gates on the
+      // caller's own identity), so the More menu holds only that entry.
+      fireEvent.click(await screen.findByRole('button', { name: 'More' }));
+      expect((await screen.findByRole('menuitem', { name: 'Connections' })).getAttribute('href')).toBe('/connections');
+      expect(screen.queryByRole('menuitem', { name: 'Tools' })).toBeNull();
+      expect(screen.queryByRole('menuitem', { name: 'MCP Servers' })).toBeNull();
     });
   });
 

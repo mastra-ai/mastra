@@ -98,6 +98,10 @@ The page shows a Connect button, opens the provider's authorization flow in a po
 
 Prefer your own UI? Call the JSON routes directly — see the [route reference](/reference/connect/user-connect-routes#routes).
 
+## Inspect connections in Studio
+
+With `userConnectRoutes()` mounted, Studio's **Connections** page shows the project's global connections alongside the connections belonging to the resource ID your studio session resolves to, and lets you run the connect flow against your allowlisted providers. Because the routes are gated on an end-user identity, the page needs `server.auth` with `mapUserToResourceId` configured — without it, Studio shows a setup prompt instead.
+
 ## Clean up after deleted users
 
 When you delete a user from your application, delete their connections too. Each mounted `DELETE /connect/connections/:id` call disconnects one of the caller's own connections; for offboarding, use the platform API's bulk cleanup for the user's resource ID from your backend.
