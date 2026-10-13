@@ -214,6 +214,9 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     },
     delete: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {
       if (!(await this.connections.get({ orgId, id }))) return false;
+      for (const link of this.projectRepositoriesRows.filter(row => row.connectionId === id)) {
+        await this.projectRepositories.unlink({ orgId, id: link.id });
+      }
       this.connectionsRows.splice(0, this.connectionsRows.length, ...this.connectionsRows.filter(row => row.id !== id));
       return true;
     },
