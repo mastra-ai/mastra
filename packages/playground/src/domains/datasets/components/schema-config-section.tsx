@@ -204,7 +204,7 @@ export function SchemaConfigSection({
       </Notice>
 
       {/* keepMounted preserves an unfinished (invalid) draft when switching tabs. */}
-      <Tabs<SchemaTab> defaultTab="input" value={tab} onValueChange={setTab}>
+      <Tabs<SchemaTab> defaultTab="input" value={tab} onValueChange={setTab} className="grid gap-4">
         <div className="flex flex-col items-start gap-2 md:flex-row md:flex-wrap md:items-center">
           <Field orientation="horizontal" className="shrink-0">
             <FieldLabel>From</FieldLabel>
@@ -286,13 +286,13 @@ export function SchemaConfigSection({
           </Txt>
         )}
 
-        <TabContent value="input" keepMounted>
+        <TabContent value="input" keepMounted flush>
           <SchemaField label="Input schema" value={inputSchema} onChange={handleInputSchemaChange} />
         </TabContent>
-        <TabContent value="groundTruth" keepMounted>
+        <TabContent value="groundTruth" keepMounted flush>
           <SchemaField label="Ground truth schema" value={outputSchema} onChange={handleOutputSchemaChange} />
         </TabContent>
-        <TabContent value="requestContext" keepMounted>
+        <TabContent value="requestContext" keepMounted flush>
           <SchemaField
             label="Request context schema"
             value={requestContextSchema}
