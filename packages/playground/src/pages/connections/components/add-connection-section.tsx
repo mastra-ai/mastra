@@ -1,20 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import {
-  useConnectLaunchHref,
-  useConnectionStatus,
-  useCreateConnectSession,
-} from '@mastra/playground-ui/domains/connect';
+import { usePendingConnect } from '@mastra/playground-ui/domains/connect';
 import type { UserConnectProvider } from '@mastra/playground-ui/domains/connect';
-import { useEffect, useState } from 'react';
-
-interface PendingConnect {
-  provider: string;
-  connectionId: string;
-  /** Shown when the popup was blocked so the user can finish the flow manually. */
-  fallbackUrl: string | null;
-}
 
 export interface AddConnectionSectionProps {
   providers: UserConnectProvider[];
@@ -24,43 +12,11 @@ export interface AddConnectionSectionProps {
  * Lists the allowed providers with a Connect action: creates a connect
  * session, drives the platform-hosted auth flow in a popup (opened inside the
  * click gesture so popup blockers allow it), and polls the connection status
- * until it settles.
+ * until it settles. Abandoned flows (closed popup, poll failure or timeout)
+ * hand the Connect action back for a retry.
  */
 export function AddConnectionSection({ providers }: AddConnectionSectionProps) {
-  const session = useCreateConnectSession();
-  const resolveLaunchHref = useConnectLaunchHref();
-  const [pending, setPending] = useState<PendingConnect | null>(null);
-  const status = useConnectionStatus({ connectionId: pending?.connectionId ?? null });
-
-  const settled = status.data !== undefined && status.data.status !== 'pending';
-  useEffect(() => {
-    if (settled) setPending(null);
-  }, [settled]);
-
-  const handleConnect = (providerId: string) => {
-    // Opened synchronously in the click handler so popup blockers allow it.
-    const popup = window.open('', 'mastra-connect', 'popup,width=600,height=720');
-    session.mutate(
-      { provider: providerId },
-      {
-        onSuccess: created => {
-          // The popup enters OAuth through the server's launch gate, which
-          // verifies this browser owns the pending session before redirecting
-          // to the vendor flow — the raw vendor URL never reaches the page.
-          const launchHref = resolveLaunchHref(created.launchUrl);
-          if (popup) {
-            popup.location.href = launchHref;
-          }
-          setPending({
-            provider: providerId,
-            connectionId: created.connectionId,
-            fallbackUrl: popup ? null : launchHref,
-          });
-        },
-        onError: () => popup?.close(),
-      },
-    );
-  };
+  const { pending, connect, isCreating, createError } = usePendingConnect();
 
   if (providers.length === 0) {
     return (
@@ -101,8 +57,8 @@ export function AddConnectionSection({ providers }: AddConnectionSectionProps) {
               <Button
                 variant="default"
                 size="sm"
-                disabled={session.isPending || isPending}
-                onClick={() => handleConnect(provider.id)}
+                disabled={isCreating || isPending}
+                onClick={() => connect(provider.id)}
               >
                 Connect
               </Button>
@@ -110,10 +66,10 @@ export function AddConnectionSection({ providers }: AddConnectionSectionProps) {
           </li>
         );
       })}
-      {session.isError ? (
+      {createError ? (
         <li>
           <Txt as="p" variant="body" className="text-destructive-foreground" role="alert">
-            {session.error.message}
+            {createError.message}
           </Txt>
         </li>
       ) : null}

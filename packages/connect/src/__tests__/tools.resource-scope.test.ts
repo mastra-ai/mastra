@@ -345,6 +345,26 @@ describe('built-in connect-prompt tool', () => {
     expect(unknown.providers.map(provider => provider.id)).toEqual(['linear']);
   });
 
+  it('matches a requested provider id case-insensitively', async () => {
+    installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
+    const platform = catalogPlatform(() => [makeConnection()]);
+    const record = await connect({ ...platform.options, providers: ['linear'], resourceId: 'end-user-42' })();
+
+    // Agents routinely capitalize provider names; the lookup must not miss
+    // the catalog entry over casing.
+    const prompt = record.request_connection as unknown as PromptTool;
+    const requested = await prompt.execute({ provider: 'LINEAR' });
+    expect(requested.requestedProvider).toBe('linear');
+    expect(requested.providers).toEqual([expect.objectContaining({ id: 'linear', connected: true })]);
+  });
+
+  it('rejects a non-boolean connectPrompt option at startup', () => {
+    const platform = catalogPlatform(() => []);
+    expect(() =>
+      connect({ ...platform.options, resourceId: 'end-user-42', connectPrompt: 'false' as unknown as boolean }),
+    ).toThrowError(/connectPrompt/);
+  });
+
   it('is omitted with connectPrompt: false and from global-only resolutions', async () => {
     installProvider('linear', 'MASTRA_LINEAR_CONNECTION_ID');
     const platform = catalogPlatform(() => [makeConnection()]);

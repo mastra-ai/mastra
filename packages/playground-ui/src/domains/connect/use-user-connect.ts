@@ -1,6 +1,6 @@
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type {
   UserConnectErrorBody,
@@ -178,6 +178,121 @@ export function useConnectionStatus({ connectionId }: { connectionId: string | n
       return status;
     },
   });
+}
+
+export interface PendingConnect {
+  provider: string;
+  connectionId: string;
+  /** Shown when the popup was blocked so the user can finish the flow manually. */
+  fallbackUrl: string | null;
+}
+
+/**
+ * Grace period after the vendor popup closes before an unsettled flow is
+ * abandoned — the activation webhook often lands a few seconds after the
+ * vendor window closes itself.
+ */
+const POPUP_CLOSE_GRACE_MS = 15_000;
+/** Wall-clock cap matching the status poll's 5 minute budget. */
+const PENDING_TIMEOUT_MS = STATUS_POLL_INTERVAL_MS * STATUS_MAX_POLLS;
+
+export interface UsePendingConnectOptions {
+  /** Overrides for the abandonment timings (primarily for tests). */
+  popupCloseGraceMs?: number;
+  pendingTimeoutMs?: number;
+}
+
+/**
+ * Drives one add-connection flow end to end: opens the popup synchronously in
+ * the click gesture (so popup blockers allow it), creates the connect session,
+ * sends the popup through the server's launch gate, and polls the connection
+ * status until it settles. The pending state always resolves — on settle, on a
+ * poll failure, when the popup closes without settling (after a grace period),
+ * or at the poll budget — so the Connect action is never stuck disabled.
+ */
+export function usePendingConnect(options: UsePendingConnectOptions = {}) {
+  const { popupCloseGraceMs = POPUP_CLOSE_GRACE_MS, pendingTimeoutMs = PENDING_TIMEOUT_MS } = options;
+  const session = useCreateConnectSession();
+  const resolveLaunchHref = useConnectLaunchHref();
+  const [pending, setPending] = useState<PendingConnect | null>(null);
+  const [connectedProviders, setConnectedProviders] = useState<ReadonlySet<string>>(new Set());
+  const popupRef = useRef<Pick<Window, 'closed'> | null>(null);
+  const status = useConnectionStatus({ connectionId: pending?.connectionId ?? null });
+
+  // Settle only on a status response for the connection currently pending —
+  // a stale result from a previous flow must not clear or mark a newer one.
+  const statusData = status.data;
+  useEffect(() => {
+    if (!pending || statusData === undefined) return;
+    if (statusData.id !== pending.connectionId || statusData.status === 'pending') return;
+    const { provider } = pending;
+    if (statusData.status === 'active') {
+      setConnectedProviders(previous => (previous.has(provider) ? previous : new Set([...previous, provider])));
+    }
+    setPending(null);
+  }, [pending, statusData]);
+
+  // A failed poll hands the Connect action back instead of leaving it stuck.
+  useEffect(() => {
+    if (status.isError) setPending(null);
+  }, [status.isError]);
+
+  // Abandonment: the popup closed without the flow settling (grace period for
+  // the trailing webhook) or the poll budget ran out.
+  useEffect(() => {
+    if (!pending) return;
+    const startedAt = Date.now();
+    let closedAt: number | null = null;
+    const tickMs = Math.min(1_000, popupCloseGraceMs);
+    const timer = window.setInterval(() => {
+      if (popupRef.current?.closed) closedAt ??= Date.now();
+      const abandoned = closedAt !== null && Date.now() - closedAt >= popupCloseGraceMs;
+      const timedOut = Date.now() - startedAt >= pendingTimeoutMs;
+      if (abandoned || timedOut) setPending(null);
+    }, tickMs);
+    return () => window.clearInterval(timer);
+  }, [pending, popupCloseGraceMs, pendingTimeoutMs]);
+
+  const connect = useCallback(
+    (providerId: string) => {
+      // Opened synchronously in the click handler so popup blockers allow it.
+      const popup = window.open('', 'mastra-connect', 'popup,width=600,height=720');
+      popupRef.current = popup;
+      session.mutate(
+        { provider: providerId },
+        {
+          onSuccess: created => {
+            // The popup enters OAuth through the server's launch gate, which
+            // verifies this browser owns the pending session before
+            // redirecting — the raw vendor URL never reaches the page.
+            const launchHref = resolveLaunchHref(created.launchUrl);
+            if (popup) {
+              popup.location.href = launchHref;
+            }
+            setPending({
+              provider: providerId,
+              connectionId: created.connectionId,
+              fallbackUrl: popup ? null : launchHref,
+            });
+          },
+          onError: () => {
+            popup?.close();
+            popupRef.current = null;
+          },
+        },
+      );
+    },
+    [session, resolveLaunchHref],
+  );
+
+  return {
+    pending,
+    connect,
+    /** Providers whose connection settled `active` during this hook's lifetime. */
+    connectedProviders,
+    isCreating: session.isPending,
+    createError: session.isError ? session.error : null,
+  };
 }
 
 /** Disconnects one of the caller's own connections. */

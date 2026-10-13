@@ -1,11 +1,5 @@
-import { useEffect, useState } from 'react';
 import type { ConnectPromptPayload } from '@/domains/connect';
-import {
-  isConnectPromptPayload,
-  useConnectLaunchHref,
-  useConnectionStatus,
-  useCreateConnectSession,
-} from '@/domains/connect';
+import { isConnectPromptPayload, usePendingConnect } from '@/domains/connect';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 
@@ -15,13 +9,6 @@ export interface ConnectPromptToolProps {
   output: unknown;
   /** Historical rendering: show the card but suppress the connect action. */
   readOnly?: boolean;
-}
-
-interface PendingConnect {
-  provider: string;
-  connectionId: string;
-  /** Shown when the popup was blocked so the user can finish the flow manually. */
-  fallbackUrl: string | null;
 }
 
 /**
@@ -38,46 +25,7 @@ export const ConnectPromptTool = ({ output, readOnly = false }: ConnectPromptToo
 };
 
 const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayload; readOnly: boolean }) => {
-  const session = useCreateConnectSession();
-  const resolveLaunchHref = useConnectLaunchHref();
-  const [pending, setPending] = useState<PendingConnect | null>(null);
-  const [connectedNow, setConnectedNow] = useState<ReadonlySet<string>>(new Set());
-  const status = useConnectionStatus({ connectionId: pending?.connectionId ?? null });
-
-  const settledStatus = status.data !== undefined && status.data.status !== 'pending' ? status.data.status : null;
-  useEffect(() => {
-    if (settledStatus === null) return;
-    setPending(current => {
-      if (current && settledStatus === 'active') {
-        setConnectedNow(previous => new Set([...previous, current.provider]));
-      }
-      return null;
-    });
-  }, [settledStatus]);
-
-  const handleConnect = (providerId: string) => {
-    // Opened synchronously in the click handler so popup blockers allow it.
-    const popup = window.open('', 'mastra-connect', 'popup,width=600,height=720');
-    session.mutate(
-      { provider: providerId },
-      {
-        onSuccess: created => {
-          // The popup enters OAuth through the server's launch gate — the raw
-          // vendor URL never reaches the page.
-          const launchHref = resolveLaunchHref(created.launchUrl);
-          if (popup) {
-            popup.location.href = launchHref;
-          }
-          setPending({
-            provider: providerId,
-            connectionId: created.connectionId,
-            fallbackUrl: popup ? null : launchHref,
-          });
-        },
-        onError: () => popup?.close(),
-      },
-    );
-  };
+  const { pending, connect, connectedProviders, isCreating, createError } = usePendingConnect();
 
   return (
     <section
@@ -89,7 +37,7 @@ const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayloa
       </Txt>
       <ul className="space-y-2">
         {payload.providers.map(provider => {
-          const isConnected = provider.connected || connectedNow.has(provider.id);
+          const isConnected = provider.connected || connectedProviders.has(provider.id);
           const isPending = pending?.provider === provider.id;
           return (
             <li key={provider.id} className="flex items-center justify-between gap-4">
@@ -120,11 +68,7 @@ const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayloa
                     Connected
                   </Txt>
                 ) : (
-                  <Button
-                    size="sm"
-                    disabled={readOnly || session.isPending || isPending}
-                    onClick={() => handleConnect(provider.id)}
-                  >
+                  <Button size="sm" disabled={readOnly || isCreating || isPending} onClick={() => connect(provider.id)}>
                     Connect
                   </Button>
                 )}
@@ -133,9 +77,9 @@ const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayloa
           );
         })}
       </ul>
-      {session.isError ? (
+      {createError ? (
         <Txt as="p" variant="body-sm" className="text-accent2" role="alert">
-          {session.error.message}
+          {createError.message}
         </Txt>
       ) : null}
     </section>

@@ -79,10 +79,14 @@ export function buildConnectPromptTool({
     execute: async (input): Promise<ConnectPromptPayload> => {
       const { catalog, connections } = await loadInputs();
 
-      const connectable = catalog.filter(entry => only === undefined || only.has(entry.id));
+      // Provider ids are compared case-insensitively: the allowlist keeps the
+      // caller's casing while catalog ids are platform-defined.
+      const allow = only === undefined ? undefined : new Set(Array.from(only, id => id.toLowerCase()));
+      const connectable = catalog.filter(entry => allow === undefined || allow.has(entry.id.toLowerCase()));
       const toProvider = (entry: IntegrationCatalogEntry): ConnectPromptProvider => {
         const usable = connections.filter(
-          connection => connection.integrationId === entry.id && connection.status === 'active',
+          connection =>
+            connection.integrationId.toLowerCase() === entry.id.toLowerCase() && connection.status === 'active',
         );
         const own = usable.some(connection => connection.resourceId === resourceId);
         return {
@@ -95,8 +99,9 @@ export function buildConnectPromptTool({
         };
       };
 
+      const requestedId = input.provider?.toLowerCase();
       const requested =
-        input.provider === undefined ? undefined : connectable.find(entry => entry.id === input.provider);
+        requestedId === undefined ? undefined : connectable.find(entry => entry.id.toLowerCase() === requestedId);
       if (requested) {
         return { type: 'connect-prompt', requestedProvider: requested.id, providers: [toProvider(requested)] };
       }

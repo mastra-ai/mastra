@@ -652,6 +652,12 @@ export function tools(options: ToolsOptions = {}): ToolsResolver {
       'Top-level requireApproval must be a boolean or an array of tool keys.',
     );
   }
+  if (options.connectPrompt !== undefined && typeof options.connectPrompt !== 'boolean') {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid connectPrompt: expected a boolean, got ${typeof options.connectPrompt}.`,
+    );
+  }
 
   const state = acquireSharedState(projectId, ttlMs, options, normalizedProviders);
 
