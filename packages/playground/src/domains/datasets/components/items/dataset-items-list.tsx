@@ -1,12 +1,14 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
+import { Button, CREATE_BUTTON_SHORTCUT } from '@mastra/playground-ui/components/Button';
 import { DataList, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { ExternalLinkIcon, FileJson, Upload } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 import { z } from 'zod';
+import { AddItemsChoices } from '../add-items-choices';
 
 export type DatasetItemsSortKey = 'createdAt';
 
@@ -243,36 +245,21 @@ interface EmptyDatasetItemListProps {
 }
 
 function EmptyDatasetItemList({ onAddClick, onImportClick, onImportJsonClick }: EmptyDatasetItemListProps) {
+  useKeydown({ [CREATE_BUTTON_SHORTCUT]: onAddClick });
+
   return (
     <EmptyState
       titleSlot="No items yet"
-      descriptionSlot={
-        <>
-          Add items to this dataset to use them <br />
-          in experiment runs.
-        </>
-      }
+      descriptionSlot="Add items to this dataset to use them in experiment runs."
       actionSlot={
-        <div className="flex flex-col items-center gap-2">
-          <div className="flex items-center gap-2">
-            <CreateButton variant="primary" onClick={onAddClick} tooltip="Add an item">
-              New item
-            </CreateButton>
-            {onImportClick && (
-              <Button onClick={onImportClick} icon={<Upload />}>
-                Import CSV
-              </Button>
-            )}
-            {onImportJsonClick && (
-              <Button onClick={onImportJsonClick} icon={<FileJson />}>
-                Import JSON
-              </Button>
-            )}
-          </div>
+        <div className="flex w-full max-w-2xl flex-col items-center gap-4">
+          <AddItemsChoices
+            onAddManually={onAddClick}
+            onImport={format => (format === 'csv' ? onImportClick : onImportJsonClick)?.()}
+          />
           <Button
             variant="ghost"
             render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}
-
             icon={<ExternalLinkIcon />}
           >
             Datasets Documentation

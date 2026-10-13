@@ -155,17 +155,27 @@ describe('Datasets page', () => {
   describe('when there are no datasets', () => {
     beforeEach(() => useDatasets([]));
 
-    it('leaves creation to the empty state, without a New dataset button in the header', async () => {
+    it('offers a single New dataset button, in the empty state', async () => {
       renderPage();
 
-      await screen.findByRole('button', { name: 'Create Dataset' });
-      expect(screen.queryByRole('button', { name: 'New dataset' })).toBeNull();
+      await screen.findByText('No datasets yet');
+      expect(screen.getAllByRole('button', { name: 'New dataset' })).toHaveLength(1);
     });
 
     it('opens the create dataset dialog from the empty state', async () => {
       renderPage();
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Create Dataset' }));
+      await screen.findByText('No datasets yet');
+      fireEvent.click(screen.getByRole('button', { name: 'New dataset' }));
+
+      expect(await screen.findByRole('heading', { name: 'Create dataset' })).not.toBeNull();
+    });
+
+    it('opens the create dataset dialog when pressing C', async () => {
+      renderPage();
+
+      await screen.findByText('No datasets yet');
+      fireEvent.keyDown(window, { key: 'c' });
 
       expect(await screen.findByRole('heading', { name: 'Create dataset' })).not.toBeNull();
     });

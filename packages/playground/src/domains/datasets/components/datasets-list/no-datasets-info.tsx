@@ -1,6 +1,6 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ExternalLinkIcon, Plus } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 
 export interface NoDatasetsInfoProps {
   onCreateClick?: () => void;
@@ -8,7 +8,7 @@ export interface NoDatasetsInfoProps {
 
 export const NoDatasetsInfo = ({ onCreateClick }: NoDatasetsInfoProps = {}) => (
   <EmptyState
-    titleSlot="No Datasets yet"
+    titleSlot="No datasets yet"
     descriptionSlot={
       <>
         Create your first dataset to start evaluating <br />
@@ -18,14 +18,13 @@ export const NoDatasetsInfo = ({ onCreateClick }: NoDatasetsInfoProps = {}) => (
     actionSlot={
       <div className="flex flex-col items-center gap-2">
         {onCreateClick && (
-          <Button variant="primary" onClick={onCreateClick} icon={<Plus />}>
-            Create Dataset
-          </Button>
+          <CreateButton variant="primary" onClick={onCreateClick} tooltip="Create a dataset">
+            New dataset
+          </CreateButton>
         )}
         <Button
           variant="ghost"
           render={<a href="https://mastra.ai/docs/evals/datasets" target="_blank" rel="noopener noreferrer" />}
-
           icon={<ExternalLinkIcon />}
         >
           Datasets Documentation

@@ -48,19 +48,45 @@ describe('DatasetItems empty state', () => {
     expect(screen.getByRole('searchbox', { name: 'Search items' })).not.toBeNull();
   });
 
-  it('wires the add and import actions', () => {
-    const onAddClick = vi.fn();
-    const onImportClick = vi.fn();
-    const onImportJsonClick = vi.fn();
-    renderEmpty({ onAddClick, onImportClick, onImportJsonClick });
+  it('offers the same ways to add items as the create dialog', () => {
+    renderEmpty({ onImportClick: () => {}, onImportJsonClick: () => {} });
 
-    fireEvent.click(screen.getByRole('button', { name: 'New item' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Import CSV' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Import JSON' }));
+    expect(screen.getByRole('button', { name: 'Add items manually' })).not.toBeNull();
+    expect(screen.getByRole('group', { name: 'Import from a file' })).not.toBeNull();
+  });
+
+  it('adds an item manually', () => {
+    const onAddClick = vi.fn();
+    renderEmpty({ onAddClick });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add items manually' }));
 
     expect(onAddClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens the CSV import by default', () => {
+    const onImportClick = vi.fn();
+    const onImportJsonClick = vi.fn();
+    renderEmpty({ onImportClick, onImportJsonClick });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
     expect(onImportClick).toHaveBeenCalledTimes(1);
+    expect(onImportJsonClick).not.toHaveBeenCalled();
+  });
+
+  it('opens the JSON import when JSON is picked', () => {
+    const onImportClick = vi.fn();
+    const onImportJsonClick = vi.fn();
+    renderEmpty({ onImportClick, onImportJsonClick });
+
+    fireEvent.click(screen.getByRole('combobox', { name: 'File format' }));
+    fireEvent.pointerDown(screen.getByRole('option', { name: 'JSON' }), { pointerType: 'mouse' });
+    fireEvent.click(screen.getByRole('option', { name: 'JSON' }), { detail: 1 });
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+
     expect(onImportJsonClick).toHaveBeenCalledTimes(1);
+    expect(onImportClick).not.toHaveBeenCalled();
   });
 
   it('opens the add item action when pressing C', () => {

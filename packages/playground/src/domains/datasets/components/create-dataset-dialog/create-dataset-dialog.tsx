@@ -3,6 +3,7 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { useRef, useState } from 'react';
 import { CSVImportFlow } from '../csv-import/csv-import-flow';
+import { JSONImportFlow } from '../json-import/json-import-flow';
 import { AddItemsStep } from './add-items-step';
 import { EMPTY_SCHEMAS } from './dataset-schemas';
 import type { DatasetSchemas } from './dataset-schemas';
@@ -88,9 +89,9 @@ export function CreateDatasetDialog({ open, onOpenChange, onSuccess }: CreateDat
   );
 }
 
-type Step = 'details' | 'schema' | 'items' | 'manual' | 'csv';
+type Step = 'details' | 'schema' | 'items' | 'manual' | 'csv' | 'json';
 
-const STEP_NUMBER: Record<Step, number> = { details: 1, schema: 2, items: 3, manual: 3, csv: 3 };
+const STEP_NUMBER: Record<Step, number> = { details: 1, schema: 2, items: 3, manual: 3, csv: 3, json: 3 };
 const STEP_COUNT = 3;
 
 interface CreateDatasetWizardProps {
@@ -157,14 +158,26 @@ function CreateDatasetWizard({ pending, save, onClose }: CreateDatasetWizardProp
         cancelLabel="Back"
       />
     );
+  } else if (step === 'json') {
+    content = (
+      <JSONImportFlow
+        title="Import JSON"
+        description="Upload a JSON file or paste the items. They are added when the dataset is created."
+        initialFile={droppedFile}
+        onImport={create}
+        importLabel={count => `Create dataset with ${itemCount(count)}`}
+        onCancel={backToItems}
+        cancelLabel="Back"
+      />
+    );
   } else {
     content = (
       <AddItemsStep
         pending={pending}
         onAddManually={() => setStep('manual')}
-        onImportCsv={file => {
+        onImport={(format, file) => {
           setDroppedFile(file);
-          setStep('csv');
+          setStep(format);
         }}
         onBack={() => setStep('schema')}
         onCreate={() => void create([])}

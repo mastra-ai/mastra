@@ -80,11 +80,22 @@ const click = (name: string | RegExp) => fireEvent.click(button(name));
 const typeIn = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
 const schemaEditor = (name: string) => screen.getByLabelText<HTMLTextAreaElement>(name);
 const OBJECT_SCHEMA = '{"type":"object"}';
+const JSON_ITEMS = JSON.stringify([
+  { input: 'What is the capital of France?', groundTruth: 'Paris' },
+  { input: 'What is 2 + 2?', groundTruth: '4' },
+]);
 
-function pickSource(name: string) {
-  fireEvent.click(screen.getByRole('combobox', { name: 'From' }));
+function pickOption(combobox: string, name: string) {
+  fireEvent.click(screen.getByRole('combobox', { name: combobox }));
   fireEvent.pointerDown(screen.getByRole('option', { name }), { pointerType: 'mouse' });
   fireEvent.click(screen.getByRole('option', { name }), { detail: 1 });
+}
+
+const pickSource = (name: string) => pickOption('From', name);
+
+function chooseImport(format: 'CSV' | 'JSON') {
+  if (format === 'JSON') pickOption('File format', 'JSON');
+  click('Import');
 }
 
 function expectDisabled(name: string | RegExp) {
@@ -121,7 +132,7 @@ function dropOnWindow(file: File) {
 }
 
 async function uploadAndMapCsv() {
-  click('Import from CSV');
+  chooseImport('CSV');
   await heading('Import CSV');
   fireEvent.change(screen.getByLabelText('CSV file'), { target: { files: [buildFile()] } });
   await heading('Preview Data');
@@ -283,7 +294,7 @@ describe('CreateDatasetDialog', () => {
       expect(
         screen.getByRole('button', { name: 'Add items manually', description: /input and ground truth/i }),
       ).toBeDefined();
-      expect(screen.getByRole('button', { name: 'Import from CSV', description: /drop it anywhere/i })).toBeDefined();
+      expect(screen.getByRole('group', { name: 'Import from a file', description: /drop it anywhere/i })).toBeDefined();
     });
 
     it('goes back through every step with the choices kept', async () => {
@@ -713,7 +724,7 @@ describe('CreateDatasetDialog', () => {
       renderDialog();
 
       await goToItems();
-      click('Import from CSV');
+      chooseImport('CSV');
       await heading('Import CSV');
 
       expect(screen.getByText('Step 3 of 3')).toBeDefined();
@@ -725,7 +736,7 @@ describe('CreateDatasetDialog', () => {
       renderDialog();
 
       await goToItems();
-      click('Import from CSV');
+      chooseImport('CSV');
       await heading('Import CSV');
       click('Back');
 
@@ -761,15 +772,60 @@ describe('CreateDatasetDialog', () => {
       expect(screen.getByText('What is the capital of France?')).toBeDefined();
     });
 
-    it('ignores a file that is not a CSV', async () => {
+    it('ignores a file that is neither CSV nor JSON', async () => {
       givenServer();
       renderDialog();
 
       await goToItems();
-      dropOnWindow(buildFile('{}', 'items.json', 'application/json'));
+      dropOnWindow(buildFile('hello', 'notes.txt', 'text/plain'));
 
       expect(screen.getByRole('heading', { name: 'Add items' })).toBeDefined();
       expect(screen.queryByRole('heading', { name: 'Preview Data' })).toBeNull();
+    });
+  });
+
+  describe('when JSON is chosen', () => {
+    it('creates the dataset with the pasted items', async () => {
+      const { createBodies, batchBodies } = givenServer();
+      const { onSuccess } = renderDialog();
+
+      await goToItems();
+      chooseImport('JSON');
+      await heading('Import JSON');
+      expect(screen.getByText('Step 3 of 3')).toBeDefined();
+      fireEvent.click(screen.getByRole('tab', { name: 'Paste JSON' }));
+      typeIn('JSON items', JSON_ITEMS);
+      click('Create dataset with 2 items');
+
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledWith(CREATED_DATASET_ID));
+      expect(createBodies).toEqual([{ name: 'My dataset' }]);
+      expect(batchBodies).toEqual([{ items: JSON.parse(JSON_ITEMS) }]);
+    });
+
+    it('goes back to the "Add items" step', async () => {
+      givenServer();
+      renderDialog();
+
+      await goToItems();
+      chooseImport('JSON');
+      await heading('Import JSON');
+      click('Back');
+
+      expect(await heading('Add items')).toBeDefined();
+    });
+  });
+
+  describe('when a JSON file is dropped on the window', () => {
+    it('opens the JSON import with the file loaded', async () => {
+      givenServer();
+      renderDialog();
+
+      await goToItems();
+      dropOnWindow(buildFile(JSON_ITEMS, 'items.json', 'application/json'));
+
+      expect(await heading('Import JSON')).toBeDefined();
+      expect(await screen.findByText('items.json')).toBeDefined();
+      await waitFor(() => expect(button('Create dataset with 2 items').disabled).toBe(false));
     });
   });
 
