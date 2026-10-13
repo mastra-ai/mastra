@@ -70,6 +70,14 @@ describe('buildComparisonRows', () => {
       expect(contender.deltas?.accuracy).toBeCloseTo(0.4);
       expect(contender.deltas?.relevancy).toBe(0);
     });
+
+    it('computes the run duration delta on the contender side', () => {
+      const [baseline, contender] = rows()[0].sides;
+
+      expect(baseline.durationDeltaMs).toBeNull();
+      // Both fixtures ran for 5s.
+      expect(contender.durationDeltaMs).toBe(0);
+    });
   });
 
   describe('when comparing a baseline and two contenders', () => {

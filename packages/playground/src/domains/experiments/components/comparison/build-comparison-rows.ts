@@ -9,6 +9,8 @@ export interface ComparisonScore {
 export interface ComparisonSide {
   /** False when the experiment never ran this item (e.g. dataset version drift). */
   present: boolean;
+  /** The experiment's target type, which decides the shape of `output`. */
+  targetType: DatasetExperimentResult['targetType'] | null;
   output: unknown;
   metadata: Record<string, unknown> | null;
   comment: string | null;
@@ -26,6 +28,8 @@ export interface ComparisonColumn extends ComparisonSide {
   role: ComparisonRole;
   /** This side minus the baseline, per scorer (null when either has no score). Null on the baseline itself. */
   deltas: Record<string, number | null> | null;
+  /** This side's run duration minus the baseline's, in ms. Null on the baseline or when either is unknown. */
+  durationDeltaMs: number | null;
 }
 
 export interface ComparisonRow {
@@ -52,6 +56,7 @@ interface BuildComparisonRowsParams {
 
 const absentSide: ComparisonSide = {
   present: false,
+  targetType: null,
   output: null,
   metadata: null,
   comment: null,
@@ -89,6 +94,7 @@ const buildSide = (
 
   return {
     present: true,
+    targetType: detail?.targetType ?? null,
     output: comparisonResult.output,
     metadata: detail?.metadata ?? null,
     comment: detail?.comment ?? null,
@@ -109,6 +115,18 @@ const deltasAgainst = (baseline: ComparisonSide, side: ComparisonSide): Record<s
     deltas[scorerId] = baselineValue != null && sideValue != null ? sideValue - baselineValue : null;
   }
   return deltas;
+};
+
+/** Run duration of one side in ms, or null when either timestamp is missing. */
+export function sideDurationMs(side: Pick<ComparisonSide, 'startedAt' | 'completedAt'>): number | null {
+  if (!side.startedAt || !side.completedAt) return null;
+  return new Date(side.completedAt).getTime() - new Date(side.startedAt).getTime();
+}
+
+const durationDeltaAgainst = (baseline: ComparisonSide, side: ComparisonSide): number | null => {
+  const baselineMs = sideDurationMs(baseline);
+  const sideMs = sideDurationMs(side);
+  return baselineMs != null && sideMs != null ? sideMs - baselineMs : null;
 };
 
 /**
@@ -146,6 +164,7 @@ export const buildComparisonRows = ({
         experimentId: experimentIds[index],
         role: index === 0 ? 'baseline' : 'contender',
         deltas: index === 0 ? null : deltasAgainst(baseline, side),
+        durationDeltaMs: index === 0 ? null : durationDeltaAgainst(baseline, side),
       })),
     };
   });
