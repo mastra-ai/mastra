@@ -21,7 +21,11 @@ import { ExperimentKpis } from '@/domains/experiments/components/experiment-kpis
 import { ExperimentResultsBulkActions } from '@/domains/experiments/components/experiment-results-bulk-actions';
 import { ExperimentResultsSection } from '@/domains/experiments/components/experiment-results-section';
 import { ExperimentItemPanelProvider } from '@/domains/experiments/context/experiment-item-panel-context';
-import { ExperimentCrumb, ExperimentCrumbStatusIcon } from '@/domains/experiments/experiment-crumb';
+import {
+  ExperimentCrumb,
+  ExperimentCrumbItemCount,
+  ExperimentCrumbStatusIcon,
+} from '@/domains/experiments/experiment-crumb';
 import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-experiment-results-selection';
 import { navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
 
@@ -49,6 +53,7 @@ function ExperimentPage() {
       id: 'experiment',
       Component: ExperimentCrumb,
       icon: ExperimentCrumbStatusIcon,
+      ...(itemId ? {} : { Action: ExperimentCrumbItemCount }),
       to: experimentId ? `/experiments/${encodeURIComponent(experimentId)}` : undefined,
     },
     ...(itemId
@@ -205,8 +210,10 @@ function ExperimentPage() {
                 hasNextPage={hasNextPage}
                 selectedIds={selection.selectedIds}
                 onToggleSelect={selection.toggleSelect}
+                onToggleSelectAll={selection.toggleSelectAll}
                 sort={sort}
                 onSortChange={onSortChange}
+                supportsMetrics={supportsMetrics}
               />
             </div>
           </div>

@@ -207,11 +207,16 @@ describe('Datasets page query loading', () => {
       try {
         renderPage();
         await screen.findByText('Alpha');
-        fireEvent.click(screen.getByRole('combobox', { name: 'Experiments' }));
-        const option = await screen.findByRole('option', { name: 'With experiments' });
-        fireEvent.pointerDown(option, { pointerType: 'mouse', button: 0 });
-        fireEvent.pointerUp(option, { pointerType: 'mouse', button: 0 });
-        fireEvent.click(option);
+        const input = screen.getByRole('combobox', { name: 'Add filter' });
+        input.focus();
+        fireEvent.change(input, { target: { value: 'Experiments' } });
+        await screen.findByRole('option', { name: 'Experiments' });
+        // Typed text lands on the search field first, so the named field is one ArrowDown away.
+        fireEvent.keyDown(input, { key: 'ArrowDown' });
+        fireEvent.keyDown(input, { key: 'Enter' });
+        fireEvent.change(input, { target: { value: 'With experiments' } });
+        await screen.findByRole('option', { name: 'With experiments' });
+        fireEvent.keyDown(input, { key: 'Enter' });
         await waitFor(() => expect(screen.queryByText('Alpha')).toBeNull());
 
         release();

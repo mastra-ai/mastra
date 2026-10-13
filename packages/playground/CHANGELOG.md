@@ -1,5 +1,21 @@
 # @internal/playground
 
+## 1.34.1-alpha.2
+
+### Patch Changes
+
+- Fixed the experiment page header status getting stuck on "Pending" or "Running" until a reload. The header now updates live as the run moves from queued to in progress to completed, and its tooltip uses the same "Run queued" / "Run in progress" wording as the experiments list. While a run is queued or in progress, the empty results list now says so instead of showing "No results yet". ([#26785](https://github.com/mastra-ai/mastra/pull/26785))
+
+  Reworked the experiment page layout. The side panel is gone. Its run numbers (average score, items, duration, tokens, latency) are now metric cards above the results table. Rerun and the actions menu moved to the top-right of the page header, at the same compact size as on other pages. The separate "Review queue" button was removed because the sidebar already links to the review queue.
+
+  Reworked the experiment results table. A "N selected" button above the table clears the selection, and "Flag for review" and "Add tag" appear next to it once at least one result is selected. Rows that errored are now highlighted in red instead of showing an error icon. The Status column was removed. The Output column now also shows output for results without a target type, as text or compact JSON.
+
+- Updated dependencies [[`734fbf8`](https://github.com/mastra-ai/mastra/commit/734fbf8c31c1a496d17a924186849e62d4b9cfa2), [`2a1bb80`](https://github.com/mastra-ai/mastra/commit/2a1bb80305bca1859504287e1a09f43c8a014330), [`519e97f`](https://github.com/mastra-ai/mastra/commit/519e97f624a15362fec7b143dea4eabcff556712), [`aea91e7`](https://github.com/mastra-ai/mastra/commit/aea91e7f3a4fb066bfda96dca670d7d2a766d770), [`da87b0a`](https://github.com/mastra-ai/mastra/commit/da87b0a1629d5ffc980b434f70fe60f9445ddb1c), [`182f097`](https://github.com/mastra-ai/mastra/commit/182f09745783aa83e42131307085ecf913cfbc38), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183), [`7236b47`](https://github.com/mastra-ai/mastra/commit/7236b472bca9bbc9dddba53f683b15c271350183)]:
+  - @mastra/playground-ui@63.0.0-alpha.2
+  - @mastra/core@1.77.0-alpha.2
+  - @mastra/client-js@1.54.0-alpha.2
+  - @mastra/react@1.10.0-alpha.2
+
 ## 1.34.1-alpha.1
 
 ### Patch Changes

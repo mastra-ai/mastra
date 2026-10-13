@@ -1,5 +1,29 @@
 # @mastra/core
 
+## 1.77.0-alpha.2
+
+### Patch Changes
+
+- Fixed durable, evented, and Inngest agents leaking one run's messages into another run's model prompt when two Mastra instances in the same process reuse a `runId`. ([#26787](https://github.com/mastra-ai/mastra/pull/26787))
+
+- Fixed output guardrails leaving blocked replies in memory. When an output processor aborts in `processOutputResult`, the agent (including durable agents) now deletes the reply messages that the run had already saved. The blocked text no longer stays in memory and is not sent back to the model on the next turn. This affected turns that paused for tool approval (approved or declined) and turns run with `savePerStep: true`. The user's message, earlier turns, and messages sent in as input are kept. Fixes #26215. ([#26252](https://github.com/mastra-ai/mastra/pull/26252))
+
+- Fixed evented agents and nested evented workflows failing with `Workflow with id ... not found` when an orchestration worker runs steps on the API server through `MASTRA_STEP_EXECUTION_URL`. The worker now sends the parent workflow with each step request, so the server can find steps that are only reachable through their parent workflow, such as the steps of an evented agent. Fixes [#26676](https://github.com/mastra-ai/mastra/issues/26676). ([#26695](https://github.com/mastra-ai/mastra/pull/26695))
+
+  Also fixed nested evented workflows hanging when their parent workflow is registered under a key that differs from its `id`.
+
+- Fixed provider tool errors being sent back to the model as successful results. When a provider-run tool returns an error, Mastra now saves it as an error and sends it back as an error in later steps and recalled conversations. ([#26652](https://github.com/mastra-ai/mastra/pull/26652))
+
+- Fixed live scorers missing tool calls when observational memory is enabled. Observational memory removes messages from the agent's context once it has observed them, and live scorers only saw the messages that were left. On runs that suspend and resume, scorer `output` could miss every tool call made before `suspend()`, or end up empty. Scorers now receive every response message the run produced, across all suspend/resume segments, under the original `runId`. The prompt sent to the model is unchanged. ([#26687](https://github.com/mastra-ai/mastra/pull/26687))
+
+- Improved AgentController sessions so each thread restores its saved mode, model, state, token usage, and pending tool prompts when selected. Switching away and `detachFromCurrent()` cancel actively running local executions only for the initiating session. Listeners detach without cancelling the run. Parked runs and pending prompts remain available when switching back. ([#26058](https://github.com/mastra-ai/mastra/pull/26058))
+
+  Fixed first-thread creation to retain explicit startup mode, model, and thinking selections. Later new conversations use controller defaults. Asynchronous state writes and resumed tools keep their source thread's preferences without changing another active conversation. Addressed resumes recover the originating agent after restart and support repeated suspensions while another thread stays active. The executing run saves token usage to its own thread and retains unsaved measurements for retry on the next step. Subscribers display saved totals without counting replayed steps again or saving usage. Storage-free sessions can still receive inactive wake signals. Custom state and permissions remain host-scoped.
+
+  Changed `session.thread.set()` and `session.thread.clear()` to throw during thread lifecycle transitions. Added address-based suspension APIs and event fields so callers can safely claim and resume a prompt after switching threads: `const claim = session.claimToolSuspension(toolCallId, runId)` returns an `address` that can be passed to `session.respondToToolSuspension({ address, resumeData })`. Exported `SuspensionAddress` and `getSuspensionAddressKey` for hosts that persist or key those addresses.
+
+  Deprecated the `SessionRecord.modeId`, `modelId`, `state`, and `pending` fields, the `HarnessStorage.appendPendingItem()`, `updatePendingItem()`, and `removePendingItem()` helpers, and `SessionSuspensions.resolveToolCallId()`.
+
 ## 1.77.0-alpha.1
 
 ### Minor Changes
