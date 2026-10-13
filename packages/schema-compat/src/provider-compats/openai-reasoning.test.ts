@@ -72,6 +72,7 @@ describe('OpenAIReasoningSchemaCompatLayer', () => {
       ['azure.chat', 'demo1-gpt'],
       ['azure.chat', 'proto3-chat'],
       ['azure.responses', 'solo4'],
+      ['azure.deepseek', 'my-o3-deployment'],
     ])('should not apply for other @ai-sdk/azure models (%s, %s)', (provider, modelId) => {
       const layer = new OpenAIReasoningSchemaCompatLayer({ provider, modelId, supportsStructuredOutputs: false });
       expect(layer.shouldApply()).toBe(false);
