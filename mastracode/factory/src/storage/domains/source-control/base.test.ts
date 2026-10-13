@@ -3,7 +3,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FactoryProjectsStorage } from '../projects/base.js';
-import { SourceControlStorage } from './base.js';
+import { SessionOwnershipMismatchError, SourceControlStorage } from './base.js';
 import type { ProjectRepository, SourceControlStorageHandle } from './base.js';
 import { SourceControlStorageInMemory } from './inmemory.js';
 
@@ -681,6 +681,41 @@ describe('SourceControlStorage', () => {
       } finally {
         warn.mockRestore();
       }
+    });
+
+    it('never reuses a session the migration left without factory ownership', async () => {
+      const project = await createProject();
+      const { first, second } = await twoLinks(project.id);
+      await insertLegacySession({
+        sessionId: '00000000-0000-4000-8000-000000000131',
+        projectRepositoryId: first.id,
+        createdAt: new Date(Date.UTC(2026, 0, 1)),
+      });
+      await insertLegacySession({
+        sessionId: '00000000-0000-4000-8000-000000000132',
+        projectRepositoryId: second.id,
+        createdAt: new Date(Date.UTC(2026, 0, 2)),
+      });
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await domain.init();
+      expect(await factoryOf('00000000-0000-4000-8000-000000000132')).toBeNull();
+
+      // Same owner, link and branch as the collision loser: rejected instead of returned unowned.
+      const attempt = github.sessions.create({
+        ...sessionInput('00000000-0000-4000-8000-000000000133', second.id),
+        factoryProjectId: project.id,
+      });
+      await expect(attempt).rejects.toBeInstanceOf(SessionOwnershipMismatchError);
+      await expect(attempt).rejects.toMatchObject({ sessionId: '00000000-0000-4000-8000-000000000132' });
+    });
+
+    it('create rejects a caller from another organization', async () => {
+      const project = await createProject();
+      const link = await linkRepository({ factoryProjectId: project.id });
+      await expect(
+        github.sessions.create({ ...sessionInput('00000000-0000-4000-8000-000000000141', link.id), orgId: 'org-2' }),
+      ).rejects.toThrow(/not found/);
+      expect(await factoryOf('00000000-0000-4000-8000-000000000141')).toBeUndefined();
     });
 
     it('listByProject spans the links of one project within the handle integration and respects visibility', async () => {
