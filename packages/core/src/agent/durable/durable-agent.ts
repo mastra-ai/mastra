@@ -4700,7 +4700,7 @@ export class DurableAgent<
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
-    const memoryInfo = this.#runRegistry.getMemoryInfo(runId);
+    let memoryInfo = this.#runRegistry.getMemoryInfo(runId);
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
@@ -4742,13 +4742,19 @@ export class DurableAgent<
     const observedEntry = getRunRegistryEntry(runId, this.#mastra) ?? this.#runRegistry.get(runId);
     const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
     let structuredOutput = observedEntry?.structuredOutput;
+    let outputProcessors = observedEntry?.outputProcessors;
+    const processorStates = observedEntry?.processorStates;
+    let returnScorerData = observedEntry?.returnScorerData;
+    let requestContext = observedEntry?.requestContext;
+    let messageList = observedEntry?.messageList ?? this.#runRegistry.getMessageList(runId);
+    let workflowInput: DurableAgenticWorkflowInput | undefined;
+    const workflowsStore = !observedEntry ? await this.#mastra?.getStorage()?.getStore('workflows') : undefined;
 
-    if (!structuredOutput) {
-      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-      let workflowInput: DurableAgenticWorkflowInput | undefined;
+    if (!structuredOutput || !observedEntry) {
+      const snapshotStore = workflowsStore ?? (await this.#mastra?.getStorage()?.getStore('workflows'));
 
       for (const workflowName of [DurableStepIds.AGENTIC_LOOP, DurableStepIds.AGENTIC_EXECUTION]) {
-        const persisted = await workflowsStore?.getWorkflowRunById({ runId, workflowName });
+        const persisted = await snapshotStore?.getWorkflowRunById({ runId, workflowName });
         if (!persisted) continue;
 
         const snapshot =
@@ -4761,22 +4767,128 @@ export class DurableAgent<
         workflowInput = persistedInput;
         break;
       }
+    }
 
-      if (workflowInput) {
-        const persistedStructuredOutput = workflowInput.options?.structuredOutput;
-        if (persistedStructuredOutput?.schema) {
-          const { errorStrategy, fallbackValue, ...rest } = persistedStructuredOutput;
-          const schema = toStandardSchema<{}>(persistedStructuredOutput.schema);
-          // A non-JSON-safe fallbackValue is not persisted; keep the default strategy then.
-          structuredOutput =
-            errorStrategy === 'fallback'
-              ? fallbackValue === undefined
-                ? { ...rest, schema }
-                : { ...rest, schema, errorStrategy, fallbackValue: fallbackValue as {} }
-              : { ...rest, schema, errorStrategy };
-        }
+    if (!structuredOutput && workflowInput) {
+      const persistedStructuredOutput = workflowInput.options?.structuredOutput;
+      if (persistedStructuredOutput?.schema) {
+        const { errorStrategy, fallbackValue, ...rest } = persistedStructuredOutput;
+        const schema = toStandardSchema<{}>(persistedStructuredOutput.schema);
+        // A non-JSON-safe fallbackValue is not persisted; keep the default strategy then.
+        structuredOutput =
+          errorStrategy === 'fallback'
+            ? fallbackValue === undefined
+              ? { ...rest, schema }
+              : { ...rest, schema, errorStrategy, fallbackValue: fallbackValue as {} }
+            : { ...rest, schema, errorStrategy };
       }
     }
+
+    if (!observedEntry && workflowInput) {
+      requestContext = workflowInput.requestContextEntries
+        ? new RequestContext(
+            Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>,
+          )
+        : new RequestContext();
+
+      const messageListMemoryInfo = (
+        workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+      )?.memoryInfo;
+      const threadId = workflowInput.state?.threadId ?? messageListMemoryInfo?.threadId;
+      const resourceId = workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId;
+      memoryInfo = threadId && resourceId ? { threadId, resourceId } : undefined;
+
+      if (threadId && resourceId) {
+        requestContext.set('MastraMemory', {
+          thread: { id: threadId },
+          resourceId,
+          memoryConfig: workflowInput.state?.memoryConfig,
+        });
+      } else {
+        requestContext.delete('MastraMemory');
+      }
+
+      messageList = new MessageList({ threadId, resourceId });
+      try {
+        let messageListState: Parameters<typeof hydrateMessageListState>[1] = workflowInput.messageListState;
+        if (workflowsStore) {
+          for (const workflowName of [DurableStepIds.AGENTIC_EXECUTION, DurableStepIds.AGENTIC_LOOP]) {
+            const persisted = await workflowsStore.getWorkflowRunById({ runId, workflowName });
+            const snapshot =
+              typeof persisted?.snapshot === 'string'
+                ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
+                : persisted?.snapshot;
+            const latestState = snapshot && latestMessageListState(snapshot);
+            if (latestState) {
+              messageListState = latestState as Parameters<typeof hydrateMessageListState>[1];
+              break;
+            }
+          }
+        }
+        messageList.deserialize(
+          await hydrateMessageListState(
+            { state: undefined, getInitData: () => workflowInput!, mastra: this.#mastra },
+            messageListState,
+          ),
+        );
+      } catch (error) {
+        this.#mastra
+          ?.getLogger?.()
+          ?.warn?.(`[DurableAgent] observe(${runId}) messageList deserialize skipped: ${error}`);
+      }
+
+      try {
+        outputProcessors = (await this.#wrappedAgent.listOutputProcessors(requestContext)) ?? [];
+      } catch (error) {
+        outputProcessors = [];
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] observe(${runId}) processor resolution failed: ${error}`);
+      }
+      returnScorerData = workflowInput.options?.returnScorerData;
+    }
+
+    const refreshObservedMessageList = async () => {
+      const targetMessageList = messageList;
+      if (!workflowsStore || !workflowInput || !returnScorerData || !targetMessageList) return;
+
+      try {
+        let latestState: unknown;
+        for (const workflowName of [DurableStepIds.AGENTIC_EXECUTION, DurableStepIds.AGENTIC_LOOP]) {
+          const persisted = await workflowsStore.getWorkflowRunById({ runId, workflowName });
+          const snapshot =
+            typeof persisted?.snapshot === 'string'
+              ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
+              : persisted?.snapshot;
+          latestState = snapshot && latestMessageListState(snapshot);
+          if (latestState) break;
+        }
+        if (!latestState) return;
+
+        targetMessageList.deserialize(
+          await hydrateMessageListState(
+            { state: undefined, getInitData: () => workflowInput!, mastra: this.#mastra },
+            latestState as Parameters<typeof hydrateMessageListState>[1],
+          ),
+        );
+      } catch (error) {
+        this.#mastra
+          ?.getLogger?.()
+          ?.warn?.(`[DurableAgent] observe(${runId}) scorer messageList refresh failed: ${error}`);
+      }
+    };
+
+    let observedResponseText = '';
+    const handleObservedChunk = async (chunk: ChunkType<TOutput>) => {
+      if (returnScorerData && chunk.type === 'text-delta' && typeof chunk.payload.text === 'string') {
+        observedResponseText += chunk.payload.text;
+      }
+      if (returnScorerData && chunk.type === 'step-finish') {
+        await refreshObservedMessageList();
+        if (messageList && messageList.get.response.db().length === 0 && observedResponseText) {
+          messageList.add({ role: 'assistant', content: observedResponseText }, 'response');
+        }
+      }
+      await options?.onChunk?.(chunk);
+    };
 
     const replayFloor = await this.#readReplayFloor(runId, options?.offset);
 
@@ -4795,7 +4907,7 @@ export class DurableAgent<
       ...replayFloor,
       idleTimeoutMs: options?.idleTimeoutMs,
       isAlive: options?.isAlive,
-      onChunk: options?.onChunk,
+      onChunk: handleObservedChunk,
       experimentalTransform: options?.experimentalTransform,
       onStepFinish: options?.onStepFinish,
       onFinish: options?.onFinish,
@@ -4819,11 +4931,12 @@ export class DurableAgent<
       },
       onSuspended: options?.onSuspended,
       structuredOutput: structuredOutput as any,
-      outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
-      processorStates: this.#runRegistry.get(runId)?.processorStates,
-      returnScorerData: this.#runRegistry.get(runId)?.returnScorerData,
+      outputProcessors,
+      processorStates,
+      returnScorerData,
+      requestContext,
       tracingContext: observedAgentSpan ? { currentSpan: observedAgentSpan } : undefined,
-      messageList: getRunRegistryEntry(runId, this.#mastra)?.messageList ?? this.#runRegistry.getMessageList(runId),
+      messageList,
     });
     const { output, ready, detach } = stream;
     streamCleanup = stream.cleanup;

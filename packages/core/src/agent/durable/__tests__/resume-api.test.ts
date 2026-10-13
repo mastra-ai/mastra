@@ -1281,6 +1281,22 @@ describe('Observe API', () => {
     expect(typeof durableAgent.observe).toBe('function');
   });
 
+  it('does not insert a global registry entry when observing an unknown run', async () => {
+    const runId = 'observe-missing-global-entry';
+    const baseAgent = new Agent({
+      id: 'observe-missing-entry-agent',
+      name: 'Observe Missing Entry Agent',
+      instructions: 'Test missing observer state',
+      model: createTextModel('unused') as LanguageModelV2,
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub: cachingPubsub });
+
+    expect(globalRunRegistry.has(runId)).toBe(false);
+    const observed = await durableAgent.observe(runId);
+    expect(globalRunRegistry.has(runId)).toBe(false);
+    observed.detach();
+  });
+
   it('should return stream result from observe', async () => {
     const mockModel = createTextModel('Hello from observe');
 
