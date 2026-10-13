@@ -79,8 +79,13 @@ async function workosProvider(): Promise<IMastraAuthProvider> {
  * the `afterAuth` org/author step. `/web/whoami` is a private custom route;
  * `/web/open` is declared public.
  */
-async function buildApp() {
+async function buildApp({ legacyDeployer = false }: { legacyDeployer?: boolean } = {}) {
   const provider = await workosProvider();
+  // A deployer without `afterAuth` support ignores `phase` and mounts the
+  // handler as ordinary middleware, which runs before core route auth.
+  const afterAuth = legacyDeployer
+    ? { path: '*', handler: createFactoryAfterAuth(provider) }
+    : { path: '*', phase: 'afterAuth', handler: createFactoryAfterAuth(provider) };
   const whoami = (c: Context) => {
     const user = getFactoryAuthUser(c);
     const requestContext = c.get('requestContext' as never) as { get(key: string): unknown };
@@ -97,10 +102,7 @@ async function buildApp() {
     logger: false,
     server: {
       auth: provider,
-      middleware: [
-        createFactoryLoginRedirect(),
-        { path: '*', phase: 'afterAuth', handler: createFactoryAfterAuth(provider) },
-      ],
+      middleware: [createFactoryLoginRedirect(), afterAuth],
       apiRoutes: [
         ...buildAuthRoutes(provider),
         registerApiRoute('/web/whoami', { method: 'GET', handler: c => whoami(c as unknown as Context) }),
@@ -332,6 +334,74 @@ describe('Factory auth on protected routes (core route auth + afterAuth)', () =>
     expect(res.headers.get('location')).toBe(
       '/signin?error=access_denied&error_description=You%20do%20not%20have%20access',
     );
+  });
+});
+
+describe('Factory auth on a deployer without afterAuth support', () => {
+  it('still selects the requested bearer organization and stamps the author', async () => {
+    mockAuthenticate.mockResolvedValue({
+      id: 'user_123',
+      email: 'user@example.com',
+      organizationId: 'org_1',
+      memberOrgIds: ['org_1', 'org_2'],
+    });
+    const { app } = await buildApp({ legacyDeployer: true });
+
+    const res = await app.request('/web/whoami', { headers: { ...bearer, 'X-Mastra-Organization-Id': 'org_2' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      tenant: { orgId: 'org_2', userId: 'user_123' },
+      author: { id: 'user_123', name: 'user@example.com' },
+    });
+  });
+
+  it('still rejects a requested organization the caller does not belong to', async () => {
+    mockAuthenticate.mockResolvedValue({ id: 'user_123', organizationId: 'org_1', memberOrgIds: ['org_1'] });
+    const { app } = await buildApp({ legacyDeployer: true });
+
+    const res = await app.request('/web/whoami', { headers: { ...bearer, 'X-Mastra-Organization-Id': 'org_other' } });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'organization_forbidden' });
+  });
+
+  it('still bootstraps a personal org for a no-org user', async () => {
+    mockAuthenticate.mockResolvedValue({ workosId: 'user_boot', email: 'boot@example.com' });
+    const { app } = await buildApp({ legacyDeployer: true });
+
+    const res = await app.request('/web/whoami', { headers: bearer });
+    expect((await res.json()).tenant).toEqual({ orgId: 'org_new', userId: 'user_boot' });
+  });
+
+  it('leaves unauthenticated requests to core route auth', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = await buildApp({ legacyDeployer: true });
+
+    expect((await app.request('/web/whoami', { headers: { Accept: 'application/json' } })).status).toBe(401);
+    // Only core route auth checks a request that carries no credentials.
+    expect(mockAuthenticate).toHaveBeenCalledTimes(1);
+    expect((await app.request('/web/whoami', { headers: bearer })).status).toBe(401);
+  });
+});
+
+describe('client-supplied request context', () => {
+  const spoofed = encodeURIComponent(
+    JSON.stringify({ user: { id: 'victim', organizationId: 'org_victim' }, factoryAuthUser: { id: 'victim' } }),
+  );
+
+  it('cannot impersonate a user on public routes', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = await buildApp();
+
+    const res = await app.request(`/web/open?requestContext=${spoofed}`, { headers: { Accept: 'application/json' } });
+    expect(await res.json()).toEqual({ userId: null });
+  });
+
+  it('cannot replace the authenticated user on a deployer without afterAuth support', async () => {
+    mockAuthenticate.mockResolvedValue({ id: 'user_123', organizationId: 'org_1' });
+    const { app } = await buildApp({ legacyDeployer: true });
+
+    const res = await app.request(`/web/whoami?requestContext=${spoofed}`, { headers: bearer });
+    expect((await res.json()).tenant).toEqual({ orgId: 'org_1', userId: 'user_123' });
   });
 });
 
