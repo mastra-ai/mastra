@@ -11,6 +11,8 @@ import { useThreadsPanel } from '../context/use-threads-panel';
 
 export interface AgentLayoutProps {
   agentId: string;
+  /** Keep Chat and Editor panel preferences independent for the same agent. */
+  persistenceScope?: 'chat' | 'editor';
   children: React.ReactNode;
   leftSlot?: React.ReactNode;
   rightSlot?: React.ReactNode;
@@ -25,6 +27,7 @@ const MEMORY_DETAIL_LEFT_PANEL_DEFAULT_RESTORE = '300px';
 
 export const AgentLayout = ({
   agentId,
+  persistenceScope = 'chat',
   children,
   leftSlot,
   rightSlot,
@@ -41,7 +44,7 @@ export const AgentLayout = ({
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     // Bumped to v6 because the OM detail now replaces the Memory content in the
     // single left panel and expands it to ~50%; avoids restoring stale widths.
-    id: `agent-layout-v6-${agentId}`,
+    id: persistenceScope === 'editor' ? `agent-editor-layout-v1-${agentId}` : `agent-layout-v6-${agentId}`,
     storage: localStorage,
   });
 

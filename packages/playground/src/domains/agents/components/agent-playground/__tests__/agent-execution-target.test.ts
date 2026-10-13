@@ -90,10 +90,12 @@ describe('agent execution target', () => {
       ]);
     });
 
-    it('preserves a label selector through the canonical versions transport', () => {
+    it('scopes a label selector to the selected agent without changing graph-wide defaults', () => {
       const target = decodeAgentExecutionTarget(encodeAgentExecutionTarget({ kind: 'label', label: 'pr-101' }));
 
-      expect(toAgentVersionOverrides(target)).toEqual<VersionOverrides>({ self: { label: 'pr-101' } });
+      expect(toAgentVersionOverrides('agent-1', target)).toEqual<VersionOverrides>({
+        agents: { 'agent-1': { label: 'pr-101' } },
+      });
     });
 
     it('preserves an exact selector through the canonical versions transport', () => {
@@ -102,9 +104,13 @@ describe('agent execution target', () => {
       );
 
       expect(target).toEqual({ kind: 'version', versionId: 'version-12-immutable' });
-      expect(toAgentVersionOverrides(target)).toEqual<VersionOverrides>({
-        self: { versionId: 'version-12-immutable' },
+      expect(toAgentVersionOverrides('agent-1', target)).toEqual<VersionOverrides>({
+        agents: { 'agent-1': { versionId: 'version-12-immutable' } },
       });
+    });
+
+    it('does not override version policy when no target is selected', () => {
+      expect(toAgentVersionOverrides('agent-1', undefined)).toBeUndefined();
     });
 
     it('rejects malformed and empty encoded targets', () => {

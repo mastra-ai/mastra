@@ -400,6 +400,7 @@ export function AgentPlaygroundView({
   return (
     <AgentLayout
       agentId={agentId}
+      persistenceScope="editor"
       leftDrawerLabel="Open configuration"
       leftSlot={
         <LeftPanel

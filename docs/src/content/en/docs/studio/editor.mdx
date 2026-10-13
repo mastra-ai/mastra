@@ -297,7 +297,7 @@ const candidateAgent = await mastra.getAgentById('support-agent', {
 })
 ```
 
-Pass one selector at a time. Labels are movable, so each new request resolves the version they currently target. Use `versionId` when you need an immutable selection.
+Pass one selector at a time. Each new request resolves the label's current target. Use `versionId` when you need an immutable selection.
 
 Version selection supports:
 
@@ -332,6 +332,8 @@ Custom labels are unsupported for source-provider-backed code agents in Studio. 
 
 The **Run target** in the Playground is separate from the version selected for inspection or editing. Choose a release label when each new run should follow a movable pointer, or choose an exact version for an immutable target. Label choices use the same `production`, custom, `latest` order, and exact versions are listed newest first.
 
+This selection applies only to the agent you're running. It doesn't change version defaults for that agent's sub-agents. Developers can configure `versions.defaultLabel` to select a label across the agent graph, or `versions.agents[agentId]` to select individual agents.
+
 After a run starts, **Current run** shows the requested selector and the immutable version ID resolved by the server. Studio reads this identity from trusted stream metadata, not from its current label cache, and provides the resolved ID for copying.
 
 If a selected label is deleted or otherwise becomes unavailable, Studio disables new sends until another target is selected. It doesn't fall back to `latest` or another version.
@@ -359,7 +361,7 @@ await editor.agent.update({
 })
 ```
 
-The direct `editor.agent.update()` method activates the new version immediately. To create a draft without changing the live agent, use the stored-agent REST API or Client SDK instead:
+The direct `editor.agent.update()` method creates an inactive draft. It doesn't change the active version. The stored-agent REST API and Client SDK also create drafts unless you enable automatic publication:
 
 ```bash title="Create a draft through the REST API"
 curl -X PATCH http://localhost:4111/api/stored/agents/support-agent \

@@ -54,8 +54,10 @@ export const decodeAgentExecutionTarget = (value: string): AgentExecutionTarget 
 export const toAgentVersionSelector = (target: AgentExecutionTarget): VersionSelector =>
   target.kind === 'label' ? { label: target.label } : { versionId: target.versionId };
 
-export const toAgentVersionOverrides = (target: AgentExecutionTarget | undefined): VersionOverrides | undefined =>
-  target ? { self: toAgentVersionSelector(target) } : undefined;
+export const toAgentVersionOverrides = (
+  agentId: string,
+  target: AgentExecutionTarget | undefined,
+): VersionOverrides | undefined => (target ? { agents: { [agentId]: toAgentVersionSelector(target) } } : undefined);
 
 export const isAgentExecutionTargetAvailable = (
   target: AgentExecutionTarget,

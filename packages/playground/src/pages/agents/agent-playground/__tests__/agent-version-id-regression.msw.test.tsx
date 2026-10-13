@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { VersionOverrides } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -6,7 +7,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import AgentPlayground from '..';
 import {
@@ -39,6 +40,9 @@ const nestedRecord = (record: Record<string, unknown> | undefined, key: string) 
   return isRecord(value) ? value : undefined;
 };
 
+const rootSelector = (versions: Record<string, unknown> | undefined) =>
+  nestedRecord(nestedRecord(versions, 'agents'), AGENT_ID);
+
 const resolvedVersionStream = (versionId: string) =>
   new ReadableStream<Uint8Array>({
     start(controller) {
@@ -47,7 +51,9 @@ const resolvedVersionStream = (versionId: string) =>
         encoder.encode(
           `data: ${JSON.stringify({
             type: 'resolved-version-overrides',
-            payload: { self: { versionId } },
+            payload: {
+              agents: { researcher: { versionId: 'dependency-version' }, [AGENT_ID]: { versionId } },
+            } satisfies VersionOverrides,
           })}\n\n`,
         ),
       );
@@ -202,6 +208,28 @@ afterEach(() => {
 });
 
 describe('AgentPlayground — test chat agent version id', () => {
+  describe('when the agent Chat sidebar was saved collapsed', () => {
+    it('keeps the Editor configuration panel open without changing the saved Chat layout', async () => {
+      registerBaselineHandlers();
+      const chatStorageKey = `react-resizable-panels:agent-layout-v6-${AGENT_ID}`;
+      const collapsedChatLayout = JSON.stringify({ 'left-slot': 0, 'main-slot': 100 });
+      window.localStorage.setItem(chatStorageKey, collapsedChatLayout);
+      // jsdom has no layout; supply only browser measurements so the real
+      // resizable-panel implementation can restore and persist its widths.
+      const panelWidth = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(500);
+      try {
+        renderAgentPlayground();
+        await screen.findByRole('button', { name: 'Manage labels', exact: true });
+        const configurationPanel = screen.getByTestId('left-slot');
+        await waitFor(() => expect(Number(getComputedStyle(configurationPanel).flexGrow)).toBeGreaterThan(0));
+        expect(window.localStorage.getItem(chatStorageKey)).toBe(collapsedChatLayout);
+      } finally {
+        cleanup();
+        panelWidth.mockRestore();
+      }
+    });
+  });
+
   describe('when exact history and Production span more than one server page', () => {
     it('keeps an older exact target selectable and renders its vN identity for the current run', async () => {
       registerBaselineHandlers();
@@ -238,7 +266,7 @@ describe('AgentPlayground — test chat agent version id', () => {
       fireEvent.click(await screen.findByRole('button', { name: /send/i }));
 
       await waitFor(() => expect(streamBodies).toHaveLength(1));
-      expect(nestedRecord(nestedRecord(streamBodies[0], 'versions'), 'self')).toEqual({
+      expect(rootSelector(nestedRecord(streamBodies[0], 'versions'))).toEqual({
         versionId: PAGINATED_OLDER_VERSION_ID,
       });
       const currentRunLabel = await screen.findByText('Current run');
@@ -284,7 +312,7 @@ describe('AgentPlayground — test chat agent version id', () => {
 
       await waitFor(() => expect(sentBodies).toHaveLength(1));
       const streamOptions = nestedRecord(nestedRecord(sentBodies[0], 'ifIdle'), 'streamOptions');
-      expect(nestedRecord(nestedRecord(streamOptions, 'versions'), 'self')).toEqual({
+      expect(rootSelector(nestedRecord(streamOptions, 'versions'))).toEqual({
         versionId: LATEST_DRAFT_VERSION_ID,
       });
     });
@@ -544,11 +572,11 @@ describe('AgentPlayground — test chat agent version id', () => {
       const ifIdle = nestedRecord(sentBodies[0], 'ifIdle');
       const streamOptions = nestedRecord(ifIdle, 'streamOptions');
       const versions = nestedRecord(streamOptions, 'versions');
-      const self = nestedRecord(versions, 'self');
+      const selectedAgent = rootSelector(versions);
       const requestContext = nestedRecord(streamOptions, 'requestContext');
 
-      expect(self).toEqual({ versionId: LATEST_DRAFT_VERSION_ID });
-      expect(self?.versionId).not.toBe(PUBLISHED_VERSION_ID);
+      expect(selectedAgent).toEqual({ versionId: LATEST_DRAFT_VERSION_ID });
+      expect(selectedAgent?.versionId).not.toBe(PUBLISHED_VERSION_ID);
       expect(requestContext).not.toHaveProperty('agentVersionId');
     });
   });
@@ -588,7 +616,7 @@ describe('AgentPlayground — test chat agent version id', () => {
       const streamOptions = nestedRecord(ifIdle, 'streamOptions');
       const versions = nestedRecord(streamOptions, 'versions');
 
-      expect(nestedRecord(versions, 'self')).toEqual({ label: 'pr-101' });
+      expect(versions).toEqual({ agents: { [AGENT_ID]: { label: 'pr-101' } } });
     });
   });
 
@@ -632,7 +660,7 @@ describe('AgentPlayground — test chat agent version id', () => {
 
       await waitFor(() => expect(sentBodies).toHaveLength(1));
       const streamOptions = nestedRecord(nestedRecord(sentBodies[0], 'ifIdle'), 'streamOptions');
-      expect(nestedRecord(nestedRecord(streamOptions, 'versions'), 'self')).toEqual({ label: 'pr-101' });
+      expect(rootSelector(nestedRecord(streamOptions, 'versions'))).toEqual({ label: 'pr-101' });
       expect(labelRequests).toBeGreaterThan(0);
       expect(screen.queryByRole('button', { name: /Production/ })).toBeNull();
     });
@@ -1074,7 +1102,7 @@ describe('AgentPlayground — test chat agent version id', () => {
       await waitFor(() => expect(versionRequests).toBeGreaterThan(initialVersionRequests));
 
       const streamOptions = nestedRecord(nestedRecord(sentBodies[0], 'ifIdle'), 'streamOptions');
-      expect(nestedRecord(nestedRecord(streamOptions, 'versions'), 'self')).toEqual({ label: 'pr-101' });
+      expect(rootSelector(nestedRecord(streamOptions, 'versions'))).toEqual({ label: 'pr-101' });
       expect(screen.queryByRole('button', { name: /send/i })).toBeNull();
       await new Promise(resolve => setTimeout(resolve, 25));
       expect(sentBodies).toHaveLength(1);
@@ -1124,7 +1152,7 @@ describe('AgentPlayground — test chat agent version id', () => {
       ).toBe(true);
 
       const streamOptions = nestedRecord(nestedRecord(sentBodies[0], 'ifIdle'), 'streamOptions');
-      expect(nestedRecord(nestedRecord(streamOptions, 'versions'), 'self')).toEqual({
+      expect(rootSelector(nestedRecord(streamOptions, 'versions'))).toEqual({
         versionId: LATEST_DRAFT_VERSION_ID,
       });
       expect(screen.queryByRole('button', { name: /send/i })).toBeNull();

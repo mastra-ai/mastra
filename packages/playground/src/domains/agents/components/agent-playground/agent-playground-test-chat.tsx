@@ -190,7 +190,7 @@ export function AgentPlaygroundTestChat({
                       agentId={agentId}
                       agentName={agentName}
                       modelVersion={modelVersion}
-                      versions={toAgentVersionOverrides(executionTarget)}
+                      versions={toAgentVersionOverrides(agentId, executionTarget)}
                       canStartRun={canStartRun}
                       runBlockedReason={runBlockedReason}
                       canContinueRun={canContinueRun}

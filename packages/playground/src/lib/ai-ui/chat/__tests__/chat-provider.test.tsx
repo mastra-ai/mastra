@@ -622,7 +622,7 @@ describe('ChatProvider', () => {
           agentId="agent-1"
           threadId="thread-1"
           initialMessages={[]}
-          versions={{ self: { versionId: 'removed-version' } }}
+          versions={{ agents: { 'agent-1': { versionId: 'removed-version' } } }}
           onRunVersionSelectorError={onRunVersionSelectorError}
         >
           <MessagesProbe />
@@ -676,7 +676,7 @@ describe('ChatProvider', () => {
             agentId="agent-1"
             threadId="thread-1"
             initialMessages={initialMessages}
-            versions={{ self: { label: 'candidate' } }}
+            versions={{ agents: { 'agent-1': { label: 'candidate' } } }}
             onRunVersionSelectorError={onRunVersionSelectorError}
             onRunAuthorizationError={onRunAuthorizationError}
           >
@@ -735,7 +735,7 @@ describe('ChatProvider', () => {
             agentId="agent-1"
             threadId="thread-2"
             initialMessages={initialMessages}
-            versions={{ self: { label: 'candidate' } }}
+            versions={{ agents: { 'agent-1': { label: 'candidate' } } }}
             onRunVersionSelectorError={onRunVersionSelectorError}
             onRunAuthorizationError={onRunAuthorizationError}
           >
@@ -778,7 +778,7 @@ describe('ChatProvider', () => {
             agentId="agent-1"
             threadId="thread-1"
             initialMessages={initialMessages}
-            versions={{ self: { label: 'candidate' } }}
+            versions={{ agents: { 'agent-1': { label: 'candidate' } } }}
             onRunAuthorizationError={onRunAuthorizationError}
           >
             <ToolContinuationHarness action="decline" />
@@ -805,7 +805,7 @@ describe('ChatProvider', () => {
             agentId="agent-1"
             threadId="thread-1"
             initialMessages={initialMessages}
-            versions={{ self: { label: 'candidate' } }}
+            versions={{ agents: { 'agent-1': { label: 'candidate' } } }}
             canContinueRun={false}
             continuationBlockedReason="You do not have permission to run this agent."
             onRunAuthorizationError={onRunAuthorizationError}
