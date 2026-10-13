@@ -533,8 +533,13 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // consume the stream (for example, resume() with a delay-only wait).
           if (finishReason === 'abort') {
             try {
+              // Completed steps carry their messages and content only in the output's buffered
+              // steps; callers saving a stopped run need them (#26780). The stream is closed above.
+              const bufferedSteps = onAbort
+                ? ((await output.steps.catch(() => undefined)) as unknown[] | undefined)
+                : [];
               await onAbort?.({
-                steps: (data.output?.steps ?? []) as unknown[],
+                steps: bufferedSteps?.length ? bufferedSteps : ((data.output?.steps ?? []) as unknown[]),
                 text: (data.output?.text ?? '') as string,
               });
             } catch (callbackError) {

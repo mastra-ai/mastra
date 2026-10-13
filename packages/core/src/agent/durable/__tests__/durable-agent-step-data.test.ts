@@ -6,7 +6,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
@@ -207,4 +207,80 @@ describe('DurableAgent step data (#26780)', () => {
       expect(step.response?.messages?.length).toBeGreaterThan(0);
     }
   }, 30000);
+
+  it('gives onAbort the completed steps and output.response the run messages (toolsets)', async () => {
+    const abort = new AbortController();
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      modelId: 'abort-model',
+      doStream: async () => {
+        calls++;
+        if (calls === 2) abort.abort();
+        const parts =
+          calls === 1
+            ? [
+                { type: 'text-start', id: 'a' },
+                { type: 'text-delta', id: 'a', delta: 'looking ' },
+                { type: 'text-end', id: 'a' },
+                { type: 'tool-call', toolCallId: 'call-1', toolName: 'probe', input: '{"q":1}' },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                },
+              ]
+            : [{ type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }];
+        return {
+          stream: convertArrayToReadableStream([{ type: 'stream-start', warnings: [] }, ...parts] as any),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    });
+    const durableAgent = createDurableAgent({
+      agent: new Agent({
+        id: 'step-data-abort',
+        name: 'Step Data Abort',
+        instructions: 'Test',
+        model: model as LanguageModelV2,
+      }),
+      pubsub,
+    });
+
+    let aborted: any;
+    const { output, cleanup } = await durableAgent.stream('go', {
+      maxSteps: 5,
+      abortSignal: abort.signal,
+      toolsets: { runtime: { probe: probe() } },
+      onAbort: (e: any) => void (aborted = e),
+    } as any);
+    await output.consumeStream().catch(() => {});
+    await vi.waitFor(() => expect(aborted).toBeDefined());
+    cleanup();
+
+    const completed = aborted.steps[0];
+    expect(completed.response.messages.some((m: any) => m.role === 'tool')).toBe(true);
+    expect(completed.content.some((p: any) => p.type === 'tool-result')).toBe(true);
+  });
+
+  it('resolves output.response with the run messages', async () => {
+    const model = toolThenTextModel('response-model');
+    const durableAgent = createDurableAgent({
+      agent: new Agent({
+        id: 'step-data-response',
+        name: 'Step Data Response',
+        instructions: 'Test',
+        model: model.model as LanguageModelV2,
+      }),
+      pubsub,
+    });
+    const { output, cleanup } = await durableAgent.stream('go', {
+      maxSteps: 5,
+      toolsets: { runtime: { probe: probe() } },
+    } as any);
+    await output.consumeStream();
+    const response: any = await output.response;
+    cleanup();
+    expect(response.modelId).toBe('response-model');
+    expect(response.messages.some((m: any) => m.role === 'tool')).toBe(true);
+  });
 });
