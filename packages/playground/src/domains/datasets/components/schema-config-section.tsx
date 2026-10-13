@@ -207,7 +207,7 @@ export function SchemaConfigSection({
       <Tabs<SchemaTab> defaultTab="input" value={tab} onValueChange={setTab}>
         <div className="flex flex-wrap items-center gap-2">
           <Field orientation="horizontal" className="shrink-0">
-            <FieldLabel>Import from</FieldLabel>
+            <FieldLabel>From</FieldLabel>
             <Select value={sourceType} onValueChange={v => handleSourceChange(v as SourceType)} disabled={disabled}>
               <SelectTrigger size="sm" className="w-28">
                 <SelectValue />

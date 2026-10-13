@@ -79,7 +79,7 @@ const schemaEditor = (name: string) => screen.getByLabelText<HTMLTextAreaElement
 const OBJECT_SCHEMA = '{"type":"object"}';
 
 function pickSource(name: string) {
-  fireEvent.click(screen.getByRole('combobox', { name: 'Import from' }));
+  fireEvent.click(screen.getByRole('combobox', { name: 'From' }));
   fireEvent.pointerDown(screen.getByRole('option', { name }), { pointerType: 'mouse' });
   fireEvent.click(screen.getByRole('option', { name }), { detail: 1 });
 }
@@ -204,15 +204,15 @@ describe('CreateDatasetDialog', () => {
       expect(screen.queryByRole('switch')).toBeNull();
     });
 
-    it('labels the source picker with a visible "Import from" label', async () => {
+    it('labels the source picker with a visible "From" label', async () => {
       givenServer();
       renderDialog();
 
       await fillDetails();
 
-      const label = screen.getByText('Import from');
+      const label = screen.getByText('From');
       expect(label.tagName).toBe('LABEL');
-      expect(screen.getByRole('combobox', { name: 'Import from' })).toBeDefined();
+      expect(screen.getByRole('combobox', { name: 'From' })).toBeDefined();
     });
 
     it('explains what the selected schema checks', async () => {
