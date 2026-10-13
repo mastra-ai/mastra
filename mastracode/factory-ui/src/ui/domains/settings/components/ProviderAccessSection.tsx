@@ -21,13 +21,14 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { AddApiKeyDialog } from './AddApiKeyDialog';
 import { ProviderOAuthDialog } from './ProviderOAuthDialog';
 import { providerDisplayName } from './provider-display-name';
+import { credentialAt } from './provider-credential';
+import type { ProviderCredential as Credential } from './provider-credential';
 
 import { ScopeSwap, useScopeControl } from './SettingsScope';
 import type { SettingsScope } from './SettingsScope';
 import { SettingsSubsection } from './SettingsSubsection';
 
 type CredentialScope = 'user' | 'org';
-type Credential = NonNullable<ProviderInfo['userCredential']>;
 
 const CREDENTIAL_LABEL: Record<Credential, string> = { oauth: 'Signed in', api_key: 'Key saved' };
 const ORG_SCOPE_MEMBER_REASON = 'Only organization admins can manage org-wide credentials.';
@@ -39,19 +40,6 @@ interface ActiveOAuthSession {
 
 function mutationErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
-}
-
-function credentialAt(provider: ProviderInfo, scope: CredentialScope): Credential | undefined {
-  if (scope === 'org') {
-    if (provider.orgCredential) return provider.orgCredential;
-    if (provider.source === 'oauth-org') return 'oauth';
-    if (provider.source === 'stored-org') return 'api_key';
-    return undefined;
-  }
-  if (provider.userCredential) return provider.userCredential;
-  if (provider.source === 'oauth' || provider.source === 'oauth-user') return 'oauth';
-  if (provider.source === 'stored' || provider.source === 'stored-user') return 'api_key';
-  return undefined;
 }
 
 interface RowScope {
