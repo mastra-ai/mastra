@@ -16,6 +16,7 @@ import { z } from 'zod';
 
 import type { MCPTraceContext } from '../shared/trace-context.js';
 import { InternalMastraMCPClient, getMcpCallToolContent, getMcpCallToolMeta } from './client.js';
+import { MALFORMED_INPUT_SCHEMAS, VALID_INPUT_SCHEMAS } from './input-schema-test-cases.js';
 
 // exit-hook keeps its callbacks in a module-level Set and installs its own process
 // listeners exactly once behind an internal flag, so process.listenerCount('exit') is
@@ -3660,41 +3661,15 @@ describe('InternalMastraMCPClient - malformed input schemas (issue #23731)', () 
   });
 
   it.each([
-    ['boolean root', true],
-    ['array root', [{ type: 'string' }]],
-    [
-      'deeply nested non-schema',
-      { type: 'object', properties: { a: { type: 'object', properties: { b: 'string' } } } },
-    ],
-    ['required with non-strings', { type: 'object', required: ['a', 1] }],
-    ['unknown type name', { type: 'object', properties: { a: { type: 'text' } } }],
-    ['enum that is not an array', { type: 'object', properties: { a: { enum: 'x' } } }],
-    ['empty anyOf', { type: 'object', properties: { a: { anyOf: [] } } }],
-    ['properties that is not an object', { type: 'object', properties: [] }],
+    ...MALFORMED_INPUT_SCHEMAS,
     ['string minimum', { type: 'object', properties: { a: { type: 'number', minimum: '5' } } }],
-    ['non-schema $defs entry', { type: 'object', $defs: { A: ['not-a-schema'] } }],
-    ['non-array prefixItems', { type: 'object', properties: { a: { prefixItems: 'x' } } }],
-    ['non-schema behind a jsonSchema wrapper', { jsonSchema: { type: 'object', properties: { a: 1 } } }],
   ])('skips a tool with a %s input schema', async (_, inputSchema) => {
     const { client } = createClientWithTools([validTool, { name: 'bad', inputSchema }]);
 
     expect(Object.keys(await client.tools())).toEqual(['get_candles']);
   });
 
-  it.each([
-    ['a property named required', { type: 'object', properties: { required: { type: 'boolean' } } }],
-    ['boolean subschemas', { type: 'object', properties: { a: true }, additionalProperties: false }],
-    ['draft-07 tuple items', { type: 'object', properties: { a: { type: 'array', items: [{ type: 'string' }] } } }],
-    ['draft-07 property dependencies', { type: 'object', dependencies: { a: ['b'], c: { required: ['d'] } } }],
-    ['nullable type arrays', { type: 'object', properties: { a: { type: ['string', 'null'] } } }],
-    ['refs into $defs', { type: 'object', properties: { a: { $ref: '#/$defs/A' } }, $defs: { A: { type: 'string' } } }],
-    ['unknown extension keywords', { type: 'object', 'x-vendor': ['anything'], properties: {} }],
-    ['a declared 2020-12 dialect', { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object' }],
-    ['duplicate required entries', { type: 'object', properties: { a: { type: 'string' } }, required: ['a', 'a'] }],
-    ['duplicate and empty enums', { type: 'object', properties: { a: { enum: ['x', 'x'] }, b: { enum: [] } } }],
-    ['a Python-style pattern', { type: 'object', properties: { a: { type: 'string', pattern: '^(?P<x>\\d+)$' } } }],
-    ['a non-URI $id', { $id: 'my tool schema', type: 'object' }],
-  ])('keeps a tool whose input schema uses %s', async (_, inputSchema) => {
+  it.each(VALID_INPUT_SCHEMAS)('keeps a tool whose input schema uses %s', async (_, inputSchema) => {
     const { client, warn } = createClientWithTools([{ name: 'ok', inputSchema }]);
 
     expect(Object.keys(await client.tools())).toEqual(['ok']);

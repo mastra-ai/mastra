@@ -179,12 +179,95 @@ export const INPUT_SCHEMA_META_SCHEMA: JsonSchemaType = {
 let inputSchemaMetaValidator: JsonSchemaValidator<unknown> | undefined;
 let inputSchemaMetaValidatorLoad: Promise<void> | undefined;
 
+const SCHEMA_TYPES = new Set(['array', 'boolean', 'integer', 'null', 'number', 'object', 'string']);
+const SCHEMA_MAP_KEYWORDS = [
+  '$defs',
+  'definitions',
+  'properties',
+  'patternProperties',
+  'dependentSchemas',
+  'dependencies',
+];
+const SCHEMA_ARRAY_KEYWORDS = ['prefixItems', 'allOf', 'anyOf', 'oneOf'];
+const SCHEMA_KEYWORDS = [
+  'additionalProperties',
+  'unevaluatedProperties',
+  'additionalItems',
+  'unevaluatedItems',
+  'contains',
+  'propertyNames',
+  'not',
+  'if',
+  'then',
+  'else',
+  'contentSchema',
+];
+
+const isStringArray = (value: unknown) => Array.isArray(value) && value.every(item => typeof item === 'string');
+
+/**
+ * Fallback for runtimes where the cf-worker validator cannot be imported. Checks the structural
+ * rules of {@link INPUT_SCHEMA_META_SCHEMA} that decide whether providers accept a schema: every
+ * subschema is an object or boolean, and `type`, `required`, `enum` and the subschema keywords
+ * have the right shape.
+ */
+function getStructuralInputSchemaError(schema: object): string | undefined {
+  const seen = new Set<object>();
+  const stack: { value: unknown; path: string }[] = [{ value: schema, path: '#' }];
+  while (stack.length > 0) {
+    const { value, path } = stack.pop()!;
+    if (typeof value === 'boolean') continue;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return `${path}: must be a JSON Schema object or boolean`;
+    }
+    if (seen.has(value)) continue;
+    seen.add(value);
+
+    const record = value as Record<string, unknown>;
+    const { type, required, enum: enumValues } = record;
+    const types = Array.isArray(type) ? type : [type];
+    if (type !== undefined && (types.length === 0 || !types.every(t => SCHEMA_TYPES.has(t as string)))) {
+      return `${path}/type: must be a JSON Schema type name or a non-empty array of them`;
+    }
+    if (required !== undefined && !isStringArray(required)) return `${path}/required: must be an array of strings`;
+    if (enumValues !== undefined && !Array.isArray(enumValues)) return `${path}/enum: must be an array`;
+
+    for (const keyword of SCHEMA_MAP_KEYWORDS) {
+      const schemas = record[keyword];
+      if (schemas === undefined) continue;
+      if (!schemas || typeof schemas !== 'object' || Array.isArray(schemas))
+        return `${path}/${keyword}: must be an object`;
+      for (const [key, child] of Object.entries(schemas)) {
+        // draft-07 `dependencies` entries may also list required property names.
+        if (keyword === 'dependencies' && isStringArray(child)) continue;
+        stack.push({ value: child, path: `${path}/${keyword}/${key}` });
+      }
+    }
+    for (const keyword of SCHEMA_ARRAY_KEYWORDS) {
+      const schemas = record[keyword];
+      if (schemas === undefined) continue;
+      if (!Array.isArray(schemas) || schemas.length === 0) return `${path}/${keyword}: must be a non-empty array`;
+      schemas.forEach((child, index) => stack.push({ value: child, path: `${path}/${keyword}/${index}` }));
+    }
+    // `items` is a schema, or a tuple of schemas in draft-07.
+    if (Array.isArray(record.items)) {
+      record.items.forEach((child, index) => stack.push({ value: child, path: `${path}/items/${index}` }));
+    } else if (record.items !== undefined) {
+      stack.push({ value: record.items, path: `${path}/items` });
+    }
+    for (const keyword of SCHEMA_KEYWORDS) {
+      if (record[keyword] !== undefined) stack.push({ value: record[keyword], path: `${path}/${keyword}` });
+    }
+  }
+  return undefined;
+}
+
 /**
  * Loads the SDK's cf-worker validator, which interprets schemas instead of compiling them with
  * `new Function`, so it also runs on Cloudflare Workers. It is imported lazily because
  * `@cfworker/json-schema` builds a URL from `self.location` at import time, which throws in some
- * browser worker locations; importing `@mastra/mcp` must not fail there. If loading fails, the
- * check is skipped and schemas are still validated when a tool is called.
+ * browser worker locations; importing `@mastra/mcp` must not fail there. Until it has loaded, or
+ * if it cannot load, the structural fallback check is used instead.
  */
 export function loadInputSchemaMetaValidator(): Promise<void> {
   inputSchemaMetaValidatorLoad ??= import('@modelcontextprotocol/client/validators/cf-worker').then(
@@ -197,13 +280,13 @@ export function loadInputSchemaMetaValidator(): Promise<void> {
 }
 
 /**
- * Checks a server-supplied input schema against {@link INPUT_SCHEMA_META_SCHEMA} once
- * {@link loadInputSchemaMetaValidator} has finished. Callers must rule out oversized schemas
+ * Checks a server-supplied input schema against {@link INPUT_SCHEMA_META_SCHEMA}, falling back to
+ * a structural check while the validator is not loaded. Callers must rule out oversized schemas
  * with getJsonSchemaComplexityError first.
  */
 export function getInputSchemaError(schema: unknown): string | undefined {
   if (!schema || typeof schema !== 'object' || Array.isArray(schema)) return '#: input schema must be a JSON object';
-  if (!inputSchemaMetaValidator) return undefined;
+  if (!inputSchemaMetaValidator) return getStructuralInputSchemaError(schema);
   let result: ReturnType<typeof inputSchemaMetaValidator>;
   try {
     result = inputSchemaMetaValidator(schema);
