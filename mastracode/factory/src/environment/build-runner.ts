@@ -13,7 +13,7 @@ import type { ScheduleService } from './build-schedule.js';
 import { createEnvironmentBuildWorkflow, ENVIRONMENT_BUILD_WORKFLOW_ID } from './build-workflow.js';
 import type { EnvironmentBuildWorkflowOptions } from './build-workflow.js';
 import type { EnvironmentBuildDeps, EnvironmentBuildOutcome, EnvironmentBuildTrigger } from './build.js';
-import { environmentBuildContext, resolveEnvironmentHeads } from './build.js';
+import { environmentBuildContext, errorReason, resolveEnvironmentHeads } from './build.js';
 
 export type StartEnvironmentBuild = (
   projectId: string,
@@ -108,7 +108,7 @@ export class EnvironmentBuildRunner {
       .catch((error: unknown) => {
         this.#logger?.info('environment build push hand-off failed', {
           factoryProjectId: event.factoryProjectId,
-          error: error instanceof Error ? error.message : String(error),
+          reason: errorReason(error),
         });
       });
   };
@@ -127,7 +127,7 @@ export class EnvironmentBuildRunner {
     try {
       run = await mastra.getWorkflow(ENVIRONMENT_BUILD_WORKFLOW_ID).createRun();
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
+      const reason = errorReason(error);
       this.#logger?.info('environment build run could not be created', { factoryProjectId: projectId, reason });
       return mastra.listWorkflows()[ENVIRONMENT_BUILD_WORKFLOW_ID]
         ? { outcome: 'failed', reason }
@@ -148,7 +148,7 @@ export class EnvironmentBuildRunner {
         this.#logger?.info('environment build run threw', {
           factoryProjectId: projectId,
           runId: run.runId,
-          error: error instanceof Error ? error.message : String(error),
+          reason: errorReason(error),
         });
       })
       .finally(() => {

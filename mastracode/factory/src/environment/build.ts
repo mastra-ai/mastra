@@ -7,7 +7,7 @@
  * waits on the provider.
  */
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type { FactorySandbox, FactorySandboxContext } from '@mastra/core/workspace';
 import type { VersionControl } from '../capabilities/version-control.js';
@@ -29,7 +29,10 @@ export interface EnvironmentBuildSourceControl {
 export interface EnvironmentBuildDeps {
   /** The factory's normalized sandbox; builds are unavailable without its `builds`. */
   sandbox: FactorySandbox | undefined;
-  projects: Pick<FactoryProjectsStorage, 'getById' | 'update' | 'claimBuildAttempt' | 'pinActiveTemplate'>;
+  projects: Pick<
+    FactoryProjectsStorage,
+    'getById' | 'claimBuildAttempt' | 'claimBuildStart' | 'releaseBuildStart' | 'pinActiveTemplate'
+  >;
   /** Absent when the factory has no source-control integration to resolve heads with. */
   sourceControl: EnvironmentBuildSourceControl | undefined;
   logger?: { info: (msg: string, meta?: Record<string, unknown>) => void };
@@ -40,7 +43,7 @@ export interface EnvironmentBuildOutcome {
   outcome: 'started' | 'skipped' | 'unavailable' | 'failed';
   buildId?: string;
   templateId?: string;
-  /** Why nothing started: `debounced`, `in_progress`, `unchanged`, `no_environment`, `no_builds`, `no_source_control`, or an error. */
+  /** Why nothing started: `debounced`, `starting` (another run is starting a build), `in_progress`, `unchanged`, `no_environment`, `no_builds`, `no_source_control`, or an error. */
   reason?: string;
   /** The heads the started build pins; the workflow stores them once the build is ready. */
   heads?: EnvironmentHeads;
@@ -57,6 +60,11 @@ export function environmentBuildSessionId(projectId: string): string {
  */
 export function redactCredentials(message: string): string {
   return message.replace(/\/\/[^/\s@]+@/g, '//***@').replace(/\b(?:gh[pousr]|github_pat)_[A-Za-z0-9_]+/g, '***');
+}
+
+/** An error's message with credentials redacted, safe to log, store or return. */
+export function errorReason(error: unknown): string {
+  return redactCredentials(error instanceof Error ? error.message : String(error));
 }
 
 /**
@@ -123,15 +131,27 @@ export async function resolveEnvironmentHeads(
 }
 
 /**
+ * How long one run may hold the build-start lease. It covers reading heads,
+ * `builds.get` and `builds.start`; a run that crashes inside it blocks other
+ * triggers only until it expires.
+ */
+export const BUILD_START_LEASE_MS = 10 * 60_000;
+
+/**
  * Start a build for `projectId` when `trigger` calls for one. `push` first
- * wins the leading-edge debounce claim; every trigger skips while the last
- * build is still running; `schedule` and `push` also skip when the last build
- * is ready and neither a head nor any other template input changed; `manual`
- * otherwise always builds. Saving settings never builds. Any error yields
- * `failed` with the attempt still recorded, so the next trigger sees a fresh
- * attempt time. Only a failed `builds.start` clears the last build id, so a
- * later `schedule` or `push` cannot mistake the previous ready build for the
- * current template; an error before that keeps a running build's id.
+ * wins the leading-edge debounce claim. Every trigger then takes the project's
+ * build-start lease before reading build state, so overlapping manual,
+ * scheduled and push runs never both start a build; a run that finds the lease
+ * held skips as `starting`. Every trigger skips while the last build is still
+ * running; `schedule` and `push` also skip when the last build is ready and
+ * neither a head nor any other template input changed; `manual` otherwise
+ * always builds. Saving settings never builds.
+ *
+ * The result is written as the lease is released, and only while this run
+ * still holds it. A failed `builds.start` clears the last build id, so a later
+ * `schedule` or `push` cannot mistake the previous ready build for the current
+ * template; any other error keeps a running build's id. Any error yields
+ * `failed` with the attempt still recorded.
  */
 export async function runEnvironmentBuild(
   deps: EnvironmentBuildDeps,
@@ -140,35 +160,59 @@ export async function runEnvironmentBuild(
   const builds = deps.sandbox?.builds;
   if (!builds) return { outcome: 'unavailable', reason: 'no_builds' };
   if (!deps.sourceControl) return { outcome: 'unavailable', reason: 'no_source_control' };
-  const project = await deps.projects.getById({ id: input.projectId });
-  if (!project) return { outcome: 'skipped', reason: 'no_environment' };
+  const sourceControl = deps.sourceControl;
+  const initial = await deps.projects.getById({ id: input.projectId });
+  if (!initial) return { outcome: 'skipped', reason: 'no_environment' };
   const now = deps.now ?? (() => new Date());
 
   if (input.trigger === 'push') {
     const claimed = await deps.projects.claimBuildAttempt({
-      id: project.id,
-      debounceMinutes: project.buildPushDebounceMinutes,
+      id: initial.id,
+      debounceMinutes: initial.buildPushDebounceMinutes,
       now: now(),
     });
     if (!claimed) return { outcome: 'skipped', reason: 'debounced' };
   }
 
-  const environment = await resolveProjectEnvironment(deps.sourceControl.storage, project);
-  if (environment.repos.length === 0) return { outcome: 'skipped', reason: 'no_environment' };
+  const token = randomUUID();
+  if (!(await deps.projects.claimBuildStart({ id: initial.id, token, leaseMs: BUILD_START_LEASE_MS, now: now() }))) {
+    return { outcome: 'skipped', reason: 'starting' };
+  }
+  const attempted = input.trigger === 'push' ? {} : { lastBuildAttemptedAt: now() };
+  const release = (changes: Parameters<EnvironmentBuildDeps['projects']['releaseBuildStart']>[0]['changes'] = {}) =>
+    deps.projects.releaseBuildStart({ id: initial.id, token, changes, now: now() });
+  const failed = async (error: unknown, changes: Parameters<typeof release>[0]) => {
+    const reason = errorReason(error);
+    await release(changes);
+    deps.logger?.info('environment build failed', { factoryProjectId: initial.id, trigger: input.trigger, reason });
+    return { outcome: 'failed', reason } satisfies EnvironmentBuildOutcome;
+  };
 
-  let startAttempted = false;
+  let project: FactoryProject;
+  let environment: SessionEnvironment;
+  let heads: EnvironmentHeads;
+  let ctx: FactorySandboxContext;
+  let buildInputs: string;
   try {
-    const heads = await resolveEnvironmentHeads(deps.sourceControl, project, environment);
-    const ctx = environmentBuildContext(project, environment, heads, deps.sourceControl.versionControl);
-    const settings = environment.settings;
-    const buildInputs = environmentBuildInputs(environment);
+    // Read build state only once this run holds the lease, so a run that
+    // finished while this one waited has already recorded its build.
+    project = (await deps.projects.getById({ id: initial.id })) ?? initial;
+    environment = await resolveProjectEnvironment(sourceControl.storage, project);
+    if (environment.repos.length === 0) {
+      await release();
+      return { outcome: 'skipped', reason: 'no_environment' };
+    }
+    heads = await resolveEnvironmentHeads(sourceControl, project, environment);
+    ctx = environmentBuildContext(project, environment, heads, sourceControl.versionControl);
+    buildInputs = environmentBuildInputs(environment);
 
     if (project.lastBuildId) {
-      const last = await builds.get(ctx, settings, project.lastBuildId);
+      const last = await builds.get(ctx, environment.settings, project.lastBuildId);
       // Two runs polling one template fight over it (each poll resubmits its
       // own definition and the provider cancels the other), so a running
       // build is never joined by a second one, whatever asked.
       if (last.status === 'pending' || last.status === 'building') {
+        await release();
         return { outcome: 'skipped', reason: 'in_progress', buildId: project.lastBuildId };
       }
       if (
@@ -177,45 +221,44 @@ export async function runEnvironmentBuild(
         !headsChanged(project.activeTemplateHeads, heads) &&
         project.lastBuildInputs === buildInputs
       ) {
+        await release();
         return { outcome: 'skipped', reason: 'unchanged' };
       }
     }
+  } catch (error) {
+    return failed(error, attempted);
+  }
 
-    startAttempted = true;
-    const started = await builds.start(ctx, settings);
-    await deps.projects.update({
-      orgId: project.orgId,
-      id: project.id,
-      input: {
-        lastBuildId: started.buildId,
-        lastBuildHeads: heads,
-        lastBuildInputs: buildInputs,
-        ...(input.trigger === 'push' ? {} : { lastBuildAttemptedAt: now() }),
-      },
-    });
+  let started: Awaited<ReturnType<typeof builds.start>>;
+  try {
+    started = await builds.start(ctx, environment.settings);
+  } catch (error) {
+    // Only a failed start clears the last build: the previous one no longer
+    // describes the template this project wants.
+    return failed(error, { lastBuildId: null, lastBuildHeads: null, lastBuildInputs: null, ...attempted });
+  }
+
+  // The provider has started the build: from here on, no error clears it.
+  const outcome: EnvironmentBuildOutcome = {
+    outcome: 'started',
+    buildId: started.buildId,
+    ...(started.templateId ? { templateId: started.templateId } : {}),
+    heads,
+  };
+  try {
+    await release({ lastBuildId: started.buildId, lastBuildHeads: heads, lastBuildInputs: buildInputs, ...attempted });
     deps.logger?.info('environment build started', {
       factoryProjectId: project.id,
       trigger: input.trigger,
       buildId: started.buildId,
       templateId: started.templateId,
     });
-    return {
-      outcome: 'started',
-      buildId: started.buildId,
-      ...(started.templateId ? { templateId: started.templateId } : {}),
-      heads,
-    };
   } catch (error) {
-    const reason = redactCredentials(error instanceof Error ? error.message : String(error));
-    await deps.projects.update({
-      orgId: project.orgId,
-      id: project.id,
-      input: {
-        ...(startAttempted ? { lastBuildId: null, lastBuildHeads: null, lastBuildInputs: null } : {}),
-        ...(input.trigger === 'push' ? {} : { lastBuildAttemptedAt: now() }),
-      },
+    deps.logger?.info('environment build started but not recorded', {
+      factoryProjectId: project.id,
+      buildId: started.buildId,
+      reason: errorReason(error),
     });
-    deps.logger?.info('environment build failed', { factoryProjectId: project.id, trigger: input.trigger, reason });
-    return { outcome: 'failed', reason };
   }
+  return outcome;
 }

@@ -32,8 +32,11 @@ class BuildingSandbox extends FactorySandbox<Settings> {
   readonly gets: string[] = [];
   statusOf: (buildId: string) => FactorySandboxBuild['status'] = () => 'ready';
   startError: Error | undefined;
+  /** Runs before the next `start` call only: await to hold that start open, throw to fail it. */
+  readonly beforeStart: Array<() => Promise<void>> = [];
   readonly builds: FactorySandboxBuilds<Settings> = {
     start: async (ctx, settings): Promise<FactorySandboxBuildStart> => {
+      await this.beforeStart.shift()?.();
       if (this.startError) throw this.startError;
       this.starts.push({ ctx, settings });
       return { buildId: `build-${this.starts.length}`, status: 'building', templateId: `tpl-${this.starts.length}` };
@@ -340,6 +343,86 @@ describe('runEnvironmentBuild', () => {
       runEnvironmentBuild(depsFor(seed, sandbox, now), { projectId: project.id, trigger: 'schedule' }),
     ).resolves.toMatchObject({ outcome: 'started', buildId: 'build-1' });
     expect(sandbox.gets).toEqual(['build-old']);
+  });
+
+  it('starts one build when manual, schedule and push runs overlap', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { buildOnPushEnabled: true } });
+    const sandbox = new BuildingSandbox();
+    let release!: () => void;
+    sandbox.beforeStart.push(() => new Promise<void>(resolve => (release = resolve)));
+    const deps = depsFor(seed, sandbox, now);
+
+    const first = runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' });
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    const overlapping = await Promise.all(
+      (['manual', 'schedule', 'push'] as const).map(trigger =>
+        runEnvironmentBuild(deps, { projectId: project.id, trigger }),
+      ),
+    );
+    release();
+
+    expect(await first).toMatchObject({ outcome: 'started', buildId: 'build-1' });
+    expect(overlapping).toEqual([
+      { outcome: 'skipped', reason: 'starting' },
+      { outcome: 'skipped', reason: 'starting' },
+      { outcome: 'skipped', reason: 'starting' },
+    ]);
+    expect(sandbox.starts).toHaveLength(1);
+    sandbox.statusOf = () => 'building';
+    expect(await runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' })).toMatchObject({
+      outcome: 'skipped',
+      reason: 'in_progress',
+      buildId: 'build-1',
+    });
+  });
+
+  it('never lets an older failing start clear a newer build', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    let failOlder!: (error: Error) => void;
+    sandbox.beforeStart.push(() => new Promise<void>((_resolve, reject) => (failOlder = reject)));
+    const deps = depsFor(seed, sandbox, now);
+
+    const older = runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' });
+    await vi.waitFor(() => expect(failOlder).toBeTypeOf('function'));
+    // The older run stalls past its lease, so a newer run takes over and starts.
+    clock = new Date(clock.getTime() + 11 * 60_000);
+    expect(await runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' })).toMatchObject({
+      outcome: 'started',
+      buildId: 'build-1',
+    });
+    failOlder(new Error('provider timed out'));
+
+    expect(await older).toEqual({ outcome: 'failed', reason: 'provider timed out' });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({
+      lastBuildId: 'build-1',
+      lastBuildHeads: { 'acme/api': SHA_A },
+    });
+  });
+
+  it('keeps a started build when anything after the provider start fails', async () => {
+    const { project } = await seedProject(seed, ['acme/api']);
+    const sandbox = new BuildingSandbox();
+    const deps = {
+      ...depsFor(seed, sandbox, now),
+      logger: {
+        info: (msg: string) => {
+          if (msg === 'environment build started') throw new Error('log sink down');
+        },
+      },
+    };
+
+    expect(await runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' })).toMatchObject({
+      outcome: 'started',
+      buildId: 'build-1',
+    });
+    expect(await seed.projects.getById({ id: project.id })).toMatchObject({ lastBuildId: 'build-1' });
+    sandbox.statusOf = () => 'building';
+    expect(await runEnvironmentBuild(deps, { projectId: project.id, trigger: 'manual' })).toMatchObject({
+      outcome: 'skipped',
+      reason: 'in_progress',
+    });
   });
 
   it('pins the repository default branch the template clones, not a link branch', async () => {

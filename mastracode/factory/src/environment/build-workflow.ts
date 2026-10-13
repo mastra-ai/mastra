@@ -3,8 +3,8 @@
  * build (`runEnvironmentBuild`), step two polls the provider until the build
  * settles and pins the active template on the project row. Registered by
  * `MastraFactory.prepare()` only when the sandbox has `builds`, and driven by
- * the Build now route, the per-project cron schedule, the GitHub push
- * hand-off and a settings change that touches the template.
+ * the Build now route, the per-project cron schedule and the GitHub push
+ * hand-off. Saving settings never starts it.
  */
 
 import { createStep, createWorkflow } from '@mastra/core/workflows';
@@ -13,6 +13,7 @@ import { resolveProjectEnvironment } from '../workspace.js';
 import {
   ENVIRONMENT_BUILD_TRIGGERS,
   environmentBuildContext,
+  errorReason,
   redactCredentials,
   runEnvironmentBuild,
 } from './build.js';
@@ -112,7 +113,7 @@ export function createEnvironmentBuildWorkflow(
               factoryProjectId: project.id,
               buildId: result.buildId,
               status: build.status,
-              error: build.error,
+              ...(build.error ? { reason: redactCredentials(build.error) } : {}),
             });
             return {
               ...result,
@@ -126,7 +127,7 @@ export function createEnvironmentBuildWorkflow(
           await sleep(pollMs);
         }
       } catch (error) {
-        const reason = redactCredentials(error instanceof Error ? error.message : String(error));
+        const reason = errorReason(error);
         deps.logger?.info('environment build status read failed', { factoryProjectId: project.id, reason });
         return { ...result, status: 'unknown', reason };
       }

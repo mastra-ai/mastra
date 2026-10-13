@@ -872,7 +872,8 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
                 const { cron, timezone } = buildTriggers.schedule;
                 const stored = await readSchedule(runner.schedules()!, project.id);
                 const nextCron = cron ?? stored.cron;
-                if (!nextCron)
+                // Disabling a schedule that never existed needs no cron: it is a no-op.
+                if (!nextCron && buildTriggers.schedule.enabled)
                   return context.json(
                     {
                       error: 'invalid_environment',
@@ -881,7 +882,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
                     400,
                   );
                 const nextTimezone = timezone ?? stored.timezone ?? undefined;
-                const message = invalidCronMessage(nextCron, nextTimezone);
+                const message = nextCron ? invalidCronMessage(nextCron, nextTimezone) : undefined;
                 if (message) {
                   return context.json(
                     {
@@ -952,13 +953,16 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           }
           if (buildTriggers?.schedule && runner?.scheduleAvailable) {
             const stored = await readSchedule(runner.schedules()!, project.id);
-            await ensureSchedule(runner.schedules()!, project.id, {
-              enabled: buildTriggers.schedule.enabled,
-              cron: (buildTriggers.schedule.cron ?? stored.cron)!,
-              ...((buildTriggers.schedule.timezone ?? stored.timezone)
-                ? { timezone: (buildTriggers.schedule.timezone ?? stored.timezone)! }
-                : {}),
-            });
+            const cron = buildTriggers.schedule.cron ?? stored.cron;
+            // Without a cron the request disables a schedule that never existed: nothing to write.
+            if (cron)
+              await ensureSchedule(runner.schedules()!, project.id, {
+                enabled: buildTriggers.schedule.enabled,
+                cron,
+                ...((buildTriggers.schedule.timezone ?? stored.timezone)
+                  ? { timezone: (buildTriggers.schedule.timezone ?? stored.timezone)! }
+                  : {}),
+              });
           }
           // Saving never builds: the next Build now, schedule or push run
           // picks the changed template up.
