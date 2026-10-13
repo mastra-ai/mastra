@@ -1,3 +1,4 @@
+import type { ModelPricingRates } from '@mastra/core/llm';
 import { PricingModel, PricingTier } from './pricing-model';
 import type { PricingMeter } from './types';
 
@@ -10,8 +11,8 @@ export const MODELS_DEV_API_URL = 'https://models.dev/api.json';
  */
 export const MIN_PRICED_MODELS = 1_000;
 
-/** models.dev `cost` keys (USD per 1M tokens) mapped to pricing meters. */
-const COST_KEY_TO_METER: Record<string, PricingMeter> = {
+/** models.dev `cost` keys (USD per 1M tokens) mapped to pricing meters. Keyed by core's `ModelPricingRates` so the two cannot drift. */
+const COST_KEY_TO_METER: Record<keyof ModelPricingRates, PricingMeter> = {
   input: 'input_tokens',
   output: 'output_tokens',
   cache_read: 'input_cache_read_tokens',
