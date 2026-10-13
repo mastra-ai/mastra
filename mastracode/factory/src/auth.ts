@@ -119,6 +119,27 @@ export interface FactoryAuthVariables {
 const FACTORY_AUTH_USER_KEY = 'factoryAuthUser';
 
 /**
+ * The normalized, org-selected user per request context. Kept off the request
+ * context's own keys because clients can supply non-reserved keys in the
+ * request body, and core route auth overwrites `user` when it runs after
+ * {@link createFactoryAfterAuth} (deployers without `afterAuth` support).
+ */
+const resolvedUsers = new WeakMap<object, FactoryAuthUser>();
+
+/**
+ * Where core route auth stores the authenticated user (`MASTRA_USER_KEY` in
+ * `@mastra/server`). Reserved, so request bodies can't set it — unlike the
+ * legacy `user` key, which is only trustworthy after core auth overwrote it.
+ */
+const CORE_AUTH_USER_KEY = 'mastra__user';
+
+/** The authenticated user for an HTTP request, from trusted sources only. */
+function authenticatedRequestUser(requestContext: { get: (key: string) => unknown } | undefined) {
+  if (!requestContext || typeof requestContext.get !== 'function') return undefined;
+  return resolvedUsers.get(requestContext) ?? toFactoryAuthUser(requestContext.get(CORE_AUTH_USER_KEY)) ?? undefined;
+}
+
+/**
  * Read the authenticated user for this request, or `undefined` when
  * unauthenticated / auth disabled. Used by downstream routes (e.g. GitHub) to
  * scope rows per user. Custom routes run on a sub-app with their own Hono
@@ -128,7 +149,7 @@ const FACTORY_AUTH_USER_KEY = 'factoryAuthUser';
 export function getFactoryAuthUser(c: Context): FactoryAuthUser | undefined {
   return (
     (c.get(FACTORY_AUTH_USER_KEY) as FactoryAuthUser | undefined) ??
-    getFactoryAuthUserFromContext(c.get('requestContext') as { get: (key: string) => unknown } | undefined)
+    authenticatedRequestUser(c.get('requestContext') as { get: (key: string) => unknown } | undefined)
   );
 }
 
@@ -148,7 +169,7 @@ export function getFactoryAuthUserFromContext(
   requestContext: { get: (key: string) => unknown } | undefined,
 ): FactoryAuthUser | undefined {
   if (!requestContext || typeof requestContext.get !== 'function') return undefined;
-  return toFactoryAuthUser(requestContext.get('user')) ?? undefined;
+  return resolvedUsers.get(requestContext) ?? toFactoryAuthUser(requestContext.get('user')) ?? undefined;
 }
 
 /** Resolve the stable user id from an authenticated user shape. */
@@ -849,8 +870,18 @@ export function createFactoryLoginRedirect() {
 export function createFactoryAfterAuth(provider: IMastraAuthProvider) {
   return async (c: Context, next: () => Promise<void>): Promise<Response | void> => {
     const requestContext = c.get('requestContext');
-    const user = getFactoryAuthUserFromContext(requestContext);
-    if (!user) return next();
+    let user = authenticatedRequestUser(requestContext);
+    if (!user) {
+      // A deployer without `afterAuth` support runs this before core route
+      // auth, so no user is on the context yet. Authenticate here so org
+      // selection, bootstrap, and the author stamp still apply; core route
+      // auth still rejects unauthenticated requests afterwards.
+      if (!c.req.header('Authorization') && !c.req.header('Cookie')) return next();
+      user =
+        (await authenticateRequest(provider, getBearerToken(c.req.header('Authorization')), c.req.raw)) ?? undefined;
+      forwardPendingResponseHeaders(provider, c);
+      if (!user) return next();
+    }
 
     const token = getBearerToken(c.req.header('Authorization'));
     const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
@@ -862,6 +893,7 @@ export function createFactoryAfterAuth(provider: IMastraAuthProvider) {
       await ensureUserOrg(provider, user);
     }
     c.set(FACTORY_AUTH_USER_KEY, user);
+    resolvedUsers.set(requestContext, user);
     requestContext.set('user', user);
     requestContext.set(MASTRA_MESSAGE_AUTHOR_KEY, messageAuthor(user));
     requestContext.set(FACTORY_INTERACTIVE_KEY, true);
