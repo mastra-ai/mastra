@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
+import { RequestContext } from '../../request-context';
 import { parseKnowledgeImporterBindingKey } from '../../storage/domains/knowledge';
 import { createTool } from '../../tools';
 import type { Knowledge } from '../index';
@@ -128,6 +129,7 @@ function assertResourceScopedObservationalMemory(config: KnowledgeImporterAgentC
 export async function runAgenticKnowledgeImport(input: {
   knowledge: Knowledge;
   importerId: string;
+  organizationId?: string;
   binding: string;
   runId: string;
   signal: AbortSignal;
@@ -177,7 +179,18 @@ export async function runAgenticKnowledgeImport(input: {
   const writes = { nodesUpserted: 0, nodesRemoved: 0, recordsAppended: 0, recordsRemoved: 0 };
   const tools = createImporterTools(input.operations, input.runId, writes);
   const activeTools = Object.keys(tools);
+  // The importer is the run's subject. Its org comes from the registration only; FGA's
+  // trusted-actor gate fails closed when it is absent.
+  const requestContext = new RequestContext();
+  if (input.organizationId) requestContext.set('organizationId', input.organizationId);
   const result = await input.config.agent.generate(prompt, {
+    requestContext,
+    actor: {
+      actorKind: 'system',
+      agentId: `importer:${input.importerId}`,
+      ...(input.organizationId ? { scope: { org: input.organizationId } } : {}),
+      permissions: ['knowledge-importers:execute'],
+    },
     memory: { resource: resourceId, thread: threadId },
     toolsets: { knowledgeImport: tools },
     prepareStep: () => ({ activeTools }),
