@@ -685,7 +685,8 @@ describe('syncEnvironmentRepository', () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return OK; // detached template pin
       if (script.includes('rev-parse --verify')) return { exitCode: 1, stdout: '', stderr: '' }; // no local branch yet
-      if (script.includes('ls-remote')) return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
+      if (script.includes('ls-remote'))
+        return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
       return OK;
     });
 
@@ -708,7 +709,8 @@ describe('syncEnvironmentRepository', () => {
   it('switches to an existing local session branch instead of resetting it onto the remote tip', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
-      if (script.includes('ls-remote')) return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
+      if (script.includes('ls-remote'))
+        return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
       return OK; // rev-parse --verify succeeds: the branch exists locally
     });
 
@@ -738,13 +740,13 @@ describe('syncEnvironmentRepository', () => {
     const calls = sandbox.calls;
     expect(calls).toContain('git -C /workspace/docs fetch origin main');
     expect(calls).toContain('git -C /workspace/docs checkout -B main FETCH_HEAD');
-    expect(calls.indexOf('git -C /workspace/docs checkout -b factory/issue-7')).toBeGreaterThan(
+    expect(calls.indexOf('git -C /workspace/docs checkout -b factory/issue-7 FETCH_HEAD')).toBeGreaterThan(
       calls.indexOf('git -C /workspace/docs checkout -B main FETCH_HEAD'),
     );
     expect(calls.join('\n')).not.toContain('checkout -B factory/issue-7');
   });
 
-  it('creates the session branch in place when the checkout sits on the default branch', async () => {
+  it('refreshes the default tip before creating a session branch from a clean default checkout', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
       if (script.includes('rev-parse --verify')) return { exitCode: 1, stdout: '', stderr: '' };
@@ -757,9 +759,12 @@ describe('syncEnvironmentRepository', () => {
       branch: 'factory/issue-7',
     });
 
-    expect(sandbox.calls).toContain('git -C /workspace/docs checkout -b factory/issue-7');
-    // The default branch is already checked out: nothing is fetched or reset.
-    expect(sandbox.calls.join('\n')).not.toMatch(/fetch origin|checkout -B/);
+    expect(sandbox.calls).toContain('git -C /workspace/docs status --porcelain');
+    expect(sandbox.calls).toContain('git -C /workspace/docs merge-base --is-ancestor HEAD FETCH_HEAD');
+    expect(sandbox.calls.indexOf('git -C /workspace/docs checkout -b factory/issue-7 FETCH_HEAD')).toBeGreaterThan(
+      sandbox.calls.indexOf('git -C /workspace/docs fetch origin main'),
+    );
+    expect(sandbox.calls.join('\n')).not.toContain('checkout -B');
   });
 
   it('leaves a checkout that sits on another branch alone when the remote lacks the session branch', async () => {
@@ -795,7 +800,8 @@ describe('syncEnvironmentRepository', () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'scratch\n', stderr: '' };
       if (script.includes('rev-parse --verify')) return { exitCode: 1, stdout: '', stderr: '' };
-      if (script.includes('ls-remote')) return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
+      if (script.includes('ls-remote'))
+        return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
       if (script.includes('checkout -B')) {
         return {
           exitCode: 1,
