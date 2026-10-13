@@ -55,32 +55,45 @@ function expectSettled(turn: { finishReason?: string; chunks: Array<{ type: stri
 }
 
 describe('T22 prepare-step (plain, durable, evented)', () => {
-  it('model: uses the model returned for the current step', async () => {
-    const served = new Map<ParityEngine, number>();
+  it('model: uses the model returned for each step', async () => {
+    const served = new Map<ParityEngine, string[]>();
 
     const results = await expectEngineParity({
-      model: { tapes: [textOnlyTape('prepared model answered')] },
+      model: {
+        respond: request =>
+          toolResultCount(request) === 0
+            ? toolCallTape('step', { n: 1 }, 'model-step-call')
+            : textOnlyTape('prepared models answered'),
+      },
       buildAgent: ({ engine, model }) => {
-        served.set(engine, 0);
-        const preparedModel = taggedModel(model, 't22-prepared-model', () =>
-          served.set(engine, served.get(engine)! + 1),
+        served.set(engine, []);
+        const step = createTool({
+          id: 'step',
+          description: 'Advance one step.',
+          inputSchema: z.object({ n: z.number() }),
+          execute: async ({ n }) => ({ n }),
+        });
+        const preparedModels = ['first', 'second'].map(label =>
+          taggedModel(model, `t22-${label}-prepared-model`, () => served.get(engine)!.push(label)),
         );
         return new Agent({
           id: `t22-model-${engine}`,
           name: 'T22 model',
           instructions: 'Follow the script.',
           model,
+          tools: { step },
           defaultOptions: {
-            prepareStep: () => ({ model: preparedModel as typeof model }),
+            prepareStep: ({ stepNumber }) => ({ model: preparedModels[stepNumber] as typeof model }),
           },
         });
       },
-      input: 'Use the prepared model.',
+      input: 'Use the prepared models.',
+      options: { maxSteps: 3 },
     });
 
     for (const engine of ENGINES) {
-      expect(results[engine]!.requests).toHaveLength(1);
-      expect(served.get(engine)).toBe(1);
+      expect(results[engine]!.requests).toHaveLength(2);
+      expect(served.get(engine)).toEqual(['first', 'second']);
       expectSettled(results[engine]!.turns.at(-1));
     }
   });
@@ -144,28 +157,37 @@ describe('T22 prepare-step (plain, durable, evented)', () => {
     }
   });
 
-  it('messages: replaces the messages for the current step', async () => {
-    const marker = 't22 prepared message';
+  it('messages: replaces the messages for each step', async () => {
+    const markers = ['t22 first prepared message', 't22 second prepared message'];
     const results = await expectEngineParity({
-      model: { tapes: [textOnlyTape('message received')] },
-      buildAgent: ({ engine, model }) =>
-        new Agent({
+      model: { tapes: [toolCallTape('step', { n: 1 }, 'messages-step-call'), textOnlyTape('messages received')] },
+      buildAgent: ({ engine, model }) => {
+        const step = createTool({
+          id: 'step',
+          description: 'Advance one step.',
+          inputSchema: z.object({ n: z.number() }),
+          execute: async ({ n }) => ({ n }),
+        });
+        return new Agent({
           id: `t22-messages-${engine}`,
           name: 'T22 messages',
           instructions: 'Follow the script.',
           model,
+          tools: { step },
           defaultOptions: {
-            prepareStep: () => ({ messages: [{ role: 'user', content: marker }] }),
+            prepareStep: ({ stepNumber }) => ({ messages: [{ role: 'user', content: markers[stepNumber]! }] }),
           },
-        }),
+        });
+      },
       input: 'original message',
+      options: { maxSteps: 3 },
     });
 
     for (const engine of ENGINES) {
       const requests = results[engine]!.requests;
-      expect(requests).toHaveLength(1);
-      expect(userText(requests[0]!)).toEqual([marker]);
-      expect(userText(requests[0]!)).not.toContain('original message');
+      expect(requests).toHaveLength(2);
+      expect(requests.map(userText)).toEqual(markers.map(marker => [marker]));
+      expect(requests.flatMap(userText)).not.toContain('original message');
       expectSettled(results[engine]!.turns.at(-1));
     }
   });

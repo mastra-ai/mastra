@@ -243,8 +243,12 @@ function createOutputProbe(id: string, mode: ProbeMode, handles: ProbeHandles): 
   };
 
   if (mode === 'tool-result') {
-    processor.processToolResult = ({ messageList }) => {
+    processor.processToolResult = ({ messageList, toolCallId, toolName, args }) => {
       record('processToolResult');
+      messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId, toolName, args, result: { done: 2 } },
+      });
       return messageList;
     };
   }
@@ -638,7 +642,11 @@ describe('T45 output processors (plain, durable, evented)', () => {
         `${engine}: streamed tool-result observations`,
       ).toHaveLength(1);
       expect(chunksOfType(turn, 'tool-result'), `${engine}: public tool-result chunks`).toBe(1);
+      expect(JSON.stringify(turn.chunkPayloads), `${engine}: streamed transformed tool result`).toContain('"done":2');
       expect(observation.requests.map(completedSteps), `${engine}: completed results per request`).toEqual([0, 1]);
+      expect(JSON.stringify(observation.requests[1]), `${engine}: transformed result in next request`).toContain(
+        '"done":2',
+      );
       expect(observation.requests, `${engine}: model calls`).toHaveLength(2);
       expect(stepCommits.get(engine), `${engine}: tool executions`).toBe(1);
       expect(chunksOfType(turn, 'finish'), `${engine}: finish chunks`).toBe(1);
@@ -646,7 +654,7 @@ describe('T45 output processors (plain, durable, evented)', () => {
       expect(turn.finishReason, `${engine}: finish reason`).toBe('stop');
 
       const { messages } = await memories.get(engine)!.recall({ threadId: THREAD, resourceId: RESOURCE });
-      expect(JSON.stringify(messages), `${engine}: persisted tool result`).toContain('"done":1');
+      expect(JSON.stringify(messages), `${engine}: persisted transformed tool result`).toContain('"done":2');
     }
   });
 
