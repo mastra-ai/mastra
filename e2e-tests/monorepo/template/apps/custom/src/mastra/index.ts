@@ -12,6 +12,7 @@ import { shutdownDrainWorkflowRoute } from '@/api/route/shutdown-drain-workflow'
 import { shutdownDrainWorkflow } from '@/workflows/shutdown-drain';
 import { transitiveWorkspaceRoute } from '@/api/route/transitive-workspace';
 import { protobufSubpathRoute } from '@/api/route/protobuf-subpath';
+import { middlewarePhases, phaseOrderRoute, phasePublicRoute } from '@/api/route/middleware-phase';
 import { modelUsageRoute } from '@/api/route/model-usage';
 import { myAgent } from '@inner/hello-world/agent';
 import { calculatorMcpServer } from '@/mcp';
@@ -37,7 +38,10 @@ export const mastra = new Mastra({
       transitiveWorkspaceRoute,
       protobufSubpathRoute,
       modelUsageRoute,
+      phaseOrderRoute,
+      phasePublicRoute,
     ],
+    middleware: middlewarePhases,
   },
   bundler: {
     externals: ['bcrypt', '@inner/subpath-only'],
