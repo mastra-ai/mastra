@@ -7,6 +7,7 @@ export interface ProviderModels {
   models: AvailableModelOption[];
   /** What the Factory starts on unless the user picks another model. */
   suggestedModelId?: string;
+  retry: () => void;
 }
 
 function preferredFactoryModel(providerId: string): string | undefined {
@@ -31,5 +32,8 @@ export function useProviderModels(providerId: string | undefined): ProviderModel
     catalogError: modelsQuery.error ?? undefined,
     models,
     suggestedModelId: models.find(model => model.id === preferredModelId)?.id ?? models[0]?.id,
+    retry: () => {
+      void modelsQuery.refetch();
+    },
   };
 }

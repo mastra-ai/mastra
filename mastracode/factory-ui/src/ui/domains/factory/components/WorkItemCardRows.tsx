@@ -141,7 +141,6 @@ export function reviewVerdict(
   const reviewed = typeof metadata.reviewedHeadSha === 'string' ? metadata.reviewedHeadSha : undefined;
   const head = typeof metadata.pullRequestHeadSha === 'string' ? metadata.pullRequestHeadSha : undefined;
   const outdated = reviewed !== undefined && head !== undefined && reviewed.toLowerCase() !== head.toLowerCase();
-  const sha = reviewed ? ` · ${reviewed.slice(0, 7)}` : '';
-  const label = `${verdict === 'approve' ? 'Approved' : 'Changes requested'}${sha}${outdated ? ' (outdated)' : ''}`;
+  const label = `${verdict === 'approve' ? 'Approved' : 'Changes requested'}${outdated ? ' (outdated)' : ''}`;
   return { approved: verdict === 'approve' && !outdated, outdated, label };
 }

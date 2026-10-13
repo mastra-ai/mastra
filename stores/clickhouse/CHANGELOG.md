@@ -1,5 +1,27 @@
 # @mastra/clickhouse
 
+## 1.25.0-alpha.0
+
+### Minor Changes
+
+- Added `clickhouse_settings` to `ObservabilityStorageClickhouseVNext` and the other ClickHouse storage domains, so settings such as `filesystem_prefetches_limit` can be applied to every query without passing a pre-configured client. ([#26327](https://github.com/mastra-ai/mastra/pull/26327))
+
+  ```typescript
+  const observabilityStore = new ObservabilityStorageClickhouseVNext({
+    url: process.env.CLICKHOUSE_URL!,
+    username: process.env.CLICKHOUSE_USERNAME!,
+    password: process.env.CLICKHOUSE_PASSWORD!,
+    clickhouse_settings: { filesystem_prefetches_limit: 8 },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed trace queries and trace aggregates dropping a trace when another tenant stored a trace with the same trace ID. Scoped trace queries and aggregates now read only that tenant's trace roots when picking each trace's current root. ([#26327](https://github.com/mastra-ai/mastra/pull/26327))
+
+- Updated dependencies [[`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`e384817`](https://github.com/mastra-ai/mastra/commit/e3848177f2a0051ea1469a06fb6502164bfada7c), [`821b8d4`](https://github.com/mastra-ai/mastra/commit/821b8d4253dcac5d8cf886994884e4645899bedc), [`878e0e2`](https://github.com/mastra-ai/mastra/commit/878e0e2f5adf9669158c7a8a8d67cd8809633c24), [`3504acd`](https://github.com/mastra-ai/mastra/commit/3504acdb2833b71db61dc9387c0f25f3cd0a3070), [`5bb6d71`](https://github.com/mastra-ai/mastra/commit/5bb6d711680d17370eacdcdab105e5af69202c5f), [`dab6849`](https://github.com/mastra-ai/mastra/commit/dab6849945ab2a0e4c946f5b31fb6f41b2c1cd7d), [`5227c95`](https://github.com/mastra-ai/mastra/commit/5227c95d54d0b4846220530450063f259797b587)]:
+  - @mastra/core@1.77.0-alpha.1
+
 ## 1.24.0
 
 ### Minor Changes

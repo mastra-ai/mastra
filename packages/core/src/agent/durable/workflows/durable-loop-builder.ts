@@ -20,7 +20,7 @@ import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
-import { globalRunRegistry } from '../run-registry';
+import { getRunRegistryEntry, globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -42,6 +42,7 @@ import {
   executeDurableAgentScorers,
   dehydrateSnapshotTranscripts,
   hydrateMessageListState,
+  loadRunStoredMessages,
   openMessageListState,
   readMessageListState,
   releaseMessageListState,
@@ -254,7 +255,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
     const initData = predicateParams.getInitData() as DurableAgenticWorkflowInput;
     const mastra = predicateParams.mastra as Mastra | undefined;
     const runId = state.runId ?? initData.runId;
-    const registryEntry = globalRunRegistry.get(runId);
+    const registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
     return {
       runId,
       agentId: state.agentId ?? initData.agentId,
@@ -1001,7 +1002,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({
                 requestContext,
               });
-              const reg = globalRunRegistry.has(initData.runId) ? globalRunRegistry.get(initData.runId) : undefined;
+              const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
               const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
               const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
               if (observability) {
@@ -1053,13 +1054,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   hydrateMessageListState(params, initData.messageListState),
                   hydrateMessageListState(params, inputData.messageListState),
                 ]);
-                executeDurableAgentScorers({
+                void executeDurableAgentScorers({
                   initData: { ...initData, messageListState: initial },
                   finalOutput: { ...inputData, messageListState: final },
                   mastra: mastra as Mastra | undefined,
                   requestContext,
                   tracingContext,
-                });
+                  loadStoredMessages: loadRunStoredMessages(params),
+                }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));
               } catch (error) {
                 mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`);
               }

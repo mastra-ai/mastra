@@ -941,6 +941,7 @@ export const API_ROUTE_METADATA = {
       "foreachIdx",
       "format",
       "input",
+      "parentWorkflow",
       "perStep",
       "requestContext",
       "resumeData",
@@ -6677,6 +6678,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "requestContext",
       "resumeData",
+      "runId",
       "toolCallId"
     ],
     "hasQuery": true,

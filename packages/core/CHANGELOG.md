@@ -1,5 +1,96 @@
 # @mastra/core
 
+## 1.77.0-alpha.2
+
+### Patch Changes
+
+- Fixed durable, evented, and Inngest agents leaking one run's messages into another run's model prompt when two Mastra instances in the same process reuse a `runId`. ([#26787](https://github.com/mastra-ai/mastra/pull/26787))
+
+- Fixed output guardrails leaving blocked replies in memory. When an output processor aborts in `processOutputResult`, the agent (including durable agents) now deletes the reply messages that the run had already saved. The blocked text no longer stays in memory and is not sent back to the model on the next turn. This affected turns that paused for tool approval (approved or declined) and turns run with `savePerStep: true`. The user's message, earlier turns, and messages sent in as input are kept. Fixes #26215. ([#26252](https://github.com/mastra-ai/mastra/pull/26252))
+
+- Fixed evented agents and nested evented workflows failing with `Workflow with id ... not found` when an orchestration worker runs steps on the API server through `MASTRA_STEP_EXECUTION_URL`. The worker now sends the parent workflow with each step request, so the server can find steps that are only reachable through their parent workflow, such as the steps of an evented agent. Fixes [#26676](https://github.com/mastra-ai/mastra/issues/26676). ([#26695](https://github.com/mastra-ai/mastra/pull/26695))
+
+  Also fixed nested evented workflows hanging when their parent workflow is registered under a key that differs from its `id`.
+
+- Fixed provider tool errors being sent back to the model as successful results. When a provider-run tool returns an error, Mastra now saves it as an error and sends it back as an error in later steps and recalled conversations. ([#26652](https://github.com/mastra-ai/mastra/pull/26652))
+
+- Fixed live scorers missing tool calls when observational memory is enabled. Observational memory removes messages from the agent's context once it has observed them, and live scorers only saw the messages that were left. On runs that suspend and resume, scorer `output` could miss every tool call made before `suspend()`, or end up empty. Scorers now receive every response message the run produced, across all suspend/resume segments, under the original `runId`. The prompt sent to the model is unchanged. ([#26687](https://github.com/mastra-ai/mastra/pull/26687))
+
+- Improved AgentController sessions so each thread restores its saved mode, model, state, token usage, and pending tool prompts when selected. Switching away and `detachFromCurrent()` cancel actively running local executions only for the initiating session. Listeners detach without cancelling the run. Parked runs and pending prompts remain available when switching back. ([#26058](https://github.com/mastra-ai/mastra/pull/26058))
+
+  Fixed first-thread creation to retain explicit startup mode, model, and thinking selections. Later new conversations use controller defaults. Asynchronous state writes and resumed tools keep their source thread's preferences without changing another active conversation. Addressed resumes recover the originating agent after restart and support repeated suspensions while another thread stays active. The executing run saves token usage to its own thread and retains unsaved measurements for retry on the next step. Subscribers display saved totals without counting replayed steps again or saving usage. Storage-free sessions can still receive inactive wake signals. Custom state and permissions remain host-scoped.
+
+  Changed `session.thread.set()` and `session.thread.clear()` to throw during thread lifecycle transitions. Added address-based suspension APIs and event fields so callers can safely claim and resume a prompt after switching threads: `const claim = session.claimToolSuspension(toolCallId, runId)` returns an `address` that can be passed to `session.respondToToolSuspension({ address, resumeData })`. Exported `SuspensionAddress` and `getSuspensionAddressKey` for hosts that persist or key those addresses.
+
+  Deprecated the `SessionRecord.modeId`, `modelId`, `state`, and `pending` fields, the `HarnessStorage.appendPendingItem()`, `updatePendingItem()`, and `removePendingItem()` helpers, and `SessionSuspensions.resolveToolCallId()`.
+
+## 1.77.0-alpha.1
+
+### Minor Changes
+
+- Added `links` to spans: references to spans in other traces. Pass `links` when starting a span to relate it to a span in another trace without joining that trace. Mastra storage saves the links with the span. ([#26059](https://github.com/mastra-ai/mastra/pull/26059))
+
+  ```ts
+  const span = getOrCreateSpan({
+    type: SpanType.GENERIC,
+    name: 'handle request',
+    links: [{ traceId: callerTraceId, spanId: callerSpanId }],
+    mastra,
+  });
+  ```
+
+  Also added `parseTraceparent()` and `formatTraceparent()` to `@mastra/core/observability` for W3C `traceparent` values.
+
+### Patch Changes
+
+- Fixed agent experiment results losing their error details. A failed agent run now stores `error.message` and `error.stack` instead of an empty object. Added exported `AgentExperimentOutput`, `ScorerExperimentOutput`, and `ExperimentResultOutput` types that describe what each experiment target stores in `output`. ([#26726](https://github.com/mastra-ai/mastra/pull/26726))
+
+- Added `targetType` to experiment results. The result `output` is now typed based on the target, so checking `targetType` gives you typed agent and scorer outputs: ([#26726](https://github.com/mastra-ai/mastra/pull/26726))
+
+  ```ts
+  const { results } = await client.listDatasetExperimentResults(datasetId, experimentId);
+
+  for (const result of results) {
+    if (result.targetType === 'agent') {
+      console.log(result.output?.text, result.output?.error?.message);
+    } else if (result.targetType === 'scorer') {
+      console.log(result.output?.score);
+    }
+  }
+  ```
+
+  Workflow, processor, and caller-driven results (`targetType: null`) keep `output` as `unknown`.
+
+- Workflow steps, conditions, and dynamic sleeps now create their `writer` stream only when your code reads `writer`. Steps that never use it no longer allocate a stream on every run, which reduces memory churn in agent loops. An agent turn, including a durable agent turn, now creates only the writers its tools use. Steps that call `writer.write()` or `writer.custom()` behave as before. ([#26665](https://github.com/mastra-ai/mastra/pull/26665))
+
+- Fixed `mastra.datasets.compareExperiments()` silently comparing only the baseline and one other experiment. Every ID in `experimentIds` now gets a result entry on each item (`null` when that experiment did not run the item). Duplicate IDs are ignored, and passing a `baselineId` that isn't one of `experimentIds` now throws instead of being ignored. ([#26725](https://github.com/mastra-ai/mastra/pull/26725))
+
+  ```ts
+  const comparison = await mastra.datasets.compareExperiments({
+    experimentIds: ['exp-baseline', 'exp-prompt-v2', 'exp-new-model'],
+    baselineId: 'exp-baseline',
+  });
+  // comparison.items[0].results has entries for all three experiments
+  ```
+
+- Fixed the `StorageMCPClientToolsConfig` and `StoredMCPClientToolsConfig` JSDoc. It previously said that omitting `tools` includes all MCP tools. For an agent-level MCP client reference, omitting `tools` selects no tools. Use `tools: {}` to include all tools. ([#26738](https://github.com/mastra-ai/mastra/pull/26738))
+
+- `ExpectedStep` now supports `provider_tool_call` steps, so you can write typed trajectory expectations for provider-executed tools such as web search. The trajectory scorer compares their `toolArgs`, `toolResult`, and `success` fields. ([#26778](https://github.com/mastra-ai/mastra/pull/26778))
+
+  ```ts
+  const steps: ExpectedStep[] = [
+    { name: 'web_search', stepType: 'provider_tool_call', toolArgs: { query: 'weather' } },
+  ];
+  ```
+
+- Fixed `structuredOutput` so it only uses the final answer of a run. ([#26639](https://github.com/mastra-ai/mastra/pull/26639))
+
+  - Text an agent writes before calling a tool (like "Let me look that up.") no longer fails validation or ends the run early.
+  - `stream.object` now resolves to the final answer, not an earlier JSON draft.
+  - Durable agents now return the final answer instead of the first JSON they saw.
+
+  ([#25038](https://github.com/mastra-ai/mastra/issues/25038))
+
 ## 1.77.0-alpha.0
 
 ### Minor Changes

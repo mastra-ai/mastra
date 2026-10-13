@@ -40,7 +40,8 @@ async function renderForm() {
   return { onSuccess };
 }
 
-const typeName = (value: string) => fireEvent.change(screen.getByLabelText(/^Name/), { target: { value } });
+const nameInput = () => screen.getByLabelText<HTMLInputElement>(/^Name/);
+const typeName = (value: string) => fireEvent.change(nameInput(), { target: { value } });
 const submit = () => fireEvent.click(screen.getByRole('button', { name: 'Create Dataset' }));
 
 describe('CreateDatasetForm', () => {
@@ -77,6 +78,37 @@ describe('CreateDatasetForm', () => {
 
       await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('created-dataset'));
       expect(createBodies[0].scorerIds).toEqual(['quality', 'stored-judge']);
+    });
+  });
+
+  describe('when the form opens', () => {
+    it('pre-fills the name with Dataset and a short id', async () => {
+      setupHandlers();
+      await renderForm();
+
+      expect(nameInput().value).toMatch(/^Dataset [0-9a-f]{4}$/);
+    });
+
+    it('creates the dataset with the pre-filled name', async () => {
+      const { createBodies } = setupHandlers();
+      const { onSuccess } = await renderForm();
+      const defaultName = nameInput().value;
+
+      submit();
+
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('created-dataset'));
+      expect(createBodies[0].name).toBe(defaultName);
+    });
+
+    it('keeps the name the user typed', async () => {
+      const { createBodies } = setupHandlers();
+      const { onSuccess } = await renderForm();
+
+      typeName('Refund questions');
+      submit();
+
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('created-dataset'));
+      expect(createBodies[0].name).toBe('Refund questions');
     });
   });
 });

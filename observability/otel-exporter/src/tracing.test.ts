@@ -748,6 +748,99 @@ describe('OtelExporter', () => {
     });
   });
 
+  describe('Flush waits for in-flight exports', () => {
+    const provider = { custom: { endpoint: 'http://localhost:4318' } };
+
+    beforeEach(() => {
+      vi.useRealTimers();
+    });
+
+    const endedSpan = {
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: {
+        id: 'span-1',
+        traceId: 'trace-1',
+        type: SpanType.AGENT_RUN,
+        name: 'Test',
+        startTime: new Date(),
+        endTime: new Date(),
+      } as unknown as AnyExportedSpan,
+    };
+
+    it('should wait for the span exporter forceFlush after the processor flush', async () => {
+      let releaseExport!: () => void;
+      const customExporter = {
+        export: vi.fn(),
+        shutdown: vi.fn().mockResolvedValue(undefined),
+        forceFlush: vi.fn().mockReturnValue(
+          new Promise<void>(resolve => {
+            releaseExport = resolve;
+          }),
+        ),
+      };
+      exporter = new OtelExporter({ provider, exporter: customExporter, signals: { logs: false } });
+      await exporter.exportTracingEvent(endedSpan);
+
+      let flushed = false;
+      const flushing = exporter.flush().then(() => {
+        flushed = true;
+      });
+      await new Promise(resolve => setImmediate(resolve));
+      expect(customExporter.forceFlush).toHaveBeenCalledTimes(1);
+      expect(flushed).toBe(false);
+
+      releaseExport();
+      await flushing;
+    });
+
+    it('should still wait for the span exporter when the processor flush fails', async () => {
+      const { BatchSpanProcessor } = await import('@opentelemetry/sdk-trace-base');
+      vi.mocked(BatchSpanProcessor).mockImplementationOnce(function () {
+        return {
+          onEnd: vi.fn(),
+          onStart: vi.fn(),
+          shutdown: vi.fn().mockResolvedValue(undefined),
+          forceFlush: vi.fn().mockRejectedValue(new Error('batch rejected')),
+        } as any;
+      });
+      let releaseExport!: () => void;
+      const customExporter = {
+        export: vi.fn(),
+        shutdown: vi.fn().mockResolvedValue(undefined),
+        forceFlush: vi.fn().mockReturnValue(
+          new Promise<void>(resolve => {
+            releaseExport = resolve;
+          }),
+        ),
+      };
+      exporter = new OtelExporter({ provider, exporter: customExporter, signals: { logs: false } });
+      await exporter.exportTracingEvent(endedSpan);
+
+      let settled = false;
+      const flushing = exporter.flush().finally(() => {
+        settled = true;
+      });
+      flushing.catch(() => {});
+      await new Promise(resolve => setImmediate(resolve));
+      expect(customExporter.forceFlush).toHaveBeenCalledTimes(1);
+      expect(settled).toBe(false);
+
+      releaseExport();
+      await expect(flushing).rejects.toThrow('batch rejected');
+    });
+
+    it('should flush normally when the span exporter has no forceFlush', async () => {
+      const customExporter = {
+        export: vi.fn(),
+        shutdown: vi.fn().mockResolvedValue(undefined),
+      };
+      exporter = new OtelExporter({ provider, exporter: customExporter, signals: { logs: false } });
+      await exporter.exportTracingEvent(endedSpan);
+
+      await expect(exporter.flush()).resolves.toBeUndefined();
+    });
+  });
+
   describe('Lifecycle with multiple signals', () => {
     it('should flush all active providers', async () => {
       exporter = new OtelExporter({
