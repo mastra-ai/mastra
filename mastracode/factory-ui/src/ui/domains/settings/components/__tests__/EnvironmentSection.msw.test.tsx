@@ -2,7 +2,7 @@ import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes } from 'react-router';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -148,7 +148,7 @@ describe('Environment settings', () => {
     renderEnvironmentSettings();
 
     // Drag and drop itself needs layout jsdom does not provide; the PATCH a drop
-    // produces is covered by `repositoriesPatch`'s unit test.
+    // produces is covered by `reorderPatch`'s unit test.
     expect(await screen.findByLabelText('Drag acme/link-web')).toBeInTheDocument();
     expect(screen.getByLabelText('Drag acme/link-api')).toBeInTheDocument();
     expect(screen.getAllByLabelText(/^Drag /)).toHaveLength(2);
@@ -165,10 +165,8 @@ describe('Environment settings', () => {
     await userEvent.setup().click(await screen.findByRole('switch', { name: 'Clone acme/api into every session' }));
 
     await waitFor(() => expect(patches).toHaveLength(1));
-    expect(patches[0]?.repositories).toEqual([
-      { projectRepositoryId: 'link-web', position: 1, inEnvironment: true, setupCommand: null, teardownCommand: null },
-      { projectRepositoryId: 'link-api', position: 2, inEnvironment: false, setupCommand: null, teardownCommand: null },
-    ]);
+    // Only the toggled repository and field: a stale page never resends another repository's values.
+    expect(patches[0]).toEqual({ repositories: [{ projectRepositoryId: 'link-api', inEnvironment: false }] });
   });
 
   it('saves a setup command inside the repositories array', async () => {
@@ -185,8 +183,26 @@ describe('Environment settings', () => {
     await user.type(input, 'pnpm i{Enter}');
 
     await waitFor(() => expect(patches).toHaveLength(1));
-    expect(patches[0]?.repositories?.[0]).toMatchObject({ projectRepositoryId: 'link-web', setupCommand: 'pnpm i' });
-    expect(patches[0]?.repositories?.[1]).toMatchObject({ projectRepositoryId: 'link-api', setupCommand: null });
+    expect(patches[0]).toEqual({ repositories: [{ projectRepositoryId: 'link-web', setupCommand: 'pnpm i' }] });
+  });
+
+  it('never overwrites a command another editor saved after this page loaded', async () => {
+    useFactory();
+    // This page loaded before someone else saved `make api` on acme/api.
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
+
+    renderEnvironmentSettings();
+
+    await user.click(await screen.findByRole('button', { name: 'Show commands for acme/web' }));
+    await user.type(screen.getByRole('textbox', { name: 'Setup command for acme/web' }), 'pnpm i{Enter}');
+
+    await waitFor(() => expect(patches).toHaveLength(1));
+    const sent = patches[0]?.repositories ?? [];
+    expect(sent.map(repository => repository.projectRepositoryId)).toEqual(['link-web']);
+    expect(sent[0]).not.toHaveProperty('teardownCommand');
   });
 
   it('surfaces a failed save as a toast and shows the stored value again', async () => {
@@ -280,6 +296,64 @@ describe('Environment settings', () => {
     await user.type(cpu, '16{Enter}');
     expect(await screen.findByText('Failed to save environment (400)')).toBeInTheDocument();
     await waitFor(() => expect(cpu).toHaveValue(2));
+  });
+
+  it('drops an unsaved draft when switching to another factory', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            { id: FACTORY_ID, name: 'Acme' },
+            { id: 'factory-b', name: 'Beta' },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-b/environment`, () => {
+        const other = environmentPayload();
+        return HttpResponse.json({ environment: { ...other, settings: { ...other.settings, cpuCount: 4 } } });
+      }),
+    );
+    useEnvironment(environmentPayload());
+    server.use(
+      http.patch(ENVIRONMENT_URL, () =>
+        HttpResponse.json(
+          { error: 'invalid_environment', issues: [{ message: 'must be >= 1', path: ['cpuCount'] }] },
+          { status: 400 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    function SwitchFactory() {
+      const navigate = useNavigate();
+      return (
+        <>
+          <button onClick={() => navigate(`/factories/${FACTORY_ID}/settings/environment`)}>Switch to Acme</button>
+          <button onClick={() => navigate('/factories/factory-b/settings/environment')}>Switch to Beta</button>
+        </>
+      );
+    }
+
+    // Beta is visited first, so its environment is cached and switching back renders it without a loading state.
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/factories/factory-b/settings/environment']}>
+        <SwitchFactory />
+        <Routes>
+          <Route path="/factories/:factoryId/settings/environment" element={<EnvironmentSection />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(screen.getByRole('spinbutton', { name: 'CPU' })).toHaveValue(4));
+    await user.click(screen.getByRole('button', { name: 'Switch to Acme' }));
+    await waitFor(() => expect(screen.getByRole('spinbutton', { name: 'CPU' })).toHaveValue(2));
+
+    const cpu = await screen.findByRole('spinbutton', { name: 'CPU' });
+    await user.clear(cpu);
+    await user.type(cpu, '0{Enter}');
+    // The rejected draft stays in Acme's field so the user can correct it.
+    await waitFor(() => expect(cpu).toHaveValue(0));
+    await user.click(screen.getByRole('button', { name: 'Switch to Beta' }));
+
+    await waitFor(() => expect(screen.getByRole('spinbutton', { name: 'CPU' })).toHaveValue(4));
   });
 
   it('shows the provider line and no settings for a custom sandbox', async () => {
